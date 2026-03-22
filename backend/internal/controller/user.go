@@ -56,3 +56,31 @@ func (ctrl *UserController) Register(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, created)
 }
+
+func (ctrl *UserController) GetProfile(c *gin.Context) {
+	userId, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var id uint
+	switch v := userId.(type) {
+	case uint:
+		id = v
+	case float64:
+		id = uint(v)
+	default:
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+		return
+	}
+
+	user, err := ctrl.authService.GetUserById(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	user.Password = "" // Hide password hash
+	c.JSON(http.StatusOK, user)
+}

@@ -1,9 +1,12 @@
 package config
 
 import (
+	"Project-M/config/seed"
+	"Project-M/internal/entity"
 	"fmt"
 	"log"
 	"os"
+
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -42,9 +45,12 @@ func ConnectionDB() {
 
 func SetupDatabase() *gorm.DB{
 	db.AutoMigrate(
-		/// &entity.user{},
+		&entity.Role{},
+		&entity.User{},
 	)
 
-	//seed.SeedPrefixData(db)
+	// เรียกใช้งาน Seeder จากโฟลเดอร์ \`seed\`
+	seed.SeedRoles(db)
+
 	return db
 }

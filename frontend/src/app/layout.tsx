@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { Kanit } from "next/font/google";
-
+import { AuthProvider } from "../providers/AuthProvider";
+import Navbar from "../components/shared/Navbar";
 
 const fontKanit = Kanit({
   subsets: ["thai", "latin"],
@@ -26,7 +27,14 @@ export default function RootLayout({
       <body
         className={`${fontKanit.className}`}
       >
-        {children}
+        <AuthProvider>
+          <div className="h-screen flex flex-col overflow-hidden">
+            <Navbar />
+            <main className="flex-1 overflow-hidden">
+              {children}
+            </main>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

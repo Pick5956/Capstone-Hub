@@ -80,3 +80,7 @@ func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
 		User:  user,
 	}, nil
 }
+
+func (s *AuthService) GetUserById(id uint) (*entity.User, error) {
+	return s.userRepo.FindById(id)
+}
