@@ -24,16 +24,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="th">
-      <body
-        className={`${fontKanit.className}`}
-      >
+      <body className={fontKanit.className}>
         <AuthProvider>
-          <div className="h-screen flex flex-col overflow-hidden">
-            <Navbar />
-            <main className="flex-1 overflow-hidden">
-              {children}
-            </main>
-          </div>
+          <Navbar />
+          <main>
+            {children}
+          </main>
         </AuthProvider>
       </body>
     </html>

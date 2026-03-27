@@ -6,10 +6,10 @@ import Link from "next/link";
 export default function Home() {
   const { user, loading, openLoginModal } = useAuth();
 
-  // Handle loading state to avoid UI jumping
+  // Handle loading state - Standard block spinner
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-50/50 dark:bg-gray-950">
+      <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50/50 dark:bg-gray-950">
         <div className="w-10 h-10 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
       </div>
     );
@@ -36,14 +36,14 @@ export default function Home() {
   };
 
   return (
-    <div className="h-full bg-gray-50/50 dark:bg-gray-950 flex flex-col items-center p-6 md:px-12 md:py-8 lg:py-10 relative overflow-hidden font-sans">
+    <div className="min-h-[calc(100vh-64px)] bg-gray-50/50 dark:bg-gray-950 p-6 md:px-12 md:py-8 lg:py-10 relative font-sans">
       {/* Background Decorative Blurs */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-200/20 dark:bg-blue-900/10 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-200/20 dark:bg-purple-900/10 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-200/20 dark:bg-blue-900/10 rounded-full blur-[100px] -z-10 pointer-events-none translate-x-1/2 -translate-y-1/2 opacity-50"></div>
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-200/20 dark:bg-purple-900/10 rounded-full blur-[100px] -z-10 pointer-events-none -translate-x-1/2 translate-y-1/2 opacity-50"></div>
 
-      <div className="w-full max-w-7xl mx-auto flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden px-2">
+      <div className="w-full max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 px-2 pb-10">
         {/* Header Section */}
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-100 dark:border-gray-800/50 mb-8 shrink-0">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-gray-100 dark:border-gray-800/50 mb-8">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight">
               {getGreeting()}
@@ -57,7 +57,7 @@ export default function Home() {
               })}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 self-start md:self-auto">
              <span className="px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold text-sm border border-blue-100 dark:border-blue-800/50 uppercase tracking-widest shadow-sm">
               {getRoleLabel()}
             </span>
@@ -65,10 +65,10 @@ export default function Home() {
         </header>
 
         {/* Dash Content */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-8 pb-6 custom-scrollbar">
+        <div className="w-full space-y-8">
           {!user && (
             <div className="p-4 bg-blue-600 rounded-2xl text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
-               <div>
+               <div className="text-center sm:text-left">
                  <p className="font-bold text-lg">เริ่มต้นจัดการโครงงานของคุณวันนี้</p>
                  <p className="text-sm text-blue-100 opacity-90">ล็อกอินเพื่อเข้าถึงฟีเจอร์การติดตามงานและทีมงานของคุณ</p>
                </div>
@@ -82,7 +82,7 @@ export default function Home() {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 shrink-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map((stat, i) => (
               <div key={i} className="p-6 bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
                 <div className={`absolute top-0 right-0 w-24 h-24 bg-${stat.color}-500/5 -mr-8 -mt-8 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500`}></div>
