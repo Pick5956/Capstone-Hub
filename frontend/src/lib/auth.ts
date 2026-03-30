@@ -1,30 +1,14 @@
-import { User } from "../types/auth";
 import { apiClient } from "./apiClient";
+import { User } from "../types/auth";
 
-export async function getCurrentUser(){
-    return await apiClient
-        .get("/api/v1/users/profile")
-        .then(res => res)
-        .catch(() => null);
-}
+export const getCurrentUser = () =>
+  apiClient.get("/api/v1/users/profile").catch(() => null);
 
-export async function login(sut_id: string, password: string) {
-    return await apiClient
-        .post("/api/login", { sut_id, password })
-        .then(res => res)
-        .catch(() => null);
-}
+export const login = (sut_id: string, password: string) =>
+  apiClient.post("/api/login", { sut_id, password }).catch(() => null);
 
-export async function register(data: User) {
-    return await apiClient
-        .post("/api/register", data)
-        .then(res => res)
-        .catch(() => null);
-}
+export const register = (data: Omit<User, "password">) =>
+  apiClient.post("/api/register", data).catch(() => null);
 
-export async function getRoles() {
-    return await apiClient
-        .get("/api/roles")
-        .then(res => res)
-        .catch(() => null);
-}
+export const getRoles = () =>
+  apiClient.get("/api/roles").catch(() => null);

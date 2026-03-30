@@ -64,3 +64,11 @@ input::-ms-reveal,
 input::-ms-clear {
   display: none;
 }
+
+/* Remove focus outline on Recharts charts when clicked */
+.recharts-wrapper,
+.recharts-wrapper svg,
+.recharts-wrapper *:focus {
+  outline: none !important;
+}
+

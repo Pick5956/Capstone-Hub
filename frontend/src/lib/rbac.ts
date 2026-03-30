@@ -1,18 +1,11 @@
-import { Permission, Role, User } from "../types/auth";
+import { Permission, User } from "../types/auth";
 
+const rolePermissions: Record<string, Permission[]> = {
+  admin:   ["view_dashboard", "manage_users", "edit_post"],
+  teacher: ["edit_post", "view_dashboard"],
+  student: ["view_dashboard"],
+};
 
-
-export const rolePermissions: Record<Role,Permission[]> = {
-    admin: ["view_dashborad","manage_users","edit_post"],
-    teacher:["edit_post","view_dashborad"],
-    student:["view_dashborad"]
+export function can(user: User, permission: Permission): boolean {
+  return rolePermissions[user.role?.role ?? ""]?.includes(permission) ?? false;
 }
-
-// export function hasPermission(role: Role,permission: Permission): boolean{
-//     return rolePermissions[role].includes(permission)
-// }
-
-export function can(user: User,permission: Permission): boolean{
-    return rolePermissions[user.role].includes(permission)
-}
-

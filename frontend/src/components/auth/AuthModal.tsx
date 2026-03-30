@@ -139,8 +139,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login" }: Au
     const [password, setPassword] = useState("");
     const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-    // Register Form State using User interface
-    const [registerForm, setRegisterForm] = useState<Partial<User> & { confirmPassword?: string; role_id?: number }>({
+    // Register Form State — password fields are local only (not part of User type)
+    const [registerForm, setRegisterForm] = useState<Partial<User> & { password?: string; confirmPassword?: string; role_id?: number }>({
         sut_id: "",
         first_name: "",
         last_name: "",
@@ -207,7 +207,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login" }: Au
             // Send default role_id if not present
             userData.role_id = userData.role_id || 3;
             
-            const res = await register(userData as User);
+            const res = await register(userData as unknown as Omit<User, "password">);
             
             if (res) {
                 // 🚀 สมัครสำเร็จปุ๊บ สั่งยิง API ขอ Log in อัตโนมัติต่อทันที!
