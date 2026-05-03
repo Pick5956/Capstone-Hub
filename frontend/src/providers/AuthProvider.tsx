@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { User } from '../types/auth';
 import { getCurrentUser } from '../lib/auth';
 import { authRepository } from '../app/repositories/authRepository';
@@ -27,29 +27,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      const token = authRepository.getToken();
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+  const fetchUser = useCallback(async () => {
+    const token = authRepository.getToken();
+    if (!token) {
+      setUser(null);
+      setLoading(false);
+      return null;
+    }
 
-      try {
-        const res = await getCurrentUser();
-        // Store user payload returned from the API
-        if (res && res.data) {
-          setUser(res.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch user profile", error);
-      } finally {
-        setLoading(false);
+    try {
+      const res = await getCurrentUser();
+      if (res && res.data) {
+        setUser(res.data);
+        return res.data;
       }
-    };
+    } catch (error) {
+      console.error("Failed to fetch user profile", error);
+    } finally {
+      setLoading(false);
+    }
 
-    fetchUser();
+    return null;
   }, []);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
   const logout = () => {
     authRepository.clearToken();
@@ -59,6 +62,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const openLoginModal = () => setIsLoginModalOpen(true);
   const closeLoginModal = () => setIsLoginModalOpen(false);
+  const handleAuthenticated = (authenticatedUser?: User) => {
+    if (authenticatedUser) {
+      setUser(authenticatedUser);
+      setLoading(false);
+      return;
+    }
+
+    fetchUser();
+  };
 
   return (
     <AuthContext.Provider value={{ user, loading, logout, openLoginModal, closeLoginModal }}>
@@ -67,6 +79,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         isOpen={isLoginModalOpen} 
         onClose={closeLoginModal} 
         initialMode="login" 
+        onAuthenticated={handleAuthenticated}
       />
     </AuthContext.Provider>
   );

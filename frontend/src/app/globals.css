@@ -6,6 +6,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --app-text-scale: 1;
 }
 
 .dark {
@@ -29,6 +30,39 @@ body {
   margin: 0;
   padding: 0;
 }
+
+html[data-font-size="small"] {
+  --app-text-scale: 1;
+}
+
+html[data-font-size="normal"] {
+  --app-text-scale: 1.08;
+}
+
+html[data-font-size="large"] {
+  --app-text-scale: 1.16;
+}
+
+html[data-font-size="extra-large"] {
+  --app-text-scale: 1.28;
+}
+
+.text-\[9px\] { font-size: calc(9px * var(--app-text-scale)); }
+.text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
+.text-\[11px\] { font-size: calc(11px * var(--app-text-scale)); }
+.text-\[12px\] { font-size: calc(12px * var(--app-text-scale)); }
+.text-\[13px\] { font-size: calc(13px * var(--app-text-scale)); }
+.text-\[14px\] { font-size: calc(14px * var(--app-text-scale)); }
+.text-\[15px\] { font-size: calc(15px * var(--app-text-scale)); }
+
+.text-xs { font-size: calc(0.75rem * var(--app-text-scale)); }
+.text-sm { font-size: calc(0.875rem * var(--app-text-scale)); }
+.text-base { font-size: calc(1rem * var(--app-text-scale)); }
+.text-lg { font-size: calc(1.125rem * var(--app-text-scale)); }
+.text-xl { font-size: calc(1.25rem * var(--app-text-scale)); }
+.text-2xl { font-size: calc(1.5rem * var(--app-text-scale)); }
+.text-3xl { font-size: calc(1.875rem * var(--app-text-scale)); }
+.text-4xl { font-size: calc(2.25rem * var(--app-text-scale)); }
 
 @keyframes modal-fade-in {
   from {
@@ -60,6 +94,17 @@ body {
   animation: modal-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+::view-transition-group(*) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
 /* Hide native Edge/Windows password reveal icon */
 input::-ms-reveal,
 input::-ms-clear {
@@ -72,4 +117,4 @@ input::-ms-clear {
 .recharts-wrapper *:focus {
   outline: none !important;
 }
-
+

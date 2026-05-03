@@ -10,5 +10,6 @@ import (
 func SetupAuthRoutes(r *gin.RouterGroup) {
 	userCtrl := controller.ProvideUserController(config.DB()) //setup method
 	r.POST("/login", userCtrl.Login)
+	r.POST("/google-login", userCtrl.GoogleLogin)
 	r.POST("/register", userCtrl.Register)
 }

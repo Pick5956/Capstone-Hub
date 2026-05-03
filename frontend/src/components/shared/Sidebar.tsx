@@ -177,6 +177,48 @@ function ThemeToggle({ className = "" }: { className?: string }) {
   );
 }
 
+function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  if (collapsed) {
+    return (
+      <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+        <Link
+          href="/restaurants"
+          onClick={onNavigate}
+          title="เปลี่ยนร้าน"
+          className="h-10 w-10 mx-auto flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
+            <path d="M9 12h6M9 16h4" />
+          </svg>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+      <Link
+        href="/restaurants"
+        onClick={onNavigate}
+        className="flex items-center gap-3 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60 px-3 py-2.5 hover:border-orange-300 dark:hover:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+      >
+        <span className="h-8 w-8 rounded-md bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 flex items-center justify-center text-orange-600 dark:text-orange-400 shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
+            <path d="M9 12h6M9 16h4" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] text-gray-400 dark:text-gray-500 leading-none">ร้านปัจจุบัน</span>
+          <span className="mt-1 block text-[13px] font-semibold text-gray-900 dark:text-white truncate">ครัวบ้านส้ม</span>
+        </span>
+        <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400 shrink-0">เปลี่ยน</span>
+      </Link>
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const { mobileOpen, setMobileOpen, collapsed, setCollapsed } = useSidebar();
 
@@ -193,12 +235,15 @@ export default function Sidebar() {
       )}
 
       {/* Drawer — uses CSS transform only (no width change = no reflow) */}
-      <aside className={`
-        lg:hidden fixed top-0 left-0 z-50 h-screen w-64 flex flex-col
-        bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 shadow-2xl
-        transition-transform duration-300 ease-in-out will-change-transform
-        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      <aside
+        aria-hidden={!mobileOpen}
+        className={`
+          lg:hidden fixed top-0 left-0 z-50 h-screen w-64 flex flex-col
+          bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 shadow-2xl
+          transition-transform duration-300 ease-in-out will-change-transform
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
+        `}
+      >
         {/* Mobile drawer header — brand only, no collapse button */}
         <div className="flex items-center justify-between h-14 px-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -226,6 +271,7 @@ export default function Sidebar() {
           </div>
         </div>
 
+        <RestaurantSwitch collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <NavLinks collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <UserFooter collapsed={false} />
       </aside>
@@ -237,7 +283,7 @@ export default function Sidebar() {
         The main content's margin-left is synced in layout.tsx.
       */}
       <aside className={`
-        hidden lg:flex flex-col fixed top-0 left-0 h-screen z-30
+        max-lg:hidden hidden lg:flex flex-col fixed top-0 left-0 h-screen z-30
         bg-white dark:bg-gray-950
         border-r border-gray-100 dark:border-gray-800
         transition-[width] duration-200 ease-out will-change-[width] overflow-hidden
@@ -274,6 +320,7 @@ export default function Sidebar() {
           </div>
         </div>
 
+        <RestaurantSwitch collapsed={collapsed} />
         <NavLinks collapsed={collapsed} />
         <UserFooter collapsed={collapsed} />
       </aside>

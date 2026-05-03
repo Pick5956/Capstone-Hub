@@ -8,28 +8,19 @@ import (
 
 type User struct {
 	gorm.Model
-	SutId        string `json:"sut_id" gorm:"unique" binding:"required"`
 	FirstName    string `json:"first_name" binding:"required"`
 	LastName     string `json:"last_name" binding:"required"`
 	Password     string `json:"password" binding:"required"`
 	BirthDay     string `json:"birthday"`
-	Email        string `json:"email" binding:"required,email"`
+	Email        string `json:"email" gorm:"unique" binding:"required,email"`
 	Address      string `json:"address"`
 	ProfileImage string `json:"profile_image"`
 	Phone        string `json:"phone"`
 	RoleID       uint   `json:"role_id" binding:"required"`
-	Role         *Role 	`gorm:"foreignKey:RoleID" json:"role"`
-
-	// IsOnline     bool     `json:"is_online" gorm:"default:true"`
-	// GPAX         *float64 `json:"gpax"`
-	// AdvisorId    *uint    `json:"advisor_id"`
-	// Advisor      *User    `gorm:"foreignKey:AdvisorId" json:"advisor"`
+	Role         *Role  `gorm:"foreignKey:RoleID" json:"role"`
 }
 
 func (u *User) Validation() error {
-	if u.SutId == "" {
-		return errors.New("SutId is required")
-	}
 	if u.FirstName == "" {
 		return errors.New("FirstName is required")
 	}

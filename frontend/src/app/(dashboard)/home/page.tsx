@@ -1,600 +1,867 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useAuth } from "@/src/providers/AuthProvider";
 import {
-  AreaChart, Area, BarChart, Bar,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip, CartesianGrid,
 } from "recharts";
-import { useState, useRef, useEffect } from "react";
 
-// ─── chart config ─────────────────────────────────────────────────────────────
-const TICK = { fontSize: 11, fill: "#94a3b8" } as const;
+// ─── types & data ─────────────────────────────────────────────────────────────
+type OrderStatus = "cooking" | "ready" | "delayed" | "served";
+type TableStatus = "occupied" | "available" | "reserved" | "cleaning";
+type DashboardWidgetId = "orders" | "lowStock" | "reservations" | "floor" | "hourly" | "topItems" | "staff";
+type WidgetPointerDrag = {
+  id: DashboardWidgetId;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  active: boolean;
+};
 
-// ─── date helpers ─────────────────────────────────────────────────────────────
-const toDateStr = (d: Date) => d.toISOString().split("T")[0];
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d); r.setDate(r.getDate() + n); return r;
-}
-function diffDays(a: Date, b: Date) {
-  return Math.max(1, Math.round((b.getTime() - a.getTime()) / 86400000) + 1);
-}
+type Order = {
+  id: number; table: string; items: string[]; waited: number;
+  status: OrderStatus; total: number;
+};
 
-function genRevenueTrend(from: Date, to: Date) {
-  const days = diffDays(from, to);
-  const buckets = days <= 14 ? days : days <= 60 ? Math.ceil(days / 3) : days <= 180 ? Math.ceil(days / 7) : Math.ceil(days / 14);
-  const step = days / buckets;
-  const seed = from.getTime();
-  const rand = (i: number, base: number, amp: number) => {
-    const x = Math.sin(seed / 1e9 + i * 1.3) * 10000;
-    return Math.round(base + (x - Math.floor(x)) * amp);
-  };
-  return Array.from({ length: buckets }, (_, i) => {
-    const d = addDays(from, Math.round(i * step));
-    const label = days <= 60
-      ? d.toLocaleDateString("th-TH", { day: "numeric", month: "short" })
-      : days <= 370
-      ? d.toLocaleDateString("th-TH", { month: "short" })
-      : d.toLocaleDateString("th-TH", { month: "short", year: "2-digit" });
-    return { day: label, revenue: rand(i, 8000, 16000) };
-  });
-}
-
-// ─── static data ─────────────────────────────────────────────────────────────
-const hourlyOrders = [
-  { hour: "09", orders: 5 },  { hour: "10", orders: 12 },
-  { hour: "11", orders: 24 }, { hour: "12", orders: 48 },
-  { hour: "13", orders: 42 }, { hour: "14", orders: 18 },
-  { hour: "15", orders: 11 }, { hour: "16", orders: 14 },
-  { hour: "17", orders: 22 }, { hour: "18", orders: 51 },
-  { hour: "19", orders: 63 }, { hour: "20", orders: 55 },
-  { hour: "21", orders: 38 }, { hour: "22", orders: 17 },
+const ORDERS: Order[] = [
+  { id: 1044, table: "T3",   items: ["ข้าวมันไก่ ×2", "น้ำส้ม"],                  waited: 22, status: "delayed", total: 220 },
+  { id: 1042, table: "T7",   items: ["ผัดกะเพราหมู", "ต้มยำกุ้ง", "ข้าวเปล่า ×2"], waited: 16, status: "cooking", total: 540 },
+  { id: 1047, table: "T5",   items: ["แกงมัสมั่นเนื้อ"],                          waited: 12, status: "cooking", total: 280 },
+  { id: 1046, table: "T9",   items: ["ผัดไทย", "ส้มตำไทย"],                       waited: 9,  status: "ready",   total: 240 },
+  { id: 1043, table: "T12",  items: ["สเต็กหมู", "สลัดผัก"],                      waited: 6,  status: "cooking", total: 380 },
+  { id: 1048, table: "Take", items: ["ข้าวผัดกุ้ง"],                              waited: 4,  status: "cooking", total: 160 },
+  { id: 1045, table: "Bar1", items: ["มะนาวโซดา", "ชาเย็น", "เบียร์ช้าง"],          waited: 3,  status: "cooking", total: 280 },
 ];
 
-const topItems = [
-  { name: "ผัดไทย",           sales: 142, revenue: 28400, growth: 8 },
-  { name: "ต้มยำกุ้ง",        sales: 118, revenue: 35400, growth: 12 },
-  { name: "ข้าวมันไก่",       sales: 104, revenue: 15600, growth: -3 },
-  { name: "ข้าวผัดกุ้ง",      sales: 89,  revenue: 17800, growth: 5 },
-  { name: "สเต็กหมู",         sales: 76,  revenue: 30400, growth: 18 },
-  { name: "แกงมัสมั่น",       sales: 65,  revenue: 19500, growth: -1 },
+const TABLES: { id: string; status: TableStatus; mins?: number; guests?: number }[] = [
+  { id: "T1",  status: "occupied", mins: 35, guests: 4 },  { id: "T2",  status: "occupied", mins: 12, guests: 2 },
+  { id: "T3",  status: "occupied", mins: 48, guests: 3 },  { id: "T4",  status: "available" },
+  { id: "T5",  status: "occupied", mins: 22, guests: 2 },  { id: "T6",  status: "cleaning" },
+  { id: "T7",  status: "occupied", mins: 18, guests: 4 },  { id: "T8",  status: "reserved" },
+  { id: "T9",  status: "occupied", mins: 8,  guests: 2 },  { id: "T10", status: "available" },
+  { id: "T11", status: "occupied", mins: 55, guests: 6 },  { id: "T12", status: "occupied", mins: 6,  guests: 2 },
+  { id: "T13", status: "occupied", mins: 28, guests: 3 },  { id: "T14", status: "reserved" },
+  { id: "T15", status: "occupied", mins: 15, guests: 4 },  { id: "T16", status: "occupied", mins: 40, guests: 5 },
+  { id: "T17", status: "available" },                       { id: "T18", status: "occupied", mins: 25, guests: 2 },
+  { id: "T19", status: "occupied", mins: 32, guests: 4 },  { id: "T20", status: "available" },
 ];
 
-const categoryRevenue = [
-  { name: "อาหารจานหลัก",      value: 48, color: "#f97316" },
-  { name: "เครื่องดื่ม",       value: 22, color: "#e2e8f0" },
-  { name: "ของหวาน",           value: 15, color: "#cbd5e1" },
-  { name: "อาหารเรียกน้ำย่อย", value: 10, color: "#94a3b8" },
-  { name: "อื่น ๆ",            value: 5,  color: "#f1f5f9" },
+const LOW_STOCK = [
+  { name: "ข้าวสวย",     left: 8,   unit: "จาน",  severity: "critical" as const },
+  { name: "กุ้งสด",       left: 12,  unit: "ตัว",   severity: "critical" as const },
+  { name: "ไข่ไก่",        left: 18,  unit: "ฟอง",  severity: "warning"  as const },
+  { name: "น้ำปลา",       left: 2,   unit: "ขวด",   severity: "warning"  as const },
+  { name: "หมูสับ",       left: 1.5, unit: "กก.",   severity: "warning"  as const },
 ];
 
-const paymentMethods = [
-  { name: "โอนเงิน",      value: 45, amount: 8370 },
-  { name: "เงินสด",       value: 38, amount: 7083 },
-  { name: "บัตรเครดิต",   value: 17, amount: 3169 },
+const RESERVATIONS = [
+  { time: "19:30", table: "T8",  guests: 4, name: "คุณสมชาย",  note: "งานวันเกิด" },
+  { time: "20:00", table: "T14", guests: 6, name: "คุณนภา" },
+  { time: "20:30", table: "T2",  guests: 2, name: "คุณอาทิตย์" },
 ];
 
-// ─── preset ranges ────────────────────────────────────────────────────────────
-type Preset = { label: string; days: number | null };
-const PRESETS: Preset[] = [
-  { label: "วันนี้",         days: 0 },
-  { label: "เมื่อวาน",      days: 1 },
-  { label: "7 วันล่าสุด",   days: 7 },
-  { label: "30 วันล่าสุด",  days: 30 },
-  { label: "2 เดือนล่าสุด", days: 60 },
-  { label: "6 เดือนล่าสุด", days: 180 },
-  { label: "1 ปีล่าสุด",    days: 365 },
-  { label: "กำหนดเอง",      days: null },
+const STAFF = [
+  { role: "ครัว",       on: 4, total: 4, lead: "เชฟอภิชัย" },
+  { role: "เสิร์ฟ",     on: 5, total: 6, lead: "พี่หน่อย" },
+  { role: "แคชเชียร์", on: 2, total: 2, lead: "พี่แอน" },
+  { role: "ผู้จัดการ",  on: 1, total: 1, lead: "คุณวิชัย" },
 ];
 
-function presetRange(p: Preset, today: Date): { from: Date; to: Date } {
-  if (p.days === 0) return { from: today, to: today };
-  if (p.days === 1) { const y = addDays(today, -1); return { from: y, to: y }; }
-  if (p.days !== null) return { from: addDays(today, -(p.days - 1)), to: today };
-  return { from: addDays(today, -29), to: today };
-}
+const HOURLY = [
+  { hour: "11", orders: 12 }, { hour: "12", orders: 28 }, { hour: "13", orders: 22 },
+  { hour: "14", orders: 14 }, { hour: "15", orders: 9 },  { hour: "16", orders: 11 },
+  { hour: "17", orders: 19 }, { hour: "18", orders: 38 }, { hour: "19", orders: 47 },
+  { hour: "20", orders: 0 },  { hour: "21", orders: 0 },  { hour: "22", orders: 0 },
+];
 
-// ─── components ──────────────────────────────────────────────────────────────
+const TOP_ITEMS_TODAY = [
+  { name: "ผัดกะเพรา",    sold: 24, stock: "พอ" },
+  { name: "ต้มยำกุ้ง",    sold: 18, stock: "ใกล้หมด" },
+  { name: "ข้าวมันไก่",   sold: 16, stock: "ใกล้หมด" },
+  { name: "ผัดไทย",       sold: 14, stock: "พอ" },
+  { name: "ข้าวผัดกุ้ง",  sold: 12, stock: "พอ" },
+];
 
-function KpiCard({ label, value, sub, trend, icon }: {
-  label: string; value: string; sub: string; trend: number; icon: React.ReactNode;
-}) {
-  const up = trend >= 0;
+const DASHBOARD_WIDGET_STORAGE_KEY = "restaurant-dashboard-widget-order";
+
+const DEFAULT_DASHBOARD_WIDGETS: DashboardWidgetId[] = [
+  "orders",
+  "lowStock",
+  "reservations",
+  "floor",
+  "hourly",
+  "topItems",
+  "staff",
+];
+
+const WIDGET_META: Record<DashboardWidgetId, { label: string; className: string }> = {
+  orders: { label: "ครัวกำลังทำ", className: "lg:col-span-8" },
+  lowStock: { label: "ของใกล้หมด", className: "lg:col-span-4" },
+  reservations: { label: "การจองคืนนี้", className: "lg:col-span-4" },
+  floor: { label: "ผังโต๊ะ", className: "lg:col-span-7" },
+  hourly: { label: "ออเดอร์รายชั่วโมง", className: "lg:col-span-5" },
+  topItems: { label: "เมนูขายดี", className: "lg:col-span-6" },
+  staff: { label: "พนักงานในกะ", className: "lg:col-span-6" },
+};
+
+// ─── status visual mapping ────────────────────────────────────────────────────
+const ORDER_STATUS = {
+  cooking:  { label: "กำลังทำ",  dot: "bg-amber-500",   text: "text-amber-700 dark:text-amber-400",  bg: "bg-amber-50 dark:bg-amber-900/20" },
+  ready:    { label: "พร้อมเสิร์ฟ", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
+  delayed:  { label: "เกินเวลา", dot: "bg-red-500",      text: "text-red-700 dark:text-red-400",      bg: "bg-red-50 dark:bg-red-900/20" },
+  served:   { label: "เสิร์ฟแล้ว", dot: "bg-slate-400",   text: "text-slate-600 dark:text-slate-400",  bg: "bg-slate-50 dark:bg-slate-800" },
+} as const;
+
+const TABLE_STATUS = {
+  occupied:  { label: "ใช้งาน",  cls: "bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-900/20 dark:border-amber-700/50 dark:text-amber-200" },
+  available: { label: "ว่าง",    cls: "bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-900/20 dark:border-emerald-700/50 dark:text-emerald-200" },
+  reserved:  { label: "จองไว้",  cls: "bg-sky-50 border-sky-300 text-sky-800 dark:bg-sky-900/20 dark:border-sky-700/50 dark:text-sky-200" },
+  cleaning:  { label: "ทำความสะอาด", cls: "bg-slate-100 border-slate-300 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400" },
+} as const;
+
+// ─── small UI helpers ─────────────────────────────────────────────────────────
+function SectionHeader({ title, hint, right }: { title: string; hint?: string; right?: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
-      <div className="flex items-start justify-between mb-4">
-        <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center text-gray-400">
-          {icon}
-        </div>
-        <span className={`inline-flex items-center gap-0.5 text-xs font-medium px-1.5 py-0.5 rounded ${
-          up
-            ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
-            : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400"
-        }`}>
-          {up ? "↑" : "↓"}{Math.abs(trend)}%
-        </span>
+    <div className="flex items-end justify-between mb-3">
+      <div>
+        <h2 className="text-[13px] font-semibold text-gray-900 dark:text-gray-100 tracking-tight">{title}</h2>
+        {hint && <p className="text-[11px] text-gray-500 dark:text-gray-500 mt-0.5">{hint}</p>}
       </div>
-      <p className="text-xs text-gray-400 dark:text-gray-500">{label}</p>
-      <p className="text-[22px] font-bold text-gray-900 dark:text-white mt-0.5 leading-tight tracking-tight">{value}</p>
-      <p className="text-xs text-gray-400 mt-1.5">{sub}</p>
+      {right}
     </div>
   );
 }
 
-function Card({ title, sub, children, action }: {
-  title: string; sub?: string; children: React.ReactNode; action?: React.ReactNode;
-}) {
+function StatusDot({ color, pulse = false }: { color: string; pulse?: boolean }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden h-full flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-        <div>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">{title}</p>
-          {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-        </div>
-        {action}
-      </div>
-      <div className="p-6 flex-1">{children}</div>
-    </div>
+    <span className="relative inline-flex w-2 h-2">
+      {pulse && <span className={`absolute inset-0 rounded-full ${color} opacity-60 animate-ping`} />}
+      <span className={`relative w-2 h-2 rounded-full ${color}`} />
+    </span>
   );
 }
 
-const ChartTooltip = ({ active, payload, label }: {
-  active?: boolean;
-  payload?: { color: string; name: string; value: number }[];
-  label?: string;
+// ─── live clock ───────────────────────────────────────────────────────────────
+function useNowTH() {
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000 * 30);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+// ─── chart tooltip ────────────────────────────────────────────────────────────
+const HourlyTooltip = ({ active, payload, label }: {
+  active?: boolean; payload?: { value: number }[]; label?: string;
 }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg px-3 py-2.5 text-xs">
-      <p className="text-gray-400 mb-1.5">{label}</p>
-      {payload.map((p, i) => (
-        <div key={i} className="flex items-center justify-between gap-5">
-          <span className="flex items-center gap-1.5 text-gray-500">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
-            {p.name}
-          </span>
-          <span className="font-semibold text-gray-900 dark:text-white">
-            {p.name.includes("฿") || p.name.includes("รายได้") || p.name.includes("ยอด")
-              ? `฿${p.value.toLocaleString()}`
-              : p.value}
-          </span>
-        </div>
-      ))}
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-md px-2.5 py-1.5 text-[11px]">
+      <p className="text-gray-500">{label}:00 น.</p>
+      <p className="font-semibold text-gray-900 dark:text-white">{payload[0].value} ออเดอร์</p>
     </div>
   );
 };
 
-// ─── Date Range Picker ────────────────────────────────────────────────────────
-function DateRangePicker({ from, to, onChange }: {
-  from: Date; to: Date;
-  onChange: (from: Date, to: Date, label: string) => void;
+function normalizeWidgetOrder(raw: string[] | null): DashboardWidgetId[] {
+  if (!raw) return DEFAULT_DASHBOARD_WIDGETS;
+
+  const valid = new Set<DashboardWidgetId>(DEFAULT_DASHBOARD_WIDGETS);
+  const seen = new Set<DashboardWidgetId>();
+  const ordered = raw.filter((id): id is DashboardWidgetId => {
+    if (!valid.has(id as DashboardWidgetId) || seen.has(id as DashboardWidgetId)) return false;
+    seen.add(id as DashboardWidgetId);
+    return true;
+  });
+
+  return [
+    ...ordered,
+    ...DEFAULT_DASHBOARD_WIDGETS.filter((id) => !seen.has(id)),
+  ];
+}
+
+function moveWidget(order: DashboardWidgetId[], fromId: DashboardWidgetId, toId: DashboardWidgetId) {
+  const fromIndex = order.indexOf(fromId);
+  const toIndex = order.indexOf(toId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return order;
+
+  const next = [...order];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function getWidgetIdFromPoint(clientX: number, clientY: number): DashboardWidgetId | null {
+  const element = document
+    .elementsFromPoint(clientX, clientY)
+    .find((item) => item instanceof HTMLElement && item.dataset.dashboardWidgetId);
+
+  return element instanceof HTMLElement
+    ? (element.dataset.dashboardWidgetId as DashboardWidgetId)
+    : null;
+}
+
+function runWidgetLayoutTransition(update: () => void) {
+  const viewTransitionDocument = document as Document & {
+    startViewTransition?: (callback: () => void) => { finished: Promise<void> };
+  };
+
+  if (!viewTransitionDocument.startViewTransition) {
+    update();
+    return;
+  }
+
+  try {
+    viewTransitionDocument.startViewTransition(() => {
+      flushSync(update);
+    });
+  } catch {
+    update();
+  }
+}
+
+function DashboardWidgetFrame({
+  id,
+  orderIndex,
+  draggingWidget,
+  dragOffset,
+  onPointerDownWidget,
+  onPointerMoveWidget,
+  onPointerEndWidget,
+  children,
+}: {
+  id: DashboardWidgetId;
+  orderIndex: number;
+  draggingWidget: DashboardWidgetId | null;
+  dragOffset: { x: number; y: number };
+  onPointerDownWidget: (id: DashboardWidgetId, event: React.PointerEvent<HTMLElement>) => void;
+  onPointerMoveWidget: (event: React.PointerEvent<HTMLElement>) => void;
+  onPointerEndWidget: (event: React.PointerEvent<HTMLElement>) => void;
+  children: React.ReactNode;
 }) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const [open, setOpen] = useState(false);
-  const [activePreset, setActivePreset] = useState<string>("7 วันล่าสุด");
-  const [customFrom, setCustomFrom] = useState(toDateStr(from));
-  const [customTo, setCustomTo] = useState(toDateStr(to));
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const selectPreset = (p: Preset) => {
-    if (p.days === null) { setActivePreset(p.label); return; }
-    setActivePreset(p.label);
-    const { from: f, to: t } = presetRange(p, today);
-    setCustomFrom(toDateStr(f));
-    setCustomTo(toDateStr(t));
-    onChange(f, t, p.label);
-    setOpen(false);
-  };
-
-  const applyCustom = () => {
-    const f = new Date(customFrom); const t = new Date(customTo);
-    if (isNaN(f.getTime()) || isNaN(t.getTime()) || f > t) return;
-    setActivePreset("กำหนดเอง");
-    onChange(f, t, `${customFrom} ถึง ${customTo}`);
-    setOpen(false);
-  };
-
-  const fmt = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-  const label = from.getTime() === to.getTime() ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+  const isDragging = draggingWidget === id;
+  const isDropTarget = draggingWidget !== null && draggingWidget !== id;
+  const widgetStyle = {
+    order: orderIndex,
+    viewTransitionName: `dashboard-widget-${id}`,
+    transform: isDragging ? `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) scale(1.02)` : undefined,
+  } as React.CSSProperties & { viewTransitionName: string };
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:border-orange-400 hover:text-orange-500 transition-colors"
+    <section
+      role="button"
+      tabIndex={0}
+      data-dashboard-widget-id={id}
+      title={`ลากการ์ด ${WIDGET_META[id].label}`}
+      aria-label={`ลากการ์ด ${WIDGET_META[id].label} เพื่อเปลี่ยนตำแหน่ง`}
+      className={`${WIDGET_META[id].className} relative group h-full rounded-md cursor-grab active:cursor-grabbing select-none touch-none will-change-transform transition-[opacity,box-shadow,outline-color] duration-150 ease-out ${isDragging ? "z-[5] opacity-85 shadow-2xl ring-2 ring-orange-300/70 dark:ring-orange-600/60" : "opacity-100"} ${isDropTarget ? "outline outline-2 outline-transparent hover:outline-orange-300/70 dark:hover:outline-orange-600/50" : ""}`}
+      style={widgetStyle}
+      onPointerDown={(event) => onPointerDownWidget(id, event)}
+      onPointerMove={onPointerMoveWidget}
+      onPointerUp={onPointerEndWidget}
+      onPointerCancel={onPointerEndWidget}
+      onLostPointerCapture={onPointerEndWidget}
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-2 top-2 z-[2] inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-300 shadow-sm transition-colors group-hover:border-orange-300 group-hover:text-orange-500 dark:border-gray-700 dark:bg-gray-900/90 dark:text-gray-600 dark:group-hover:border-orange-600 dark:group-hover:text-orange-400"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
-          <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+          <circle cx="9" cy="6" r="1.5" />
+          <circle cx="15" cy="6" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="18" r="1.5" />
+          <circle cx="15" cy="18" r="1.5" />
         </svg>
-        <span className="whitespace-nowrap">{label}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}>
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
+      </div>
+      {children}
+    </section>
+  );
+}
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl p-4 min-w-[256px]">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">ช่วงเวลา</p>
-          <div className="grid grid-cols-2 gap-1 mb-3">
-            {PRESETS.map(p => (
-              <button
-                key={p.label}
-                onClick={() => selectPreset(p)}
-                className={`px-3 py-1.5 rounded-lg text-xs text-left transition-colors ${
-                  activePreset === p.label
-                    ? "bg-orange-500 text-white font-medium"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <div className={`space-y-2 transition-opacity ${activePreset === "กำหนดเอง" ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
-            <div className="h-px bg-gray-100 dark:bg-gray-800" />
-            <div className="flex items-end gap-2 pt-1">
-              <div className="flex-1">
-                <p className="text-[10px] text-gray-400 mb-1">จากวันที่</p>
-                <input type="date" value={customFrom} max={customTo} onChange={e => setCustomFrom(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-400" />
-              </div>
-              <span className="text-gray-300 pb-1.5">—</span>
-              <div className="flex-1">
-                <p className="text-[10px] text-gray-400 mb-1">ถึงวันที่</p>
-                <input type="date" value={customTo} min={customFrom} max={toDateStr(today)} onChange={e => setCustomTo(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-orange-400" />
-              </div>
+// ─── main page ────────────────────────────────────────────────────────────────
+export default function Home() {
+  const { user } = useAuth();
+  const now = useNowTH();
+  const [widgetOrder, setWidgetOrder] = useState<DashboardWidgetId[]>(DEFAULT_DASHBOARD_WIDGETS);
+  const [draggingWidget, setDraggingWidget] = useState<DashboardWidgetId | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const lastDragTargetRef = useRef<DashboardWidgetId | null>(null);
+  const pointerDragRef = useRef<WidgetPointerDrag | null>(null);
+
+  // derived ops stats
+  const tablesUsed = TABLES.filter(t => t.status === "occupied").length;
+  const tablesTotal = TABLES.length;
+  const cooking = ORDERS.filter(o => o.status === "cooking").length;
+  const overdue = ORDERS.filter(o => o.waited >= 15).length;
+  const readyCount = ORDERS.filter(o => o.status === "ready").length;
+  const shiftRevenue = 18640;
+  const shiftOrders = 87;
+
+  const dateLabel = now.toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" });
+  const timeLabel = now.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const saved = window.localStorage.getItem(DASHBOARD_WIDGET_STORAGE_KEY);
+        setWidgetOrder(normalizeWidgetOrder(saved ? JSON.parse(saved) : null));
+      } catch {
+        setWidgetOrder(DEFAULT_DASHBOARD_WIDGETS);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const persistWidgetOrder = (next: DashboardWidgetId[]) => {
+    try {
+      window.localStorage.setItem(DASHBOARD_WIDGET_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Local storage can be unavailable in private windows; the live layout still updates.
+    }
+  };
+
+  const updateWidgetOrder = (next: DashboardWidgetId[]) => {
+    runWidgetLayoutTransition(() => {
+      setWidgetOrder(next);
+    });
+    persistWidgetOrder(next);
+  };
+
+  const moveDraggingWidgetOver = (targetId: DashboardWidgetId, draggingId: DashboardWidgetId) => {
+    if (draggingId === targetId) return;
+    if (lastDragTargetRef.current === targetId) return;
+
+    lastDragTargetRef.current = targetId;
+
+    runWidgetLayoutTransition(() => {
+      setWidgetOrder((current) => {
+        const next = moveWidget(current, draggingId, targetId);
+        persistWidgetOrder(next);
+        return next;
+      });
+    });
+  };
+
+  const startWidgetDrag = (id: DashboardWidgetId) => {
+    lastDragTargetRef.current = null;
+    setDragOffset({ x: 0, y: 0 });
+    setDraggingWidget(id);
+  };
+
+  const finishWidgetDrag = () => {
+    lastDragTargetRef.current = null;
+    pointerDragRef.current = null;
+    setDragOffset({ x: 0, y: 0 });
+    setDraggingWidget(null);
+  };
+
+  const handleWidgetPointerDown = (id: DashboardWidgetId, event: React.PointerEvent<HTMLElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+
+    pointerDragRef.current = {
+      id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleWidgetPointerMove = (event: React.PointerEvent<HTMLElement>) => {
+    const pointerDrag = pointerDragRef.current;
+    if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY);
+    if (!pointerDrag.active && distance < 7) return;
+
+    event.preventDefault();
+
+    if (!pointerDrag.active) {
+      pointerDrag.active = true;
+      startWidgetDrag(pointerDrag.id);
+    }
+
+    setDragOffset({
+      x: event.clientX - pointerDrag.startX,
+      y: event.clientY - pointerDrag.startY,
+    });
+
+    const targetId = getWidgetIdFromPoint(event.clientX, event.clientY);
+    if (targetId) {
+      moveDraggingWidgetOver(targetId, pointerDrag.id);
+    }
+  };
+
+  const handleWidgetPointerEnd = (event: React.PointerEvent<HTMLElement>) => {
+    const pointerDrag = pointerDragRef.current;
+    if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+
+    if (pointerDrag.active) {
+      event.preventDefault();
+    }
+
+    finishWidgetDrag();
+  };
+
+  const resetWidgetOrder = () => {
+    updateWidgetOrder(DEFAULT_DASHBOARD_WIDGETS);
+    finishWidgetDrag();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+
+      {/* ── header: operational, not analytical ──────────────────────────────── */}
+      <div className="sticky top-0 z-10 bg-white/95 dark:bg-gray-950/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+        <div className="px-5 md:px-7 h-14 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-[14px] font-semibold tracking-tight truncate">ภาพรวมร้านวันนี้</h1>
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
+                <StatusDot color="bg-emerald-500" pulse />
+                เปิดให้บริการ
+              </span>
             </div>
-            <button onClick={applyCustom}
-              className="w-full py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg transition-colors">
-              ดูข้อมูล
+            <p className="text-[11px] text-gray-500 mt-0.5 truncate" suppressHydrationWarning>
+              {dateLabel} · กะเย็น 17:00–24:00 · เวลา {timeLabel}
+              {user ? ` · ${user.first_name}` : ""}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-label="รีเฟรชข้อมูล"
+              className="inline-flex items-center gap-1.5 px-2.5 h-8 text-[12px] font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+              </svg>
+              <span className="hidden sm:inline">รีเฟรช</span>
+            </button>
+            <button
+              type="button"
+              aria-label="สร้างออเดอร์ใหม่"
+              className="inline-flex items-center gap-1.5 px-2.5 h-8 text-[12px] font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-md hover:opacity-90 transition-opacity"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span className="hidden sm:inline">ออเดอร์ใหม่</span>
             </button>
           </div>
         </div>
-      )}
+
+        {/* ── ops summary strip (no cards, just inline stats) ──────────────── */}
+        <div className="border-t border-gray-100 dark:border-gray-800/60">
+          <div className="px-5 md:px-7 grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800/60">
+            <Stat label="โต๊ะใช้งาน" main={`${tablesUsed} / ${tablesTotal}`} hint={`${Math.round(tablesUsed / tablesTotal * 100)}% เต็ม`} tone="amber" />
+            <Stat label="ครัวกำลังทำ" main={`${cooking} จาน`} hint={`พร้อมเสิร์ฟ ${readyCount}`} tone="info" />
+            <Stat label="ออเดอร์ใกล้เกินเวลา" main={`${overdue} รายการ`} hint="เกิน 15 นาที" tone={overdue > 0 ? "red" : "neutral"} />
+            <Stat label="รายได้กะนี้" main={`฿${shiftRevenue.toLocaleString()}`} hint={`${shiftOrders} ออเดอร์`} tone="neutral" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── main content ─────────────────────────────────────────────────────── */}
+      <div className="px-5 md:px-7 py-5 max-w-screen-2xl mx-auto">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] text-gray-500 dark:text-gray-500">
+            ลากการ์ดจากจุดไหนก็ได้เพื่อจัดตำแหน่งหน้าภาพรวมในแบบที่ทีมใช้งานถนัด
+          </p>
+          <button
+            type="button"
+            onClick={resetWidgetOrder}
+            className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[12px] font-medium text-gray-600 transition-colors hover:border-orange-300 hover:text-orange-600 dark:border-gray-700 dark:text-gray-300 dark:hover:border-orange-600 dark:hover:text-orange-400"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 3v6h6" />
+            </svg>
+            คืนค่า layout
+          </button>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        {/* row 1 — Order Queue (lg col-span-2) + Alerts/Reservations stack */}
+        <>
+
+          {/* Kitchen / Order Queue */}
+          <DashboardWidgetFrame
+            id="orders"
+            orderIndex={widgetOrder.indexOf("orders")}
+            draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+            onPointerDownWidget={handleWidgetPointerDown}
+            onPointerMoveWidget={handleWidgetPointerMove}
+            onPointerEndWidget={handleWidgetPointerEnd}
+          >
+          <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h2 className="text-[13px] font-semibold tracking-tight">ครัวกำลังทำ</h2>
+                <p className="text-[11px] text-gray-500 mt-0.5">เรียงตามเวลารอ · {ORDERS.length} ออเดอร์ในคิว</p>
+              </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <Legend dot="bg-red-500" label={`เกินเวลา ${overdue}`} />
+                <Legend dot="bg-amber-500" label={`กำลังทำ ${cooking}`} />
+                <Legend dot="bg-emerald-500" label={`พร้อมเสิร์ฟ ${readyCount}`} />
+              </div>
+            </div>
+
+            <div>
+              {/* desktop table-like header */}
+              <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800/60">
+                <span className="col-span-1">#</span>
+                <span className="col-span-1">โต๊ะ</span>
+                <span className="col-span-5">รายการ</span>
+                <span className="col-span-2 text-right">เวลารอ</span>
+                <span className="col-span-2 text-right">ยอด</span>
+                <span className="col-span-1 text-right">สถานะ</span>
+              </div>
+
+              <ul>
+                {ORDERS.map(o => {
+                  const s = ORDER_STATUS[o.status];
+                  const overdueRow = o.waited >= 15;
+                  return (
+                    <li
+                      key={o.id}
+                      className={`px-4 py-3 text-[12px] border-b border-gray-50 dark:border-gray-800/40 last:border-0 hover:bg-slate-50/60 dark:hover:bg-gray-800/30 transition-colors ${overdueRow ? "bg-red-50/40 dark:bg-red-900/10" : ""}`}
+                    >
+                      {/* mobile: stacked compact rows */}
+                      <div className="sm:hidden space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-700 dark:text-gray-200">
+                            <span className="font-mono text-gray-500">#{o.id}</span>
+                            <span className="mx-1.5 text-gray-300 dark:text-gray-700">·</span>
+                            <span className="font-semibold">{o.table}</span>
+                          </span>
+                          <span className={`font-semibold tabular-nums ${overdueRow ? "text-red-600 dark:text-red-400" : "text-gray-700 dark:text-gray-300"}`}>
+                            {o.waited} นาที
+                          </span>
+                        </div>
+                        <p className="text-gray-700 dark:text-gray-300 leading-snug">{o.items.join(" · ")}</p>
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${s.bg} ${s.text}`}>
+                            <StatusDot color={s.dot} pulse={o.status !== "served"} />
+                            {s.label}
+                          </span>
+                          <span className="text-gray-500 tabular-nums">฿{o.total.toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      {/* desktop: table-like grid */}
+                      <div className="hidden sm:grid sm:grid-cols-12 gap-2 items-center">
+                        <span className="col-span-1 font-mono text-gray-500">#{o.id}</span>
+                        <span className="col-span-1 font-semibold">{o.table}</span>
+                        <span className="col-span-5 text-gray-700 dark:text-gray-300 leading-snug">{o.items.join(" · ")}</span>
+                        <span className={`col-span-2 text-right font-semibold tabular-nums ${overdueRow ? "text-red-600 dark:text-red-400" : "text-gray-700 dark:text-gray-300"}`}>
+                          {o.waited} นาที
+                        </span>
+                        <span className="col-span-2 text-right text-gray-500 tabular-nums">฿{o.total.toLocaleString()}</span>
+                        <span className="col-span-1 text-right">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${s.bg} ${s.text}`}>
+                            <StatusDot color={s.dot} pulse={o.status !== "served"} />
+                            {s.label}
+                          </span>
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+          </DashboardWidgetFrame>
+
+          {/* right column: Alerts + Reservations stacked */}
+          <>
+
+            {/* low stock alerts */}
+            <DashboardWidgetFrame
+              id="lowStock"
+              orderIndex={widgetOrder.indexOf("lowStock")}
+              draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+              onPointerDownWidget={handleWidgetPointerDown}
+              onPointerMoveWidget={handleWidgetPointerMove}
+              onPointerEndWidget={handleWidgetPointerEnd}
+            >
+            <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-red-500">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <h2 className="text-[13px] font-semibold tracking-tight">ของใกล้หมด</h2>
+                </div>
+                <span className="text-[10px] font-medium text-red-600 dark:text-red-400 px-1.5 py-0.5 bg-red-50 dark:bg-red-900/20 rounded">
+                  {LOW_STOCK.length} รายการ
+                </span>
+              </div>
+              <ul>
+                {LOW_STOCK.map((s, i) => (
+                  <li key={i} className="flex items-center justify-between px-4 py-2.5 text-[12px] border-b border-gray-50 dark:border-gray-800/40 last:border-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot color={s.severity === "critical" ? "bg-red-500" : "bg-amber-500"} />
+                      <span className="text-gray-800 dark:text-gray-200 truncate">{s.name}</span>
+                    </div>
+                    <span className={`tabular-nums font-medium ${s.severity === "critical" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                      เหลือ {s.left} {s.unit}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            </DashboardWidgetFrame>
+
+            {/* reservations */}
+            <DashboardWidgetFrame
+              id="reservations"
+              orderIndex={widgetOrder.indexOf("reservations")}
+              draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+              onPointerDownWidget={handleWidgetPointerDown}
+              onPointerMoveWidget={handleWidgetPointerMove}
+              onPointerEndWidget={handleWidgetPointerEnd}
+            >
+            <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <h2 className="text-[13px] font-semibold tracking-tight">การจองคืนนี้</h2>
+                <span className="text-[10px] text-gray-400">{RESERVATIONS.length} รายการ</span>
+              </div>
+              <ul>
+                {RESERVATIONS.map((r, i) => (
+                  <li key={i} className="flex items-center gap-3 px-4 py-2.5 text-[12px] border-b border-gray-50 dark:border-gray-800/40 last:border-0">
+                    <div className="text-center shrink-0">
+                      <p className="font-mono font-semibold text-gray-900 dark:text-white">{r.time}</p>
+                    </div>
+                    <div className="w-px h-7 bg-gray-100 dark:bg-gray-800" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-gray-800 dark:text-gray-200 truncate">
+                        <span className="font-semibold">{r.table}</span> · {r.guests} ท่าน · {r.name}
+                      </p>
+                      {r.note && <p className="text-[11px] text-gray-500 truncate">{r.note}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            </DashboardWidgetFrame>
+          </>
+        </>
+
+        {/* row 2 — Floor status + Hourly chart */}
+        <>
+
+          {/* floor map */}
+          <DashboardWidgetFrame
+            id="floor"
+            orderIndex={widgetOrder.indexOf("floor")}
+            draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+            onPointerDownWidget={handleWidgetPointerDown}
+            onPointerMoveWidget={handleWidgetPointerMove}
+            onPointerEndWidget={handleWidgetPointerEnd}
+          >
+          <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+            <SectionHeader
+              title="ผังโต๊ะรอบปัจจุบัน"
+              hint="สถานะโต๊ะแบบ real-time"
+              right={
+                <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                  <Legend dot="bg-amber-500" label="ใช้งาน" />
+                  <Legend dot="bg-emerald-500" label="ว่าง" />
+                  <Legend dot="bg-sky-500" label="จอง" />
+                  <Legend dot="bg-slate-400" label="ทำความสะอาด" />
+                </div>
+              }
+            />
+            <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-5 xl:grid-cols-7 gap-1.5">
+              {TABLES.map(t => {
+                const s = TABLE_STATUS[t.status];
+                return (
+                  <button
+                    key={t.id}
+                    title={`${t.id} · ${s.label}${t.mins ? ` · ${t.mins} นาที` : ""}${t.guests ? ` · ${t.guests} ท่าน` : ""}`}
+                    className={`aspect-square flex flex-col items-center justify-center border rounded-md text-[11px] font-semibold leading-tight hover:scale-[1.03] transition-transform ${s.cls}`}
+                  >
+                    <span>{t.id}</span>
+                    {t.status === "occupied" && (
+                      <span className="text-[9px] font-normal opacity-80 mt-0.5 tabular-nums">{t.mins}m</span>
+                    )}
+                    {t.status === "reserved" && <span className="text-[9px] font-normal opacity-80 mt-0.5">จอง</span>}
+                    {t.status === "cleaning" && <span className="text-[9px] font-normal opacity-80 mt-0.5">ทำความสะอาด</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          </DashboardWidgetFrame>
+
+          {/* hourly chart */}
+          <DashboardWidgetFrame
+            id="hourly"
+            orderIndex={widgetOrder.indexOf("hourly")}
+            draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+            onPointerDownWidget={handleWidgetPointerDown}
+            onPointerMoveWidget={handleWidgetPointerMove}
+            onPointerEndWidget={handleWidgetPointerEnd}
+          >
+          <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+            <SectionHeader
+              title="ออเดอร์รายชั่วโมง"
+              hint="รอบเย็นเริ่มแน่น 18:00 เป็นต้นไป"
+              right={
+                <span className="text-[10px] text-gray-400">วันนี้</span>
+              }
+            />
+            <ResponsiveContainer width="100%" height={186}>
+              <BarChart data={HOURLY} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} className="dark:opacity-30" />
+                <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: "rgba(148,163,184,0.08)" }} content={<HourlyTooltip />} />
+                <Bar dataKey="orders" radius={[2, 2, 0, 0]} maxBarSize={22}>
+                  {HOURLY.map((e, i) => {
+                    const fill = e.orders === 0 ? "#e2e8f0"
+                      : e.orders >= 40 ? "#f97316"
+                      : e.orders >= 20 ? "#fb923c"
+                      : "#fdba74";
+                    return <Cell key={i} fill={fill} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="text-[10px] text-gray-400 mt-1">ชั่วโมงพีคของวันนี้: 19:00 (47 ออเดอร์)</p>
+          </div>
+          </DashboardWidgetFrame>
+        </>
+
+        {/* row 3 — top items today + staff on duty */}
+        <>
+
+          {/* top items today */}
+          <DashboardWidgetFrame
+            id="topItems"
+            orderIndex={widgetOrder.indexOf("topItems")}
+            draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+            onPointerDownWidget={handleWidgetPointerDown}
+            onPointerMoveWidget={handleWidgetPointerMove}
+            onPointerEndWidget={handleWidgetPointerEnd}
+          >
+          <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+            <SectionHeader title="เมนูขายดีวันนี้" hint="นับตั้งแต่เปิดร้าน" />
+            <ul className="space-y-1.5">
+              {TOP_ITEMS_TODAY.map((it, i) => {
+                const max = TOP_ITEMS_TODAY[0].sold;
+                const pct = (it.sold / max) * 100;
+                const lowStock = it.stock === "ใกล้หมด";
+                return (
+                  <li key={i} className="grid grid-cols-12 items-center gap-2 text-[12px]">
+                    <span className="col-span-1 text-[11px] text-gray-400 tabular-nums">{i + 1}.</span>
+                    <span className="col-span-4 truncate text-gray-800 dark:text-gray-200">{it.name}</span>
+                    <div className="col-span-5 h-1.5 bg-slate-100 dark:bg-gray-800 rounded-sm overflow-hidden">
+                      <div
+                        className={`h-full rounded-sm ${lowStock ? "bg-amber-500" : "bg-orange-500"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="col-span-1 text-right text-gray-700 dark:text-gray-300 font-medium tabular-nums">{it.sold}</span>
+                    <span className={`col-span-1 text-right text-[10px] ${lowStock ? "text-amber-600 dark:text-amber-400" : "text-gray-400"}`}>
+                      {it.stock}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          </DashboardWidgetFrame>
+
+          {/* staff on duty */}
+          <DashboardWidgetFrame
+            id="staff"
+            orderIndex={widgetOrder.indexOf("staff")}
+            draggingWidget={draggingWidget}
+            dragOffset={dragOffset}
+            onPointerDownWidget={handleWidgetPointerDown}
+            onPointerMoveWidget={handleWidgetPointerMove}
+            onPointerEndWidget={handleWidgetPointerEnd}
+          >
+          <div className="h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md p-4">
+            <SectionHeader
+              title="พนักงานในกะ"
+              hint={`รวม ${STAFF.reduce((a, b) => a + b.on, 0)} คน · กะเย็น`}
+              right={<button className="text-[11px] text-gray-500 hover:text-orange-500">ดูตาราง →</button>}
+            />
+            <ul className="space-y-2">
+              {STAFF.map((s, i) => {
+                const full = s.on === s.total;
+                return (
+                  <li key={i} className="flex items-center justify-between text-[12px] py-1.5 border-b border-gray-50 dark:border-gray-800/40 last:border-0">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-1 h-6 rounded-sm ${full ? "bg-emerald-500" : "bg-amber-500"}`} />
+                      <div>
+                        <p className="font-medium text-gray-800 dark:text-gray-200">{s.role}</p>
+                        <p className="text-[10px] text-gray-500">หัวหน้า: {s.lead}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="tabular-nums font-semibold">
+                        <span className={full ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{s.on}</span>
+                        <span className="text-gray-400"> / {s.total}</span>
+                      </p>
+                      <p className="text-[10px] text-gray-400">{full ? "เต็มทีม" : "ขาด " + (s.total - s.on)}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          </DashboardWidgetFrame>
+        </>
+
+        </div>
+      </div>
     </div>
   );
 }
 
-// ─── main ─────────────────────────────────────────────────────────────────────
-export default function Home() {
-  const { user } = useAuth();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-
-  const [dateFrom, setDateFrom] = useState(() => addDays(today, -6));
-  const [dateTo, setDateTo] = useState(today);
-  const [rangeLabel, setRangeLabel] = useState("7 วันล่าสุด");
-
-  const trendData = genRevenueTrend(dateFrom, dateTo);
-  const days = diffDays(dateFrom, dateTo);
-
-  const handleRange = (f: Date, t: Date, label: string) => {
-    setDateFrom(f); setDateTo(t); setRangeLabel(label);
-  };
-
-  const totalRevenue = 18640 * Math.max(1, days / 7);
-  const totalOrders = Math.round(87 * Math.max(1, days / 7));
-
+// ─── small reusable bits below main ───────────────────────────────────────────
+function Stat({ label, main, hint, tone }: {
+  label: string; main: string; hint: string;
+  tone: "neutral" | "amber" | "info" | "red";
+}) {
+  const toneCls =
+    tone === "red"   ? "text-red-600 dark:text-red-400"
+    : tone === "amber" ? "text-amber-700 dark:text-amber-400"
+    : tone === "info"  ? "text-sky-700 dark:text-sky-400"
+    : "text-gray-900 dark:text-white";
   return (
-    <div className="min-h-screen bg-[#f8f9fb] dark:bg-gray-950">
-
-      {/* ── header ────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800">
-        <div className="px-6 md:px-8 h-14 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="font-semibold text-gray-900 dark:text-white text-[15px]">ภาพรวมยอดขาย</h1>
-            <p className="text-xs text-gray-400 leading-none mt-0.5">
-              {rangeLabel}{user ? ` · ${user.first_name}` : ""}
-            </p>
-          </div>
-          <DateRangePicker from={dateFrom} to={dateTo} onChange={handleRange} />
-        </div>
-      </div>
-
-      <div className="px-6 md:px-8 py-6 max-w-screen-2xl mx-auto space-y-5">
-
-        {/* ── KPI row ──────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-          <KpiCard
-            label="รายได้รวม"
-            value={`฿${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-            sub={`ช่วง ${days} วัน`}
-            trend={12.4}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-              </svg>
-            }
-          />
-          <KpiCard
-            label="ออเดอร์ทั้งหมด"
-            value={`${totalOrders.toLocaleString()} รายการ`}
-            sub={`เฉลี่ย ฿214 / ออเดอร์`}
-            trend={8.2}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-                <rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12h6M9 16h4" />
-              </svg>
-            }
-          />
-          <KpiCard
-            label="โต๊ะที่ใช้บริการ"
-            value="14 / 20 โต๊ะ"
-            sub="อัตราการใช้งาน 70%"
-            trend={5.0}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <rect x="3" y="3" width="18" height="4" rx="1" /><path d="M5 7v13M19 7v13M8 20h8" />
-              </svg>
-            }
-          />
-          <KpiCard
-            label="ลูกค้าทั้งหมด"
-            value={`${Math.round(203 * Math.max(1, days / 7)).toLocaleString()} คน`}
-            sub="เพิ่มขึ้นจากช่วงก่อน"
-            trend={-3.1}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-              </svg>
-            }
-          />
-        </div>
-
-        {/* ── Revenue + Live status ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-
-          {/* revenue area chart */}
-          <div className="xl:col-span-2">
-            <Card title="แนวโน้มยอดขาย" sub={rangeLabel}>
-              <ResponsiveContainer width="100%" height={268}>
-                <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f97316" stopOpacity={0.12} />
-                      <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="day" tick={TICK} axisLine={false} tickLine={false} />
-                  <YAxis tick={TICK} axisLine={false} tickLine={false} tickFormatter={v => `฿${(v / 1000).toFixed(0)}k`} width={44} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <ReferenceLine y={12000} stroke="#e2e8f0" strokeDasharray="4 3" label={{ value: "เป้าหมาย", fill: "#cbd5e1", fontSize: 10, position: "right" }} />
-                  <Area
-                    type="monotone" dataKey="revenue" name="ยอดขาย (฿)"
-                    stroke="#f97316" strokeWidth={2}
-                    fill="url(#revGrad)"
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#f97316", stroke: "#fff", strokeWidth: 2 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
-          </div>
-
-          {/* live status */}
-          <div>
-            <Card title="สถานะร้านตอนนี้" sub="ข้อมูล ณ ปัจจุบัน" action={
-              <span className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                สด
-              </span>
-            }>
-              <div className="space-y-1 h-full">
-                {[
-                  {
-                    label: "โต๊ะว่าง",
-                    value: "6 โต๊ะ",
-                    sub: "จาก 20 โต๊ะทั้งหมด",
-                    icon: (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <rect x="3" y="3" width="18" height="4" rx="1" /><path d="M5 7v13M19 7v13M8 20h8" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    label: "ออเดอร์กำลังทำ",
-                    value: "8 รายการ",
-                    sub: "รอส่งถึงโต๊ะ 3 รายการ",
-                    icon: (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-                        <rect x="9" y="3" width="6" height="4" rx="1" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    label: "เวลารอเฉลี่ย",
-                    value: "18 นาที",
-                    sub: "ดีกว่าเป้า 20 นาที",
-                    icon: (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    label: "พนักงานออนดิวตี้",
-                    value: "12 คน",
-                    sub: "เชฟ 4 · เสิร์ฟ 8",
-                    icon: (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
-                      </svg>
-                    ),
-                  },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-500 shrink-0">
-                      {item.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400">{item.label}</p>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.value}</p>
-                    </div>
-                    <p className="text-[11px] text-gray-400 text-right shrink-0 max-w-[90px] leading-snug">{item.sub}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
-
-        {/* ── Top items + Hourly ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-          {/* top menu items */}
-          <Card title="เมนูขายดี" sub="เรียงตามจำนวนออเดอร์">
-            <div className="space-y-0.5">
-              {/* header row */}
-              <div className="grid grid-cols-12 gap-2 px-3 pb-2 text-[11px] text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                <span className="col-span-1">#</span>
-                <span className="col-span-4">เมนู</span>
-                <span className="col-span-2 text-right">จำนวน</span>
-                <span className="col-span-3 text-right">รายได้</span>
-                <span className="col-span-2 text-right">เทียบก่อน</span>
-              </div>
-              {topItems.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-center px-3 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                  <span className={`col-span-1 text-xs font-bold ${i < 3 ? "text-orange-500" : "text-gray-300 dark:text-gray-600"}`}>
-                    {i + 1}
-                  </span>
-                  <span className="col-span-4 text-sm text-gray-800 dark:text-gray-200 truncate">{item.name}</span>
-                  <span className="col-span-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">{item.sales}</span>
-                  <span className="col-span-3 text-right text-sm text-gray-500 dark:text-gray-400">
-                    ฿{item.revenue.toLocaleString()}
-                  </span>
-                  <span className={`col-span-2 text-right text-xs font-medium ${
-                    item.growth >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"
-                  }`}>
-                    {item.growth >= 0 ? "+" : ""}{item.growth}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* hourly bar chart */}
-          <Card title="ออเดอร์รายชั่วโมง" sub="ชั่วโมง peak ของวัน">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={hourlyOrders} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="hour" tick={TICK} axisLine={false} tickLine={false} tickFormatter={v => `${v}`} />
-                <YAxis tick={TICK} axisLine={false} tickLine={false} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="orders" name="ออเดอร์" radius={[3, 3, 0, 0]} maxBarSize={28}>
-                  {hourlyOrders.map((e, i) => (
-                    <Cell
-                      key={i}
-                      fill={e.orders >= 50 ? "#f97316" : e.orders >= 25 ? "#fdba74" : "#fef3e2"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        </div>
-
-        {/* ── Category + Payment ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-
-          {/* donut */}
-          <Card title="สัดส่วนรายได้" sub="แบ่งตามหมวดหมู่">
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <ResponsiveContainer width={160} height={160}>
-                  <PieChart>
-                    <Pie
-                      data={categoryRevenue} cx="50%" cy="50%"
-                      innerRadius={52} outerRadius={72}
-                      dataKey="value" paddingAngle={2} stroke="none"
-                      startAngle={90} endAngle={-270}
-                    >
-                      {categoryRevenue.map((c, i) => <Cell key={i} fill={c.color} />)}
-                    </Pie>
-                    <Tooltip formatter={v => [`${v}%`, ""]} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">48%</p>
-                  <p className="text-[10px] text-gray-400">จานหลัก</p>
-                </div>
-              </div>
-              <div className="w-full space-y-2">
-                {categoryRevenue.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: c.color }} />
-                      {c.name}
-                    </span>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">{c.value}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-
-          {/* payment methods */}
-          <div className="lg:col-span-2">
-            <Card title="ช่องทางชำระเงิน" sub="สัดส่วนและยอดรวม">
-              <div className="space-y-5">
-                {paymentMethods.map((p, i) => (
-                  <div key={i} className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{p.name}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400">฿{p.amount.toLocaleString()}</span>
-                        <span className="text-sm font-semibold text-gray-900 dark:text-white w-8 text-right">{p.value}%</span>
-                      </div>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-orange-500 transition-all duration-700"
-                        style={{ width: `${p.value}%`, opacity: 1 - i * 0.2 }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* summary stats */}
-          <div className="lg:col-span-2">
-            <Card title="สรุปช่วงเวลา" sub={rangeLabel}>
-              <div className="space-y-0">
-                {[
-                  { label: "รายได้เฉลี่ย / วัน",    value: `฿${(totalRevenue / days).toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
-                  { label: "ออเดอร์เฉลี่ย / วัน",   value: `${Math.round(totalOrders / days)} รายการ` },
-                  { label: "มูลค่าเฉลี่ย / โต๊ะ",   value: "฿1,331" },
-                  { label: "อัตราหมุนเวียนโต๊ะ",    value: "3.2 รอบ / วัน" },
-                  { label: "กำไรขั้นต้น (est.)",      value: "~62%" },
-                  { label: "ชั่วโมง peak",             value: "19:00 – 20:00 น." },
-                ].map((row, i) => (
-                  <div key={i} className={`flex items-center justify-between py-2.5 text-sm ${
-                    i !== 0 ? "border-t border-gray-50 dark:border-gray-800" : ""
-                  }`}>
-                    <span className="text-gray-500 dark:text-gray-400">{row.label}</span>
-                    <span className="font-medium text-gray-900 dark:text-white">{row.value}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
-
-      </div>
+    <div className="px-4 py-3 first:pl-5 md:first:pl-7 last:pr-5 md:last:pr-7">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400">{label}</p>
+      <p className={`text-[18px] font-bold tabular-nums leading-tight mt-0.5 ${toneCls}`}>{main}</p>
+      <p className="text-[11px] text-gray-500 leading-tight mt-0.5">{hint}</p>
     </div>
+  );
+}
+
+function Legend({ dot, label }: { dot: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400">
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} /> {label}
+    </span>
   );
 }

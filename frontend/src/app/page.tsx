@@ -424,7 +424,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-orange-500/20 mb-4">
                     <path d="M10 8v6a4 4 0 01-4 4H4v-4h2v-6h4zm10 0v6a4 4 0 01-4 4h-2v-4h2v-6h4z"/>
                   </svg>
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">"{t.quote}"</p>
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">&ldquo;{t.quote}&rdquo;</p>
                   <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white font-bold text-sm">
                       {t.name.slice(-1)}

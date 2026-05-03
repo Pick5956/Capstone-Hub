@@ -14,9 +14,9 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) FindBySutId(sutId string) (*entity.User, error) {
+func (r *UserRepository) FindByEmail(email string) (*entity.User, error) {
 	var user entity.User
-	if err := r.db.Preload("Role").Where("sut_id = ?", sutId).First(&user).Error; err != nil {
+	if err := r.db.Preload("Role").Where("email = ?", email).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // หน้าที่ต้อง login ก่อนถึงจะเข้าได้
-const protectedRoutes = ['/home', '/orders', '/tables', '/menu', '/inventory', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
+const protectedRoutes = ['/restaurants', '/home', '/orders', '/tables', '/menu', '/inventory', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,7 +17,7 @@ export function middleware(request: NextRequest) {
 
   // login แล้วแต่เข้าหน้า landing → ไปที่ dashboard
   if (token && pathname === '/') {
-    return NextResponse.redirect(new URL('/home', request.url));
+    return NextResponse.redirect(new URL('/restaurants', request.url));
   }
 
   return NextResponse.next();

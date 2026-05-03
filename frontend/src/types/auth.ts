@@ -4,7 +4,6 @@ export type Permission = "view_dashboard" | "manage_users" | "edit_post";
 
 export interface User {
   ID: number;
-  sut_id: string;
   first_name: string;
   last_name: string;
   birthday: string;

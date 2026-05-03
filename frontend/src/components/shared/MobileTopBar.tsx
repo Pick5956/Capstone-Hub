@@ -31,6 +31,17 @@ export default function MobileTopBar() {
           RESTAURANT <span className="text-orange-500">HUB</span>
         </span>
       </Link>
+
+      <Link
+        href="/restaurants"
+        className="ml-auto h-8 px-2.5 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-[12px] font-medium text-gray-600 dark:text-gray-300 inline-flex items-center gap-1.5 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+          <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
+          <path d="M9 12h6" />
+        </svg>
+        ร้าน
+      </Link>
     </header>
   );
 }

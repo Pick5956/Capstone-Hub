@@ -1,2 +1,12 @@
 .env
 backend/vendor/
+
+# Personal LLM-maintained dev wiki — local only
+docs/wiki/
+
+# Personal Claude Code skills — local only
+.claude/
+
+# Personal Claude Code project entry — local only
+CLAUDE.md
+/.obsidian

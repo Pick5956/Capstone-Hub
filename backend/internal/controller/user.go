@@ -40,6 +40,23 @@ func (ctrl *UserController) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (ctrl *UserController) GoogleLogin(c *gin.Context) {
+	var req service.GoogleLoginRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := ctrl.authService.GoogleLogin(&req)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid google credentials"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 func (ctrl *UserController) Register(c *gin.Context) {
 	var user entity.User
 
