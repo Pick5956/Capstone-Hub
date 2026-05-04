@@ -154,14 +154,15 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
 
 // ── main export ───────────────────────────────────────────────────────────────
 function ThemeToggle({ className = "" }: { className?: string }) {
-  const { theme, toggle } = useTheme();
+  const { theme, mounted, toggle } = useTheme();
+  const isDark = mounted && theme === 'dark';
   return (
     <button
       onClick={toggle}
-      title={theme === 'dark' ? 'สลับเป็น Light mode' : 'สลับเป็น Dark mode'}
+      title={isDark ? 'สลับเป็น Light mode' : 'สลับเป็น Dark mode'}
       className={`p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 transition-colors shrink-0 ${className}`}
     >
-      {theme === 'dark' ? (
+      {isDark ? (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
           <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
           <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
@@ -178,6 +179,9 @@ function ThemeToggle({ className = "" }: { className?: string }) {
 }
 
 function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  const { activeMembership } = useAuth();
+  const restaurantName = activeMembership?.restaurant?.name ?? "เลือกร้าน";
+
   if (collapsed) {
     return (
       <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
@@ -211,7 +215,7 @@ function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNav
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[11px] text-gray-400 dark:text-gray-500 leading-none">ร้านปัจจุบัน</span>
-          <span className="mt-1 block text-[13px] font-semibold text-gray-900 dark:text-white truncate">ครัวบ้านส้ม</span>
+          <span className="mt-1 block text-[13px] font-semibold text-gray-900 dark:text-white truncate">{restaurantName}</span>
         </span>
         <span className="text-[11px] font-medium text-orange-600 dark:text-orange-400 shrink-0">เปลี่ยน</span>
       </Link>

@@ -8,6 +8,7 @@ type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
 interface ThemeCtx {
   theme: Theme;
   fontSize: FontSize;
+  mounted: boolean;
   toggle: () => void;
   setFontSize: (size: FontSize) => void;
 }
@@ -17,6 +18,7 @@ const FONT_SIZES: FontSize[] = ['small', 'normal', 'large', 'extra-large'];
 const ThemeContext = createContext<ThemeCtx>({
   theme: 'light',
   fontSize: 'large',
+  mounted: false,
   toggle: () => {},
   setFontSize: () => {},
 });
@@ -35,8 +37,9 @@ function getInitialFontSize(): FontSize {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
-  const [fontSize, setFontSizeState] = useState<FontSize>(() => getInitialFontSize());
+  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<Theme>('light');
+  const [fontSize, setFontSizeState] = useState<FontSize>('large');
 
   const applyTheme = useCallback((t: Theme) => {
     setTheme(t);
@@ -47,16 +50,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(getInitialTheme());
+      setFontSizeState(getInitialFontSize());
+      setMounted(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.dataset.fontSize = fontSize;
     localStorage.setItem('theme', theme);
     localStorage.setItem('fontSize', fontSize);
-  }, [fontSize, theme]);
+  }, [fontSize, mounted, theme]);
 
   const toggle = () => applyTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
-    <ThemeContext.Provider value={{ theme, fontSize, toggle, setFontSize: applyFontSize }}>
+    <ThemeContext.Provider value={{ theme, fontSize, mounted, toggle, setFontSize: applyFontSize }}>
       {children}
     </ThemeContext.Provider>
   );

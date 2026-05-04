@@ -15,12 +15,14 @@ import (
 )
 
 type AuthService struct {
-	userRepo *repository.UserRepository
+	userRepo    *repository.UserRepository
+	memberRepo  *repository.RestaurantMemberRepository
 }
 
-func ProvideAuthService(userRepo *repository.UserRepository) *AuthService {
+func ProvideAuthService(userRepo *repository.UserRepository, memberRepo *repository.RestaurantMemberRepository) *AuthService {
 	return &AuthService{
-		userRepo: userRepo,
+		userRepo:   userRepo,
+		memberRepo: memberRepo,
 	}
 }
 
@@ -29,32 +31,30 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-type LoginResponse struct {
-	Token string       `json:"token"`
-	User  *entity.User `json:"user"`
-}
-
 type GoogleLoginRequest struct {
 	IDToken string `json:"id_token" binding:"required"`
 }
 
-// registration
-
-// registration now uses entity.User directly
+type LoginResponse struct {
+	Token       string                      `json:"token"`
+	User        *entity.User                `json:"user"`
+	Memberships []entity.RestaurantMember   `json:"memberships"`
+}
 
 func (s *AuthService) Register(user *entity.User) (*entity.User, error) {
 	if err := user.Validation(); err != nil {
 		return nil, err
 	}
+	if user.Password == "" {
+		return nil, errors.New("Password is required")
+	}
 
-	// hash password
 	hashed, err := auth.HashPassword(user.Password)
 	if err != nil {
 		return nil, err
 	}
 	user.Password = hashed
 
-	// save
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, err
 	}
@@ -63,32 +63,16 @@ func (s *AuthService) Register(user *entity.User) (*entity.User, error) {
 }
 
 func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
-	// ค้นหา user
 	user, err := s.userRepo.FindByEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	// ตรวจสอบ password
 	if err := auth.VerifyPassword(user.Password, req.Password); err != nil {
 		return nil, err
 	}
 
-	// สร้าง token
-	jwtWrapper := &auth.JwtWrapper{
-		SecretKey: os.Getenv("JWT_SECRET"),
-		Issuer:    "project-management",
-	}
-
-	token, err := jwtWrapper.GenerateToken(user.ID, "user")
-	if err != nil {
-		return nil, err
-	}
-
-	return &LoginResponse{
-		Token: token,
-		User:  hideUserPassword(user),
-	}, nil
+	return s.buildLoginResponse(user)
 }
 
 func (s *AuthService) GoogleLogin(req *GoogleLoginRequest) (*LoginResponse, error) {
@@ -102,13 +86,16 @@ func (s *AuthService) GoogleLogin(req *GoogleLoginRequest) (*LoginResponse, erro
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
-
 		user, err = s.createGoogleUser(googleClaims)
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	return s.buildLoginResponse(user)
+}
+
+func (s *AuthService) buildLoginResponse(user *entity.User) (*LoginResponse, error) {
 	jwtWrapper := &auth.JwtWrapper{
 		SecretKey: os.Getenv("JWT_SECRET"),
 		Issuer:    "project-management",
@@ -119,9 +106,15 @@ func (s *AuthService) GoogleLogin(req *GoogleLoginRequest) (*LoginResponse, erro
 		return nil, err
 	}
 
+	memberships, err := s.memberRepo.FindActiveByUser(user.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &LoginResponse{
-		Token: token,
-		User:  hideUserPassword(user),
+		Token:       token,
+		User:        hideUserPassword(user),
+		Memberships: memberships,
 	}, nil
 }
 
@@ -154,7 +147,6 @@ func (s *AuthService) createGoogleUser(claims *auth.GoogleIDTokenClaims) (*entit
 		Email:        claims.Email,
 		Password:     hashed,
 		ProfileImage: claims.Picture,
-		RoleID:       3,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {

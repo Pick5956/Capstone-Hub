@@ -4,6 +4,6 @@ import "gorm.io/gorm"
 
 type Role struct {
 	gorm.Model
-	Role string `json:"role" valid:"required~Role is required"`
-	User []User `gorm:"foreignKey:RoleID" json:"user"`
+	Name        string `json:"name" gorm:"unique;not null" binding:"required"` // owner|manager|cashier|waiter|chef
+	Permissions string `json:"permissions" gorm:"type:jsonb;default:'[]'"`     // JSON array of permission keys
 }

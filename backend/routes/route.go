@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(r *gin.Engine){
+func SetupRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	SetupAuthRoutes(api)
 	SetupRoleRoutes(api)
@@ -16,9 +16,14 @@ func SetupRoutes(r *gin.Engine){
 	userCtrl := controller.ProvideUserController(config.DB())
 
 	v1 := api.Group("v1")
-
 	v1.Use(auth.Authorizes())
+	v1.Use(auth.RestaurantScope(config.DB()))
 	{
 		v1.GET("/users/profile", userCtrl.GetProfile)
 	}
+
+	// Restaurants + invitations.
+	// `api` carries the public invitation preview route, `v1` carries everything that requires auth.
+	SetupRestaurantRoutes(api, v1)
+	SetupMenuTableRoutes(v1)
 }
