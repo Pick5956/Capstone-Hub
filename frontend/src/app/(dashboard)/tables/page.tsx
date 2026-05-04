@@ -42,6 +42,7 @@ export default function TablesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const actionOnceRef = useRef(createSingleFlight());
 
   const copy = language === "th"
@@ -148,12 +149,13 @@ export default function TablesPage() {
     event.preventDefault();
     if (!canManage) return;
     if (!form.table_number.trim()) {
-      setError(copy.tableRequired);
+      setFormError(copy.tableRequired);
       return;
     }
     await actionOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
+      setFormError("");
       try {
         const payload = {
           ...form,
@@ -171,7 +173,7 @@ export default function TablesPage() {
         setEditing(null);
         setForm(emptyForm);
       } catch {
-        setError(copy.saveError);
+        setFormError(copy.saveError);
       } finally {
         setSubmitting(false);
       }
@@ -180,6 +182,7 @@ export default function TablesPage() {
 
   const editTable = (table: RestaurantTable) => {
     setEditing(table);
+    setFormError("");
     setForm({ table_number: table.table_number, capacity: table.capacity, zone: table.zone, status: table.status });
   };
 
@@ -332,10 +335,17 @@ export default function TablesPage() {
               <div className="mt-3 space-y-2">
                 <input
                   value={form.table_number}
-                  onChange={(e) => setForm({ ...form, table_number: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, table_number: e.target.value });
+                    setFormError("");
+                  }}
                   placeholder={copy.tablePlaceholder}
-                  className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900"
+                  aria-invalid={Boolean(formError)}
+                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
+                    formError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
+                  }`}
                 />
+                {formError && <p className="-mt-0.5 text-[11px] font-medium text-red-600 dark:text-red-300">{formError}</p>}
                 <input
                   value={form.capacity}
                   onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })}

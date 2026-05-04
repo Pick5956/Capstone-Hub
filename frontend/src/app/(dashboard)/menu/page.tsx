@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, uploadMenuImage } from "@/src/lib/menu";
 import { createSingleFlight } from "@/src/lib/singleFlight";
@@ -10,10 +11,19 @@ import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
-const emptyItem: MenuItemInput = { category_id: 0, name: "", price: 0, image_url: "", description: "", is_available: true, display_order: 0 };
+const emptyItem: MenuItemInput = {
+  category_id: 0,
+  name: "",
+  price: 0,
+  image_url: "",
+  description: "",
+  is_available: true,
+  display_order: 0,
+};
 
 export default function MenuPage() {
   const { activeMembership } = useAuth();
+  const { language } = useLanguage();
   const canManage = can(activeMembership, "manage_menu");
   const canView = canManage || can(activeMembership, "view_menu");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -29,7 +39,153 @@ export default function MenuPage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string }>({});
   const actionOnceRef = useRef(createSingleFlight());
+
+  const copy = language === "th"
+    ? {
+        permissionDenied: "ไม่มีสิทธิ์ดูเมนู",
+        eyebrow: "Menu",
+        title: "เมนูอาหาร",
+        manageSubtitle: "จัดการหมวดหมู่และเมนูของร้าน",
+        viewSubtitle: "ดูเมนูทั้งหมดแบบ read-only",
+        refresh: "รีเฟรช",
+        loadError: "โหลดข้อมูลเมนูไม่สำเร็จ",
+        categoryRequired: "กรุณากรอกชื่อหมวดหมู่",
+        categorySaveError: "บันทึกหมวดหมู่ไม่สำเร็จ",
+        itemRequired: "กรุณาเลือกหมวดหมู่และกรอกชื่อเมนู",
+        itemCategoryRequired: "เลือกหมวดหมู่ก่อนเพิ่มเมนู",
+        itemNameRequired: "กรอกชื่อเมนูที่ลูกค้าและพนักงานจำได้",
+        itemSaveError: "บันทึกเมนูไม่สำเร็จ",
+        categoryDeleteError: "ลบหมวดหมู่ไม่สำเร็จ",
+        itemDeleteError: "ลบเมนูไม่สำเร็จ",
+        imageTypeError: "กรุณาเลือกไฟล์รูปภาพ",
+        imageUploadError: "อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB",
+        allCategories: "ทุกหมวดหมู่",
+        catalogTitle: "รายการเมนู",
+        menuSummary: "เมนูทั้งหมด",
+        availableSummary: "พร้อมขาย",
+        categoryManager: "หมวดหมู่เมนู",
+        editorTitle: "จัดการเมนู",
+        editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
+        categoryHint: "จัดกลุ่มเมนูให้พนักงานหาเจอเร็ว",
+        searchPlaceholder: "ค้นหาเมนู",
+        noImage: "ไม่มีรูป",
+        uncategorized: "ไม่ระบุหมวด",
+        noDescription: "ไม่มีรายละเอียด",
+        available: "พร้อมขาย",
+        unavailable: "ปิดขาย",
+        edit: "แก้ไข",
+        delete: "ลบ",
+        noMenuTitle: "ยังไม่มีเมนู",
+        noMenuManage: "สร้างหมวดหมู่และเพิ่มเมนูแรกจากแผงด้านขวา",
+        noMenuView: "เจ้าของร้านยังไม่ได้เปิดเมนูให้ดู",
+        categories: "หมวดหมู่",
+        noCategories: "ยังไม่มีหมวดหมู่",
+        editCategory: "แก้หมวดหมู่",
+        addCategory: "เพิ่มหมวดหมู่",
+        categoryName: "ชื่อหมวดหมู่",
+        categoryPlaceholder: "เช่น อาหารจานเดียว / เครื่องดื่ม",
+        categoryOrder: "ลำดับแสดงผลของหมวดหมู่",
+        categoryOrderPlaceholder: "เช่น 1",
+        categoryOrderHelp: "เลขน้อยจะแสดงก่อน ถ้าไม่แน่ใจใส่ 0 ได้",
+        saveCategory: "บันทึกหมวดหมู่",
+        createCategory: "เพิ่มหมวดหมู่",
+        editItem: "แก้เมนู",
+        addItem: "เพิ่มเมนู",
+        itemCategory: "หมวดหมู่เมนู",
+        createCategoryFirst: "สร้างหมวดหมู่ก่อนเพิ่มเมนู",
+        createCategoryHint: "เพิ่มหมวดหมู่ เช่น อาหารจานเดียว / เครื่องดื่ม ก่อน แล้วค่อยเพิ่มเมนูในหมวดนั้น",
+        itemName: "ชื่อเมนู",
+        itemNamePlaceholder: "เช่น ข้าวกะเพราหมูสับ",
+        price: "ราคาเมนู (บาท)",
+        pricePlaceholder: "เช่น 65",
+        itemOrder: "ลำดับแสดงผลของเมนู",
+        itemOrderHelp: "เลขน้อยจะแสดงก่อนในหมวดหมู่นั้น ถ้าไม่แน่ใจเว้นว่างได้",
+        image: "รูปเมนู",
+        imageUrlPlaceholder: "หรือวาง URL รูปภาพเอง",
+        uploading: "กำลังอัปโหลดรูป...",
+        imageHelp: "รองรับ jpg, png, webp ไม่เกิน 5MB",
+        description: "รายละเอียดเมนู",
+        descriptionPlaceholder: "เช่น เผ็ดน้อยได้ เพิ่มไข่ดาวได้",
+        availableInStaffView: "พร้อมขายในหน้าพนักงาน",
+        saveItem: "บันทึกเมนู",
+        createItem: "เพิ่มเมนู",
+        cancelEdit: "ยกเลิกการแก้ไข",
+        imageAlt: "รูปเมนู",
+      }
+    : {
+        permissionDenied: "You do not have permission to view the menu.",
+        eyebrow: "Menu",
+        title: "Food menu",
+        manageSubtitle: "Manage the restaurant's categories and menu items.",
+        viewSubtitle: "View the full menu in read-only mode.",
+        refresh: "Refresh",
+        loadError: "Could not load menu data.",
+        categoryRequired: "Please enter a category name.",
+        categorySaveError: "Could not save category.",
+        itemRequired: "Please choose a category and enter a menu item name.",
+        itemCategoryRequired: "Choose a category before adding a menu item.",
+        itemNameRequired: "Enter a menu item name your team can recognize.",
+        itemSaveError: "Could not save menu item.",
+        categoryDeleteError: "Could not delete category.",
+        itemDeleteError: "Could not delete menu item.",
+        imageTypeError: "Please choose an image file.",
+        imageUploadError: "Could not upload image. Use jpg, png, or webp up to 5MB.",
+        allCategories: "All categories",
+        catalogTitle: "Menu catalog",
+        menuSummary: "Total items",
+        availableSummary: "Available",
+        categoryManager: "Menu categories",
+        editorTitle: "Menu editor",
+        editorHint: "Add a new item or edit the selected menu item.",
+        categoryHint: "Group items so staff can find them quickly.",
+        searchPlaceholder: "Search menu",
+        noImage: "No image",
+        uncategorized: "Uncategorized",
+        noDescription: "No description",
+        available: "Available",
+        unavailable: "Unavailable",
+        edit: "Edit",
+        delete: "Delete",
+        noMenuTitle: "No menu items yet",
+        noMenuManage: "Create a category and add the first menu item from the right panel.",
+        noMenuView: "The owner has not made menu items visible yet.",
+        categories: "Categories",
+        noCategories: "No categories yet",
+        editCategory: "Edit category",
+        addCategory: "Add category",
+        categoryName: "Category name",
+        categoryPlaceholder: "For example, Main dishes / Drinks",
+        categoryOrder: "Category display order",
+        categoryOrderPlaceholder: "For example, 1",
+        categoryOrderHelp: "Lower numbers appear first. Use 0 if you are not sure.",
+        saveCategory: "Save category",
+        createCategory: "Add category",
+        editItem: "Edit menu item",
+        addItem: "Add menu item",
+        itemCategory: "Menu category",
+        createCategoryFirst: "Create a category before adding a menu item",
+        createCategoryHint: "Add a category such as Main dishes or Drinks first, then add menu items to it.",
+        itemName: "Menu item name",
+        itemNamePlaceholder: "For example, Basil pork with rice",
+        price: "Price (THB)",
+        pricePlaceholder: "For example, 65",
+        itemOrder: "Menu item display order",
+        itemOrderHelp: "Lower numbers appear first inside this category. Leave blank if you are not sure.",
+        image: "Menu image",
+        imageUrlPlaceholder: "Or paste an image URL",
+        uploading: "Uploading image...",
+        imageHelp: "Supports jpg, png, webp up to 5MB",
+        description: "Menu description",
+        descriptionPlaceholder: "For example, mild spice available, add fried egg",
+        availableInStaffView: "Available in staff view",
+        saveItem: "Save menu item",
+        createItem: "Add menu item",
+        cancelEdit: "Cancel edit",
+        imageAlt: "Menu image",
+      };
 
   const refresh = async () => {
     if (!canView) return;
@@ -42,7 +198,7 @@ export default function MenuPage() {
       setItems(itemRes.data.menu_items ?? []);
       setItemForm((current) => current.category_id ? current : { ...current, category_id: nextCategories[0]?.ID ?? 0 });
     } catch {
-      setError("โหลดข้อมูลเมนูไม่สำเร็จ");
+      setError(copy.loadError);
     } finally {
       setLoading(false);
     }
@@ -51,7 +207,7 @@ export default function MenuPage() {
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView]);
+  }, [canView, language]);
 
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -62,19 +218,29 @@ export default function MenuPage() {
     });
   }, [filterCategory, items, search]);
 
-  if (!canView) return <PermissionDenied title="ไม่มีสิทธิ์ดูเมนู" />;
+  const categoryCounts = useMemo(() => {
+    return categories.reduce<Record<number, number>>((acc, category) => {
+      acc[category.ID] = items.filter((item) => item.category_id === category.ID).length;
+      return acc;
+    }, {});
+  }, [categories, items]);
+  const activeCategory = categories.find((category) => category.ID === filterCategory);
+  const availableCount = items.filter((item) => item.is_available).length;
+
+  if (!canView) return <PermissionDenied title={copy.permissionDenied} />;
 
   const saveCategory = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canManage) return;
     const name = categoryName.trim();
     if (!name) {
-      setError("กรุณากรอกชื่อหมวดหมู่");
+      setCategoryError(copy.categoryRequired);
       return;
     }
     await actionOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
+      setCategoryError("");
       try {
         const payload = { name, display_order: Number.parseInt(categoryOrder, 10) || 0, is_active: editingCategory?.is_active ?? true };
         if (editingCategory) {
@@ -89,7 +255,7 @@ export default function MenuPage() {
         setCategoryOrder("0");
         setEditingCategory(null);
       } catch {
-        setError("บันทึกหมวดหมู่ไม่สำเร็จ");
+        setCategoryError(copy.categorySaveError);
       } finally {
         setSubmitting(false);
       }
@@ -99,13 +265,18 @@ export default function MenuPage() {
   const saveItem = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canManage) return;
-    if (!itemForm.category_id || !itemForm.name.trim()) {
-      setError("กรุณาเลือกหมวดหมู่และกรอกชื่อเมนู");
+    const nextItemErrors = {
+      category: itemForm.category_id ? undefined : copy.itemCategoryRequired,
+      name: itemForm.name.trim() ? undefined : copy.itemNameRequired,
+    };
+    if (nextItemErrors.category || nextItemErrors.name) {
+      setItemErrors(nextItemErrors);
       return;
     }
     await actionOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
+      setItemErrors({});
       try {
         const payload = { ...itemForm, name: itemForm.name.trim(), price: Number(itemForm.price) || 0, display_order: Number(itemForm.display_order) || 0 };
         if (editingItem) {
@@ -118,7 +289,7 @@ export default function MenuPage() {
         setEditingItem(null);
         setItemForm({ ...emptyItem, category_id: categories[0]?.ID ?? 0 });
       } catch {
-        setError("บันทึกเมนูไม่สำเร็จ");
+        setItemErrors({ submit: copy.itemSaveError });
       } finally {
         setSubmitting(false);
       }
@@ -129,10 +300,12 @@ export default function MenuPage() {
     setEditingCategory(category);
     setCategoryName(category.name);
     setCategoryOrder(String(category.display_order));
+    setCategoryError("");
   };
 
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
+    setItemErrors({});
     setItemForm({
       category_id: item.category_id,
       name: item.name,
@@ -153,7 +326,7 @@ export default function MenuPage() {
         await deleteCategory(category.ID);
         await refresh();
       } catch {
-        setError("ลบหมวดหมู่ไม่สำเร็จ");
+        setError(copy.categoryDeleteError);
       } finally {
         setSubmitting(false);
       }
@@ -169,7 +342,7 @@ export default function MenuPage() {
         await deleteMenuItem(item.ID);
         setItems((current) => current.filter((menuItem) => menuItem.ID !== item.ID));
       } catch {
-        setError("ลบเมนูไม่สำเร็จ");
+        setError(copy.itemDeleteError);
       } finally {
         setSubmitting(false);
       }
@@ -179,16 +352,17 @@ export default function MenuPage() {
   const uploadImage = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("กรุณาเลือกไฟล์รูปภาพ");
+      setItemErrors((current) => ({ ...current, image: copy.imageTypeError }));
       return;
     }
     setUploadingImage(true);
     setError("");
+    setItemErrors((current) => ({ ...current, image: undefined }));
     try {
       const res = await uploadMenuImage(file);
       setItemForm((current) => ({ ...current, image_url: res.data.image_url }));
     } catch {
-      setError("อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB");
+      setItemErrors((current) => ({ ...current, image: copy.imageUploadError }));
     } finally {
       setUploadingImage(false);
     }
@@ -198,145 +372,249 @@ export default function MenuPage() {
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">Menu</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">เมนูอาหาร</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? "จัดการหมวดหมู่และเมนูของร้าน" : "ดูเมนูทั้งหมดแบบ read-only"}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
         </div>
-        <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">รีเฟรช</button>
+        <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+          {copy.refresh}
+        </button>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_360px]">
-        <section className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr]">
-              <ThemedSelect
-                value={String(filterCategory)}
-                onChange={(next) => setFilterCategory(Number(next))}
-                options={[
-                  { value: "0", label: "ทุกหมวดหมู่" },
-                  ...categories.map((category) => ({ value: String(category.ID), label: category.name })),
-                ]}
-              />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาเมนู" className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="space-y-3"><RestaurantCardSkeleton /><RestaurantCardSkeleton /></div>
-          ) : filteredItems.length ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {filteredItems.map((item) => (
-                <div key={item.ID} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-                  <div className="flex gap-3">
-                    <div
-                      className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                      style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
-                      aria-label={item.image_url ? `รูปเมนู ${item.name}` : undefined}
-                    >
-                      {!item.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">ไม่มีรูป</div>}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
-                          <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{item.category?.name ?? "ไม่ระบุหมวด"}</p>
-                        </div>
-                        <p className="font-mono text-[14px] font-semibold text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">{item.description || "ไม่มีรายละเอียด"}</p>
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>{item.is_available ? "พร้อมขาย" : "ปิดขาย"}</span>
-                        {canManage && <div className="flex gap-2">
-                          <button type="button" onClick={() => editItem(item)} className="text-[12px] font-medium text-orange-600 dark:text-orange-400">แก้ไข</button>
-                          <button type="button" disabled={submitting} onClick={() => removeItem(item)} className="text-[12px] font-medium text-red-600 disabled:opacity-50 dark:text-red-300">ลบ</button>
-                        </div>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-950">
-              <p className="text-[14px] font-semibold text-gray-900 dark:text-white">ยังไม่มีเมนู</p>
-              <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{canManage ? "สร้างหมวดหมู่และเพิ่มเมนูแรกจากแผงด้านขวา" : "เจ้าของร้านยังไม่ได้เปิดเมนูให้ดู"}</p>
-            </div>
-          )}
-        </section>
-
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_420px]">
         <aside className="space-y-4">
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800"><h2 className="text-[14px] font-semibold">หมวดหมู่</h2></div>
-            <div className="space-y-2 p-4">
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.categoryManager}</p>
+              <h2 className="mt-0.5 text-[14px] font-semibold">{copy.categories}</h2>
+              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.categoryHint}</p>
+            </div>
+            <div className="p-2">
+              <button
+                type="button"
+                onClick={() => setFilterCategory(0)}
+                className={`flex min-h-10 w-full items-center justify-between rounded-md px-3 text-left text-[12px] transition-colors ${
+                  filterCategory === 0
+                    ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
+                    : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"
+                }`}
+              >
+                <span>{copy.allCategories}</span>
+                <span className="font-mono tabular-nums text-gray-400">{items.length}</span>
+              </button>
               {categories.map((category) => (
-                <div key={category.ID} className="flex items-center justify-between gap-2 rounded-md border border-gray-200 px-3 py-2 text-[12px] dark:border-gray-800">
-                  <span className={!category.is_active ? "text-gray-400 line-through" : ""}>{category.name}</span>
-                  {canManage && <div className="flex gap-2"><button onClick={() => editCategory(category)} className="text-orange-600 dark:text-orange-400">แก้</button><button disabled={submitting} onClick={() => removeCategory(category)} className="text-red-600 disabled:opacity-50 dark:text-red-300">ลบ</button></div>}
+                <div key={category.ID} className="group mt-1 grid grid-cols-[1fr_auto] items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterCategory(category.ID)}
+                    className={`flex min-h-10 min-w-0 items-center justify-between rounded-md px-3 text-left text-[12px] transition-colors ${
+                      filterCategory === category.ID
+                        ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
+                        : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"
+                    }`}
+                  >
+                    <span className={`truncate ${!category.is_active ? "text-gray-400 line-through" : ""}`}>{category.name}</span>
+                    <span className="ml-2 font-mono tabular-nums text-gray-400">{categoryCounts[category.ID] ?? 0}</span>
+                  </button>
+                  {canManage && (
+                    <div className="flex">
+                      <button type="button" onClick={() => editCategory(category)} className="h-9 rounded-md px-2 text-[11px] font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20">{copy.edit}</button>
+                      <button type="button" disabled={submitting} onClick={() => removeCategory(category)} className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
+                    </div>
+                  )}
                 </div>
               ))}
-              {!categories.length && <p className="text-[12px] text-gray-500">ยังไม่มีหมวดหมู่</p>}
+              {!categories.length && <p className="px-3 py-4 text-[12px] text-gray-500">{copy.noCategories}</p>}
+            </div>
+
+            {canManage && (
+              <form onSubmit={saveCategory} className="border-t border-gray-200 p-4 dark:border-gray-800">
+                <h3 className="text-[13px] font-semibold">{editingCategory ? copy.editCategory : copy.addCategory}</h3>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <input
+                    value={categoryName}
+                    onChange={(event) => {
+                      setCategoryName(event.target.value);
+                      setCategoryError("");
+                    }}
+                    placeholder={copy.categoryPlaceholder}
+                    aria-invalid={Boolean(categoryError)}
+                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
+                      categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  />
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <input value={categoryOrder} onChange={(event) => setCategoryOrder(event.target.value)} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                    <button disabled={submitting} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                      {editingCategory ? copy.saveCategory : copy.createCategory}
+                    </button>
+                  </div>
+                  {categoryError ? (
+                    <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{categoryError}</p>
+                  ) : (
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{copy.categoryOrderHelp}</p>
+                  )}
+                </div>
+              </form>
+            )}
+          </div>
+        </aside>
+
+        <section className="space-y-4">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.catalogTitle}</p>
+                  <h2 className="mt-0.5 text-[16px] font-semibold text-gray-900 dark:text-white">{activeCategory?.name ?? copy.allCategories}</h2>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] sm:min-w-[220px]">
+                  <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <p className="text-gray-400">{copy.menuSummary}</p>
+                    <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">{items.length}</p>
+                  </div>
+                  <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <p className="text-gray-400">{copy.availableSummary}</p>
+                    <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">{availableCount}</p>
+                  </div>
+                </div>
+              </div>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="mt-3 h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+            </div>
+
+            <div className="p-4">
+              {loading ? (
+                <div className="space-y-3">
+                  <RestaurantCardSkeleton />
+                  <RestaurantCardSkeleton />
+                </div>
+              ) : filteredItems.length ? (
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {filteredItems.map((item) => (
+                    <div key={item.ID} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
+                      <div
+                        className="h-24 w-full overflow-hidden rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900 sm:h-20 sm:w-20"
+                        style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                        aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
+                      >
+                        {!item.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
+                          <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                            {item.is_available ? copy.available : copy.unavailable}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.category?.name ?? copy.uncategorized}</p>
+                        <p className="mt-2 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">{item.description || copy.noDescription}</p>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+                        <p className="font-mono text-[15px] font-semibold text-gray-900 tabular-nums dark:text-white">฿{item.price.toLocaleString()}</p>
+                        {canManage && (
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => editItem(item)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.edit}</button>
+                            <button type="button" disabled={submitting} onClick={() => removeItem(item)} className="h-9 rounded-md border border-red-200 px-3 text-[12px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.noMenuTitle}</p>
+                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{canManage ? copy.noMenuManage : copy.noMenuView}</p>
+                </div>
+              )}
             </div>
           </div>
+        </section>
 
-          {canManage && <>
-            <form onSubmit={saveCategory} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-              <h2 className="text-[14px] font-semibold">{editingCategory ? "แก้หมวดหมู่" : "เพิ่มหมวดหมู่"}</h2>
-              <label className="mt-3 block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">ชื่อหมวดหมู่</span>
-                <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} placeholder="เช่น อาหารจานเดียว / เครื่องดื่ม" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-              </label>
-              <label className="mt-2 block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">ลำดับแสดงผลของหมวดหมู่</span>
-                <input value={categoryOrder} onChange={(e) => setCategoryOrder(e.target.value)} placeholder="เช่น 1" type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">เลขน้อยจะแสดงก่อน ถ้าไม่แน่ใจใส่ 0 ได้</p>
-              </label>
-              <button disabled={submitting} className="mt-3 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingCategory ? "บันทึกหมวดหมู่" : "เพิ่มหมวดหมู่"}</button>
-            </form>
-
-            <form onSubmit={saveItem} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-              <h2 className="text-[14px] font-semibold">{editingItem ? "แก้เมนู" : "เพิ่มเมนู"}</h2>
-              <div className="mt-3 space-y-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">หมวดหมู่เมนู</span>
-                  <ThemedSelect
-                    value={String(itemForm.category_id)}
-                    onChange={(next) => setItemForm({ ...itemForm, category_id: Number(next) })}
-                    disabled={!categories.length}
-                    options={
-                      categories.length
-                        ? categories.map((cat) => ({ value: String(cat.ID), label: cat.name }))
-                        : [{ value: "0", label: "สร้างหมวดหมู่ก่อนเพิ่มเมนู" }]
-                    }
-                  />
-                  {!categories.length && (
-                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-300">เพิ่มหมวดหมู่ เช่น อาหารจานเดียว / เครื่องดื่ม ก่อน แล้วค่อยเพิ่มเมนูในหมวดนั้น</p>
-                  )}
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">ชื่อเมนู</span>
-                  <input value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="เช่น ข้าวกะเพราหมูสับ" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">ราคาเมนู (บาท)</span>
-                  <input value={itemForm.price || ""} onChange={(e) => setItemForm({ ...itemForm, price: Number(e.target.value) })} placeholder="เช่น 65" type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">ลำดับแสดงผลของเมนู</span>
-                  <input value={itemForm.display_order || ""} onChange={(e) => setItemForm({ ...itemForm, display_order: Number(e.target.value) })} placeholder="เช่น 1" type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                  <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">เลขน้อยจะแสดงก่อนในหมวดหมู่นั้น ถ้าไม่แน่ใจเว้นว่างได้</p>
-                </label>
-                <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                  <span className="mb-2 block text-[12px] font-medium text-gray-700 dark:text-gray-300">รูปเมนู</span>
-                  <div className="flex gap-3">
-                    <div
-                      className="h-20 w-20 shrink-0 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                      style={itemForm.image_url ? { backgroundImage: `url(${itemForm.image_url})` } : undefined}
+        {canManage && (
+          <aside>
+            <form onSubmit={saveItem} className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 xl:sticky xl:top-4">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
+                    <h2 className="mt-0.5 text-[14px] font-semibold">{editingItem ? copy.editItem : copy.addItem}</h2>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.editorHint}</p>
+                  </div>
+                  {editingItem && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingItem(null);
+                        setItemErrors({});
+                        setItemForm({ ...emptyItem, category_id: categories[0]?.ID ?? 0 });
+                      }}
+                      className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
                     >
-                      {!itemForm.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">ไม่มีรูป</div>}
+                      {copy.cancelEdit}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategory}</span>
+                    <ThemedSelect
+                      value={String(itemForm.category_id)}
+                      onChange={(next) => {
+                        setItemForm({ ...itemForm, category_id: Number(next) });
+                        setItemErrors((current) => ({ ...current, category: undefined, submit: undefined }));
+                      }}
+                      disabled={!categories.length}
+                      options={
+                        categories.length
+                          ? categories.map((cat) => ({ value: String(cat.ID), label: cat.name }))
+                          : [{ value: "0", label: copy.createCategoryFirst }]
+                      }
+                    />
+                    {itemErrors.category && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category}</p>}
+                    {!categories.length && <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-300">{copy.createCategoryHint}</p>}
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
+                    <input
+                      value={itemForm.name}
+                      onChange={(event) => {
+                        setItemForm({ ...itemForm, name: event.target.value });
+                        setItemErrors((current) => ({ ...current, name: undefined, submit: undefined }));
+                      }}
+                      placeholder={copy.itemNamePlaceholder}
+                      aria-invalid={Boolean(itemErrors.name)}
+                      className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
+                        itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
+                      }`}
+                    />
+                    {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
+                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemOrder}</span>
+                    <input value={itemForm.display_order || ""} onChange={(event) => setItemForm({ ...itemForm, display_order: Number(event.target.value) })} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                    <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{copy.itemOrderHelp}</p>
+                  </label>
+                </div>
+
+                <div className="rounded-md border border-gray-200 dark:border-gray-800">
+                  <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
+                  </div>
+                  <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr] xl:grid-cols-[96px_1fr]">
+                    <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={itemForm.image_url ? { backgroundImage: `url(${itemForm.image_url})` } : undefined}>
+                      {!itemForm.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
                     </div>
-                    <div className="min-w-0 flex-1 space-y-2">
+                    <div className="min-w-0 space-y-2">
                       <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
@@ -344,21 +622,41 @@ export default function MenuPage() {
                         onChange={(event) => uploadImage(event.target.files?.[0])}
                         className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900"
                       />
-                      <input value={itemForm.image_url} onChange={(e) => setItemForm({ ...itemForm, image_url: e.target.value })} placeholder="หรือวาง URL รูปภาพเอง" className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-900" />
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500">{uploadingImage ? "กำลังอัปโหลดรูป..." : "รองรับ jpg, png, webp ไม่เกิน 5MB"}</p>
+                      <input
+                        value={itemForm.image_url}
+                        onChange={(event) => {
+                          setItemForm({ ...itemForm, image_url: event.target.value });
+                          setItemErrors((current) => ({ ...current, image: undefined }));
+                        }}
+                        placeholder={copy.imageUrlPlaceholder}
+                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
+                      />
+                      <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+                        {itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}
+                      </p>
                     </div>
                   </div>
                 </div>
+
                 <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">รายละเอียดเมนู</span>
-                  <textarea value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} placeholder="เช่น เผ็ดน้อยได้ เพิ่มไข่ดาวได้" className="h-20 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
+                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
                 </label>
-                <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={itemForm.is_available} onChange={(e) => setItemForm({ ...itemForm, is_available: e.target.checked })} /> พร้อมขายในหน้าพนักงาน</label>
+                <label className="flex min-h-9 items-center gap-2 text-[12px]">
+                  <input type="checkbox" checked={itemForm.is_available} onChange={(event) => setItemForm({ ...itemForm, is_available: event.target.checked })} />
+                  {copy.availableInStaffView}
+                </label>
               </div>
-              <button disabled={submitting || uploadingImage || !categories.length} className="mt-3 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingItem ? "บันทึกเมนู" : "เพิ่มเมนู"}</button>
+
+              <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+                <button disabled={submitting || uploadingImage || !categories.length} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                  {editingItem ? copy.saveItem : copy.createItem}
+                </button>
+                {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
+              </div>
             </form>
-          </>}
-        </aside>
+          </aside>
+        )}
       </div>
     </div>
   );

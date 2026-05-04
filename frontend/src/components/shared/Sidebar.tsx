@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
@@ -130,15 +131,20 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
 function UserFooter({ collapsed }: { collapsed: boolean }) {
   const { user, logout } = useAuth();
   const { language } = useLanguage();
-  const initials = user ? `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase() : '?';
-  const displayName = user ? `${user.first_name} ${user.last_name}` : language === 'th' ? 'ผู้ใช้งาน' : 'User';
+  const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === '-' ? '' : user.last_name}`.trim()) : language === 'th' ? 'ผู้ใช้งาน' : 'User';
+  const initials = displayName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
   const logoutLabel = language === 'th' ? 'ออกจากระบบ' : 'Sign out';
 
   if (collapsed) {
     return (
       <div className="flex shrink-0 flex-col items-center gap-2 border-t border-gray-100 px-3 py-4 dark:border-gray-800">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-          {initials}
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+          {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
         </div>
         <ThemeToggle />
         <button
@@ -159,8 +165,8 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="shrink-0 border-t border-gray-100 px-4 py-4 dark:border-gray-800">
       <div className="group flex items-center gap-3 rounded-md px-2 py-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-          {initials}
+        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+          {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200">{displayName}</p>

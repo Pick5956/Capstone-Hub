@@ -195,6 +195,7 @@ export interface AuthModalProps {
   onClose: () => void;
   initialMode?: "login" | "register";
   onAuthenticated?: (user?: User, memberships?: Membership[]) => void;
+  redirectTo?: string;
 }
 
 type RegisterFormState = {
@@ -210,6 +211,7 @@ export default function AuthModal({
   onClose,
   initialMode = "login",
   onAuthenticated,
+  redirectTo,
 }: AuthModalProps) {
   const { language } = useLanguage();
   const [authMode, setAuthMode] = useState<"login" | "register">(initialMode);
@@ -322,14 +324,14 @@ export default function AuthModal({
       if (data.token) authRepository.setToken(data.token, tokenType);
       onAuthenticated?.(data.user, data.memberships);
       onClose();
-      const target = decideRedirect(data.memberships ?? []);
+      const target = redirectTo?.startsWith("/") ? redirectTo : decideRedirect(data.memberships ?? []);
       if (hardReload) {
         window.location.href = target;
       } else {
         router.push(target);
       }
     },
-    [onAuthenticated, onClose, router]
+    [onAuthenticated, onClose, redirectTo, router]
   );
 
   const handleGoogleCredential = useCallback(
@@ -445,6 +447,7 @@ export default function AuthModal({
         email: registerForm.email,
         first_name: registerForm.first_name,
         last_name: registerForm.last_name,
+        nickname: "",
         password: registerForm.password,
         phone: "",
         address: "",

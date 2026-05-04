@@ -9,6 +9,7 @@ import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import ThemedTimeInput from "@/src/components/shared/ThemedTimeInput";
 import { createSingleFlight } from "@/src/lib/singleFlight";
+import { updateProfile, uploadProfileImage } from "@/src/lib/auth";
 import { getRestaurant, updateRestaurant, uploadRestaurantLogo } from "@/src/lib/restaurant";
 import type { Restaurant } from "@/src/types/restaurant";
 import { RESTAURANT_TYPES, getRestaurantTypeLabel } from "@/src/app/restaurants/restaurantWorkspaceUi";
@@ -53,6 +54,7 @@ function toRestaurantFormState(restaurant: Restaurant, language: Language): Rest
 
 function getDisplayName(user: ReturnType<typeof useAuth>["user"], language: Language) {
   if (!user) return language === "th" ? "ผู้ใช้งาน" : "User";
+  if (user.nickname?.trim()) return user.nickname.trim();
   const parts = [user.first_name, user.last_name]
     .map((part) => part?.trim())
     .filter((part) => part && part !== "-");
@@ -180,9 +182,22 @@ function TextAreaField({
 }
 
 function AccountSettings() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { fontSize, setFontSize } = useTheme();
+  const saveOnceRef = useRef(createSingleFlight());
+  const uploadOnceRef = useRef(createSingleFlight());
+  const profileInputRef = useRef<HTMLInputElement>(null);
+  const [form, setForm] = useState({
+    first_name: "",
+    last_name: "",
+    nickname: "",
+    phone: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [uploadingProfile, setUploadingProfile] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const displayName = getDisplayName(user, language);
   const initials = displayName
     .split(" ")
@@ -191,12 +206,35 @@ function AccountSettings() {
     .slice(0, 2)
     .toUpperCase();
 
+  useEffect(() => {
+    setForm({
+      first_name: user?.first_name ?? "",
+      last_name: user?.last_name === "-" ? "" : user?.last_name ?? "",
+      nickname: user?.nickname ?? "",
+      phone: user?.phone ?? "",
+    });
+    setMessage("");
+    setError("");
+  }, [user]);
+
   const copy = language === "th"
     ? {
         accountTitle: "ข้อมูลบัญชี",
-        accountHint: "ข้อมูลนี้ใช้แสดงกับทีมและกิจกรรมในระบบ",
+        accountHint: "แก้ชื่อที่ทีมเห็นในระบบได้ โดยเฉพาะชื่อเล่นที่จำง่ายกว่าชื่อจริง",
+        saveProfile: "บันทึกข้อมูลบัญชี",
+        savingProfile: "กำลังบันทึก...",
+        uploadProfile: "อัปโหลดรูป",
+        uploadingProfile: "กำลังอัปโหลด...",
+        removeProfile: "ยังไม่มีรูป",
+        saveSuccess: "บันทึกข้อมูลบัญชีแล้ว",
+        uploadSuccess: "อัปโหลดรูปโปรไฟล์แล้ว",
+        saveError: "บันทึกข้อมูลบัญชีไม่สำเร็จ",
+        uploadError: "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB",
+        firstNameRequired: "กรุณากรอกชื่อ",
         firstName: "ชื่อ",
         lastName: "นามสกุล",
+        nickname: "ชื่อเล่น",
+        nicknameHelp: "ถ้าใส่ชื่อเล่น ระบบจะแสดงชื่อนี้ใน sidebar, ทีม และคำเชิญก่อนชื่อจริง",
         email: "อีเมล",
         phone: "เบอร์โทร",
         emptyEmail: "ยังไม่มีอีเมล",
@@ -215,9 +253,21 @@ function AccountSettings() {
       }
     : {
         accountTitle: "Account details",
-        accountHint: "This information appears in team and activity contexts.",
+        accountHint: "Edit the name your team sees. Nicknames are easier to recognize during service.",
+        saveProfile: "Save account details",
+        savingProfile: "Saving...",
+        uploadProfile: "Upload photo",
+        uploadingProfile: "Uploading...",
+        removeProfile: "No photo",
+        saveSuccess: "Account details saved.",
+        uploadSuccess: "Profile photo uploaded.",
+        saveError: "Could not save account details.",
+        uploadError: "Could not upload profile photo. Use jpg, png, or webp up to 5MB.",
+        firstNameRequired: "Please enter your first name.",
         firstName: "First name",
         lastName: "Last name",
+        nickname: "Nickname",
+        nicknameHelp: "If set, this name appears before your legal name in the sidebar, team, and invitations.",
         email: "Email",
         phone: "Phone",
         emptyEmail: "No email",
@@ -235,6 +285,62 @@ function AccountSettings() {
         fontHint: "Adjust the reading size for your device.",
       };
 
+  const setField = (key: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setMessage("");
+    setError("");
+  };
+
+  const handleSaveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+    if (!form.first_name.trim()) {
+      setError(copy.firstNameRequired);
+      return;
+    }
+
+    await saveOnceRef.current(async () => {
+      setSaving(true);
+      setMessage("");
+      setError("");
+      try {
+        const res = await updateProfile({
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
+          nickname: form.nickname.trim(),
+          phone: form.phone.trim(),
+        });
+        updateUser(res.data);
+        setMessage(copy.saveSuccess);
+      } catch {
+        setError(copy.saveError);
+      } finally {
+        setSaving(false);
+      }
+    });
+  };
+
+  const handleUploadProfile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user) return;
+
+    await uploadOnceRef.current(async () => {
+      setUploadingProfile(true);
+      setMessage("");
+      setError("");
+      try {
+        const res = await uploadProfileImage(file);
+        updateUser(res.data);
+        setMessage(copy.uploadSuccess);
+      } catch {
+        setError(copy.uploadError);
+      } finally {
+        setUploadingProfile(false);
+      }
+    });
+  };
+
   const fontOptions = [
     { id: "small" as const, label: language === "th" ? "เล็ก" : "Small" },
     { id: "normal" as const, label: language === "th" ? "ปกติ" : "Normal" },
@@ -245,21 +351,62 @@ function AccountSettings() {
   return (
     <div className="space-y-4">
       <Panel title={copy.accountTitle} hint={copy.accountHint}>
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-orange-100 text-lg font-bold text-orange-700 dark:bg-orange-900/25 dark:text-orange-300">
-            {initials}
+        <form onSubmit={handleSaveProfile}>
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-lg font-bold text-orange-700 dark:bg-orange-900/25 dark:text-orange-300">
+            {user?.profile_image ? (
+              <Image src={user.profile_image} alt={displayName} width={64} height={64} unoptimized className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <div className="min-w-0">
             <p className="truncate text-[14px] font-semibold text-gray-900 dark:text-white">{displayName}</p>
             <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{user?.email ?? copy.emptyEmail}</p>
           </div>
+          </div>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <input ref={profileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleUploadProfile} />
+            <button
+              type="button"
+              onClick={() => profileInputRef.current?.click()}
+              disabled={!user || uploadingProfile}
+              aria-busy={uploadingProfile}
+              className="inline-flex h-10 w-full items-center justify-center rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.04)] transition-[background-color,border-color,box-shadow,transform,opacity] hover:bg-gray-50 active:translate-y-px active:bg-gray-100 active:shadow-inner disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 dark:active:bg-gray-700 sm:h-9 sm:w-[128px]"
+            >
+              {copy.uploadProfile}
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label={copy.firstName} value={user?.first_name ?? ""} />
-          <Field label={copy.lastName} value={user?.last_name === "-" ? "" : user?.last_name ?? ""} />
+          <Field label={copy.nickname} value={form.nickname} onChange={(value) => setField("nickname", value)} help={copy.nicknameHelp} />
+          <Field label={copy.phone} value={form.phone} onChange={(value) => setField("phone", normalizePhone(value))} inputMode="tel" />
+          <Field label={copy.firstName} value={form.first_name} onChange={(value) => setField("first_name", value)} error={error === copy.firstNameRequired ? error : undefined} />
+          <Field label={copy.lastName} value={form.last_name} onChange={(value) => setField("last_name", value)} />
           <Field label={copy.email} value={user?.email ?? ""} />
-          <Field label={copy.phone} value={user?.phone ?? ""} />
         </div>
+        <div
+          aria-live="polite"
+          className={`mt-3 min-h-9 rounded-md border px-3 py-2 text-[12px] ${
+            error
+              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+              : message
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300"
+                : "border-transparent"
+          }`}
+        >
+          {error || message}
+        </div>
+        <button
+          type="submit"
+          disabled={!user || saving}
+          aria-busy={saving}
+          className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.12)] transition-[background-color,box-shadow,transform,opacity] hover:opacity-90 active:translate-y-px active:bg-gray-800 active:shadow-inner disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900 dark:active:bg-gray-100 sm:w-[180px]"
+        >
+          {copy.saveProfile}
+        </button>
+        </form>
       </Panel>
 
       <Panel title={copy.prefsTitle} hint={copy.prefsHint}>

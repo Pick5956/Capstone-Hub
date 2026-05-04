@@ -88,6 +88,7 @@ export function getRestaurantTypeLabel(type: string, language: Language) {
 
 export function formatUserName(user: User | null, language: Language = "th") {
   if (!user) return language === "th" ? "ผู้ใช้" : "User";
+  if (user.nickname?.trim()) return user.nickname.trim();
 
   const parts = [user.first_name, user.last_name]
     .map((part) => part?.trim())

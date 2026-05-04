@@ -1,7 +1,13 @@
 package controller
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -77,20 +83,8 @@ func (ctrl *UserController) Register(c *gin.Context) {
 }
 
 func (ctrl *UserController) GetProfile(c *gin.Context) {
-	userId, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	var id uint
-	switch v := userId.(type) {
-	case uint:
-		id = v
-	case float64:
-		id = uint(v)
-	default:
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+	id, ok := getUserIDFromContext(c)
+	if !ok {
 		return
 	}
 
@@ -102,4 +96,95 @@ func (ctrl *UserController) GetProfile(c *gin.Context) {
 
 	user.Password = ""
 	c.JSON(http.StatusOK, user)
+}
+
+func (ctrl *UserController) UpdateProfile(c *gin.Context) {
+	id, ok := getUserIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	var req service.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := ctrl.authService.UpdateProfile(id, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
+	id, ok := getUserIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file must be 5MB or smaller"})
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image must be jpg, png, or webp"})
+		return
+	}
+
+	random := make([]byte, 12)
+	if _, err := rand.Read(random); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
+		return
+	}
+
+	fileName := hex.EncodeToString(random) + ext
+	userIDText := strconv.FormatUint(uint64(id), 10)
+	relativeDir := filepath.Join("uploads", "users", userIDText)
+	if err := os.MkdirAll(relativeDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
+		return
+	}
+
+	destination := filepath.Join(relativeDir, fileName)
+	if err := c.SaveUploadedFile(file, destination); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
+		return
+	}
+
+	publicPath := "http://" + c.Request.Host + "/uploads/users/" + userIDText + "/" + fileName
+	user, err := ctrl.authService.UpdateProfileImage(id, publicPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+}
+
+func getUserIDFromContext(c *gin.Context) (uint, bool) {
+	userId, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return 0, false
+	}
+
+	switch v := userId.(type) {
+	case uint:
+		return v, true
+	case float64:
+		return uint(v), true
+	default:
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token payload"})
+		return 0, false
+	}
 }

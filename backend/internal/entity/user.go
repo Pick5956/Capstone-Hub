@@ -12,6 +12,7 @@ type User struct {
 	Password     string `json:"password,omitempty"`
 	FirstName    string `json:"first_name" binding:"required"`
 	LastName     string `json:"last_name" binding:"required"`
+	Nickname     string `json:"nickname"`
 	Phone        string `json:"phone"`
 	Address      string `json:"address"`
 	BirthDay     string `json:"birthday"`

@@ -245,7 +245,7 @@ export default function Home() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.headerEyebrow}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.headerTitle}</h1>
               <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
-                {user?.first_name ? `${copy.greeting} ${user.first_name}` : copy.greeting} · {dateLabel} · {timeLabel}
+                {user ? `${copy.greeting} ${user.nickname?.trim() || user.first_name}` : copy.greeting} · {dateLabel} · {timeLabel}
               </p>
             </div>
 

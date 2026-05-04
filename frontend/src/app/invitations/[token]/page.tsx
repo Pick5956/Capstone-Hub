@@ -135,7 +135,7 @@ export default function InvitationAcceptPage() {
 
   const handleAccept = async () => {
     if (!user) {
-      openLoginModal();
+      openLoginModal(`/invitations/${token}`);
       return;
     }
     if (!usable || emailMismatch) return;
@@ -175,7 +175,7 @@ export default function InvitationAcceptPage() {
             ) : (
               <button
                 type="button"
-                onClick={openLoginModal}
+                onClick={() => openLoginModal(`/invitations/${token}`)}
                 className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
               >
                 {copy.login}

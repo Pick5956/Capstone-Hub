@@ -15,8 +15,8 @@ import (
 )
 
 type AuthService struct {
-	userRepo    *repository.UserRepository
-	memberRepo  *repository.RestaurantMemberRepository
+	userRepo   *repository.UserRepository
+	memberRepo *repository.RestaurantMemberRepository
 }
 
 func ProvideAuthService(userRepo *repository.UserRepository, memberRepo *repository.RestaurantMemberRepository) *AuthService {
@@ -35,10 +35,17 @@ type GoogleLoginRequest struct {
 	IDToken string `json:"id_token" binding:"required"`
 }
 
+type UpdateProfileRequest struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Nickname  string `json:"nickname"`
+	Phone     string `json:"phone"`
+}
+
 type LoginResponse struct {
-	Token       string                      `json:"token"`
-	User        *entity.User                `json:"user"`
-	Memberships []entity.RestaurantMember   `json:"memberships"`
+	Token       string                    `json:"token"`
+	User        *entity.User              `json:"user"`
+	Memberships []entity.RestaurantMember `json:"memberships"`
 }
 
 func (s *AuthService) Register(user *entity.User) (*entity.User, error) {
@@ -171,4 +178,39 @@ func hideUserPassword(user *entity.User) *entity.User {
 
 func (s *AuthService) GetUserById(id uint) (*entity.User, error) {
 	return s.userRepo.FindById(id)
+}
+
+func (s *AuthService) UpdateProfile(id uint, req *UpdateProfileRequest) (*entity.User, error) {
+	user, err := s.userRepo.FindById(id)
+	if err != nil {
+		return nil, err
+	}
+
+	firstName := strings.TrimSpace(req.FirstName)
+	lastName := strings.TrimSpace(req.LastName)
+	if firstName == "" {
+		return nil, errors.New("FirstName is required")
+	}
+	if lastName == "" {
+		lastName = "-"
+	}
+
+	user.FirstName = firstName
+	user.LastName = lastName
+	user.Nickname = strings.TrimSpace(req.Nickname)
+	user.Phone = strings.TrimSpace(req.Phone)
+
+	if err := s.userRepo.UpdateProfile(user); err != nil {
+		return nil, err
+	}
+
+	return hideUserPassword(user), nil
+}
+
+func (s *AuthService) UpdateProfileImage(id uint, imageURL string) (*entity.User, error) {
+	user, err := s.userRepo.UpdateProfileImage(id, imageURL)
+	if err != nil {
+		return nil, err
+	}
+	return hideUserPassword(user), nil
 }

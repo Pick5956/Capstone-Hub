@@ -131,7 +131,7 @@ export default function LandingPage() {
             <LanguageToggle />
             <ThemeToggle />
             <button
-              onClick={openLoginModal}
+              onClick={() => openLoginModal()}
               className="hidden rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900 sm:inline-flex"
             >
               {copy.heroPrimary}
@@ -151,7 +151,7 @@ export default function LandingPage() {
               <p className="mt-5 max-w-2xl text-[15px] leading-7 text-gray-600 dark:text-gray-400">{copy.heroBody}</p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
-                  onClick={openLoginModal}
+                  onClick={() => openLoginModal()}
                   className="rounded-md bg-gray-900 px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
                 >
                   {copy.heroPrimary}
@@ -217,7 +217,7 @@ export default function LandingPage() {
             <h2 className="text-3xl font-black tracking-tight">{copy.ctaTitle}</h2>
             <p className="mt-4 max-w-2xl text-[14px] leading-7 text-white/75 dark:text-gray-600">{copy.ctaBody}</p>
             <button
-              onClick={openLoginModal}
+              onClick={() => openLoginModal()}
               className="mt-6 rounded-md bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition-opacity hover:opacity-90 dark:bg-gray-900 dark:text-white"
             >
               {copy.ctaButton}
