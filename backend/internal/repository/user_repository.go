@@ -45,3 +45,19 @@ func (r *UserRepository) Create(user *entity.User) error {
 func (r *UserRepository) Update(user *entity.User) error {
 	return r.db.Save(user).Error
 }
+
+func (r *UserRepository) UpdateProfile(user *entity.User) error {
+	return r.db.Model(user).Updates(map[string]any{
+		"first_name": user.FirstName,
+		"last_name":  user.LastName,
+		"nickname":   user.Nickname,
+		"phone":      user.Phone,
+	}).Error
+}
+
+func (r *UserRepository) UpdateProfileImage(id uint, imageURL string) (*entity.User, error) {
+	if err := r.db.Model(&entity.User{}).Where("id = ?", id).Update("profile_image", imageURL).Error; err != nil {
+		return nil, err
+	}
+	return r.FindById(id)
+}

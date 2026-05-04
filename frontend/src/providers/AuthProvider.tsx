@@ -15,8 +15,9 @@ interface AuthContextType {
   activeMembership: Membership | null;
   loading: boolean;
   logout: () => void;
-  openLoginModal: () => void;
+  openLoginModal: (redirectTo?: string) => void;
   closeLoginModal: () => void;
+  updateUser: (user: User) => void;
   setActiveRestaurant: (restaurantId: number) => void;
   refreshMemberships: () => Promise<Membership[]>;
 }
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
   openLoginModal: () => {},
   closeLoginModal: () => {},
+  updateUser: () => {},
   setActiveRestaurant: () => {},
   refreshMemberships: async () => [],
 });
@@ -39,6 +41,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginRedirectTo, setLoginRedirectTo] = useState<string | undefined>(undefined);
 
   const applyMemberships = useCallback((list: Membership[]) => {
     setMemberships(list);
@@ -109,8 +112,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     window.location.href = '/';
   };
 
-  const openLoginModal = () => setIsLoginModalOpen(true);
-  const closeLoginModal = () => setIsLoginModalOpen(false);
+  const openLoginModal = (redirectTo?: string) => {
+    setLoginRedirectTo(typeof redirectTo === "string" && redirectTo.startsWith("/") ? redirectTo : undefined);
+    setIsLoginModalOpen(true);
+  };
+  const closeLoginModal = () => {
+    setIsLoginModalOpen(false);
+    setLoginRedirectTo(undefined);
+  };
+  const updateUser = (nextUser: User) => setUser(nextUser);
 
   const handleAuthenticated = (authenticatedUser?: User, freshMemberships?: Membership[]) => {
     if (authenticatedUser) {
@@ -142,6 +152,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         logout,
         openLoginModal,
         closeLoginModal,
+        updateUser,
         setActiveRestaurant,
         refreshMemberships,
       }}
@@ -152,6 +163,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         onClose={closeLoginModal}
         initialMode="login"
         onAuthenticated={handleAuthenticated}
+        redirectTo={loginRedirectTo}
       />
     </AuthContext.Provider>
   );

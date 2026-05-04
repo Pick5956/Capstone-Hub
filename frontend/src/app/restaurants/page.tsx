@@ -1,20 +1,22 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { restaurantRepository } from "../repositories/restaurantRepository";
 import type { Membership } from "@/src/types/restaurant";
-import { PLAN, WorkspaceShell } from "./restaurantWorkspaceUi";
+import { PLAN, WorkspaceShell, getRestaurantTypeLabel } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: "เจ้าของร้าน",
-  manager: "ผู้จัดการ",
-  cashier: "แคชเชียร์",
-  waiter: "พนักงานเสิร์ฟ",
-  chef: "ครัว",
+const ROLE_LABEL: Record<string, Record<Language, string>> = {
+  owner: { th: "เจ้าของร้าน", en: "Owner" },
+  manager: { th: "ผู้จัดการ", en: "Manager" },
+  cashier: { th: "แคชเชียร์", en: "Cashier" },
+  waiter: { th: "พนักงานเสิร์ฟ", en: "Waiter" },
+  chef: { th: "ครัว", en: "Kitchen" },
 };
 
 const ROLE_TONE: Record<string, string> = {
@@ -29,8 +31,8 @@ function roleNameOf(membership: Membership) {
   return membership.role?.name ?? "waiter";
 }
 
-function roleLabelOf(membership: Membership) {
-  return ROLE_LABEL[roleNameOf(membership)] ?? roleNameOf(membership);
+function roleLabelOf(membership: Membership, language: Language) {
+  return ROLE_LABEL[roleNameOf(membership)]?.[language] ?? roleNameOf(membership);
 }
 
 function canManageInvites(membership: Membership) {
@@ -38,13 +40,13 @@ function canManageInvites(membership: Membership) {
   return roleName === "owner" || roleName === "manager";
 }
 
-function permissionLabelOf(membership: Membership) {
-  if (membership.role?.permissions === `["*"]`) return "ทุกเมนู";
+function permissionLabelOf(membership: Membership, language: Language) {
+  if (membership.role?.permissions === `["*"]`) return language === "th" ? "ทุกเมนู" : "All sections";
   try {
     const permissions = JSON.parse(membership.role?.permissions ?? "[]") as string[];
-    return permissions.length ? `${permissions.length} สิทธิ์` : "พื้นฐาน";
+    return permissions.length ? `${permissions.length} ${language === "th" ? "สิทธิ์" : "permissions"}` : language === "th" ? "พื้นฐาน" : "Basic";
   } catch {
-    return "พื้นฐาน";
+    return language === "th" ? "พื้นฐาน" : "Basic";
   }
 }
 
@@ -57,62 +59,103 @@ function RestaurantCard({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const { language } = useLanguage();
   const restaurant = membership.restaurant;
   const roleName = roleNameOf(membership);
   const membershipStyle = ROLE_TONE[roleName] ?? ROLE_TONE.waiter;
-  const roleLabel = roleLabelOf(membership);
+  const roleLabel = roleLabelOf(membership, language);
+  const branchName = restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch");
+  const restaurantType = getRestaurantTypeLabel(restaurant?.restaurant_type?.trim() || "ร้านอาหาร", language);
   const hours = restaurant?.open_time && restaurant?.close_time
     ? `${restaurant.open_time}-${restaurant.close_time}`
-    : "ยังไม่ระบุเวลา";
-  const tableCount = restaurant?.table_count ? `${restaurant.table_count} โต๊ะ` : "ยังไม่ระบุโต๊ะ";
+    : language === "th" ? "ยังไม่ระบุเวลา" : "Hours not set";
+  const tableCount = restaurant?.table_count ? `${restaurant.table_count} ${language === "th" ? "โต๊ะ" : "tables"}` : language === "th" ? "ยังไม่ระบุโต๊ะ" : "Tables not set";
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left border rounded-md bg-white dark:bg-gray-950 p-4 transition-colors ${
+      className={`w-full rounded-md border bg-white p-4 text-left transition-colors dark:bg-gray-950 ${
         selected
           ? "border-orange-500 ring-2 ring-orange-500/15"
-          : "border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
+          : "border-gray-200 hover:border-gray-300 dark:border-gray-800 dark:hover:border-gray-700"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white truncate">{restaurant?.name ?? "ร้านอาหาร"}</h3>
-            {selected && (
-              <span className="h-5 w-5 inline-flex items-center justify-center rounded-full bg-orange-600 text-white shrink-0">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M20 6L9 17l-5-5" />
-                </svg>
-              </span>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
+            {restaurant?.logo ? (
+              <Image
+                src={restaurant.logo}
+                alt={`${language === "th" ? "โลโก้ร้าน" : "Restaurant logo"} ${restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant")}`}
+                width={40}
+                height={40}
+                unoptimized
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
+                <path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
+              </svg>
             )}
           </div>
-          <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400 truncate">{restaurant?.phone || "ยังไม่ระบุเบอร์"} · เข้าร่วมเมื่อ {new Date(membership.joined_at).toLocaleDateString("th-TH")}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">
+                {restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant")}
+              </h3>
+              {selected && (
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </span>
+              )}
+            </div>
+            <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
+              {branchName} · {restaurantType}
+            </p>
+            <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
+              {restaurant?.phone || (language === "th" ? "ยังไม่ระบุเบอร์" : "No phone")} · {language === "th" ? "เข้าร่วมเมื่อ" : "Joined on"}{" "}
+              {new Date(membership.joined_at).toLocaleDateString(language === "th" ? "th-TH" : "en-US")}
+            </p>
+          </div>
         </div>
-        <span className={`text-[11px] font-medium px-2 py-1 rounded-md ${membershipStyle}`}>
+        <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${membershipStyle}`}>
           {roleLabel}
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-[12px]">
-        <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-          <p className="text-gray-400">บทบาท</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{roleLabel}</p>
+        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+          <p className="text-gray-400">{language === "th" ? "บทบาท" : "Role"}</p>
+          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{roleLabel}</p>
         </div>
-        <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-          <p className="text-gray-400">สิทธิ์</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{permissionLabelOf(membership)}</p>
+        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+          <p className="text-gray-400">{language === "th" ? "ประเภท" : "Type"}</p>
+          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{restaurantType}</p>
         </div>
-        <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-          <p className="text-gray-400">เวลา/โต๊ะ</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{hours} · {tableCount}</p>
+        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+          <p className="text-gray-400">{language === "th" ? "สิทธิ์" : "Permissions"}</p>
+          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{permissionLabelOf(membership, language)}</p>
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+          <p className="text-gray-400">{language === "th" ? "เวลา/โต๊ะ" : "Hours / tables"}</p>
+          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{hours} · {tableCount}</p>
+        </div>
+        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+          <p className="text-gray-400">{language === "th" ? "สาขา" : "Branch"}</p>
+          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{branchName}</p>
         </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400">
-        <span className="truncate">{restaurant?.address || "ยังไม่ระบุที่อยู่"}</span>
-        {canManageInvites(membership) && restaurant?.invite_code && <span className="shrink-0">Code {restaurant.invite_code}</span>}
+        <span className="truncate">{restaurant?.address || (language === "th" ? "ยังไม่ระบุที่อยู่" : "No address")}</span>
+        {canManageInvites(membership) && <span className="shrink-0">{language === "th" ? "จัดการคำเชิญได้" : "Can manage invites"}</span>}
       </div>
       <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">Restaurant ID {membership.restaurant_id}</p>
     </button>
@@ -132,19 +175,22 @@ function QuickAction({
 }) {
   const cls =
     tone === "orange"
-      ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300"
-      : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300";
+      ? "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300"
+      : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
 
   return (
-    <Link href={href} className="block rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4 hover:border-orange-300 dark:hover:border-orange-800 transition-colors">
-      <div className={`h-9 w-9 rounded-md inline-flex items-center justify-center ${cls}`}>
+    <Link
+      href={href}
+      className="block rounded-md border border-gray-200 bg-white p-4 transition-colors hover:border-orange-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-800"
+    >
+      <div className={`inline-flex h-9 w-9 items-center justify-center rounded-md ${cls}`}>
         {tone === "orange" ? (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M12 5v14M5 12h14" />
           </svg>
         ) : (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
             <path d="M10 17l5-5-5-5M15 12H3" />
           </svg>
         )}
@@ -156,31 +202,37 @@ function QuickAction({
 }
 
 function EmptyRestaurantsState() {
+  const { language } = useLanguage();
+
   return (
     <div className="px-4 py-8">
       <div className="mx-auto max-w-lg text-center">
-        <div className="mx-auto h-12 w-12 rounded-md bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-300 inline-flex items-center justify-center">
+        <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
+            <path d="M3 7h18M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2M6 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7" />
             <path d="M9 12h6M9 16h4" />
           </svg>
         </div>
-        <h3 className="mt-4 text-[16px] font-semibold text-gray-900 dark:text-white">ยังไม่มีร้านในบัญชีนี้</h3>
+        <h3 className="mt-4 text-[16px] font-semibold text-gray-900 dark:text-white">
+          {language === "th" ? "ยังไม่มีร้านในบัญชีนี้" : "This account has no restaurants yet"}
+        </h3>
         <p className="mt-2 text-[13px] text-gray-500 dark:text-gray-400">
-          เริ่มได้สองทาง: ถ้าคุณเป็นเจ้าของร้านให้สร้างร้านแรก หรือถ้าเป็นพนักงานให้ใช้รหัสเชิญจากร้าน
+          {language === "th"
+            ? "เริ่มได้สองทาง: ถ้าคุณเป็นเจ้าของร้านให้สร้างร้านแรก หรือถ้าเป็นพนักงานให้เปิดลิงก์คำเชิญจากร้าน"
+            : "You can start in two ways: create the first restaurant if you own it, or open an invitation link if you were invited as staff."}
         </p>
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <Link
             href="/restaurants/new"
-            className="h-10 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold inline-flex items-center justify-center hover:opacity-90 transition-opacity"
+            className="inline-flex h-10 items-center justify-center rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
           >
-            สร้างร้านแรก
+            {language === "th" ? "สร้างร้านแรก" : "Create first restaurant"}
           </Link>
           <Link
             href="/restaurants/join"
-            className="h-10 rounded-md border border-gray-200 dark:border-gray-700 text-[13px] font-semibold text-gray-700 dark:text-gray-200 inline-flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            เข้าร่วมร้าน
+            {language === "th" ? "เปิดลิงก์เชิญ" : "Open invite link"}
           </Link>
         </div>
       </div>
@@ -190,8 +242,11 @@ function EmptyRestaurantsState() {
 
 export default function RestaurantsPage() {
   const router = useRouter();
+  const { language } = useLanguage();
   const { memberships, activeMembership, loading, setActiveRestaurant, refreshMemberships } = useAuth();
-  const [selectedId, setSelectedId] = useState<number | null>(activeMembership?.restaurant_id ?? memberships[0]?.restaurant_id ?? null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    activeMembership?.restaurant_id ?? memberships[0]?.restaurant_id ?? null
+  );
   const hasRestaurants = memberships.length > 0;
 
   useEffect(() => {
@@ -221,22 +276,28 @@ export default function RestaurantsPage() {
 
   return (
     <WorkspaceShell
-      title="เลือกร้านที่ต้องการจัดการ"
-      description="บัญชีเดียวดูแลได้หลายร้านหรือหลายสาขา ส่วนการสร้างร้านและการเข้าร่วมร้านแยกเป็นขั้นตอนเฉพาะ"
+      title={language === "th" ? "เลือกร้านที่ต้องการจัดการ" : "Choose a restaurant to manage"}
+      description={language === "th"
+        ? "บัญชีเดียวดูแลได้หลายร้านหรือหลายสาขา ส่วนการสร้างร้านและการเข้าร่วมร้านแยกเป็นขั้นตอนเฉพาะ"
+        : "One account can manage multiple restaurants or branches. Creating a restaurant and joining one are separate flows."}
     >
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         <section className="space-y-4">
-          <div className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 rounded-md">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
-                <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">ร้านของฉัน</h2>
-                <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">รวมร้านที่เป็นเจ้าของ ผู้จัดการ หรือพนักงานจาก membership ของบัญชีนี้</p>
+                <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{language === "th" ? "ร้านของฉัน" : "My restaurants"}</h2>
+                <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">
+                  {language === "th"
+                    ? "รวมร้านที่เป็นเจ้าของ ผู้จัดการ หรือพนักงานจาก membership ของบัญชีนี้"
+                    : "Lists every restaurant where this account is an owner, manager, or staff member."}
+                </p>
               </div>
-              <span className="text-[11px] font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300">
-                {memberships.length} ร้าน
+              <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                {memberships.length} {language === "th" ? "ร้าน" : "restaurants"}
               </span>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="space-y-3 p-4">
               {loading ? (
                 <>
                   <RestaurantCardSkeleton />
@@ -259,64 +320,82 @@ export default function RestaurantsPage() {
           </div>
 
           {hasRestaurants && (
-          <div className="sticky bottom-0 -mx-4 sm:-mx-6 lg:mx-0 border-t lg:border border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 lg:rounded-md backdrop-blur">
-            <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[12px] text-gray-500 dark:text-gray-400">ร้านที่เลือก</p>
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">{selectedRestaurant?.restaurant?.name ?? "ยังไม่ได้เลือกร้าน"}</p>
+            <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:-mx-6 lg:mx-0 lg:rounded-md lg:border">
+              <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">{language === "th" ? "ร้านที่เลือก" : "Selected restaurant"}</p>
+                  <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">
+                    {selectedRestaurant?.restaurant?.name ?? (language === "th" ? "ยังไม่ได้เลือกร้าน" : "No restaurant selected")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!selectedRestaurant}
+                  onClick={enterDashboard}
+                  className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                >
+                  {language === "th" ? "เข้า dashboard ร้านนี้" : "Open this dashboard"}
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={!selectedRestaurant}
-                onClick={enterDashboard}
-                className="h-10 px-4 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-              >
-                เข้า dashboard ร้านนี้
-              </button>
             </div>
-          </div>
           )}
         </section>
 
         <aside className="space-y-4">
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4">
+          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">แพ็กเกจปัจจุบัน</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                  {language === "th" ? "แพ็กเกจปัจจุบัน" : "Current plan"}
+                </p>
                 <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{PLAN.name}</h2>
               </div>
-              <span className={`text-[11px] font-medium px-2 py-1 rounded-md ${isPlanFull ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"}`}>
-                {usedRestaurants}/{PLAN.maxRestaurants} ร้าน
+              <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+                isPlanFull
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+              }`}>
+                {usedRestaurants}/{PLAN.maxRestaurants} {language === "th" ? "ร้าน" : "restaurants"}
               </span>
             </div>
-            <p className="mt-3 text-[12px] text-gray-500 dark:text-gray-400">Free เปิดได้ 1 ร้าน และสมาชิก 3 คนต่อร้าน</p>
+            <p className="mt-3 text-[12px] text-gray-500 dark:text-gray-400">
+              {language === "th"
+                ? "Free เปิดได้ 1 ร้าน และสมาชิก 3 คนต่อร้าน"
+                : "Free supports 1 restaurant and 3 members per restaurant."}
+            </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">เป็นเจ้าของ</p>
-                <p className="mt-1 text-[15px] font-semibold text-gray-900 dark:text-white">{ownedCount} ร้าน</p>
+              <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "เป็นเจ้าของ" : "Owned"}</p>
+                <p className="mt-1 text-[15px] font-semibold text-gray-900 dark:text-white">{ownedCount} {language === "th" ? "ร้าน" : "restaurants"}</p>
               </div>
-              <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">เข้าร่วม</p>
-                <p className="mt-1 text-[15px] font-semibold text-gray-900 dark:text-white">{joinedCount} ร้าน</p>
+              <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "เข้าร่วม" : "Joined"}</p>
+                <p className="mt-1 text-[15px] font-semibold text-gray-900 dark:text-white">{joinedCount} {language === "th" ? "ร้าน" : "restaurants"}</p>
               </div>
             </div>
             {isPlanFull && (
-              <p className="mt-3 rounded-md border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/15 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-300">
-                ถึง limit ร้านแล้ว สร้างร้านเพิ่มต้องอัปเกรดแพ็กเกจ
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-300">
+                {language === "th"
+                  ? "ถึง limit ร้านแล้ว สร้างร้านเพิ่มต้องอัปเกรดแพ็กเกจ"
+                  : "You have reached the restaurant limit. Upgrade the plan to create more restaurants."}
               </p>
             )}
           </div>
 
           <QuickAction
             href="/restaurants/new"
-            title="สร้างร้านใหม่"
-            description="สำหรับเจ้าของร้านหรือผู้ดูแลที่ต้องการเปิดร้านหรือสาขาใหม่"
+            title={language === "th" ? "สร้างร้านใหม่" : "Create restaurant"}
+            description={language === "th"
+              ? "สำหรับเจ้าของร้านหรือผู้ดูแลที่ต้องการเปิดร้านหรือสาขาใหม่"
+              : "For owners or admins who want to create a new restaurant or branch."}
             tone="orange"
           />
           <QuickAction
             href="/restaurants/join"
-            title="เข้าร่วมร้าน"
-            description="สำหรับพนักงานที่ได้รับรหัสเชิญหรือลิงก์จากร้าน"
+            title={language === "th" ? "เปิดลิงก์เชิญ" : "Open invite link"}
+            description={language === "th"
+              ? "สำหรับพนักงานที่ได้รับลิงก์หรือ token คำเชิญจากร้าน"
+              : "For staff who received an invitation link or token from a restaurant."}
             tone="emerald"
           />
         </aside>

@@ -26,14 +26,6 @@ func (r *RestaurantRepository) FindByID(id uint) (*entity.Restaurant, error) {
 	return &restaurant, nil
 }
 
-func (r *RestaurantRepository) FindByInviteCode(inviteCode string) (*entity.Restaurant, error) {
-	var restaurant entity.Restaurant
-	if err := r.db.Where("invite_code = ?", inviteCode).First(&restaurant).Error; err != nil {
-		return nil, err
-	}
-	return &restaurant, nil
-}
-
 func (r *RestaurantRepository) Update(restaurant *entity.Restaurant) error {
 	return r.db.Save(restaurant).Error
 }

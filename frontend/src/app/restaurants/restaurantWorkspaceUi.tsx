@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
+import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { getCurrentUser } from "@/src/lib/auth";
+import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import type { User } from "@/src/types/auth";
 
 export type Restaurant = {
@@ -26,7 +28,7 @@ export const RESTAURANTS: Restaurant[] = [
     id: "r-1",
     name: "ครัวบ้านส้ม",
     branch: "สาขาหลัก",
-    type: "ร้านอาหารไทย",
+    type: "ร้านอาหาร",
     address: "ถนนมิตรภาพ นครราชสีมา",
     role: "เจ้าของร้าน",
     membershipType: "owner",
@@ -72,8 +74,21 @@ export const PLAN = {
 
 export const RESTAURANT_TYPES = ["ร้านอาหาร", "คาเฟ่", "ชาบู/ปิ้งย่าง", "เดลิเวอรี", "ฟู้ดทรัค"];
 
-export function formatUserName(user: User | null) {
-  if (!user) return "ผู้ใช้";
+const RESTAURANT_TYPE_LABELS: Record<string, Record<Language, string>> = {
+  "ร้านอาหาร": { th: "ร้านอาหาร", en: "Restaurant" },
+  "คาเฟ่": { th: "คาเฟ่", en: "Cafe" },
+  "ชาบู/ปิ้งย่าง": { th: "ชาบู/ปิ้งย่าง", en: "Shabu / Grill" },
+  "เดลิเวอรี": { th: "เดลิเวอรี", en: "Delivery" },
+  "ฟู้ดทรัค": { th: "ฟู้ดทรัค", en: "Food truck" },
+};
+
+export function getRestaurantTypeLabel(type: string, language: Language) {
+  return RESTAURANT_TYPE_LABELS[type]?.[language] ?? type;
+}
+
+export function formatUserName(user: User | null, language: Language = "th") {
+  if (!user) return language === "th" ? "ผู้ใช้" : "User";
+  if (user.nickname?.trim()) return user.nickname.trim();
 
   const parts = [user.first_name, user.last_name]
     .map((part) => part?.trim())
@@ -98,14 +113,15 @@ export function useWorkspaceUser() {
 
 export function ThemeButton() {
   const { theme, mounted, toggle } = useTheme();
+  const { language } = useLanguage();
   const isDark = mounted && theme === "dark";
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label="สลับธีม"
-      title={isDark ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
+      aria-label={language === "th" ? "สลับธีม" : "Toggle theme"}
+      title={isDark ? (language === "th" ? "สลับเป็น Light mode" : "Switch to light mode") : language === "th" ? "สลับเป็น Dark mode" : "Switch to dark mode"}
       className="h-9 w-9 inline-flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
     >
       {isDark ? (
@@ -149,6 +165,7 @@ export function WorkspaceShell({
   children: React.ReactNode;
 }) {
   const { logout } = useAuth();
+  const { language } = useLanguage();
   const user = useWorkspaceUser();
 
   return (
@@ -157,13 +174,14 @@ export function WorkspaceShell({
         <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <BrandMark />
           <div className="flex items-center gap-2">
+            <LanguageToggle />
             <ThemeButton />
             <button
               type="button"
               onClick={logout}
               className="h-9 px-3 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
             >
-              ออกจากระบบ
+              {language === "th" ? "ออกจากระบบ" : "Log out"}
             </button>
           </div>
         </div>
@@ -177,7 +195,8 @@ export function WorkspaceShell({
             <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">{description}</p>
           </div>
           <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 py-2 text-[12px] text-gray-600 dark:text-gray-300">
-            เข้าสู่ระบบในชื่อ <span className="font-semibold text-gray-900 dark:text-white">{formatUserName(user)}</span>
+            {language === "th" ? "เข้าสู่ระบบในชื่อ " : "Signed in as "}
+            <span className="font-semibold text-gray-900 dark:text-white">{formatUserName(user, language)}</span>
           </div>
         </div>
 
@@ -188,6 +207,8 @@ export function WorkspaceShell({
 }
 
 export function BackToRestaurants() {
+  const { language } = useLanguage();
+
   return (
     <Link
       href="/restaurants"
@@ -196,7 +217,7 @@ export function BackToRestaurants() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
         <path d="M19 12H5M12 19l-7-7 7-7" />
       </svg>
-      กลับไปเลือกร้าน
+      {language === "th" ? "กลับไปเลือกร้าน" : "Back to restaurants"}
     </Link>
   );
 }

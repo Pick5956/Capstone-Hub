@@ -53,6 +53,9 @@ func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasTable(&entity.Role{}) && !db.Migrator().HasColumn(&entity.Role{}, "name") {
 		_ = db.Migrator().DropTable(&entity.Role{})
 	}
+	if db.Migrator().HasColumn("restaurants", "invite_code") {
+		_ = db.Migrator().DropColumn("restaurants", "invite_code")
+	}
 
 	db.AutoMigrate(
 		&entity.Role{},
@@ -60,6 +63,7 @@ func SetupDatabase() *gorm.DB {
 		&entity.Restaurant{},
 		&entity.RestaurantMember{},
 		&entity.Invitation{},
+		&entity.RestaurantAuditLog{},
 		&entity.Category{},
 		&entity.MenuItem{},
 		&entity.RestaurantTable{},

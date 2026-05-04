@@ -20,6 +20,8 @@ func SetupRoutes(r *gin.Engine) {
 	v1.Use(auth.RestaurantScope(config.DB()))
 	{
 		v1.GET("/users/profile", userCtrl.GetProfile)
+		v1.PATCH("/users/profile", userCtrl.UpdateProfile)
+		v1.POST("/users/profile/upload-image", userCtrl.UploadProfileImage)
 	}
 
 	// Restaurants + invitations.
