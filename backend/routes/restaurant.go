@@ -18,10 +18,14 @@ func SetupRestaurantRoutes(api *gin.RouterGroup, v1 *gin.RouterGroup) {
 
 	// private (require auth)
 	v1.POST("/restaurants", ctrl.Create)
-	v1.POST("/restaurants/join", ctrl.JoinByInviteCode)
 	v1.GET("/restaurants/me", ctrl.ListMyMemberships)
 	v1.GET("/restaurants/:id", ctrl.Get)
+	v1.PATCH("/restaurants/:id", ctrl.Update)
+	v1.POST("/restaurants/:id/upload-logo", ctrl.UploadLogo)
 	v1.GET("/restaurants/:id/members", ctrl.ListMembers)
+	v1.PATCH("/restaurants/:id/members/:memberId/status", ctrl.UpdateMemberStatus)
+	v1.PATCH("/restaurants/:id/members/:memberId/role", ctrl.UpdateMemberRole)
+	v1.GET("/restaurants/:id/audit-logs", ctrl.ListAuditLogs)
 
 	v1.POST("/restaurants/:id/invitations", ctrl.CreateInvitation)
 	v1.GET("/restaurants/:id/invitations", ctrl.ListPendingInvitations)

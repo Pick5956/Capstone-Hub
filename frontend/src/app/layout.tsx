@@ -3,6 +3,7 @@ import "./globals.css";
 
 import { Kanit } from "next/font/google";
 import { AuthProvider } from "@/src/providers/AuthProvider";
+import { LanguageProvider } from "@/src/providers/LanguageProvider";
 import { ThemeProvider } from "@/src/providers/ThemeProvider";
 
 const fontKanit = Kanit({
@@ -14,7 +15,7 @@ const fontKanit = Kanit({
 
 export const metadata: Metadata = {
   title: "Restaurant Hub",
-  description: "ระบบจัดการร้านอาหาร",
+  description: "Restaurant management system",
 };
 
 export default function RootLayout({
@@ -25,11 +26,11 @@ export default function RootLayout({
   return (
     <html lang="th" suppressHydrationWarning>
       <body className={fontKanit.className}>
-        <ThemeProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ThemeProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

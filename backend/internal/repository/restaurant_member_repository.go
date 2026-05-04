@@ -4,6 +4,7 @@ import (
 	"Project-M/internal/entity"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type RestaurantMemberRepository struct {
@@ -16,6 +17,23 @@ func NewRestaurantMemberRepository(db *gorm.DB) *RestaurantMemberRepository {
 
 func (r *RestaurantMemberRepository) Create(member *entity.RestaurantMember) error {
 	return r.db.Create(member).Error
+}
+
+func (r *RestaurantMemberRepository) Update(member *entity.RestaurantMember) error {
+	return r.db.Omit(clause.Associations).Save(member).Error
+}
+
+func (r *RestaurantMemberRepository) FindByID(id uint) (*entity.RestaurantMember, error) {
+	var member entity.RestaurantMember
+	err := r.db.
+		Preload("Role").
+		Preload("Restaurant").
+		Preload("User").
+		First(&member, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &member, nil
 }
 
 func (r *RestaurantMemberRepository) FindByUserAndRestaurant(userID, restaurantID uint) (*entity.RestaurantMember, error) {
@@ -53,6 +71,20 @@ func (r *RestaurantMemberRepository) FindActiveByRestaurant(restaurantID uint) (
 		Preload("Role").
 		Preload("User").
 		Where("restaurant_id = ? AND status = ?", restaurantID, "active").
+		Order("joined_at asc").
+		Find(&members).Error
+	if err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+func (r *RestaurantMemberRepository) FindAllByRestaurant(restaurantID uint) ([]entity.RestaurantMember, error) {
+	var members []entity.RestaurantMember
+	err := r.db.
+		Preload("Role").
+		Preload("User").
+		Where("restaurant_id = ?", restaurantID).
 		Order("joined_at asc").
 		Find(&members).Error
 	if err != nil {

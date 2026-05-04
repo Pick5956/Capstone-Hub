@@ -19,6 +19,7 @@ type InvitationService struct {
 	memberRepo *repository.RestaurantMemberRepository
 	roleRepo   *repository.RoleRepository
 	userRepo   *repository.UserRepository
+	auditRepo  *repository.RestaurantAuditLogRepository
 }
 
 func ProvideInvitationService(
@@ -26,12 +27,14 @@ func ProvideInvitationService(
 	memberRepo *repository.RestaurantMemberRepository,
 	roleRepo *repository.RoleRepository,
 	userRepo *repository.UserRepository,
+	auditRepo *repository.RestaurantAuditLogRepository,
 ) *InvitationService {
 	return &InvitationService{
 		invRepo:    invRepo,
 		memberRepo: memberRepo,
 		roleRepo:   roleRepo,
 		userRepo:   userRepo,
+		auditRepo:  auditRepo,
 	}
 }
 
@@ -86,8 +89,35 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 
 	loaded, err := s.invRepo.FindByID(inv.ID)
 	if err == nil {
+		writeAuditEvent(
+			s.auditRepo,
+			restaurantID,
+			entity.AuditActionInvitationCreated,
+			&invitedByUserID,
+			nil,
+			&loaded.ID,
+			map[string]any{
+				"email":      loaded.Email,
+				"role_name":  role.Name,
+				"expires_at": loaded.ExpiresAt,
+			},
+		)
 		return loaded, nil
 	}
+
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionInvitationCreated,
+		&invitedByUserID,
+		nil,
+		&inv.ID,
+		map[string]any{
+			"email":      inv.Email,
+			"role_name":  role.Name,
+			"expires_at": inv.ExpiresAt,
+		},
+	)
 	return inv, nil
 }
 
@@ -126,8 +156,28 @@ func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity
 				inv.AcceptedByUserID = &uid
 				_ = s.invRepo.Update(inv)
 			}
-			s.applyInviteCodeVisibility(existing)
 			return existing, nil
+		}
+		existing.RoleID = inv.RoleID
+		existing.Status = "active"
+		existing.InvitedByUserID = &inv.InvitedByUserID
+		if err := s.memberRepo.Update(existing); err != nil {
+			return nil, err
+		}
+
+		inv.Status = entity.InvitationStatusAccepted
+		now := time.Now()
+		inv.AcceptedAt = &now
+		uid := userID
+		inv.AcceptedByUserID = &uid
+		if err := s.invRepo.Update(inv); err != nil {
+			return nil, err
+		}
+
+		loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID)
+		if err == nil {
+			s.logInvitationAccepted(inv, userID, loaded)
+			return loaded, nil
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -172,23 +222,14 @@ func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity
 
 	loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID)
 	if err == nil {
-		s.applyInviteCodeVisibility(loaded)
+		s.logInvitationAccepted(inv, userID, loaded)
 		return loaded, nil
 	}
-	s.applyInviteCodeVisibility(member)
+	s.logInvitationAccepted(inv, userID, member)
 	return member, nil
 }
 
-func (s *InvitationService) applyInviteCodeVisibility(member *entity.RestaurantMember) {
-	if member == nil || member.Restaurant == nil || member.Role == nil {
-		return
-	}
-	if member.Role.Name != "owner" && member.Role.Name != "manager" {
-		member.Restaurant.InviteCode = ""
-	}
-}
-
-func (s *InvitationService) RevokeInvitation(restaurantID, invitationID uint) error {
+func (s *InvitationService) RevokeInvitation(actorUserID, restaurantID, invitationID uint) error {
 	inv, err := s.invRepo.FindByID(invitationID)
 	if err != nil {
 		return err
@@ -200,7 +241,24 @@ func (s *InvitationService) RevokeInvitation(restaurantID, invitationID uint) er
 		return errors.New("only pending invitations can be revoked")
 	}
 	inv.Status = entity.InvitationStatusRevoked
-	return s.invRepo.Update(inv)
+	if err := s.invRepo.Update(inv); err != nil {
+		return err
+	}
+
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionInvitationRevoked,
+		&actorUserID,
+		nil,
+		&inv.ID,
+		map[string]any{
+			"email":     inv.Email,
+			"role_name": roleName(inv.Role),
+		},
+	)
+
+	return nil
 }
 
 func (s *InvitationService) ListPending(restaurantID uint) ([]entity.Invitation, error) {
@@ -213,4 +271,23 @@ func generateInviteToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+func (s *InvitationService) logInvitationAccepted(inv *entity.Invitation, userID uint, member *entity.RestaurantMember) {
+	targetUserID := userID
+	invitationID := inv.ID
+	writeAuditEvent(
+		s.auditRepo,
+		inv.RestaurantID,
+		entity.AuditActionInvitationAccepted,
+		&targetUserID,
+		&targetUserID,
+		&invitationID,
+		map[string]any{
+			"email":         inv.Email,
+			"role_name":     roleName(member.Role),
+			"member_id":     member.ID,
+			"member_status": member.Status,
+		},
+	)
 }

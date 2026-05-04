@@ -4,13 +4,14 @@ import { User } from "./auth";
 export interface Restaurant {
   ID: number;
   name: string;
+  branch_name: string;
+  restaurant_type: string;
   address: string;
   phone: string;
   logo: string;
   open_time: string;
   close_time: string;
   table_count: number;
-  invite_code?: string;
   owner_id: number;
   owner?: User;
   CreatedAt?: string;
@@ -49,4 +50,20 @@ export interface Invitation {
 
   restaurant?: Restaurant;
   role?: Role;
+}
+
+export interface RestaurantAuditLog {
+  ID: number;
+  restaurant_id: number;
+  actor_user_id?: number | null;
+  target_user_id?: number | null;
+  invitation_id?: number | null;
+  action: string;
+  details: string;
+  CreatedAt?: string;
+  UpdatedAt?: string;
+
+  actor_user?: User;
+  target_user?: User;
+  invitation?: Invitation;
 }

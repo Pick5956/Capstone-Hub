@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/src/providers/LanguageProvider";
 
 export type ThemedSelectOption = {
   value: string;
@@ -23,9 +24,11 @@ export default function ThemedSelect({
   className?: string;
   placeholder?: string;
 }) {
+  const { language } = useLanguage();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const selected = options.find((option) => option.value === value);
+  const fallbackPlaceholder = language === "th" ? "เลือก" : "Select";
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -44,7 +47,7 @@ export default function ThemedSelect({
         className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 pr-9 text-left text-[13px] text-gray-900 outline-none transition-colors hover:border-gray-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:border-gray-600"
       >
         <span className={`${selected ? "" : "text-gray-400"} block truncate`}>
-          {selected?.label ?? placeholder}
+          {selected?.label ?? (placeholder || fallbackPlaceholder)}
         </span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}>
           <path d="M6 9l6 6 6-6" />
