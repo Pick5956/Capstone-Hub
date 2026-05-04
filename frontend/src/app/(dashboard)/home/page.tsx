@@ -16,6 +16,8 @@ type WidgetPointerDrag = {
   pointerId: number;
   startX: number;
   startY: number;
+  grabOffsetX: number;
+  grabOffsetY: number;
   active: boolean;
 };
 
@@ -193,10 +195,14 @@ function moveWidget(order: DashboardWidgetId[], fromId: DashboardWidgetId, toId:
   return next;
 }
 
-function getWidgetIdFromPoint(clientX: number, clientY: number): DashboardWidgetId | null {
+function getWidgetIdFromPoint(clientX: number, clientY: number, excludeId?: DashboardWidgetId): DashboardWidgetId | null {
   const element = document
     .elementsFromPoint(clientX, clientY)
-    .find((item) => item instanceof HTMLElement && item.dataset.dashboardWidgetId);
+    .find((item) => (
+      item instanceof HTMLElement
+      && item.dataset.dashboardWidgetId
+      && item.dataset.dashboardWidgetId !== excludeId
+    ));
 
   return element instanceof HTMLElement
     ? (element.dataset.dashboardWidgetId as DashboardWidgetId)
@@ -226,7 +232,6 @@ function DashboardWidgetFrame({
   id,
   orderIndex,
   draggingWidget,
-  dragOffset,
   onPointerDownWidget,
   onPointerMoveWidget,
   onPointerEndWidget,
@@ -235,7 +240,6 @@ function DashboardWidgetFrame({
   id: DashboardWidgetId;
   orderIndex: number;
   draggingWidget: DashboardWidgetId | null;
-  dragOffset: { x: number; y: number };
   onPointerDownWidget: (id: DashboardWidgetId, event: React.PointerEvent<HTMLElement>) => void;
   onPointerMoveWidget: (event: React.PointerEvent<HTMLElement>) => void;
   onPointerEndWidget: (event: React.PointerEvent<HTMLElement>) => void;
@@ -246,7 +250,6 @@ function DashboardWidgetFrame({
   const widgetStyle = {
     order: orderIndex,
     viewTransitionName: `dashboard-widget-${id}`,
-    transform: isDragging ? `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0) scale(1.02)` : undefined,
   } as React.CSSProperties & { viewTransitionName: string };
 
   return (
@@ -256,7 +259,7 @@ function DashboardWidgetFrame({
       data-dashboard-widget-id={id}
       title={`ลากการ์ด ${WIDGET_META[id].label}`}
       aria-label={`ลากการ์ด ${WIDGET_META[id].label} เพื่อเปลี่ยนตำแหน่ง`}
-      className={`${WIDGET_META[id].className} relative group h-full rounded-md cursor-grab active:cursor-grabbing select-none touch-none will-change-transform transition-[opacity,box-shadow,outline-color] duration-150 ease-out ${isDragging ? "z-[5] opacity-85 shadow-2xl ring-2 ring-orange-300/70 dark:ring-orange-600/60" : "opacity-100"} ${isDropTarget ? "outline outline-2 outline-transparent hover:outline-orange-300/70 dark:hover:outline-orange-600/50" : ""}`}
+      className={`${WIDGET_META[id].className} relative group h-full rounded-md cursor-default select-none touch-none will-change-transform transition-[opacity,box-shadow,outline-color] duration-150 ease-out ${isDragging ? "z-[5] opacity-85 shadow-2xl ring-2 ring-orange-300/70 dark:ring-orange-600/60" : "opacity-100"} ${isDropTarget ? "outline outline-2 outline-transparent hover:outline-orange-300/70 dark:hover:outline-orange-600/50" : ""}`}
       style={widgetStyle}
       onPointerDown={(event) => onPointerDownWidget(id, event)}
       onPointerMove={onPointerMoveWidget}
@@ -264,19 +267,6 @@ function DashboardWidgetFrame({
       onPointerCancel={onPointerEndWidget}
       onLostPointerCapture={onPointerEndWidget}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-2 top-2 z-[2] inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white/90 text-gray-300 shadow-sm transition-colors group-hover:border-orange-300 group-hover:text-orange-500 dark:border-gray-700 dark:bg-gray-900/90 dark:text-gray-600 dark:group-hover:border-orange-600 dark:group-hover:text-orange-400"
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
-          <circle cx="9" cy="6" r="1.5" />
-          <circle cx="15" cy="6" r="1.5" />
-          <circle cx="9" cy="12" r="1.5" />
-          <circle cx="15" cy="12" r="1.5" />
-          <circle cx="9" cy="18" r="1.5" />
-          <circle cx="15" cy="18" r="1.5" />
-        </svg>
-      </div>
       {children}
     </section>
   );
@@ -288,7 +278,8 @@ export default function Home() {
   const now = useNowTH();
   const [widgetOrder, setWidgetOrder] = useState<DashboardWidgetId[]>(DEFAULT_DASHBOARD_WIDGETS);
   const [draggingWidget, setDraggingWidget] = useState<DashboardWidgetId | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const dragOffsetFrameRef = useRef<number | null>(null);
   const lastDragTargetRef = useRef<DashboardWidgetId | null>(null);
   const pointerDragRef = useRef<WidgetPointerDrag | null>(null);
 
@@ -315,6 +306,14 @@ export default function Home() {
     });
 
     return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dragOffsetFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragOffsetFrameRef.current);
+      }
+    };
   }, []);
 
   const persistWidgetOrder = (next: DashboardWidgetId[]) => {
@@ -349,25 +348,56 @@ export default function Home() {
 
   const startWidgetDrag = (id: DashboardWidgetId) => {
     lastDragTargetRef.current = null;
-    setDragOffset({ x: 0, y: 0 });
+    dragOffsetRef.current = { x: 0, y: 0 };
     setDraggingWidget(id);
   };
 
   const finishWidgetDrag = () => {
     lastDragTargetRef.current = null;
     pointerDragRef.current = null;
-    setDragOffset({ x: 0, y: 0 });
+    if (dragOffsetFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragOffsetFrameRef.current);
+      dragOffsetFrameRef.current = null;
+    }
+    dragOffsetRef.current = { x: 0, y: 0 };
+    const draggedElement = draggingWidget
+      ? document.querySelector<HTMLElement>(`[data-dashboard-widget-id="${draggingWidget}"]`)
+      : null;
+    if (draggedElement) {
+      draggedElement.style.transform = "";
+    }
     setDraggingWidget(null);
+  };
+
+  const updateDragOffset = (next: { x: number; y: number }) => {
+    if (dragOffsetRef.current.x === next.x && dragOffsetRef.current.y === next.y) return;
+
+    dragOffsetRef.current = next;
+    if (dragOffsetFrameRef.current !== null) return;
+
+    dragOffsetFrameRef.current = window.requestAnimationFrame(() => {
+      dragOffsetFrameRef.current = null;
+      const pointerDrag = pointerDragRef.current;
+      if (!pointerDrag?.active) return;
+
+      const draggedElement = document.querySelector<HTMLElement>(`[data-dashboard-widget-id="${pointerDrag.id}"]`);
+      if (!draggedElement) return;
+
+      draggedElement.style.transform = `translate3d(${dragOffsetRef.current.x}px, ${dragOffsetRef.current.y}px, 0)`;
+    });
   };
 
   const handleWidgetPointerDown = (id: DashboardWidgetId, event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary || event.button !== 0) return;
 
+    const rect = event.currentTarget.getBoundingClientRect();
     pointerDragRef.current = {
       id,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
+      grabOffsetX: event.clientX - rect.left,
+      grabOffsetY: event.clientY - rect.top,
       active: false,
     };
 
@@ -379,7 +409,7 @@ export default function Home() {
     if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
 
     const distance = Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY);
-    if (!pointerDrag.active && distance < 7) return;
+    if (!pointerDrag.active && distance < 3) return;
 
     event.preventDefault();
 
@@ -388,12 +418,18 @@ export default function Home() {
       startWidgetDrag(pointerDrag.id);
     }
 
-    setDragOffset({
-      x: event.clientX - pointerDrag.startX,
-      y: event.clientY - pointerDrag.startY,
-    });
+    const draggedElement = document.querySelector<HTMLElement>(`[data-dashboard-widget-id="${pointerDrag.id}"]`);
+    if (draggedElement) {
+      const rect = draggedElement.getBoundingClientRect();
+      const baseLeft = rect.left - dragOffsetRef.current.x;
+      const baseTop = rect.top - dragOffsetRef.current.y;
+      updateDragOffset({
+        x: event.clientX - pointerDrag.grabOffsetX - baseLeft,
+        y: event.clientY - pointerDrag.grabOffsetY - baseTop,
+      });
+    }
 
-    const targetId = getWidgetIdFromPoint(event.clientX, event.clientY);
+    const targetId = getWidgetIdFromPoint(event.clientX, event.clientY, pointerDrag.id);
     if (targetId) {
       moveDraggingWidgetOver(targetId, pointerDrag.id);
     }
@@ -499,7 +535,6 @@ export default function Home() {
             id="orders"
             orderIndex={widgetOrder.indexOf("orders")}
             draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
             onPointerDownWidget={handleWidgetPointerDown}
             onPointerMoveWidget={handleWidgetPointerMove}
             onPointerEndWidget={handleWidgetPointerEnd}
@@ -591,7 +626,6 @@ export default function Home() {
               id="lowStock"
               orderIndex={widgetOrder.indexOf("lowStock")}
               draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
               onPointerDownWidget={handleWidgetPointerDown}
               onPointerMoveWidget={handleWidgetPointerMove}
               onPointerEndWidget={handleWidgetPointerEnd}
@@ -630,7 +664,6 @@ export default function Home() {
               id="reservations"
               orderIndex={widgetOrder.indexOf("reservations")}
               draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
               onPointerDownWidget={handleWidgetPointerDown}
               onPointerMoveWidget={handleWidgetPointerMove}
               onPointerEndWidget={handleWidgetPointerEnd}
@@ -669,7 +702,6 @@ export default function Home() {
             id="floor"
             orderIndex={widgetOrder.indexOf("floor")}
             draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
             onPointerDownWidget={handleWidgetPointerDown}
             onPointerMoveWidget={handleWidgetPointerMove}
             onPointerEndWidget={handleWidgetPointerEnd}
@@ -714,7 +746,6 @@ export default function Home() {
             id="hourly"
             orderIndex={widgetOrder.indexOf("hourly")}
             draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
             onPointerDownWidget={handleWidgetPointerDown}
             onPointerMoveWidget={handleWidgetPointerMove}
             onPointerEndWidget={handleWidgetPointerEnd}
@@ -757,7 +788,6 @@ export default function Home() {
             id="topItems"
             orderIndex={widgetOrder.indexOf("topItems")}
             draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
             onPointerDownWidget={handleWidgetPointerDown}
             onPointerMoveWidget={handleWidgetPointerMove}
             onPointerEndWidget={handleWidgetPointerEnd}
@@ -795,7 +825,6 @@ export default function Home() {
             id="staff"
             orderIndex={widgetOrder.indexOf("staff")}
             draggingWidget={draggingWidget}
-            dragOffset={dragOffset}
             onPointerDownWidget={handleWidgetPointerDown}
             onPointerMoveWidget={handleWidgetPointerMove}
             onPointerEndWidget={handleWidgetPointerEnd}

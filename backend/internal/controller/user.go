@@ -17,7 +17,8 @@ type UserController struct {
 
 func ProvideUserController(db *gorm.DB) *UserController {
 	userRepo := repository.NewUserRepository(db)
-	authService := service.ProvideAuthService(userRepo)
+	memberRepo := repository.NewRestaurantMemberRepository(db)
+	authService := service.ProvideAuthService(userRepo, memberRepo)
 	return &UserController{
 		authService: authService,
 	}
@@ -71,6 +72,7 @@ func (ctrl *UserController) Register(c *gin.Context) {
 		return
 	}
 
+	created.Password = ""
 	c.JSON(http.StatusCreated, created)
 }
 
@@ -98,6 +100,6 @@ func (ctrl *UserController) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user.Password = "" // Hide password hash
+	user.Password = ""
 	c.JSON(http.StatusOK, user)
 }

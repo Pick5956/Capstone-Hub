@@ -1,19 +1,20 @@
 import { can } from "@/src/lib/rbac";
-import { Permission, User } from "@/src/types/auth";
+import { useAuth } from "@/src/providers/AuthProvider";
+import { Permission } from "@/src/types/auth";
 import { ReactNode } from "react";
 
 interface PermissionGuardProps{
-    user:User
     permission: Permission
     children: ReactNode
 }
 
 export default function PermissionGuard({
-    user,
     permission,
     children
 }: PermissionGuardProps){
-    if (!can(user,permission)){
+    const { activeMembership } = useAuth();
+
+    if (!can(activeMembership, permission)){
         return null;
     }
     return <>{children}</>

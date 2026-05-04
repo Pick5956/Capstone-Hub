@@ -1,24 +1,70 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PLAN, RESTAURANTS, Restaurant, WorkspaceShell } from "./restaurantWorkspaceUi";
+import { useAuth } from "@/src/providers/AuthProvider";
+import { restaurantRepository } from "../repositories/restaurantRepository";
+import type { Membership } from "@/src/types/restaurant";
+import { PLAN, WorkspaceShell } from "./restaurantWorkspaceUi";
+import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "เจ้าของร้าน",
+  manager: "ผู้จัดการ",
+  cashier: "แคชเชียร์",
+  waiter: "พนักงานเสิร์ฟ",
+  chef: "ครัว",
+};
+
+const ROLE_TONE: Record<string, string> = {
+  owner: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",
+  manager: "bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300",
+  cashier: "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300",
+  waiter: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
+  chef: "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
+};
+
+function roleNameOf(membership: Membership) {
+  return membership.role?.name ?? "waiter";
+}
+
+function roleLabelOf(membership: Membership) {
+  return ROLE_LABEL[roleNameOf(membership)] ?? roleNameOf(membership);
+}
+
+function canManageInvites(membership: Membership) {
+  const roleName = roleNameOf(membership);
+  return roleName === "owner" || roleName === "manager";
+}
+
+function permissionLabelOf(membership: Membership) {
+  if (membership.role?.permissions === `["*"]`) return "ทุกเมนู";
+  try {
+    const permissions = JSON.parse(membership.role?.permissions ?? "[]") as string[];
+    return permissions.length ? `${permissions.length} สิทธิ์` : "พื้นฐาน";
+  } catch {
+    return "พื้นฐาน";
+  }
+}
 
 function RestaurantCard({
-  restaurant,
+  membership,
   selected,
   onSelect,
 }: {
-  restaurant: Restaurant;
+  membership: Membership;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const membershipStyle = {
-    owner: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",
-    manager: "bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300",
-    staff: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
-  }[restaurant.membershipType];
+  const restaurant = membership.restaurant;
+  const roleName = roleNameOf(membership);
+  const membershipStyle = ROLE_TONE[roleName] ?? ROLE_TONE.waiter;
+  const roleLabel = roleLabelOf(membership);
+  const hours = restaurant?.open_time && restaurant?.close_time
+    ? `${restaurant.open_time}-${restaurant.close_time}`
+    : "ยังไม่ระบุเวลา";
+  const tableCount = restaurant?.table_count ? `${restaurant.table_count} โต๊ะ` : "ยังไม่ระบุโต๊ะ";
 
   return (
     <button
@@ -33,7 +79,7 @@ function RestaurantCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white truncate">{restaurant.name}</h3>
+            <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white truncate">{restaurant?.name ?? "ร้านอาหาร"}</h3>
             {selected && (
               <span className="h-5 w-5 inline-flex items-center justify-center rounded-full bg-orange-600 text-white shrink-0">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
@@ -42,33 +88,33 @@ function RestaurantCard({
               </span>
             )}
           </div>
-          <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400 truncate">{restaurant.branch} · {restaurant.type}</p>
+          <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400 truncate">{restaurant?.phone || "ยังไม่ระบุเบอร์"} · เข้าร่วมเมื่อ {new Date(membership.joined_at).toLocaleDateString("th-TH")}</p>
         </div>
         <span className={`text-[11px] font-medium px-2 py-1 rounded-md ${membershipStyle}`}>
-          {restaurant.role}
+          {roleLabel}
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-[12px]">
         <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
           <p className="text-gray-400">บทบาท</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{restaurant.role}</p>
+          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{roleLabel}</p>
         </div>
         <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
           <p className="text-gray-400">สิทธิ์</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{restaurant.permissions}</p>
+          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{permissionLabelOf(membership)}</p>
         </div>
         <div className="rounded-md bg-gray-50 dark:bg-gray-900 px-3 py-2">
-          <p className="text-gray-400">โต๊ะ</p>
-          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{restaurant.tables} โต๊ะ</p>
+          <p className="text-gray-400">เวลา/โต๊ะ</p>
+          <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200 truncate">{hours} · {tableCount}</p>
         </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400">
-        <span className="truncate">{restaurant.address}</span>
-        <span className="shrink-0">ทีม {restaurant.staff} คน</span>
+        <span className="truncate">{restaurant?.address || "ยังไม่ระบุที่อยู่"}</span>
+        {canManageInvites(membership) && restaurant?.invite_code && <span className="shrink-0">Code {restaurant.invite_code}</span>}
       </div>
-      <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">เปิดล่าสุด {restaurant.lastOpened}</p>
+      <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">Restaurant ID {membership.restaurant_id}</p>
     </button>
   );
 }
@@ -144,15 +190,34 @@ function EmptyRestaurantsState() {
 
 export default function RestaurantsPage() {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState(RESTAURANTS[0]?.id ?? "");
-  const hasRestaurants = RESTAURANTS.length > 0;
+  const { memberships, activeMembership, loading, setActiveRestaurant, refreshMemberships } = useAuth();
+  const [selectedId, setSelectedId] = useState<number | null>(activeMembership?.restaurant_id ?? memberships[0]?.restaurant_id ?? null);
+  const hasRestaurants = memberships.length > 0;
+
+  useEffect(() => {
+    refreshMemberships();
+  }, [refreshMemberships]);
+
+  const effectiveSelectedId = selectedId && memberships.some((membership) => membership.restaurant_id === selectedId)
+    ? selectedId
+    : activeMembership?.restaurant_id ?? memberships[0]?.restaurant_id ?? null;
+
   const selectedRestaurant = useMemo(
-    () => RESTAURANTS.find((restaurant) => restaurant.id === selectedId),
-    [selectedId]
+    () => memberships.find((membership) => membership.restaurant_id === effectiveSelectedId) ?? null,
+    [memberships, effectiveSelectedId]
   );
-  const ownedCount = RESTAURANTS.filter((restaurant) => restaurant.membershipType === "owner").length;
-  const joinedCount = RESTAURANTS.length - ownedCount;
-  const isPlanFull = PLAN.usedRestaurants >= PLAN.maxRestaurants;
+  const ownedCount = memberships.filter((membership) => roleNameOf(membership) === "owner").length;
+  const joinedCount = memberships.length - ownedCount;
+  const usedRestaurants = memberships.length;
+  const isPlanFull = usedRestaurants >= PLAN.maxRestaurants;
+
+  const enterDashboard = () => {
+    if (!selectedRestaurant) return;
+    restaurantRepository.setActiveId(selectedRestaurant.restaurant_id);
+    setActiveRestaurant(selectedRestaurant.restaurant_id);
+    const next = new URLSearchParams(window.location.search).get("next");
+    router.push(next?.startsWith("/") ? next : "/home");
+  };
 
   return (
     <WorkspaceShell
@@ -168,17 +233,23 @@ export default function RestaurantsPage() {
                 <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">รวมร้านที่เป็นเจ้าของ ผู้จัดการ หรือพนักงานจาก membership ของบัญชีนี้</p>
               </div>
               <span className="text-[11px] font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300">
-                {RESTAURANTS.length} ร้าน
+                {memberships.length} ร้าน
               </span>
             </div>
             <div className="p-4 space-y-3">
-              {hasRestaurants ? (
-                RESTAURANTS.map((restaurant) => (
+              {loading ? (
+                <>
+                  <RestaurantCardSkeleton />
+                  <RestaurantCardSkeleton />
+                  <RestaurantCardSkeleton />
+                </>
+              ) : hasRestaurants ? (
+                memberships.map((membership) => (
                   <RestaurantCard
-                    key={restaurant.id}
-                    restaurant={restaurant}
-                    selected={restaurant.id === selectedId}
-                    onSelect={() => setSelectedId(restaurant.id)}
+                    key={membership.ID}
+                    membership={membership}
+                    selected={membership.restaurant_id === effectiveSelectedId}
+                    onSelect={() => setSelectedId(membership.restaurant_id)}
                   />
                 ))
               ) : (
@@ -192,12 +263,12 @@ export default function RestaurantsPage() {
             <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[12px] text-gray-500 dark:text-gray-400">ร้านที่เลือก</p>
-                <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">{selectedRestaurant?.name ?? "ยังไม่ได้เลือกร้าน"}</p>
+                <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">{selectedRestaurant?.restaurant?.name ?? "ยังไม่ได้เลือกร้าน"}</p>
               </div>
               <button
                 type="button"
                 disabled={!selectedRestaurant}
-                onClick={() => router.push("/home")}
+                onClick={enterDashboard}
                 className="h-10 px-4 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
               >
                 เข้า dashboard ร้านนี้
@@ -215,7 +286,7 @@ export default function RestaurantsPage() {
                 <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{PLAN.name}</h2>
               </div>
               <span className={`text-[11px] font-medium px-2 py-1 rounded-md ${isPlanFull ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"}`}>
-                {PLAN.usedRestaurants}/{PLAN.maxRestaurants} ร้าน
+                {usedRestaurants}/{PLAN.maxRestaurants} ร้าน
               </span>
             </div>
             <p className="mt-3 text-[12px] text-gray-500 dark:text-gray-400">Free เปิดได้ 1 ร้าน และสมาชิก 3 คนต่อร้าน</p>

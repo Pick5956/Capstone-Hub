@@ -11,7 +11,7 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   useEffect(() => {
     // If auth loading is done and there is no user, redirect to home page
     if (!loading && !user) {
-      router.push('/home');
+      router.push('/');
     }
   }, [user, loading, router]);
 

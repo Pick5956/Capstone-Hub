@@ -43,13 +43,28 @@ func ConnectionDB() {
 	db = database
 }
 
-func SetupDatabase() *gorm.DB{
+func SetupDatabase() *gorm.DB {
+	if db.Migrator().HasColumn(&entity.User{}, "role_id") {
+		_ = db.Migrator().DropColumn(&entity.User{}, "role_id")
+	}
+	if db.Migrator().HasColumn(&entity.User{}, "restaurant_id") {
+		_ = db.Migrator().DropColumn(&entity.User{}, "restaurant_id")
+	}
+	if db.Migrator().HasTable(&entity.Role{}) && !db.Migrator().HasColumn(&entity.Role{}, "name") {
+		_ = db.Migrator().DropTable(&entity.Role{})
+	}
+
 	db.AutoMigrate(
 		&entity.Role{},
 		&entity.User{},
+		&entity.Restaurant{},
+		&entity.RestaurantMember{},
+		&entity.Invitation{},
+		&entity.Category{},
+		&entity.MenuItem{},
+		&entity.RestaurantTable{},
 	)
 
-	// เรียกใช้งาน Seeder จากโฟลเดอร์ \`seed\`
 	seed.SeedRoles(db)
 
 	return db

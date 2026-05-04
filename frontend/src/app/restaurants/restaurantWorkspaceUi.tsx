@@ -97,16 +97,18 @@ export function useWorkspaceUser() {
 }
 
 export function ThemeButton() {
-  const { theme, toggle } = useTheme();
+  const { theme, mounted, toggle } = useTheme();
+  const isDark = mounted && theme === "dark";
+
   return (
     <button
       type="button"
       onClick={toggle}
       aria-label="สลับธีม"
-      title={theme === "dark" ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
+      title={isDark ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
       className="h-9 w-9 inline-flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
     >
-      {theme === "dark" ? (
+      {isDark ? (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
           <circle cx="12" cy="12" r="5" />
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />

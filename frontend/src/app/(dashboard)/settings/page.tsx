@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
+import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
 type SettingsTab = "account" | "restaurant" | "team" | "plan" | "notifications" | "security";
 
@@ -69,12 +71,6 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   },
 ];
 
-const TEAM_MEMBERS = [
-  { name: "คุณสมชาย", email: "owner@restaurant.test", role: "เจ้าของร้าน", access: "ทุกเมนู", status: "ใช้งาน" },
-  { name: "พี่แอน", email: "cashier@restaurant.test", role: "แคชเชียร์", access: "ออเดอร์ / ชำระเงิน", status: "ใช้งาน" },
-  { name: "เชฟอภิชัย", email: "kitchen@restaurant.test", role: "ครัว", access: "คิวครัว / สต็อก", status: "รอเชิญ" },
-];
-
 const DEVICES = [
   { name: "Chrome on Windows", place: "นครราชสีมา", lastSeen: "ตอนนี้" },
   { name: "Safari on iPhone", place: "กรุงเทพฯ", lastSeen: "เมื่อวาน 21:14" },
@@ -124,14 +120,11 @@ function SelectField({
   return (
     <label className="block">
       <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{label}</span>
-      <select
-        defaultValue={value}
-        className="h-9 w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 text-[13px] text-gray-900 dark:text-white outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15"
-      >
-        {options.map((option) => (
-          <option key={option}>{option}</option>
-        ))}
-      </select>
+      <ThemedSelect
+        value={value}
+        onChange={() => {}}
+        options={options.map((option) => ({ value: option, label: option }))}
+      />
     </label>
   );
 }
@@ -351,7 +344,7 @@ function RestaurantSettings() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <SelectField label="รอบร้านหลัก" value="กะเย็น" options={["กะเช้า", "กะบ่าย", "กะเย็น", "ทั้งวัน"]} />
           <Field label="เวลาเปิด" value="17:00" type="time" />
-          <Field label="เวลาปิด" value="24:00" type="time" />
+          <Field label="เวลาปิด" value="00:00" type="time" />
         </div>
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
           {["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์", "วันหยุดพิเศษ"].map((day, index) => (
@@ -385,46 +378,19 @@ function TeamSettings() {
   return (
     <div className="space-y-4">
       <Panel
-        title="สมาชิกในร้าน"
-        hint="เชิญทีมและกำหนดสิทธิ์ตามหน้าที่"
+        title="จัดการทีม"
+        hint="หน้าเชิญทีมจริงอยู่ที่เมนูพนักงาน"
         right={
-          <button type="button" className="h-8 px-3 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[12px] font-semibold hover:opacity-90 transition-opacity">
-            เชิญสมาชิก
-          </button>
+          <Link href="/staff" className="h-8 px-3 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center">
+            เปิดหน้าพนักงาน
+          </Link>
         }
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-[12px]">
-            <thead className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
-              <tr>
-                <th className="py-2 font-semibold">ชื่อ</th>
-                <th className="py-2 font-semibold">บทบาท</th>
-                <th className="py-2 font-semibold">สิทธิ์</th>
-                <th className="py-2 font-semibold text-right">สถานะ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {TEAM_MEMBERS.map((member) => (
-                <tr key={member.email} className="border-b border-gray-50 dark:border-gray-800/70 last:border-0">
-                  <td className="py-3">
-                    <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{member.email}</p>
-                  </td>
-                  <td className="py-3 text-gray-700 dark:text-gray-300">{member.role}</td>
-                  <td className="py-3 text-gray-500 dark:text-gray-400">{member.access}</td>
-                  <td className="py-3 text-right">
-                    <span className={`px-2 py-1 rounded-md text-[11px] font-medium ${
-                      member.status === "ใช้งาน"
-                        ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
-                        : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
-                    }`}>
-                      {member.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 px-4 py-3">
+          <p className="text-[13px] font-semibold text-gray-900 dark:text-white">Phase B ใช้หน้า `/staff` เป็นแหล่งจริง</p>
+          <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">
+            หน้านั้นดึงสมาชิกจาก `restaurant_members`, สร้าง invitation token, คัดลอกลิงก์ และ revoke คำเชิญได้แล้ว
+          </p>
         </div>
       </Panel>
 

@@ -6,14 +6,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // ── theme toggle ───────────────────────────────────────────────────────────
 function ThemeToggle() {
-  const { theme, toggle } = useTheme();
+  const { theme, mounted, toggle } = useTheme();
+  const isDark = mounted && theme === "dark";
   return (
     <button
       onClick={toggle}
-      title={theme === "dark" ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
+      title={isDark ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
       className="w-9 h-9 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-gray-900/60 backdrop-blur hover:bg-white dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors"
     >
-      {theme === "dark" ? (
+      {isDark ? (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
           <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
           <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>

@@ -16,16 +16,24 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 
 func (r *UserRepository) FindByEmail(email string) (*entity.User, error) {
 	var user entity.User
-	if err := r.db.Preload("Role").Where("email = ?", email).First(&user).Error; err != nil {
-		return nil, err
+	result := r.db.Where("email = ?", email).Limit(1).Find(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &user, nil
 }
 
 func (r *UserRepository) FindById(id uint) (*entity.User, error) {
 	var user entity.User
-	if err := r.db.Preload("Role").First(&user, id).Error; err != nil {
-		return nil, err
+	result := r.db.Where("id = ?", id).Limit(1).Find(&user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 	return &user, nil
 }

@@ -19,3 +19,19 @@ func (r *RoleRepository) FindAll() ([]entity.Role, error) {
 	err := r.db.Find(&roles).Error
 	return roles, err
 }
+
+func (r *RoleRepository) FindByID(id uint) (*entity.Role, error) {
+	var role entity.Role
+	if err := r.db.First(&role, id).Error; err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
+func (r *RoleRepository) FindByName(name string) (*entity.Role, error) {
+	var role entity.Role
+	if err := r.db.Where("name = ?", name).First(&role).Error; err != nil {
+		return nil, err
+	}
+	return &role, nil
+}

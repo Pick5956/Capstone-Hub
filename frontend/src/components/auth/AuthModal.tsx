@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { User } from "../../types/auth";
-import { googleLogin, login, register, getRoles } from "../../lib/auth";
+import { Membership } from "../../types/restaurant";
+import { googleLogin, login, register, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
+import { restaurantRepository } from "../../app/repositories/restaurantRepository";
 
 type GoogleCredentialResponse = {
     credential?: string;
@@ -54,14 +56,6 @@ const ClearIcon = () => (
     </svg>
 );
 
-// ── role API shape (loose: backend may return Role/role + ID/id) ────────────
-type ApiRole = {
-    ID?: number;
-    id?: number;
-    Role?: string;
-    role?: string;
-};
-
 // ── reusable input ──────────────────────────────────────────────────────────
 interface InputFieldProps {
     id: string;
@@ -72,6 +66,7 @@ interface InputFieldProps {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     placeholder?: string;
     required?: boolean;
+    autoComplete?: string;
     onClear?: () => void;
     showPasswordToggle?: boolean;
     isPasswordVisible?: boolean;
@@ -80,7 +75,7 @@ interface InputFieldProps {
 
 const InputField = ({
     id, name, label, type = "text", value = "", onChange, placeholder, required,
-    onClear, showPasswordToggle, isPasswordVisible, onTogglePassword,
+    autoComplete, onClear, showPasswordToggle, isPasswordVisible, onTogglePassword,
 }: InputFieldProps) => {
     const isPasswordType = type === "password";
     const actualType = isPasswordType && isPasswordVisible ? "text" : type;
@@ -98,7 +93,7 @@ const InputField = ({
             <div className="relative">
                 <input
                     type={actualType} id={id} name={name || id} value={value} onChange={onChange}
-                    placeholder={placeholder} required={required}
+                    placeholder={placeholder} required={required} autoComplete={autoComplete}
                     className={`w-full pl-3 ${prClass} h-9 text-[13px] border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 outline-none transition-colors`}
                 />
 
@@ -127,15 +122,6 @@ const InputField = ({
     );
 };
 
-// ── role label mapping (restaurant context) ─────────────────────────────────
-function mapRoleLabel(raw: string): string {
-    const k = raw.toLowerCase();
-    if (k.includes("admin")) return "เจ้าของร้าน / ผู้จัดการ";
-    if (k.includes("teacher") || k.includes("manager")) return "ผู้จัดการ";
-    if (k.includes("student") || k.includes("staff") || k.includes("employee")) return "พนักงาน";
-    return raw;
-}
-
 // ── brand block ─────────────────────────────────────────────────────────────
 function BrandLine() {
     return (
@@ -154,13 +140,32 @@ function BrandLine() {
     );
 }
 
+// Pick where to send the user after a successful auth.
+// Side effect: persists active restaurant id when there's exactly one membership.
+function decideRedirect(memberships: Membership[]): string {
+    if (memberships.length === 0) return "/restaurants";
+    if (memberships.length === 1) {
+        restaurantRepository.setActiveId(memberships[0].restaurant_id);
+        return "/home";
+    }
+    return "/restaurants";
+}
+
 // ── main modal ──────────────────────────────────────────────────────────────
 export interface AuthModalProps {
     isOpen: boolean;
     onClose: () => void;
     initialMode?: "login" | "register";
-    onAuthenticated?: (user?: User) => void;
+    onAuthenticated?: (user?: User, memberships?: Membership[]) => void;
 }
+
+type RegisterFormState = {
+    first_name: string;
+    last_name: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+};
 
 export default function AuthModal({ isOpen, onClose, initialMode = "login", onAuthenticated }: AuthModalProps) {
     const [authMode, setAuthMode] = useState<"login" | "register">(initialMode);
@@ -169,23 +174,10 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
     const googleButtonRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
-    const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
-    const [rolesList, setRolesList] = useState<{ id: number; label: string }[]>([]);
-
     useEffect(() => {
         if (!isOpen) return;
         setAuthMode(initialMode);
         setError("");
-
-        getRoles().then(res => {
-            if (res?.data?.data) {
-                const apiRoles = (res.data.data as ApiRole[]).map(r => ({
-                    id: (r.ID ?? r.id) as number,
-                    label: mapRoleLabel(r.Role || r.role || ""),
-                }));
-                setRolesList(apiRoles);
-            }
-        });
     }, [isOpen, initialMode]);
 
     // login state
@@ -193,38 +185,47 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
     const [password, setPassword] = useState("");
     const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-    // register state — password fields are local only
-    const [registerForm, setRegisterForm] = useState<Partial<User> & { password?: string; confirmPassword?: string; role_id?: number }>({
+    // register state — no role selection here. role is assigned later via
+    // creating a restaurant (becomes owner) or accepting an invitation.
+    const [registerForm, setRegisterForm] = useState<RegisterFormState>({
         first_name: "", last_name: "", email: "",
-        password: "", confirmPassword: "", role_id: 3,
+        password: "", confirmPassword: "",
     });
     const [showRegisterPw, setShowRegisterPw] = useState(false);
     const [showConfirmPw, setShowConfirmPw] = useState(false);
 
-    const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const val = e.target.name === "role_id" ? parseInt(e.target.value, 10) : e.target.value;
-        setRegisterForm(prev => ({ ...prev, [e.target.name]: val }));
+    const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setRegisterForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
-    const clearRegisterField = (field: keyof typeof registerForm) => {
+    const clearRegisterField = (field: keyof RegisterFormState) => {
         setRegisterForm(prev => ({ ...prev, [field]: "" }));
     };
 
+    // ── shared post-auth handler ────────────────────────────────────────────
+    const completeAuth = useCallback((data: LoginResponse, hardReload = false) => {
+        const tokenType = "Bearer";
+        if (data.token) authRepository.setToken(data.token, tokenType);
+        onAuthenticated?.(data.user, data.memberships);
+        onClose();
+        const target = decideRedirect(data.memberships ?? []);
+        if (hardReload) {
+            window.location.href = target;
+        } else {
+            router.push(target);
+        }
+    }, [onAuthenticated, onClose, router]);
+
+    // ── google ──────────────────────────────────────────────────────────────
     const handleGoogleCredential = useCallback(async (response: GoogleCredentialResponse) => {
         if (!response.credential) {
             setError("ไม่สามารถเข้าสู่ระบบด้วย Google ได้");
             return;
         }
-
         setLoading(true); setError("");
         try {
             const res = await googleLogin(response.credential);
             if (res && res.data) {
-                const token = res.data.token || res.data.access_token;
-                const tokenType = res.data.token_type || "Bearer";
-                if (token) authRepository.setToken(token, tokenType);
-                onAuthenticated?.(res.data.user);
-                onClose();
-                router.push("/restaurants");
+                completeAuth(res.data);
             } else {
                 setError("เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
             }
@@ -233,7 +234,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
         } finally {
             setLoading(false);
         }
-    }, [onAuthenticated, onClose, router]);
+    }, [completeAuth]);
 
     useEffect(() => {
         const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -242,7 +243,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
         let cancelled = false;
         const initializeGoogleButton = () => {
             if (cancelled || !window.google || !googleButtonRef.current) return;
-
             window.google.accounts.id.initialize({
                 client_id: clientId,
                 callback: handleGoogleCredential,
@@ -276,11 +276,10 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
             }
         }
 
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [authMode, handleGoogleCredential, isOpen]);
 
+    // ── password login ─────────────────────────────────────────────────────
     const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setError("");
@@ -288,12 +287,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
             if (loginEmail && password) {
                 const res = await login(loginEmail, password);
                 if (res && res.data) {
-                    const token = res.data.token || res.data.access_token;
-                    const tokenType = res.data.token_type || "Bearer";
-                    if (token) authRepository.setToken(token, tokenType);
-                    onAuthenticated?.(res.data.user);
-                    onClose();
-                    router.push("/restaurants");
+                    completeAuth(res.data);
                 } else {
                     setError("ข้อมูลเข้าสู่ระบบไม่ถูกต้อง");
                 }
@@ -305,6 +299,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
         }
     };
 
+    // ── register + auto-login ──────────────────────────────────────────────
     const handleRegisterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true); setError("");
@@ -319,23 +314,26 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                 setLoading(false);
                 return;
             }
-            const userData = { ...registerForm };
-            delete userData.confirmPassword;
-            userData.role_id = userData.role_id || 3;
 
-            const res = await register(userData as unknown as Omit<User, "password">);
+            const res = await register({
+                email: registerForm.email,
+                first_name: registerForm.first_name,
+                last_name: registerForm.last_name,
+                password: registerForm.password,
+                phone: "",
+                address: "",
+                birthday: "",
+                profile_image: "",
+            });
+
             if (res) {
-                const loginRes = await login(registerForm.email!, registerForm.password!);
+                const loginRes = await login(registerForm.email, registerForm.password);
                 if (loginRes && loginRes.data) {
-                    const token = loginRes.data.token || loginRes.data.access_token;
-                    const tokenType = loginRes.data.token_type || "Bearer";
-                    if (token) authRepository.setToken(token, tokenType);
-                    onAuthenticated?.(loginRes.data.user);
-                    onClose();
-                    window.location.href = "/restaurants";
+                    // hard reload so AuthProvider re-fetches user + memberships fresh
+                    completeAuth(loginRes.data, true);
                 } else {
                     setAuthMode("login");
-                    setLoginEmail(registerForm.email || "");
+                    setLoginEmail(registerForm.email);
                     setPassword("");
                 }
             } else {
@@ -355,7 +353,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
     };
 
     const isLogin = authMode === "login";
-    const selectedRole = rolesList.find(r => r.id === registerForm.role_id);
 
     return (
         <div
@@ -374,12 +371,12 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                     <div>
                         <BrandLine />
                         <h2 className="mt-3 text-[15px] font-semibold text-gray-900 dark:text-white tracking-tight">
-                            {isLogin ? "เข้าสู่ระบบร้าน" : "สร้างบัญชีพนักงาน"}
+                            {isLogin ? "เข้าสู่ระบบร้าน" : "สร้างบัญชีใหม่"}
                         </h2>
                         <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                             {isLogin
                                 ? "เข้าใช้งานแผงควบคุมร้านและออเดอร์"
-                                : "เพิ่มบัญชีสำหรับทีมหน้าร้านหรือหลังครัว"}
+                                : "สมัครเสร็จเลือกได้ว่าจะสร้างร้านใหม่หรือเข้าร่วมร้านที่มีอยู่"}
                         </p>
                     </div>
                     <button
@@ -401,6 +398,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                             <InputField
                                 id="login-email" label="อีเมล"
                                 type="email" placeholder="example@email.com" required
+                                autoComplete="email"
                                 value={loginEmail}
                                 onChange={e => setLoginEmail(e.target.value)}
                                 onClear={() => setLoginEmail("")}
@@ -408,6 +406,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                             <InputField
                                 id="login-password" label="รหัสผ่าน"
                                 type="password" placeholder="••••••••" required
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 onClear={() => setPassword("")}
@@ -437,69 +436,17 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                         </form>
                     ) : (
                         <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                            {/* role */}
-                            <div className="relative">
-                                <label className="block text-[12px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                                    ตำแหน่ง
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsRoleDropdownOpen(o => !o)}
-                                    className={`w-full px-3 h-9 flex items-center justify-between border rounded-md bg-white dark:bg-gray-900 text-[13px] text-gray-900 dark:text-white transition-colors outline-none ${
-                                        isRoleDropdownOpen
-                                            ? "border-orange-500 ring-2 ring-orange-500/15"
-                                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                                    }`}
-                                >
-                                    <span className="truncate">{selectedRole?.label ?? "เลือกตำแหน่ง"}</span>
-                                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${isRoleDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                {isRoleDropdownOpen && (
-                                    <>
-                                        <div className="fixed inset-0 z-40" onClick={() => setIsRoleDropdownOpen(false)} />
-                                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg overflow-hidden">
-                                            {rolesList.map(role => {
-                                                const active = registerForm.role_id === role.id;
-                                                return (
-                                                    <button
-                                                        key={role.id}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setRegisterForm(prev => ({ ...prev, role_id: role.id }));
-                                                            setIsRoleDropdownOpen(false);
-                                                        }}
-                                                        className={`w-full px-3 py-2 flex items-center justify-between text-left text-[13px] transition-colors ${
-                                                            active
-                                                                ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 font-medium"
-                                                                : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                                        }`}
-                                                    >
-                                                        <span>{role.label}</span>
-                                                        {active && (
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        )}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <InputField
                                     id="firstName" name="first_name" label="ชื่อ" placeholder="ชื่อ" required
+                                    autoComplete="given-name"
                                     value={registerForm.first_name}
                                     onChange={handleRegisterChange}
                                     onClear={() => clearRegisterField("first_name")}
                                 />
                                 <InputField
                                     id="lastName" name="last_name" label="นามสกุล" placeholder="นามสกุล" required
+                                    autoComplete="family-name"
                                     value={registerForm.last_name}
                                     onChange={handleRegisterChange}
                                     onClear={() => clearRegisterField("last_name")}
@@ -509,6 +456,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                             <InputField
                                 id="register-email" name="email" label="อีเมล"
                                 type="email" placeholder="example@email.com" required
+                                autoComplete="email"
                                 value={registerForm.email}
                                 onChange={handleRegisterChange}
                                 onClear={() => clearRegisterField("email")}
@@ -518,6 +466,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                                 <InputField
                                     id="register-password" name="password" label="รหัสผ่าน"
                                     type="password" placeholder="••••••••" required
+                                    autoComplete="new-password"
                                     value={registerForm.password}
                                     onChange={handleRegisterChange}
                                     onClear={() => clearRegisterField("password")}
@@ -527,6 +476,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "login", onAu
                                 <InputField
                                     id="confirmPassword" name="confirmPassword" label="ยืนยันรหัสผ่าน"
                                     type="password" placeholder="••••••••" required
+                                    autoComplete="new-password"
                                     value={registerForm.confirmPassword}
                                     onChange={handleRegisterChange}
                                     onClear={() => clearRegisterField("confirmPassword")}
