@@ -3,6 +3,7 @@ package main
 import (
 	"Project-M/config"
 	"Project-M/routes"
+	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -46,5 +47,9 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	r.Run(host + ":" + port)
+	address := host + ":" + port
+	log.Printf("Backend listening on http://%s", address)
+	if err := r.Run(address); err != nil {
+		log.Fatalf("failed to start backend server on %s: %v", address, err)
+	}
 }
