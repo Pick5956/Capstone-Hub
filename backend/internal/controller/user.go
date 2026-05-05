@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,6 +81,45 @@ func (ctrl *UserController) Register(c *gin.Context) {
 
 	created.Password = ""
 	c.JSON(http.StatusCreated, created)
+}
+
+func (ctrl *UserController) ForgotPassword(c *gin.Context) {
+	var req service.ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := ctrl.authService.RequestPasswordReset(&req); err != nil {
+		if errors.Is(err, service.ErrPasswordResetGoogleAccount) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "This email uses Google sign-in. Please continue with Google.",
+				"code":  "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to request password reset"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a password reset link has been sent."})
+}
+
+func (ctrl *UserController) ResetPassword(c *gin.Context) {
+	var req service.ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := ctrl.authService.ResetPassword(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset."})
 }
 
 func (ctrl *UserController) GetProfile(c *gin.Context) {

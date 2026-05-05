@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import { User } from "../../types/auth";
 import { Membership } from "../../types/restaurant";
-import { googleLogin, login, register, LoginResponse } from "../../lib/auth";
+import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
 import { restaurantRepository } from "../../app/repositories/restaurantRepository";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -198,6 +199,8 @@ export interface AuthModalProps {
   redirectTo?: string;
 }
 
+type AuthMode = "login" | "register" | "forgot";
+
 type RegisterFormState = {
   first_name: string;
   last_name: string;
@@ -214,9 +217,10 @@ export default function AuthModal({
   redirectTo,
 }: AuthModalProps) {
   const { language } = useLanguage();
-  const [authMode, setAuthMode] = useState<"login" | "register">(initialMode);
+  const [authMode, setAuthMode] = useState<AuthMode>(initialMode);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -229,16 +233,23 @@ export default function AuthModal({
         googleLoginFailed: "เข้าสู่ระบบด้วย Google ไม่สำเร็จ",
         googleLoginRetry: "เข้าสู่ระบบด้วย Google ล้มเหลว กรุณาลองใหม่อีกครั้ง",
         invalidCredentials: "ข้อมูลเข้าสู่ระบบไม่ถูกต้อง",
+        invalidCredentialsHint: "ถ้าเคยใช้ Google กับอีเมลนี้ ให้กด Continue with Google แทน",
         fillLogin: "กรุณากรอกอีเมลและรหัสผ่าน",
         loginFailed: "เข้าสู่ระบบล้มเหลว กรุณาลองใหม่อีกครั้ง",
+        resetEmailRequired: "กรุณากรอกอีเมลสำหรับกู้รหัสผ่าน",
+        resetRequestFailed: "ส่งลิงก์กู้รหัสผ่านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+        resetGoogleAccount: "อีเมลนี้ใช้เข้าสู่ระบบด้วย Google กรุณากด Continue with Google แทน",
+        resetEmailSent: "ถ้ามีอีเมลนี้ในระบบ เราส่งลิงก์กู้รหัสผ่านให้แล้ว",
         passwordMismatch: "รหัสผ่านไม่ตรงกัน",
         fillRequired: "กรุณากรอกข้อมูลสำคัญให้ครบถ้วน",
         registerFailed: "การสมัครสมาชิกไม่สำเร็จ (อีเมลนี้อาจซ้ำในระบบ)",
         registerRetry: "การสมัครสมาชิกล้มเหลว กรุณาลองใหม่อีกครั้ง",
         loginTitle: "เข้าสู่ระบบร้าน",
         registerTitle: "สร้างบัญชีใหม่",
+        forgotTitle: "กู้รหัสผ่าน",
         loginSubtitle: "เข้าใช้งานแผงควบคุมร้านและออเดอร์",
         registerSubtitle: "สมัครเสร็จเลือกได้ว่าจะสร้างร้านใหม่หรือเข้าร่วมร้านที่มีอยู่",
+        forgotSubtitle: "กรอกอีเมลบัญชีของคุณ แล้วเราจะส่งลิงก์สำหรับตั้งรหัสผ่านใหม่",
         close: "ปิดหน้าต่าง",
         email: "อีเมล",
         password: "รหัสผ่าน",
@@ -247,11 +258,15 @@ export default function AuthModal({
         confirmPassword: "ยืนยันรหัสผ่าน",
         loginButton: "เข้าสู่ระบบ",
         loginBusy: "กำลังเข้าสู่ระบบ...",
+        sendResetLink: "ส่งลิงก์กู้รหัสผ่าน",
+        sendResetBusy: "กำลังส่งลิงก์...",
         createAccountButton: "สร้างบัญชี",
         createAccountBusy: "กำลังสร้างบัญชี...",
         or: "หรือ",
         noAccount: "ยังไม่มีบัญชี?",
         haveAccount: "มีบัญชีอยู่แล้ว?",
+        forgotPassword: "ลืมรหัสผ่าน?",
+        backToLogin: "กลับไปเข้าสู่ระบบ",
         switchToRegister: "สร้างบัญชี",
         switchToLogin: "เข้าสู่ระบบ",
       }
@@ -263,16 +278,23 @@ export default function AuthModal({
         googleLoginFailed: "Google sign-in was not successful.",
         googleLoginRetry: "Google sign-in failed. Please try again.",
         invalidCredentials: "The email or password is incorrect.",
+        invalidCredentialsHint: "If you used Google with this email, continue with Google instead.",
         fillLogin: "Please enter your email and password.",
         loginFailed: "Sign-in failed. Please try again.",
+        resetEmailRequired: "Please enter the email for your account.",
+        resetRequestFailed: "Could not send the reset link. Please try again.",
+        resetGoogleAccount: "This email uses Google sign-in. Please continue with Google instead.",
+        resetEmailSent: "If this email exists, we sent a password reset link.",
         passwordMismatch: "Passwords do not match.",
         fillRequired: "Please fill in all required information.",
         registerFailed: "Registration was not successful. This email may already exist.",
         registerRetry: "Registration failed. Please try again.",
         loginTitle: "Sign in to your restaurant",
         registerTitle: "Create an account",
+        forgotTitle: "Reset your password",
         loginSubtitle: "Access the restaurant dashboard and order operations.",
         registerSubtitle: "After signing up, you can create a new restaurant or join an existing one.",
+        forgotSubtitle: "Enter your account email and we will send a link to set a new password.",
         close: "Close",
         email: "Email",
         password: "Password",
@@ -281,11 +303,15 @@ export default function AuthModal({
         confirmPassword: "Confirm password",
         loginButton: "Sign in",
         loginBusy: "Signing in...",
+        sendResetLink: "Send reset link",
+        sendResetBusy: "Sending link...",
         createAccountButton: "Create account",
         createAccountBusy: "Creating account...",
         or: "or",
         noAccount: "Don't have an account?",
         haveAccount: "Already have an account?",
+        forgotPassword: "Forgot password?",
+        backToLogin: "Back to sign in",
         switchToRegister: "Create one",
         switchToLogin: "Sign in",
       };
@@ -294,10 +320,12 @@ export default function AuthModal({
     if (!isOpen) return;
     setAuthMode(initialMode);
     setError("");
+    setNotice("");
   }, [isOpen, initialMode]);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [forgotEmail, setForgotEmail] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   const [registerForm, setRegisterForm] = useState<RegisterFormState>({
@@ -413,13 +441,41 @@ export default function AuthModal({
         if (res?.data) {
           completeAuth(res.data);
         } else {
-          setError(copy.invalidCredentials);
+          setError(`${copy.invalidCredentials} ${copy.invalidCredentialsHint}`);
         }
       } else {
         setError(copy.fillLogin);
       }
     } catch {
       setError(copy.loginFailed);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setNotice("");
+
+    const email = forgotEmail.trim();
+    if (!email) {
+      setError(copy.resetEmailRequired);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await requestPasswordReset(email);
+      if (res) {
+        setNotice(copy.resetEmailSent);
+      } else {
+        setError(copy.resetRequestFailed);
+      }
+    } catch (err) {
+      const code = axios.isAxiosError(err) ? err.response?.data?.code : undefined;
+      setError(code === "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN" ? copy.resetGoogleAccount : copy.resetRequestFailed);
     } finally {
       setLoading(false);
     }
@@ -477,12 +533,16 @@ export default function AuthModal({
   const toggleAuthMode = () => {
     setAuthMode((prev) => (prev === "login" ? "register" : "login"));
     setError("");
+    setNotice("");
     setShowLoginPassword(false);
     setShowRegisterPw(false);
     setShowConfirmPw(false);
   };
 
   const isLogin = authMode === "login";
+  const isForgot = authMode === "forgot";
+  const title = isForgot ? copy.forgotTitle : isLogin ? copy.loginTitle : copy.registerTitle;
+  const subtitle = isForgot ? copy.forgotSubtitle : isLogin ? copy.loginSubtitle : copy.registerSubtitle;
 
   return (
     <div
@@ -492,17 +552,17 @@ export default function AuthModal({
     >
       <div
         className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
-          isLogin ? "max-w-sm" : "max-w-lg"
+          isLogin || isForgot ? "max-w-sm" : "max-w-lg"
         } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
       >
         <div className="flex items-start justify-between border-b border-gray-100 px-5 pb-3 pt-4 dark:border-gray-800">
           <div>
             <BrandLine />
             <h2 className="mt-3 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
-              {isLogin ? copy.loginTitle : copy.registerTitle}
+              {title}
             </h2>
             <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-              {isLogin ? copy.loginSubtitle : copy.registerSubtitle}
+              {subtitle}
             </p>
           </div>
           <button
@@ -548,6 +608,21 @@ export default function AuthModal({
                 labels={copy}
               />
 
+              <div className="-mt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode("forgot");
+                    setForgotEmail(loginEmail);
+                    setError("");
+                    setNotice("");
+                  }}
+                  className="text-[12px] font-semibold text-orange-600 transition-colors hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                >
+                  {copy.forgotPassword}
+                </button>
+              </div>
+
               {error && <ErrorBox message={error} />}
 
               <button
@@ -568,6 +643,32 @@ export default function AuthModal({
                   <div className="flex min-h-10 justify-center" ref={googleButtonRef} />
                 </>
               )}
+            </form>
+          ) : isForgot ? (
+            <form onSubmit={handleForgotSubmit} className="space-y-3.5">
+              <InputField
+                id="forgot-email"
+                label={copy.email}
+                type="email"
+                placeholder="example@email.com"
+                required
+                autoComplete="email"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                onClear={() => setForgotEmail("")}
+                labels={copy}
+              />
+
+              {error && <ErrorBox message={error} />}
+              {notice && <NoticeBox message={notice} />}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-1 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900"
+              >
+                {loading ? copy.sendResetBusy : copy.sendResetLink}
+              </button>
             </form>
           ) : (
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
@@ -661,16 +762,30 @@ export default function AuthModal({
         </div>
 
         <div className="bg-slate-50/60 px-5 py-3 text-center dark:bg-gray-900/40 border-t border-gray-100 dark:border-gray-800">
-          <p className="text-[12px] text-gray-600 dark:text-gray-400">
-            {isLogin ? copy.noAccount : copy.haveAccount}{" "}
+          {isForgot ? (
             <button
-              onClick={toggleAuthMode}
+              onClick={() => {
+                setAuthMode("login");
+                setError("");
+                setNotice("");
+              }}
               type="button"
-              className="font-semibold text-orange-600 transition-colors hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+              className="text-[12px] font-semibold text-orange-600 transition-colors hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
             >
-              {isLogin ? copy.switchToRegister : copy.switchToLogin}
+              {copy.backToLogin}
             </button>
-          </p>
+          ) : (
+            <p className="text-[12px] text-gray-600 dark:text-gray-400">
+              {isLogin ? copy.noAccount : copy.haveAccount}{" "}
+              <button
+                onClick={toggleAuthMode}
+                type="button"
+                className="font-semibold text-orange-600 transition-colors hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+              >
+                {isLogin ? copy.switchToRegister : copy.switchToLogin}
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -692,6 +807,25 @@ function ErrorBox({ message }: { message: string }) {
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function NoticeBox({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:text-emerald-300">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="mt-px h-4 w-4 shrink-0"
+      >
+        <path d="M20 6 9 17l-5-5" />
       </svg>
       <span>{message}</span>
     </div>

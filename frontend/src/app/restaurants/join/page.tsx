@@ -38,7 +38,7 @@ function InvitePreview() {
           </span>
         </div>
         <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-400">{copy.body}</p>
-        <p className="mt-2 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+        <p className="mt-2 max-w-full break-all rounded-md border border-gray-200 bg-gray-50 px-2 py-1 font-mono text-[11px] leading-5 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
           https://localhost:3000/invitations/AbCdEfGhIjKlMnOpQrStUvWxYz12_345
         </p>
       </div>

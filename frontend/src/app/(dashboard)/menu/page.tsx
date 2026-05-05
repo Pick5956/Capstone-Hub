@@ -21,6 +21,10 @@ const emptyItem: MenuItemInput = {
   display_order: 0,
 };
 
+type DeleteTarget =
+  | { type: "category"; id: number; name: string }
+  | { type: "item"; id: number; name: string };
+
 export default function MenuPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -41,7 +45,13 @@ export default function MenuPage() {
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string }>({});
-  const actionOnceRef = useRef(createSingleFlight());
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const saveCategoryOnceRef = useRef(createSingleFlight());
+  const saveItemOnceRef = useRef(createSingleFlight());
+  const deleteCategoryOnceRef = useRef(createSingleFlight());
+  const deleteItemOnceRef = useRef(createSingleFlight());
 
   const copy = language === "th"
     ? {
@@ -60,10 +70,19 @@ export default function MenuPage() {
         itemSaveError: "บันทึกเมนูไม่สำเร็จ",
         categoryDeleteError: "ลบหมวดหมู่ไม่สำเร็จ",
         itemDeleteError: "ลบเมนูไม่สำเร็จ",
+        confirmDeleteTitle: "ยืนยันการลบ",
+        confirmDeleteBody: "ต้องการลบรายการนี้ใช่ไหม? การทำงานนี้ย้อนกลับไม่ได้",
+        confirmDelete: "ยืนยันลบ",
+        cancel: "ยกเลิก",
         imageTypeError: "กรุณาเลือกไฟล์รูปภาพ",
         imageUploadError: "อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB",
         allCategories: "ทุกหมวดหมู่",
         catalogTitle: "รายการเมนู",
+        menuColumn: "เมนู",
+        categoryColumn: "หมวดหมู่",
+        statusColumn: "สถานะ",
+        priceColumn: "ราคา",
+        actionsColumn: "จัดการ",
         menuSummary: "เมนูทั้งหมด",
         availableSummary: "พร้อมขาย",
         categoryManager: "หมวดหมู่เมนู",
@@ -131,10 +150,19 @@ export default function MenuPage() {
         itemSaveError: "Could not save menu item.",
         categoryDeleteError: "Could not delete category.",
         itemDeleteError: "Could not delete menu item.",
+        confirmDeleteTitle: "Confirm delete",
+        confirmDeleteBody: "Delete this item? This action cannot be undone.",
+        confirmDelete: "Delete",
+        cancel: "Cancel",
         imageTypeError: "Please choose an image file.",
         imageUploadError: "Could not upload image. Use jpg, png, or webp up to 5MB.",
         allCategories: "All categories",
         catalogTitle: "Menu catalog",
+        menuColumn: "Item",
+        categoryColumn: "Category",
+        statusColumn: "Status",
+        priceColumn: "Price",
+        actionsColumn: "Actions",
         menuSummary: "Total items",
         availableSummary: "Available",
         categoryManager: "Menu categories",
@@ -237,7 +265,7 @@ export default function MenuPage() {
       setCategoryError(copy.categoryRequired);
       return;
     }
-    await actionOnceRef.current(async () => {
+    await saveCategoryOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       setCategoryError("");
@@ -273,7 +301,7 @@ export default function MenuPage() {
       setItemErrors(nextItemErrors);
       return;
     }
-    await actionOnceRef.current(async () => {
+    await saveItemOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       setItemErrors({});
@@ -288,6 +316,7 @@ export default function MenuPage() {
         }
         setEditingItem(null);
         setItemForm({ ...emptyItem, category_id: categories[0]?.ID ?? 0 });
+        setDrawerOpen(false);
       } catch {
         setItemErrors({ submit: copy.itemSaveError });
       } finally {
@@ -315,35 +344,51 @@ export default function MenuPage() {
       is_available: item.is_available,
       display_order: item.display_order,
     });
+    setDrawerOpen(true);
   };
 
-  const removeCategory = async (category: Category) => {
+  const startCreateItem = () => {
+    setEditingItem(null);
+    setItemErrors({});
+    setItemForm({ ...emptyItem, category_id: filterCategory || categories[0]?.ID || 0 });
+    setDrawerOpen(true);
+  };
+
+  const closeItemDrawer = () => {
+    setDrawerOpen(false);
+    setEditingItem(null);
+    setItemErrors({});
+  };
+
+  const removeCategory = async (categoryId: number) => {
     if (!canManage) return;
-    await actionOnceRef.current(async () => {
+    await deleteCategoryOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       try {
-        await deleteCategory(category.ID);
+        await deleteCategory(categoryId);
         await refresh();
       } catch {
         setError(copy.categoryDeleteError);
       } finally {
+        setDeleteTarget(null);
         setSubmitting(false);
       }
     });
   };
 
-  const removeItem = async (item: MenuItem) => {
+  const removeItem = async (itemId: number) => {
     if (!canManage) return;
-    await actionOnceRef.current(async () => {
+    await deleteItemOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       try {
-        await deleteMenuItem(item.ID);
-        setItems((current) => current.filter((menuItem) => menuItem.ID !== item.ID));
+        await deleteMenuItem(itemId);
+        setItems((current) => current.filter((menuItem) => menuItem.ID !== itemId));
       } catch {
         setError(copy.itemDeleteError);
       } finally {
+        setDeleteTarget(null);
         setSubmitting(false);
       }
     });
@@ -370,97 +415,70 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
         </div>
-        <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-          {copy.refresh}
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+            {copy.refresh}
+          </button>
+          {canManage && (
+            <>
+              <button type="button" onClick={() => setCategoryModalOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+                {copy.categoryManager}
+              </button>
+              <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                + {copy.createItem}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_420px]">
-        <aside className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.categoryManager}</p>
-              <h2 className="mt-0.5 text-[14px] font-semibold">{copy.categories}</h2>
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.categoryHint}</p>
-            </div>
-            <div className="p-2">
+      <div className="space-y-4">
+        <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 lg:flex-1 lg:pb-0">
               <button
                 type="button"
                 onClick={() => setFilterCategory(0)}
-                className={`flex min-h-10 w-full items-center justify-between rounded-md px-3 text-left text-[12px] transition-colors ${
+                className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-[12px] font-medium transition-colors ${
                   filterCategory === 0
-                    ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
-                    : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                    : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
                 }`}
               >
-                <span>{copy.allCategories}</span>
-                <span className="font-mono tabular-nums text-gray-400">{items.length}</span>
+                {copy.allCategories}
+                <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${filterCategory === 0 ? "bg-white/15 dark:bg-gray-900/10" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                  {items.length}
+                </span>
               </button>
               {categories.map((category) => (
-                <div key={category.ID} className="group mt-1 grid grid-cols-[1fr_auto] items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setFilterCategory(category.ID)}
-                    className={`flex min-h-10 min-w-0 items-center justify-between rounded-md px-3 text-left text-[12px] transition-colors ${
-                      filterCategory === category.ID
-                        ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
-                        : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"
-                    }`}
-                  >
-                    <span className={`truncate ${!category.is_active ? "text-gray-400 line-through" : ""}`}>{category.name}</span>
-                    <span className="ml-2 font-mono tabular-nums text-gray-400">{categoryCounts[category.ID] ?? 0}</span>
-                  </button>
-                  {canManage && (
-                    <div className="flex">
-                      <button type="button" onClick={() => editCategory(category)} className="h-9 rounded-md px-2 text-[11px] font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20">{copy.edit}</button>
-                      <button type="button" disabled={submitting} onClick={() => removeCategory(category)} className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
-                    </div>
-                  )}
-                </div>
+                <button
+                  key={category.ID}
+                  type="button"
+                  onClick={() => setFilterCategory(category.ID)}
+                  className={`inline-flex h-9 max-w-[220px] shrink-0 items-center gap-2 rounded-md px-3 text-[12px] font-medium transition-colors ${
+                    filterCategory === category.ID
+                      ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                      : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
+                  }`}
+                >
+                  <span className={`truncate ${!category.is_active ? "line-through opacity-60" : ""}`}>{category.name}</span>
+                  <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${filterCategory === category.ID ? "bg-white/15 dark:bg-gray-900/10" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                    {categoryCounts[category.ID] ?? 0}
+                  </span>
+                </button>
               ))}
-              {!categories.length && <p className="px-3 py-4 text-[12px] text-gray-500">{copy.noCategories}</p>}
             </div>
-
-            {canManage && (
-              <form onSubmit={saveCategory} className="border-t border-gray-200 p-4 dark:border-gray-800">
-                <h3 className="text-[13px] font-semibold">{editingCategory ? copy.editCategory : copy.addCategory}</h3>
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  <input
-                    value={categoryName}
-                    onChange={(event) => {
-                      setCategoryName(event.target.value);
-                      setCategoryError("");
-                    }}
-                    placeholder={copy.categoryPlaceholder}
-                    aria-invalid={Boolean(categoryError)}
-                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
-                      categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
-                    }`}
-                  />
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
-                    <input value={categoryOrder} onChange={(event) => setCategoryOrder(event.target.value)} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                    <button disabled={submitting} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
-                      {editingCategory ? copy.saveCategory : copy.createCategory}
-                    </button>
-                  </div>
-                  {categoryError ? (
-                    <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{categoryError}</p>
-                  ) : (
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{copy.categoryOrderHelp}</p>
-                  )}
-                </div>
-              </form>
-            )}
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 lg:max-w-xs" />
           </div>
-        </aside>
+        </div>
 
         <section className="space-y-4">
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
@@ -481,46 +499,42 @@ export default function MenuPage() {
                   </div>
                 </div>
               </div>
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="mt-3 h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
             </div>
 
             <div className="p-4">
               {loading ? (
-                <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <RestaurantCardSkeleton />
                   <RestaurantCardSkeleton />
                   <RestaurantCardSkeleton />
                 </div>
               ) : filteredItems.length ? (
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {filteredItems.map((item) => (
-                    <div key={item.ID} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[88px_minmax(0,1fr)_auto] sm:items-center">
+                    <article key={item.ID} className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white transition-[border-color,background-color,box-shadow] hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 ${!item.is_available ? "opacity-60" : ""}`}>
                       <div
-                        className="h-24 w-full overflow-hidden rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900 sm:h-20 sm:w-20"
+                        className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
                         style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
                       >
-                        {!item.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
+                        {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{copy.noImage}</div>}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
+                      <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                        <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
+                        <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                        <div className="mt-2">
                           <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
                             {item.is_available ? copy.available : copy.unavailable}
                           </span>
                         </div>
-                        <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.category?.name ?? copy.uncategorized}</p>
-                        <p className="mt-2 line-clamp-2 text-[12px] text-gray-500 dark:text-gray-400">{item.description || copy.noDescription}</p>
                       </div>
-                      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-                        <p className="font-mono text-[15px] font-semibold text-gray-900 tabular-nums dark:text-white">฿{item.price.toLocaleString()}</p>
-                        {canManage && (
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => editItem(item)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.edit}</button>
-                            <button type="button" disabled={submitting} onClick={() => removeItem(item)} className="h-9 rounded-md border border-red-200 px-3 text-[12px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      {canManage ? (
+                        <div className="grid grid-cols-2 gap-2 border-t border-gray-100 p-2 dark:border-gray-800">
+                          <button type="button" onClick={() => editItem(item)} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.edit}</button>
+                          <button type="button" disabled={submitting} onClick={() => setDeleteTarget({ type: "item", id: item.ID, name: item.name })} className="h-8 rounded-md border border-red-200 px-2 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
+                        </div>
+                      ) : null}
+                    </article>
                   ))}
                 </div>
               ) : (
@@ -533,68 +547,94 @@ export default function MenuPage() {
           </div>
         </section>
 
-        {canManage && (
-          <aside>
-            <form onSubmit={saveItem} className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 xl:sticky xl:top-4">
-              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
-                    <h2 className="mt-0.5 text-[14px] font-semibold">{editingItem ? copy.editItem : copy.addItem}</h2>
-                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.editorHint}</p>
-                  </div>
-                  {editingItem && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingItem(null);
-                        setItemErrors({});
-                        setItemForm({ ...emptyItem, category_id: categories[0]?.ID ?? 0 });
-                      }}
-                      className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                    >
-                      {copy.cancelEdit}
-                    </button>
-                  )}
-                </div>
-              </div>
+      </div>
 
-              <div className="space-y-4 p-4">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategory}</span>
-                    <ThemedSelect
-                      value={String(itemForm.category_id)}
-                      onChange={(next) => {
-                        setItemForm({ ...itemForm, category_id: Number(next) });
-                        setItemErrors((current) => ({ ...current, category: undefined, submit: undefined }));
-                      }}
-                      disabled={!categories.length}
-                      options={
-                        categories.length
-                          ? categories.map((cat) => ({ value: String(cat.ID), label: cat.name }))
-                          : [{ value: "0", label: copy.createCategoryFirst }]
-                      }
-                    />
-                    {itemErrors.category && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category}</p>}
-                    {!categories.length && <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-300">{copy.createCategoryHint}</p>}
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
-                    <input
-                      value={itemForm.name}
-                      onChange={(event) => {
-                        setItemForm({ ...itemForm, name: event.target.value });
-                        setItemErrors((current) => ({ ...current, name: undefined, submit: undefined }));
-                      }}
-                      placeholder={copy.itemNamePlaceholder}
-                      aria-invalid={Boolean(itemErrors.name)}
-                      className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
-                        itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
-                      }`}
-                    />
-                    {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
-                  </label>
+      {categoryModalOpen && canManage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
+          <div className="flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
+              <button type="button" onClick={() => setCategoryModalOpen(false)} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <div className="space-y-1">
+                {categories.map((category) => (
+                  <div key={category.ID} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <div className="min-w-0">
+                      <p className={`truncate text-[13px] font-medium ${!category.is_active ? "text-gray-400 line-through" : "text-gray-900 dark:text-white"}`}>{category.name}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">{categoryCounts[category.ID] ?? 0} {copy.menuSummary}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button type="button" onClick={() => editCategory(category)} className="h-8 rounded-md px-2 text-[11px] font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20">{copy.edit}</button>
+                      <button type="button" disabled={submitting} onClick={() => setDeleteTarget({ type: "category", id: category.ID, name: category.name })} className="h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
+                    </div>
+                  </div>
+                ))}
+                {!categories.length && <p className="rounded-md border border-gray-200 px-3 py-6 text-center text-[12px] text-gray-500 dark:border-gray-800">{copy.noCategories}</p>}
+              </div>
+            </div>
+            <form onSubmit={saveCategory} className="border-t border-gray-200 p-4 dark:border-gray-800">
+              <h3 className="text-[13px] font-semibold">{editingCategory ? copy.editCategory : copy.addCategory}</h3>
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                <input
+                  value={categoryName}
+                  onChange={(event) => {
+                    setCategoryName(event.target.value);
+                    setCategoryError("");
+                  }}
+                  placeholder={copy.categoryPlaceholder}
+                  aria-invalid={Boolean(categoryError)}
+                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
+                />
+                <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <input value={categoryOrder} onChange={(event) => setCategoryOrder(event.target.value)} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                  <button disabled={submitting} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                    {editingCategory ? copy.saveCategory : copy.createCategory}
+                  </button>
+                </div>
+                {categoryError ? (
+                  <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{categoryError}</p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{copy.categoryOrderHelp}</p>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {drawerOpen && canManage && (
+        <>
+          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className="fixed inset-0 z-30 cursor-default bg-gray-950/40" />
+          <form onSubmit={saveItem} className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
+                <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
+              </div>
+              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategory}</span>
+                  <ThemedSelect
+                    value={String(itemForm.category_id)}
+                    onChange={(next) => {
+                      setItemForm({ ...itemForm, category_id: Number(next) });
+                      setItemErrors((current) => ({ ...current, category: undefined, submit: undefined }));
+                    }}
+                    disabled={!categories.length}
+                    options={categories.length ? categories.map((cat) => ({ value: String(cat.ID), label: cat.name })) : [{ value: "0", label: copy.createCategoryFirst }]}
+                  />
+                  {itemErrors.category && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category}</p>}
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
+                  <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
+                  {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
                     <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
@@ -602,42 +642,23 @@ export default function MenuPage() {
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemOrder}</span>
                     <input value={itemForm.display_order || ""} onChange={(event) => setItemForm({ ...itemForm, display_order: Number(event.target.value) })} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-                    <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{copy.itemOrderHelp}</p>
                   </label>
                 </div>
-
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
                   <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
                   </div>
-                  <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr] xl:grid-cols-[96px_1fr]">
+                  <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr]">
                     <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={itemForm.image_url ? { backgroundImage: `url(${itemForm.image_url})` } : undefined}>
                       {!itemForm.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
                     </div>
                     <div className="min-w-0 space-y-2">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        disabled={uploadingImage}
-                        onChange={(event) => uploadImage(event.target.files?.[0])}
-                        className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900"
-                      />
-                      <input
-                        value={itemForm.image_url}
-                        onChange={(event) => {
-                          setItemForm({ ...itemForm, image_url: event.target.value });
-                          setItemErrors((current) => ({ ...current, image: undefined }));
-                        }}
-                        placeholder={copy.imageUrlPlaceholder}
-                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
-                      />
-                      <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
-                        {itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}
-                      </p>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploadingImage} onChange={(event) => uploadImage(event.target.files?.[0])} className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900" />
+                      <input value={itemForm.image_url} onChange={(event) => { setItemForm({ ...itemForm, image_url: event.target.value }); setItemErrors((current) => ({ ...current, image: undefined })); }} placeholder={copy.imageUrlPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                      <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
                     </div>
                   </div>
                 </div>
-
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
                   <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
@@ -647,17 +668,43 @@ export default function MenuPage() {
                   {copy.availableInStaffView}
                 </label>
               </div>
+            </div>
+            <div className="border-t border-gray-200 p-4 dark:border-gray-800">
+              <button disabled={submitting || uploadingImage || !categories.length} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                {editingItem ? copy.saveItem : copy.createItem}
+              </button>
+              {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
+            </div>
+          </form>
+        </>
+      )}
 
-              <div className="border-t border-gray-200 p-4 dark:border-gray-800">
-                <button disabled={submitting || uploadingImage || !categories.length} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
-                  {editingItem ? copy.saveItem : copy.createItem}
-                </button>
-                {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
-              </div>
-            </form>
-          </aside>
-        )}
-      </div>
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
+          <div className="w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
+              <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.name}</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={submitting} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void (deleteTarget.type === "category" ? removeCategory(deleteTarget.id) : removeItem(deleteTarget.id))}
+                className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+              >
+                {copy.confirmDelete}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

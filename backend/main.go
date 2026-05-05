@@ -3,6 +3,7 @@ package main
 import (
 	"Project-M/config"
 	"Project-M/routes"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,5 +38,13 @@ func main() {
 	r.Static("/uploads", "./uploads")
 
 	routes.SetupRoutes(r)
-	r.Run("localhost:8080")
+	host := os.Getenv("SERVER_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	r.Run(host + ":" + port)
 }

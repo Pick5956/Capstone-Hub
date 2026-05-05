@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { listTables } from "@/src/lib/table";
+import type { RestaurantTable } from "@/src/types/table";
+import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 
 type OrderStatus = "delayed" | "cooking" | "ready";
-type TableStatus = "occupied" | "available" | "reserved" | "cleaning";
+type DashboardTableStatus = "occupied" | "available" | "reserved" | "cleaning";
+type DashboardTable = { id: string; status: DashboardTableStatus; guests?: number; mins?: number; zone?: string };
+type HourlyPoint = { hour: string; orders: number };
 
 function useNow() {
   const [now, setNow] = useState<Date>(() => new Date());
@@ -42,10 +46,80 @@ function Section({
   );
 }
 
+function ShiftDemandChart({
+  data,
+  demandTooltip,
+  ordersLabel,
+}: {
+  data: HourlyPoint[];
+  demandTooltip: string;
+  ordersLabel: string;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const element = wrapperRef.current;
+    if (!element) return;
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      setSize({
+        width: Math.max(0, Math.floor(rect.width)),
+        height: Math.max(0, Math.floor(rect.height)),
+      });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const ready = size.width > 0 && size.height > 0;
+
+  return (
+    <div ref={wrapperRef} className="h-56 min-h-56 min-w-0 overflow-hidden">
+      {ready ? (
+        <BarChart width={size.width} height={size.height} data={data} margin={{ top: 8, right: 0, left: -18, bottom: 0 }}>
+          <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="hour" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
+          <Tooltip
+            cursor={{ fill: "rgba(249, 115, 22, 0.06)" }}
+            formatter={(value) => [`${value} ${demandTooltip}`, ordersLabel]}
+            labelFormatter={(label) => `${label}:00`}
+          />
+          <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
+            {data.map((entry) => (
+              <Cell key={entry.hour} fill={entry.orders >= 35 ? "#f59e0b" : entry.orders >= 20 ? "#fb923c" : "#cbd5e1"} />
+            ))}
+          </Bar>
+        </BarChart>
+      ) : null}
+    </div>
+  );
+}
+
+function toDashboardTable(table: RestaurantTable): DashboardTable {
+  const status: DashboardTableStatus =
+    table.status === "free" ? "available" : table.status === "reserved" ? "reserved" : "occupied";
+
+  return {
+    id: table.table_number,
+    status,
+    guests: status === "occupied" ? table.capacity : undefined,
+    zone: table.zone,
+  };
+}
+
 export default function Home() {
-  const { user } = useAuth();
+  const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
   const now = useNow();
+  const [tables, setTables] = useState<DashboardTable[]>([]);
+  const [loadingTables, setLoadingTables] = useState(true);
+  const [floorError, setFloorError] = useState("");
 
   const copy = language === "th"
     ? {
@@ -55,6 +129,7 @@ export default function Home() {
         open: "เปิดให้บริการ",
         refresh: "รีเฟรช",
         newOrder: "ออเดอร์ใหม่",
+        newOrderSoon: "ระบบออเดอร์จะเปิดในเฟสถัดไป",
         urgentOrders: "ออเดอร์ต้องเร่งก่อน",
         activeTables: "โต๊ะกำลังใช้งาน",
         upcomingReservations: "การจองใกล้ถึงเวลา",
@@ -83,6 +158,7 @@ export default function Home() {
         reserved: "จองไว้",
         cleaning: "ทำความสะอาด",
         noZone: "ไม่ระบุโซน",
+        tableLoadError: "โหลดสถานะโต๊ะไม่สำเร็จ",
         people: "คน",
         minutes: "นาที",
         nearService: "รอบเย็นเริ่มแน่น",
@@ -106,6 +182,7 @@ export default function Home() {
         open: "Open for service",
         refresh: "Refresh",
         newOrder: "New order",
+        newOrderSoon: "Orders are coming in the next phase.",
         urgentOrders: "Urgent orders",
         activeTables: "Active tables",
         upcomingReservations: "Upcoming reservations",
@@ -134,6 +211,7 @@ export default function Home() {
         reserved: "Reserved",
         cleaning: "Cleaning",
         noZone: "No zone",
+        tableLoadError: "Could not load table status.",
         people: "people",
         minutes: "mins",
         nearService: "The evening service is getting busy",
@@ -158,16 +236,24 @@ export default function Home() {
     { id: 1046, table: "T9", items: language === "th" ? ["ผัดไทย", "ส้มตำไทย"] : ["Pad Thai", "Papaya salad"], waited: 9, total: 240, status: "ready" as OrderStatus },
   ];
 
-  const tables = [
-    { id: "T1", status: "occupied" as TableStatus, guests: 4, mins: 35 },
-    { id: "T2", status: "occupied" as TableStatus, guests: 2, mins: 12 },
-    { id: "T3", status: "occupied" as TableStatus, guests: 3, mins: 48 },
-    { id: "T4", status: "available" as TableStatus },
-    { id: "T5", status: "occupied" as TableStatus, guests: 2, mins: 22 },
-    { id: "T6", status: "cleaning" as TableStatus, mins: 4 },
-    { id: "T7", status: "occupied" as TableStatus, guests: 4, mins: 18 },
-    { id: "T8", status: "reserved" as TableStatus, guests: 4, mins: 30 },
-  ];
+  const loadTables = async () => {
+    setLoadingTables(true);
+    setFloorError("");
+    try {
+      const res = await listTables();
+      setTables((res.data.tables ?? []).map(toDashboardTable));
+    } catch {
+      setFloorError(copy.tableLoadError);
+    } finally {
+      setLoadingTables(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeMembership?.restaurant_id) return;
+    void loadTables();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMembership?.restaurant_id, language]);
 
   const lowStock = [
     { name: language === "th" ? "ข้าวสวย" : "Steamed rice", left: 8, unit: language === "th" ? "จาน" : "plates", critical: true },
@@ -258,10 +344,10 @@ export default function Home() {
                 {copy.open}
               </div>
               <div className="flex gap-2">
-                <button type="button" className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+                <button type="button" onClick={() => void loadTables()} disabled={loadingTables} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
                   {copy.refresh}
                 </button>
-                <button type="button" className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                <button type="button" disabled title={copy.newOrderSoon} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-gray-900">
                   {copy.newOrder}
                 </button>
               </div>
@@ -358,7 +444,7 @@ export default function Home() {
             aside={<p className="text-[12px] text-gray-500 dark:text-gray-400">{copy.nearService}</p>}
           >
             <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-4">
-              {(["occupied", "available", "reserved", "cleaning"] as TableStatus[]).map((status) => (
+              {(["occupied", "available", "reserved", "cleaning"] as DashboardTableStatus[]).map((status) => (
                 <div key={status} className="bg-white px-4 py-3 dark:bg-gray-950">
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">{tableMeta[status].label}</p>
                   <p className="mt-1 text-[20px] font-semibold tabular-nums">{tables.filter((table) => table.status === status).length}</p>
@@ -366,7 +452,11 @@ export default function Home() {
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2 px-4 py-4 sm:grid-cols-4">
-              {tables.map((table) => (
+              {loadingTables ? (
+                <div className="col-span-full text-[12px] text-gray-500 dark:text-gray-400">{copy.refresh}...</div>
+              ) : floorError ? (
+                <div className="col-span-full rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{floorError}</div>
+              ) : tables.length ? tables.map((table) => (
                 <div key={table.id} className={`rounded-md px-2.5 py-2 ${tableMeta[table.status].tone}`}>
                   <p className="text-[12px] font-semibold">{table.id}</p>
                   <p className="mt-0.5 text-[11px]">
@@ -374,7 +464,9 @@ export default function Home() {
                   </p>
                   {table.mins ? <p className="text-[11px] opacity-80">{table.mins} {copy.minutes}</p> : null}
                 </div>
-              ))}
+              )) : (
+                <div className="col-span-full text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+              )}
             </div>
           </Section>
         </div>
@@ -429,8 +521,8 @@ export default function Home() {
             title={copy.demandTitle}
             aside={<p className="text-[12px] text-gray-500 dark:text-gray-400">{copy.demandAside}</p>}
           >
-            <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr]">
-              <div className="px-4 py-4 xl:border-r xl:border-gray-200 xl:dark:border-gray-800">
+            <div className="grid min-w-0 grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+              <div className="min-w-0 px-4 py-4 xl:border-r xl:border-gray-200 xl:dark:border-gray-800">
                 <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.ordersOpen}</p>
@@ -450,28 +542,10 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={hourly} margin={{ top: 8, right: 0, left: -18, bottom: 0 }}>
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="hour" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
-                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
-                      <Tooltip
-                        cursor={{ fill: "rgba(249, 115, 22, 0.06)" }}
-                        formatter={(value) => [`${value} ${copy.demandTooltip}`, copy.orders]}
-                        labelFormatter={(label) => `${label}:00`}
-                      />
-                      <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
-                        {hourly.map((entry) => (
-                          <Cell key={entry.hour} fill={entry.orders >= 35 ? "#f59e0b" : entry.orders >= 20 ? "#fb923c" : "#cbd5e1"} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                <ShiftDemandChart data={hourly} demandTooltip={copy.demandTooltip} ordersLabel={copy.orders} />
               </div>
 
-              <div className="divide-y divide-gray-200 px-4 py-2 dark:divide-gray-800">
+              <div className="min-w-0 divide-y divide-gray-200 px-4 py-2 dark:divide-gray-800">
                 {topItems.map((item) => (
                   <div key={item.name} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3">
                     <div>
