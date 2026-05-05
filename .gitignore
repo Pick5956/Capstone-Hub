@@ -27,12 +27,15 @@ backups/
 data/
 database/
 
-# Personal LLM-maintained dev wiki — local only
+# Personal AI/agent workspace files — local only
 docs/wiki/
-
-# Personal Claude Code skills — local only
 .claude/
-
-# Personal Claude Code project entry — local only
+.codex/
+.agents/
 CLAUDE.md
+AGENTS.md
+*.chat.md
+*.prompt.md
+*.session.md
+*.transcript.md
 /.obsidian
