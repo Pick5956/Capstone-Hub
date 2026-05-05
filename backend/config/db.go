@@ -56,6 +56,10 @@ func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasColumn("restaurants", "invite_code") {
 		_ = db.Migrator().DropColumn("restaurants", "invite_code")
 	}
+	_ = db.Exec("DO $$ BEGIN IF to_regclass('public.users') IS NOT NULL THEN ALTER TABLE users DROP CONSTRAINT IF EXISTS uni_users_email; END IF; END $$;").Error
+	if db.Migrator().HasIndex(&entity.User{}, "uni_users_email") {
+		_ = db.Migrator().DropIndex(&entity.User{}, "uni_users_email")
+	}
 
 	db.AutoMigrate(
 		&entity.Role{},

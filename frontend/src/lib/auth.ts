@@ -33,5 +33,11 @@ export const googleLogin = (idToken: string) =>
 export const register = (data: Omit<User, "ID"> & { password: string }) =>
   apiClient.post("/api/register", data).catch(() => null);
 
+export const requestPasswordReset = (email: string) =>
+  apiClient.post("/api/forgot-password", { email });
+
+export const resetPassword = (token: string, password: string) =>
+  apiClient.post("/api/reset-password", { token, password }).catch(() => null);
+
 export const getRoles = () =>
   apiClient.get("/api/roles").catch(() => null);

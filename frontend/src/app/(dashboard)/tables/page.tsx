@@ -43,7 +43,10 @@ export default function TablesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
-  const actionOnceRef = useRef(createSingleFlight());
+  const [deleteTarget, setDeleteTarget] = useState<RestaurantTable | null>(null);
+  const saveTableOnceRef = useRef(createSingleFlight());
+  const deleteTableOnceRef = useRef(createSingleFlight());
+  const quickCreateOnceRef = useRef(createSingleFlight());
 
   const copy = language === "th"
     ? {
@@ -52,6 +55,10 @@ export default function TablesPage() {
         tableRequired: "กรุณากรอกเลขโต๊ะ",
         saveError: "บันทึกโต๊ะไม่สำเร็จ",
         deleteError: "ลบโต๊ะไม่สำเร็จ",
+        confirmDeleteTitle: "ยืนยันการลบโต๊ะ",
+        confirmDeleteBody: "ต้องการลบโต๊ะนี้ใช่ไหม? การทำงานนี้ย้อนกลับไม่ได้",
+        confirmDelete: "ยืนยันลบ",
+        cancel: "ยกเลิก",
         bootstrapError: "สร้างโต๊ะเริ่มต้นไม่สำเร็จ",
         eyebrow: "Tables",
         title: "ผังโต๊ะ",
@@ -87,6 +94,10 @@ export default function TablesPage() {
         tableRequired: "Please enter a table number.",
         saveError: "Could not save the table.",
         deleteError: "Could not delete the table.",
+        confirmDeleteTitle: "Confirm table delete",
+        confirmDeleteBody: "Delete this table? This action cannot be undone.",
+        confirmDelete: "Delete",
+        cancel: "Cancel",
         bootstrapError: "Could not create the starting tables.",
         eyebrow: "Tables",
         title: "Table layout",
@@ -152,7 +163,7 @@ export default function TablesPage() {
       setFormError(copy.tableRequired);
       return;
     }
-    await actionOnceRef.current(async () => {
+    await saveTableOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       setFormError("");
@@ -188,7 +199,7 @@ export default function TablesPage() {
 
   const removeTable = async (table: RestaurantTable) => {
     if (!canManage) return;
-    await actionOnceRef.current(async () => {
+    await deleteTableOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       try {
@@ -197,6 +208,7 @@ export default function TablesPage() {
       } catch {
         setError(copy.deleteError);
       } finally {
+        setDeleteTarget(null);
         setSubmitting(false);
       }
     });
@@ -204,16 +216,16 @@ export default function TablesPage() {
 
   const quickCreate = async () => {
     if (!canManage || tables.length > 0) return;
-    await actionOnceRef.current(async () => {
+    await quickCreateOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       try {
         const total = activeMembership?.restaurant?.table_count || 8;
-        const created: RestaurantTable[] = [];
-        for (let i = 1; i <= total; i += 1) {
-          const res = await createTable({ table_number: `T${i}`, capacity: 2, zone: copy.initialZone, status: "free" });
-          created.push(res.data);
-        }
+        const created = await Promise.all(
+          Array.from({ length: total }, (_, index) =>
+            createTable({ table_number: `T${index + 1}`, capacity: 2, zone: copy.initialZone, status: "free" }).then((res) => res.data),
+          ),
+        );
         setTables(created);
       } catch {
         setError(copy.bootstrapError);
@@ -280,8 +292,28 @@ export default function TablesPage() {
             </div>
           ) : filteredTables.length ? (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
-              {filteredTables.map((table) => (
-                <div key={table.ID} className={`rounded-md border p-4 ${STATUS[table.status].cls}`}>
+              {filteredTables.map((table) => {
+                const selected = editing?.ID === table.ID;
+                return (
+                <div
+                  key={table.ID}
+                  role={canManage ? "button" : undefined}
+                  tabIndex={canManage ? 0 : undefined}
+                  onClick={canManage ? () => editTable(table) : undefined}
+                  onKeyDown={
+                    canManage
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            editTable(table);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={`rounded-md border p-4 transition-[border-color,box-shadow,transform] ${
+                    canManage ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20" : ""
+                  } ${selected ? "ring-2 ring-orange-500/30" : ""} ${STATUS[table.status].cls}`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h2 className="text-xl font-semibold">{table.table_number}</h2>
@@ -293,22 +325,24 @@ export default function TablesPage() {
                     {table.capacity} {copy.seats}
                   </p>
                   {canManage ? (
-                    <div className="mt-3 flex gap-2 text-[12px] font-medium">
-                      <button type="button" onClick={() => editTable(table)}>
-                        {copy.edit}
-                      </button>
+                    <div className="mt-3 flex items-center justify-between gap-2 border-t border-current/10 pt-3 text-[12px] font-medium">
+                      <span className="text-[11px] text-current/60">{selected ? copy.editForm : copy.edit}</span>
                       <button
                         type="button"
                         disabled={submitting}
-                        onClick={() => removeTable(table)}
-                        className="text-red-600 disabled:opacity-50 dark:text-red-300"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(table);
+                        }}
+                        className="h-8 rounded-md border border-red-200 bg-white/70 px-3 text-[12px] font-semibold text-red-600 transition-[background-color,border-color,color] hover:border-red-300 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950/40 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-900/20"
                       >
                         {copy.remove}
                       </button>
                     </div>
                   ) : null}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-950">
@@ -333,32 +367,41 @@ export default function TablesPage() {
             <form onSubmit={saveTable} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
               <h2 className="text-[14px] font-semibold">{editing ? copy.editForm : copy.createForm}</h2>
               <div className="mt-3 space-y-2">
-                <input
-                  value={form.table_number}
-                  onChange={(e) => {
-                    setForm({ ...form, table_number: e.target.value });
-                    setFormError("");
-                  }}
-                  placeholder={copy.tablePlaceholder}
-                  aria-invalid={Boolean(formError)}
-                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
-                    formError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
-                  }`}
-                />
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.tableNumber}</span>
+                  <input
+                    value={form.table_number}
+                    onChange={(e) => {
+                      setForm({ ...form, table_number: e.target.value });
+                      setFormError("");
+                    }}
+                    placeholder={copy.tablePlaceholder}
+                    aria-invalid={Boolean(formError)}
+                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${
+                      formError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  />
+                </label>
                 {formError && <p className="-mt-0.5 text-[11px] font-medium text-red-600 dark:text-red-300">{formError}</p>}
-                <input
-                  value={form.capacity}
-                  onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })}
-                  type="number"
-                  placeholder={copy.capacity}
-                  className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900"
-                />
-                <input
-                  value={form.zone}
-                  onChange={(e) => setForm({ ...form, zone: e.target.value })}
-                  placeholder={copy.zonePlaceholder}
-                  className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900"
-                />
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.capacity}</span>
+                  <input
+                    value={form.capacity}
+                    onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) })}
+                    type="number"
+                    placeholder={copy.capacity}
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.zone}</span>
+                  <input
+                    value={form.zone}
+                    onChange={(e) => setForm({ ...form, zone: e.target.value })}
+                    placeholder={copy.zonePlaceholder}
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900"
+                  />
+                </label>
                 <ThemedSelect
                   value={form.status}
                   onChange={(next) => setForm({ ...form, status: next as TableStatus })}
@@ -369,16 +412,54 @@ export default function TablesPage() {
                   ]}
                 />
               </div>
-              <button
-                disabled={submitting}
-                className="mt-3 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900"
-              >
-                {editing ? copy.saveButtonEdit : copy.saveButtonCreate}
-              </button>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                <button
+                  disabled={submitting}
+                  className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900"
+                >
+                  {editing ? copy.saveButtonEdit : copy.saveButtonCreate}
+                </button>
+                {editing !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(null);
+                      setForm(emptyForm);
+                      setFormError("");
+                    }}
+                    className="h-10 rounded-md border border-gray-200 px-3 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                  >
+                    {copy.cancel}
+                  </button>
+                )}
+              </div>
             </form>
           </aside>
         ) : null}
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
+          <div className="w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
+              <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.table_number}</p>
+              <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{deleteTarget.zone || copy.unspecifiedZone}</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={submitting} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                {copy.cancel}
+              </button>
+              <button type="button" onClick={() => void removeTable(deleteTarget)} disabled={submitting} className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
+                {copy.confirmDelete}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

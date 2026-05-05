@@ -12,4 +12,6 @@ func SetupAuthRoutes(r *gin.RouterGroup) {
 	r.POST("/login", userCtrl.Login)
 	r.POST("/google-login", userCtrl.GoogleLogin)
 	r.POST("/register", userCtrl.Register)
+	r.POST("/forgot-password", userCtrl.ForgotPassword)
+	r.POST("/reset-password", userCtrl.ResetPassword)
 }

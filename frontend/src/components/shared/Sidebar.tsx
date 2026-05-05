@@ -13,6 +13,7 @@ type NavItem = {
   href: string;
   icon: React.ReactNode;
   badge?: string;
+  comingSoon?: boolean;
 };
 
 type NavGroup = {
@@ -33,7 +34,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'ออเดอร์' : 'Orders',
           href: '/orders',
-          badge: '3',
+          comingSoon: true,
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
         },
         {
@@ -54,6 +55,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'คลังวัตถุดิบ' : 'Inventory',
           href: '/inventory',
+          comingSoon: true,
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
         },
         {
@@ -69,8 +71,14 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'รายได้และยอดขาย' : 'Revenue and sales',
           href: '/reports',
+          comingSoon: true,
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
         },
+      ],
+    },
+    {
+      group: '',
+      items: [
         {
           label: language === 'th' ? 'ตั้งค่า' : 'Settings',
           href: '/settings',
@@ -89,35 +97,55 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
 
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
-      {nav.map(({ group, items }) => (
-        <div key={group}>
-          {!collapsed && (
+      {nav.map(({ group, items }, groupIndex) => (
+        <div key={group || `group-${groupIndex}`}>
+          {!collapsed && group && (
             <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">{group}</p>
           )}
           <div className="space-y-0.5">
-            {items.map(({ label, href, icon, badge }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={onNavigate}
-                  title={collapsed ? label : undefined}
-                  className={`relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
-                    active
-                      ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
-                  } ${collapsed ? 'justify-center' : ''}`}
-                >
+            {items.map(({ label, href, icon, badge, comingSoon }) => {
+              const active = !comingSoon && isActive(href);
+              const itemClassName = `relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
+                active
+                  ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+              } ${collapsed ? 'justify-center' : ''} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
+              const content = (
+                <>
                   {active && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-orange-500" />}
                   <span className={active ? 'text-orange-500' : ''}>{icon}</span>
-                  {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                  {!collapsed && (
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="truncate">{label}</span>
+                      {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                    </span>
+                  )}
                   {!collapsed && badge && (
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-[10px] font-black text-white">
                       {badge}
                     </span>
                   )}
                   {collapsed && badge && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-orange-500" />}
+                </>
+              );
+
+              if (comingSoon) {
+                return (
+                  <span key={href} title={collapsed ? `${label} (${language === 'th' ? 'เร็วๆ นี้' : 'Soon'})` : undefined} className={itemClassName}>
+                    {content}
+                  </span>
+                );
+              }
+
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  title={collapsed ? label : undefined}
+                  className={itemClassName}
+                >
+                  {content}
                 </Link>
               );
             })}

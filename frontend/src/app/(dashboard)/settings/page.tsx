@@ -238,6 +238,15 @@ function AccountSettings() {
         email: "อีเมล",
         phone: "เบอร์โทร",
         emptyEmail: "ยังไม่มีอีเมล",
+        linkedTitle: "บัญชีที่เชื่อมไว้",
+        linkedHint: "บอกให้ชัดว่าบัญชีนี้เข้าสู่ระบบด้วยช่องทางไหน",
+        primaryLogin: "วิธีเข้าสู่ระบบหลัก",
+        googleAccount: "Google",
+        localAccount: "อีเมลและรหัสผ่าน",
+        connected: "เชื่อมแล้ว",
+        notConnected: "ยังไม่เชื่อม",
+        googleDescription: "เข้าสู่ระบบผ่านบัญชี Google แยกจากบัญชีรหัสผ่าน",
+        localDescription: "เข้าสู่ระบบด้วยอีเมลและรหัสผ่านของ Restaurant Hub",
         prefsTitle: "ค่ากำหนดส่วนตัว",
         prefsHint: "มีผลกับบัญชีนี้เท่านั้น",
         language: "ภาษา",
@@ -271,6 +280,15 @@ function AccountSettings() {
         email: "Email",
         phone: "Phone",
         emptyEmail: "No email",
+        linkedTitle: "Linked accounts",
+        linkedHint: "Shows exactly which sign-in method this account uses.",
+        primaryLogin: "Primary sign-in method",
+        googleAccount: "Google",
+        localAccount: "Email and password",
+        connected: "Connected",
+        notConnected: "Not connected",
+        googleDescription: "Signs in through a Google account, separate from password accounts.",
+        localDescription: "Signs in with a Restaurant Hub email and password.",
         prefsTitle: "Personal preferences",
         prefsHint: "These settings only affect your account.",
         language: "Language",
@@ -347,6 +365,23 @@ function AccountSettings() {
     { id: "large" as const, label: language === "th" ? "ใหญ่" : "Large" },
     { id: "extra-large" as const, label: language === "th" ? "ใหญ่มาก" : "Extra large" },
   ];
+  const isGoogleAccount = user?.auth_provider === "google";
+  const linkedAccounts = [
+    {
+      id: "google",
+      label: copy.googleAccount,
+      description: copy.googleDescription,
+      connected: isGoogleAccount,
+      mark: "G",
+    },
+    {
+      id: "local",
+      label: copy.localAccount,
+      description: copy.localDescription,
+      connected: !isGoogleAccount,
+      mark: "@",
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -380,6 +415,50 @@ function AccountSettings() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <div className="rounded-md border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800/60">
+              <div className="flex flex-col gap-2 border-b border-gray-200 px-3 py-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.linkedTitle}</p>
+                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.linkedHint}</p>
+                </div>
+                <div className="inline-flex h-8 items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-2.5 text-[11px] font-semibold text-orange-700 dark:border-orange-900/40 dark:bg-orange-900/20 dark:text-orange-300">
+                  <span className="text-gray-500 dark:text-gray-400">{copy.primaryLogin}</span>
+                  <span>{isGoogleAccount ? copy.googleAccount : copy.localAccount}</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 divide-y divide-gray-200 dark:divide-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                {linkedAccounts.map((account) => (
+                  <div key={account.id} className="flex items-start gap-3 px-3 py-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-[13px] font-black ${
+                        account.connected
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300"
+                          : "border-gray-200 bg-white text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500"
+                      }`}
+                    >
+                      {account.mark}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{account.label}</p>
+                        <span
+                          className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold ${
+                            account.connected
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                              : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"
+                          }`}
+                        >
+                          {account.connected ? copy.connected : copy.notConnected}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{account.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
           <Field label={copy.nickname} value={form.nickname} onChange={(value) => setField("nickname", value)} help={copy.nicknameHelp} />
           <Field label={copy.phone} value={form.phone} onChange={(value) => setField("phone", normalizePhone(value))} inputMode="tel" />
           <Field label={copy.firstName} value={form.first_name} onChange={(value) => setField("first_name", value)} error={error === copy.firstNameRequired ? error : undefined} />
