@@ -23,12 +23,20 @@
 
 body {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   margin: 0;
   padding: 0;
+}
+
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 html[data-font-size="small"] {
@@ -74,6 +82,76 @@ html[data-font-size="extra-large"] {
   }
 }
 
+@keyframes modal-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+@keyframes bottom-sheet-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bottom-sheet-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+@keyframes drawer-enter-right {
+  from {
+    opacity: 0.8;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes modal-slide-down {
   from {
     opacity: 0;
@@ -92,6 +170,67 @@ html[data-font-size="extra-large"] {
 
 .animate-slide-down {
   animation: modal-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.motion-overlay {
+  animation: modal-fade-in 180ms ease-out both;
+}
+
+.motion-overlay-exit {
+  animation: modal-fade-out 160ms ease-in both;
+}
+
+.motion-dialog {
+  animation: dialog-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+.motion-dialog-exit {
+  animation: dialog-exit 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: transform, opacity;
+}
+
+.motion-bottom-sheet {
+  animation: bottom-sheet-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+.motion-bottom-sheet-exit {
+  animation: bottom-sheet-exit 170ms cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: transform, opacity;
+}
+
+.motion-drawer {
+  animation: drawer-enter-right 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+.ui-press {
+  transition-property: transform, box-shadow, background-color, border-color, color, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ui-press:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-overlay,
+  .motion-overlay-exit,
+  .motion-dialog,
+  .motion-dialog-exit,
+  .motion-bottom-sheet,
+  .motion-bottom-sheet-exit,
+  .motion-drawer,
+  .animate-fade-in,
+  .animate-slide-down {
+    animation: none !important;
+  }
+
+  .ui-press {
+    transition: none !important;
+  }
 }
 
 ::view-transition-group(*) {
