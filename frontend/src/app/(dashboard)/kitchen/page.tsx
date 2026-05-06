@@ -9,6 +9,7 @@ import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
 import type { Order } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
+import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 
 function minutesSince(value?: string | null) {
   if (!value) return 0;
@@ -157,42 +158,29 @@ export default function KitchenPage() {
 
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
+  const lastUpdatedText = lastUpdated
+    ? `${language === "th" ? "อัปเดต" : "Updated"} ${lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}`
+    : undefined;
+
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{copy.subtitle}</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {lastUpdated ? (
-            <p className="text-[12px] text-gray-500 dark:text-gray-400">
-              {language === "th" ? "อัปเดต" : "Updated"} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          ) : null}
-          <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
-            {copy.refresh}
-          </button>
-        </div>
-      </div>
+    <OperationalPageShell
+      eyebrow={copy.eyebrow}
+      title={copy.title}
+      subtitle={copy.subtitle}
+      lastUpdated={lastUpdatedText}
+      actions={(
+        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+          {copy.refresh}
+        </button>
+      )}
+      stats={[
+        { label: copy.cooking, value: cookingCount, tone: "warning" },
+        { label: copy.ready, value: readyCount, tone: "good" },
+        { label: language === "th" ? "เกินเวลา" : "Overdue", value: delayedCount, tone: "danger" },
+      ]}
+    >
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-
-      <div className="mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800">
-        <div className="bg-white px-3 py-3 dark:bg-gray-950">
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.cooking}</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-amber-700 dark:text-amber-300">{cookingCount}</p>
-        </div>
-        <div className="bg-white px-3 py-3 dark:bg-gray-950">
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.ready}</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{readyCount}</p>
-        </div>
-        <div className="bg-white px-3 py-3 dark:bg-gray-950">
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "เกินเวลา" : "Overdue"}</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-red-700 dark:text-red-300">{delayedCount}</p>
-        </div>
-      </div>
 
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -257,6 +245,6 @@ export default function KitchenPage() {
           <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.emptyHint}</p>
         </div>
       )}
-    </div>
+    </OperationalPageShell>
   );
 }

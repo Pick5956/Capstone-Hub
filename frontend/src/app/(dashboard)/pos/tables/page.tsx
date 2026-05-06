@@ -12,6 +12,7 @@ import type { Order } from "@/src/types/order";
 import type { RestaurantTable } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
+import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 
@@ -83,6 +84,10 @@ export default function PosTablesPage() {
     return map;
   }, [orders]);
 
+  const activeTableCount = tables.filter((table) => activeOrderByTable.has(table.ID)).length;
+  const reservedTableCount = tables.filter((table) => table.status === "reserved").length;
+  const freeTableCount = tables.length - activeTableCount - reservedTableCount;
+
   const load = async () => {
     if (!canTake) return;
     setLoading(true);
@@ -145,17 +150,21 @@ export default function PosTablesPage() {
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{copy.subtitle}</p>
-        </div>
-        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+    <OperationalPageShell
+      eyebrow={copy.eyebrow}
+      title={copy.title}
+      subtitle={copy.subtitle}
+      actions={(
+        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
           {copy.refresh}
         </button>
-      </div>
+      )}
+      stats={[
+        { label: copy.free, value: freeTableCount, tone: "good" },
+        { label: copy.occupied, value: activeTableCount, tone: "warning" },
+        { label: copy.reserved, value: reservedTableCount, tone: "info" },
+      ]}
+    >
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
@@ -225,6 +234,6 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
-    </div>
+    </OperationalPageShell>
   );
 }

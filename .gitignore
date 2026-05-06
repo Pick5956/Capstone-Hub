@@ -28,10 +28,11 @@ backups/
 data/
 database/
 
-# Personal AI/agent workspace files — local only
+# Personal AI/agent workspace files - local only
 docs/wiki/
 .claude/
 .codex/
+.agent/
 .agents/
 CLAUDE.md
 AGENTS.md

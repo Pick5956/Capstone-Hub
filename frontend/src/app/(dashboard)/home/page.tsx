@@ -374,9 +374,9 @@ export default function Home() {
   const avgTicket = shiftOrders ? Math.round(shiftRevenue / shiftOrders) : 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="space-y-5">
-        <header className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.08),transparent_28rem),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] px-4 py-4 text-gray-900 dark:bg-[radial-gradient(circle_at_top_left,rgba(249,115,22,0.14),transparent_26rem),linear-gradient(180deg,#020617_0%,#030712_100%)] dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-[1600px] space-y-5">
+        <header className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.headerEyebrow}</p>
