@@ -77,6 +77,8 @@ func SetupDatabase() *gorm.DB {
 		&entity.OrderItem{},
 		&entity.OrderPayment{},
 		&entity.OrderStatusLog{},
+		&entity.Ingredient{},
+		&entity.IngredientTransaction{},
 	)
 	ensureOrderNumberIndex(db)
 
