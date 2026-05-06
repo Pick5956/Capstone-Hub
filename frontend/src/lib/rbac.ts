@@ -3,7 +3,7 @@ import { Membership } from "../types/restaurant";
 
 const fallbackRolePermissions: Record<string, Permission[]> = {
   owner: ["*"],
-  manager: ["view_dashboard", "manage_menu", "manage_table", "manage_staff", "manage_inventory", "view_reports"],
+  manager: ["view_dashboard", "manage_menu", "manage_table", "manage_staff", "manage_inventory", "view_reports", "take_order", "view_orders", "view_kitchen", "update_order_status"],
   cashier: ["view_dashboard", "take_payment", "view_orders", "view_tables"],
   waiter: ["view_dashboard", "take_order", "manage_table", "view_menu", "view_orders"],
   chef: ["view_kitchen", "update_order_status", "view_menu", "view_inventory"],

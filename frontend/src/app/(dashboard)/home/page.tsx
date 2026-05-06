@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { listTables } from "@/src/lib/table";
+import { kitchenQueue, listOrders } from "@/src/lib/order";
+import type { Order } from "@/src/types/order";
 import type { RestaurantTable } from "@/src/types/table";
 import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -11,6 +14,14 @@ type OrderStatus = "delayed" | "cooking" | "ready";
 type DashboardTableStatus = "occupied" | "available" | "reserved" | "cleaning";
 type DashboardTable = { id: string; status: DashboardTableStatus; guests?: number; mins?: number; zone?: string };
 type HourlyPoint = { hour: string; orders: number };
+type DashboardTicket = { id: number; orderNumber: string; table: string; items: string[]; waited: number; total: number; status: OrderStatus };
+
+const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
+
+function minutesSince(value?: string | null) {
+  if (!value) return 0;
+  return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
+}
 
 function useNow() {
   const [now, setNow] = useState<Date>(() => new Date());
@@ -101,25 +112,31 @@ function ShiftDemandChart({
   );
 }
 
-function toDashboardTable(table: RestaurantTable): DashboardTable {
+function toDashboardTable(table: RestaurantTable, activeOrder?: Order): DashboardTable {
   const status: DashboardTableStatus =
     table.status === "free" ? "available" : table.status === "reserved" ? "reserved" : "occupied";
 
   return {
     id: table.table_number,
     status,
-    guests: status === "occupied" ? table.capacity : undefined,
+    guests: activeOrder?.customer_count,
+    mins: activeOrder ? minutesSince(activeOrder.opened_at) : undefined,
     zone: table.zone,
   };
 }
 
 export default function Home() {
+  const router = useRouter();
   const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
   const now = useNow();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [kitchenOrders, setKitchenOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<DashboardTable[]>([]);
   const [loadingTables, setLoadingTables] = useState(true);
   const [floorError, setFloorError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const copy = language === "th"
     ? {
@@ -229,19 +246,42 @@ export default function Home() {
         missingSome: "Still missing some staff",
       };
 
-  const orderTickets = [
-    { id: 1044, table: "T3", items: language === "th" ? ["ข้าวมันไก่ x2", "น้ำส้ม"] : ["Chicken rice x2", "Orange juice"], waited: 22, total: 220, status: "delayed" as OrderStatus },
-    { id: 1042, table: "T7", items: language === "th" ? ["ผัดกะเพราหมู", "ต้มยำกุ้ง", "ข้าวเปล่า x2"] : ["Basil pork", "Tom yum shrimp", "Steamed rice x2"], waited: 16, total: 540, status: "cooking" as OrderStatus },
-    { id: 1047, table: "T5", items: language === "th" ? ["แกงมัสมั่นเนื้อ"] : ["Beef massaman curry"], waited: 12, total: 280, status: "cooking" as OrderStatus },
-    { id: 1046, table: "T9", items: language === "th" ? ["ผัดไทย", "ส้มตำไทย"] : ["Pad Thai", "Papaya salad"], waited: 9, total: 240, status: "ready" as OrderStatus },
-  ];
+  const liveOrderTickets: DashboardTicket[] = kitchenOrders.map((order) => {
+    const oldestSent = order.items?.reduce<string | null>((oldest, item) => {
+      if (!item.sent_at) return oldest;
+      if (!oldest || new Date(item.sent_at) < new Date(oldest)) return item.sent_at;
+      return oldest;
+    }, null);
+    const waited = minutesSince(oldestSent ?? order.opened_at);
+    const hasCooking = order.items?.some((item) => item.status === "cooking") ?? false;
+    return {
+      id: order.ID,
+      orderNumber: order.order_number,
+      table: order.table?.table_number ?? String(order.table_id),
+      items: order.items?.map((item) => `${item.quantity}x ${item.menu_name}`) ?? [],
+      waited,
+      total: order.total_amount,
+      status: waited >= 10 ? "delayed" : hasCooking ? "cooking" : "ready",
+    };
+  });
+  const orderTickets: DashboardTicket[] = liveOrderTickets;
 
-  const loadTables = async () => {
-    setLoadingTables(true);
+  const loadOperations = async () => {
+    if (!hasLoadedRef.current) setLoadingTables(true);
     setFloorError("");
     try {
-      const res = await listTables();
-      setTables((res.data.tables ?? []).map(toDashboardTable));
+      const today = new Date().toISOString().slice(0, 10);
+      const [tableRes, orderRes, kitchenRes] = await Promise.all([listTables(), listOrders({ date: today }), kitchenQueue()]);
+      const nextOrders = orderRes.data.orders ?? [];
+      const activeOrderByTable = new Map<number, Order>();
+      nextOrders
+        .filter((order) => activeOrderStatuses.includes(order.status))
+        .forEach((order) => activeOrderByTable.set(order.table_id, order));
+      setOrders(nextOrders);
+      setKitchenOrders(kitchenRes.data.orders ?? []);
+      setTables((tableRes.data.tables ?? []).map((table) => toDashboardTable(table, activeOrderByTable.get(table.ID))));
+      setLastUpdated(new Date());
+      hasLoadedRef.current = true;
     } catch {
       setFloorError(copy.tableLoadError);
     } finally {
@@ -251,7 +291,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!activeMembership?.restaurant_id) return;
-    void loadTables();
+    void loadOperations();
+    const timer = window.setInterval(() => void loadOperations(), 10_000);
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMembership?.restaurant_id, language]);
 
@@ -267,23 +309,31 @@ export default function Home() {
     { role: language === "th" ? "แคชเชียร์" : "Cashier", on: 2, total: 2, lead: language === "th" ? "พี่แอน" : "P' Ann" },
   ];
 
-  const topItems = [
-    { name: language === "th" ? "ผัดกะเพรา" : "Basil stir-fry", sold: 24, stock: "low" },
-    { name: language === "th" ? "ต้มยำกุ้ง" : "Tom yum shrimp", sold: 18, stock: "low" },
-    { name: language === "th" ? "ข้าวมันไก่" : "Chicken rice", sold: 16, stock: "ok" },
-  ];
+  const liveTopItems = Array.from(
+    orders.reduce((map, order) => {
+      order.items?.forEach((item) => {
+        const current = map.get(item.menu_name) ?? 0;
+        map.set(item.menu_name, current + item.quantity);
+      });
+      return map;
+    }, new Map<string, number>()),
+  )
+    .map(([name, sold]) => ({ name, sold, stock: "ok" }))
+    .sort((a, b) => b.sold - a.sold)
+    .slice(0, 3);
+  const topItems = liveTopItems;
 
-  const hourly = [
-    { hour: "11", orders: 12 },
-    { hour: "12", orders: 28 },
-    { hour: "13", orders: 22 },
-    { hour: "14", orders: 14 },
-    { hour: "15", orders: 9 },
-    { hour: "16", orders: 11 },
-    { hour: "17", orders: 19 },
-    { hour: "18", orders: 38 },
-    { hour: "19", orders: 47 },
-  ];
+  const orderHours = orders.map((order) => new Date(order.opened_at).getHours());
+  const chartStartHour = Math.min(...orderHours, 11);
+  const chartEndHour = Math.max(...orderHours, 19);
+  const hourly = Array.from({ length: chartEndHour - chartStartHour + 1 }, (_, index) => {
+    const hourNumber = chartStartHour + index;
+    const hour = String(hourNumber).padStart(2, "0");
+    return {
+      hour,
+      orders: orders.filter((order) => new Date(order.opened_at).getHours() === hourNumber).length,
+    };
+  });
 
   const dateLabel = now.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
     weekday: "long",
@@ -317,10 +367,11 @@ export default function Home() {
     [copy.available, copy.cleaning, copy.occupied, copy.reserved]
   );
 
-  const shiftRevenue = 18640;
-  const shiftOrders = 87;
+  const revenueOrders = orders.filter((order) => order.status !== "cancelled");
+  const shiftRevenue = Math.round(revenueOrders.reduce((sum, order) => sum + order.total_amount, 0));
+  const shiftOrders = revenueOrders.length;
   const guestCount = occupied.reduce((sum, table) => sum + (table.guests ?? 0), 0);
-  const avgTicket = Math.round(shiftRevenue / shiftOrders);
+  const avgTicket = shiftOrders ? Math.round(shiftRevenue / shiftOrders) : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
@@ -333,6 +384,11 @@ export default function Home() {
               <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
                 {user ? `${copy.greeting} ${user.nickname?.trim() || user.first_name}` : copy.greeting} · {dateLabel} · {timeLabel}
               </p>
+              {lastUpdated ? (
+                <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                  {language === "th" ? "อัปเดต" : "Updated"} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -344,10 +400,10 @@ export default function Home() {
                 {copy.open}
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => void loadTables()} disabled={loadingTables} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+                <button type="button" onClick={() => void loadOperations()} disabled={loadingTables} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
                   {copy.refresh}
                 </button>
-                <button type="button" disabled title={copy.newOrderSoon} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white opacity-50 disabled:cursor-not-allowed dark:bg-white dark:text-gray-900">
+                <button type="button" onClick={() => router.push("/pos/tables")} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
                   {copy.newOrder}
                 </button>
               </div>
@@ -416,7 +472,7 @@ export default function Home() {
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
                                   <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{ticket.table}</p>
-                                  <p className="font-mono text-[11px] text-gray-400">#{ticket.id}</p>
+                                  <p className="font-mono text-[11px] text-gray-400">#{ticket.orderNumber}</p>
                                 </div>
                                 <p className="mt-1 text-[12px] leading-5 text-gray-600 dark:text-gray-400">{ticket.items.join(" · ")}</p>
                               </div>
@@ -526,7 +582,7 @@ export default function Home() {
                 <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.ordersOpen}</p>
-                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-900 dark:text-white">{87}</p>
+                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-900 dark:text-white">{shiftOrders}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.averageBill}</p>
@@ -546,7 +602,7 @@ export default function Home() {
               </div>
 
               <div className="min-w-0 divide-y divide-gray-200 px-4 py-2 dark:divide-gray-800">
-                {topItems.map((item) => (
+                {topItems.length ? topItems.map((item) => (
                   <div key={item.name} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3">
                     <div>
                       <p className="text-[13px] font-medium text-gray-900 dark:text-white">{item.name}</p>
@@ -563,7 +619,7 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                ))}
+                )) : <div className="py-3 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>}
               </div>
             </div>
           </Section>

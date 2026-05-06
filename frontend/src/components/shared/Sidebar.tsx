@@ -7,6 +7,9 @@ import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useTheme } from '@/src/providers/ThemeProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
+import { can } from '@/src/lib/rbac';
+import { getDefaultWorkspaceRoute, getWorkModeHint, getWorkModeName } from '@/src/lib/workMode';
+import type { Permission } from '@/src/types/auth';
 
 type NavItem = {
   label: string;
@@ -14,6 +17,7 @@ type NavItem = {
   icon: React.ReactNode;
   badge?: string;
   comingSoon?: boolean;
+  permission?: Permission | Permission[];
 };
 
 type NavGroup = {
@@ -24,54 +28,72 @@ type NavGroup = {
 function buildNav(language: 'th' | 'en'): NavGroup[] {
   return [
     {
-      group: language === 'th' ? 'หลัก' : 'Core',
+      group: language === 'th' ? 'เริ่มงาน' : 'Start work',
       items: [
         {
           label: language === 'th' ? 'ภาพรวม' : 'Overview',
           href: '/home',
+          permission: 'view_dashboard',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
         },
         {
-          label: language === 'th' ? 'ออเดอร์' : 'Orders',
+          label: language === 'th' ? 'รับออเดอร์' : 'Take orders',
+          href: '/pos/tables',
+          permission: 'take_order',
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M4 9h16"/><path d="M5 9l1-5h12l1 5"/><path d="M6 9v10a1 1 0 001 1h10a1 1 0 001-1V9"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
+        },
+        {
+          label: language === 'th' ? 'ติดตามออเดอร์' : 'Order console',
           href: '/orders',
-          comingSoon: true,
+          permission: ['view_orders', 'take_order'],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
         },
         {
-          label: language === 'th' ? 'โต๊ะ' : 'Tables',
-          href: '/tables',
-          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13M19 7v13M8 20h8"/></svg>,
+          label: language === 'th' ? 'จอครัว' : 'Kitchen screen',
+          href: '/kitchen',
+          permission: 'view_kitchen',
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2v20"/><path d="M18 2v20"/><path d="M6 8h12"/><path d="M6 16h12"/><path d="M9 5h6"/><path d="M9 19h6"/></svg>,
         },
       ],
     },
     {
-      group: language === 'th' ? 'จัดการ' : 'Manage',
+      group: language === 'th' ? 'จัดการร้าน' : 'Restaurant setup',
       items: [
         {
           label: language === 'th' ? 'เมนูอาหาร' : 'Menu',
           href: '/menu',
+          permission: ['view_menu', 'manage_menu'],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>,
+        },
+        {
+          label: language === 'th' ? 'ผังโต๊ะ' : 'Tables',
+          href: '/tables',
+          permission: ['manage_table', 'view_tables'],
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13M19 7v13M8 20h8"/></svg>,
         },
         {
           label: language === 'th' ? 'คลังวัตถุดิบ' : 'Inventory',
           href: '/inventory',
           comingSoon: true,
+          permission: ['manage_inventory', 'view_inventory'],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
         },
         {
           label: language === 'th' ? 'พนักงาน' : 'Staff',
           href: '/staff',
+          permission: 'manage_staff',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
         },
       ],
     },
     {
-      group: language === 'th' ? 'รายงาน' : 'Reports',
+      group: language === 'th' ? 'ต่อยอด' : 'Next modules',
       items: [
         {
           label: language === 'th' ? 'รายได้และยอดขาย' : 'Revenue and sales',
           href: '/reports',
           comingSoon: true,
+          permission: 'view_reports',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
         },
       ],
@@ -92,18 +114,27 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
 function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const { language } = useLanguage();
+  const { activeMembership } = useAuth();
   const nav = buildNav(language);
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  const isActive = (href: string) => {
+    if (href === "/pos/tables") return pathname.startsWith("/pos/");
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+  const canSee = (permission?: Permission | Permission[]) => {
+    if (!permission) return true;
+    const permissions = Array.isArray(permission) ? permission : [permission];
+    return permissions.some((item) => can(activeMembership, item));
+  };
 
   return (
     <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
       {nav.map(({ group, items }, groupIndex) => (
-        <div key={group || `group-${groupIndex}`}>
+        <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
           {!collapsed && group && (
             <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">{group}</p>
           )}
           <div className="space-y-0.5">
-            {items.map(({ label, href, icon, badge, comingSoon }) => {
+            {items.filter((item) => canSee(item.permission)).map(({ label, href, icon, badge, comingSoon }) => {
               const active = !comingSoon && isActive(href);
               const itemClassName = `relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
                 active
@@ -153,6 +184,55 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
         </div>
       ))}
     </nav>
+  );
+}
+
+function WorkModeEntry({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+  const { activeMembership } = useAuth();
+  const { language } = useLanguage();
+  if (!activeMembership) return null;
+
+  const href = getDefaultWorkspaceRoute(activeMembership);
+  const mode = getWorkModeName(activeMembership, language);
+  const hint = getWorkModeHint(activeMembership, language);
+
+  if (collapsed) {
+    return (
+      <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
+        <Link
+          href={href}
+          onClick={onNavigate}
+          title={mode}
+          className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-gray-900 text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="M5 12h14" />
+            <path d="M13 6l6 6-6 6" />
+          </svg>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
+      <Link
+        href={href}
+        onClick={onNavigate}
+        className="block rounded-md border border-gray-200 bg-gray-50 px-3 py-3 transition-colors hover:border-orange-300 hover:bg-orange-50 dark:border-gray-800 dark:bg-gray-900/60 dark:hover:border-orange-800 dark:hover:bg-orange-900/20"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{mode}</span>
+          <span className="text-orange-600 dark:text-orange-400">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M5 12h14" />
+              <path d="M13 6l6 6-6 6" />
+            </svg>
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] leading-4 text-gray-500 dark:text-gray-400">{hint}</p>
+      </Link>
+    </div>
   );
 }
 
@@ -344,6 +424,7 @@ export default function Sidebar() {
         </div>
 
         <RestaurantSwitch collapsed={false} onNavigate={() => setMobileOpen(false)} />
+        <WorkModeEntry collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <NavLinks collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <UserFooter collapsed={false} />
       </aside>
@@ -386,6 +467,7 @@ export default function Sidebar() {
         </div>
 
         <RestaurantSwitch collapsed={collapsed} />
+        <WorkModeEntry collapsed={collapsed} />
         <NavLinks collapsed={collapsed} />
         <UserFooter collapsed={collapsed} />
       </aside>

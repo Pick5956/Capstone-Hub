@@ -28,4 +28,5 @@ func SetupRoutes(r *gin.Engine) {
 	// `api` carries the public invitation preview route, `v1` carries everything that requires auth.
 	SetupRestaurantRoutes(api, v1)
 	SetupMenuTableRoutes(v1)
+	SetupOrderRoutes(v1)
 }

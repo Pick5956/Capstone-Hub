@@ -71,9 +71,20 @@ func SetupDatabase() *gorm.DB {
 		&entity.Category{},
 		&entity.MenuItem{},
 		&entity.RestaurantTable{},
+		&entity.Order{},
+		&entity.OrderItem{},
+		&entity.OrderStatusLog{},
 	)
+	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
 
 	return db
+}
+
+func ensureOrderNumberIndex(db *gorm.DB) {
+	if db.Migrator().HasIndex(&entity.Order{}, "idx_orders_restaurant_day_number") {
+		_ = db.Migrator().DropIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
+	}
+	_ = db.Migrator().CreateIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
 }
