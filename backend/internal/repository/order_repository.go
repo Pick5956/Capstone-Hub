@@ -48,6 +48,7 @@ func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, 
 		Preload("Table").
 		Preload("Staff").
 		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
 		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") }).
 		Where("restaurant_id = ? AND id = ?", restaurantID, orderID).
 		First(&order).Error
@@ -69,7 +70,7 @@ func (r *OrderRepository) FindOpenOrderByTable(restaurantID, tableID uint) (*ent
 	return &order, nil
 }
 
-func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string) ([]entity.Order, error) {
+func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
 	var orders []entity.Order
 	query := r.db.Preload("Table").Preload("Items").Where("restaurant_id = ?", restaurantID)
 	if status != "" {
@@ -81,7 +82,8 @@ func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID u
 	if orderDate != "" {
 		query = query.Where("order_date = ?", orderDate)
 	}
-	err := query.Order("opened_at desc, id desc").Find(&orders).Error
+	offset := (page - 1) * limit
+	err := query.Order("opened_at desc, id desc").Limit(limit).Offset(offset).Find(&orders).Error
 	return orders, err
 }
 
@@ -114,6 +116,19 @@ func (r *OrderRepository) ListItems(orderID uint) ([]entity.OrderItem, error) {
 
 func (r *OrderRepository) CreateStatusLog(log *entity.OrderStatusLog) error {
 	return r.db.Create(log).Error
+}
+
+func (r *OrderRepository) CreatePayment(payment *entity.OrderPayment) error {
+	return r.db.Create(payment).Error
+}
+
+func (r *OrderRepository) FindRestaurant(restaurantID uint) (*entity.Restaurant, error) {
+	var restaurant entity.Restaurant
+	err := r.db.Where("id = ?", restaurantID).First(&restaurant).Error
+	if err != nil {
+		return nil, err
+	}
+	return &restaurant, nil
 }
 
 func (r *OrderRepository) FindMenuItem(restaurantID, menuID uint) (*entity.MenuItem, error) {

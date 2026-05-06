@@ -74,12 +74,32 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 		}
 		tableID = uint(parsed)
 	}
-	orders, err := ctrl.orderSvc.ListOrders(restaurantID, c.Query("status"), tableID, c.Query("date"))
+	page := boundedQueryInt(c, "page", 1, 1, 100000)
+	limit := boundedQueryInt(c, "limit", 100, 1, 200)
+	orders, err := ctrl.orderSvc.ListOrders(restaurantID, c.Query("status"), tableID, c.Query("date"), page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
+}
+
+func boundedQueryInt(c *gin.Context, key string, fallback, min, max int) int {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	if parsed < min {
+		return min
+	}
+	if parsed > max {
+		return max
+	}
+	return parsed
 }
 
 func (ctrl *OrderController) GetOrder(c *gin.Context) {
@@ -192,6 +212,56 @@ func (ctrl *OrderController) CloseOrder(c *gin.Context) {
 		return
 	}
 	order, err := ctrl.orderSvc.CloseOrder(restaurantID, userID, orderID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, order)
+}
+
+func (ctrl *OrderController) Bill(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireOrderAccess(c, "view_orders") {
+		return
+	}
+	orderID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	bill, err := ctrl.orderSvc.Bill(restaurantID, orderID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return
+	}
+	c.JSON(http.StatusOK, bill)
+}
+
+func (ctrl *OrderController) PayOrder(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireOrderAccess(c, "take_payment") {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	orderID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.PayOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	order, err := ctrl.orderSvc.PayOrder(restaurantID, userID, orderID, &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

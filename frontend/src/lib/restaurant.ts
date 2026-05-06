@@ -11,6 +11,12 @@ export interface CreateRestaurantInput {
   open_time?: string;
   close_time?: string;
   table_count?: number;
+  service_charge_enabled?: boolean;
+  service_charge_rate?: number;
+  vat_enabled?: boolean;
+  vat_rate?: number;
+  promptpay_name?: string;
+  promptpay_qr_image?: string;
 }
 
 export type UpdateRestaurantInput = CreateRestaurantInput;

@@ -13,9 +13,11 @@ func SetupOrderRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/orders", ctrl.CreateOrder)
 	v1.GET("/orders", ctrl.ListOrders)
 	v1.GET("/orders/:id", ctrl.GetOrder)
+	v1.GET("/orders/:id/bill", ctrl.Bill)
 	v1.PATCH("/orders/:id", ctrl.UpdateOrder)
 	v1.POST("/orders/:id/cancel", ctrl.CancelOrder)
 	v1.POST("/orders/:id/close", ctrl.CloseOrder)
+	v1.POST("/orders/:id/pay", ctrl.PayOrder)
 
 	v1.POST("/orders/:id/items", ctrl.AddItem)
 	v1.PATCH("/orders/:id/items/:itemId", ctrl.UpdateItem)

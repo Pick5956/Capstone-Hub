@@ -1,7 +1,9 @@
 package auth
+
 import (
-	"time"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -18,6 +20,9 @@ type JwtClaims struct {
 }
 
 func (j *JwtWrapper) ValidateToken(tokenString string) (*JwtClaims, error) {
+	if strings.TrimSpace(j.SecretKey) == "" {
+		return nil, errors.New("jwt secret is not configured")
+	}
 
 	token, err := jwt.ParseWithClaims(
 		tokenString,
@@ -44,17 +49,20 @@ func (j *JwtWrapper) ValidateToken(tokenString string) (*JwtClaims, error) {
 }
 
 func (j *JwtWrapper) GenerateToken(userID uint, role string) (string, error) {
-    now := time.Now()
-    claims := &JwtClaims{
-        UserID: userID,
-        Role:   role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            IssuedAt:  jwt.NewNumericDate(now),
-            ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)), 
-            Issuer:    j.Issuer,
-        },
-    }
+	if strings.TrimSpace(j.SecretKey) == "" {
+		return "", errors.New("jwt secret is not configured")
+	}
+	now := time.Now()
+	claims := &JwtClaims{
+		UserID: userID,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
+			Issuer:    j.Issuer,
+		},
+	}
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString([]byte(j.SecretKey))
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(j.SecretKey))
 }

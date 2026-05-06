@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import type { AddOrderItemInput, OpenOrderInput, Order, OrderItemStatus, OrderStatus } from "../types/order";
+import type { AddOrderItemInput, Bill, OpenOrderInput, Order, OrderItemStatus, OrderStatus } from "../types/order";
 
 export const listOrders = (params?: { status?: OrderStatus | ""; table_id?: number; date?: string }) =>
   apiClient.get<{ orders: Order[] }>("/api/v1/orders", { params });
@@ -18,6 +18,12 @@ export const cancelOrder = (id: number, reason: string) =>
 
 export const closeOrder = (id: number) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/close`);
+
+export const getOrderBill = (id: number) =>
+  apiClient.get<Bill>(`/api/v1/orders/${id}/bill`);
+
+export const payOrder = (id: number, data: { method: "cash" | "promptpay_qr"; received_amount?: number; note?: string }) =>
+  apiClient.post<Order>(`/api/v1/orders/${id}/pay`, data);
 
 export const addOrderItem = (orderId: number, data: AddOrderItemInput) =>
   apiClient.post<Order>(`/api/v1/orders/${orderId}/items`, data);

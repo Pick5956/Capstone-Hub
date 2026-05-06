@@ -1,19 +1,35 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, cancelOrder, closeOrder, deleteOrderItem, getOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
+import { addOrderItem, cancelOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
-import type { Order, OrderItem } from "@/src/types/order";
+import type { Bill, Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 
 const terminalStatuses = ["completed", "cancelled"];
+
+function playBeep(frequency = 880) {
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.frequency.value = frequency;
+  oscillator.type = "sine";
+  gain.gain.value = 0.05;
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.16);
+}
 
 const apiErrorMessage = (error: unknown) => {
   if (!axios.isAxiosError(error)) return "";
@@ -26,6 +42,7 @@ export default function PosOrderDetailPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const canTake = can(activeMembership, "take_order");
+  const canPay = can(activeMembership, "take_payment");
   const orderId = Number(params.id);
   const [order, setOrder] = useState<Order | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -35,12 +52,17 @@ export default function PosOrderDetailPage() {
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [bill, setBill] = useState<Bill | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "promptpay_qr">("cash");
+  const [receivedAmount, setReceivedAmount] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const actionInFlightRef = useRef(false);
+  const readyItemIdsRef = useRef<Set<number>>(new Set());
 
   const copy = language === "th"
     ? {
@@ -63,7 +85,18 @@ export default function PosOrderDetailPage() {
         emptyCart: "ยังไม่มีรายการ",
         sendKitchen: "ส่งเข้าครัว",
         markServed: "เสิร์ฟแล้ว",
-        close: "ปิดออเดอร์",
+        close: "ออกบิล / รับเงิน",
+        readyAlert: "มีอาหารพร้อมเสิร์ฟ",
+        bill: "บิล",
+        service: "Service charge",
+        vat: "VAT",
+        grandTotal: "ยอดสุทธิ",
+        cash: "เงินสด",
+        qr: "QR PromptPay",
+        received: "รับเงินมา",
+        change: "เงินทอน",
+        print: "พิมพ์บิล",
+        confirmPayment: "ยืนยันรับเงิน",
         cancelOrder: "ยกเลิกออเดอร์",
         cancelReason: "เหตุผลที่ยกเลิก",
         cancelTitle: "ยกเลิกออเดอร์นี้?",
@@ -96,7 +129,18 @@ export default function PosOrderDetailPage() {
         emptyCart: "No items yet",
         sendKitchen: "Send to Kitchen",
         markServed: "Served",
-        close: "Close order",
+        close: "Bill / Pay",
+        readyAlert: "Food ready to serve",
+        bill: "Bill",
+        service: "Service charge",
+        vat: "VAT",
+        grandTotal: "Grand total",
+        cash: "Cash",
+        qr: "QR PromptPay",
+        received: "Received amount",
+        change: "Change",
+        print: "Print bill",
+        confirmPayment: "Confirm payment",
         cancelOrder: "Cancel order",
         cancelReason: "Cancel reason",
         cancelTitle: "Cancel this order?",
@@ -113,6 +157,8 @@ export default function PosOrderDetailPage() {
   const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
   const hasPending = Boolean(order?.items?.some((item) => item.status === "pending"));
+  const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
+  const hasReadyItems = readyItems.length > 0;
   const canCancelFromPos = Boolean(order && order.status === "open");
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -150,6 +196,14 @@ export default function PosOrderDetailPage() {
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canTake, orderId, order?.status]);
+
+  useEffect(() => {
+    if (!order?.items) return;
+    const readyIds = new Set(order.items.filter((item) => item.status === "ready").map((item) => item.ID));
+    const hasNewReady = [...readyIds].some((id) => !readyItemIdsRef.current.has(id));
+    if (readyItemIdsRef.current.size && hasNewReady) playBeep(1046);
+    readyItemIdsRef.current = readyIds;
+  }, [order?.items]);
 
   const runAction = async (action: () => Promise<Order>) => {
     setSubmitting(true);
@@ -189,6 +243,38 @@ export default function PosOrderDetailPage() {
     setCancelReason("");
   };
 
+  const openPayment = async () => {
+    if (!order) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await getOrderBill(order.ID);
+      setBill(res.data);
+      setReceivedAmount(String(res.data.grand_total));
+      setPaymentMethod("cash");
+      setPaymentOpen(true);
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmPayment = async () => {
+    if (!order || !bill) return;
+    await runAction(async () => {
+      const res = await payOrder(order.ID, {
+        method: paymentMethod,
+        received_amount: paymentMethod === "cash" ? Number(receivedAmount) : bill.grand_total,
+      });
+      setPaymentOpen(false);
+      setBill(null);
+      return res.data;
+    });
+  };
+
+  const changeAmount = bill ? Math.max(0, Number(receivedAmount || 0) - bill.grand_total) : 0;
+
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
@@ -207,6 +293,11 @@ export default function PosOrderDetailPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+      {hasReadyItems && (
+        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+          {copy.readyAlert}: {readyItems.length}
+        </div>
+      )}
 
       {loading && !order ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
@@ -291,7 +382,7 @@ export default function PosOrderDetailPage() {
                 </button>
               )}
               {order.status === "served" && (
-                <button type="button" disabled={submitting} onClick={() => runAction(async () => (await closeOrder(order.ID)).data)} className="h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                <button type="button" disabled={submitting || !canPay} onClick={openPayment} className="h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                   {copy.close}
                 </button>
               )}
@@ -337,6 +428,82 @@ export default function PosOrderDetailPage() {
               <button type="button" disabled={submitting} onClick={addSelectedMenu} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                 {copy.add}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentOpen && bill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
+          <style jsx global>{`
+            @media print {
+              body * {
+                visibility: hidden;
+              }
+              #print-bill,
+              #print-bill * {
+                visibility: visible;
+              }
+              #print-bill {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                color: #111827;
+                background: white;
+              }
+            }
+          `}</style>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+            <div id="print-bill" className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>
+                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{bill.order.table?.table_number ?? bill.order.table_id}</p>
+                </div>
+                <p className="font-mono text-xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{bill.grand_total.toLocaleString()}</p>
+              </div>
+              <div className="mt-4 divide-y divide-gray-200 text-[12px] dark:divide-gray-800">
+                {bill.items.map((item) => (
+                  <div key={item.ID} className="flex justify-between gap-3 py-2">
+                    <span>{item.quantity}x {item.menu_name}</span>
+                    <span className="font-mono tabular-nums">฿{item.subtotal.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 space-y-1 border-t border-gray-200 pt-3 text-[12px] dark:border-gray-800">
+                <div className="flex justify-between"><span>{copy.total}</span><span className="font-mono tabular-nums">฿{bill.total_amount.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums">฿{bill.service_charge_amount.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums">฿{bill.vat_amount.toLocaleString()}</span></div>
+                <div className="flex justify-between pt-2 text-[15px] font-semibold"><span>{copy.grandTotal}</span><span className="font-mono tabular-nums">฿{bill.grand_total.toLocaleString()}</span></div>
+              </div>
+            </div>
+
+            <div className="space-y-3 p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setPaymentMethod("cash")} className={`h-10 rounded-md border text-[12px] font-semibold ${paymentMethod === "cash" ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-300"}`}>{copy.cash}</button>
+                <button type="button" onClick={() => setPaymentMethod("promptpay_qr")} className={`h-10 rounded-md border text-[12px] font-semibold ${paymentMethod === "promptpay_qr" ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-300"}`}>{copy.qr}</button>
+              </div>
+
+              {paymentMethod === "cash" ? (
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.received}</span>
+                  <input type="number" min={0} value={receivedAmount} onChange={(event) => setReceivedAmount(event.target.value)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                  <p className="mt-1 text-[12px] text-gray-500">{copy.change}: ฿{changeAmount.toLocaleString()}</p>
+                </label>
+              ) : (
+                <div className="rounded-md border border-gray-200 p-3 text-center dark:border-gray-800">
+                  {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-900">No QR</div>}
+                  <p className="mt-2 text-[13px] font-semibold text-gray-900 dark:text-white">{bill.promptpay_name || copy.qr}</p>
+                  <p className="font-mono text-lg font-semibold tabular-nums">฿{bill.grand_total.toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+              <button type="button" onClick={() => window.print()} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.print}</button>
+              <button type="button" onClick={() => setPaymentOpen(false)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{language === "th" ? "ยกเลิก" : "Cancel"}</button>
+              <button type="button" disabled={submitting || (paymentMethod === "cash" && Number(receivedAmount || 0) < bill.grand_total)} onClick={confirmPayment} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button>
             </div>
           </div>
         </div>

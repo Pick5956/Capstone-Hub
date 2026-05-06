@@ -26,6 +26,21 @@ function apiErrorMessage(error: unknown) {
   return String(error.response?.data?.error ?? "");
 }
 
+function playBeep() {
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.frequency.value = 740;
+  oscillator.type = "square";
+  gain.gain.value = 0.04;
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.18);
+}
+
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -37,6 +52,7 @@ export default function KitchenPage() {
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const hasLoadedRef = useRef(false);
+  const ticketIdsRef = useRef<Set<number>>(new Set());
 
   const copy = language === "th"
     ? {
@@ -50,6 +66,7 @@ export default function KitchenPage() {
         table: "โต๊ะ",
         elapsed: "นาที",
         markReady: "พร้อมเสิร์ฟ",
+        markAllReady: "พร้อมทั้งออเดอร์",
         ready: "พร้อมแล้ว",
         cooking: "กำลังทำ",
         sent_to_kitchen: "ส่งเข้าครัว",
@@ -67,6 +84,7 @@ export default function KitchenPage() {
         table: "Table",
         elapsed: "min",
         markReady: "Mark Ready",
+        markAllReady: "Mark all ready",
         ready: "Ready",
         cooking: "Cooking",
         sent_to_kitchen: "Sent",
@@ -88,7 +106,11 @@ export default function KitchenPage() {
     setError("");
     try {
       const res = await kitchenQueue();
+      const nextIds = new Set(res.data.orders.map((order) => order.ID));
+      const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
       setOrders(res.data.orders);
+      if (hasNewTicket) playBeep();
+      ticketIdsRef.current = nextIds;
       setLastUpdated(new Date());
       hasLoadedRef.current = true;
     } catch (error) {
@@ -110,6 +132,21 @@ export default function KitchenPage() {
     setError("");
     try {
       await updateOrderItemStatus(orderId, itemId, "ready");
+      await load();
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const markAllReady = async (order: Order) => {
+    const cookingItems = order.items?.filter((item) => item.status === "cooking") ?? [];
+    if (!cookingItems.length) return;
+    setSubmittingId(order.ID);
+    setError("");
+    try {
+      await Promise.all(cookingItems.map((item) => updateOrderItemStatus(order.ID, item.ID, "ready")));
       await load();
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
@@ -184,6 +221,11 @@ export default function KitchenPage() {
                     <p className="text-[11px] text-gray-500">{copy.elapsed}</p>
                   </div>
                 </div>
+                {canUpdate && order.items?.some((item) => item.status === "cooking") && (
+                  <button type="button" disabled={submittingId === order.ID} onClick={() => markAllReady(order)} className="mt-4 h-9 w-full rounded-md border border-emerald-200 bg-white/70 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950/45 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                    {copy.markAllReady}
+                  </button>
+                )}
 
                 <div className="mt-4 space-y-2">
                   {order.items?.map((item) => (

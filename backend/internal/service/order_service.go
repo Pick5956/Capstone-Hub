@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -52,6 +53,31 @@ type CancelRequest struct {
 	Reason string `json:"reason" binding:"required"`
 }
 
+type PayOrderRequest struct {
+	Method         string  `json:"method" binding:"required"`
+	ReceivedAmount float64 `json:"received_amount"`
+	Note           string  `json:"note"`
+}
+
+type BillResponse struct {
+	Order                *entity.Order         `json:"order"`
+	Items                []entity.OrderItem    `json:"items"`
+	Subtotal             float64               `json:"subtotal"`
+	DiscountAmount       float64               `json:"discount_amount"`
+	ServiceChargeEnabled bool                  `json:"service_charge_enabled"`
+	ServiceChargeRate    float64               `json:"service_charge_rate"`
+	ServiceChargeAmount  float64               `json:"service_charge_amount"`
+	VATEnabled           bool                  `json:"vat_enabled"`
+	VATRate              float64               `json:"vat_rate"`
+	VATAmount            float64               `json:"vat_amount"`
+	TotalAmount          float64               `json:"total_amount"`
+	GrandTotal           float64               `json:"grand_total"`
+	PaymentStatus        string                `json:"payment_status"`
+	PromptPayName        string                `json:"promptpay_name"`
+	PromptPayQRImage     string                `json:"promptpay_qr_image"`
+	Payments             []entity.OrderPayment `json:"payments"`
+}
+
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
 	var created *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
@@ -85,6 +111,7 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			StaffID:       userID,
 			CustomerCount: customerCount,
 			Status:        entity.OrderStatusOpen,
+			PaymentStatus: "unpaid",
 			Note:          strings.TrimSpace(req.Note),
 			OpenedAt:      now,
 			Version:       1,
@@ -108,8 +135,17 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 	return s.repo.FindOrder(restaurantID, created.ID)
 }
 
-func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate string) ([]entity.Order, error) {
-	return s.repo.ListOrders(restaurantID, strings.TrimSpace(status), tableID, strings.TrimSpace(orderDate))
+func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 100
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	return s.repo.ListOrders(restaurantID, strings.TrimSpace(status), tableID, strings.TrimSpace(orderDate), page, limit)
 }
 
 func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, error) {
@@ -384,6 +420,83 @@ func (s *OrderService) KitchenQueue(restaurantID uint) ([]entity.Order, error) {
 	return s.repo.KitchenQueue(restaurantID)
 }
 
+func (s *OrderService) Bill(restaurantID, orderID uint) (*BillResponse, error) {
+	order, err := s.repo.FindOrder(restaurantID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	restaurant, err := s.repo.FindRestaurant(restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	return billFromOrder(order, restaurant), nil
+}
+
+func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrderRequest) (*entity.Order, error) {
+	var changed uint
+	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
+		order, err := tx.FindOrder(restaurantID, orderID)
+		if err != nil {
+			return err
+		}
+		if order.Status != entity.OrderStatusServed {
+			return errors.New("order must be served before payment")
+		}
+		if order.PaymentStatus == "paid" {
+			return errors.New("order is already paid")
+		}
+		method := strings.TrimSpace(req.Method)
+		if method != "cash" && method != "promptpay_qr" {
+			return errors.New("invalid payment method")
+		}
+		restaurant, err := tx.FindRestaurant(restaurantID)
+		if err != nil {
+			return err
+		}
+		bill := billFromOrder(order, restaurant)
+		received := req.ReceivedAmount
+		if method == "promptpay_qr" || received <= 0 {
+			received = bill.GrandTotal
+		}
+		if received < bill.GrandTotal {
+			return errors.New("received amount is less than grand total")
+		}
+		now := repository.BangkokNow()
+		order.ServiceChargeAmount = bill.ServiceChargeAmount
+		order.VATAmount = bill.VATAmount
+		order.TotalAmount = bill.TotalAmount
+		order.GrandTotal = bill.GrandTotal
+		order.PaymentStatus = "paid"
+		order.ClosedAt = &now
+		if err := setOrderStatus(tx, order, entity.OrderStatusCompleted, userID, "payment received"); err != nil {
+			return err
+		}
+		payment := &entity.OrderPayment{
+			OrderID:        order.ID,
+			RestaurantID:   restaurantID,
+			Method:         method,
+			Amount:         bill.GrandTotal,
+			ReceivedAmount: roundMoney(received),
+			ChangeAmount:   roundMoney(received - bill.GrandTotal),
+			Note:           strings.TrimSpace(req.Note),
+			PaidBy:         userID,
+			PaidAt:         now,
+		}
+		if err := tx.CreatePayment(payment); err != nil {
+			return err
+		}
+		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
+			return err
+		}
+		changed = order.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindOrder(restaurantID, changed)
+}
+
 func orderNumberFromIndex(index int) string {
 	if index < 1 {
 		index = 1
@@ -429,11 +542,75 @@ func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) erro
 	if order.DiscountAmount < 0 {
 		order.DiscountAmount = 0
 	}
+	if order.DiscountAmount > subtotal {
+		order.DiscountAmount = subtotal
+	}
 	order.TotalAmount = subtotal - order.DiscountAmount
 	if order.TotalAmount < 0 {
 		order.TotalAmount = 0
 	}
+	order.GrandTotal = order.TotalAmount + order.ServiceChargeAmount + order.VATAmount
 	return tx.SaveOrder(order)
+}
+
+func billFromOrder(order *entity.Order, restaurant *entity.Restaurant) *BillResponse {
+	subtotal := roundMoney(order.Subtotal)
+	discount := roundMoney(order.DiscountAmount)
+	if discount < 0 {
+		discount = 0
+	}
+	if discount > subtotal {
+		discount = subtotal
+	}
+	total := roundMoney(subtotal - discount)
+	if total < 0 {
+		total = 0
+	}
+	serviceEnabled := restaurant.ServiceChargeEnabled
+	serviceRate := restaurant.ServiceChargeRate
+	vatEnabled := restaurant.VATEnabled
+	vatRate := restaurant.VATRate
+	serviceAmount := order.ServiceChargeAmount
+	vatAmount := order.VATAmount
+	grandTotal := order.GrandTotal
+	if order.PaymentStatus != "paid" {
+		if serviceEnabled {
+			serviceAmount = roundMoney(total * serviceRate / 100)
+		} else {
+			serviceAmount = 0
+		}
+		if vatEnabled {
+			vatAmount = roundMoney((total + serviceAmount) * vatRate / 100)
+		} else {
+			vatAmount = 0
+		}
+		grandTotal = roundMoney(total + serviceAmount + vatAmount)
+	}
+	if grandTotal <= 0 {
+		grandTotal = roundMoney(total + serviceAmount + vatAmount)
+	}
+	return &BillResponse{
+		Order:                order,
+		Items:                order.Items,
+		Subtotal:             subtotal,
+		DiscountAmount:       discount,
+		ServiceChargeEnabled: serviceEnabled,
+		ServiceChargeRate:    serviceRate,
+		ServiceChargeAmount:  roundMoney(serviceAmount),
+		VATEnabled:           vatEnabled,
+		VATRate:              vatRate,
+		VATAmount:            roundMoney(vatAmount),
+		TotalAmount:          total,
+		GrandTotal:           grandTotal,
+		PaymentStatus:        order.PaymentStatus,
+		PromptPayName:        restaurant.PromptPayName,
+		PromptPayQRImage:     restaurant.PromptPayQRImage,
+		Payments:             order.Payments,
+	}
+}
+
+func roundMoney(value float64) float64 {
+	return math.Round(value*100) / 100
 }
 
 func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
