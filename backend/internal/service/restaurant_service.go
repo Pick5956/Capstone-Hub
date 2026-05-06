@@ -38,39 +38,57 @@ func ProvideRestaurantService(
 }
 
 type CreateRestaurantRequest struct {
-	Name           string `json:"name" binding:"required"`
-	BranchName     string `json:"branch_name" binding:"required"`
-	RestaurantType string `json:"restaurant_type" binding:"required"`
-	Address        string `json:"address"`
-	Phone          string `json:"phone"`
-	Logo           string `json:"logo"`
-	OpenTime       string `json:"open_time"`
-	CloseTime      string `json:"close_time"`
-	TableCount     int    `json:"table_count"`
+	Name                 string  `json:"name" binding:"required"`
+	BranchName           string  `json:"branch_name" binding:"required"`
+	RestaurantType       string  `json:"restaurant_type" binding:"required"`
+	Address              string  `json:"address"`
+	Phone                string  `json:"phone"`
+	Logo                 string  `json:"logo"`
+	OpenTime             string  `json:"open_time"`
+	CloseTime            string  `json:"close_time"`
+	TableCount           int     `json:"table_count"`
+	ServiceChargeEnabled bool    `json:"service_charge_enabled"`
+	ServiceChargeRate    float64 `json:"service_charge_rate"`
+	VATEnabled           bool    `json:"vat_enabled"`
+	VATRate              float64 `json:"vat_rate"`
+	PromptPayName        string  `json:"promptpay_name"`
+	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 }
 
 type UpdateRestaurantRequest struct {
-	Name           string `json:"name" binding:"required"`
-	BranchName     string `json:"branch_name" binding:"required"`
-	RestaurantType string `json:"restaurant_type" binding:"required"`
-	Address        string `json:"address"`
-	Phone          string `json:"phone"`
-	Logo           string `json:"logo"`
-	OpenTime       string `json:"open_time"`
-	CloseTime      string `json:"close_time"`
-	TableCount     int    `json:"table_count"`
+	Name                 string  `json:"name" binding:"required"`
+	BranchName           string  `json:"branch_name" binding:"required"`
+	RestaurantType       string  `json:"restaurant_type" binding:"required"`
+	Address              string  `json:"address"`
+	Phone                string  `json:"phone"`
+	Logo                 string  `json:"logo"`
+	OpenTime             string  `json:"open_time"`
+	CloseTime            string  `json:"close_time"`
+	TableCount           int     `json:"table_count"`
+	ServiceChargeEnabled bool    `json:"service_charge_enabled"`
+	ServiceChargeRate    float64 `json:"service_charge_rate"`
+	VATEnabled           bool    `json:"vat_enabled"`
+	VATRate              float64 `json:"vat_rate"`
+	PromptPayName        string  `json:"promptpay_name"`
+	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 }
 
 type restaurantFields struct {
-	Name           string
-	BranchName     string
-	RestaurantType string
-	Address        string
-	Phone          string
-	Logo           string
-	OpenTime       string
-	CloseTime      string
-	TableCount     int
+	Name                 string
+	BranchName           string
+	RestaurantType       string
+	Address              string
+	Phone                string
+	Logo                 string
+	OpenTime             string
+	CloseTime            string
+	TableCount           int
+	ServiceChargeEnabled bool
+	ServiceChargeRate    float64
+	VATEnabled           bool
+	VATRate              float64
+	PromptPayName        string
+	PromptPayQRImage     string
 }
 
 // CreateRestaurant creates a restaurant and adds the creator as the owner member.
@@ -85,6 +103,12 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		req.OpenTime,
 		req.CloseTime,
 		req.TableCount,
+		req.ServiceChargeEnabled,
+		req.ServiceChargeRate,
+		req.VATEnabled,
+		req.VATRate,
+		req.PromptPayName,
+		req.PromptPayQRImage,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -96,16 +120,22 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 	}
 
 	restaurant := &entity.Restaurant{
-		Name:           fields.Name,
-		BranchName:     fields.BranchName,
-		RestaurantType: fields.RestaurantType,
-		Address:        fields.Address,
-		Phone:          fields.Phone,
-		Logo:           fields.Logo,
-		OpenTime:       fields.OpenTime,
-		CloseTime:      fields.CloseTime,
-		TableCount:     fields.TableCount,
-		OwnerID:        userID,
+		Name:                 fields.Name,
+		BranchName:           fields.BranchName,
+		RestaurantType:       fields.RestaurantType,
+		Address:              fields.Address,
+		Phone:                fields.Phone,
+		Logo:                 fields.Logo,
+		OpenTime:             fields.OpenTime,
+		CloseTime:            fields.CloseTime,
+		TableCount:           fields.TableCount,
+		ServiceChargeEnabled: fields.ServiceChargeEnabled,
+		ServiceChargeRate:    fields.ServiceChargeRate,
+		VATEnabled:           fields.VATEnabled,
+		VATRate:              fields.VATRate,
+		PromptPayName:        fields.PromptPayName,
+		PromptPayQRImage:     fields.PromptPayQRImage,
+		OwnerID:              userID,
 	}
 	if err := s.restaurantRepo.Create(restaurant); err != nil {
 		return nil, nil, err
@@ -299,6 +329,12 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 		req.OpenTime,
 		req.CloseTime,
 		req.TableCount,
+		req.ServiceChargeEnabled,
+		req.ServiceChargeRate,
+		req.VATEnabled,
+		req.VATRate,
+		req.PromptPayName,
+		req.PromptPayQRImage,
 	)
 	if err != nil {
 		return nil, err
@@ -313,6 +349,12 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 	restaurant.OpenTime = fields.OpenTime
 	restaurant.CloseTime = fields.CloseTime
 	restaurant.TableCount = fields.TableCount
+	restaurant.ServiceChargeEnabled = fields.ServiceChargeEnabled
+	restaurant.ServiceChargeRate = fields.ServiceChargeRate
+	restaurant.VATEnabled = fields.VATEnabled
+	restaurant.VATRate = fields.VATRate
+	restaurant.PromptPayName = fields.PromptPayName
+	restaurant.PromptPayQRImage = fields.PromptPayQRImage
 
 	if err := s.restaurantRepo.Update(restaurant); err != nil {
 		return nil, err
@@ -409,6 +451,12 @@ func sanitizeRestaurantFields(
 	openTime string,
 	closeTime string,
 	tableCount int,
+	serviceChargeEnabled bool,
+	serviceChargeRate float64,
+	vatEnabled bool,
+	vatRate float64,
+	promptPayName string,
+	promptPayQRImage string,
 ) (*restaurantFields, error) {
 	normalizedName := strings.TrimSpace(name)
 	if normalizedName == "" {
@@ -451,17 +499,35 @@ func sanitizeRestaurantFields(
 	if tableCount < 1 || tableCount > 500 {
 		return nil, errors.New("table_count must be between 1 and 500")
 	}
+	if serviceChargeRate <= 0 {
+		serviceChargeRate = 10
+	}
+	if serviceChargeRate > 30 {
+		return nil, errors.New("service_charge_rate must be between 0 and 30")
+	}
+	if vatRate <= 0 {
+		vatRate = 7
+	}
+	if vatRate > 20 {
+		return nil, errors.New("vat_rate must be between 0 and 20")
+	}
 
 	return &restaurantFields{
-		Name:           normalizedName,
-		BranchName:     normalizedBranchName,
-		RestaurantType: normalizedRestaurantType,
-		Address:        strings.TrimSpace(address),
-		Phone:          normalizedPhone,
-		Logo:           strings.TrimSpace(logo),
-		OpenTime:       openTime,
-		CloseTime:      closeTime,
-		TableCount:     tableCount,
+		Name:                 normalizedName,
+		BranchName:           normalizedBranchName,
+		RestaurantType:       normalizedRestaurantType,
+		Address:              strings.TrimSpace(address),
+		Phone:                normalizedPhone,
+		Logo:                 strings.TrimSpace(logo),
+		OpenTime:             openTime,
+		CloseTime:            closeTime,
+		TableCount:           tableCount,
+		ServiceChargeEnabled: serviceChargeEnabled,
+		ServiceChargeRate:    serviceChargeRate,
+		VATEnabled:           vatEnabled,
+		VATRate:              vatRate,
+		PromptPayName:        strings.TrimSpace(promptPayName),
+		PromptPayQRImage:     strings.TrimSpace(promptPayQRImage),
 	}, nil
 }
 

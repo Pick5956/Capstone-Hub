@@ -26,9 +26,15 @@ type RestaurantFormState = {
   close_time: string;
   table_count: string;
   logo: string;
+  service_charge_enabled: boolean;
+  service_charge_rate: string;
+  vat_enabled: boolean;
+  vat_rate: string;
+  promptpay_name: string;
+  promptpay_qr_image: string;
 };
 
-type RestaurantFormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "submit", string>>;
+type RestaurantFormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "service_charge_rate" | "vat_rate" | "submit", string>>;
 
 function normalizePhone(value: string) {
   return value.replace(/[^\d+\-\s]/g, "").slice(0, 24);
@@ -49,6 +55,12 @@ function toRestaurantFormState(restaurant: Restaurant, language: Language): Rest
     close_time: restaurant.close_time || "00:00",
     table_count: restaurant.table_count ? String(restaurant.table_count) : "12",
     logo: restaurant.logo ?? "",
+    service_charge_enabled: Boolean(restaurant.service_charge_enabled),
+    service_charge_rate: String(restaurant.service_charge_rate ?? 10),
+    vat_enabled: Boolean(restaurant.vat_enabled),
+    vat_rate: String(restaurant.vat_rate ?? 7),
+    promptpay_name: restaurant.promptpay_name ?? "",
+    promptpay_qr_image: restaurant.promptpay_qr_image ?? "",
   };
 }
 
@@ -678,16 +690,24 @@ function RestaurantSettings() {
     setForm((current) => ({ ...current, [field]: value }));
     setSavedMessage("");
   };
+  const setBoolField = (field: "service_charge_enabled" | "vat_enabled", value: boolean) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setSavedMessage("");
+  };
 
   const validate = () => {
     const next: RestaurantFormErrors = {};
     const tableCount = Number.parseInt(form.table_count, 10);
+    const serviceRate = Number.parseFloat(form.service_charge_rate);
+    const vatRate = Number.parseFloat(form.vat_rate);
     if (!form.name.trim()) next.name = copy.validateName;
     if (!form.branch_name.trim()) next.branch_name = copy.validateBranch;
     if (form.phone.trim() && form.phone.replace(/\D/g, "").length < 9) next.phone = copy.validatePhone;
     if (!validateTime(form.open_time)) next.open_time = copy.validateOpen;
     if (!validateTime(form.close_time)) next.close_time = copy.validateClose;
     if (!Number.isFinite(tableCount) || tableCount < 1 || tableCount > 500) next.table_count = copy.validateTables;
+    if (!Number.isFinite(serviceRate) || serviceRate < 0 || serviceRate > 30) next.service_charge_rate = language === "th" ? "ค่าบริการต้องอยู่ระหว่าง 0 ถึง 30%" : "Service charge must be between 0 and 30%.";
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 20) next.vat_rate = language === "th" ? "VAT ต้องอยู่ระหว่าง 0 ถึง 20%" : "VAT must be between 0 and 20%.";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -710,6 +730,12 @@ function RestaurantSettings() {
           open_time: form.open_time,
           close_time: form.close_time,
           table_count: Number.parseInt(form.table_count, 10),
+          service_charge_enabled: form.service_charge_enabled,
+          service_charge_rate: Number.parseFloat(form.service_charge_rate),
+          vat_enabled: form.vat_enabled,
+          vat_rate: Number.parseFloat(form.vat_rate),
+          promptpay_name: form.promptpay_name.trim(),
+          promptpay_qr_image: form.promptpay_qr_image.trim(),
         });
         setRestaurant(res.data.restaurant);
         setForm(toRestaurantFormState(res.data.restaurant, language));
@@ -842,6 +868,55 @@ function RestaurantSettings() {
                 value={form.address}
                 onChange={(value) => setField("address", value)}
                 placeholder={copy.addressPlaceholder}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+            <div className="mb-3">
+              <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{language === "th" ? "การคิดเงินและ PromptPay" : "Billing and PromptPay"}</h3>
+              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "ตั้งค่าที่ใช้คำนวณบิลตอนรับเงิน ค่านี้จะถูก snapshot ลงออเดอร์เมื่อยืนยันรับเงิน" : "These values are snapshotted to the order when payment is confirmed."}</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                <span>
+                  <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{language === "th" ? "คิด Service charge" : "Service charge"}</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "เช่น 10%" : "Commonly 10%"}</span>
+                </span>
+                <input type="checkbox" checked={form.service_charge_enabled} onChange={(event) => setBoolField("service_charge_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
+              </label>
+              <Field
+                label={language === "th" ? "Service charge %" : "Service charge %"}
+                value={form.service_charge_rate}
+                onChange={(value) => setField("service_charge_rate", value)}
+                error={errors.service_charge_rate}
+                inputMode="decimal"
+              />
+              <label className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                <span>
+                  <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{language === "th" ? "คิด VAT" : "VAT"}</span>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "เช่น 7%" : "Commonly 7%"}</span>
+                </span>
+                <input type="checkbox" checked={form.vat_enabled} onChange={(event) => setBoolField("vat_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
+              </label>
+              <Field
+                label={language === "th" ? "VAT %" : "VAT %"}
+                value={form.vat_rate}
+                onChange={(value) => setField("vat_rate", value)}
+                error={errors.vat_rate}
+                inputMode="decimal"
+              />
+              <Field
+                label={language === "th" ? "ชื่อบัญชี PromptPay" : "PromptPay account name"}
+                value={form.promptpay_name}
+                onChange={(value) => setField("promptpay_name", value)}
+                placeholder={language === "th" ? "เช่น ครัวบ้านส้ม" : "e.g. Baan Som Kitchen"}
+              />
+              <Field
+                label={language === "th" ? "ลิงก์รูป QR PromptPay" : "PromptPay QR image URL"}
+                value={form.promptpay_qr_image}
+                onChange={(value) => setField("promptpay_qr_image", value)}
+                placeholder="/uploads/..."
               />
             </div>
           </div>

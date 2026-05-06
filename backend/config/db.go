@@ -19,7 +19,7 @@ func DB() *gorm.DB {
 }
 
 func ConnectionDB() {
-	if os.Getenv("GIN_MODE") != "releasw" {
+	if os.Getenv("GIN_MODE") != ginReleaseMode {
 		err := godotenv.Load()
 		if err != nil {
 			log.Fatal("Error loading .env file")
@@ -42,6 +42,8 @@ func ConnectionDB() {
 	fmt.Println("Connect database")
 	db = database
 }
+
+const ginReleaseMode = "release"
 
 func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasColumn(&entity.User{}, "role_id") {
@@ -71,9 +73,21 @@ func SetupDatabase() *gorm.DB {
 		&entity.Category{},
 		&entity.MenuItem{},
 		&entity.RestaurantTable{},
+		&entity.Order{},
+		&entity.OrderItem{},
+		&entity.OrderPayment{},
+		&entity.OrderStatusLog{},
 	)
+	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
 
 	return db
+}
+
+func ensureOrderNumberIndex(db *gorm.DB) {
+	if db.Migrator().HasIndex(&entity.Order{}, "idx_orders_restaurant_day_number") {
+		_ = db.Migrator().DropIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
+	}
+	_ = db.Migrator().CreateIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
 }

@@ -201,7 +201,7 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 		return
 	}
 
-	publicPath := "http://" + c.Request.Host + "/uploads/users/" + userIDText + "/" + fileName
+	publicPath := publicURL(c, "/uploads/users/"+userIDText+"/"+fileName)
 	user, err := ctrl.authService.UpdateProfileImage(id, publicPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

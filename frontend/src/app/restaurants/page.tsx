@@ -10,6 +10,7 @@ import { restaurantRepository } from "../repositories/restaurantRepository";
 import type { Membership } from "@/src/types/restaurant";
 import { PLAN, WorkspaceShell, getRestaurantTypeLabel } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
+import { getDefaultWorkspaceRoute, getWorkModeHint, getWorkModeName } from "@/src/lib/workMode";
 
 const ROLE_LABEL: Record<string, Record<Language, string>> = {
   owner: { th: "เจ้าของร้าน", en: "Owner" },
@@ -271,7 +272,7 @@ export default function RestaurantsPage() {
     restaurantRepository.setActiveId(selectedRestaurant.restaurant_id);
     setActiveRestaurant(selectedRestaurant.restaurant_id);
     const next = new URLSearchParams(window.location.search).get("next");
-    router.push(next?.startsWith("/") ? next : "/home");
+    router.push(next?.startsWith("/") ? next : getDefaultWorkspaceRoute(selectedRestaurant));
   };
 
   return (
@@ -327,6 +328,11 @@ export default function RestaurantsPage() {
                   <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">
                     {selectedRestaurant?.restaurant?.name ?? (language === "th" ? "ยังไม่ได้เลือกร้าน" : "No restaurant selected")}
                   </p>
+                  {selectedRestaurant && (
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      {getWorkModeName(selectedRestaurant, language)} · {getWorkModeHint(selectedRestaurant, language)}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -334,7 +340,7 @@ export default function RestaurantsPage() {
                   onClick={enterDashboard}
                   className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
                 >
-                  {language === "th" ? "เข้า dashboard ร้านนี้" : "Open this dashboard"}
+                  {selectedRestaurant ? getWorkModeName(selectedRestaurant, language) : language === "th" ? "เข้าโหมดทำงาน" : "Open workspace"}
                 </button>
               </div>
             </div>

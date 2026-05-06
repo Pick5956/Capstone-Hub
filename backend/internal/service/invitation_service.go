@@ -144,6 +144,9 @@ func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity
 	if err != nil {
 		return nil, err
 	}
+	if !inv.IsUsable() {
+		return nil, errors.New("invitation is no longer usable")
+	}
 
 	// already a member?
 	if existing, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID); err == nil {
@@ -181,10 +184,6 @@ func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
-	}
-
-	if !inv.IsUsable() {
-		return nil, errors.New("invitation is no longer usable")
 	}
 
 	// scoped invitation: only the matching email may accept

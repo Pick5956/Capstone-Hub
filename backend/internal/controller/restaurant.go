@@ -234,7 +234,7 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		return
 	}
 
-	publicPath := "http://" + c.Request.Host + "/uploads/restaurants/" + strconv.FormatUint(uint64(restaurantID), 10) + "/" + fileName
+	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
 	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantLogo(restaurantID, publicPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
