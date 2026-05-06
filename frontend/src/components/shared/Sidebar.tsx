@@ -8,7 +8,6 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useTheme } from '@/src/providers/ThemeProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import { can } from '@/src/lib/rbac';
-import { getDefaultWorkspaceRoute, getWorkModeHint, getWorkModeName } from '@/src/lib/workMode';
 import type { Permission } from '@/src/types/auth';
 
 type NavItem = {
@@ -184,55 +183,6 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
         </div>
       ))}
     </nav>
-  );
-}
-
-function WorkModeEntry({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const { activeMembership } = useAuth();
-  const { language } = useLanguage();
-  if (!activeMembership) return null;
-
-  const href = getDefaultWorkspaceRoute(activeMembership);
-  const mode = getWorkModeName(activeMembership, language);
-  const hint = getWorkModeHint(activeMembership, language);
-
-  if (collapsed) {
-    return (
-      <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
-        <Link
-          href={href}
-          onClick={onNavigate}
-          title={mode}
-          className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-gray-900 text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M5 12h14" />
-            <path d="M13 6l6 6-6 6" />
-          </svg>
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
-      <Link
-        href={href}
-        onClick={onNavigate}
-        className="block rounded-md border border-gray-200 bg-gray-50 px-3 py-3 transition-colors hover:border-orange-300 hover:bg-orange-50 dark:border-gray-800 dark:bg-gray-900/60 dark:hover:border-orange-800 dark:hover:bg-orange-900/20"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{mode}</span>
-          <span className="text-orange-600 dark:text-orange-400">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M5 12h14" />
-              <path d="M13 6l6 6-6 6" />
-            </svg>
-          </span>
-        </div>
-        <p className="mt-1 text-[11px] leading-4 text-gray-500 dark:text-gray-400">{hint}</p>
-      </Link>
-    </div>
   );
 }
 
@@ -424,7 +374,6 @@ export default function Sidebar() {
         </div>
 
         <RestaurantSwitch collapsed={false} onNavigate={() => setMobileOpen(false)} />
-        <WorkModeEntry collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <NavLinks collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <UserFooter collapsed={false} />
       </aside>
@@ -467,7 +416,6 @@ export default function Sidebar() {
         </div>
 
         <RestaurantSwitch collapsed={collapsed} />
-        <WorkModeEntry collapsed={collapsed} />
         <NavLinks collapsed={collapsed} />
         <UserFooter collapsed={collapsed} />
       </aside>

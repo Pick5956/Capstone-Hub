@@ -550,8 +550,8 @@ export default function MenuPage() {
       </div>
 
       {categoryModalOpen && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
-          <div className="flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
+          <div className="motion-bottom-sheet flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
               <button type="button" onClick={() => setCategoryModalOpen(false)} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
@@ -588,7 +588,7 @@ export default function MenuPage() {
                 />
                 <div className="grid grid-cols-[1fr_auto] gap-2">
                   <input value={categoryOrder} onChange={(event) => setCategoryOrder(event.target.value)} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                  <button disabled={submitting} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                  <button disabled={submitting} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                     {editingCategory ? copy.saveCategory : copy.createCategory}
                   </button>
                 </div>
@@ -605,8 +605,8 @@ export default function MenuPage() {
 
       {drawerOpen && canManage && (
         <>
-          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className="fixed inset-0 z-30 cursor-default bg-gray-950/40" />
-          <form onSubmit={saveItem} className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className="motion-overlay fixed inset-0 z-30 cursor-default bg-gray-950/40" />
+          <form onSubmit={saveItem} className="motion-drawer fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
@@ -670,7 +670,7 @@ export default function MenuPage() {
               </div>
             </div>
             <div className="border-t border-gray-200 p-4 dark:border-gray-800">
-              <button disabled={submitting || uploadingImage || !categories.length} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+              <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {editingItem ? copy.saveItem : copy.createItem}
               </button>
               {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
@@ -680,8 +680,8 @@ export default function MenuPage() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
-          <div className="w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
+          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
@@ -690,14 +690,14 @@ export default function MenuPage() {
               <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.name}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => setDeleteTarget(null)} disabled={submitting} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.cancel}
               </button>
               <button
                 type="button"
                 disabled={submitting}
                 onClick={() => void (deleteTarget.type === "category" ? removeCategory(deleteTarget.id) : removeItem(deleteTarget.id))}
-                className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                className="ui-press h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
               >
                 {copy.confirmDelete}
               </button>

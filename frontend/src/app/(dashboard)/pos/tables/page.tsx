@@ -29,6 +29,7 @@ export default function PosTablesPage() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
+  const [sheetClosing, setSheetClosing] = useState(false);
   const [customerCount, setCustomerCount] = useState(1);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -143,8 +144,18 @@ export default function PosTablesPage() {
       return;
     }
     setSelectedTable(table);
+    setSheetClosing(false);
     setCustomerCount(Math.max(1, Math.min(table.capacity || 1, 6)));
     setNote("");
+  };
+
+  const closeOpenOrderSheet = () => {
+    if (submitting || sheetClosing) return;
+    setSheetClosing(true);
+    window.setTimeout(() => {
+      setSelectedTable(null);
+      setSheetClosing(false);
+    }, 180);
   };
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
@@ -155,7 +166,7 @@ export default function PosTablesPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       actions={(
-        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+        <button type="button" onClick={load} className="ui-press h-11 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 sm:h-10">
           {copy.refresh}
         </button>
       )}
@@ -185,7 +196,7 @@ export default function PosTablesPage() {
                 ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-900/20 dark:text-sky-200"
                 : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-200";
             return (
-              <button key={table.ID} type="button" onClick={() => handleTableClick(table)} className={`min-h-32 rounded-md border p-4 text-left transition-[transform,box-shadow] active:translate-y-px ${status !== "reserved" ? "hover:-translate-y-0.5 hover:shadow-sm" : "cursor-default opacity-70"} ${cls}`}>
+              <button key={table.ID} type="button" onClick={() => handleTableClick(table)} className={`ui-press min-h-36 rounded-md border p-4 text-left sm:min-h-32 ${status !== "reserved" ? "hover:-translate-y-0.5 hover:shadow-sm" : "cursor-default opacity-70"} ${cls}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-2xl font-semibold">{table.table_number}</p>
@@ -208,26 +219,43 @@ export default function PosTablesPage() {
       )}
 
       {selectedTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 px-4">
-          <div className="w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${sheetClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0`}>
+          <button type="button" aria-label={copy.cancel} onClick={closeOpenOrderSheet} className="absolute inset-0 cursor-default" />
+          <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.openOrder} · {selectedTable.table_number}</h2>
             </div>
             <div className="space-y-3 p-4">
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerCount}</span>
-                <input type="number" min={1} value={customerCount} onChange={(event) => setCustomerCount(Number(event.target.value))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                  <button type="button" onClick={() => setCustomerCount((current) => Math.max(1, current - 1))} disabled={customerCount <= 1} className="ui-press h-14 border-r border-gray-200 text-xl font-semibold text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+                    -
+                  </button>
+                  <input type="number" min={1} value={customerCount} onChange={(event) => setCustomerCount(Math.max(1, Number(event.target.value) || 1))} className="h-14 min-w-0 border-0 bg-transparent px-2 text-center text-[22px] font-semibold tabular-nums text-gray-900 outline-none dark:text-white" />
+                  <button type="button" onClick={() => setCustomerCount((current) => current + 1)} className="ui-press h-14 border-l border-gray-200 text-xl font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200">
+                    +
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setCustomerCount((current) => current + 5)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+                    +5
+                  </button>
+                  <button type="button" onClick={() => setCustomerCount((current) => current + 10)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+                    +10
+                  </button>
+                </div>
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:min-h-20 sm:text-[13px]" />
               </label>
             </div>
-            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => setSelectedTable(null)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:flex sm:justify-end">
+              <button type="button" onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
                 {copy.cancel}
               </button>
-              <button type="button" disabled={submitting} onClick={openTable} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="button" disabled={submitting} onClick={openTable} className="ui-press h-11 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900 sm:h-9 sm:text-[12px]">
                 {copy.confirm}
               </button>
             </div>

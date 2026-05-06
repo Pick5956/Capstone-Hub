@@ -10,7 +10,7 @@ export default function MobileTopBar() {
   const { language } = useLanguage();
 
   return (
-    <header className="lg:hidden sticky top-0 z-30 flex items-center gap-3 px-4 h-14
+    <header className="lg:hidden sticky top-0 z-30 flex h-14 max-w-full items-center gap-3 overflow-hidden px-4
       bg-white/90 dark:bg-gray-950/90 backdrop-blur-md
       border-b border-gray-100 dark:border-gray-800 shadow-sm">
       <button
@@ -25,14 +25,14 @@ export default function MobileTopBar() {
         </svg>
       </button>
 
-      <Link href="/home" className="flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-white font-black text-xs shadow">R</div>
-        <span className="font-extrabold text-sm tracking-tight text-gray-900 dark:text-white">
+      <Link href="/home" className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-red-600 text-xs font-black text-white shadow">R</div>
+        <span className="truncate text-sm font-extrabold tracking-tight text-gray-900 dark:text-white">
           RESTAURANT <span className="text-orange-500">HUB</span>
         </span>
       </Link>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <LanguageToggle />
         <Link
           href="/restaurants"
