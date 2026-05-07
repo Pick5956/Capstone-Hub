@@ -47,7 +47,11 @@ func (r *MenuRepository) DeleteCategory(category *entity.Category) error {
 
 func (r *MenuRepository) ListMenuItems(restaurantID uint, includeUnavailable bool, categoryID uint) ([]entity.MenuItem, error) {
 	var items []entity.MenuItem
-	query := r.db.Preload("Category").Where("restaurant_id = ?", restaurantID)
+	query := r.db.
+		Preload("Category").
+		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Where("restaurant_id = ?", restaurantID)
 	if !includeUnavailable {
 		query = query.Where("is_available = ?", true).
 			Where("category_id IN (?)", r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true))
@@ -65,7 +69,12 @@ func (r *MenuRepository) CreateMenuItem(item *entity.MenuItem) error {
 
 func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.MenuItem, error) {
 	var item entity.MenuItem
-	err := r.db.Preload("Category").Where("restaurant_id = ? AND id = ?", restaurantID, menuItemID).First(&item).Error
+	err := r.db.
+		Preload("Category").
+		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Where("restaurant_id = ? AND id = ?", restaurantID, menuItemID).
+		First(&item).Error
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +83,41 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 
 func (r *MenuRepository) UpdateMenuItem(item *entity.MenuItem) error {
 	return r.db.Save(item).Error
+}
+
+func (r *MenuRepository) ReplaceMenuOptions(item *entity.MenuItem, groups []entity.MenuOptionGroup) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var existing []entity.MenuOptionGroup
+		if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Find(&existing).Error; err != nil {
+			return err
+		}
+		for _, group := range existing {
+			if err := tx.Where("restaurant_id = ? AND option_group_id = ?", item.RestaurantID, group.ID).Delete(&entity.MenuOption{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuOptionGroup{}).Error; err != nil {
+			return err
+		}
+		for i := range groups {
+			groups[i].RestaurantID = item.RestaurantID
+			groups[i].MenuItemID = item.ID
+			options := groups[i].Options
+			groups[i].Options = nil
+			if err := tx.Create(&groups[i]).Error; err != nil {
+				return err
+			}
+			for j := range options {
+				options[j].RestaurantID = item.RestaurantID
+				options[j].MenuItemID = item.ID
+				options[j].OptionGroupID = groups[i].ID
+				if err := tx.Create(&options[j]).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (r *MenuRepository) DeleteMenuItem(item *entity.MenuItem) error {

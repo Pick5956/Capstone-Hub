@@ -12,6 +12,7 @@ export interface OrderItem {
   menu_id: number;
   menu_name: string;
   unit_price: number;
+  options_total: number;
   quantity: number;
   subtotal: number;
   note: string;
@@ -21,8 +22,21 @@ export interface OrderItem {
   served_at?: string | null;
   cancelled_reason?: string;
   menu?: MenuItem;
+  selected_options?: OrderItemOption[];
   CreatedAt?: string;
   UpdatedAt?: string;
+}
+
+export interface OrderItemOption {
+  ID: number;
+  order_item_id: number;
+  order_id: number;
+  restaurant_id: number;
+  menu_option_id: number;
+  option_group_id: number;
+  group_name: string;
+  option_name: string;
+  price_delta: number;
 }
 
 export interface OrderStatusLog {
@@ -108,4 +122,5 @@ export interface AddOrderItemInput {
   menu_id: number;
   quantity: number;
   note?: string;
+  selected_option_ids?: number[];
 }

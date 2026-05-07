@@ -400,7 +400,6 @@ export default function Sidebar() {
             </div>
           )}
           <div className="flex items-center gap-0.5">
-            {!collapsed && <ThemeToggle />}
             <button
               onClick={() => setCollapsed(!collapsed)}
               className="shrink-0 rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"

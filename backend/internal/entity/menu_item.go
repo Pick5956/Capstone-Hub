@@ -13,6 +13,7 @@ type MenuItem struct {
 	IsAvailable  bool    `json:"is_available" gorm:"default:true"`
 	DisplayOrder int     `json:"display_order" gorm:"default:0"`
 
-	Restaurant *Restaurant `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
-	Category   *Category   `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	Restaurant   *Restaurant       `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
+	Category     *Category         `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	OptionGroups []MenuOptionGroup `json:"option_groups,omitempty" gorm:"foreignKey:MenuItemID"`
 }

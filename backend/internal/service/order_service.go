@@ -33,9 +33,10 @@ type UpdateOrderRequest struct {
 }
 
 type AddOrderItemRequest struct {
-	MenuID   uint   `json:"menu_id" binding:"required"`
-	Quantity int    `json:"quantity"`
-	Note     string `json:"note"`
+	MenuID            uint   `json:"menu_id" binding:"required"`
+	Quantity          int    `json:"quantity"`
+	Note              string `json:"note"`
+	SelectedOptionIDs []uint `json:"selected_option_ids"`
 }
 
 type UpdateOrderItemRequest struct {
@@ -76,6 +77,14 @@ type BillResponse struct {
 	PromptPayName        string                `json:"promptpay_name"`
 	PromptPayQRImage     string                `json:"promptpay_qr_image"`
 	Payments             []entity.OrderPayment `json:"payments"`
+}
+
+type selectedMenuOption struct {
+	ID            uint
+	OptionGroupID uint
+	GroupName     string
+	OptionName    string
+	PriceDelta    float64
 }
 
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
@@ -199,19 +208,39 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 		if qty <= 0 {
 			qty = 1
 		}
+		selectedOptions, optionsTotal, err := validateSelectedMenuOptions(menu, req.SelectedOptionIDs)
+		if err != nil {
+			return err
+		}
 		item := &entity.OrderItem{
 			OrderID:      order.ID,
 			RestaurantID: restaurantID,
 			MenuID:       menu.ID,
 			MenuName:     menu.Name,
 			UnitPrice:    menu.Price,
+			OptionsTotal: optionsTotal,
 			Quantity:     qty,
-			Subtotal:     menu.Price * float64(qty),
+			Subtotal:     (menu.Price + optionsTotal) * float64(qty),
 			Note:         strings.TrimSpace(req.Note),
 			Status:       entity.OrderItemStatusPending,
 		}
 		if err := tx.CreateItem(item); err != nil {
 			return err
+		}
+		for _, option := range selectedOptions {
+			snapshot := &entity.OrderItemOption{
+				OrderItemID:   item.ID,
+				OrderID:       order.ID,
+				RestaurantID:  restaurantID,
+				MenuOptionID:  option.ID,
+				OptionGroupID: option.OptionGroupID,
+				GroupName:     option.GroupName,
+				OptionName:    option.OptionName,
+				PriceDelta:    option.PriceDelta,
+			}
+			if err := tx.CreateItemOption(snapshot); err != nil {
+				return err
+			}
 		}
 		if err := recalcOrderTotals(tx, order); err != nil {
 			return err
@@ -238,7 +267,7 @@ func (s *OrderService) UpdateItem(restaurantID, orderID, itemID uint, req *Updat
 		}
 		item.Quantity = qty
 		item.Note = strings.TrimSpace(req.Note)
-		item.Subtotal = item.UnitPrice * float64(qty)
+		item.Subtotal = (item.UnitPrice + item.OptionsTotal) * float64(qty)
 		if err := tx.SaveItem(item); err != nil {
 			return err
 		}
@@ -525,6 +554,56 @@ func editablePendingItem(tx *repository.OrderRepository, restaurantID, orderID, 
 		return nil, nil, errors.New("only pending items can be edited")
 	}
 	return order, item, nil
+}
+
+func validateSelectedMenuOptions(menu *entity.MenuItem, selectedIDs []uint) ([]selectedMenuOption, float64, error) {
+	selectedByID := map[uint]bool{}
+	for _, id := range selectedIDs {
+		if id != 0 {
+			selectedByID[id] = true
+		}
+	}
+	selected := []selectedMenuOption{}
+	total := 0.0
+	for _, group := range menu.OptionGroups {
+		if !group.IsActive {
+			continue
+		}
+		groupSelected := 0
+		for _, option := range group.Options {
+			if !option.IsActive || !selectedByID[option.ID] {
+				continue
+			}
+			groupSelected += 1
+			total += option.PriceDelta
+			selected = append(selected, selectedMenuOption{
+				ID:            option.ID,
+				OptionGroupID: group.ID,
+				GroupName:     group.Name,
+				OptionName:    option.Name,
+				PriceDelta:    option.PriceDelta,
+			})
+			delete(selectedByID, option.ID)
+		}
+		minSelect := group.MinSelect
+		if group.Required && minSelect < 1 {
+			minSelect = 1
+		}
+		maxSelect := group.MaxSelect
+		if maxSelect < 1 {
+			maxSelect = 1
+		}
+		if groupSelected < minSelect {
+			return nil, 0, fmt.Errorf("กรุณาเลือก %s อย่างน้อย %d ตัวเลือก", group.Name, minSelect)
+		}
+		if groupSelected > maxSelect {
+			return nil, 0, fmt.Errorf("%s เลือกได้สูงสุด %d ตัวเลือก", group.Name, maxSelect)
+		}
+	}
+	if len(selectedByID) > 0 {
+		return nil, 0, errors.New("ตัวเลือกนี้ไม่พร้อมใช้งานสำหรับเมนูนี้")
+	}
+	return selected, total, nil
 }
 
 func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) error {

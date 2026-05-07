@@ -221,6 +221,13 @@ export default function KitchenPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-white">{item.quantity}x {item.menu_name}</p>
+                          {item.selected_options?.length ? (
+                            <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+                              {item.selected_options.map((option) => (
+                                <p key={option.ID}>{option.group_name}: {option.option_name}</p>
+                              ))}
+                            </div>
+                          ) : null}
                           {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
                         </div>
                         <span className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
