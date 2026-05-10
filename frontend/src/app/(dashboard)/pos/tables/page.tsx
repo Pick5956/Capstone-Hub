@@ -52,7 +52,9 @@ export default function PosTablesPage() {
         free: "ว่าง",
         occupied: "มีออเดอร์",
         reserved: "จอง",
+        noZone: "ไม่มีโซน",
         total: "ยอดรวม",
+        seats: "ที่นั่ง",
         elapsed: "นาที",
         loadError: "โหลดผังโต๊ะไม่สำเร็จ",
         saveError: "เปิดออเดอร์ไม่สำเร็จ",
@@ -72,7 +74,9 @@ export default function PosTablesPage() {
         free: "Free",
         occupied: "Active order",
         reserved: "Reserved",
+        noZone: "No zone",
         total: "Total",
+        seats: "seats",
         elapsed: "min",
         loadError: "Could not load table layout.",
         saveError: "Could not open order.",
@@ -88,6 +92,15 @@ export default function PosTablesPage() {
   const activeTableCount = tables.filter((table) => activeOrderByTable.has(table.ID)).length;
   const reservedTableCount = tables.filter((table) => table.status === "reserved").length;
   const freeTableCount = tables.length - activeTableCount - reservedTableCount;
+  const groupedTables = useMemo(() => {
+    const groups = new Map<string, { label: string; tables: RestaurantTable[] }>();
+    tables.forEach((table) => {
+      const key = table.zone_id ? String(table.zone_id) : "none";
+      if (!groups.has(key)) groups.set(key, { label: table.table_zone?.name || table.zone || copy.noZone, tables: [] });
+      groups.get(key)?.tables.push(table);
+    });
+    return Array.from(groups.values());
+  }, [copy.noZone, tables]);
 
   const load = async () => {
     if (!canTake) return;
@@ -185,8 +198,12 @@ export default function PosTablesPage() {
           {Array.from({ length: 10 }).map((_, index) => <Skeleton key={index} className="h-32" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {tables.map((table) => {
+        <div className="space-y-5">
+          {groupedTables.map((group) => (
+            <section key={group.label}>
+              <h2 className="mb-2 text-[12px] font-semibold text-gray-500 dark:text-gray-400">{group.label}</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {group.tables.map((table) => {
             const order = activeOrderByTable.get(table.ID);
             const busy = Boolean(order);
             const status = busy ? "occupied" : table.status;
@@ -199,22 +216,32 @@ export default function PosTablesPage() {
               <button key={table.ID} type="button" onClick={() => handleTableClick(table)} className={`ui-press min-h-36 rounded-md border p-4 text-left sm:min-h-32 ${status !== "reserved" ? "hover:-translate-y-0.5 hover:shadow-sm" : "cursor-default opacity-70"} ${cls}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-2xl font-semibold">{table.table_number}</p>
-                    <p className="mt-1 text-[12px] opacity-75">{table.zone || "-"}</p>
+                    <p className="text-2xl font-semibold">{table.display_label || table.table_number}</p>
+                    <p className="mt-1 text-[12px] opacity-75">{table.table_zone?.name || table.zone || copy.noZone}</p>
                   </div>
                   <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-gray-950/35">{status === "occupied" ? copy.occupied : status === "reserved" ? copy.reserved : copy.free}</span>
                 </div>
+                {table.tags?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {table.tags.slice(0, 3).map((tag) => (
+                      <span key={tag.ID} className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-semibold dark:bg-gray-950/35">{tag.name}</span>
+                    ))}
+                  </div>
+                ) : null}
                 {order ? (
                   <div className="mt-5">
                     <p className="font-mono text-[18px] font-semibold tabular-nums">{order.order_number}</p>
                     <p className="mt-1 text-[12px] opacity-80">{copy.total} ฿{order.total_amount.toLocaleString()}</p>
                   </div>
                 ) : (
-                  <p className="mt-7 text-[12px] opacity-75">{table.capacity} seats</p>
+                  <p className="mt-7 text-[12px] opacity-75">{table.capacity} {copy.seats}</p>
                 )}
               </button>
             );
           })}
+              </div>
+            </section>
+          ))}
         </div>
       )}
 

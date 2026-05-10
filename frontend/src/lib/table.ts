@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import type { RestaurantTable, RestaurantTableInput } from "../types/table";
+import type { BulkCreateTablesInput, MoveTableZoneInput, RestaurantTable, RestaurantTableInput, TableTag, TableTagInput, TableZone, TableZoneInput } from "../types/table";
 
 export const listTables = () =>
   apiClient.get<{ tables: RestaurantTable[] }>("/api/v1/tables");
@@ -7,8 +7,38 @@ export const listTables = () =>
 export const createTable = (data: RestaurantTableInput) =>
   apiClient.post<RestaurantTable>("/api/v1/tables", data);
 
+export const bulkCreateTables = (data: BulkCreateTablesInput) =>
+  apiClient.post<{ tables: RestaurantTable[] }>("/api/v1/tables/bulk-create", data);
+
 export const updateTable = (id: number, data: RestaurantTableInput) =>
   apiClient.put<RestaurantTable>(`/api/v1/tables/${id}`, data);
 
+export const moveTableZone = (id: number, data: MoveTableZoneInput) =>
+  apiClient.patch<RestaurantTable>(`/api/v1/tables/${id}/move-zone`, data);
+
 export const deleteTable = (id: number) =>
   apiClient.delete(`/api/v1/tables/${id}`);
+
+export const listTableZones = () =>
+  apiClient.get<{ zones: TableZone[] }>("/api/v1/table-zones");
+
+export const createTableZone = (data: TableZoneInput) =>
+  apiClient.post<TableZone>("/api/v1/table-zones", data);
+
+export const updateTableZone = (id: number, data: TableZoneInput) =>
+  apiClient.put<TableZone>(`/api/v1/table-zones/${id}`, data);
+
+export const deleteTableZone = (id: number) =>
+  apiClient.delete(`/api/v1/table-zones/${id}`);
+
+export const listTableTags = () =>
+  apiClient.get<{ tags: TableTag[] }>("/api/v1/table-tags");
+
+export const createTableTag = (data: TableTagInput) =>
+  apiClient.post<TableTag>("/api/v1/table-tags", data);
+
+export const updateTableTag = (id: number, data: TableTagInput) =>
+  apiClient.put<TableTag>(`/api/v1/table-tags/${id}`, data);
+
+export const deleteTableTag = (id: number) =>
+  apiClient.delete(`/api/v1/table-tags/${id}`);

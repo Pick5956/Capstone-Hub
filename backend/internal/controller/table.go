@@ -59,6 +59,28 @@ func (ctrl *TableController) CreateTable(c *gin.Context) {
 	c.JSON(http.StatusCreated, table)
 }
 
+func (ctrl *TableController) BulkCreateTables(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	var req service.BulkCreateTablesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tables, err := ctrl.tableSvc.BulkCreateTables(restaurantID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"tables": tables})
+}
+
 func (ctrl *TableController) UpdateTable(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
@@ -85,6 +107,32 @@ func (ctrl *TableController) UpdateTable(c *gin.Context) {
 	c.JSON(http.StatusOK, table)
 }
 
+func (ctrl *TableController) MoveTableZone(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.MoveTableZoneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	table, err := ctrl.tableSvc.MoveTableZone(restaurantID, tableID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
 func (ctrl *TableController) DeleteTable(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
@@ -99,6 +147,176 @@ func (ctrl *TableController) DeleteTable(c *gin.Context) {
 		return
 	}
 	if err := ctrl.tableSvc.DeleteTable(restaurantID, tableID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (ctrl *TableController) ListZones(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "view_tables") && !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing table permission"})
+		return
+	}
+	zones, err := ctrl.tableSvc.ListZones(restaurantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"zones": zones})
+}
+
+func (ctrl *TableController) CreateZone(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	var req service.TableZoneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	zone, err := ctrl.tableSvc.CreateZone(restaurantID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, zone)
+}
+
+func (ctrl *TableController) UpdateZone(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	zoneID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.TableZoneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	zone, err := ctrl.tableSvc.UpdateZone(restaurantID, zoneID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, zone)
+}
+
+func (ctrl *TableController) DeleteZone(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	zoneID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := ctrl.tableSvc.DeleteZone(restaurantID, zoneID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func (ctrl *TableController) ListTags(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "view_tables") && !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing table permission"})
+		return
+	}
+	tags, err := ctrl.tableSvc.ListTags(restaurantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": tags})
+}
+
+func (ctrl *TableController) CreateTag(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	var req service.TableTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tag, err := ctrl.tableSvc.CreateTag(restaurantID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, tag)
+}
+
+func (ctrl *TableController) UpdateTag(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	tagID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.TableTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	tag, err := ctrl.tableSvc.UpdateTag(restaurantID, tagID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tag)
+}
+
+func (ctrl *TableController) DeleteTag(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	tagID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := ctrl.tableSvc.DeleteTag(restaurantID, tagID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
