@@ -59,6 +59,7 @@ type OrderItem struct {
 	MenuID          uint       `json:"menu_id" gorm:"not null;index"`
 	MenuName        string     `json:"menu_name" gorm:"not null"`
 	UnitPrice       float64    `json:"unit_price" gorm:"not null"`
+	OptionsTotal    float64    `json:"options_total" gorm:"not null;default:0"`
 	Quantity        int        `json:"quantity" gorm:"not null"`
 	Subtotal        float64    `json:"subtotal" gorm:"not null"`
 	Note            string     `json:"note"`
@@ -68,8 +69,9 @@ type OrderItem struct {
 	ServedAt        *time.Time `json:"served_at"`
 	CancelledReason string     `json:"cancelled_reason"`
 
-	Order *Order    `json:"order,omitempty" gorm:"foreignKey:OrderID"`
-	Menu  *MenuItem `json:"menu,omitempty" gorm:"foreignKey:MenuID"`
+	Order           *Order            `json:"order,omitempty" gorm:"foreignKey:OrderID"`
+	Menu            *MenuItem         `json:"menu,omitempty" gorm:"foreignKey:MenuID"`
+	SelectedOptions []OrderItemOption `json:"selected_options,omitempty" gorm:"foreignKey:OrderItemID"`
 }
 
 type OrderStatusLog struct {

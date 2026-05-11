@@ -370,6 +370,13 @@ export default function OrdersPage() {
                   <div key={item.ID} className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                      {item.selected_options?.length ? (
+                        <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+                          {item.selected_options.map((option) => (
+                            <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}</p>
+                          ))}
+                        </div>
+                      ) : null}
                       <p className="mt-1 text-[12px] text-gray-500">x{item.quantity} · ฿{item.unit_price.toLocaleString()} {item.note ? `· ${item.note}` : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">

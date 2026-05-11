@@ -50,6 +50,7 @@ export default function PosOrderDetailPage() {
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -71,6 +72,9 @@ export default function PosOrderDetailPage() {
         search: "ค้นหาเมนู",
         all: "ทั้งหมด",
         add: "เพิ่ม",
+        options: "ตัวเลือก",
+        requiredOption: "ต้องเลือก",
+        chooseRequiredOptions: "เลือกตัวเลือกให้ครบก่อนเพิ่มรายการ",
         quantity: "จำนวน",
         note: "หมายเหตุ",
         pending: "รอส่งครัว",
@@ -115,6 +119,9 @@ export default function PosOrderDetailPage() {
         search: "Search menu",
         all: "All",
         add: "Add",
+        options: "Options",
+        requiredOption: "Required",
+        chooseRequiredOptions: "Choose required options before adding.",
         quantity: "Qty",
         note: "Note",
         pending: "Pending",
@@ -168,6 +175,36 @@ export default function PosOrderDetailPage() {
       return item.is_available;
     });
   }, [categoryId, menuItems, search]);
+  const selectedOptionsTotal = selectedMenu?.option_groups?.reduce((sum, group) => {
+    const selected = (group.options ?? []).filter((option) => selectedOptionIds.includes(option.ID));
+    return sum + selected.reduce((optionSum, option) => optionSum + option.price_delta, 0);
+  }, 0) ?? 0;
+  const requiredOptionsMissing = Boolean(selectedMenu?.option_groups?.some((group) => {
+    if (!group.is_active) return false;
+    const minSelect = group.required ? Math.max(1, group.min_select || 0) : group.min_select || 0;
+    if (minSelect <= 0) return false;
+    const selectedCount = (group.options ?? []).filter((option) => option.is_active && selectedOptionIds.includes(option.ID)).length;
+    return selectedCount < minSelect;
+  }));
+
+  const openMenuPicker = (item: MenuItem) => {
+    const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => (group.options ?? []).filter((option) => option.is_active && option.is_default).map((option) => option.ID));
+    setSelectedMenu(item);
+    setSelectedOptionIds(defaultOptionIds);
+    setQuantity(1);
+    setNote("");
+  };
+
+  const toggleOption = (groupOptionIds: number[], optionId: number, maxSelect: number) => {
+    setSelectedOptionIds((current) => {
+      const withoutGroup = current.filter((id) => !groupOptionIds.includes(id));
+      if (current.includes(optionId)) return withoutGroup;
+      if (maxSelect <= 1) return [...withoutGroup, optionId];
+      const currentInGroup = current.filter((id) => groupOptionIds.includes(id));
+      if (currentInGroup.length >= maxSelect) return [...withoutGroup, ...currentInGroup.slice(1), optionId];
+      return [...current, optionId];
+    });
+  };
 
   const load = async ({ background = false }: { background?: boolean } = {}) => {
     if (!canTake || !orderId) return;
@@ -222,9 +259,14 @@ export default function PosOrderDetailPage() {
 
   const addSelectedMenu = async () => {
     if (!selectedMenu || !order) return;
+    if (requiredOptionsMissing) {
+      setError(copy.chooseRequiredOptions);
+      return;
+    }
     await runAction(async () => {
-      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note });
+      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, selected_option_ids: selectedOptionIds });
       setSelectedMenu(null);
+      setSelectedOptionIds([]);
       setQuantity(1);
       setNote("");
       return res.data;
@@ -351,10 +393,19 @@ export default function PosOrderDetailPage() {
 
             <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 xl:grid-cols-4">
               {filteredMenu.length ? filteredMenu.map((item) => (
-                <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => { setSelectedMenu(item); setQuantity(1); setNote(""); }} className="ui-press min-h-36 rounded-md border border-gray-200 bg-white p-3 text-left hover:border-orange-200 hover:bg-orange-50/30 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 sm:min-h-32 sm:hover:-translate-y-0.5">
-                  <p className="line-clamp-2 text-[14px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                  <p className="mt-4 font-mono text-[18px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                  <p className="mt-1 text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className="ui-press flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,background-color,box-shadow] hover:border-orange-200 hover:bg-orange-50/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 sm:hover:-translate-y-0.5">
+                  <div
+                    className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
+                    style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                    aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
+                  >
+                    {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
+                    <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                    <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                  </div>
                 </button>
               )) : (
                 <div className="col-span-full px-4 py-12 text-center text-[13px] text-gray-500">{copy.noMenu}</div>
@@ -375,6 +426,13 @@ export default function PosOrderDetailPage() {
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
                       <p className="mt-1 text-[12px] text-gray-500">฿{item.unit_price.toLocaleString()} · {statusLabel(item.status)}</p>
+                      {item.selected_options?.length ? (
+                        <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+                          {item.selected_options.map((option) => (
+                            <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}</p>
+                          ))}
+                        </div>
+                      ) : null}
                       {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
                     </div>
                     <p className="font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.subtotal.toLocaleString()}</p>
@@ -445,11 +503,38 @@ export default function PosOrderDetailPage() {
       {selectedMenu && (
         <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
           <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+            <div className="aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
+              {!selectedMenu.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
+            </div>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{selectedMenu.name}</h2>
-              <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">฿{selectedMenu.price.toLocaleString()}</p>
+              <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
             </div>
             <div className="space-y-3 p-4">
+              {selectedMenu.option_groups?.length ? (
+                <div className="space-y-3">
+                  {selectedMenu.option_groups.filter((group) => group.is_active).map((group) => {
+                    const options = (group.options ?? []).filter((option) => option.is_active);
+                    const maxSelect = Math.max(1, group.max_select || 1);
+                    return (
+                      <div key={group.ID}>
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{group.name}</span>
+                          {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.requiredOption}</span>}
+                        </div>
+                        <div className="grid gap-2">
+                          {options.map((option) => (
+                            <button key={option.ID} type="button" onClick={() => toggleOption(options.map((current) => current.ID), option.ID, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] ${selectedOptionIds.includes(option.ID) ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
+                              <span>{option.name}</span>
+                              <span className="font-mono tabular-nums">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.quantity}</span>
                 <div className="flex items-center gap-2">
@@ -464,10 +549,10 @@ export default function PosOrderDetailPage() {
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => setSelectedMenu(null)} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => { setSelectedMenu(null); setSelectedOptionIds([]); }} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {language === "th" ? "ยกเลิก" : "Cancel"}
               </button>
-              <button type="button" disabled={submitting} onClick={addSelectedMenu} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                 {copy.add}
               </button>
             </div>
@@ -507,8 +592,17 @@ export default function PosOrderDetailPage() {
               </div>
               <div className="mt-4 divide-y divide-gray-200 text-[12px] dark:divide-gray-800">
                 {bill.items.map((item) => (
-                  <div key={item.ID} className="flex justify-between gap-3 py-2">
-                    <span>{item.quantity}x {item.menu_name}</span>
+                  <div key={item.ID} className="grid grid-cols-[1fr_auto] gap-3 py-2">
+                    <div>
+                      <span>{item.quantity}x {item.menu_name}</span>
+                      {item.selected_options?.length ? (
+                        <div className="mt-0.5 space-y-0.5 text-[11px] text-gray-500">
+                          {item.selected_options.map((option) => (
+                            <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     <span className="font-mono tabular-nums">฿{item.subtotal.toLocaleString()}</span>
                   </div>
                 ))}

@@ -6,7 +6,7 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, uploadMenuImage } from "@/src/lib/menu";
 import { createSingleFlight } from "@/src/lib/singleFlight";
-import type { Category, MenuItem, MenuItemInput } from "@/src/types/menu";
+import type { Category, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -19,7 +19,18 @@ const emptyItem: MenuItemInput = {
   description: "",
   is_available: true,
   display_order: 0,
+  option_groups: [],
 };
+
+const emptyOptionGroup = (): MenuOptionGroupInput => ({
+  name: "",
+  required: false,
+  min_select: 0,
+  max_select: 1,
+  display_order: 0,
+  is_active: true,
+  options: [{ name: "", price_delta: 0, is_default: false, display_order: 0, is_active: true }],
+});
 
 type DeleteTarget =
   | { type: "category"; id: number; name: string }
@@ -44,7 +55,7 @@ export default function MenuPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
-  const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string }>({});
+  const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string; options?: string }>({});
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
@@ -133,6 +144,20 @@ export default function MenuPage() {
         createItem: "เพิ่มเมนู",
         cancelEdit: "ยกเลิกการแก้ไข",
         imageAlt: "รูปเมนู",
+        optionsTitle: "ตัวเลือกเมนู",
+        optionsHint: "เช่น ระดับความสุก ซอส ท็อปปิง หรือพิเศษ",
+        addOptionGroup: "เพิ่มชุดตัวเลือก",
+        optionGroupName: "ชื่อชุดตัวเลือก",
+        optionGroupPlaceholder: "เช่น ระดับความสุก",
+        requiredOption: "ต้องเลือก",
+        maxSelect: "เลือกได้สูงสุด",
+        optionName: "ชื่อตัวเลือก",
+        optionNamePlaceholder: "เช่น สุกปานกลาง",
+        optionPrice: "ราคาเพิ่ม",
+        addOption: "เพิ่มตัวเลือก",
+        removeOptionGroup: "ลบชุด",
+        removeOption: "ลบ",
+        optionError: "กรอกชื่อชุดตัวเลือกและอย่างน้อย 1 ตัวเลือก หรือปล่อยว่างทั้งชุด",
       }
     : {
         permissionDenied: "You do not have permission to view the menu.",
@@ -213,6 +238,20 @@ export default function MenuPage() {
         createItem: "Add menu item",
         cancelEdit: "Cancel edit",
         imageAlt: "Menu image",
+        optionsTitle: "Menu options",
+        optionsHint: "For doneness, sauces, toppings, or special size.",
+        addOptionGroup: "Add option group",
+        optionGroupName: "Option group name",
+        optionGroupPlaceholder: "For example, Doneness",
+        requiredOption: "Required",
+        maxSelect: "Max choices",
+        optionName: "Option name",
+        optionNamePlaceholder: "For example, Medium",
+        optionPrice: "Extra price",
+        addOption: "Add option",
+        removeOptionGroup: "Remove group",
+        removeOption: "Remove",
+        optionError: "Enter an option group name and at least 1 option, or leave the group empty.",
       };
 
   const refresh = async () => {
@@ -257,6 +296,29 @@ export default function MenuPage() {
 
   if (!canView) return <PermissionDenied title={copy.permissionDenied} />;
 
+  const normalizeOptionGroups = (groups: MenuOptionGroupInput[]) =>
+    groups
+      .map((group, groupIndex) => ({
+        ...group,
+        name: group.name.trim(),
+        min_select: group.required ? 1 : 0,
+        max_select: Math.max(1, Number(group.max_select) || 1),
+        display_order: Number(group.display_order) || groupIndex,
+        options: group.options
+          .map((option, optionIndex) => ({
+            ...option,
+            name: option.name.trim(),
+            price_delta: Number(option.price_delta) || 0,
+            display_order: Number(option.display_order) || optionIndex,
+          }))
+          .filter((option) => option.name),
+      }))
+      .filter((group) => group.name || group.options.length);
+
+  const validateOptionGroups = (groups: MenuOptionGroupInput[]) => {
+    return normalizeOptionGroups(groups).every((group) => group.name && group.options.length && group.max_select >= group.min_select);
+  };
+
   const saveCategory = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canManage) return;
@@ -296,8 +358,9 @@ export default function MenuPage() {
     const nextItemErrors = {
       category: itemForm.category_id ? undefined : copy.itemCategoryRequired,
       name: itemForm.name.trim() ? undefined : copy.itemNameRequired,
+      options: validateOptionGroups(itemForm.option_groups ?? []) ? undefined : copy.optionError,
     };
-    if (nextItemErrors.category || nextItemErrors.name) {
+    if (nextItemErrors.category || nextItemErrors.name || nextItemErrors.options) {
       setItemErrors(nextItemErrors);
       return;
     }
@@ -306,7 +369,13 @@ export default function MenuPage() {
       setError("");
       setItemErrors({});
       try {
-        const payload = { ...itemForm, name: itemForm.name.trim(), price: Number(itemForm.price) || 0, display_order: Number(itemForm.display_order) || 0 };
+        const payload = {
+          ...itemForm,
+          name: itemForm.name.trim(),
+          price: Number(itemForm.price) || 0,
+          display_order: Number(itemForm.display_order) || 0,
+          option_groups: normalizeOptionGroups(itemForm.option_groups ?? []),
+        };
         if (editingItem) {
           const res = await updateMenuItem(editingItem.ID, payload);
           setItems((current) => current.map((item) => item.ID === res.data.ID ? res.data : item));
@@ -343,6 +412,21 @@ export default function MenuPage() {
       description: item.description,
       is_available: item.is_available,
       display_order: item.display_order,
+      option_groups: (item.option_groups ?? []).map((group) => ({
+        name: group.name,
+        required: group.required,
+        min_select: group.min_select,
+        max_select: group.max_select,
+        display_order: group.display_order,
+        is_active: group.is_active,
+        options: (group.options ?? []).map((option) => ({
+          name: option.name,
+          price_delta: option.price_delta,
+          is_default: option.is_default,
+          display_order: option.display_order,
+          is_active: option.is_active,
+        })),
+      })),
     });
     setDrawerOpen(true);
   };
@@ -358,6 +442,25 @@ export default function MenuPage() {
     setDrawerOpen(false);
     setEditingItem(null);
     setItemErrors({});
+  };
+
+  const updateOptionGroups = (updater: (groups: MenuOptionGroupInput[]) => MenuOptionGroupInput[]) => {
+    setItemForm((current) => ({ ...current, option_groups: updater(current.option_groups ?? []) }));
+    setItemErrors((current) => ({ ...current, options: undefined, submit: undefined }));
+  };
+
+  const updateOptionGroup = (groupIndex: number, patch: Partial<MenuOptionGroupInput>) => {
+    updateOptionGroups((groups) => groups.map((group, index) => index === groupIndex ? { ...group, ...patch } : group));
+  };
+
+  const updateOption = (groupIndex: number, optionIndex: number, patch: Partial<MenuOptionGroupInput["options"][number]>) => {
+    updateOptionGroups((groups) => groups.map((group, index) => {
+      if (index !== groupIndex) return group;
+      return {
+        ...group,
+        options: group.options.map((option, currentOptionIndex) => currentOptionIndex === optionIndex ? { ...option, ...patch } : option),
+      };
+    }));
   };
 
   const removeCategory = async (categoryId: number) => {
@@ -663,6 +766,57 @@ export default function MenuPage() {
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
                   <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
                 </label>
+                <div className="rounded-md border border-gray-200 dark:border-gray-800">
+                  <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <div>
+                      <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.optionsTitle}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">{copy.optionsHint}</p>
+                    </div>
+                    <button type="button" onClick={() => updateOptionGroups((groups) => [...groups, emptyOptionGroup()])} className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                      {copy.addOptionGroup}
+                    </button>
+                  </div>
+                  <div className="space-y-3 p-3">
+                    {(itemForm.option_groups ?? []).map((group, groupIndex) => (
+                      <div key={groupIndex} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
+                        <div className="flex items-start justify-between gap-2">
+                          <label className="min-w-0 flex-1">
+                            <span className="mb-1.5 block text-[11px] font-medium text-gray-500">{copy.optionGroupName}</span>
+                            <input value={group.name} onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })} placeholder={copy.optionGroupPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                          </label>
+                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.filter((_, index) => index !== groupIndex))} className="mt-6 h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
+                            {copy.removeOptionGroup}
+                          </button>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <label className="flex h-9 items-center gap-2 rounded-md border border-gray-200 px-3 text-[12px] dark:border-gray-800">
+                            <input type="checkbox" checked={group.required} onChange={(event) => updateOptionGroup(groupIndex, { required: event.target.checked, min_select: event.target.checked ? 1 : 0 })} />
+                            {copy.requiredOption}
+                          </label>
+                          <label>
+                            <span className="sr-only">{copy.maxSelect}</span>
+                            <input type="number" min={1} value={group.max_select || 1} onChange={(event) => updateOptionGroup(groupIndex, { max_select: Number(event.target.value) || 1 })} title={copy.maxSelect} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-900" />
+                          </label>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {group.options.map((option, optionIndex) => (
+                            <div key={optionIndex} className="grid grid-cols-[1fr_88px_auto] gap-2">
+                              <input value={option.name} onChange={(event) => updateOption(groupIndex, optionIndex, { name: event.target.value })} placeholder={copy.optionNamePlaceholder} className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                              <input type="number" min={0} value={option.price_delta || ""} onChange={(event) => updateOption(groupIndex, optionIndex, { price_delta: Number(event.target.value) || 0 })} placeholder={copy.optionPrice} className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-900" />
+                              <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: currentGroup.options.filter((_, currentOptionIndex) => currentOptionIndex !== optionIndex) } : currentGroup))} className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
+                                {copy.removeOption}
+                              </button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: [...currentGroup.options, { name: "", price_delta: 0, is_default: false, display_order: currentGroup.options.length, is_active: true }] } : currentGroup))} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                            {copy.addOption}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {itemErrors.options && <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.options}</p>}
+                  </div>
+                </div>
                 <label className="flex min-h-9 items-center gap-2 text-[12px]">
                   <input type="checkbox" checked={itemForm.is_available} onChange={(event) => setItemForm({ ...itemForm, is_available: event.target.checked })} />
                   {copy.availableInStaffView}

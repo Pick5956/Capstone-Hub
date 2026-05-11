@@ -48,6 +48,7 @@ func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, 
 		Preload("Table").
 		Preload("Staff").
 		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
 		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
 		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") }).
 		Where("restaurant_id = ? AND id = ?", restaurantID, orderID).
@@ -72,7 +73,7 @@ func (r *OrderRepository) FindOpenOrderByTable(restaurantID, tableID uint) (*ent
 
 func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
 	var orders []entity.Order
-	query := r.db.Preload("Table").Preload("Items").Where("restaurant_id = ?", restaurantID)
+	query := r.db.Preload("Table").Preload("Items").Preload("Items.SelectedOptions").Where("restaurant_id = ?", restaurantID)
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -89,6 +90,10 @@ func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID u
 
 func (r *OrderRepository) CreateItem(item *entity.OrderItem) error {
 	return r.db.Create(item).Error
+}
+
+func (r *OrderRepository) CreateItemOption(option *entity.OrderItemOption) error {
+	return r.db.Create(option).Error
 }
 
 func (r *OrderRepository) SaveItem(item *entity.OrderItem) error {
@@ -133,7 +138,11 @@ func (r *OrderRepository) FindRestaurant(restaurantID uint) (*entity.Restaurant,
 
 func (r *OrderRepository) FindMenuItem(restaurantID, menuID uint) (*entity.MenuItem, error) {
 	var item entity.MenuItem
-	err := r.db.Where("restaurant_id = ? AND id = ?", restaurantID, menuID).First(&item).Error
+	err := r.db.
+		Preload("OptionGroups", "is_active = ?", true).
+		Preload("OptionGroups.Options", "is_active = ?", true).
+		Where("restaurant_id = ? AND id = ?", restaurantID, menuID).
+		First(&item).Error
 	if err != nil {
 		return nil, err
 	}
@@ -158,6 +167,7 @@ func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error
 	err := r.db.
 		Preload("Table").
 		Preload("Items", "status IN ?", []string{entity.OrderItemStatusCooking, entity.OrderItemStatusReady}).
+		Preload("Items.SelectedOptions").
 		Where("restaurant_id = ? AND status IN ?", restaurantID, []string{entity.OrderStatusSentToKitchen, entity.OrderStatusCooking, entity.OrderStatusReady}).
 		Order("opened_at asc, id asc").
 		Find(&orders).Error

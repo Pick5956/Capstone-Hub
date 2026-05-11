@@ -23,13 +23,32 @@ type CategoryRequest struct {
 }
 
 type MenuItemRequest struct {
-	CategoryID   uint    `json:"category_id" binding:"required"`
-	Name         string  `json:"name" binding:"required"`
-	Price        float64 `json:"price"`
-	ImageURL     string  `json:"image_url"`
-	Description  string  `json:"description"`
-	IsAvailable  *bool   `json:"is_available"`
+	CategoryID   uint                     `json:"category_id" binding:"required"`
+	Name         string                   `json:"name" binding:"required"`
+	Price        float64                  `json:"price"`
+	ImageURL     string                   `json:"image_url"`
+	Description  string                   `json:"description"`
+	IsAvailable  *bool                    `json:"is_available"`
+	DisplayOrder int                      `json:"display_order"`
+	OptionGroups []MenuOptionGroupRequest `json:"option_groups"`
+}
+
+type MenuOptionGroupRequest struct {
+	Name         string              `json:"name"`
+	Required     bool                `json:"required"`
+	MinSelect    int                 `json:"min_select"`
+	MaxSelect    int                 `json:"max_select"`
+	DisplayOrder int                 `json:"display_order"`
+	IsActive     *bool               `json:"is_active"`
+	Options      []MenuOptionRequest `json:"options"`
+}
+
+type MenuOptionRequest struct {
+	Name         string  `json:"name"`
+	PriceDelta   float64 `json:"price_delta"`
+	IsDefault    bool    `json:"is_default"`
 	DisplayOrder int     `json:"display_order"`
+	IsActive     *bool   `json:"is_active"`
 }
 
 func (s *MenuService) ListCategories(restaurantID uint, includeInactive bool) ([]entity.Category, error) {
@@ -115,6 +134,13 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	if err := s.repo.CreateMenuItem(item); err != nil {
 		return nil, err
 	}
+	groups, err := normalizeMenuOptionGroups(restaurantID, item.ID, req.OptionGroups)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.ReplaceMenuOptions(item, groups); err != nil {
+		return nil, err
+	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
@@ -145,6 +171,13 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	if err := s.repo.UpdateMenuItem(item); err != nil {
 		return nil, err
 	}
+	groups, err := normalizeMenuOptionGroups(restaurantID, item.ID, req.OptionGroups)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.ReplaceMenuOptions(item, groups); err != nil {
+		return nil, err
+	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
@@ -154,4 +187,69 @@ func (s *MenuService) DeleteMenuItem(restaurantID, itemID uint) error {
 		return err
 	}
 	return s.repo.DeleteMenuItem(item)
+}
+
+func normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOptionGroupRequest) ([]entity.MenuOptionGroup, error) {
+	groups := make([]entity.MenuOptionGroup, 0, len(requests))
+	for _, req := range requests {
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			continue
+		}
+		minSelect := req.MinSelect
+		maxSelect := req.MaxSelect
+		if req.Required && minSelect < 1 {
+			minSelect = 1
+		}
+		if minSelect < 0 {
+			minSelect = 0
+		}
+		if maxSelect < 1 {
+			maxSelect = 1
+		}
+		if maxSelect < minSelect {
+			return nil, errors.New("option max_select must be greater than or equal to min_select")
+		}
+		group := entity.MenuOptionGroup{
+			RestaurantID: restaurantID,
+			MenuItemID:   menuItemID,
+			Name:         name,
+			Required:     req.Required,
+			MinSelect:    minSelect,
+			MaxSelect:    maxSelect,
+			DisplayOrder: req.DisplayOrder,
+			IsActive:     true,
+			Options:      []entity.MenuOption{},
+		}
+		if req.IsActive != nil {
+			group.IsActive = *req.IsActive
+		}
+		for _, optionReq := range req.Options {
+			optionName := strings.TrimSpace(optionReq.Name)
+			if optionName == "" {
+				continue
+			}
+			if optionReq.PriceDelta < 0 {
+				return nil, errors.New("option price must be zero or greater")
+			}
+			option := entity.MenuOption{
+				RestaurantID: restaurantID,
+				MenuItemID:   menuItemID,
+				Name:         optionName,
+				PriceDelta:   optionReq.PriceDelta,
+				IsDefault:    optionReq.IsDefault,
+				DisplayOrder: optionReq.DisplayOrder,
+				IsActive:     true,
+			}
+			if optionReq.IsActive != nil {
+				option.IsActive = *optionReq.IsActive
+			}
+			group.Options = append(group.Options, option)
+		}
+		if len(group.Options) == 0 {
+			return nil, errors.New("option group must have at least one option")
+		}
+		groups = append(groups, group)
+	}
+	return groups, nil
 }
