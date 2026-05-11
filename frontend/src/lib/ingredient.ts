@@ -1,5 +1,14 @@
 import { apiClient } from "./apiClient";
-import type { Ingredient, IngredientInput, IngredientTransaction, AdjustStockInput } from "../types/ingredient";
+import type {
+  AdjustStockInput,
+  Ingredient,
+  IngredientCategory,
+  IngredientInput,
+  IngredientTransaction,
+} from "../types/ingredient";
+
+export const listIngredientCategories = () =>
+  apiClient.get<{ categories: IngredientCategory[] }>("/api/v1/ingredient-categories");
 
 export const listIngredients = () =>
   apiClient.get<{ ingredients: Ingredient[] }>("/api/v1/ingredients");

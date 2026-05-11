@@ -38,6 +38,45 @@ func (ctrl *IngredientController) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ingredients": items})
 }
 
+func (ctrl *IngredientController) ListCategories(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "view_inventory") && !memberCan(c, "manage_inventory") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing inventory permission"})
+		return
+	}
+	items, err := ctrl.svc.ListCategories(restaurantID, memberCan(c, "manage_inventory"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"categories": items})
+}
+
+func (ctrl *IngredientController) CreateCategory(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_inventory") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
+		return
+	}
+	var req service.IngredientCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	category, err := ctrl.svc.CreateCategory(restaurantID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, category)
+}
+
 func (ctrl *IngredientController) Create(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

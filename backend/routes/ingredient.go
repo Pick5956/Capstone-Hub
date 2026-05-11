@@ -10,6 +10,8 @@ import (
 func SetupIngredientRoutes(v1 *gin.RouterGroup) {
 	ingredientCtrl := controller.ProvideIngredientController(config.DB())
 
+	v1.GET("/ingredient-categories", ingredientCtrl.ListCategories)
+	v1.POST("/ingredient-categories", ingredientCtrl.CreateCategory)
 	v1.GET("/ingredients", ingredientCtrl.List)
 	v1.POST("/ingredients", ingredientCtrl.Create)
 	v1.PUT("/ingredients/:id", ingredientCtrl.Update)
