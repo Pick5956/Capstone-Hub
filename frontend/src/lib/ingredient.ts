@@ -10,6 +10,12 @@ import type {
 export const listIngredientCategories = () =>
   apiClient.get<{ categories: IngredientCategory[] }>("/api/v1/ingredient-categories");
 
+export const createIngredientCategory = (data: {
+  name: string;
+  display_order?: number;
+  is_active?: boolean;
+}) => apiClient.post<IngredientCategory>("/api/v1/ingredient-categories", data);
+
 export const listIngredients = () =>
   apiClient.get<{ ingredients: Ingredient[] }>("/api/v1/ingredients");
 

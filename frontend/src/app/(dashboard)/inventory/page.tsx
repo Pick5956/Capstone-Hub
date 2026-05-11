@@ -24,6 +24,7 @@ import { can } from "@/src/lib/rbac";
 import {
   adjustStock,
   createIngredient,
+  createIngredientCategory,
   deleteIngredient,
   listIngredientCategories,
   listIngredients,
@@ -212,6 +213,8 @@ function buildCopy(language: "th" | "en") {
         imageUrl: "ลิงก์รูปภาพ",
         uncategorized: "ยังไม่จัดหมวด",
         noCategories: "ยังไม่มีหมวดวัตถุดิบ",
+        addCategory: "เพิ่มหมวด",
+        categoryName: "ชื่อหมวดหมู่",
         storageTypes: {
           room_temp: "อุณหภูมิห้อง",
           chilled: "แช่เย็น",
@@ -294,6 +297,8 @@ function buildCopy(language: "th" | "en") {
         imageUrl: "Image URL",
         uncategorized: "Uncategorized",
         noCategories: "No ingredient categories yet",
+        addCategory: "Add category",
+        categoryName: "Category name",
         storageTypes: {
           room_temp: "Room temp",
           chilled: "Chilled",
@@ -385,6 +390,10 @@ export default function InventoryPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [categorySubmitting, setCategorySubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
 
@@ -515,6 +524,29 @@ export default function InventoryPage() {
         setSubmitting(false);
       }
     });
+  }
+
+  async function handleCreateCategory() {
+    const name = categoryName.trim();
+    if (!name) {
+      setCategoryError(lang === "th" ? "กรุณาระบุชื่อหมวดหมู่" : "Category name is required");
+      return;
+    }
+
+    setCategoryError("");
+    setCategorySubmitting(true);
+    try {
+      const response = await createIngredientCategory({ name, is_active: true });
+      setCategories((prev) => [...prev, response.data].sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)));
+      setForm((current) => ({ ...current, category_id: response.data.ID }));
+      setCategoryName("");
+      setCategoryModalOpen(false);
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setCategoryError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
+    } finally {
+      setCategorySubmitting(false);
+    }
   }
 
   async function handleDelete() {
@@ -952,7 +984,22 @@ export default function InventoryPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryError("");
+                          setCategoryName("");
+                          setCategoryModalOpen(true);
+                        }}
+                        className="text-xs font-semibold text-orange-600 transition hover:text-orange-500 dark:text-orange-300"
+                      >
+                        {copy.addCategory}
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={form.category_id ?? 0}
                     onChange={(event) =>
@@ -1145,6 +1192,46 @@ export default function InventoryPage() {
                 className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
               >
                 {submitting ? "..." : copy.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {categoryModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950">
+            <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{copy.addCategory}</h2>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.categoryName}</label>
+                <input
+                  type="text"
+                  value={categoryName}
+                  onChange={(event) => setCategoryName(event.target.value)}
+                  className={inputCls}
+                  autoFocus
+                />
+              </div>
+              {categoryError && <p className="text-xs text-red-500">{categoryError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setCategoryModalOpen(false)}
+                className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateCategory}
+                disabled={categorySubmitting}
+                className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+              >
+                {categorySubmitting ? "..." : copy.save}
               </button>
             </div>
           </div>
