@@ -233,7 +233,7 @@ function EmptyRestaurantsState() {
             href="/restaurants/join"
             className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            {language === "th" ? "เปิดลิงก์เชิญ" : "Open invite link"}
+            {language === "th" ? "เข้าร่" : "Open invite link"}
           </Link>
         </div>
       </div>
@@ -398,7 +398,7 @@ export default function RestaurantsPage() {
           />
           <QuickAction
             href="/restaurants/join"
-            title={language === "th" ? "เปิดลิงก์เชิญ" : "Open invite link"}
+            title={language === "th" ? "เข้าร่วมร้าน" : "Join restaurant"}
             description={language === "th"
               ? "สำหรับพนักงานที่ได้รับลิงก์หรือ token คำเชิญจากร้าน"
               : "For staff who received an invitation link or token from a restaurant."}
