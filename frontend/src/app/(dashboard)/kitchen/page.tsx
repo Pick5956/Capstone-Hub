@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
-import type { Order } from "@/src/types/order";
+import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
@@ -42,6 +43,11 @@ function playBeep() {
   oscillator.stop(context.currentTime + 0.18);
 }
 
+function isOrderReady(order: Order) {
+  const items = order.items ?? [];
+  return items.length > 0 && items.every((item) => item.status === "ready");
+}
+
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -52,6 +58,8 @@ export default function KitchenPage() {
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [completingOrderIds, setCompletingOrderIds] = useState<Set<number>>(new Set());
+  const [hiddenReadyOrderIds, setHiddenReadyOrderIds] = useState<Set<number>>(new Set());
   const hasLoadedRef = useRef(false);
   const ticketIdsRef = useRef<Set<number>>(new Set());
 
@@ -68,6 +76,7 @@ export default function KitchenPage() {
         elapsed: "นาที",
         markReady: "พร้อมเสิร์ฟ",
         markAllReady: "พร้อมทั้งออเดอร์",
+        completedTicket: "พร้อมเสิร์ฟทั้งออเดอร์",
         ready: "พร้อมแล้ว",
         cooking: "กำลังทำ",
         sent_to_kitchen: "ส่งเข้าครัว",
@@ -86,6 +95,7 @@ export default function KitchenPage() {
         elapsed: "min",
         markReady: "Mark Ready",
         markAllReady: "Mark all ready",
+        completedTicket: "Order ready",
         ready: "Ready",
         cooking: "Cooking",
         sent_to_kitchen: "Sent",
@@ -93,9 +103,13 @@ export default function KitchenPage() {
         saveError: "Could not update item status.",
       };
 
+  const visibleOrders = useMemo(
+    () => orders.filter((order) => completingOrderIds.has(order.ID) || (!isOrderReady(order) && !hiddenReadyOrderIds.has(order.ID))),
+    [completingOrderIds, hiddenReadyOrderIds, orders],
+  );
   const activeItems = useMemo(
-    () => orders.flatMap((order) => order.items?.map((item) => ({ order, item })) ?? []),
-    [orders],
+    () => visibleOrders.flatMap((order) => order.items?.map((item) => ({ order, item })) ?? []),
+    [visibleOrders],
   );
   const delayedCount = activeItems.filter(({ item, order }) => minutesSince(item.sent_at ?? order.opened_at) >= 10).length;
   const cookingCount = activeItems.filter(({ item }) => item.status === "cooking").length;
@@ -121,6 +135,31 @@ export default function KitchenPage() {
     }
   };
 
+  const completeTicketIfReady = (order: Order) => {
+    if (!isOrderReady(order)) return;
+    setCompletingOrderIds((current) => new Set(current).add(order.ID));
+    window.setTimeout(() => {
+      setCompletingOrderIds((current) => {
+        const next = new Set(current);
+        next.delete(order.ID);
+        return next;
+      });
+      setHiddenReadyOrderIds((current) => new Set(current).add(order.ID));
+      setOrders((current) => current.filter((item) => item.ID !== order.ID));
+    }, 980);
+  };
+
+  const applyReadyResponse = (order: Order, itemId?: number) => {
+    const nextOrder = itemId
+      ? {
+          ...order,
+          items: order.items?.map((item: OrderItem) => item.ID === itemId ? { ...item, status: "ready" as const } : item),
+        }
+      : order;
+    setOrders((current) => current.map((item) => item.ID === nextOrder.ID ? nextOrder : item));
+    completeTicketIfReady(nextOrder);
+  };
+
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 5000);
@@ -132,8 +171,8 @@ export default function KitchenPage() {
     setSubmittingId(itemId);
     setError("");
     try {
-      await updateOrderItemStatus(orderId, itemId, "ready");
-      await load();
+      const res = await updateOrderItemStatus(orderId, itemId, "ready");
+      applyReadyResponse(res.data, itemId);
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
@@ -148,7 +187,10 @@ export default function KitchenPage() {
     setError("");
     try {
       await Promise.all(cookingItems.map((item) => updateOrderItemStatus(order.ID, item.ID, "ready")));
-      await load();
+      applyReadyResponse({
+        ...order,
+        items: order.items?.map((item) => item.status === "cooking" ? { ...item, status: "ready" as const } : item),
+      });
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
@@ -190,15 +232,26 @@ export default function KitchenPage() {
         </div>
       ) : activeItems.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {orders.map((order) => {
+          {visibleOrders.map((order) => {
             const oldestSent = order.items?.reduce<string | null>((oldest, item) => {
               if (!item.sent_at) return oldest;
               if (!oldest || new Date(item.sent_at) < new Date(oldest)) return item.sent_at;
               return oldest;
             }, null);
             const elapsed = minutesSince(oldestSent ?? order.opened_at);
+            const completing = completingOrderIds.has(order.ID);
             return (
-              <article key={order.ID} className={`rounded-md border p-4 ${urgencyClass(elapsed)}`}>
+              <article key={order.ID} className={`relative overflow-hidden rounded-md border p-4 ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
+                {completing && (
+                  <div className="kitchen-ticket-success absolute inset-0 z-20 grid place-items-center bg-emerald-50/95 text-emerald-700 backdrop-blur-[1px] dark:bg-emerald-950/90 dark:text-emerald-200">
+                    <div className="text-center">
+                      <div className="kitchen-success-icon mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 dark:bg-emerald-500 dark:text-emerald-950">
+                        <CheckCircle2 className="h-12 w-12" strokeWidth={2.6} />
+                      </div>
+                      <p className="mt-3 text-[14px] font-semibold">{copy.completedTicket}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{copy.table} {order.table?.table_number ?? order.table_id}</p>

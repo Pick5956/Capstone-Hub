@@ -152,6 +152,50 @@ html[data-font-size="extra-large"] {
   }
 }
 
+@keyframes kitchen-ticket-complete {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+
+  62% {
+    transform: translateY(0) scale(1.01);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-12px) scale(0.98);
+    opacity: 0;
+  }
+}
+
+@keyframes kitchen-ticket-success {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kitchen-success-icon {
+  0% {
+    transform: translateY(10px) scale(0.72) rotate(-8deg);
+    opacity: 0;
+  }
+
+  58% {
+    transform: translateY(-3px) scale(1.08) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
 @keyframes modal-slide-down {
   from {
     opacity: 0;
@@ -205,6 +249,19 @@ html[data-font-size="extra-large"] {
   will-change: transform, opacity;
 }
 
+.kitchen-ticket-complete {
+  animation: kitchen-ticket-complete 980ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+.kitchen-ticket-success {
+  animation: kitchen-ticket-success 180ms ease-out both;
+}
+
+.kitchen-success-icon {
+  animation: kitchen-success-icon 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .ui-press {
   transition-property: transform, box-shadow, background-color, border-color, color, opacity;
   transition-duration: 160ms;
@@ -223,6 +280,9 @@ html[data-font-size="extra-large"] {
   .motion-bottom-sheet,
   .motion-bottom-sheet-exit,
   .motion-drawer,
+  .kitchen-ticket-complete,
+  .kitchen-ticket-success,
+  .kitchen-success-icon,
   .animate-fade-in,
   .animate-slide-down {
     animation: none !important;
