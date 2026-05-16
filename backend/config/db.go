@@ -83,6 +83,9 @@ func SetupDatabase() *gorm.DB {
 		&entity.OrderItemOption{},
 		&entity.OrderPayment{},
 		&entity.OrderStatusLog{},
+		&entity.IngredientCategory{},
+		&entity.Ingredient{},
+		&entity.IngredientTransaction{},
 	)
 	migrateLegacyTableLayout(db)
 	ensureOrderNumberIndex(db)

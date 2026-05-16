@@ -263,7 +263,7 @@ export default function StaffPage() {
         target: "เป้าหมาย",
         noAudit: "ยังไม่มีประวัติในช่วงนี้",
         auditDenied: "เฉพาะเจ้าของร้านหรือผู้จัดการเท่านั้นที่ดู audit log ได้",
-        inviteTitle: "เชิญพนักงาน",
+        inviteTitle: "เพิ่มพนักงาน",
         inviteHint: "เลือกบทบาทแล้วสร้างลิงก์เชิญ จากนั้นคัดลอกหรือเปิดอีเมลเพื่อนำส่งต่อ",
         emailLabel: "อีเมลพนักงาน",
         emailPlaceholder: "staff@example.com หรือเว้นว่าง",
@@ -717,8 +717,8 @@ export default function StaffPage() {
 
         <aside className="space-y-4">
           <form onSubmit={createInvite} className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
+            <div className="border-b border-gray-200 px-4 py-3 dark:border-green-500">
+              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-green-500">{copy.inviteTitle}</h2>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
             </div>
             <div className="space-y-3 p-4">
@@ -772,7 +772,7 @@ export default function StaffPage() {
                 />
               </label>
 
-              <button type="submit" disabled={!allowed || !roleId || submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="submit" disabled={!allowed || !roleId || submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-400 dark:text-gray-950">
                 {submitting ? copy.creating : copy.createLink}
               </button>
             </div>

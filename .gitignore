@@ -1,5 +1,6 @@
 .env
 backend/vendor/
+backend/.gocache/
 
 # Local database/runtime data
 *.db
