@@ -63,6 +63,7 @@ func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasIndex(&entity.User{}, "uni_users_email") {
 		_ = db.Migrator().DropIndex(&entity.User{}, "uni_users_email")
 	}
+	ensureTableZonePrefixIndex(db)
 
 	db.AutoMigrate(
 		&entity.Role{},
@@ -130,16 +131,10 @@ func migrateLegacyTableLayout(db *gorm.DB) {
 
 func findOrCreateLegacyTableZone(db *gorm.DB, restaurantID uint, name string) *entity.TableZone {
 	var existing entity.TableZone
-	if err := db.Where("restaurant_id = ? AND name = ?", restaurantID, name).First(&existing).Error; err == nil {
+	if result := db.Where("restaurant_id = ? AND name = ?", restaurantID, name).Limit(1).Find(&existing); result.Error == nil && result.RowsAffected > 0 {
 		return &existing
 	}
-	prefix := strings.ToUpper(string([]rune(name)[0]))
-	if prefix == "" {
-		prefix = "Z"
-	}
-	if tableZonePrefixExists(db, restaurantID, prefix) {
-		prefix = ""
-	}
+	prefix := nextLegacyTableZonePrefix(db, restaurantID, name)
 	zone := &entity.TableZone{
 		RestaurantID: restaurantID,
 		Name:         name,
@@ -148,12 +143,33 @@ func findOrCreateLegacyTableZone(db *gorm.DB, restaurantID uint, name string) *e
 		IsActive:     true,
 	}
 	if err := db.Create(zone).Error; err != nil {
-		zone.Prefix = ""
-		if err := db.Create(zone).Error; err != nil {
-			return nil
-		}
+		return nil
 	}
 	return zone
+}
+
+func ensureTableZonePrefixIndex(db *gorm.DB) {
+	if db.Migrator().HasIndex(&entity.TableZone{}, "idx_table_zones_restaurant_prefix") {
+		_ = db.Migrator().DropIndex(&entity.TableZone{}, "idx_table_zones_restaurant_prefix")
+	}
+}
+
+func nextLegacyTableZonePrefix(db *gorm.DB, restaurantID uint, name string) string {
+	runes := []rune(strings.TrimSpace(name))
+	prefix := "Z"
+	if len(runes) > 0 {
+		prefix = strings.ToUpper(string(runes[0]))
+	}
+	if !tableZonePrefixExists(db, restaurantID, prefix) {
+		return prefix
+	}
+	for i := 2; i <= 99; i++ {
+		candidate := fmt.Sprintf("%s%d", prefix, i)
+		if !tableZonePrefixExists(db, restaurantID, candidate) {
+			return candidate
+		}
+	}
+	return fmt.Sprintf("Z%d", restaurantID)
 }
 
 func tableZonePrefixExists(db *gorm.DB, restaurantID uint, prefix string) bool {
