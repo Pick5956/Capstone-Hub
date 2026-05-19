@@ -272,6 +272,24 @@ html[data-font-size="extra-large"] {
   transform: translateY(1px) scale(0.99);
 }
 
+.sidebar-nav-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.soft-scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.soft-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .motion-overlay,
   .motion-overlay-exit,

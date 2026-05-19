@@ -30,4 +30,6 @@ func SetupRoutes(r *gin.Engine) {
 	SetupMenuTableRoutes(v1)
 	SetupIngredientRoutes(v1)
 	SetupOrderRoutes(v1)
+	SetupReportRoutes(v1)
+	SetupAIRoutes(v1)
 }

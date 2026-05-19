@@ -28,6 +28,7 @@ db-dumps/
 backups/
 data/
 database/
+docs/
 
 # Personal AI/agent workspace files - local only
 docs/wiki/

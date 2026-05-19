@@ -20,8 +20,28 @@ export interface MenuItem {
   display_order: number;
   category?: Category;
   option_groups?: MenuOptionGroup[];
+  ingredients?: MenuItemIngredient[];
   CreatedAt?: string;
   UpdatedAt?: string;
+}
+
+export interface MenuItemIngredient {
+  ID: number;
+  restaurant_id: number;
+  menu_item_id: number;
+  ingredient_id: number;
+  quantity: number;
+  unit: string;
+  note: string;
+  ingredient?: {
+    ID: number;
+    name: string;
+    unit: string;
+    stock: number;
+    min_stock: number;
+    cost_per_unit: number;
+    yield_percent?: number;
+  };
 }
 
 export interface MenuOptionGroup {
@@ -64,6 +84,14 @@ export interface MenuItemInput {
   is_available: boolean;
   display_order: number;
   option_groups?: MenuOptionGroupInput[];
+  ingredients?: MenuIngredientInput[];
+}
+
+export interface MenuIngredientInput {
+  ingredient_id: number;
+  quantity: number;
+  unit?: string;
+  note?: string;
 }
 
 export interface MenuOptionGroupInput {

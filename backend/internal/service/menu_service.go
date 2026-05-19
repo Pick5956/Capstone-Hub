@@ -31,6 +31,14 @@ type MenuItemRequest struct {
 	IsAvailable  *bool                    `json:"is_available"`
 	DisplayOrder int                      `json:"display_order"`
 	OptionGroups []MenuOptionGroupRequest `json:"option_groups"`
+	Ingredients  []MenuIngredientRequest  `json:"ingredients"`
+}
+
+type MenuIngredientRequest struct {
+	IngredientID uint    `json:"ingredient_id"`
+	Quantity     float64 `json:"quantity"`
+	Unit         string  `json:"unit"`
+	Note         string  `json:"note"`
 }
 
 type MenuOptionGroupRequest struct {
@@ -118,6 +126,10 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	if req.Price < 0 {
 		return nil, errors.New("price must be zero or greater")
 	}
+	components, err := s.normalizeMenuIngredients(restaurantID, 0, req.Ingredients)
+	if err != nil {
+		return nil, err
+	}
 	item := &entity.MenuItem{
 		RestaurantID: restaurantID,
 		CategoryID:   req.CategoryID,
@@ -141,6 +153,9 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	if err := s.repo.ReplaceMenuOptions(item, groups); err != nil {
 		return nil, err
 	}
+	if err := s.repo.ReplaceMenuIngredients(item, components); err != nil {
+		return nil, err
+	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
@@ -159,6 +174,10 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	if req.Price < 0 {
 		return nil, errors.New("price must be zero or greater")
 	}
+	components, err := s.normalizeMenuIngredients(restaurantID, item.ID, req.Ingredients)
+	if err != nil {
+		return nil, err
+	}
 	item.CategoryID = req.CategoryID
 	item.Name = name
 	item.Price = req.Price
@@ -176,6 +195,9 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 		return nil, err
 	}
 	if err := s.repo.ReplaceMenuOptions(item, groups); err != nil {
+		return nil, err
+	}
+	if err := s.repo.ReplaceMenuIngredients(item, components); err != nil {
 		return nil, err
 	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
@@ -252,4 +274,41 @@ func normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOpt
 		groups = append(groups, group)
 	}
 	return groups, nil
+}
+
+func (s *MenuService) normalizeMenuIngredients(restaurantID, menuItemID uint, requests []MenuIngredientRequest) ([]entity.MenuItemIngredient, error) {
+	components := make([]entity.MenuItemIngredient, 0, len(requests))
+	seen := map[uint]bool{}
+	for _, req := range requests {
+		if req.IngredientID == 0 && req.Quantity == 0 {
+			continue
+		}
+		if req.IngredientID == 0 {
+			return nil, errors.New("ingredient is required for recipe component")
+		}
+		if req.Quantity <= 0 {
+			return nil, errors.New("recipe quantity must be greater than zero")
+		}
+		if seen[req.IngredientID] {
+			return nil, errors.New("ingredient can only appear once per menu recipe")
+		}
+		ingredient, err := s.repo.FindIngredient(restaurantID, req.IngredientID)
+		if err != nil {
+			return nil, errors.New("recipe ingredient not found")
+		}
+		unit := strings.TrimSpace(req.Unit)
+		if unit == "" {
+			unit = ingredient.Unit
+		}
+		components = append(components, entity.MenuItemIngredient{
+			RestaurantID: restaurantID,
+			MenuItemID:   menuItemID,
+			IngredientID: req.IngredientID,
+			Quantity:     req.Quantity,
+			Unit:         unit,
+			Note:         strings.TrimSpace(req.Note),
+		})
+		seen[req.IngredientID] = true
+	}
+	return components, nil
 }

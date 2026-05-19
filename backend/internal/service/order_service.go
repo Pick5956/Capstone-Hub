@@ -370,6 +370,9 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 			item.ReadyAt = &now
 		}
 		if next == entity.OrderItemStatusServed {
+			if err := deductInventoryForServedItem(tx, restaurantID, userID, order, item); err != nil {
+				return err
+			}
 			item.ServedAt = &now
 		}
 		if next == entity.OrderItemStatusCancelled {
@@ -719,6 +722,77 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		return setOrderStatus(tx, order, entity.OrderStatusCooking, userID, "items in kitchen")
 	}
 	return nil
+}
+
+func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
+	components, err := tx.ListRecipeComponents(restaurantID, item.MenuID)
+	if err != nil {
+		return err
+	}
+	if len(components) == 0 {
+		return nil
+	}
+	for _, component := range components {
+		required := component.Quantity * float64(item.Quantity)
+		if required <= 0 {
+			continue
+		}
+		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, component.IngredientID)
+		if err != nil {
+			return err
+		}
+		if alreadyDeducted {
+			continue
+		}
+		ingredient, err := tx.FindIngredientForUpdate(restaurantID, component.IngredientID)
+		if err != nil {
+			return err
+		}
+		if ingredient.Stock < required {
+			return fmt.Errorf("%s stock is not enough for %s", ingredient.Name, item.MenuName)
+		}
+		ingredient.Stock -= required
+		if err := tx.SaveIngredient(ingredient); err != nil {
+			return err
+		}
+		cost := recipeComponentCost(required, ingredient.CostPerUnit, ingredient.YieldPercent)
+		deduction := &entity.OrderInventoryDeduction{
+			RestaurantID: restaurantID,
+			OrderID:      order.ID,
+			OrderItemID:  item.ID,
+			MenuItemID:   item.MenuID,
+			IngredientID: ingredient.ID,
+			Quantity:     required,
+			CostSnapshot: cost,
+			Note:         fmt.Sprintf("auto deduction for order %s / %s", order.OrderNumber, item.MenuName),
+			CreatedByID:  userID,
+		}
+		if err := tx.CreateInventoryDeduction(deduction); err != nil {
+			return err
+		}
+		stockTx := &entity.IngredientTransaction{
+			RestaurantID: restaurantID,
+			IngredientID: ingredient.ID,
+			Type:         "out",
+			Quantity:     required,
+			Note:         deduction.Note,
+			CreatedByID:  userID,
+		}
+		if err := tx.CreateIngredientTransaction(stockTx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func recipeComponentCost(quantity, costPerUnit, yieldPercent float64) float64 {
+	if quantity <= 0 || costPerUnit <= 0 {
+		return 0
+	}
+	if yieldPercent <= 0 {
+		yieldPercent = 100
+	}
+	return roundMoney(quantity * costPerUnit / (yieldPercent / 100))
 }
 
 func setOrderStatus(tx *repository.OrderRepository, order *entity.Order, next string, userID uint, note string) error {

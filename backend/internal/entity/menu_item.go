@@ -13,7 +13,21 @@ type MenuItem struct {
 	IsAvailable  bool    `json:"is_available" gorm:"default:true"`
 	DisplayOrder int     `json:"display_order" gorm:"default:0"`
 
-	Restaurant   *Restaurant       `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
-	Category     *Category         `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
-	OptionGroups []MenuOptionGroup `json:"option_groups,omitempty" gorm:"foreignKey:MenuItemID"`
+	Restaurant   *Restaurant          `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
+	Category     *Category            `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	OptionGroups []MenuOptionGroup    `json:"option_groups,omitempty" gorm:"foreignKey:MenuItemID"`
+	Ingredients  []MenuItemIngredient `json:"ingredients,omitempty" gorm:"foreignKey:MenuItemID"`
+}
+
+type MenuItemIngredient struct {
+	gorm.Model
+	RestaurantID uint    `json:"restaurant_id" gorm:"not null;index"`
+	MenuItemID   uint    `json:"menu_item_id" gorm:"not null;index"`
+	IngredientID uint    `json:"ingredient_id" gorm:"not null;index"`
+	Quantity     float64 `json:"quantity" gorm:"not null"`
+	Unit         string  `json:"unit"`
+	Note         string  `json:"note"`
+
+	MenuItem   *MenuItem   `json:"menu_item,omitempty" gorm:"foreignKey:MenuItemID"`
+	Ingredient *Ingredient `json:"ingredient,omitempty" gorm:"foreignKey:IngredientID"`
 }

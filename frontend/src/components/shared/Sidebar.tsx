@@ -7,6 +7,7 @@ import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useTheme } from '@/src/providers/ThemeProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
+import LanguageToggle from '@/src/components/shared/LanguageToggle';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
@@ -42,12 +43,6 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M4 9h16"/><path d="M5 9l1-5h12l1 5"/><path d="M6 9v10a1 1 0 001 1h10a1 1 0 001-1V9"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
         },
         {
-          label: language === 'th' ? 'ติดตามออเดอร์' : 'Order console',
-          href: '/orders',
-          permission: ['view_orders', 'take_order'],
-          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
-        },
-        {
           label: language === 'th' ? 'จอครัว' : 'Kitchen screen',
           href: '/kitchen',
           permission: 'view_kitchen',
@@ -71,10 +66,22 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13M19 7v13M8 20h8"/></svg>,
         },
         {
+          label: language === 'th' ? 'คลังออเดอร์' : 'Order archive',
+          href: '/orders',
+          permission: ['view_orders', 'take_order'],
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
+        },
+        {
           label: language === 'th' ? 'คลังวัตถุดิบ' : 'Inventory',
           href: '/inventory',
           permission: ['manage_inventory', 'view_inventory'],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+        },
+        {
+          label: language === 'th' ? 'AI ผู้ช่วย' : 'AI assistant',
+          href: '/ai-assistant',
+          permission: ['view_reports', 'manage_inventory'],
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M10 17h4"/></svg>,
         },
         {
           label: language === 'th' ? 'พนักงาน' : 'Staff',
@@ -90,7 +97,6 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'รายได้และยอดขาย' : 'Revenue and sales',
           href: '/reports',
-          comingSoon: true,
           permission: 'view_reports',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
         },
@@ -125,16 +131,16 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   };
 
   return (
-    <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4">
+    <nav className="sidebar-nav-scroll flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [@media(max-height:760px)]:space-y-1.5 [@media(max-height:760px)]:py-1.5">
       {nav.map(({ group, items }, groupIndex) => (
         <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
           {!collapsed && group && (
-            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">{group}</p>
+            <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-0.5 [@media(max-height:760px)]:text-[9px]">{group}</p>
           )}
           <div className="space-y-0.5">
             {items.filter((item) => canSee(item.permission)).map(({ label, href, icon, badge, comingSoon }) => {
               const active = !comingSoon && isActive(href);
-              const itemClassName = `relative flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors ${
+              const itemClassName = `relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors [@media(max-height:760px)]:py-1.5 ${
                 active
                   ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300'
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
@@ -203,6 +209,7 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
           {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
         </div>
+        <LanguageCycleButton />
         <ThemeToggle />
         <button
           onClick={logout}
@@ -220,7 +227,7 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div className="shrink-0 border-t border-gray-100 px-4 py-4 dark:border-gray-800">
+    <div className="shrink-0 border-t border-gray-100 px-4 py-3 dark:border-gray-800 [@media(max-height:760px)]:py-2">
       <div className="group flex items-center gap-3 rounded-md px-2 py-2">
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
           {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
@@ -242,6 +249,22 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function LanguageCycleButton({ className = '' }: { className?: string }) {
+  const { language, setLanguage } = useLanguage();
+  const title = language === 'th' ? 'Switch to English' : 'สลับเป็นภาษาไทย';
+
+  return (
+    <button
+      type="button"
+      onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}
+      title={title}
+      className={`shrink-0 rounded-md p-2 text-[11px] font-bold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white ${className}`}
+    >
+      {language.toUpperCase()}
+    </button>
   );
 }
 
@@ -275,6 +298,17 @@ function ThemeToggle({ className = '' }: { className?: string }) {
   );
 }
 
+function DesktopControls() {
+  return (
+    <div className="hidden shrink-0 border-y border-gray-100 px-3 py-2 dark:border-gray-800 lg:block">
+      <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/60">
+        <LanguageToggle className="h-8 border-0 bg-transparent shadow-none dark:bg-transparent" />
+        <ThemeToggle className="h-8 w-8 border-0 bg-transparent p-0 text-gray-600 shadow-none hover:bg-white hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white" />
+      </div>
+    </div>
+  );
+}
+
 function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -301,7 +335,7 @@ function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNav
   }
 
   return (
-    <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
+    <div className="shrink-0 border-b border-gray-100 px-3 py-2.5 dark:border-gray-800 [@media(max-height:760px)]:py-2">
       <Link
         href="/restaurants"
         onClick={onNavigate}
@@ -415,6 +449,7 @@ export default function Sidebar() {
 
         <RestaurantSwitch collapsed={collapsed} />
         <NavLinks collapsed={collapsed} />
+        {!collapsed && <DesktopControls />}
         <UserFooter collapsed={collapsed} />
       </aside>
     </>

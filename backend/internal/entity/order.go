@@ -44,12 +44,13 @@ type Order struct {
 	CancelledReason     string     `json:"cancelled_reason"`
 	Version             int        `json:"version" gorm:"not null;default:1"`
 
-	Restaurant *Restaurant      `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
-	Table      *RestaurantTable `json:"table,omitempty" gorm:"foreignKey:TableID"`
-	Staff      *User            `json:"staff,omitempty" gorm:"foreignKey:StaffID"`
-	Items      []OrderItem      `json:"items,omitempty" gorm:"foreignKey:OrderID"`
-	Payments   []OrderPayment   `json:"payments,omitempty" gorm:"foreignKey:OrderID"`
-	StatusLogs []OrderStatusLog `json:"status_logs,omitempty" gorm:"foreignKey:OrderID"`
+	Restaurant *Restaurant               `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
+	Table      *RestaurantTable          `json:"table,omitempty" gorm:"foreignKey:TableID"`
+	Staff      *User                     `json:"staff,omitempty" gorm:"foreignKey:StaffID"`
+	Items      []OrderItem               `json:"items,omitempty" gorm:"foreignKey:OrderID"`
+	Payments   []OrderPayment            `json:"payments,omitempty" gorm:"foreignKey:OrderID"`
+	StatusLogs []OrderStatusLog          `json:"status_logs,omitempty" gorm:"foreignKey:OrderID"`
+	Deductions []OrderInventoryDeduction `json:"deductions,omitempty" gorm:"foreignKey:OrderID"`
 }
 
 type OrderItem struct {
@@ -69,9 +70,10 @@ type OrderItem struct {
 	ServedAt        *time.Time `json:"served_at"`
 	CancelledReason string     `json:"cancelled_reason"`
 
-	Order           *Order            `json:"order,omitempty" gorm:"foreignKey:OrderID"`
-	Menu            *MenuItem         `json:"menu,omitempty" gorm:"foreignKey:MenuID"`
-	SelectedOptions []OrderItemOption `json:"selected_options,omitempty" gorm:"foreignKey:OrderItemID"`
+	Order           *Order                    `json:"order,omitempty" gorm:"foreignKey:OrderID"`
+	Menu            *MenuItem                 `json:"menu,omitempty" gorm:"foreignKey:MenuID"`
+	SelectedOptions []OrderItemOption         `json:"selected_options,omitempty" gorm:"foreignKey:OrderItemID"`
+	Deductions      []OrderInventoryDeduction `json:"deductions,omitempty" gorm:"foreignKey:OrderItemID"`
 }
 
 type OrderStatusLog struct {
@@ -101,4 +103,22 @@ type OrderPayment struct {
 
 	Order *Order `json:"order,omitempty" gorm:"foreignKey:OrderID"`
 	User  *User  `json:"user,omitempty" gorm:"foreignKey:PaidBy"`
+}
+
+type OrderInventoryDeduction struct {
+	gorm.Model
+	RestaurantID uint    `json:"restaurant_id" gorm:"not null;index"`
+	OrderID      uint    `json:"order_id" gorm:"not null;uniqueIndex:idx_order_deduction_once,priority:1"`
+	OrderItemID  uint    `json:"order_item_id" gorm:"not null;uniqueIndex:idx_order_deduction_once,priority:2"`
+	MenuItemID   uint    `json:"menu_item_id" gorm:"not null;index"`
+	IngredientID uint    `json:"ingredient_id" gorm:"not null;uniqueIndex:idx_order_deduction_once,priority:3"`
+	Quantity     float64 `json:"quantity" gorm:"not null"`
+	CostSnapshot float64 `json:"cost_snapshot" gorm:"not null;default:0"`
+	Note         string  `json:"note"`
+	CreatedByID  uint    `json:"created_by_id"`
+
+	Order      *Order      `json:"order,omitempty" gorm:"foreignKey:OrderID"`
+	OrderItem  *OrderItem  `json:"order_item,omitempty" gorm:"foreignKey:OrderItemID"`
+	Ingredient *Ingredient `json:"ingredient,omitempty" gorm:"foreignKey:IngredientID"`
+	CreatedBy  *User       `json:"created_by,omitempty" gorm:"foreignKey:CreatedByID"`
 }

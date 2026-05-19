@@ -49,6 +49,8 @@ func (r *MenuRepository) ListMenuItems(restaurantID uint, includeUnavailable boo
 	var items []entity.MenuItem
 	query := r.db.
 		Preload("Category").
+		Preload("Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Where("restaurant_id = ?", restaurantID)
@@ -71,6 +73,8 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 	var item entity.MenuItem
 	err := r.db.
 		Preload("Category").
+		Preload("Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Where("restaurant_id = ? AND id = ?", restaurantID, menuItemID).
@@ -118,6 +122,31 @@ func (r *MenuRepository) ReplaceMenuOptions(item *entity.MenuItem, groups []enti
 		}
 		return nil
 	})
+}
+
+func (r *MenuRepository) ReplaceMenuIngredients(item *entity.MenuItem, components []entity.MenuItemIngredient) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuItemIngredient{}).Error; err != nil {
+			return err
+		}
+		for i := range components {
+			components[i].RestaurantID = item.RestaurantID
+			components[i].MenuItemID = item.ID
+			if err := tx.Create(&components[i]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *MenuRepository) FindIngredient(restaurantID, ingredientID uint) (*entity.Ingredient, error) {
+	var ingredient entity.Ingredient
+	err := r.db.Where("restaurant_id = ? AND id = ?", restaurantID, ingredientID).First(&ingredient).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ingredient, nil
 }
 
 func (r *MenuRepository) DeleteMenuItem(item *entity.MenuItem) error {

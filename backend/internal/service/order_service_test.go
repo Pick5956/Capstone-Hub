@@ -30,3 +30,15 @@ func TestCanTransitionItem(t *testing.T) {
 		t.Fatal("served should be terminal for item status")
 	}
 }
+
+func TestRecipeComponentCostUsesYield(t *testing.T) {
+	if got := recipeComponentCost(2, 10, 100); got != 20 {
+		t.Fatalf("recipeComponentCost with full yield = %v, want 20", got)
+	}
+	if got := recipeComponentCost(2, 10, 80); got != 25 {
+		t.Fatalf("recipeComponentCost with 80 percent yield = %v, want 25", got)
+	}
+	if got := recipeComponentCost(2, 10, 0); got != 20 {
+		t.Fatalf("recipeComponentCost with empty yield = %v, want 20", got)
+	}
+}

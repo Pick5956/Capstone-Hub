@@ -1,0 +1,14 @@
+package routes
+
+import (
+	"Project-M/config"
+	"Project-M/internal/controller"
+
+	"github.com/gin-gonic/gin"
+)
+
+func SetupReportRoutes(v1 *gin.RouterGroup) {
+	ctrl := controller.ProvideReportController(config.DB())
+
+	v1.GET("/reports/manager", ctrl.ManagerReport)
+}

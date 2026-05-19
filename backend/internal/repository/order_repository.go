@@ -113,6 +113,48 @@ func (r *OrderRepository) FindItem(restaurantID, orderID, itemID uint) (*entity.
 	return &item, nil
 }
 
+func (r *OrderRepository) ListRecipeComponents(restaurantID, menuItemID uint) ([]entity.MenuItemIngredient, error) {
+	var components []entity.MenuItemIngredient
+	err := r.db.
+		Preload("Ingredient").
+		Where("restaurant_id = ? AND menu_item_id = ?", restaurantID, menuItemID).
+		Order("id asc").
+		Find(&components).Error
+	return components, err
+}
+
+func (r *OrderRepository) FindIngredientForUpdate(restaurantID, ingredientID uint) (*entity.Ingredient, error) {
+	var ingredient entity.Ingredient
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("restaurant_id = ? AND id = ?", restaurantID, ingredientID).
+		First(&ingredient).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ingredient, nil
+}
+
+func (r *OrderRepository) SaveIngredient(ingredient *entity.Ingredient) error {
+	return r.db.Omit(clause.Associations).Save(ingredient).Error
+}
+
+func (r *OrderRepository) CreateIngredientTransaction(tx *entity.IngredientTransaction) error {
+	return r.db.Create(tx).Error
+}
+
+func (r *OrderRepository) HasInventoryDeduction(orderItemID, ingredientID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&entity.OrderInventoryDeduction{}).
+		Where("order_item_id = ? AND ingredient_id = ?", orderItemID, ingredientID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *OrderRepository) CreateInventoryDeduction(deduction *entity.OrderInventoryDeduction) error {
+	return r.db.Create(deduction).Error
+}
+
 func (r *OrderRepository) ListItems(orderID uint) ([]entity.OrderItem, error) {
 	var items []entity.OrderItem
 	err := r.db.Where("order_id = ?", orderID).Order("created_at asc, id asc").Find(&items).Error

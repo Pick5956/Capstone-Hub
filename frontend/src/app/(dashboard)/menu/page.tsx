@@ -5,8 +5,10 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, uploadMenuImage } from "@/src/lib/menu";
+import { listIngredients } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
-import type { Category, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
+import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
+import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -20,6 +22,7 @@ const emptyItem: MenuItemInput = {
   is_available: true,
   display_order: 0,
   option_groups: [],
+  ingredients: [],
 };
 
 const emptyOptionGroup = (): MenuOptionGroupInput => ({
@@ -32,6 +35,22 @@ const emptyOptionGroup = (): MenuOptionGroupInput => ({
   options: [{ name: "", price_delta: 0, is_default: false, display_order: 0, is_active: true }],
 });
 
+const emptyRecipeComponent = (): MenuIngredientInput => ({
+  ingredient_id: 0,
+  quantity: 0,
+  unit: "",
+  note: "",
+});
+
+function recipeCost(components: MenuIngredientInput[], ingredients: Ingredient[]) {
+  return components.reduce((total, component) => {
+    const ingredient = ingredients.find((item) => item.ID === component.ingredient_id);
+    if (!ingredient || component.quantity <= 0) return total;
+    const yieldPercent = ingredient.yield_percent && ingredient.yield_percent > 0 ? ingredient.yield_percent : 100;
+    return total + (component.quantity * ingredient.cost_per_unit) / (yieldPercent / 100);
+  }, 0);
+}
+
 type DeleteTarget =
   | { type: "category"; id: number; name: string }
   | { type: "item"; id: number; name: string };
@@ -43,6 +62,7 @@ export default function MenuPage() {
   const canView = canManage || can(activeMembership, "view_menu");
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [recipeIngredients, setRecipeIngredients] = useState<Ingredient[]>([]);
   const [categoryName, setCategoryName] = useState("");
   const [categoryOrder, setCategoryOrder] = useState("0");
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -158,6 +178,16 @@ export default function MenuPage() {
         removeOptionGroup: "ลบชุด",
         removeOption: "ลบ",
         optionError: "กรอกชื่อชุดตัวเลือกและอย่างน้อย 1 ตัวเลือก หรือปล่อยว่างทั้งชุด",
+        recipeTitle: "สูตรวัตถุดิบ",
+        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกตอนเสิร์ฟ",
+        addRecipeComponent: "เพิ่มวัตถุดิบ",
+        ingredient: "วัตถุดิบ",
+        quantity: "จำนวน",
+        unit: "หน่วย",
+        note: "หมายเหตุ",
+        removeComponent: "ลบ",
+        recipeCost: "ต้นทุน/จาน",
+        noIngredients: "เพิ่มวัตถุดิบในหน้า Inventory ก่อน",
       }
     : {
         permissionDenied: "You do not have permission to view the menu.",
@@ -252,6 +282,16 @@ export default function MenuPage() {
         removeOptionGroup: "Remove group",
         removeOption: "Remove",
         optionError: "Enter an option group name and at least 1 option, or leave the group empty.",
+        recipeTitle: "Recipe ingredients",
+        recipeHint: "Connect this item to stock so serving it deducts inventory and calculates food cost.",
+        addRecipeComponent: "Add ingredient",
+        ingredient: "Ingredient",
+        quantity: "Quantity",
+        unit: "Unit",
+        note: "Note",
+        removeComponent: "Remove",
+        recipeCost: "Cost/portion",
+        noIngredients: "Add ingredients in Inventory first.",
       };
 
   const refresh = async () => {
@@ -259,10 +299,11 @@ export default function MenuPage() {
     setLoading(true);
     setError("");
     try {
-      const [catRes, itemRes] = await Promise.all([listCategories(), listMenuItems()]);
+      const [catRes, itemRes, ingredientRes] = await Promise.all([listCategories(), listMenuItems(), listIngredients()]);
       const nextCategories = catRes.data.categories ?? [];
       setCategories(nextCategories);
       setItems(itemRes.data.menu_items ?? []);
+      setRecipeIngredients(ingredientRes.data.ingredients ?? []);
       setItemForm((current) => current.category_id ? current : { ...current, category_id: nextCategories[0]?.ID ?? 0 });
     } catch {
       setError(copy.loadError);
@@ -317,6 +358,24 @@ export default function MenuPage() {
 
   const validateOptionGroups = (groups: MenuOptionGroupInput[]) => {
     return normalizeOptionGroups(groups).every((group) => group.name && group.options.length && group.max_select >= group.min_select);
+  };
+
+  const normalizeRecipeComponents = (components: MenuIngredientInput[] = []) =>
+    components
+      .map((component) => {
+        const ingredient = recipeIngredients.find((item) => item.ID === component.ingredient_id);
+        return {
+          ingredient_id: Number(component.ingredient_id) || 0,
+          quantity: Number(component.quantity) || 0,
+          unit: (component.unit || ingredient?.unit || "").trim(),
+          note: (component.note || "").trim(),
+        };
+      })
+      .filter((component) => component.ingredient_id && component.quantity > 0);
+
+  const updateRecipeComponents = (updater: (components: MenuIngredientInput[]) => MenuIngredientInput[]) => {
+    setItemForm((current) => ({ ...current, ingredients: updater(current.ingredients ?? []) }));
+    setItemErrors((current) => ({ ...current, submit: undefined }));
   };
 
   const saveCategory = async (event: React.FormEvent) => {
@@ -375,6 +434,7 @@ export default function MenuPage() {
           price: Number(itemForm.price) || 0,
           display_order: Number(itemForm.display_order) || 0,
           option_groups: normalizeOptionGroups(itemForm.option_groups ?? []),
+          ingredients: normalizeRecipeComponents(itemForm.ingredients ?? []),
         };
         if (editingItem) {
           const res = await updateMenuItem(editingItem.ID, payload);
@@ -426,6 +486,12 @@ export default function MenuPage() {
           display_order: option.display_order,
           is_active: option.is_active,
         })),
+      })),
+      ingredients: (item.ingredients ?? []).map((component) => ({
+        ingredient_id: component.ingredient_id,
+        quantity: component.quantity,
+        unit: component.unit || component.ingredient?.unit || "",
+        note: component.note || "",
       })),
     });
     setDrawerOpen(true);
@@ -625,6 +691,11 @@ export default function MenuPage() {
                       <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                        {item.ingredients?.length ? (
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            {copy.recipeCost}: {new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", { style: "currency", currency: "THB", maximumFractionDigits: 2 }).format(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients))}
+                          </p>
+                        ) : null}
                         <div className="mt-2">
                           <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
                             {item.is_available ? copy.available : copy.unavailable}
@@ -815,6 +886,78 @@ export default function MenuPage() {
                       </div>
                     ))}
                     {itemErrors.options && <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.options}</p>}
+                  </div>
+                </div>
+                <div className="rounded-md border border-gray-200 dark:border-gray-800">
+                  <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <div>
+                      <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.recipeTitle}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">{copy.recipeHint}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!recipeIngredients.length}
+                      onClick={() => updateRecipeComponents((components) => [...components, emptyRecipeComponent()])}
+                      className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                    >
+                      {copy.addRecipeComponent}
+                    </button>
+                  </div>
+                  <div className="space-y-3 p-3">
+                    {!recipeIngredients.length && (
+                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{copy.noIngredients}</p>
+                    )}
+                    {(itemForm.ingredients ?? []).map((component, componentIndex) => {
+                      const selectedIngredient = recipeIngredients.find((ingredient) => ingredient.ID === component.ingredient_id);
+                      return (
+                        <div key={componentIndex} className="grid gap-2 rounded-md border border-gray-200 p-2 dark:border-gray-800">
+                          <ThemedSelect
+                            value={String(component.ingredient_id || 0)}
+                            onChange={(next) => {
+                              const ingredient = recipeIngredients.find((item) => item.ID === Number(next));
+                              updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, ingredient_id: Number(next), unit: ingredient?.unit ?? current.unit } : current));
+                            }}
+                            options={[{ value: "0", label: copy.ingredient }, ...recipeIngredients.map((ingredient) => ({ value: String(ingredient.ID), label: `${ingredient.name} (${ingredient.unit})` }))]}
+                          />
+                          <div className="grid grid-cols-[1fr_80px_auto] gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={component.quantity || ""}
+                              onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
+                              placeholder={copy.quantity}
+                              className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
+                            />
+                            <input
+                              value={component.unit || selectedIngredient?.unit || ""}
+                              onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, unit: event.target.value } : current))}
+                              placeholder={copy.unit}
+                              className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-900"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateRecipeComponents((components) => components.filter((_, index) => index !== componentIndex))}
+                              className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20"
+                            >
+                              {copy.removeComponent}
+                            </button>
+                          </div>
+                          <input
+                            value={component.note || ""}
+                            onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, note: event.target.value } : current))}
+                            placeholder={copy.note}
+                            className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-900"
+                          />
+                        </div>
+                      );
+                    })}
+                    <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-[12px] dark:bg-gray-900">
+                      <span className="font-medium text-gray-500 dark:text-gray-400">{copy.recipeCost}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", { style: "currency", currency: "THB", maximumFractionDigits: 2 }).format(recipeCost(itemForm.ingredients ?? [], recipeIngredients))}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <label className="flex min-h-9 items-center gap-2 text-[12px]">
