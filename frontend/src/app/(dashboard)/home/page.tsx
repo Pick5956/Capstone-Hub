@@ -349,10 +349,10 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-3 py-4 text-gray-900 dark:bg-[linear-gradient(180deg,#020617_0%,#030712_100%)] dark:text-gray-100 sm:px-5 lg:px-7">
-      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4">
-        <header className="rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
-          <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+      <div className="flex w-full flex-col gap-4">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex w-full flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -394,17 +394,18 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </header>
 
-          <div className="grid border-t border-gray-200 dark:border-gray-800 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-4">
             {[
               { icon: AlertTriangle, label: copy.kitchenDelayed, value: delayed.length, helper: copy.kitchenDelayedHelp, tone: "text-red-600 dark:text-red-300" },
               { icon: LayoutGrid, label: copy.activeTables, value: `${occupied.length}/${tables.length}`, helper: `${guestCount} ${copy.activeTablesHelp}`, tone: "text-amber-600 dark:text-amber-300" },
               { icon: CheckCircle2, label: copy.readyToServe, value: ready.length, helper: copy.readyToServeHelp, tone: "text-emerald-600 dark:text-emerald-300" },
               { icon: Wallet, label: copy.shiftRevenue, value: formatCurrency(shiftRevenue, language), helper: `${copy.shiftRevenueHelp} ${formatCurrency(avgTicket, language)}`, tone: "text-gray-950 dark:text-white" },
-            ].map((stat, index) => {
+            ].map((stat) => {
               const Icon = stat.icon;
               return (
-                <div key={stat.label} className={`px-4 py-3 ${index > 0 ? "border-t border-gray-200 dark:border-gray-800 md:border-l md:border-t-0" : ""}`}>
+                <div key={stat.label} className="rounded-md border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
                   <div className="flex items-start gap-3">
                     <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-300">
                       <Icon className="h-4 w-4" />
@@ -419,7 +420,6 @@ export default function Home() {
               );
             })}
           </div>
-        </header>
 
         <main className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(330px,0.8fr)]">
           <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">

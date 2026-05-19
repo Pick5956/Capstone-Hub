@@ -15,8 +15,19 @@ type MenuItem struct {
 
 	Restaurant   *Restaurant          `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 	Category     *Category            `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+	Categories   []MenuItemCategory   `json:"categories,omitempty" gorm:"foreignKey:MenuItemID"`
 	OptionGroups []MenuOptionGroup    `json:"option_groups,omitempty" gorm:"foreignKey:MenuItemID"`
 	Ingredients  []MenuItemIngredient `json:"ingredients,omitempty" gorm:"foreignKey:MenuItemID"`
+}
+
+type MenuItemCategory struct {
+	gorm.Model
+	RestaurantID uint `json:"restaurant_id" gorm:"not null;index"`
+	MenuItemID   uint `json:"menu_item_id" gorm:"not null;uniqueIndex:idx_menu_item_category_unique,priority:1"`
+	CategoryID   uint `json:"category_id" gorm:"not null;uniqueIndex:idx_menu_item_category_unique,priority:2"`
+
+	MenuItem *MenuItem `json:"menu_item,omitempty" gorm:"foreignKey:MenuItemID"`
+	Category *Category `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
 }
 
 type MenuItemIngredient struct {

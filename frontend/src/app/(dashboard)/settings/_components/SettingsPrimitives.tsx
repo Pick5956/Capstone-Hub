@@ -24,7 +24,7 @@ export function SettingsShell({
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
-        <div className="mx-auto flex min-h-16 w-full max-w-screen-2xl items-center justify-between gap-3 px-3 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {backLabel ? (
@@ -41,7 +41,7 @@ export function SettingsShell({
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-screen-2xl px-3 py-4 sm:px-6 lg:px-8">
+      <main className="w-full px-4 py-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

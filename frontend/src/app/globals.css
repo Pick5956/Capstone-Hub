@@ -328,6 +328,18 @@ input::-ms-clear {
   display: none;
 }
 
+/* Hide native number spinners. They render poorly in dark mode and clash with custom input styling. */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 select {
   color: inherit;
 }

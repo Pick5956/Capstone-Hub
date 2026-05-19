@@ -15,6 +15,7 @@ import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
 const emptyItem: MenuItemInput = {
   category_id: 0,
+  category_ids: [],
   name: "",
   price: 0,
   image_url: "",
@@ -51,6 +52,15 @@ function recipeCost(components: MenuIngredientInput[], ingredients: Ingredient[]
   }, 0);
 }
 
+function menuCategoryIds(item: MenuItem) {
+  const ids = new Set<number>();
+  if (item.category_id) ids.add(item.category_id);
+  for (const link of item.categories ?? []) {
+    if (link.category_id) ids.add(link.category_id);
+  }
+  return Array.from(ids);
+}
+
 type DeleteTarget =
   | { type: "category"; id: number; name: string }
   | { type: "item"; id: number; name: string };
@@ -65,6 +75,9 @@ export default function MenuPage() {
   const [recipeIngredients, setRecipeIngredients] = useState<Ingredient[]>([]);
   const [categoryName, setCategoryName] = useState("");
   const [categoryOrder, setCategoryOrder] = useState("0");
+  const [inlineCategoryName, setInlineCategoryName] = useState("");
+  const [inlineCategorySaving, setInlineCategorySaving] = useState(false);
+  const [inlineCategoryError, setInlineCategoryError] = useState("");
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [itemForm, setItemForm] = useState<MenuItemInput>(emptyItem);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -145,6 +158,10 @@ export default function MenuPage() {
         editItem: "แก้เมนู",
         addItem: "เพิ่มเมนู",
         itemCategory: "หมวดหมู่เมนู",
+        itemCategories: "หมวดหมู่เมนู",
+        addInlineCategory: "สร้างหมวดใหม่",
+        inlineCategoryPlaceholder: "ชื่อหมวดใหม่",
+        noCategorySelected: "เลือกอย่างน้อย 1 หมวด",
         createCategoryFirst: "สร้างหมวดหมู่ก่อนเพิ่มเมนู",
         createCategoryHint: "เพิ่มหมวดหมู่ เช่น อาหารจานเดียว / เครื่องดื่ม ก่อน แล้วค่อยเพิ่มเมนูในหมวดนั้น",
         itemName: "ชื่อเมนู",
@@ -249,6 +266,10 @@ export default function MenuPage() {
         editItem: "Edit menu item",
         addItem: "Add menu item",
         itemCategory: "Menu category",
+        itemCategories: "Menu categories",
+        addInlineCategory: "Create category",
+        inlineCategoryPlaceholder: "New category name",
+        noCategorySelected: "Choose at least 1 category",
         createCategoryFirst: "Create a category before adding a menu item",
         createCategoryHint: "Add a category such as Main dishes or Drinks first, then add menu items to it.",
         itemName: "Menu item name",
@@ -304,7 +325,11 @@ export default function MenuPage() {
       setCategories(nextCategories);
       setItems(itemRes.data.menu_items ?? []);
       setRecipeIngredients(ingredientRes.data.ingredients ?? []);
-      setItemForm((current) => current.category_id ? current : { ...current, category_id: nextCategories[0]?.ID ?? 0 });
+      setItemForm((current) => {
+        if (current.category_id || current.category_ids?.length) return current;
+        const firstID = nextCategories[0]?.ID ?? 0;
+        return { ...current, category_id: firstID, category_ids: firstID ? [firstID] : [] };
+      });
     } catch {
       setError(copy.loadError);
     } finally {
@@ -320,7 +345,7 @@ export default function MenuPage() {
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return items.filter((item) => {
-      const categoryMatch = !filterCategory || item.category_id === filterCategory;
+      const categoryMatch = !filterCategory || menuCategoryIds(item).includes(filterCategory);
       const searchMatch = !keyword || item.name.toLowerCase().includes(keyword) || item.description.toLowerCase().includes(keyword);
       return categoryMatch && searchMatch;
     });
@@ -328,7 +353,7 @@ export default function MenuPage() {
 
   const categoryCounts = useMemo(() => {
     return categories.reduce<Record<number, number>>((acc, category) => {
-      acc[category.ID] = items.filter((item) => item.category_id === category.ID).length;
+      acc[category.ID] = items.filter((item) => menuCategoryIds(item).includes(category.ID)).length;
       return acc;
     }, {});
   }, [categories, items]);
@@ -373,9 +398,53 @@ export default function MenuPage() {
       })
       .filter((component) => component.ingredient_id && component.quantity > 0);
 
+  const selectedCategoryIds = itemForm.category_ids?.length
+    ? itemForm.category_ids
+    : itemForm.category_id
+      ? [itemForm.category_id]
+      : [];
+
+  const setSelectedCategoryIds = (ids: number[]) => {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    setItemForm((current) => ({ ...current, category_id: unique[0] ?? 0, category_ids: unique }));
+    setItemErrors((current) => ({ ...current, category: undefined, submit: undefined }));
+  };
+
+  const toggleSelectedCategory = (categoryId: number) => {
+    setSelectedCategoryIds(
+      selectedCategoryIds.includes(categoryId)
+        ? selectedCategoryIds.filter((id) => id !== categoryId)
+        : [...selectedCategoryIds, categoryId]
+    );
+  };
+
   const updateRecipeComponents = (updater: (components: MenuIngredientInput[]) => MenuIngredientInput[]) => {
     setItemForm((current) => ({ ...current, ingredients: updater(current.ingredients ?? []) }));
     setItemErrors((current) => ({ ...current, submit: undefined }));
+  };
+
+  const createInlineCategory = async () => {
+    const name = inlineCategoryName.trim();
+    if (!name) {
+      setInlineCategoryError(copy.categoryRequired);
+      return;
+    }
+    setInlineCategorySaving(true);
+    setInlineCategoryError("");
+    try {
+      const res = await createCategory({
+        name,
+        display_order: categories.length,
+        is_active: true,
+      });
+      setCategories((current) => [...current, res.data]);
+      setSelectedCategoryIds([...selectedCategoryIds, res.data.ID]);
+      setInlineCategoryName("");
+    } catch {
+      setInlineCategoryError(copy.categorySaveError);
+    } finally {
+      setInlineCategorySaving(false);
+    }
   };
 
   const saveCategory = async (event: React.FormEvent) => {
@@ -398,7 +467,7 @@ export default function MenuPage() {
         } else {
           const res = await createCategory(payload);
           setCategories((current) => [...current, res.data]);
-          if (!itemForm.category_id) setItemForm((current) => ({ ...current, category_id: res.data.ID }));
+          if (!itemForm.category_id && !itemForm.category_ids?.length) setItemForm((current) => ({ ...current, category_id: res.data.ID, category_ids: [res.data.ID] }));
         }
         setCategoryName("");
         setCategoryOrder("0");
@@ -415,7 +484,7 @@ export default function MenuPage() {
     event.preventDefault();
     if (!canManage) return;
     const nextItemErrors = {
-      category: itemForm.category_id ? undefined : copy.itemCategoryRequired,
+      category: selectedCategoryIds.length ? undefined : copy.itemCategoryRequired,
       name: itemForm.name.trim() ? undefined : copy.itemNameRequired,
       options: validateOptionGroups(itemForm.option_groups ?? []) ? undefined : copy.optionError,
     };
@@ -431,6 +500,8 @@ export default function MenuPage() {
         const payload = {
           ...itemForm,
           name: itemForm.name.trim(),
+          category_id: selectedCategoryIds[0],
+          category_ids: selectedCategoryIds,
           price: Number(itemForm.price) || 0,
           display_order: Number(itemForm.display_order) || 0,
           option_groups: normalizeOptionGroups(itemForm.option_groups ?? []),
@@ -444,7 +515,8 @@ export default function MenuPage() {
           setItems((current) => [...current, res.data]);
         }
         setEditingItem(null);
-        setItemForm({ ...emptyItem, category_id: categories[0]?.ID ?? 0 });
+        const firstID = categories[0]?.ID ?? 0;
+        setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
         setDrawerOpen(false);
       } catch {
         setItemErrors({ submit: copy.itemSaveError });
@@ -466,6 +538,7 @@ export default function MenuPage() {
     setItemErrors({});
     setItemForm({
       category_id: item.category_id,
+      category_ids: menuCategoryIds(item),
       name: item.name,
       price: item.price,
       image_url: item.image_url,
@@ -500,7 +573,10 @@ export default function MenuPage() {
   const startCreateItem = () => {
     setEditingItem(null);
     setItemErrors({});
-    setItemForm({ ...emptyItem, category_id: filterCategory || categories[0]?.ID || 0 });
+    const firstID = filterCategory || categories[0]?.ID || 0;
+    setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
+    setInlineCategoryName("");
+    setInlineCategoryError("");
     setDrawerOpen(true);
   };
 
@@ -691,6 +767,17 @@ export default function MenuPage() {
                       <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {menuCategoryIds(item).slice(0, 3).map((categoryId) => {
+                            const category = categories.find((cat) => cat.ID === categoryId);
+                            if (!category) return null;
+                            return (
+                              <span key={categoryId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                                {category.name}
+                              </span>
+                            );
+                          })}
+                        </div>
                         {item.ingredients?.length ? (
                           <p className="mt-1 text-[11px] text-gray-400">
                             {copy.recipeCost}: {new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", { style: "currency", currency: "THB", maximumFractionDigits: 2 }).format(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients))}
@@ -790,19 +877,65 @@ export default function MenuPage() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <div className="space-y-4">
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategory}</span>
-                  <ThemedSelect
-                    value={String(itemForm.category_id)}
-                    onChange={(next) => {
-                      setItemForm({ ...itemForm, category_id: Number(next) });
-                      setItemErrors((current) => ({ ...current, category: undefined, submit: undefined }));
-                    }}
-                    disabled={!categories.length}
-                    options={categories.length ? categories.map((cat) => ({ value: String(cat.ID), label: cat.name })) : [{ value: "0", label: copy.createCategoryFirst }]}
-                  />
-                  {itemErrors.category && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category}</p>}
-                </label>
+                <div className="rounded-md border border-gray-200 dark:border-gray-800">
+                  <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                    <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategories}</span>
+                  </div>
+                  <div className="space-y-3 p-3">
+                    {categories.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {categories.map((category) => {
+                          const selected = selectedCategoryIds.includes(category.ID);
+                          return (
+                            <button
+                              key={category.ID}
+                              type="button"
+                              onClick={() => toggleSelectedCategory(category.ID)}
+                              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors ${
+                                selected
+                                  ? "border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500/20 dark:border-orange-500 dark:bg-orange-950/50 dark:text-orange-200 dark:ring-orange-400/20"
+                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-orange-50/70 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-orange-950/30 dark:hover:text-orange-200"
+                              }`}
+                            >
+                              {selected && <span className="h-1.5 w-1.5 rounded-full bg-orange-500 dark:bg-orange-300" />}
+                              {category.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{copy.createCategoryFirst}</p>
+                    )}
+                    <div className="grid grid-cols-[1fr_auto] gap-2 rounded-md bg-gray-50 p-2 dark:bg-gray-900/70">
+                      <input
+                        value={inlineCategoryName}
+                        onChange={(event) => {
+                          setInlineCategoryName(event.target.value);
+                          setInlineCategoryError("");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void createInlineCategory();
+                          }
+                        }}
+                        placeholder={copy.inlineCategoryPlaceholder}
+                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-950"
+                      />
+                      <button
+                        type="button"
+                        disabled={inlineCategorySaving || !inlineCategoryName.trim()}
+                        onClick={createInlineCategory}
+                        className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 hover:border-orange-300 hover:text-orange-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                      >
+                        {inlineCategorySaving ? "..." : copy.createCategory}
+                      </button>
+                    </div>
+                    {(itemErrors.category || inlineCategoryError) && (
+                      <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.category || inlineCategoryError}</p>
+                    )}
+                  </div>
+                </div>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
                   <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />

@@ -49,17 +49,25 @@ func (r *MenuRepository) ListMenuItems(restaurantID uint, includeUnavailable boo
 	var items []entity.MenuItem
 	query := r.db.
 		Preload("Category").
+		Preload("Categories", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("Categories.Category").
 		Preload("Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
 		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Where("restaurant_id = ?", restaurantID)
 	if !includeUnavailable {
+		activeCategoryIDs := r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true)
+		activeLinkedMenuIDs := r.db.Table("menu_item_categories").
+			Select("menu_item_categories.menu_item_id").
+			Joins("JOIN categories ON categories.id = menu_item_categories.category_id").
+			Where("menu_item_categories.restaurant_id = ? AND categories.is_active = ?", restaurantID, true)
 		query = query.Where("is_available = ?", true).
-			Where("category_id IN (?)", r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true))
+			Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs)
 	}
 	if categoryID != 0 {
-		query = query.Where("category_id = ?", categoryID)
+		linkedMenuIDs := r.db.Model(&entity.MenuItemCategory{}).Select("menu_item_id").Where("restaurant_id = ? AND category_id = ?", restaurantID, categoryID)
+		query = query.Where("(category_id = ? OR id IN (?))", categoryID, linkedMenuIDs)
 	}
 	err := query.Order("display_order asc, id asc").Find(&items).Error
 	return items, err
@@ -73,6 +81,8 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 	var item entity.MenuItem
 	err := r.db.
 		Preload("Category").
+		Preload("Categories", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("Categories.Category").
 		Preload("Ingredients", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
 		Preload("Ingredients.Ingredient").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
@@ -133,6 +143,22 @@ func (r *MenuRepository) ReplaceMenuIngredients(item *entity.MenuItem, component
 			components[i].RestaurantID = item.RestaurantID
 			components[i].MenuItemID = item.ID
 			if err := tx.Create(&components[i]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *MenuRepository) ReplaceMenuCategories(item *entity.MenuItem, categories []entity.MenuItemCategory) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuItemCategory{}).Error; err != nil {
+			return err
+		}
+		for i := range categories {
+			categories[i].RestaurantID = item.RestaurantID
+			categories[i].MenuItemID = item.ID
+			if err := tx.Create(&categories[i]).Error; err != nil {
 				return err
 			}
 		}

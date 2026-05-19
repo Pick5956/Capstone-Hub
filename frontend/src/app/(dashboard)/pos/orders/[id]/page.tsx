@@ -16,6 +16,15 @@ import { Skeleton } from "@/src/components/shared/Skeleton";
 
 const terminalStatuses = ["completed", "cancelled"];
 
+function menuCategoryIds(item: MenuItem) {
+  const ids = new Set<number>();
+  if (item.category_id) ids.add(item.category_id);
+  for (const link of item.categories ?? []) {
+    if (link.category_id) ids.add(link.category_id);
+  }
+  return Array.from(ids);
+}
+
 function playBeep(frequency = 880) {
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) return;
@@ -170,7 +179,7 @@ export default function PosOrderDetailPage() {
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return menuItems.filter((item) => {
-      if (categoryId !== "all" && item.category_id !== categoryId) return false;
+      if (categoryId !== "all" && !menuCategoryIds(item).includes(categoryId)) return false;
       if (keyword && !item.name.toLowerCase().includes(keyword)) return false;
       return item.is_available;
     });

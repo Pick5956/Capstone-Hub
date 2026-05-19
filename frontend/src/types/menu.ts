@@ -19,10 +19,19 @@ export interface MenuItem {
   is_available: boolean;
   display_order: number;
   category?: Category;
+  categories?: MenuItemCategory[];
   option_groups?: MenuOptionGroup[];
   ingredients?: MenuItemIngredient[];
   CreatedAt?: string;
   UpdatedAt?: string;
+}
+
+export interface MenuItemCategory {
+  ID: number;
+  restaurant_id: number;
+  menu_item_id: number;
+  category_id: number;
+  category?: Category;
 }
 
 export interface MenuItemIngredient {
@@ -77,6 +86,7 @@ export interface CategoryInput {
 
 export interface MenuItemInput {
   category_id: number;
+  category_ids?: number[];
   name: string;
   price: number;
   image_url?: string;

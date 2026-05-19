@@ -134,7 +134,7 @@ export default function AIAssistantPage() {
 
   if (!canUseAI) {
     return (
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
+      <main className="flex w-full flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <section className="rounded-md border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-950">
           <Bot className="mx-auto h-10 w-10 text-gray-400" />
           <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">{copy.permissionDenied}</h1>
@@ -149,7 +149,7 @@ export default function AIAssistantPage() {
   const inventorySummary = snapshot?.inventory_summary;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="flex w-full flex-1 flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
       <header className="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-gray-800 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>

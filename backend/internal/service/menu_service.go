@@ -23,7 +23,8 @@ type CategoryRequest struct {
 }
 
 type MenuItemRequest struct {
-	CategoryID   uint                     `json:"category_id" binding:"required"`
+	CategoryID   uint                     `json:"category_id"`
+	CategoryIDs  []uint                   `json:"category_ids"`
 	Name         string                   `json:"name" binding:"required"`
 	Price        float64                  `json:"price"`
 	ImageURL     string                   `json:"image_url"`
@@ -116,8 +117,9 @@ func (s *MenuService) ListMenuItems(restaurantID uint, includeUnavailable bool, 
 }
 
 func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*entity.MenuItem, error) {
-	if _, err := s.repo.FindCategory(restaurantID, req.CategoryID); err != nil {
-		return nil, errors.New("category not found")
+	categoryIDs, err := s.normalizeMenuCategories(restaurantID, req)
+	if err != nil {
+		return nil, err
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -132,7 +134,7 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	}
 	item := &entity.MenuItem{
 		RestaurantID: restaurantID,
-		CategoryID:   req.CategoryID,
+		CategoryID:   categoryIDs[0],
 		Name:         name,
 		Price:        req.Price,
 		ImageURL:     strings.TrimSpace(req.ImageURL),
@@ -156,6 +158,9 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	if err := s.repo.ReplaceMenuIngredients(item, components); err != nil {
 		return nil, err
 	}
+	if err := s.repo.ReplaceMenuCategories(item, categoryLinks(restaurantID, item.ID, categoryIDs)); err != nil {
+		return nil, err
+	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
@@ -164,8 +169,9 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.repo.FindCategory(restaurantID, req.CategoryID); err != nil {
-		return nil, errors.New("category not found")
+	categoryIDs, err := s.normalizeMenuCategories(restaurantID, req)
+	if err != nil {
+		return nil, err
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -178,7 +184,7 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	if err != nil {
 		return nil, err
 	}
-	item.CategoryID = req.CategoryID
+	item.CategoryID = categoryIDs[0]
 	item.Name = name
 	item.Price = req.Price
 	item.ImageURL = strings.TrimSpace(req.ImageURL)
@@ -198,6 +204,9 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 		return nil, err
 	}
 	if err := s.repo.ReplaceMenuIngredients(item, components); err != nil {
+		return nil, err
+	}
+	if err := s.repo.ReplaceMenuCategories(item, categoryLinks(restaurantID, item.ID, categoryIDs)); err != nil {
 		return nil, err
 	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)
@@ -274,6 +283,46 @@ func normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOpt
 		groups = append(groups, group)
 	}
 	return groups, nil
+}
+
+func (s *MenuService) normalizeMenuCategories(restaurantID uint, req *MenuItemRequest) ([]uint, error) {
+	ids := make([]uint, 0, len(req.CategoryIDs)+1)
+	if req.CategoryID != 0 {
+		ids = append(ids, req.CategoryID)
+	}
+	for _, id := range req.CategoryIDs {
+		if id != 0 {
+			ids = append(ids, id)
+		}
+	}
+	seen := map[uint]bool{}
+	unique := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		if _, err := s.repo.FindCategory(restaurantID, id); err != nil {
+			return nil, errors.New("category not found")
+		}
+		seen[id] = true
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return nil, errors.New("category not found")
+	}
+	return unique, nil
+}
+
+func categoryLinks(restaurantID, menuItemID uint, categoryIDs []uint) []entity.MenuItemCategory {
+	links := make([]entity.MenuItemCategory, 0, len(categoryIDs))
+	for _, id := range categoryIDs {
+		links = append(links, entity.MenuItemCategory{
+			RestaurantID: restaurantID,
+			MenuItemID:   menuItemID,
+			CategoryID:   id,
+		})
+	}
+	return links
 }
 
 func (s *MenuService) normalizeMenuIngredients(restaurantID, menuItemID uint, requests []MenuIngredientRequest) ([]entity.MenuItemIngredient, error) {

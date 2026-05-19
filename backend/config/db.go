@@ -74,6 +74,7 @@ func SetupDatabase() *gorm.DB {
 		&entity.RestaurantAuditLog{},
 		&entity.Category{},
 		&entity.MenuItem{},
+		&entity.MenuItemCategory{},
 		&entity.MenuItemIngredient{},
 		&entity.MenuOptionGroup{},
 		&entity.MenuOption{},
