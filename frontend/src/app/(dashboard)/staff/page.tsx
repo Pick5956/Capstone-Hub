@@ -12,6 +12,7 @@ import type { Role } from "@/src/types/role";
 import { RestaurantCardSkeleton, Skeleton } from "@/src/components/shared/Skeleton";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 
 const ROLE_LABELS: Record<Language, Record<string, string>> = {
   th: {
@@ -197,6 +198,8 @@ function replaceMember(current: Membership[], nextMember: Membership) {
 export default function StaffPage() {
   const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
   const restaurantId = activeMembership?.restaurant_id;
   const activeRole = activeMembership?.role?.name;
   const allowed = canManageTeam(activeRole);
@@ -230,6 +233,17 @@ export default function StaffPage() {
         copyError: "คัดลอกลิงก์ไม่ได้",
         revokeError: "ยกเลิกคำเชิญไม่สำเร็จ",
         memberError: "อัปเดตข้อมูลสมาชิกไม่สำเร็จ",
+        inviteCreated: "สร้างลิงก์เชิญแล้ว",
+        inviteCopied: "คัดลอกลิงก์เชิญแล้ว",
+        inviteRevoked: "ยกเลิกคำเชิญแล้ว",
+        memberUpdated: "อัปเดตข้อมูลพนักงานแล้ว",
+        confirmRevokeTitle: "ยกเลิกคำเชิญนี้?",
+        confirmRevokeBody: "ลิงก์นี้จะใช้งานไม่ได้ทันที และพนักงานต้องขอลิงก์ใหม่หากยังต้องเข้าร่วมร้าน",
+        confirmMemberTitle: "ยืนยันการเปลี่ยนแปลงพนักงาน?",
+        confirmMemberBody: "การเปลี่ยนบทบาทหรือสถานะจะมีผลกับสิทธิ์การใช้งานของพนักงานทันที",
+        confirmAction: "ยืนยัน",
+        cancelAction: "กลับไปก่อน",
+        cancelRevokeAction: "ไม่ยกเลิก",
         noPermissionTitle: "บัญชีนี้ดูทีมได้ แต่จัดการคำเชิญหรือเปลี่ยนสถานะสมาชิกไม่ได้",
         noPermissionBody: "เฉพาะเจ้าของร้านหรือผู้จัดการเท่านั้นที่เชิญ ยกเลิกคำเชิญ และจัดการ member lifecycle ได้",
         membersTitle: "สมาชิกในร้าน",
@@ -292,6 +306,17 @@ export default function StaffPage() {
         copyError: "Could not copy invitation link.",
         revokeError: "Could not revoke invitation.",
         memberError: "Could not update member details.",
+        inviteCreated: "Invitation link created",
+        inviteCopied: "Invitation link copied",
+        inviteRevoked: "Invitation revoked",
+        memberUpdated: "Staff details updated",
+        confirmRevokeTitle: "Revoke this invitation?",
+        confirmRevokeBody: "This link will stop working immediately. The staff member will need a new link to join.",
+        confirmMemberTitle: "Confirm staff change?",
+        confirmMemberBody: "Role or status changes apply to this staff member's access immediately.",
+        confirmAction: "Confirm",
+        cancelAction: "Cancel",
+        cancelRevokeAction: "Keep invitation",
         noPermissionTitle: "This account can view the team but cannot manage invitations or member status.",
         noPermissionBody: "Only owners and managers can invite people, revoke invitations, and manage the member lifecycle.",
         membersTitle: "Restaurant members",
@@ -404,6 +429,7 @@ export default function StaffPage() {
         setInvitations((current) => [res.data, ...current]);
         setEmail("");
         setCopiedToken("");
+        showToast({ title: copy.inviteCreated });
         await refresh();
       } catch {
         setInviteError(copy.createError);
@@ -417,6 +443,7 @@ export default function StaffPage() {
     try {
       await navigator.clipboard.writeText(inviteUrl(token));
       setCopiedToken(token);
+      showToast({ title: copy.inviteCopied });
     } catch {
       setError(copy.copyError);
     }
@@ -429,12 +456,21 @@ export default function StaffPage() {
 
   const revokeInvite = async (invitationId: number) => {
     if (!restaurantId || revokeLocksRef.current.has(invitationId)) return;
+    const confirmed = await confirm({
+      title: copy.confirmRevokeTitle,
+      message: copy.confirmRevokeBody,
+      confirmLabel: copy.revoke,
+      cancelLabel: copy.cancelRevokeAction,
+      tone: "danger",
+    });
+    if (!confirmed) return;
     revokeLocksRef.current.add(invitationId);
     setRevokingIds((current) => [...current, invitationId]);
     setError("");
     try {
       await revokeInvitation(restaurantId, invitationId);
       setInvitations((current) => current.filter((item) => item.ID !== invitationId));
+      showToast({ title: copy.inviteRevoked });
       await refresh();
     } catch {
       setError(copy.revokeError);
@@ -461,9 +497,18 @@ export default function StaffPage() {
 
   const changeMemberStatus = async (memberId: number, status: MembershipStatus) => {
     if (!restaurantId) return;
+    const confirmed = await confirm({
+      title: copy.confirmMemberTitle,
+      message: copy.confirmMemberBody,
+      confirmLabel: copy.confirmAction,
+      cancelLabel: copy.cancelAction,
+      tone: status === "removed" ? "danger" : "warning",
+    });
+    if (!confirmed) return;
     await withMemberLock(memberId, async () => {
       const res = await updateMemberStatus(restaurantId, memberId, status);
       setMembers((current) => replaceMember(current, res.data.member));
+      showToast({ title: copy.memberUpdated });
       await refresh();
     });
   };
@@ -472,9 +517,18 @@ export default function StaffPage() {
     if (!restaurantId) return;
     const parsed = Number.parseInt(nextRoleId, 10);
     if (!Number.isFinite(parsed)) return;
+    const confirmed = await confirm({
+      title: copy.confirmMemberTitle,
+      message: copy.confirmMemberBody,
+      confirmLabel: copy.confirmAction,
+      cancelLabel: copy.cancelAction,
+      tone: "warning",
+    });
+    if (!confirmed) return;
     await withMemberLock(memberId, async () => {
       const res = await updateMemberRole(restaurantId, memberId, parsed);
       setMembers((current) => replaceMember(current, res.data.member));
+      showToast({ title: copy.memberUpdated });
       await refresh();
     });
   };

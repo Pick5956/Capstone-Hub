@@ -12,6 +12,7 @@ import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 
 const emptyItem: MenuItemInput = {
   category_id: 0,
@@ -68,6 +69,7 @@ type DeleteTarget =
 export default function MenuPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
   const canManage = can(activeMembership, "manage_menu");
   const canView = canManage || can(activeMembership, "view_menu");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -92,6 +94,9 @@ export default function MenuPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [drawerClosing, setDrawerClosing] = useState(false);
+  const [categoryModalClosing, setCategoryModalClosing] = useState(false);
+  const [deleteClosing, setDeleteClosing] = useState(false);
   const saveCategoryOnceRef = useRef(createSingleFlight());
   const saveItemOnceRef = useRef(createSingleFlight());
   const deleteCategoryOnceRef = useRef(createSingleFlight());
@@ -114,6 +119,12 @@ export default function MenuPage() {
         itemSaveError: "บันทึกเมนูไม่สำเร็จ",
         categoryDeleteError: "ลบหมวดหมู่ไม่สำเร็จ",
         itemDeleteError: "ลบเมนูไม่สำเร็จ",
+        categoryCreated: "เพิ่มหมวดหมู่แล้ว",
+        categoryUpdated: "อัปเดตหมวดหมู่แล้ว",
+        itemCreated: "เพิ่มเมนูแล้ว",
+        itemUpdated: "อัปเดตเมนูแล้ว",
+        categoryDeleted: "ลบหมวดหมู่แล้ว",
+        itemDeleted: "ลบเมนูแล้ว",
         confirmDeleteTitle: "ยืนยันการลบ",
         confirmDeleteBody: "ต้องการลบรายการนี้ใช่ไหม? การทำงานนี้ย้อนกลับไม่ได้",
         confirmDelete: "ยืนยันลบ",
@@ -222,6 +233,12 @@ export default function MenuPage() {
         itemSaveError: "Could not save menu item.",
         categoryDeleteError: "Could not delete category.",
         itemDeleteError: "Could not delete menu item.",
+        categoryCreated: "Category added",
+        categoryUpdated: "Category updated",
+        itemCreated: "Menu item added",
+        itemUpdated: "Menu item updated",
+        categoryDeleted: "Category deleted",
+        itemDeleted: "Menu item deleted",
         confirmDeleteTitle: "Confirm delete",
         confirmDeleteBody: "Delete this item? This action cannot be undone.",
         confirmDelete: "Delete",
@@ -440,6 +457,7 @@ export default function MenuPage() {
       setCategories((current) => [...current, res.data]);
       setSelectedCategoryIds([...selectedCategoryIds, res.data.ID]);
       setInlineCategoryName("");
+      showToast({ title: copy.categoryCreated });
     } catch {
       setInlineCategoryError(copy.categorySaveError);
     } finally {
@@ -464,10 +482,12 @@ export default function MenuPage() {
         if (editingCategory) {
           const res = await updateCategory(editingCategory.ID, payload);
           setCategories((current) => current.map((cat) => cat.ID === res.data.ID ? res.data : cat));
+          showToast({ title: copy.categoryUpdated });
         } else {
           const res = await createCategory(payload);
           setCategories((current) => [...current, res.data]);
           if (!itemForm.category_id && !itemForm.category_ids?.length) setItemForm((current) => ({ ...current, category_id: res.data.ID, category_ids: [res.data.ID] }));
+          showToast({ title: copy.categoryCreated });
         }
         setCategoryName("");
         setCategoryOrder("0");
@@ -510,14 +530,16 @@ export default function MenuPage() {
         if (editingItem) {
           const res = await updateMenuItem(editingItem.ID, payload);
           setItems((current) => current.map((item) => item.ID === res.data.ID ? res.data : item));
+          showToast({ title: copy.itemUpdated });
         } else {
           const res = await createMenuItem(payload);
           setItems((current) => [...current, res.data]);
+          showToast({ title: copy.itemCreated });
         }
         setEditingItem(null);
         const firstID = categories[0]?.ID ?? 0;
         setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
-        setDrawerOpen(false);
+        closeItemDrawer();
       } catch {
         setItemErrors({ submit: copy.itemSaveError });
       } finally {
@@ -577,13 +599,37 @@ export default function MenuPage() {
     setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
     setInlineCategoryName("");
     setInlineCategoryError("");
+    setDrawerClosing(false);
     setDrawerOpen(true);
   };
 
   const closeItemDrawer = () => {
-    setDrawerOpen(false);
-    setEditingItem(null);
-    setItemErrors({});
+    if (drawerClosing) return;
+    setDrawerClosing(true);
+    window.setTimeout(() => {
+      setDrawerOpen(false);
+      setDrawerClosing(false);
+      setEditingItem(null);
+      setItemErrors({});
+    }, 180);
+  };
+
+  const closeCategoryModal = () => {
+    if (categoryModalClosing) return;
+    setCategoryModalClosing(true);
+    window.setTimeout(() => {
+      setCategoryModalOpen(false);
+      setCategoryModalClosing(false);
+    }, 180);
+  };
+
+  const closeDeleteModal = () => {
+    if (submitting || deleteClosing) return;
+    setDeleteClosing(true);
+    window.setTimeout(() => {
+      setDeleteTarget(null);
+      setDeleteClosing(false);
+    }, 180);
   };
 
   const updateOptionGroups = (updater: (groups: MenuOptionGroupInput[]) => MenuOptionGroupInput[]) => {
@@ -613,11 +659,12 @@ export default function MenuPage() {
       try {
         await deleteCategory(categoryId);
         await refresh();
+        showToast({ title: copy.categoryDeleted });
       } catch {
         setError(copy.categoryDeleteError);
       } finally {
-        setDeleteTarget(null);
         setSubmitting(false);
+        closeDeleteModal();
       }
     });
   };
@@ -630,11 +677,12 @@ export default function MenuPage() {
       try {
         await deleteMenuItem(itemId);
         setItems((current) => current.filter((menuItem) => menuItem.ID !== itemId));
+        showToast({ title: copy.itemDeleted });
       } catch {
         setError(copy.itemDeleteError);
       } finally {
-        setDeleteTarget(null);
         setSubmitting(false);
+        closeDeleteModal();
       }
     });
   };
@@ -672,7 +720,7 @@ export default function MenuPage() {
           </button>
           {canManage && (
             <>
-              <button type="button" onClick={() => setCategoryModalOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.categoryManager}
               </button>
               <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
@@ -811,11 +859,11 @@ export default function MenuPage() {
       </div>
 
       {categoryModalOpen && canManage && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCategoryModal}>
+          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
-              <button type="button" onClick={() => setCategoryModalOpen(false)} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <div className="space-y-1">
@@ -866,8 +914,8 @@ export default function MenuPage() {
 
       {drawerOpen && canManage && (
         <>
-          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className="motion-overlay fixed inset-0 z-30 cursor-default bg-gray-950/40" />
-          <form onSubmit={saveItem} className="motion-drawer fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
+          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
@@ -1110,8 +1158,8 @@ export default function MenuPage() {
       )}
 
       {deleteTarget && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeDeleteModal}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
@@ -1120,7 +1168,7 @@ export default function MenuPage() {
               <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.name}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => setDeleteTarget(null)} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={closeDeleteModal} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.cancel}
               </button>
               <button

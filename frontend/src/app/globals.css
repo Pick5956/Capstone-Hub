@@ -152,6 +152,18 @@ html[data-font-size="extra-large"] {
   }
 }
 
+@keyframes drawer-exit-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+
 @keyframes kitchen-ticket-complete {
   0% {
     transform: translateY(0) scale(1);
@@ -249,6 +261,11 @@ html[data-font-size="extra-large"] {
   will-change: transform, opacity;
 }
 
+.motion-drawer-exit {
+  animation: drawer-exit-right 170ms cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: transform, opacity;
+}
+
 .kitchen-ticket-complete {
   animation: kitchen-ticket-complete 980ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: transform, opacity;
@@ -298,6 +315,7 @@ html[data-font-size="extra-large"] {
   .motion-bottom-sheet,
   .motion-bottom-sheet-exit,
   .motion-drawer,
+  .motion-drawer-exit,
   .kitchen-ticket-complete,
   .kitchen-ticket-success,
   .kitchen-success-icon,

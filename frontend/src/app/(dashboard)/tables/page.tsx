@@ -10,6 +10,7 @@ import type { RestaurantTable, RestaurantTableInput, TableStatus, TableTag, Tabl
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 
 const emptyTableForm: RestaurantTableInput = { zone_id: null, capacity: 2, status: "free", tag_ids: [] };
 const emptyZoneForm: TableZoneInput = { name: "", prefix: "", display_order: 0, is_active: true };
@@ -38,6 +39,8 @@ function tagClass(color: TableTagColor) {
 export default function TablesPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
   const canManage = can(activeMembership, "manage_table");
   const canView = canManage || can(activeMembership, "view_tables");
   const [tables, setTables] = useState<RestaurantTable[]>([]);
@@ -58,6 +61,7 @@ export default function TablesPage() {
   const [editingTag, setEditingTag] = useState<TableTag | null>(null);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "table"; table: RestaurantTable } | { type: "zone"; zone: TableZone } | { type: "tag"; tag: TableTag } | null>(null);
+  const [deleteClosing, setDeleteClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -118,6 +122,17 @@ export default function TablesPage() {
         saveError: "บันทึกข้อมูลไม่สำเร็จ",
         deleteError: "ลบข้อมูลไม่สำเร็จ",
         requiredName: "กรอกชื่อก่อนบันทึก",
+        tableCreated: "เพิ่มโต๊ะแล้ว",
+        tableUpdated: "อัปเดตโต๊ะแล้ว",
+        batchCreated: "สร้างชุดโต๊ะแล้ว",
+        zoneCreated: "เพิ่มโซนแล้ว",
+        zoneUpdated: "อัปเดตโซนแล้ว",
+        tagCreated: "เพิ่ม tag แล้ว",
+        tagUpdated: "อัปเดต tag แล้ว",
+        itemDeleted: "ลบข้อมูลแล้ว",
+        confirmBatchTitle: "สร้างโต๊ะเป็นชุด?",
+        confirmBatchBody: "ระบบจะเพิ่มโต๊ะหลายรายการตามจำนวนที่ตั้งไว้และอัปเดตผังโต๊ะทันที",
+        confirmBatch: "ยืนยันสร้างโต๊ะ",
       }
     : {
         denied: "You do not have permission to view tables.",
@@ -170,6 +185,17 @@ export default function TablesPage() {
         saveError: "Could not save data.",
         deleteError: "Could not delete data.",
         requiredName: "Enter a name before saving.",
+        tableCreated: "Table added",
+        tableUpdated: "Table updated",
+        batchCreated: "Tables created",
+        zoneCreated: "Zone added",
+        zoneUpdated: "Zone updated",
+        tagCreated: "Tag added",
+        tagUpdated: "Tag updated",
+        itemDeleted: "Item deleted",
+        confirmBatchTitle: "Create tables in bulk?",
+        confirmBatchBody: "The system will add multiple tables and update the layout immediately.",
+        confirmBatch: "Create tables",
       };
 
   const STATUS = statusMeta(language);
@@ -245,9 +271,11 @@ export default function TablesPage() {
           }
           updated = (await updateTable(editingTable.ID, { ...tableForm, zone_id: updated.zone_id ?? null, capacity: Number(tableForm.capacity) || 2 })).data;
           setTables((current) => current.map((table) => table.ID === updated.ID ? updated : table));
+          showToast({ title: copy.tableUpdated });
         } else {
           const created = (await createTable({ ...tableForm, capacity: Number(tableForm.capacity) || 2 })).data;
           setTables((current) => [...current, created]);
+          showToast({ title: copy.tableCreated });
         }
         setEditingTable(null);
         setTableForm(emptyTableForm);
@@ -261,12 +289,21 @@ export default function TablesPage() {
 
   const createBatch = async () => {
     if (!canManage) return;
+    const confirmed = await confirm({
+      title: copy.confirmBatchTitle,
+      message: copy.confirmBatchBody,
+      confirmLabel: copy.confirmBatch,
+      cancelLabel: copy.cancel,
+      tone: "warning",
+    });
+    if (!confirmed) return;
     await bulkOnceRef.current(async () => {
       setSubmitting(true);
       setError("");
       try {
         const res = await bulkCreateTables({ zone_id: bulkZoneId === "none" ? null : Number(bulkZoneId), count: Number(bulkCount) || 1, capacity: Number(bulkCapacity) || 2, tag_ids: bulkTagIds });
         setTables(res.data.tables ?? []);
+        showToast({ title: copy.batchCreated });
       } catch {
         setError(copy.saveError);
       } finally {
@@ -288,6 +325,7 @@ export default function TablesPage() {
         const payload = { ...zoneForm, name: zoneForm.name.trim(), prefix: zoneForm.prefix?.trim().toUpperCase(), display_order: Number(zoneForm.display_order) || 0 };
         const res = editingZone ? await updateTableZone(editingZone.ID, payload) : await createTableZone(payload);
         setZones((current) => editingZone ? current.map((zone) => zone.ID === res.data.ID ? res.data : zone) : [...current, res.data]);
+        showToast({ title: editingZone ? copy.zoneUpdated : copy.zoneCreated });
         setEditingZone(null);
         setZoneForm(emptyZoneForm);
       } catch {
@@ -311,6 +349,7 @@ export default function TablesPage() {
         const payload = { ...tagForm, name: tagForm.name.trim(), display_order: Number(tagForm.display_order) || 0 };
         const res = editingTag ? await updateTableTag(editingTag.ID, payload) : await createTableTag(payload);
         setTags((current) => editingTag ? current.map((tag) => tag.ID === res.data.ID ? res.data : tag) : [...current, res.data]);
+        showToast({ title: editingTag ? copy.tagUpdated : copy.tagCreated });
         setEditingTag(null);
         setTagForm(emptyTagForm);
       } catch {
@@ -339,13 +378,23 @@ export default function TablesPage() {
           await deleteTableTag(deleteTarget.tag.ID);
           setTags((current) => current.filter((tag) => tag.ID !== deleteTarget.tag.ID));
         }
-        setDeleteTarget(null);
+        showToast({ title: copy.itemDeleted });
+        closeDeleteModal();
       } catch {
         setError(copy.deleteError);
       } finally {
         setSubmitting(false);
       }
     });
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteClosing) return;
+    setDeleteClosing(true);
+    window.setTimeout(() => {
+      setDeleteTarget(null);
+      setDeleteClosing(false);
+    }, 180);
   };
 
   return (
@@ -493,14 +542,14 @@ export default function TablesPage() {
       )}
 
       {deleteTarget && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeDeleteModal}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3">
-              <button type="button" onClick={() => setDeleteTarget(null)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.cancel}</button>
+              <button type="button" onClick={closeDeleteModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.cancel}</button>
               <button type="button" onClick={confirmDelete} disabled={submitting} className="h-9 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
             </div>
           </div>
@@ -511,12 +560,19 @@ export default function TablesPage() {
 }
 
 function ManagerModal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const [closing, setClosing] = useState(false);
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(onClose, 180);
+  };
+
   return (
-    <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-      <div className="motion-bottom-sheet max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950">
+    <div className={`${closing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={close}>
+      <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <button type="button" onClick={onClose} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+          <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
         </div>
         <div className="p-4">{children}</div>
       </div>

@@ -5,6 +5,7 @@ import { Kanit } from "next/font/google";
 import { AuthProvider } from "@/src/providers/AuthProvider";
 import { LanguageProvider } from "@/src/providers/LanguageProvider";
 import { ThemeProvider } from "@/src/providers/ThemeProvider";
+import { FeedbackProvider } from "@/src/components/shared/FeedbackProvider";
 
 const fontKanit = Kanit({
   subsets: ["thai", "latin"],
@@ -28,7 +29,9 @@ export default function RootLayout({
       <body className={fontKanit.className}>
         <LanguageProvider>
           <ThemeProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <FeedbackProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </FeedbackProvider>
           </ThemeProvider>
         </LanguageProvider>
       </body>

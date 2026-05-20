@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
   Boxes,
-  Clock3,
   Filter,
   History,
   PackageOpen,
@@ -15,7 +13,6 @@ import {
   Plus,
   Search,
   Trash2,
-  Wallet,
   X,
 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -34,6 +31,8 @@ import {
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import type { Ingredient, IngredientCategory, IngredientInput, IngredientTransaction } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
+import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 
 const UNITS = ["kg", "g", "liter", "ml", "piece", "pack", "bottle", "box", "bag"];
 const STORAGE_TYPES = ["room_temp", "chilled", "frozen", "dry"];
@@ -132,7 +131,7 @@ function statusMeta(status: ItemStatus, copy: Copy) {
     bar: "from-emerald-500 to-teal-400",
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
     value: "text-slate-900 dark:text-white",
-    accent: "border-slate-200/80 bg-white/85 dark:border-gray-800 dark:bg-gray-950/50",
+    accent: "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950",
   };
 }
 
@@ -215,6 +214,14 @@ function buildCopy(language: "th" | "en") {
         noCategories: "ยังไม่มีหมวดวัตถุดิบ",
         addCategory: "เพิ่มหมวด",
         categoryName: "ชื่อหมวดหมู่",
+        ingredientCreated: "เพิ่มวัตถุดิบแล้ว",
+        ingredientUpdated: "อัปเดตวัตถุดิบแล้ว",
+        categoryCreated: "เพิ่มหมวดวัตถุดิบแล้ว",
+        ingredientDeleted: "ลบวัตถุดิบแล้ว",
+        stockAdjusted: "ปรับสต็อกแล้ว",
+        confirmAdjustTitle: "ยืนยันการปรับสต็อก?",
+        confirmAdjustBody: "การจ่ายออกหรือตั้งค่าสต็อกใหม่จะเปลี่ยนจำนวนคงเหลือทันที",
+        confirmAdjust: "ยืนยันปรับสต็อก",
         storageTypes: {
           room_temp: "อุณหภูมิห้อง",
           chilled: "แช่เย็น",
@@ -299,6 +306,14 @@ function buildCopy(language: "th" | "en") {
         noCategories: "No ingredient categories yet",
         addCategory: "Add category",
         categoryName: "Category name",
+        ingredientCreated: "Ingredient added",
+        ingredientUpdated: "Ingredient updated",
+        categoryCreated: "Ingredient category added",
+        ingredientDeleted: "Ingredient deleted",
+        stockAdjusted: "Stock adjusted",
+        confirmAdjustTitle: "Confirm stock adjustment?",
+        confirmAdjustBody: "Stock-out and set-value adjustments change the current stock immediately.",
+        confirmAdjust: "Confirm adjustment",
         storageTypes: {
           room_temp: "Room temp",
           chilled: "Chilled",
@@ -331,13 +346,11 @@ function groupTxByDate(txs: IngredientTransaction[], copy: Copy) {
 }
 
 function SectionCard({
-  icon,
   label,
   value,
   helper,
   tone = "default",
 }: {
-  icon: ReactNode;
   label: string;
   value: string;
   helper: string;
@@ -350,34 +363,39 @@ function SectionCard({
         ? "border-red-200/80 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/20"
         : tone === "success"
           ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-          : "border-slate-200/80 bg-white/85 dark:border-gray-800 dark:bg-gray-950/50";
+          : "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950";
 
   return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${toneClass}`}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
-          {icon}
-        </span>
-        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</span>
-      </div>
-      <p className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{value}</p>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{helper}</p>
+    <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
+      <span className="text-[11px] text-slate-400">{label}</span>
+      <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{value}</p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helper}</p>
     </div>
   );
 }
 
 /* Shared input style */
 const inputCls =
-  "w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-orange-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500";
+  "h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:ring-orange-900/30";
 
 export default function InventoryPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
   const lang = language as "th" | "en";
   const canManage = can(activeMembership, "manage_inventory");
   const canView = canManage || can(activeMembership, "view_inventory");
   const copy = useMemo(() => buildCopy(lang), [lang]);
-
+  const unitOptions = useMemo(() => UNITS.map((unit) => ({ value: unit, label: unit })), []);
+  const storageOptions = useMemo(
+    () =>
+      STORAGE_TYPES.map((type) => ({
+        value: type,
+        label: copy.storageTypes[type as keyof typeof copy.storageTypes],
+      })),
+    [copy],
+  );
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,16 +406,20 @@ export default function InventoryPage() {
   const [form, setForm] = useState<IngredientInput>(emptyForm);
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalClosing, setModalClosing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryModalClosing, setCategoryModalClosing] = useState(false);
   const [categoryName, setCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [categorySubmitting, setCategorySubmitting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
+  const [deleteClosing, setDeleteClosing] = useState(false);
 
   const [adjustTarget, setAdjustTarget] = useState<Ingredient | null>(null);
+  const [adjustClosing, setAdjustClosing] = useState(false);
   const [adjustType, setAdjustType] = useState<"in" | "out" | "adjust">("in");
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
@@ -405,12 +427,20 @@ export default function InventoryPage() {
   const [adjusting, setAdjusting] = useState(false);
 
   const [txTarget, setTxTarget] = useState<Ingredient | null>(null);
+  const [txClosing, setTxClosing] = useState(false);
   const [transactions, setTransactions] = useState<IngredientTransaction[]>([]);
   const [txLoading, setTxLoading] = useState(false);
 
   const saveOnce = useRef(createSingleFlight());
   const deleteOnce = useRef(createSingleFlight());
   const adjustOnce = useRef(createSingleFlight());
+  const categoryOptions = useMemo(
+    () => [
+      { value: "0", label: categories.length === 0 ? copy.noCategories : copy.uncategorized },
+      ...categories.map((category) => ({ value: String(category.ID), label: category.name })),
+    ],
+    [categories, copy],
+  );
 
   useEffect(() => {
     if (!canView) {
@@ -472,6 +502,7 @@ export default function InventoryPage() {
   }, [adjustTarget, adjustQty, adjustType]);
 
   function openCreate() {
+    setModalClosing(false);
     setEditingItem(null);
     setForm(emptyForm);
     setFormError("");
@@ -479,6 +510,7 @@ export default function InventoryPage() {
   }
 
   function openEdit(item: Ingredient) {
+    setModalClosing(false);
     setEditingItem(item);
     setForm({
       name: item.name,
@@ -512,11 +544,13 @@ export default function InventoryPage() {
         if (editingItem) {
           const response = await updateIngredient(editingItem.ID, form);
           setIngredients((prev) => prev.map((item) => (item.ID === editingItem.ID ? response.data : item)));
+          showToast({ title: copy.ingredientUpdated });
         } else {
           const response = await createIngredient(form);
           setIngredients((prev) => [...prev, response.data]);
+          showToast({ title: copy.ingredientCreated });
         }
-        setModalOpen(false);
+        closeModal();
       } catch (error: unknown) {
         const err = error as { response?: { data?: { error?: string } } };
         setFormError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
@@ -540,7 +574,8 @@ export default function InventoryPage() {
       setCategories((prev) => [...prev, response.data].sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)));
       setForm((current) => ({ ...current, category_id: response.data.ID }));
       setCategoryName("");
-      setCategoryModalOpen(false);
+      closeCategoryModal();
+      showToast({ title: copy.categoryCreated });
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       setCategoryError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
@@ -555,13 +590,15 @@ export default function InventoryPage() {
       try {
         await deleteIngredient(deleteTarget.ID);
         setIngredients((prev) => prev.filter((item) => item.ID !== deleteTarget.ID));
+        showToast({ title: copy.ingredientDeleted });
       } finally {
-        setDeleteTarget(null);
+        closeDeleteModal();
       }
     });
   }
 
   function openAdjust(item: Ingredient) {
+    setAdjustClosing(false);
     setAdjustTarget(item);
     setAdjustType("in");
     setAdjustQty("");
@@ -576,13 +613,24 @@ export default function InventoryPage() {
       setAdjustError(lang === "th" ? "กรุณาระบุจำนวนที่ถูกต้อง" : "Enter a valid quantity");
       return;
     }
+    if (adjustType !== "in") {
+      const confirmed = await confirm({
+        title: copy.confirmAdjustTitle,
+        message: copy.confirmAdjustBody,
+        confirmLabel: copy.confirmAdjust,
+        cancelLabel: copy.cancel,
+        tone: "warning",
+      });
+      if (!confirmed) return;
+    }
 
     await adjustOnce.current(async () => {
       setAdjusting(true);
       try {
         const response = await adjustStock(adjustTarget.ID, { type: adjustType, quantity: qty, note: adjustNote });
         setIngredients((prev) => prev.map((item) => (item.ID === adjustTarget.ID ? response.data : item)));
-        setAdjustTarget(null);
+        closeAdjustModal();
+        showToast({ title: copy.stockAdjusted });
       } catch (error: unknown) {
         const err = error as { response?: { data?: { error?: string } } };
         setAdjustError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
@@ -593,6 +641,7 @@ export default function InventoryPage() {
   }
 
   async function openTransactions(item: Ingredient) {
+    setTxClosing(false);
     setTxTarget(item);
     setTransactions([]);
     setTxLoading(true);
@@ -602,6 +651,51 @@ export default function InventoryPage() {
     } finally {
       setTxLoading(false);
     }
+  }
+
+  function closeModal() {
+    if (modalClosing) return;
+    setModalClosing(true);
+    window.setTimeout(() => {
+      setModalOpen(false);
+      setModalClosing(false);
+    }, 180);
+  }
+
+  function closeCategoryModal() {
+    if (categoryModalClosing) return;
+    setCategoryModalClosing(true);
+    window.setTimeout(() => {
+      setCategoryModalOpen(false);
+      setCategoryModalClosing(false);
+    }, 180);
+  }
+
+  function closeDeleteModal() {
+    if (deleteClosing) return;
+    setDeleteClosing(true);
+    window.setTimeout(() => {
+      setDeleteTarget(null);
+      setDeleteClosing(false);
+    }, 180);
+  }
+
+  function closeAdjustModal() {
+    if (adjustClosing) return;
+    setAdjustClosing(true);
+    window.setTimeout(() => {
+      setAdjustTarget(null);
+      setAdjustClosing(false);
+    }, 180);
+  }
+
+  function closeTxDrawer() {
+    if (txClosing) return;
+    setTxClosing(true);
+    window.setTimeout(() => {
+      setTxTarget(null);
+      setTxClosing(false);
+    }, 180);
   }
 
   if (loading) {
@@ -617,87 +711,83 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.08),_transparent_22%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-4 text-slate-900 dark:bg-[linear-gradient(180deg,_#020617_0%,_#111827_100%)] dark:text-white sm:px-6">
-      <div className="overflow-hidden rounded-[28px] border border-white/70 bg-white/80 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.45)] backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/78">
-        <div className="border-b border-slate-200/80 px-5 py-5 dark:border-gray-800">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900">
-                <Boxes className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-orange-500">{copy.eyebrow}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{copy.title}</h1>
-                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300">
-                    {formatNumber(totalItems, lang)} {copy.total}
-                  </span>
-                </div>
-                <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
-              </div>
+    <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+      <div className="space-y-5">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.eyebrow}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{copy.title}</h1>
+              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
+                {formatNumber(totalItems, lang)} {copy.total}
+              </span>
             </div>
-
-            <div className="flex w-full flex-col gap-2 lg:w-auto lg:min-w-[420px] lg:flex-row lg:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={copy.searchPlaceholder}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className={`${inputCls} h-12 pl-11 pr-4`}
-                />
-              </div>
-              <button
-                onClick={() => setFiltersOpen((value) => !value)}
-                className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
-              >
-                <Filter className="h-4 w-4" />
-                {copy.filter}
-              </button>
-              {canManage && (
-                <button
-                  onClick={openCreate}
-                  className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-[0.99] dark:bg-white dark:text-slate-900"
-                >
-                  <Plus className="h-4 w-4" />
-                  {copy.add}
-                </button>
-              )}
-            </div>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
           </div>
 
-          {(outCount > 0 || lowCount > 0) && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {outCount > 0 && (
-                <button
-                  onClick={() => setStatusFilter("out")}
-                  className="flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300"
-                >
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                  {copy.alertOut(outCount)}
-                </button>
-              )}
-              {lowCount > 0 && (
-                <button
-                  onClick={() => setStatusFilter("low")}
-                  className="flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
-                >
-                  <span className="h-2 w-2 rounded-full bg-amber-400" />
-                  {copy.alertLow(lowCount)}
-                </button>
-              )}
+          <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px] md:flex-row md:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={copy.searchPlaceholder}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className={`${inputCls} pl-10 pr-3`}
+              />
             </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((value) => !value)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+            >
+              <Filter className="h-4 w-4" />
+              {copy.filter}
+            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+              >
+                <Plus className="h-4 w-4" />
+                {copy.add}
+              </button>
+            )}
+          </div>
+        </header>
 
-        <div className="px-5 py-5">
-          <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2`}>
+        {(outCount > 0 || lowCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {outCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter("out")}
+                className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300"
+              >
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                {copy.alertOut(outCount)}
+              </button>
+            )}
+            {lowCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter("low")}
+                className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                {copy.alertLow(lowCount)}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
             {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
-                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
                   statusFilter === status
                     ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
                     : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
@@ -712,52 +802,172 @@ export default function InventoryPage() {
                       : copy.filterOut}
               </button>
             ))}
-          </div>
+        </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_360px]">
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <SectionCard
-                icon={<PackageOpen className="h-5 w-5" />}
                 label={copy.total}
                 value={formatNumber(totalItems, lang)}
                 helper={`${formatNumber(filtered.length, lang)} ${copy.tableSummary.toLowerCase()}`}
               />
               <SectionCard
-                icon={<Wallet className="h-5 w-5" />}
                 label={copy.totalValue}
                 value={formatCurrency(totalValue, lang)}
                 helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
                 tone="warm"
               />
               <SectionCard
-                icon={<AlertTriangle className="h-5 w-5" />}
                 label={copy.urgentItems}
                 value={formatNumber(lowCount + outCount, lang)}
                 helper={outCount > 0 ? copy.alertOut(outCount) : copy.alertLow(lowCount)}
                 tone={lowCount + outCount > 0 ? "danger" : "default"}
               />
               <SectionCard
-                icon={<Clock3 className="h-5 w-5" />}
                 label={copy.averageCoverage}
                 value={`${formatNumber(averageCoverage, lang)}%`}
                 helper={`${formatNumber(okCount, lang)} ${copy.healthyItems.toLowerCase()}`}
                 tone="success"
               />
-            </div>
+        </div>
 
-            <aside className="rounded-2xl border border-slate-200/80 bg-white/85 p-4 shadow-sm dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+              <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{copy.tableSummary}</p>
+                    <h2 className="mt-0.5 text-[16px] font-semibold text-slate-900 dark:text-white">{copy.title}</h2>
+                  </div>
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                    {formatNumber(filtered.length, lang)} {lang === "th" ? "รายการ" : "items"}
+                    {ingredients.length !== filtered.length ? ` / ${formatNumber(ingredients.length, lang)}` : ""}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4">
+                {filtered.length === 0 ? (
+                  <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
+                      <Boxes className="h-6 w-6" />
+                    </div>
+                    <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
+                      {ingredients.length === 0 ? copy.noIngredients : copy.noResults}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {filtered.map((item) => {
+                      const status = getStatus(item);
+                      const meta = statusMeta(status, copy);
+                      const percent = getStockPercent(item);
+                      const value = getInventoryValue(item);
+                      const refill = getRestockAmount(item);
+
+                      return (
+                        <article key={item.ID} className="flex min-h-60 flex-col rounded-md border border-slate-200 bg-white transition-colors hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10">
+                          <div className="flex items-start justify-between gap-3 p-4">
+                            <div className="min-w-0">
+                              <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                              <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                                {copy.sku} {item.sku || "-"} · {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold ${meta.badge}`}>
+                              {meta.label}
+                            </span>
+                          </div>
+
+                          <div className="px-4">
+                            <div className="flex items-end justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] text-slate-400">{copy.current}</p>
+                                <p className={`mt-1 text-2xl font-semibold tabular-nums ${meta.value}`}>
+                                  {formatNumber(item.stock, lang)} <span className="text-xs font-medium text-slate-400">{item.unit}</span>
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[11px] text-slate-400">{copy.minStock}</p>
+                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                                  {item.min_stock > 0 ? `${formatNumber(item.min_stock, lang)} ${item.unit}` : "-"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3 h-2 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                              <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid grid-cols-2 gap-px border-y border-slate-200 bg-slate-200 text-xs dark:border-gray-800 dark:bg-gray-800">
+                            <div className="bg-white px-4 py-3 dark:bg-gray-950">
+                              <p className="text-slate-400">{copy.rowValue}</p>
+                              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{value > 0 ? formatCurrency(value, lang) : "-"}</p>
+                            </div>
+                            <div className="bg-white px-4 py-3 dark:bg-gray-950">
+                              <p className="text-slate-400">{copy.recommendedTopup}</p>
+                              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{formatNumber(refill, lang)} {item.unit}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-auto flex items-center justify-between gap-2 p-3">
+                            <button
+                              type="button"
+                              onClick={() => openTransactions(item)}
+                              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                            >
+                              <History className="h-4 w-4" />
+                              {copy.history}
+                            </button>
+                            {canManage && (
+                              <div className="flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openAdjust(item)}
+                                  title={copy.adjust}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEdit(item)}
+                                  title={copy.edit}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900 dark:hover:text-white"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteTarget(item)}
+                                  title={copy.delete}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <aside className="rounded-md border border-slate-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.priorityTitle}</p>
                   <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-900 dark:text-white">{copy.prioritySubtitle}</h2>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-gray-900 dark:text-slate-300">
+                <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-gray-900 dark:text-slate-300">
                   {formatNumber(priorityItems.length, lang)}
                 </span>
               </div>
 
               {priorityItems.length === 0 ? (
-                <div className="mt-5 rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-gray-800">
+                <div className="mt-5 rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-gray-800">
                   {copy.noPriority}
                 </div>
               ) : (
@@ -767,7 +977,7 @@ export default function InventoryPage() {
                     const meta = statusMeta(status, copy);
                     const refill = getRestockAmount(item);
                     return (
-                      <div key={item.ID} className={`rounded-2xl border p-4 ${meta.accent}`}>
+                      <div key={item.ID} className={`rounded-md border p-4 ${meta.accent}`}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -778,7 +988,7 @@ export default function InventoryPage() {
                               {copy.current} {formatNumber(item.stock, lang)} {item.unit} • {copy.target} {formatNumber(getTargetStock(item), lang)} {item.unit}
                             </p>
                           </div>
-                          <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
+                          <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
                             {meta.label}
                           </span>
                         </div>
@@ -797,7 +1007,7 @@ export default function InventoryPage() {
                           {canManage && (
                             <button
                               onClick={() => openAdjust(item)}
-                              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
                             >
                               <Plus className="h-3.5 w-3.5" />
                               {copy.adjust}
@@ -812,10 +1022,10 @@ export default function InventoryPage() {
             </aside>
           </div>
 
-          <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200/80 bg-white/85 shadow-sm dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="hidden">
             {filtered.length === 0 ? (
               <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
+                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
                   <Boxes className="h-6 w-6" />
                 </div>
                 <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
@@ -848,13 +1058,13 @@ export default function InventoryPage() {
                         <tr key={item.ID} className="align-top transition hover:bg-slate-50/70 dark:hover:bg-gray-900/35">
                           <td className="px-5 py-4">
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300">
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300">
                                 <PackageOpen className="h-4 w-4" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
+                                  <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
                                     {meta.label}
                                   </span>
                                 </div>
@@ -901,7 +1111,7 @@ export default function InventoryPage() {
                               <button
                                 onClick={() => openTransactions(item)}
                                 title={copy.history}
-                                className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
                               >
                                 <History className="h-4 w-4" />
                               </button>
@@ -910,21 +1120,21 @@ export default function InventoryPage() {
                                   <button
                                     onClick={() => openAdjust(item)}
                                     title={copy.adjust}
-                                    className="rounded-xl border border-orange-200 bg-orange-50 p-2 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
+                                    className="rounded-md border border-orange-200 bg-orange-50 p-2 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
                                   >
                                     <Plus className="h-4 w-4" />
                                   </button>
                                   <button
                                     onClick={() => openEdit(item)}
                                     title={copy.edit}
-                                    className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
+                                    className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
                                   >
                                     <Pencil className="h-4 w-4" />
                                   </button>
                                   <button
                                     onClick={() => setDeleteTarget(item)}
                                     title={copy.delete}
-                                    className="rounded-xl border border-red-200 bg-red-50 p-2 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                                    className="rounded-md border border-red-200 bg-red-50 p-2 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
@@ -952,11 +1162,10 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
-      </div>
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${modalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeModal}>
+          <div className={`${modalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-md rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">{editingItem ? copy.edit : copy.add}</h2>
             </div>
@@ -992,6 +1201,7 @@ export default function InventoryPage() {
                         onClick={() => {
                           setCategoryError("");
                           setCategoryName("");
+                          setCategoryModalClosing(false);
                           setCategoryModalOpen(true);
                         }}
                         className="text-xs font-semibold text-orange-600 transition hover:text-orange-500 dark:text-orange-300"
@@ -1000,20 +1210,11 @@ export default function InventoryPage() {
                       </button>
                     )}
                   </div>
-                  <select
-                    value={form.category_id ?? 0}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, category_id: parseInt(event.target.value, 10) || 0 }))
-                    }
-                    className={inputCls}
-                  >
-                    <option value={0}>{categories.length === 0 ? copy.noCategories : copy.uncategorized}</option>
-                    {categories.map((category) => (
-                      <option key={category.ID} value={category.ID}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
+                  <ThemedSelect
+                    value={String(form.category_id ?? 0)}
+                    onChange={(value) => setForm((current) => ({ ...current, category_id: parseInt(value, 10) || 0 }))}
+                    options={categoryOptions}
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.imageUrl}</label>
@@ -1028,11 +1229,11 @@ export default function InventoryPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
-                  <select
+                  <ThemedSelect
                     value={form.unit}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setForm((current) => {
-                        const nextUnit = event.target.value;
+                        const nextUnit = value;
                         const nextBaseUnit = current.base_unit ? current.base_unit : nextUnit;
                         const nextPurchaseUnit = current.purchase_unit_default ? current.purchase_unit_default : nextUnit;
                         return {
@@ -1043,46 +1244,26 @@ export default function InventoryPage() {
                         };
                       })
                     }
-                    className={inputCls}
-                  >
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
+                    options={unitOptions}
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.baseUnit}</label>
-                  <select
+                  <ThemedSelect
                     value={form.base_unit ?? form.unit}
-                    onChange={(event) => setForm((current) => ({ ...current, base_unit: event.target.value }))}
-                    className={inputCls}
-                  >
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setForm((current) => ({ ...current, base_unit: value }))}
+                    options={unitOptions}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.purchaseUnitDefault}</label>
-                  <select
+                  <ThemedSelect
                     value={form.purchase_unit_default ?? form.unit}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, purchase_unit_default: event.target.value }))
-                    }
-                    className={inputCls}
-                  >
-                    {UNITS.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setForm((current) => ({ ...current, purchase_unit_default: value }))}
+                    options={unitOptions}
+                  />
                 </div>
                 {!editingItem && (
                   <div>
@@ -1165,31 +1346,25 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
-                <select
+                <ThemedSelect
                   value={form.storage_type ?? "room_temp"}
-                  onChange={(event) => setForm((current) => ({ ...current, storage_type: event.target.value }))}
-                  className={inputCls}
-                >
-                  {STORAGE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {copy.storageTypes[type as keyof typeof copy.storageTypes]}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
+                  options={storageOptions}
+                />
               </div>
               {formError && <p className="text-xs text-red-500">{formError}</p>}
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
               <button
-                onClick={() => setModalOpen(false)}
-                className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                onClick={closeModal}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
               <button
                 onClick={handleSave}
                 disabled={submitting}
-                className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
                 {submitting ? "..." : copy.save}
               </button>
@@ -1199,8 +1374,8 @@ export default function InventoryPage() {
       )}
 
       {categoryModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCategoryModal}>
+          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">{copy.addCategory}</h2>
             </div>
@@ -1220,8 +1395,8 @@ export default function InventoryPage() {
             <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
               <button
                 type="button"
-                onClick={() => setCategoryModalOpen(false)}
-                className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                onClick={closeCategoryModal}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
@@ -1229,7 +1404,7 @@ export default function InventoryPage() {
                 type="button"
                 onClick={handleCreateCategory}
                 disabled={categorySubmitting}
-                className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
                 {categorySubmitting ? "..." : copy.save}
               </button>
@@ -1239,8 +1414,8 @@ export default function InventoryPage() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeDeleteModal}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="px-6 py-5">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300">
                 <Trash2 className="h-5 w-5" />
@@ -1250,14 +1425,14 @@ export default function InventoryPage() {
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
               <button
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                onClick={closeDeleteModal}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
               <button
                 onClick={handleDelete}
-                className="rounded-2xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
+                className="rounded-md bg-red-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600"
               >
                 {copy.delete}
               </button>
@@ -1267,8 +1442,8 @@ export default function InventoryPage() {
       )}
 
       {adjustTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-3xl border border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${adjustClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeAdjustModal}>
+          <div className={`${adjustClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">{copy.adjustTitle}</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -1281,7 +1456,7 @@ export default function InventoryPage() {
                   <button
                     key={type}
                     onClick={() => setAdjustType(type)}
-                    className={`rounded-2xl border py-2 text-xs font-semibold transition ${
+                    className={`rounded-md border py-2 text-xs font-semibold transition ${
                       adjustType === type
                         ? type === "in"
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
@@ -1318,7 +1493,7 @@ export default function InventoryPage() {
                 />
               </div>
               {adjustPreview !== null && (
-                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 dark:bg-gray-900">
+                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 dark:bg-gray-900">
                   <span className="text-xs text-slate-400">{copy.previewAfter}</span>
                   <div className="flex items-center gap-2 text-sm font-bold">
                     <span className="tabular-nums text-slate-400">{formatNumber(adjustTarget.stock, lang)}</span>
@@ -1342,15 +1517,15 @@ export default function InventoryPage() {
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
               <button
-                onClick={() => setAdjustTarget(null)}
-                className="rounded-2xl px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                onClick={closeAdjustModal}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
               <button
                 onClick={handleAdjust}
                 disabled={adjusting}
-                className="rounded-2xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
               >
                 {adjusting ? "..." : copy.save}
               </button>
@@ -1360,9 +1535,9 @@ export default function InventoryPage() {
       )}
 
       {txTarget && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-sm" onClick={() => setTxTarget(null)}>
+        <div className={`${txClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex justify-end bg-gray-950/45 backdrop-blur-sm`} onClick={closeTxDrawer}>
           <div
-            className="flex h-full w-full max-w-sm flex-col border-l border-white/70 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950"
+            className={`${txClosing ? "motion-drawer-exit" : "motion-drawer"} flex h-full w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-gray-800">
@@ -1371,8 +1546,8 @@ export default function InventoryPage() {
                 <p className="text-xs text-slate-400">{txTarget.name}</p>
               </div>
               <button
-                onClick={() => setTxTarget(null)}
-                className="rounded-2xl p-2 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                onClick={closeTxDrawer}
+                className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1391,7 +1566,7 @@ export default function InventoryPage() {
                         {items.map((tx) => (
                           <div
                             key={tx.ID}
-                            className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 dark:border-gray-800 dark:bg-gray-950/50"
+                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-950"
                           >
                             <div
                               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${

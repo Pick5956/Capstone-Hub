@@ -300,8 +300,8 @@ function ThemeToggle({ className = '' }: { className?: string }) {
 
 function DesktopControls() {
   return (
-    <div className="hidden shrink-0 border-y border-gray-100 px-3 py-2 dark:border-gray-800 lg:block">
-      <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900/60">
+    <div className="hidden shrink-0 px-3 py-2 lg:block">
+      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
         <LanguageToggle className="h-8 border-0 bg-transparent shadow-none dark:bg-transparent" />
         <ThemeToggle className="h-8 w-8 border-0 bg-transparent p-0 text-gray-600 shadow-none hover:bg-white hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white" />
       </div>

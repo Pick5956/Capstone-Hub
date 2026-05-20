@@ -59,10 +59,13 @@ export default function PosOrderDetailPage() {
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const [selectedMenuClosing, setSelectedMenuClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentClosing, setPaymentClosing] = useState(false);
   const [bill, setBill] = useState<Bill | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "promptpay_qr">("cash");
   const [receivedAmount, setReceivedAmount] = useState("");
@@ -198,10 +201,40 @@ export default function PosOrderDetailPage() {
 
   const openMenuPicker = (item: MenuItem) => {
     const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => (group.options ?? []).filter((option) => option.is_active && option.is_default).map((option) => option.ID));
+    setSelectedMenuClosing(false);
     setSelectedMenu(item);
     setSelectedOptionIds(defaultOptionIds);
     setQuantity(1);
     setNote("");
+  };
+
+  const closeMenuPicker = () => {
+    if (selectedMenuClosing) return;
+    setSelectedMenuClosing(true);
+    window.setTimeout(() => {
+      setSelectedMenu(null);
+      setSelectedOptionIds([]);
+      setSelectedMenuClosing(false);
+    }, 180);
+  };
+
+  const closePaymentModal = () => {
+    if (paymentClosing) return;
+    setPaymentClosing(true);
+    window.setTimeout(() => {
+      setPaymentOpen(false);
+      setPaymentClosing(false);
+    }, 180);
+  };
+
+  const closeCancelModal = () => {
+    if (cancelClosing) return;
+    setCancelClosing(true);
+    window.setTimeout(() => {
+      setCancelOpen(false);
+      setCancelReason("");
+      setCancelClosing(false);
+    }, 180);
   };
 
   const toggleOption = (groupOptionIds: number[], optionId: number, maxSelect: number) => {
@@ -274,8 +307,7 @@ export default function PosOrderDetailPage() {
     }
     await runAction(async () => {
       const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, selected_option_ids: selectedOptionIds });
-      setSelectedMenu(null);
-      setSelectedOptionIds([]);
+      closeMenuPicker();
       setQuantity(1);
       setNote("");
       return res.data;
@@ -290,8 +322,7 @@ export default function PosOrderDetailPage() {
   const cancelSelectedOrder = async () => {
     if (!order || !cancelReason.trim()) return;
     await runAction(async () => (await cancelOrder(order.ID, cancelReason)).data);
-    setCancelOpen(false);
-    setCancelReason("");
+    closeCancelModal();
   };
 
   const openPayment = async () => {
@@ -303,6 +334,7 @@ export default function PosOrderDetailPage() {
       setBill(res.data);
       setReceivedAmount(String(res.data.grand_total));
       setPaymentMethod("cash");
+      setPaymentClosing(false);
       setPaymentOpen(true);
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
@@ -318,8 +350,7 @@ export default function PosOrderDetailPage() {
         method: paymentMethod,
         received_amount: paymentMethod === "cash" ? Number(receivedAmount) : bill.grand_total,
       });
-      setPaymentOpen(false);
-      setBill(null);
+      closePaymentModal();
       return res.data;
     });
   };
@@ -482,7 +513,7 @@ export default function PosOrderDetailPage() {
                 </button>
               )}
               {canCancelFromPos && (
-                <button type="button" disabled={submitting} onClick={() => setCancelOpen(true)} className="h-11 w-full rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
+                <button type="button" disabled={submitting} onClick={() => { setCancelClosing(false); setCancelOpen(true); }} className="h-11 w-full rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
                   {copy.cancelOrder}
                 </button>
               )}
@@ -510,8 +541,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {selectedMenu && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeMenuPicker}>
+          <div className={`${selectedMenuClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
               {!selectedMenu.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
             </div>
@@ -558,7 +589,7 @@ export default function PosOrderDetailPage() {
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => { setSelectedMenu(null); setSelectedOptionIds([]); }} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={closeMenuPicker} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {language === "th" ? "ยกเลิก" : "Cancel"}
               </button>
               <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
@@ -570,7 +601,7 @@ export default function PosOrderDetailPage() {
       )}
 
       {paymentOpen && bill && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
+        <div className={`${paymentClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closePaymentModal}>
           <style jsx global>{`
             @media print {
               body * {
@@ -590,7 +621,7 @@ export default function PosOrderDetailPage() {
               }
             }
           `}</style>
-          <div className="motion-bottom-sheet max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+          <div className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div id="print-bill" className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -647,7 +678,7 @@ export default function PosOrderDetailPage() {
 
             <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
               <button type="button" onClick={() => window.print()} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.print}</button>
-              <button type="button" onClick={() => setPaymentOpen(false)} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{language === "th" ? "ยกเลิก" : "Cancel"}</button>
+              <button type="button" onClick={closePaymentModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{language === "th" ? "ยกเลิก" : "Cancel"}</button>
               <button type="button" disabled={submitting || (paymentMethod === "cash" && Number(receivedAmount || 0) < bill.grand_total)} onClick={confirmPayment} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button>
             </div>
           </div>
@@ -655,8 +686,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {cancelOpen && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCancelModal}>
+          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>
@@ -668,7 +699,7 @@ export default function PosOrderDetailPage() {
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => { setCancelOpen(false); setCancelReason(""); }} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={closeCancelModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.keepOrder}
               </button>
               <button type="button" disabled={!cancelReason.trim() || submitting} onClick={cancelSelectedOrder} className="ui-press h-9 rounded-md bg-red-600 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">

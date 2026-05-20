@@ -79,6 +79,7 @@ export default function OrdersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
 
   const copy = language === "th"
@@ -282,6 +283,16 @@ export default function OrdersPage() {
     }
   };
 
+  const closeCancelModal = () => {
+    if (cancelClosing) return;
+    setCancelClosing(true);
+    window.setTimeout(() => {
+      setCancelOpen(false);
+      setCancelReason("");
+      setCancelClosing(false);
+    }, 180);
+  };
+
   const cancelSelected = async () => {
     if (!selectedOrder || !cancelReason.trim()) return;
     setSubmitting(true);
@@ -289,8 +300,7 @@ export default function OrdersPage() {
     try {
       const res = await cancelOrder(selectedOrder.ID, cancelReason.trim());
       setSelectedOrder(res.data);
-      setCancelOpen(false);
-      setCancelReason("");
+      closeCancelModal();
       await loadOrders(true);
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
@@ -555,7 +565,10 @@ export default function OrdersPage() {
                     <button
                       type="button"
                       disabled={submitting}
-                      onClick={() => setCancelOpen(true)}
+                      onClick={() => {
+                        setCancelClosing(false);
+                        setCancelOpen(true);
+                      }}
                       className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20"
                     >
                       <Ban className="h-4 w-4" />
@@ -578,8 +591,8 @@ export default function OrdersPage() {
       </section>
 
       {cancelOpen && (
-        <div className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 sm:items-center sm:px-4 sm:pb-0">
-          <div className="motion-bottom-sheet w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
+        <div className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCancelModal}>
+          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>
@@ -598,8 +611,7 @@ export default function OrdersPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setCancelOpen(false);
-                  setCancelReason("");
+                  closeCancelModal();
                 }}
                 className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
               >
