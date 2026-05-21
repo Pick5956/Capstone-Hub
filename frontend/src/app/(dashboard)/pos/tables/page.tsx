@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -15,6 +16,7 @@ import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
+const tableRefreshIntervalMs = 3_000;
 
 const apiErrorMessage = (error: unknown) => {
   if (!axios.isAxiosError(error)) return "";
@@ -34,8 +36,10 @@ export default function PosTablesPage() {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const refreshInFlight = useRef(false);
 
   const copy = language === "th"
     ? {
@@ -43,7 +47,8 @@ export default function PosTablesPage() {
         eyebrow: "POS",
         title: "เลือกโต๊ะ",
         subtitle: "แตะโต๊ะว่างเพื่อเปิดออเดอร์ หรือแตะโต๊ะที่ใช้งานเพื่อทำรายการต่อ",
-        refresh: "รีเฟรช",
+        search: "ค้นหาโต๊ะ",
+        noSearchResults: "ไม่พบโต๊ะที่ตรงกับคำค้นหา",
         openOrder: "เปิดออเดอร์",
         customerCount: "จำนวนลูกค้า",
         note: "หมายเหตุ",
@@ -65,7 +70,8 @@ export default function PosTablesPage() {
         eyebrow: "POS",
         title: "Select table",
         subtitle: "Tap a free table to open an order, or continue an active table.",
-        refresh: "Refresh",
+        search: "Search tables",
+        noSearchResults: "No tables match your search.",
         openOrder: "Open order",
         customerCount: "Customers",
         note: "Note",
@@ -89,22 +95,31 @@ export default function PosTablesPage() {
     return map;
   }, [orders]);
 
-  const activeTableCount = tables.filter((table) => activeOrderByTable.has(table.ID)).length;
-  const reservedTableCount = tables.filter((table) => table.status === "reserved").length;
-  const freeTableCount = tables.length - activeTableCount - reservedTableCount;
   const groupedTables = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
     const groups = new Map<string, { label: string; tables: RestaurantTable[] }>();
-    tables.forEach((table) => {
+    tables.filter((table) => {
+      if (!keyword) return true;
+      return [
+        table.table_number,
+        table.display_label,
+        table.table_zone?.name,
+        table.zone,
+        ...(table.tags?.map((tag) => tag.name) ?? []),
+      ].some((value) => String(value ?? "").toLowerCase().includes(keyword));
+    }).forEach((table) => {
       const key = table.zone_id ? String(table.zone_id) : "none";
       if (!groups.has(key)) groups.set(key, { label: table.table_zone?.name || table.zone || copy.noZone, tables: [] });
       groups.get(key)?.tables.push(table);
     });
     return Array.from(groups.values());
-  }, [copy.noZone, tables]);
+  }, [copy.noZone, search, tables]);
 
-  const load = async () => {
+  const load = useCallback(async (showLoading = true) => {
     if (!canTake) return;
-    setLoading(true);
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    if (showLoading) setLoading(true);
     setError("");
     try {
       const [tableRes, orderRes] = await Promise.all([listTables(), listOrders()]);
@@ -113,14 +128,25 @@ export default function PosTablesPage() {
     } catch {
       setError(copy.loadError);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      refreshInFlight.current = false;
     }
-  };
+  }, [canTake, copy.loadError]);
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canTake]);
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") void load(false);
+    };
+    const interval = window.setInterval(refreshIfVisible, tableRefreshIntervalMs);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [load]);
 
   const openTable = async () => {
     if (!selectedTable) return;
@@ -179,15 +205,17 @@ export default function PosTablesPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       actions={(
-        <button type="button" onClick={load} className="ui-press h-11 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 sm:h-10">
-          {copy.refresh}
-        </button>
+        <label className="relative w-full sm:w-80">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={copy.search}
+            className="h-11 w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+            aria-label={copy.search}
+          />
+        </label>
       )}
-      stats={[
-        { label: copy.free, value: freeTableCount, tone: "good" },
-        { label: copy.occupied, value: activeTableCount, tone: "warning" },
-        { label: copy.reserved, value: reservedTableCount, tone: "info" },
-      ]}
     >
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
@@ -199,7 +227,7 @@ export default function PosTablesPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {groupedTables.map((group) => (
+          {groupedTables.length ? groupedTables.map((group) => (
             <section key={group.label}>
               <h2 className="mb-2 text-[12px] font-semibold text-gray-500 dark:text-gray-400">{group.label}</h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -241,7 +269,11 @@ export default function PosTablesPage() {
           })}
               </div>
             </section>
-          ))}
+          )) : (
+            <div className="rounded-md border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-[13px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+              {copy.noSearchResults}
+            </div>
+          )}
         </div>
       )}
 

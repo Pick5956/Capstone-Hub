@@ -54,12 +54,12 @@ function recipeCost(components: MenuIngredientInput[], ingredients: Ingredient[]
 }
 
 function menuCategoryIds(item: MenuItem) {
-  const ids = new Set<number>();
-  if (item.category_id) ids.add(item.category_id);
+  const linkedIds = new Set<number>();
   for (const link of item.categories ?? []) {
-    if (link.category_id) ids.add(link.category_id);
+    if (link.category_id) linkedIds.add(link.category_id);
   }
-  return Array.from(ids);
+  if (linkedIds.size) return Array.from(linkedIds);
+  return item.category_id ? [item.category_id] : [];
 }
 
 type DeleteTarget =
@@ -558,9 +558,10 @@ export default function MenuPage() {
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
     setItemErrors({});
+    const categoryIds = menuCategoryIds(item);
     setItemForm({
-      category_id: item.category_id,
-      category_ids: menuCategoryIds(item),
+      category_id: categoryIds[0] ?? 0,
+      category_ids: categoryIds,
       name: item.name,
       price: item.price,
       image_url: item.image_url,

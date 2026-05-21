@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { createRestaurant } from "@/src/lib/restaurant";
@@ -12,7 +11,6 @@ import ThemedTimeInput from "@/src/components/shared/ThemedTimeInput";
 import { restaurantRepository } from "../../repositories/restaurantRepository";
 import {
   BackToRestaurants,
-  PLAN,
   RESTAURANT_TYPES,
   WorkspaceShell,
   getRestaurantTypeLabel,
@@ -198,7 +196,7 @@ function validateTime(value: string) {
 
 export default function NewRestaurantPage() {
   const router = useRouter();
-  const { memberships, setActiveRestaurant, refreshMemberships } = useAuth();
+  const { setActiveRestaurant, refreshMemberships } = useAuth();
   const { language } = useLanguage();
   const [type, setType] = useState(RESTAURANT_TYPES[0]);
   const [name, setName] = useState("");
@@ -216,12 +214,9 @@ export default function NewRestaurantPage() {
     ? {
         pageTitle: "สร้างร้านใหม่",
         pageDescription: "ตั้งค่าข้อมูลหลักให้พร้อมก่อนเข้าหน้าภาพรวม ร้านจะถูกผูกกับบัญชีนี้ในบทบาทเจ้าของร้าน",
-        viewPlan: "ดูแพ็กเกจ",
         starterTitle: "ข้อมูลเริ่มต้นของร้าน",
         starterDescription: "ข้อมูลชุดนี้จะใช้ในใบเสร็จ หน้าภาพรวม และการตั้งค่าร้าน",
         completion: "ความครบถ้วน",
-        freePlanTitle: "แพ็กเกจ Free เปิดร้านได้ 1 ร้าน",
-        freePlanDescription: "อัปเกรดเป็น Pro เพื่อสร้างร้านหรือสาขาเพิ่ม",
         restaurantSectionTitle: "ข้อมูลร้าน",
         restaurantSectionDescription: "ชื่อร้านและประเภทร้านจะช่วยให้ทีมแยกร้านหรือสาขาได้ถูกต้อง",
         nameLabel: "ชื่อร้าน",
@@ -262,9 +257,6 @@ export default function NewRestaurantPage() {
         serviceStepDesc: "เวลาเปิดปิดและจำนวนโต๊ะถูกต้อง",
         afterCreateTitle: "หลังสร้างร้านแล้ว",
         afterCreateItems: ["เพิ่มเมนูขายจริง", "จัดผังโต๊ะ", "เชิญผู้จัดการหรือพนักงาน"],
-        planTitle: "แพ็กเกจปัจจุบัน",
-        planUsage: "ร้าน",
-        planDescription: "ตอนนี้ใช้ limit จากจำนวนร้านที่บัญชีนี้เป็นเจ้าของ ก่อนต่อระบบ subscription จริง",
         restaurantNameFallback: "ชื่อร้าน",
         branchFallback: "สาขาหลัก",
         submitError: "สร้างร้านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
@@ -279,12 +271,9 @@ export default function NewRestaurantPage() {
     : {
         pageTitle: "Create a restaurant",
         pageDescription: "Set up the core details before entering the operations view. This account will become the owner of the restaurant.",
-        viewPlan: "View plan",
         starterTitle: "Restaurant starter details",
         starterDescription: "These details appear in receipts, the command center, and restaurant settings.",
         completion: "Completion",
-        freePlanTitle: "The Free plan includes 1 restaurant",
-        freePlanDescription: "Upgrade to Pro to add more restaurants or branches.",
         restaurantSectionTitle: "Restaurant details",
         restaurantSectionDescription: "Restaurant name and type help your team distinguish each location correctly.",
         nameLabel: "Restaurant name",
@@ -325,9 +314,6 @@ export default function NewRestaurantPage() {
         serviceStepDesc: "Hours and table count are valid",
         afterCreateTitle: "After creating the restaurant",
         afterCreateItems: ["Add live menu items", "Arrange the table layout", "Invite managers or staff"],
-        planTitle: "Current plan",
-        planUsage: "restaurants",
-        planDescription: "Right now the limit is based on how many restaurants this account owns before the real subscription system is connected.",
         restaurantNameFallback: "Restaurant name",
         branchFallback: "Main branch",
         submitError: "Could not create the restaurant. Please try again.",
@@ -343,8 +329,6 @@ export default function NewRestaurantPage() {
   const trimmedName = name.trim();
   const trimmedBranch = branch.trim();
   const tableCount = Number.parseInt(initialTables, 10);
-  const ownerRestaurantCount = memberships.filter((membership) => membership.role?.name === "owner").length;
-  const planFull = ownerRestaurantCount >= PLAN.maxRestaurants;
   const previewName = trimmedName || copy.restaurantNameFallback;
   const previewBranch = trimmedBranch || copy.branchFallback;
   const validTableCount = Number.isFinite(tableCount) && tableCount >= 1 && tableCount <= 500;
@@ -410,9 +394,6 @@ export default function NewRestaurantPage() {
     <WorkspaceShell title={copy.pageTitle} description={copy.pageDescription}>
       <div className="mt-6 flex items-center justify-between gap-3">
         <BackToRestaurants />
-        <Link href="/settings" className="text-[12px] font-medium text-orange-600 hover:underline dark:text-orange-400">
-          {copy.viewPlan}
-        </Link>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -436,15 +417,7 @@ export default function NewRestaurantPage() {
               </div>
             </div>
 
-            {planFull ? (
-              <div className="p-4">
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-900/15">
-                  <p className="text-[13px] font-semibold text-amber-900 dark:text-amber-200">{copy.freePlanTitle}</p>
-                  <p className="mt-1 text-[12px] text-amber-800/80 dark:text-amber-300/80">{copy.freePlanDescription}</p>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={submit}>
+            <form onSubmit={submit}>
                 <Section title={copy.restaurantSectionTitle} description={copy.restaurantSectionDescription}>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label={copy.nameLabel} placeholder={copy.namePlaceholder} value={name} onChange={setName} error={errors.name} />
@@ -522,8 +495,7 @@ export default function NewRestaurantPage() {
                     {submitting ? copy.submitBusy : copy.submitIdle}
                   </button>
                 </div>
-              </form>
-            )}
+            </form>
           </div>
         </div>
 
@@ -586,15 +558,6 @@ export default function NewRestaurantPage() {
             </div>
           </div>
 
-          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.planTitle}</p>
-              <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                {ownerRestaurantCount}/{PLAN.maxRestaurants} {copy.planUsage}
-              </span>
-            </div>
-            <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{copy.planDescription}</p>
-          </div>
         </aside>
       </div>
     </WorkspaceShell>

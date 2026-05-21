@@ -65,13 +65,6 @@ export const RESTAURANTS: Restaurant[] = [
   },
 ];
 
-export const PLAN = {
-  name: "Free",
-  maxRestaurants: 1,
-  usedRestaurants: RESTAURANTS.length,
-  maxMembers: 3,
-};
-
 export const RESTAURANT_TYPES = ["ร้านอาหาร", "คาเฟ่", "ชาบู/ปิ้งย่าง", "เดลิเวอรี", "ฟู้ดทรัค"];
 
 const RESTAURANT_TYPE_LABELS: Record<string, Record<Language, string>> = {

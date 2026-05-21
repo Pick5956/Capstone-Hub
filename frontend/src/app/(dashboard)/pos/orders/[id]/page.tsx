@@ -13,6 +13,7 @@ import type { Category, MenuItem } from "@/src/types/menu";
 import type { Bill, Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 
 const terminalStatuses = ["completed", "cancelled"];
 
@@ -40,6 +41,63 @@ function playBeep(frequency = 880) {
   oscillator.stop(context.currentTime + 0.16);
 }
 
+type OrderItemGroup = {
+  key: string;
+  firstItem: OrderItem;
+  items: OrderItem[];
+  quantity: number;
+  subtotal: number;
+  statusQuantities: Record<OrderItem["status"], number>;
+  pendingItems: OrderItem[];
+  readyItems: OrderItem[];
+};
+
+const groupOrderItems = (items: OrderItem[] = []) => {
+  const groups = new Map<string, OrderItemGroup>();
+
+  for (const item of items) {
+    const optionKey = [...(item.selected_options ?? [])]
+      .sort((first, second) => first.menu_option_id - second.menu_option_id)
+      .map((option) => `${option.option_group_id}:${option.menu_option_id}:${option.price_delta}`)
+      .join("|");
+    const key = [item.menu_id, item.menu_name, item.unit_price, item.options_total, item.note ?? "", optionKey].join("::");
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.items.push(item);
+      existing.quantity += item.quantity;
+      existing.subtotal += item.subtotal;
+      existing.statusQuantities[item.status] = (existing.statusQuantities[item.status] ?? 0) + item.quantity;
+      if (item.status === "pending") existing.pendingItems.push(item);
+      if (item.status === "ready") existing.readyItems.push(item);
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      firstItem: item,
+      items: [item],
+      quantity: item.quantity,
+      subtotal: item.subtotal,
+      statusQuantities: {
+        pending: item.status === "pending" ? item.quantity : 0,
+        cooking: item.status === "cooking" ? item.quantity : 0,
+        ready: item.status === "ready" ? item.quantity : 0,
+        served: item.status === "served" ? item.quantity : 0,
+        cancelled: item.status === "cancelled" ? item.quantity : 0,
+      },
+      pendingItems: item.status === "pending" ? [item] : [],
+      readyItems: item.status === "ready" ? [item] : [],
+    });
+  }
+
+  return Array.from(groups.values()).sort((first, second) => {
+    const firstUpdated = first.items.at(-1)?.UpdatedAt ?? first.items.at(-1)?.CreatedAt ?? "";
+    const secondUpdated = second.items.at(-1)?.UpdatedAt ?? second.items.at(-1)?.CreatedAt ?? "";
+    return secondUpdated.localeCompare(firstUpdated);
+  });
+};
+
 const apiErrorMessage = (error: unknown) => {
   if (!axios.isAxiosError(error)) return "";
   return String(error.response?.data?.error ?? "");
@@ -50,6 +108,7 @@ export default function PosOrderDetailPage() {
   const router = useRouter();
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
   const canTake = can(activeMembership, "take_order");
   const canPay = can(activeMembership, "take_payment");
   const orderId = Number(params.id);
@@ -60,6 +119,8 @@ export default function PosOrderDetailPage() {
   const [search, setSearch] = useState("");
   const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
   const [selectedMenuClosing, setSelectedMenuClosing] = useState(false);
+  const [allItemsOpen, setAllItemsOpen] = useState(false);
+  const [allItemsClosing, setAllItemsClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelClosing, setCancelClosing] = useState(false);
@@ -174,10 +235,32 @@ export default function PosOrderDetailPage() {
       };
 
   const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
+  const serveAllLabel = language === "th" ? "เสิร์ฟทั้งหมด" : "Serve all ready";
+  const billLockedTitle = language === "th" ? "คิดเงินได้เมื่อเสิร์ฟครบแล้ว" : "Bill after all items are served";
+  const billLockedDetail = language === "th" ? "ถ้ามีอาหารพร้อมแล้วให้กดเสิร์ฟก่อน แล้วปุ่มออกบิลจะขึ้นตรงนี้" : "Serve ready food first, then the bill button will appear here.";
+  const noPaymentPermission = language === "th" ? "บัญชีนี้ไม่มีสิทธิ์รับเงิน" : "This account cannot take payment.";
+  const servedToastTitle = language === "th" ? "เสิร์ฟรายการพร้อมทั้งหมดแล้ว" : "Ready items served";
+  const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
+  const currentCartLabel = language === "th" ? "รายการรอบนี้" : "Current round";
+  const tableItemsLabel = language === "th" ? "รายการทั้งหมดของโต๊ะ" : "All table items";
+  const viewAllItemsLabel = language === "th" ? "ดูรายการทั้งหมด" : "View all items";
+  const sentItemsLabel = language === "th" ? "รายการที่ส่งแล้ว" : "Sent items";
+  const emptyCurrentCart = language === "th" ? "ยังไม่มีรายการในรอบนี้" : "No items in this round";
+  const emptyCurrentCartHint = language === "th" ? "เลือกเมนูเพื่อเพิ่มเข้าตะกร้า หรือเปิดรายการทั้งหมดเพื่อดูอาหารที่ส่งครัวแล้ว" : "Add menu items here, or open all items to review food already sent to kitchen.";
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
   const hasPending = Boolean(order?.items?.some((item) => item.status === "pending"));
   const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
   const hasReadyItems = readyItems.length > 0;
+  const pendingGroupedOrderItems = useMemo(() => groupOrderItems((order?.items ?? []).filter((item) => item.status === "pending")), [order?.items]);
+  const sentGroupedOrderItems = useMemo(() => groupOrderItems((order?.items ?? []).filter((item) => item.status !== "pending")), [order?.items]);
+  const menuOrderQuantities = useMemo(() => {
+    const quantities = new Map<number, number>();
+    for (const item of order?.items ?? []) {
+      if (item.status !== "pending") continue;
+      quantities.set(item.menu_id, (quantities.get(item.menu_id) ?? 0) + item.quantity);
+    }
+    return quantities;
+  }, [order?.items]);
   const canCancelFromPos = Boolean(order && order.status === "open");
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -215,6 +298,15 @@ export default function PosOrderDetailPage() {
       setSelectedMenu(null);
       setSelectedOptionIds([]);
       setSelectedMenuClosing(false);
+    }, 180);
+  };
+
+  const closeAllItemsDrawer = () => {
+    if (allItemsClosing) return;
+    setAllItemsClosing(true);
+    window.setTimeout(() => {
+      setAllItemsOpen(false);
+      setAllItemsClosing(false);
     }, 180);
   };
 
@@ -351,32 +443,120 @@ export default function PosOrderDetailPage() {
         received_amount: paymentMethod === "cash" ? Number(receivedAmount) : bill.grand_total,
       });
       closePaymentModal();
+      showToast({ title: paidToastTitle });
       return res.data;
+    });
+  };
+
+  const serveReadyItems = async (itemsToServe = readyItems) => {
+    if (!order || !itemsToServe.length) return;
+    await runAction(async () => {
+      let nextOrder = order;
+      for (const item of itemsToServe) {
+        const res = await updateOrderItemStatus(order.ID, item.ID, "served");
+        nextOrder = res.data;
+      }
+      showToast({ title: servedToastTitle });
+      return nextOrder;
     });
   };
 
   const changeAmount = bill ? Math.max(0, Number(receivedAmount || 0) - bill.grand_total) : 0;
   const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const mobileActionLabel = hasPending ? copy.sendKitchen : order?.status === "served" ? copy.close : hasReadyItems ? copy.readyAlert : copy.cart;
-  const mobileActionDisabled = submitting || isTerminal || (!hasPending && order?.status !== "served");
+  const pendingItemCount = order?.items?.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const pendingTotal = order?.items?.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.subtotal, 0) ?? 0;
+  const statusToneClass = (status: OrderItem["status"]) => {
+    if (status === "pending") return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-900/20 dark:text-orange-300";
+    if (status === "cooking") return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300";
+    if (status === "ready") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300";
+    if (status === "served") return "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300";
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300";
+  };
+  const mobileActionLabel = hasPending ? copy.sendKitchen : hasReadyItems ? serveAllLabel : order?.status === "served" ? copy.close : viewAllItemsLabel;
+  const mobileActionDisabled = submitting || isTerminal;
   const runMobilePrimaryAction = () => {
     if (!order) return;
     if (hasPending) {
       void runAction(async () => (await sendOrderToKitchen(order.ID)).data);
       return;
     }
+    if (hasReadyItems) {
+      void serveReadyItems();
+      return;
+    }
     if (order.status === "served") {
       void openPayment();
       return;
     }
-    document.getElementById("order-cart")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setAllItemsClosing(false);
+    setAllItemsOpen(true);
+  };
+
+  const renderOrderItemGroup = (group: OrderItemGroup) => {
+    if (!order) return null;
+    const item = group.firstItem;
+    const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
+
+    return (
+      <div key={group.key} className="p-3">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+              <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">x{group.quantity}</span>
+            </div>
+            <p className="mt-1 text-[12px] text-gray-500">฿{item.unit_price.toLocaleString()}{group.quantity > 1 ? ` × ${group.quantity}` : ""}</p>
+            {item.selected_options?.length ? (
+              <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-500">
+                {item.selected_options.map((option) => (
+                  <span key={option.ID} className="rounded-md bg-gray-100 px-2 py-0.5 dark:bg-gray-900">
+                    {option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(["pending", "cooking", "ready", "served", "cancelled"] as OrderItem["status"][]).map((status) => {
+                const statusQuantity = group.statusQuantities[status] ?? 0;
+                if (!statusQuantity) return null;
+                return (
+                  <span key={status} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${statusToneClass(status)}`}>
+                    {statusLabel(status)} x{statusQuantity}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <p className="mr-auto font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white sm:mr-0">฿{group.subtotal.toLocaleString()}</p>
+            {group.readyItems.length > 0 && (
+              <button type="button" disabled={submitting} onClick={() => serveReadyItems(group.readyItems)} className="ui-press h-9 rounded-md border border-emerald-200 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                {copy.markServed}
+              </button>
+            )}
+            {singlePendingItem && (
+              <>
+                <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity - 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">-</button>
+                <span className="min-w-8 text-center font-mono text-[14px] font-semibold tabular-nums">{singlePendingItem.quantity}</span>
+                <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity + 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">+</button>
+                <button type="button" disabled={submitting} onClick={() => runAction(async () => (await deleteOrderItem(order.ID, singlePendingItem.ID)).data)} className="ui-press h-9 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
+                  {copy.remove}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-slate-50 px-3 py-3 pb-28 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 sm:pb-6 lg:px-8 lg:py-6">
-      <div className="sticky top-14 z-20 -mx-3 mb-3 border-b border-gray-200 bg-slate-50/95 px-3 pb-3 pt-1 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:static sm:mx-0 sm:mb-4 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-0">
+      <div className="-mx-3 mb-3 border-b border-gray-200 bg-slate-50 px-3 pb-3 pt-1 dark:border-gray-800 dark:bg-gray-950 sm:mx-0 sm:mb-4 sm:border-0 sm:bg-transparent sm:p-0">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press h-11 w-fit rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
             {copy.back}
@@ -389,17 +569,6 @@ export default function PosOrderDetailPage() {
             </div>
           )}
         </div>
-        {order && (
-          <a href="#order-cart" className="mt-3 grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-950 lg:hidden">
-            <div>
-              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{copy.cart}</p>
-              <p className="font-mono text-[18px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
-            </div>
-            <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-              {orderItemCount} {language === "th" ? "รายการ" : "items"}
-            </span>
-          </a>
-        )}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
@@ -415,15 +584,15 @@ export default function PosOrderDetailPage() {
           <Skeleton className="h-[520px]" />
         </div>
       ) : order ? (
-        <div className="grid flex-1 gap-4 lg:grid-cols-[1fr_380px]">
+        <div className="grid flex-1 items-start gap-4 lg:grid-cols-[1fr_380px]">
           <section className="min-w-0 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                <button type="button" onClick={() => setCategoryId("all")} className={`ui-press h-11 shrink-0 rounded-md px-4 text-[13px] font-semibold sm:h-9 sm:px-3 sm:text-[12px] ${categoryId === "all" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900"}`}>
+              <div className="soft-scrollbar-hide -mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
+                <button type="button" onClick={() => setCategoryId("all")} className={`ui-press min-h-12 min-w-[72px] shrink-0 snap-start rounded-md px-4 text-[14px] font-semibold sm:min-h-9 sm:min-w-0 sm:px-3 sm:text-[12px] ${categoryId === "all" ? "bg-gray-900 text-white shadow-md shadow-gray-950/10 dark:bg-white dark:text-gray-900 dark:shadow-black/30" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
                   {copy.all}
                 </button>
                 {categories.map((category) => (
-                  <button key={category.ID} type="button" onClick={() => setCategoryId(category.ID)} className={`ui-press h-11 shrink-0 rounded-md px-4 text-[13px] font-semibold sm:h-9 sm:px-3 sm:text-[12px] ${categoryId === category.ID ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900"}`}>
+                  <button key={category.ID} type="button" onClick={() => setCategoryId(category.ID)} className={`ui-press min-h-12 min-w-[92px] shrink-0 snap-start rounded-md px-4 text-[14px] font-semibold sm:min-h-9 sm:min-w-0 sm:px-3 sm:text-[12px] ${categoryId === category.ID ? "bg-gray-900 text-white shadow-md shadow-gray-950/10 dark:bg-white dark:text-gray-900 dark:shadow-black/30" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
                     {category.name}
                   </button>
                 ))}
@@ -432,110 +601,225 @@ export default function PosOrderDetailPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 xl:grid-cols-4">
-              {filteredMenu.length ? filteredMenu.map((item) => (
-                <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className="ui-press flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,background-color,box-shadow] hover:border-orange-200 hover:bg-orange-50/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 sm:hover:-translate-y-0.5">
-                  <div
-                    className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                    style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
-                    aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
-                  >
-                    {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
-                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                    <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                    <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
-                  </div>
-                </button>
-              )) : (
+              {filteredMenu.length ? filteredMenu.map((item) => {
+                const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
+
+                return (
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                    {orderedQuantity > 0 && (
+                      <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
+                        {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
+                      </span>
+                    )}
+                    <div
+                      className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
+                      style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                      aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
+                    >
+                      {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                      <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
+                      <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                      <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                    </div>
+                  </button>
+                );
+              }) : (
                 <div className="col-span-full px-4 py-12 text-center text-[13px] text-gray-500">{copy.noMenu}</div>
               )}
             </div>
           </section>
 
-          <aside id="order-cart" className="scroll-mt-28 flex min-h-[480px] flex-col rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cart}</h2>
-              <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
-            </div>
-
-            <div className="flex-1 divide-y divide-gray-200 overflow-auto dark:divide-gray-800">
-              {order.items?.length ? order.items.map((item) => (
-                <div key={item.ID} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
-                      <p className="mt-1 text-[12px] text-gray-500">฿{item.unit_price.toLocaleString()} · {statusLabel(item.status)}</p>
-                      {item.selected_options?.length ? (
-                        <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
-                          {item.selected_options.map((option) => (
-                            <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}</p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
-                    </div>
-                    <p className="font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.subtotal.toLocaleString()}</p>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {item.status === "pending" && (
-                      <>
-                        <button type="button" disabled={submitting} onClick={() => bumpItem(item, item.quantity - 1)} className="ui-press h-11 w-11 rounded-md border border-gray-200 text-[18px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900 sm:h-9 sm:w-9 sm:text-[16px]">-</button>
-                        <span className="min-w-8 text-center font-mono text-[14px] font-semibold tabular-nums">{item.quantity}</span>
-                        <button type="button" disabled={submitting} onClick={() => bumpItem(item, item.quantity + 1)} className="ui-press h-11 w-11 rounded-md border border-gray-200 text-[18px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900 sm:h-9 sm:w-9 sm:text-[16px]">+</button>
-                        <button type="button" disabled={submitting} onClick={() => runAction(async () => (await deleteOrderItem(order.ID, item.ID)).data)} className="ui-press ml-auto h-11 rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20 sm:h-9 sm:px-3 sm:text-[12px]">
-                          {copy.remove}
-                        </button>
-                      </>
-                    )}
-                    {item.status === "ready" && (
-                      <button type="button" disabled={submitting} onClick={() => runAction(async () => (await updateOrderItemStatus(order.ID, item.ID, "served")).data)} className="ui-press h-11 rounded-md border border-emerald-200 px-4 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20 sm:h-9 sm:px-3 sm:text-[12px]">
-                        {copy.markServed}
+          <aside id="order-cart" className="hidden scroll-mt-28 flex-col rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 lg:sticky lg:top-6 lg:flex lg:h-[calc(100vh-3rem)] lg:max-h-[calc(100vh-3rem)] lg:min-h-[420px] lg:overflow-hidden">
+            <div className="shrink-0 border-b border-gray-200 p-4 dark:border-gray-800">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{currentCartLabel}</h2>
+                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{pendingTotal.toLocaleString()}</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <span className="w-fit rounded-md bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                    {pendingItemCount} {language === "th" ? "รายการใหม่" : "new items"}
+                  </span>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                    <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} className="ui-press h-11 w-full rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                      {viewAllItemsLabel} ({orderItemCount})
+                    </button>
+                    {hasPending && (
+                      <button type="button" disabled={submitting} onClick={() => runAction(async () => (await sendOrderToKitchen(order.ID)).data)} className="ui-press h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                        {copy.sendKitchen}
                       </button>
                     )}
                   </div>
                 </div>
-              )) : (
-                <div className="px-4 py-12 text-center text-[13px] text-gray-500">{copy.emptyCart}</div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-gray-200 dark:divide-gray-800 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+              {pendingGroupedOrderItems.length ? pendingGroupedOrderItems.map((group) => {
+                const item = group.firstItem;
+                const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
+
+                return (
+                  <div key={group.key} className="p-3">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                          <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                            x{group.quantity}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[12px] text-gray-500">
+                          ฿{item.unit_price.toLocaleString()}{group.quantity > 1 ? ` × ${group.quantity}` : ""}
+                        </p>
+                        {item.selected_options?.length ? (
+                          <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-500">
+                            {item.selected_options.map((option) => (
+                              <span key={option.ID} className="rounded-md bg-gray-100 px-2 py-0.5 dark:bg-gray-900">
+                                {option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {(["pending", "cooking", "ready", "served", "cancelled"] as OrderItem["status"][]).map((status) => {
+                            const statusQuantity = group.statusQuantities[status] ?? 0;
+                            if (!statusQuantity) return null;
+                            return (
+                              <span key={status} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${statusToneClass(status)}`}>
+                                {statusLabel(status)} x{statusQuantity}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <p className="mr-auto font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white lg:mr-0">฿{group.subtotal.toLocaleString()}</p>
+                        {group.readyItems.length > 0 && (
+                          <button type="button" disabled={submitting} onClick={() => serveReadyItems(group.readyItems)} className="ui-press h-9 rounded-md border border-emerald-200 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                            {copy.markServed}
+                          </button>
+                        )}
+                        {singlePendingItem && (
+                          <>
+                            <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity - 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">-</button>
+                            <span className="min-w-8 text-center font-mono text-[14px] font-semibold tabular-nums">{singlePendingItem.quantity}</span>
+                            <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity + 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">+</button>
+                            <button type="button" disabled={submitting} onClick={() => runAction(async () => (await deleteOrderItem(order.ID, singlePendingItem.ID)).data)} className="ui-press h-9 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
+                              {copy.remove}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="px-4 py-12 text-center text-[13px] text-gray-500">
+                  <p className="font-semibold text-gray-700 dark:text-gray-300">{emptyCurrentCart}</p>
+                  <p className="mt-1 leading-5">{emptyCurrentCartHint}</p>
+                </div>
               )}
             </div>
 
-            <div className="space-y-2 border-t border-gray-200 p-4 dark:border-gray-800">
-              {hasPending && (
-                <button type="button" disabled={submitting} onClick={() => runAction(async () => (await sendOrderToKitchen(order.ID)).data)} className="ui-press h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                  {copy.sendKitchen}
-                </button>
-              )}
-              {order.status === "served" && (
-                <button type="button" disabled={submitting || !canPay} onClick={openPayment} className="ui-press h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                  {copy.close}
-                </button>
-              )}
-              {canCancelFromPos && (
-                <button type="button" disabled={submitting} onClick={() => { setCancelClosing(false); setCancelOpen(true); }} className="h-11 w-full rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
-                  {copy.cancelOrder}
-                </button>
-              )}
-              <div className="flex items-center justify-between text-[12px] text-gray-500">
-                <span>{copy.total}</span>
-                <span className="font-mono tabular-nums">฿{order.total_amount.toLocaleString()}</span>
-              </div>
-            </div>
           </aside>
         </div>
       ) : null}
 
       {order && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:hidden">
-          <div className="grid grid-cols-[1fr_1.15fr] gap-2">
-            <a href="#order-cart" className="flex h-12 flex-col justify-center rounded-md border border-gray-200 px-3 dark:border-gray-800">
-              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{copy.total}</span>
-              <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{order.total_amount.toLocaleString()}</span>
-            </a>
-            <button type="button" disabled={mobileActionDisabled} onClick={runMobilePrimaryAction} className="h-12 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">
-              {mobileActionLabel}
+        <div className="fixed inset-x-3 bottom-3 z-30 rounded-md border border-gray-200 bg-white/95 p-3 shadow-[0_16px_48px_rgba(15,23,42,0.2)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 dark:shadow-black/40 sm:hidden">
+          <div className="mb-2 grid grid-cols-[1fr_auto] items-center gap-2">
+            <button type="button" onClick={() => document.getElementById("order-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="min-w-0 rounded-md border border-gray-200 px-3 py-2 text-left dark:border-gray-800">
+              <span className="block text-[10px] font-medium text-gray-500 dark:text-gray-400">{currentCartLabel}</span>
+              <span className="mt-0.5 block truncate font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">
+                ฿{pendingTotal.toLocaleString()} · {pendingItemCount} {language === "th" ? "รายการ" : "items"}
+              </span>
             </button>
+            <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} className="h-full rounded-md border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 dark:border-gray-800 dark:text-gray-200">
+              {language === "th" ? "ทั้งหมด" : "All"} {orderItemCount}
+            </button>
+          </div>
+          <button type="button" disabled={mobileActionDisabled} onClick={runMobilePrimaryAction} className="h-12 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">
+            {mobileActionLabel}
+          </button>
+        </div>
+      )}
+
+      {allItemsOpen && order && (
+        <div className={`${allItemsClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:justify-end sm:px-4`} onClick={closeAllItemsDrawer}>
+          <div className={`${allItemsClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-2rem)]`} onClick={(event) => event.stopPropagation()}>
+            <div className="shrink-0 border-b border-gray-200 p-4 dark:border-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{tableItemsLabel}</h2>
+                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
+                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{orderItemCount} {language === "th" ? "รายการทั้งหมด" : "items total"}</p>
+                </div>
+                <button type="button" onClick={closeAllItemsDrawer} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                  {language === "th" ? "ปิด" : "Close"}
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {hasReadyItems && (
+                  <button type="button" disabled={submitting} onClick={() => serveReadyItems()} className="ui-press h-11 rounded-md border border-emerald-200 px-4 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                    {serveAllLabel}
+                  </button>
+                )}
+                {order.status === "served" && (
+                  <button type="button" disabled={submitting || !canPay} onClick={openPayment} className="ui-press h-11 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                    {copy.close}
+                  </button>
+                )}
+                {canCancelFromPos && (
+                  <button type="button" disabled={submitting} onClick={() => { setCancelClosing(false); setCancelOpen(true); }} className="h-11 rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
+                    {copy.cancelOrder}
+                  </button>
+                )}
+              </div>
+              {order.status !== "served" && !isTerminal && (
+                <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400">
+                  <p className="font-semibold text-gray-900 dark:text-white">{billLockedTitle}</p>
+                  <p>{billLockedDetail}</p>
+                </div>
+              )}
+              {order.status === "served" && !canPay && (
+                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
+                  {noPaymentPermission}
+                </div>
+              )}
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {pendingGroupedOrderItems.length ? (
+                <section>
+                  <div className="sticky top-0 z-10 border-b border-orange-200 bg-orange-50 px-3 py-2 text-[12px] font-semibold text-orange-800 dark:border-orange-900/50 dark:bg-orange-950 dark:text-orange-200">
+                    {currentCartLabel} ({pendingItemCount})
+                  </div>
+                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {pendingGroupedOrderItems.map(renderOrderItemGroup)}
+                  </div>
+                </section>
+              ) : null}
+
+              {sentGroupedOrderItems.length ? (
+                <section>
+                  <div className="sticky top-0 z-10 border-y border-gray-200 bg-gray-50 px-3 py-2 text-[12px] font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                    {sentItemsLabel} ({orderItemCount - pendingItemCount})
+                  </div>
+                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                    {sentGroupedOrderItems.map(renderOrderItemGroup)}
+                  </div>
+                </section>
+              ) : null}
+
+              {!pendingGroupedOrderItems.length && !sentGroupedOrderItems.length ? (
+                <div className="px-4 py-12 text-center text-[13px] text-gray-500">{copy.emptyCart}</div>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

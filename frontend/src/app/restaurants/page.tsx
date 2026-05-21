@@ -8,7 +8,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { restaurantRepository } from "../repositories/restaurantRepository";
 import type { Membership } from "@/src/types/restaurant";
-import { PLAN, WorkspaceShell, getRestaurantTypeLabel } from "./restaurantWorkspaceUi";
+import { WorkspaceShell, getRestaurantTypeLabel } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
 
@@ -115,11 +115,7 @@ function RestaurantCard({
               )}
             </div>
             <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
-              {branchName} · {restaurantType}
-            </p>
-            <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
-              {restaurant?.phone || (language === "th" ? "ยังไม่ระบุเบอร์" : "No phone")} · {language === "th" ? "เข้าร่วมเมื่อ" : "Joined on"}{" "}
-              {new Date(membership.joined_at).toLocaleDateString(language === "th" ? "th-TH" : "en-US")}
+              {branchName} · {restaurantType} · {restaurant?.phone || (language === "th" ? "ยังไม่ระบุเบอร์" : "No phone")}
             </p>
           </div>
         </div>
@@ -128,37 +124,22 @@ function RestaurantCard({
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-[12px]">
-        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
-          <p className="text-gray-400">{language === "th" ? "บทบาท" : "Role"}</p>
-          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{roleLabel}</p>
-        </div>
-        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
-          <p className="text-gray-400">{language === "th" ? "ประเภท" : "Type"}</p>
-          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{restaurantType}</p>
-        </div>
-        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
-          <p className="text-gray-400">{language === "th" ? "สิทธิ์" : "Permissions"}</p>
-          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{permissionLabelOf(membership, language)}</p>
-        </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
+        <span className="rounded-md bg-gray-50 px-2 py-1 font-medium text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+          {hours}
+        </span>
+        <span className="rounded-md bg-gray-50 px-2 py-1 font-medium text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+          {tableCount}
+        </span>
+        <span className="rounded-md bg-gray-50 px-2 py-1 font-medium text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+          {permissionLabelOf(membership, language)}
+        </span>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
-        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
-          <p className="text-gray-400">{language === "th" ? "เวลา/โต๊ะ" : "Hours / tables"}</p>
-          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{hours} · {tableCount}</p>
-        </div>
-        <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
-          <p className="text-gray-400">{language === "th" ? "สาขา" : "Branch"}</p>
-          <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{branchName}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 text-[11px] text-gray-500 dark:border-gray-800 dark:text-gray-400">
         <span className="truncate">{restaurant?.address || (language === "th" ? "ยังไม่ระบุที่อยู่" : "No address")}</span>
         {canManageInvites(membership) && <span className="shrink-0">{language === "th" ? "จัดการคำเชิญได้" : "Can manage invites"}</span>}
       </div>
-      <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">Restaurant ID {membership.restaurant_id}</p>
     </button>
   );
 }
@@ -264,8 +245,6 @@ export default function RestaurantsPage() {
   );
   const ownedCount = memberships.filter((membership) => roleNameOf(membership) === "owner").length;
   const joinedCount = memberships.length - ownedCount;
-  const usedRestaurants = memberships.length;
-  const isPlanFull = usedRestaurants >= PLAN.maxRestaurants;
 
   const enterDashboard = () => {
     if (!selectedRestaurant) return;
@@ -347,22 +326,20 @@ export default function RestaurantsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-                  {language === "th" ? "แพ็กเกจปัจจุบัน" : "Current plan"}
+                  {language === "th" ? "พื้นที่ร้าน" : "Restaurant workspace"}
                 </p>
-                <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{PLAN.name}</h2>
+                <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                  {language === "th" ? "สร้างร้านได้ไม่จำกัด" : "Unlimited restaurants"}
+                </h2>
               </div>
-              <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${
-                isPlanFull
-                  ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-              }`}>
-                {usedRestaurants}/{PLAN.maxRestaurants} {language === "th" ? "ร้าน" : "restaurants"}
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                {language === "th" ? "ไม่จำกัด" : "Unlimited"}
               </span>
             </div>
             <p className="mt-3 text-[12px] text-gray-500 dark:text-gray-400">
               {language === "th"
-                ? "Free เปิดได้ 1 ร้าน และสมาชิก 3 คนต่อร้าน"
-                : "Free supports 1 restaurant and 3 members per restaurant."}
+                ? "เจ้าของร้านสามารถสร้างร้านหรือสาขาเพิ่มได้ตามต้องการในช่วงพัฒนา MVP"
+                : "Owners can create as many restaurants or branches as needed during the MVP phase."}
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <div className="rounded-md bg-gray-50 px-3 py-2 dark:bg-gray-900">
@@ -374,13 +351,6 @@ export default function RestaurantsPage() {
                 <p className="mt-1 text-[15px] font-semibold text-gray-900 dark:text-white">{joinedCount} {language === "th" ? "ร้าน" : "restaurants"}</p>
               </div>
             </div>
-            {isPlanFull && (
-              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-300">
-                {language === "th"
-                  ? "ถึง limit ร้านแล้ว สร้างร้านเพิ่มต้องอัปเกรดแพ็กเกจ"
-                  : "You have reached the restaurant limit. Upgrade the plan to create more restaurants."}
-              </p>
-            )}
           </div>
 
           <QuickAction

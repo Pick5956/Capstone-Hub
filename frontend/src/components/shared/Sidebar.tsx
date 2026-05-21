@@ -131,7 +131,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   };
 
   return (
-    <nav className="sidebar-nav-scroll flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [@media(max-height:760px)]:space-y-1.5 [@media(max-height:760px)]:py-1.5">
+    <nav className="sidebar-nav-scroll flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 py-2 [@media(max-height:760px)]:space-y-1.5 [@media(max-height:760px)]:py-1.5">
       {nav.map(({ group, items }, groupIndex) => (
         <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
           {!collapsed && group && (

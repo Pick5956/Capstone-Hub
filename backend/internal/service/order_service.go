@@ -320,12 +320,18 @@ func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entit
 			return err
 		}
 		now := repository.BangkokNow()
+		maxBatch, err := tx.MaxKitchenBatch(order.ID)
+		if err != nil {
+			return err
+		}
+		nextBatch := maxBatch + 1
 		pendingCount := 0
 		for i := range items {
 			if items[i].Status == entity.OrderItemStatusPending {
 				pendingCount += 1
 				items[i].Status = entity.OrderItemStatusCooking
 				items[i].SentAt = &now
+				items[i].KitchenBatch = nextBatch
 				if err := tx.SaveItem(&items[i]); err != nil {
 					return err
 				}
@@ -334,7 +340,7 @@ func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entit
 		if pendingCount == 0 {
 			return errors.New("no pending items to send")
 		}
-		if err := setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, "sent to kitchen"); err != nil {
+		if err := setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch)); err != nil {
 			return err
 		}
 		changed = order.ID

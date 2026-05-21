@@ -96,7 +96,17 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 }
 
 func (r *MenuRepository) UpdateMenuItem(item *entity.MenuItem) error {
-	return r.db.Save(item).Error
+	return r.db.Model(&entity.MenuItem{}).
+		Where("restaurant_id = ? AND id = ?", item.RestaurantID, item.ID).
+		Updates(map[string]any{
+			"category_id":   item.CategoryID,
+			"name":          item.Name,
+			"price":         item.Price,
+			"image_url":     item.ImageURL,
+			"description":   item.Description,
+			"is_available":  item.IsAvailable,
+			"display_order": item.DisplayOrder,
+		}).Error
 }
 
 func (r *MenuRepository) ReplaceMenuOptions(item *entity.MenuItem, groups []entity.MenuOptionGroup) error {
@@ -152,7 +162,7 @@ func (r *MenuRepository) ReplaceMenuIngredients(item *entity.MenuItem, component
 
 func (r *MenuRepository) ReplaceMenuCategories(item *entity.MenuItem, categories []entity.MenuItemCategory) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuItemCategory{}).Error; err != nil {
+		if err := tx.Unscoped().Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuItemCategory{}).Error; err != nil {
 			return err
 		}
 		for i := range categories {

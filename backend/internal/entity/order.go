@@ -43,6 +43,9 @@ type Order struct {
 	ClosedAt            *time.Time `json:"closed_at"`
 	CancelledReason     string     `json:"cancelled_reason"`
 	Version             int        `json:"version" gorm:"not null;default:1"`
+	KitchenTicketID     string     `json:"kitchen_ticket_id,omitempty" gorm:"-"`
+	KitchenBatch        uint       `json:"kitchen_batch,omitempty" gorm:"-"`
+	KitchenSentAt       *time.Time `json:"kitchen_sent_at,omitempty" gorm:"-"`
 
 	Restaurant *Restaurant               `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 	Table      *RestaurantTable          `json:"table,omitempty" gorm:"foreignKey:TableID"`
@@ -66,6 +69,7 @@ type OrderItem struct {
 	Note            string     `json:"note"`
 	Status          string     `json:"status" gorm:"size:32;not null;default:'pending';index:idx_order_items_status_sent,priority:1"`
 	SentAt          *time.Time `json:"sent_at" gorm:"index:idx_order_items_status_sent,priority:2"`
+	KitchenBatch    uint       `json:"kitchen_batch" gorm:"not null;default:0;index"`
 	ReadyAt         *time.Time `json:"ready_at"`
 	ServedAt        *time.Time `json:"served_at"`
 	CancelledReason string     `json:"cancelled_reason"`

@@ -18,6 +18,7 @@ export interface OrderItem {
   note: string;
   status: OrderItemStatus;
   sent_at?: string | null;
+  kitchen_batch?: number;
   ready_at?: string | null;
   served_at?: string | null;
   cancelled_reason?: string;
@@ -71,6 +72,9 @@ export interface Order {
   closed_at?: string | null;
   cancelled_reason?: string;
   version: number;
+  kitchen_ticket_id?: string;
+  kitchen_batch?: number;
+  kitchen_sent_at?: string | null;
   table?: RestaurantTable;
   staff?: User;
   items?: OrderItem[];

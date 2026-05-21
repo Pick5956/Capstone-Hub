@@ -48,6 +48,10 @@ function isOrderReady(order: Order) {
   return items.length > 0 && items.every((item) => item.status === "ready");
 }
 
+function ticketKey(order: Order) {
+  return order.kitchen_ticket_id ?? `${order.ID}:${order.kitchen_batch ?? 0}`;
+}
+
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -58,10 +62,10 @@ export default function KitchenPage() {
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [completingOrderIds, setCompletingOrderIds] = useState<Set<number>>(new Set());
-  const [hiddenReadyOrderIds, setHiddenReadyOrderIds] = useState<Set<number>>(new Set());
+  const [completingTicketIds, setCompletingTicketIds] = useState<Set<string>>(new Set());
+  const [hiddenReadyTicketIds, setHiddenReadyTicketIds] = useState<Set<string>>(new Set());
   const hasLoadedRef = useRef(false);
-  const ticketIdsRef = useRef<Set<number>>(new Set());
+  const ticketIdsRef = useRef<Set<string>>(new Set());
 
   const copy = language === "th"
     ? {
@@ -104,14 +108,14 @@ export default function KitchenPage() {
       };
 
   const visibleOrders = useMemo(
-    () => orders.filter((order) => completingOrderIds.has(order.ID) || (!isOrderReady(order) && !hiddenReadyOrderIds.has(order.ID))),
-    [completingOrderIds, hiddenReadyOrderIds, orders],
+    () => orders.filter((order) => completingTicketIds.has(ticketKey(order)) || (!isOrderReady(order) && !hiddenReadyTicketIds.has(ticketKey(order)))),
+    [completingTicketIds, hiddenReadyTicketIds, orders],
   );
   const activeItems = useMemo(
     () => visibleOrders.flatMap((order) => order.items?.map((item) => ({ order, item })) ?? []),
     [visibleOrders],
   );
-  const delayedCount = activeItems.filter(({ item, order }) => minutesSince(item.sent_at ?? order.opened_at) >= 10).length;
+  const delayedCount = activeItems.filter(({ item, order }) => minutesSince(item.sent_at ?? order.kitchen_sent_at ?? order.opened_at) >= 10).length;
   const cookingCount = activeItems.filter(({ item }) => item.status === "cooking").length;
   const readyCount = activeItems.filter(({ item }) => item.status === "ready").length;
 
@@ -121,7 +125,7 @@ export default function KitchenPage() {
     setError("");
     try {
       const res = await kitchenQueue();
-      const nextIds = new Set(res.data.orders.map((order) => order.ID));
+      const nextIds = new Set(res.data.orders.map((order) => ticketKey(order)));
       const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
       setOrders(res.data.orders);
       if (hasNewTicket) playBeep();
@@ -137,26 +141,28 @@ export default function KitchenPage() {
 
   const completeTicketIfReady = (order: Order) => {
     if (!isOrderReady(order)) return;
-    setCompletingOrderIds((current) => new Set(current).add(order.ID));
+    const key = ticketKey(order);
+    setCompletingTicketIds((current) => new Set(current).add(key));
     window.setTimeout(() => {
-      setCompletingOrderIds((current) => {
+      setCompletingTicketIds((current) => {
         const next = new Set(current);
-        next.delete(order.ID);
+        next.delete(key);
         return next;
       });
-      setHiddenReadyOrderIds((current) => new Set(current).add(order.ID));
-      setOrders((current) => current.filter((item) => item.ID !== order.ID));
+      setHiddenReadyTicketIds((current) => new Set(current).add(key));
+      setOrders((current) => current.filter((item) => ticketKey(item) !== key));
     }, 980);
   };
 
   const applyReadyResponse = (order: Order, itemId?: number) => {
+    const key = ticketKey(order);
     const nextOrder = itemId
       ? {
           ...order,
           items: order.items?.map((item: OrderItem) => item.ID === itemId ? { ...item, status: "ready" as const } : item),
         }
       : order;
-    setOrders((current) => current.map((item) => item.ID === nextOrder.ID ? nextOrder : item));
+    setOrders((current) => current.map((item) => ticketKey(item) === key ? nextOrder : item));
     completeTicketIfReady(nextOrder);
   };
 
@@ -167,12 +173,12 @@ export default function KitchenPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView]);
 
-  const markReady = async (orderId: number, itemId: number) => {
+  const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);
     setError("");
     try {
-      const res = await updateOrderItemStatus(orderId, itemId, "ready");
-      applyReadyResponse(res.data, itemId);
+      await updateOrderItemStatus(order.ID, itemId, "ready");
+      applyReadyResponse(order, itemId);
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
@@ -237,11 +243,11 @@ export default function KitchenPage() {
               if (!item.sent_at) return oldest;
               if (!oldest || new Date(item.sent_at) < new Date(oldest)) return item.sent_at;
               return oldest;
-            }, null);
-            const elapsed = minutesSince(oldestSent ?? order.opened_at);
-            const completing = completingOrderIds.has(order.ID);
+            }, order.kitchen_sent_at ?? null);
+            const elapsed = minutesSince(oldestSent ?? order.kitchen_sent_at ?? order.opened_at);
+            const completing = completingTicketIds.has(ticketKey(order));
             return (
-              <article key={order.ID} className={`relative overflow-hidden rounded-md border p-4 ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
+              <article key={ticketKey(order)} className={`relative overflow-hidden rounded-md border p-4 ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
                 {completing && (
                   <div className="kitchen-ticket-success absolute inset-0 z-20 grid place-items-center bg-emerald-50/95 text-emerald-700 backdrop-blur-[1px] dark:bg-emerald-950/90 dark:text-emerald-200">
                     <div className="text-center">
@@ -288,7 +294,7 @@ export default function KitchenPage() {
                         </span>
                       </div>
                       {canUpdate && item.status === "cooking" && (
-                        <button type="button" disabled={submittingId === item.ID} onClick={() => markReady(order.ID, item.ID)} className="mt-3 h-9 w-full rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                        <button type="button" disabled={submittingId === item.ID} onClick={() => markReady(order, item.ID)} className="mt-3 h-9 w-full rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                           {copy.markReady}
                         </button>
                       )}

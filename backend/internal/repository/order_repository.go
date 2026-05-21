@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"fmt"
+	"sort"
 	"time"
 
 	"Project-M/internal/entity"
@@ -161,6 +163,15 @@ func (r *OrderRepository) ListItems(orderID uint) ([]entity.OrderItem, error) {
 	return items, err
 }
 
+func (r *OrderRepository) MaxKitchenBatch(orderID uint) (uint, error) {
+	var maxBatch uint
+	err := r.db.Model(&entity.OrderItem{}).
+		Where("order_id = ?", orderID).
+		Select("COALESCE(MAX(kitchen_batch), 0)").
+		Scan(&maxBatch).Error
+	return maxBatch, err
+}
+
 func (r *OrderRepository) CreateStatusLog(log *entity.OrderStatusLog) error {
 	return r.db.Create(log).Error
 }
@@ -213,7 +224,60 @@ func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error
 		Where("restaurant_id = ? AND status IN ?", restaurantID, []string{entity.OrderStatusSentToKitchen, entity.OrderStatusCooking, entity.OrderStatusReady}).
 		Order("opened_at asc, id asc").
 		Find(&orders).Error
-	return orders, err
+	if err != nil {
+		return nil, err
+	}
+	tickets := make([]entity.Order, 0, len(orders))
+	for _, order := range orders {
+		batches := map[uint][]entity.OrderItem{}
+		for _, item := range order.Items {
+			batch := item.KitchenBatch
+			if batch == 0 {
+				batch = 1
+			}
+			batches[batch] = append(batches[batch], item)
+		}
+		for batch, items := range batches {
+			hasCooking := false
+			var sentAt *time.Time
+			for index := range items {
+				if items[index].Status == entity.OrderItemStatusCooking {
+					hasCooking = true
+				}
+				if items[index].SentAt != nil && (sentAt == nil || items[index].SentAt.Before(*sentAt)) {
+					value := *items[index].SentAt
+					sentAt = &value
+				}
+			}
+			if !hasCooking {
+				continue
+			}
+			ticket := order
+			ticket.Items = items
+			ticket.KitchenBatch = batch
+			ticket.KitchenSentAt = sentAt
+			ticket.KitchenTicketID = fmt.Sprintf("%d:%d", order.ID, batch)
+			tickets = append(tickets, ticket)
+		}
+	}
+	sort.SliceStable(tickets, func(i, j int) bool {
+		left := tickets[i].OpenedAt
+		right := tickets[j].OpenedAt
+		if tickets[i].KitchenSentAt != nil {
+			left = *tickets[i].KitchenSentAt
+		}
+		if tickets[j].KitchenSentAt != nil {
+			right = *tickets[j].KitchenSentAt
+		}
+		if !left.Equal(right) {
+			return left.Before(right)
+		}
+		if tickets[i].ID != tickets[j].ID {
+			return tickets[i].ID < tickets[j].ID
+		}
+		return tickets[i].KitchenBatch < tickets[j].KitchenBatch
+	})
+	return tickets, nil
 }
 
 func (r *OrderRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
