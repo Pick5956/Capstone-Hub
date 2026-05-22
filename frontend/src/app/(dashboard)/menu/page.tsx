@@ -712,7 +712,7 @@ export default function MenuPage() {
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

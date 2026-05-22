@@ -38,7 +38,7 @@ export default function OperationalPageShell({
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
             {subtitle ? <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
             {lastUpdated ? <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{lastUpdated}</p> : null}
           </div>

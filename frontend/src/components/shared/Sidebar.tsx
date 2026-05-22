@@ -309,7 +309,7 @@ function DesktopControls() {
   );
 }
 
-function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const restaurantName = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
@@ -318,12 +318,12 @@ function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNav
 
   if (collapsed) {
     return (
-      <div className="shrink-0 border-b border-gray-100 px-3 py-3 dark:border-gray-800">
+      <div className="flex h-14 shrink-0 items-center justify-center border-b border-gray-100 dark:border-gray-800">
         <Link
           href="/restaurants"
           onClick={onNavigate}
-          title={switchLabel}
-          className="mx-auto flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition-colors hover:bg-orange-50 hover:text-orange-600 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-orange-900/20 dark:hover:text-orange-400"
+          title={`${currentRestaurant}: ${restaurantName}`}
+          className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white transition-colors hover:bg-orange-700"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
@@ -335,23 +335,23 @@ function RestaurantSwitch({ collapsed, onNavigate }: { collapsed: boolean; onNav
   }
 
   return (
-    <div className="shrink-0 border-b border-gray-100 px-3 py-2.5 dark:border-gray-800 [@media(max-height:760px)]:py-2">
+    <div className="min-w-0 flex-1 overflow-hidden">
       <Link
         href="/restaurants"
         onClick={onNavigate}
-        className="flex items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 transition-colors hover:border-orange-300 hover:bg-orange-50 dark:border-gray-800 dark:bg-gray-900/60 dark:hover:border-orange-800 dark:hover:bg-orange-900/20"
+        className="flex min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1 transition-colors hover:bg-orange-50 dark:hover:bg-orange-900/20"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-orange-600 dark:border-gray-800 dark:bg-gray-950 dark:text-orange-400">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
             <path d="M9 12h6M9 16h4" />
           </svg>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[11px] leading-none text-gray-400 dark:text-gray-500">{currentRestaurant}</span>
-          <span className="mt-1 block truncate text-[13px] font-semibold text-gray-900 dark:text-white">{restaurantName}</span>
+          <span className="block truncate text-[11px] leading-none text-gray-400 dark:text-gray-500">{currentRestaurant}</span>
+          <span className="mt-1 block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
         </span>
-        <span className="shrink-0 text-[11px] font-medium text-orange-600 dark:text-orange-400">{switchLabel}</span>
+        <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
       </Link>
     </div>
   );
@@ -380,19 +380,8 @@ export default function Sidebar() {
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-100 px-4 dark:border-gray-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-red-600 shadow-md">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2"/><path d="M7 2v20"/>
-                <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3"/><path d="M21 15v7"/>
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] leading-none text-gray-400 dark:text-gray-500">Restaurant</p>
-              <p className="text-sm font-black tracking-tight leading-snug text-gray-900 dark:text-white">HUB</p>
-            </div>
-          </div>
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
+          <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
             <ThemeToggle />
             <button
@@ -406,7 +395,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <RestaurantSwitch collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <NavLinks collapsed={false} onNavigate={() => setMobileOpen(false)} />
         <UserFooter collapsed={false} />
       </aside>
@@ -417,21 +405,8 @@ export default function Sidebar() {
           ${collapsed ? 'w-[68px]' : 'w-60'}
         `}
       >
-        <div className={`flex h-14 shrink-0 items-center border-b border-gray-100 px-3 dark:border-gray-800 ${collapsed ? 'justify-center' : 'justify-between'}`}>
-          {!collapsed && (
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-red-600 shadow-md">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2"/><path d="M7 2v20"/>
-                  <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3"/><path d="M21 15v7"/>
-                </svg>
-              </div>
-              <div className="overflow-hidden">
-                <p className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.18em] leading-none text-gray-400 dark:text-gray-500">Restaurant</p>
-                <p className="whitespace-nowrap text-sm font-black tracking-tight leading-snug text-gray-900 dark:text-white">HUB</p>
-              </div>
-            </div>
-          )}
+        <div className={`flex h-14 shrink-0 items-center border-b border-gray-100 px-3 dark:border-gray-800 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+          {!collapsed && <RestaurantHeader collapsed={false} />}
           <div className="flex items-center gap-0.5">
             <button
               onClick={() => setCollapsed(!collapsed)}
@@ -447,7 +422,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <RestaurantSwitch collapsed={collapsed} />
+        {collapsed && <RestaurantHeader collapsed={true} />}
         <NavLinks collapsed={collapsed} />
         {!collapsed && <DesktopControls />}
         <UserFooter collapsed={collapsed} />

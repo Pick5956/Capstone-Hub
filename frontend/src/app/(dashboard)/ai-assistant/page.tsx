@@ -153,7 +153,7 @@ export default function AIAssistantPage() {
       <header className="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-gray-800 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{copy.subtitle}</p>
         </div>
         {result && (

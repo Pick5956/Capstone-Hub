@@ -565,7 +565,6 @@ export default function PosOrderDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white">{order.table?.table_number ?? order.table_id}</span>
               <span className="rounded-md bg-gray-900 px-3 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-gray-900">{order.order_number}</span>
-              <span className="rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">{statusLabel(order.status)}</span>
             </div>
           )}
         </div>

@@ -9,62 +9,6 @@ import { getCurrentUser } from "@/src/lib/auth";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import type { User } from "@/src/types/auth";
 
-export type Restaurant = {
-  id: string;
-  name: string;
-  branch: string;
-  type: string;
-  address: string;
-  role: string;
-  membershipType: "owner" | "manager" | "staff";
-  permissions: string;
-  staff: number;
-  tables: number;
-  lastOpened: string;
-};
-
-export const RESTAURANTS: Restaurant[] = [
-  {
-    id: "r-1",
-    name: "ครัวบ้านส้ม",
-    branch: "สาขาหลัก",
-    type: "ร้านอาหาร",
-    address: "ถนนมิตรภาพ นครราชสีมา",
-    role: "เจ้าของร้าน",
-    membershipType: "owner",
-    permissions: "ทุกเมนู",
-    staff: 8,
-    tables: 18,
-    lastOpened: "วันนี้ 18:42",
-  },
-  {
-    id: "r-2",
-    name: "บ้านส้ม คาเฟ่",
-    branch: "สาขา มทส.",
-    type: "คาเฟ่",
-    address: "ประตู 4 มทส.",
-    role: "ผู้จัดการ",
-    membershipType: "manager",
-    permissions: "ออเดอร์ / ทีม / รายงาน",
-    staff: 5,
-    tables: 12,
-    lastOpened: "เมื่อวาน 20:10",
-  },
-  {
-    id: "r-3",
-    name: "ชาบูหน้าเมือง",
-    branch: "สาขากลางเมือง",
-    type: "ชาบู/ปิ้งย่าง",
-    address: "ถนนจอมสุรางค์ยาตร์",
-    role: "ครัว",
-    membershipType: "staff",
-    permissions: "คิวครัว / สต็อก",
-    staff: 14,
-    tables: 26,
-    lastOpened: "2 วันที่แล้ว",
-  },
-];
-
 export const RESTAURANT_TYPES = ["ร้านอาหาร", "คาเฟ่", "ชาบู/ปิ้งย่าง", "เดลิเวอรี", "ฟู้ดทรัค"];
 
 const RESTAURANT_TYPE_LABELS: Record<string, Record<Language, string>> = {

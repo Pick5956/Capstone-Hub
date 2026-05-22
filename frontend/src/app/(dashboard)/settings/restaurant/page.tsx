@@ -302,7 +302,7 @@ export default function RestaurantSettingsPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       backLabel={copy.back}
-      action={<button type="submit" form="restaurant-settings-form" disabled={saving || loading} className="ui-press hidden h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:inline-flex">{saving ? copy.saving : copy.save}</button>}
+      action={<button type="submit" form="restaurant-settings-form" disabled={saving || loading} className="ui-press hidden h-10 items-center justify-center rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:inline-flex">{saving ? copy.saving : copy.save}</button>}
     >
       <form id="restaurant-settings-form" onSubmit={save} className="space-y-4 pb-20 sm:pb-0">
         {loading ? (
@@ -376,7 +376,7 @@ export default function RestaurantSettingsPage() {
         )}
 
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 p-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:hidden">
-          <button type="submit" disabled={saving || loading} className="ui-press h-12 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+          <button type="submit" disabled={saving || loading} className="ui-press flex h-12 w-full items-center justify-center rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
             {saving ? copy.saving : copy.save}
           </button>
         </div>

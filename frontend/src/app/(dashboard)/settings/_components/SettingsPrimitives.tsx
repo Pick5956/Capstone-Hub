@@ -34,7 +34,7 @@ export function SettingsShell({
               ) : null}
               <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
             </div>
-            <h1 className="mt-1 truncate text-[18px] font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+            <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
             <p className="mt-0.5 line-clamp-2 max-w-2xl text-[12px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p>
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}

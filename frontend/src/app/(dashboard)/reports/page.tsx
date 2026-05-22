@@ -106,7 +106,7 @@ export default function ReportsPage() {
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-black tracking-tight">{copy.title}</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
         </div>
         <button type="button" onClick={() => void load()} className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-900">

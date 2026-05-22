@@ -717,7 +717,7 @@ export default function InventoryPage() {
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.eyebrow}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{copy.title}</h1>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
               <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
                 {formatNumber(totalItems, lang)} {copy.total}
               </span>
@@ -1164,213 +1164,243 @@ export default function InventoryPage() {
         </div>
 
       {modalOpen && (
-        <div className={`${modalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeModal}>
-          <div className={`${modalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-md rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
-            <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{editingItem ? copy.edit : copy.add}</h2>
+        <>
+          <button
+            type="button"
+            aria-label={copy.cancel}
+            onClick={closeModal}
+            className={`${modalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-40 cursor-default bg-gray-950/45 backdrop-blur-sm`}
+          />
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSave();
+            }}
+            className={`${modalClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {lang === "th" ? "คลังวัตถุดิบ" : "Inventory"}
+                </p>
+                <h2 className="mt-0.5 text-[15px] font-semibold text-slate-900 dark:text-white">
+                  {editingItem ? copy.edit : copy.add}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="h-8 w-8 rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-gray-900 dark:hover:text-slate-200"
+              >
+                <X className="mx-auto h-4 w-4" />
+              </button>
             </div>
-            <div className="space-y-4 px-6 py-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.name}</label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                    className={inputCls}
-                    autoFocus
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.sku}</label>
-                  <input
-                    type="text"
-                    value={form.sku ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
-                    {canManage && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCategoryError("");
-                          setCategoryName("");
-                          setCategoryModalClosing(false);
-                          setCategoryModalOpen(true);
-                        }}
-                        className="text-xs font-semibold text-orange-600 transition hover:text-orange-500 dark:text-orange-300"
-                      >
-                        {copy.addCategory}
-                      </button>
-                    )}
-                  </div>
-                  <ThemedSelect
-                    value={String(form.category_id ?? 0)}
-                    onChange={(value) => setForm((current) => ({ ...current, category_id: parseInt(value, 10) || 0 }))}
-                    options={categoryOptions}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.imageUrl}</label>
-                  <input
-                    type="text"
-                    value={form.image_url ?? ""}
-                    onChange={(event) => setForm((current) => ({ ...current, image_url: event.target.value }))}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
-                  <ThemedSelect
-                    value={form.unit}
-                    onChange={(value) =>
-                      setForm((current) => {
-                        const nextUnit = value;
-                        const nextBaseUnit = current.base_unit ? current.base_unit : nextUnit;
-                        const nextPurchaseUnit = current.purchase_unit_default ? current.purchase_unit_default : nextUnit;
-                        return {
-                          ...current,
-                          unit: nextUnit,
-                          base_unit: nextBaseUnit,
-                          purchase_unit_default: nextPurchaseUnit,
-                        };
-                      })
-                    }
-                    options={unitOptions}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.baseUnit}</label>
-                  <ThemedSelect
-                    value={form.base_unit ?? form.unit}
-                    onChange={(value) => setForm((current) => ({ ...current, base_unit: value }))}
-                    options={unitOptions}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.purchaseUnitDefault}</label>
-                  <ThemedSelect
-                    value={form.purchase_unit_default ?? form.unit}
-                    onChange={(value) => setForm((current) => ({ ...current, purchase_unit_default: value }))}
-                    options={unitOptions}
-                  />
-                </div>
-                {!editingItem && (
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.initialStock}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.name}</label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                      className={inputCls}
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.sku}</label>
+                    <input
+                      type="text"
+                      value={form.sku ?? ""}
+                      onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategoryError("");
+                            setCategoryName("");
+                            setCategoryModalClosing(false);
+                            setCategoryModalOpen(true);
+                          }}
+                          className="text-xs font-semibold text-orange-600 transition hover:text-orange-500 dark:text-orange-300"
+                        >
+                          {copy.addCategory}
+                        </button>
+                      )}
+                    </div>
+                    <ThemedSelect
+                      value={String(form.category_id ?? 0)}
+                      onChange={(value) => setForm((current) => ({ ...current, category_id: parseInt(value, 10) || 0 }))}
+                      options={categoryOptions}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.imageUrl}</label>
+                    <input
+                      type="text"
+                      value={form.image_url ?? ""}
+                      onChange={(event) => setForm((current) => ({ ...current, image_url: event.target.value }))}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
+                    <ThemedSelect
+                      value={form.unit}
+                      onChange={(value) =>
+                        setForm((current) => {
+                          const nextUnit = value;
+                          const nextBaseUnit = current.base_unit ? current.base_unit : nextUnit;
+                          const nextPurchaseUnit = current.purchase_unit_default ? current.purchase_unit_default : nextUnit;
+                          return {
+                            ...current,
+                            unit: nextUnit,
+                            base_unit: nextBaseUnit,
+                            purchase_unit_default: nextPurchaseUnit,
+                          };
+                        })
+                      }
+                      options={unitOptions}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.baseUnit}</label>
+                    <ThemedSelect
+                      value={form.base_unit ?? form.unit}
+                      onChange={(value) => setForm((current) => ({ ...current, base_unit: value }))}
+                      options={unitOptions}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.purchaseUnitDefault}</label>
+                    <ThemedSelect
+                      value={form.purchase_unit_default ?? form.unit}
+                      onChange={(value) => setForm((current) => ({ ...current, purchase_unit_default: value }))}
+                      options={unitOptions}
+                    />
+                  </div>
+                  {!editingItem ? (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.initialStock}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={form.stock}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, stock: parseFloat(event.target.value) || 0 }))
+                        }
+                        className={inputCls}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.minStock}</label>
                     <input
                       type="number"
                       min={0}
-                      value={form.stock}
+                      value={form.min_stock}
                       onChange={(event) =>
-                        setForm((current) => ({ ...current, stock: parseFloat(event.target.value) || 0 }))
+                        setForm((current) => ({ ...current, min_stock: parseFloat(event.target.value) || 0 }))
                       }
                       className={inputCls}
                     />
                   </div>
-                )}
-                {editingItem && <div />}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.minStock}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.min_stock}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, min_stock: parseFloat(event.target.value) || 0 }))
-                    }
-                    className={inputCls}
-                  />
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {copy.costPerUnit} (THB)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.cost_per_unit}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, cost_per_unit: parseFloat(event.target.value) || 0 }))
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {copy.conversionFactorDefault}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.conversion_factor_default ?? 1}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          conversion_factor_default: parseFloat(event.target.value) || 1,
+                        }))
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      {copy.yieldPercent}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={form.yield_percent ?? 100}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, yield_percent: parseFloat(event.target.value) || 100 }))
+                      }
+                      className={inputCls}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {copy.costPerUnit} (THB)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.cost_per_unit}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, cost_per_unit: parseFloat(event.target.value) || 0 }))
-                    }
-                    className={inputCls}
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
+                  <ThemedSelect
+                    value={form.storage_type ?? "room_temp"}
+                    onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
+                    options={storageOptions}
                   />
                 </div>
+                {formError && <p className="text-xs text-red-500">{formError}</p>}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {copy.conversionFactorDefault}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.conversion_factor_default ?? 1}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        conversion_factor_default: parseFloat(event.target.value) || 1,
-                      }))
-                    }
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    {copy.yieldPercent}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={form.yield_percent ?? 100}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, yield_percent: parseFloat(event.target.value) || 100 }))
-                    }
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
-                <ThemedSelect
-                  value={form.storage_type ?? "room_temp"}
-                  onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
-                  options={storageOptions}
-                />
-              </div>
-              {formError && <p className="text-xs text-red-500">{formError}</p>}
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
-              <button
-                onClick={closeModal}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
-              >
-                {copy.cancel}
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={submitting}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
-              >
-                {submitting ? "..." : copy.save}
-              </button>
+            <div className="border-t border-slate-200 p-4 dark:border-gray-800">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                >
+                  {copy.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                >
+                  {submitting ? "..." : copy.save}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+          </form>
+        </>
       )}
 
       {categoryModalOpen && (

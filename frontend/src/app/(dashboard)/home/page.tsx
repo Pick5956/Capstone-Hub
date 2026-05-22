@@ -18,9 +18,13 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { listIngredients } from "@/src/lib/ingredient";
 import { kitchenQueue, listOrders } from "@/src/lib/order";
+import { listMembers } from "@/src/lib/restaurant";
 import { listTables } from "@/src/lib/table";
+import type { Ingredient } from "@/src/types/ingredient";
 import type { Order } from "@/src/types/order";
+import type { Membership } from "@/src/types/restaurant";
 import type { RestaurantTable } from "@/src/types/table";
 
 type LaneStatus = "delayed" | "cooking" | "ready";
@@ -59,6 +63,25 @@ function formatCurrency(value: number, language: "th" | "en") {
     currency: "THB",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function userNameOf(member: Membership, language: "th" | "en") {
+  const user = member.user;
+  if (!user) return language === "th" ? "ยังไม่ระบุชื่อ" : "Unnamed staff";
+  if (user.nickname?.trim()) return user.nickname.trim();
+  const name = [user.first_name, user.last_name].map((part) => part?.trim()).filter(Boolean).join(" ");
+  return name || user.email;
+}
+
+function roleLabel(roleName: string, language: "th" | "en") {
+  const labels: Record<string, Record<"th" | "en", string>> = {
+    owner: { th: "เจ้าของร้าน", en: "Owner" },
+    manager: { th: "ผู้จัดการ", en: "Manager" },
+    cashier: { th: "แคชเชียร์", en: "Cashier" },
+    waiter: { th: "เสิร์ฟ", en: "Service" },
+    chef: { th: "ครัว", en: "Kitchen" },
+  };
+  return labels[roleName]?.[language] ?? roleName;
 }
 
 function buildCopy(language: "th" | "en") {
@@ -234,6 +257,8 @@ export default function Home() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [kitchenOrders, setKitchenOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<FloorTable[]>([]);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [members, setMembers] = useState<Membership[]>([]);
   const [loading, setLoading] = useState(true);
   const [floorError, setFloorError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -243,7 +268,15 @@ export default function Home() {
     setFloorError("");
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [tableRes, orderRes, kitchenRes] = await Promise.all([listTables(), listOrders({ date: today }), kitchenQueue()]);
+      const [tableRes, orderRes, kitchenRes, ingredientRes, memberRes] = await Promise.all([
+        listTables(),
+        listOrders({ date: today }),
+        kitchenQueue(),
+        listIngredients().catch(() => ({ data: { ingredients: [] } })),
+        activeMembership?.restaurant_id
+          ? listMembers(activeMembership.restaurant_id).catch(() => ({ data: { members: [] } }))
+          : Promise.resolve({ data: { members: [] } }),
+      ]);
       const nextOrders = orderRes.data.orders ?? [];
       const activeOrderByTable = new Map<number, Order>();
       nextOrders
@@ -252,6 +285,8 @@ export default function Home() {
       setOrders(nextOrders);
       setKitchenOrders(kitchenRes.data.orders ?? []);
       setTables((tableRes.data.tables ?? []).map((table) => toFloorTable(table, activeOrderByTable.get(table.ID))));
+      setIngredients(ingredientRes.data.ingredients ?? []);
+      setMembers(memberRes.data.members ?? []);
       setLastUpdated(new Date());
       hasLoadedRef.current = true;
     } catch {
@@ -318,16 +353,33 @@ export default function Home() {
     };
   });
 
-  const lowStock = [
-    { name: language === "th" ? "ข้าวสวย" : "Steamed rice", left: 8, unit: language === "th" ? "จาน" : "plates", critical: true },
-    { name: language === "th" ? "กุ้งสด" : "Fresh shrimp", left: 12, unit: language === "th" ? "ตัว" : "pcs", critical: true },
-    { name: language === "th" ? "ไข่ไก่" : "Eggs", left: 18, unit: language === "th" ? "ฟอง" : "eggs", critical: false },
-  ];
-  const staff = [
-    { role: language === "th" ? "ครัว" : "Kitchen", on: 4, total: 4, lead: language === "th" ? "เชฟอภิชัย" : "Chef Apichai" },
-    { role: language === "th" ? "เสิร์ฟ" : "Service", on: 5, total: 6, lead: language === "th" ? "พี่หน่อย" : "P' Noi" },
-    { role: language === "th" ? "แคชเชียร์" : "Cashier", on: 2, total: 2, lead: language === "th" ? "พี่แอน" : "P' Ann" },
-  ];
+  const lowStock = ingredients
+    .filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5)
+    .sort((a, b) => (a.stock / a.min_stock) - (b.stock / b.min_stock))
+    .slice(0, 3)
+    .map((item) => ({
+      name: item.name,
+      left: item.stock,
+      unit: item.unit,
+      critical: item.stock <= item.min_stock,
+    }));
+  const staff = Array.from(
+    members.reduce((map, member) => {
+      const roleName = member.role?.name ?? "staff";
+      const current = map.get(roleName) ?? { roleName, members: [] as Membership[] };
+      current.members.push(member);
+      map.set(roleName, current);
+      return map;
+    }, new Map<string, { roleName: string; members: Membership[] }>()),
+  ).map(([, group]) => {
+    const active = group.members.filter((member) => member.status === "active");
+    return {
+      role: roleLabel(group.roleName, language),
+      on: active.length,
+      total: group.members.length,
+      lead: active[0] ? userNameOf(active[0], language) : copy.noItems,
+    };
+  });
 
   const dateLabel = now.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
     weekday: "long",
@@ -491,20 +543,22 @@ export default function Home() {
                 <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.needsAttentionHelp}</p>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {lowStock.map((item) => (
+                {lowStock.length ? lowStock.map((item) => (
                   <div key={item.name} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-semibold text-gray-950 dark:text-white">{item.name}</p>
-                      <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">{item.critical ? copy.stockGoodPull : copy.stockAnchor}</p>
+                      <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">{item.critical ? copy.refillSoon : copy.lowStock}</p>
                     </div>
                     <div className="text-right">
                       <p className={`text-[13px] font-semibold tabular-nums ${item.critical ? "text-red-600 dark:text-red-300" : "text-amber-600 dark:text-amber-300"}`}>
-                        {item.left} {item.unit}
+                        {item.left.toLocaleString()} {item.unit}
                       </p>
                       <p className="text-[11px] text-gray-400">{item.critical ? copy.refillSoon : copy.lowStock}</p>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="px-4 py-5 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+                )}
               </div>
             </section>
 
@@ -514,7 +568,7 @@ export default function Home() {
                 <h2 className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.teamNotes}</h2>
               </div>
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {staff.map((member) => {
+                {staff.length ? staff.map((member) => {
                   const full = member.on === member.total;
                   return (
                     <div key={member.role} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
@@ -530,7 +584,9 @@ export default function Home() {
                       </div>
                     </div>
                   );
-                })}
+                }) : (
+                  <div className="px-4 py-5 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+                )}
               </div>
             </section>
           </aside>

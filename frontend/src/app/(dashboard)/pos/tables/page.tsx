@@ -7,9 +7,9 @@ import { Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
-import { createOrder, listOrders } from "@/src/lib/order";
+import { createOrder, listOrders, updateOrderItemStatus } from "@/src/lib/order";
 import { listTables } from "@/src/lib/table";
-import type { Order } from "@/src/types/order";
+import type { Order, OrderItem } from "@/src/types/order";
 import type { RestaurantTable } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -17,6 +17,15 @@ import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 const tableRefreshIntervalMs = 3_000;
+
+type ReadyTableSummary = {
+  order: Order;
+  tableLabel: string;
+  readyCount: number;
+  oldestReadyAt: string;
+  items: OrderItem[];
+  itemSummary: string;
+};
 
 const apiErrorMessage = (error: unknown) => {
   if (!axios.isAxiosError(error)) return "";
@@ -36,6 +45,7 @@ export default function PosTablesPage() {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [servingOrderId, setServingOrderId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -57,6 +67,12 @@ export default function PosTablesPage() {
         free: "ว่าง",
         occupied: "มีออเดอร์",
         reserved: "จอง",
+        ready: "พร้อมเสิร์ฟ",
+        readyBannerTitle: "อาหารพร้อมเสิร์ฟ",
+        readyBannerHelp: "ดูรายการที่ครัวทำเสร็จและกดเสิร์ฟได้จากตรงนี้",
+        readyItems: "รายการ",
+        serveAll: "เสิร์ฟทั้งหมด",
+        serving: "กำลังเสิร์ฟ...",
         noZone: "ไม่มีโซน",
         total: "ยอดรวม",
         seats: "ที่นั่ง",
@@ -80,6 +96,12 @@ export default function PosTablesPage() {
         free: "Free",
         occupied: "Active order",
         reserved: "Reserved",
+        ready: "Ready to serve",
+        readyBannerTitle: "Ready to serve",
+        readyBannerHelp: "Review finished kitchen items and serve them from here.",
+        readyItems: "items",
+        serveAll: "Serve all",
+        serving: "Serving...",
         noZone: "No zone",
         total: "Total",
         seats: "seats",
@@ -94,6 +116,35 @@ export default function PosTablesPage() {
     orders.filter((order) => activeOrderStatuses.includes(order.status)).forEach((order) => map.set(order.table_id, order));
     return map;
   }, [orders]);
+
+  const readyTables = useMemo<ReadyTableSummary[]>(() => {
+    return orders
+      .filter((order) => activeOrderStatuses.includes(order.status))
+      .map((order) => {
+        const readyItems = order.items?.filter((item) => item.status === "ready") ?? [];
+        const table = tables.find((item) => item.ID === order.table_id);
+        const oldestReadyAt = readyItems.reduce<string>((oldest, item) => {
+          const value = item.ready_at || item.UpdatedAt || item.CreatedAt || order.opened_at;
+          return !oldest || new Date(value) < new Date(oldest) ? value : oldest;
+        }, "");
+        return {
+          order,
+          tableLabel: order.table?.display_label || order.table?.table_number || table?.display_label || table?.table_number || String(order.table_id),
+          readyCount: readyItems.reduce((sum, item) => sum + item.quantity, 0),
+          oldestReadyAt,
+          items: readyItems,
+          itemSummary: readyItems.map((item) => `${item.quantity}x ${item.menu_name}`).join(" · "),
+        };
+      })
+      .filter((item) => item.readyCount > 0)
+      .sort((a, b) => new Date(a.oldestReadyAt || a.order.opened_at).getTime() - new Date(b.oldestReadyAt || b.order.opened_at).getTime());
+  }, [orders, tables]);
+
+  const readyCountByOrderId = useMemo(() => {
+    const map = new Map<number, number>();
+    readyTables.forEach((item) => map.set(item.order.ID, item.readyCount));
+    return map;
+  }, [readyTables]);
 
   const groupedTables = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -197,6 +248,25 @@ export default function PosTablesPage() {
     }, 180);
   };
 
+  const serveReadyItems = async (summary: ReadyTableSummary) => {
+    if (!summary.items.length || servingOrderId) return;
+    setServingOrderId(summary.order.ID);
+    setError("");
+    try {
+      let nextOrder = summary.order;
+      for (const item of summary.items) {
+        const res = await updateOrderItemStatus(summary.order.ID, item.ID, "served");
+        nextOrder = res.data;
+      }
+      setOrders((current) => current.map((order) => order.ID === nextOrder.ID ? nextOrder : order));
+      void load(false);
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setServingOrderId(null);
+    }
+  };
+
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
@@ -220,6 +290,43 @@ export default function PosTablesPage() {
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
+      {!loading && readyTables.length ? (
+        <section className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-[14px] font-semibold">{copy.readyBannerTitle} · {readyTables.length} {language === "th" ? "โต๊ะ" : "tables"}</h2>
+              <p className="mt-0.5 text-[12px] opacity-80">{copy.readyBannerHelp}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {readyTables.map((item) => (
+              <div
+                key={item.order.ID}
+                className="rounded-md border border-emerald-200 bg-white p-3 text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-gray-950 dark:text-emerald-100"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <button type="button" onClick={() => router.push(`/pos/orders/${item.order.ID}`)} className="min-w-0 text-left">
+                    <span className="block truncate text-[14px] font-semibold">{item.tableLabel}</span>
+                    <span className="mt-0.5 block truncate font-mono text-[11px] opacity-70">#{item.order.order_number}</span>
+                  </button>
+                  <span className="shrink-0 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100">
+                    {item.readyCount} {copy.readyItems}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-2 text-[12px] leading-5 opacity-85">{item.itemSummary}</p>
+                <button
+                  type="button"
+                  disabled={servingOrderId === item.order.ID}
+                  onClick={() => void serveReadyItems(item)}
+                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-gray-950 dark:hover:bg-emerald-400"
+                >
+                  {servingOrderId === item.order.ID ? copy.serving : copy.serveAll}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -235,7 +342,10 @@ export default function PosTablesPage() {
             const order = activeOrderByTable.get(table.ID);
             const busy = Boolean(order);
             const status = busy ? "occupied" : table.status;
-            const cls = status === "occupied"
+            const readyCount = order ? readyCountByOrderId.get(order.ID) ?? 0 : 0;
+            const cls = readyCount
+              ? "border-emerald-300 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/10 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-100"
+              : status === "occupied"
               ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200"
               : status === "reserved"
                 ? "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-900/20 dark:text-sky-200"
@@ -247,7 +357,7 @@ export default function PosTablesPage() {
                     <p className="text-2xl font-semibold">{table.display_label || table.table_number}</p>
                     <p className="mt-1 text-[12px] opacity-75">{table.table_zone?.name || table.zone || copy.noZone}</p>
                   </div>
-                  <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-gray-950/35">{status === "occupied" ? copy.occupied : status === "reserved" ? copy.reserved : copy.free}</span>
+                  <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-gray-950/35">{readyCount ? `${copy.ready} ${readyCount}` : status === "occupied" ? copy.occupied : status === "reserved" ? copy.reserved : copy.free}</span>
                 </div>
                 {table.tags?.length ? (
                   <div className="mt-3 flex flex-wrap gap-1">
