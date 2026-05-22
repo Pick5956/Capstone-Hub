@@ -2,7 +2,35 @@ import axios from "axios";
 import { authRepository } from "../app/repositories/authRepository";
 import { restaurantRepository } from "../app/repositories/restaurantRepository";
 
-export const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const localhostHosts = new Set(["localhost", "127.0.0.1"]);
+
+function resolveApiUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
+  if (typeof window === "undefined") {
+    return configuredUrl || "http://localhost:8080";
+  }
+
+  const currentHost = window.location.hostname;
+  const fallbackUrl = `${window.location.protocol}//${currentHost}:8080`;
+
+  if (!configuredUrl) {
+    return fallbackUrl;
+  }
+
+  try {
+    const parsed = new URL(configuredUrl);
+    if (localhostHosts.has(parsed.hostname) && !localhostHosts.has(currentHost)) {
+      parsed.hostname = currentHost;
+      return parsed.toString().replace(/\/$/, "");
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return configuredUrl;
+  }
+}
+
+export const apiUrl = resolveApiUrl();
 
 export const apiClient = axios.create({
   baseURL: apiUrl,

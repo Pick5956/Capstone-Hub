@@ -586,7 +586,7 @@ export default function PosOrderDetailPage() {
         <div className="grid flex-1 items-start gap-4 lg:grid-cols-[1fr_380px]">
           <section className="min-w-0 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-              <div className="soft-scrollbar-hide -mx-3 flex snap-x gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
+              <div className="soft-scrollbar-hide min-w-0 flex snap-x gap-2 overflow-x-auto pb-2">
                 <button type="button" onClick={() => setCategoryId("all")} className={`ui-press min-h-12 min-w-[72px] shrink-0 snap-start rounded-md px-4 text-[14px] font-semibold sm:min-h-9 sm:min-w-0 sm:px-3 sm:text-[12px] ${categoryId === "all" ? "bg-gray-900 text-white shadow-md shadow-gray-950/10 dark:bg-white dark:text-gray-900 dark:shadow-black/30" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
                   {copy.all}
                 </button>
@@ -824,8 +824,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {selectedMenu && (
-        <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeMenuPicker}>
-          <div className={`${selectedMenuClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`} onClick={closeMenuPicker}>
+          <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`} onClick={(event) => event.stopPropagation()}>
             <div className="aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
               {!selectedMenu.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
             </div>
@@ -833,7 +833,7 @@ export default function PosOrderDetailPage() {
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{selectedMenu.name}</h2>
               <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
             </div>
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 overflow-y-auto p-4">
               {selectedMenu.option_groups?.length ? (
                 <div className="space-y-3">
                   {selectedMenu.option_groups.filter((group) => group.is_active).map((group) => {
