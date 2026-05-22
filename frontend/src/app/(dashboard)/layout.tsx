@@ -15,7 +15,7 @@ export default function DashboardLayout({
         <Sidebar />
         <ContentWrapper>
           <MobileTopBar />
-          <main className="min-w-0 max-w-full overflow-x-hidden">{children}</main>
+          <main className="min-w-0 max-w-full overflow-x-clip pt-14 lg:pt-0">{children}</main>
         </ContentWrapper>
       </SidebarProvider>
     </DashboardRestaurantGuard>
