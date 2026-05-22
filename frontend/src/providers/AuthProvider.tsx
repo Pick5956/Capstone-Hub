@@ -8,6 +8,8 @@ import { getMyMemberships } from '../lib/restaurant';
 import { authRepository } from '../app/repositories/authRepository';
 import { restaurantRepository } from '../app/repositories/restaurantRepository';
 import AuthModal from '../components/auth/AuthModal';
+import { useConfirm } from '../components/shared/FeedbackProvider';
+import { useLanguage } from './LanguageProvider';
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +38,8 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const confirm = useConfirm();
+  const { language } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -103,7 +107,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     fetchUser();
   }, [fetchUser]);
 
-  const logout = () => {
+  const logout = async () => {
+    const confirmed = await confirm({
+      title: language === 'th' ? 'ออกจากระบบ?' : 'Sign out?',
+      message: language === 'th'
+        ? 'คุณจะต้องเข้าสู่ระบบใหม่เพื่อกลับมาใช้งานร้านนี้'
+        : 'You will need to sign in again to access this restaurant workspace.',
+      confirmLabel: language === 'th' ? 'ออกจากระบบ' : 'Sign out',
+      cancelLabel: language === 'th' ? 'ยกเลิก' : 'Cancel',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     authRepository.clearToken();
     restaurantRepository.clearActiveId();
     setUser(null);

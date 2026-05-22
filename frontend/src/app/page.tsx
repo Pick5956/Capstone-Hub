@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -163,9 +164,16 @@ const TESTIMONIALS = [
 
 // ── main page ──────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const { openLoginModal } = useAuth();
+  const router = useRouter();
+  const { openLoginModal, user, loading } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/restaurants");
+    }
+  }, [loading, router, user]);
 
   useEffect(() => {
     const onScroll = () => {
@@ -178,6 +186,10 @@ export default function LandingPage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  if (loading || user) {
+    return <div className="min-h-screen bg-white dark:bg-gray-950" />;
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 overflow-x-hidden">

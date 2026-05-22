@@ -3,11 +3,15 @@
 import Link from 'next/link';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
+import { useAuth } from '@/src/providers/AuthProvider';
 import LanguageToggle from '@/src/components/shared/LanguageToggle';
 
 export default function MobileTopBar() {
   const { setMobileOpen } = useSidebar();
   const { language } = useLanguage();
+  const { activeMembership } = useAuth();
+  const restaurantName = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
+  const currentRestaurant = language === 'th' ? 'ร้านปัจจุบัน' : 'Current restaurant';
 
   return (
     <header
@@ -27,10 +31,16 @@ export default function MobileTopBar() {
         </svg>
       </button>
 
-      <Link href="/home" className="flex min-w-0 flex-1 items-center gap-2">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-red-600 text-xs font-black text-white shadow">R</div>
-        <span className="truncate text-sm font-extrabold tracking-tight text-gray-900 dark:text-white">
-          RESTAURANT <span className="text-orange-500">HUB</span>
+      <Link href="/restaurants" className="flex min-w-0 flex-1 items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
+            <path d="M9 12h6M9 16h4" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[11px] leading-none text-gray-400 dark:text-gray-500">{currentRestaurant}</span>
+          <span className="mt-1 block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
         </span>
       </Link>
 

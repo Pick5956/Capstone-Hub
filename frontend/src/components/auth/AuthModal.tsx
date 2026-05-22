@@ -7,7 +7,6 @@ import { User } from "../../types/auth";
 import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
-import { restaurantRepository } from "../../app/repositories/restaurantRepository";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
 type GoogleCredentialResponse = {
@@ -128,7 +127,7 @@ const InputField = ({
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[13px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white`}
+          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[16px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white sm:text-[13px]`}
         />
 
         {value.length > 0 && onClear && (
@@ -182,12 +181,7 @@ function BrandLine() {
   );
 }
 
-function decideRedirect(memberships: Membership[]): string {
-  if (memberships.length === 0) return "/restaurants";
-  if (memberships.length === 1) {
-    restaurantRepository.setActiveId(memberships[0].restaurant_id);
-    return "/home";
-  }
+function decideRedirect(): string {
   return "/restaurants";
 }
 
@@ -352,7 +346,7 @@ export default function AuthModal({
       if (data.token) authRepository.setToken(data.token, tokenType);
       onAuthenticated?.(data.user, data.memberships);
       onClose();
-      const target = redirectTo?.startsWith("/") ? redirectTo : decideRedirect(data.memberships ?? []);
+      const target = redirectTo?.startsWith("/") ? redirectTo : decideRedirect();
       if (hardReload) {
         window.location.href = target;
       } else {
@@ -546,11 +540,16 @@ export default function AuthModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200 ${
-        isOpen ? "visible bg-black/40 opacity-100 backdrop-blur-sm" : "invisible bg-black/0 opacity-0"
+      aria-hidden={!isOpen}
+      inert={!isOpen}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-[background-color,opacity,backdrop-filter] duration-200 ${
+        isOpen ? "bg-black/40 opacity-100 backdrop-blur-sm" : "pointer-events-none bg-black/0 opacity-0 backdrop-blur-none"
       }`}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
         className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
         } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
@@ -558,7 +557,7 @@ export default function AuthModal({
         <div className="flex items-start justify-between border-b border-gray-100 px-5 pb-3 pt-4 dark:border-gray-800">
           <div>
             <BrandLine />
-            <h2 className="mt-3 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
+            <h2 id="auth-modal-title" className="mt-3 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
               {title}
             </h2>
             <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">

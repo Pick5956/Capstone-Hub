@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -360,9 +361,18 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
 export default function Sidebar() {
   const { mobileOpen, setMobileOpen, collapsed, setCollapsed } = useSidebar();
   const { language } = useLanguage();
+  const mobileDrawerRef = useRef<HTMLElement>(null);
   const collapseTitle = collapsed
     ? language === 'th' ? 'ขยายแถบด้านข้าง' : 'Expand sidebar'
     : language === 'th' ? 'ย่อแถบด้านข้าง' : 'Collapse sidebar';
+
+  useEffect(() => {
+    if (mobileOpen) return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && mobileDrawerRef.current?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }, [mobileOpen]);
 
   return (
     <>
@@ -374,7 +384,14 @@ export default function Sidebar() {
       )}
 
       <aside
-        aria-hidden={!mobileOpen}
+        ref={mobileDrawerRef}
+        role="dialog"
+        aria-modal={mobileOpen}
+        aria-label={language === 'th' ? 'เมนูนำทาง' : 'Navigation menu'}
+        inert={!mobileOpen}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setMobileOpen(false);
+        }}
         className={`
           fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-100 bg-white shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-gray-800 dark:bg-gray-950 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
@@ -386,6 +403,7 @@ export default function Sidebar() {
             <ThemeToggle />
             <button
               onClick={() => setMobileOpen(false)}
+              aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
               className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-5 w-5">

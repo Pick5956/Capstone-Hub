@@ -447,6 +447,14 @@ select option {
   color: #f9fafb;
 }
 
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* Remove focus outline on Recharts charts when clicked */
 .recharts-wrapper,
 .recharts-wrapper svg,
