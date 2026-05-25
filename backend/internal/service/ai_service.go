@@ -632,6 +632,8 @@ Answer in natural Thai for a restaurant owner or manager.
 Use only the provided restaurant snapshot. Do not invent numbers.
 If the available data is not enough for a confident recommendation, say what is missing.
 Keep the answer practical: summarize the situation, risks, and next actions.
+Format for a narrow chat panel: use short headings and bullet lists.
+Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
 
 Restaurant snapshot JSON:
 %s
@@ -765,6 +767,8 @@ Answer in natural Thai for a restaurant owner or manager.
 Use only the provided restaurant snapshot. Do not invent numbers.
 If the available data is not enough for a confident recommendation, say what is missing.
 Keep the answer practical: summarize the situation, risks, and next actions.
+Format for a narrow chat panel: use short headings and bullet lists.
+Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
 
 Restaurant snapshot JSON:
 %s

@@ -1,0 +1,152 @@
+import React from "react";
+
+type AIResponseContentProps = {
+  content: string;
+  compact?: boolean;
+};
+
+function inlineContent(text: string) {
+  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`)/g).filter(Boolean);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-bold text-orange-600 dark:text-orange-400">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={index} className="rounded bg-gray-200/70 px-1 py-0.5 text-[0.92em] dark:bg-gray-700">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <React.Fragment key={index}>{part}</React.Fragment>;
+  });
+}
+
+function tableCells(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string) {
+  const cells = tableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+export default function AIResponseContent({ content, compact = false }: AIResponseContentProps) {
+  const lines = content
+    .replace(/\u00a0|\u202f|\u2007/g, " ")
+    .replace(/\r\n/g, "\n")
+    .split("\n");
+  const blocks: React.ReactNode[] = [];
+  const textClass = compact ? "text-xs sm:text-[13px] leading-relaxed" : "text-sm leading-7";
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (!trimmed) continue;
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      blocks.push(
+        <h3 key={`heading-${index}`} className={`${compact ? "text-sm" : "text-base"} font-bold text-gray-900 dark:text-gray-100`}>
+          {inlineContent(heading[2])}
+        </h3>
+      );
+      continue;
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      blocks.push(<hr key={`rule-${index}`} className="border-gray-200 dark:border-gray-700" />);
+      continue;
+    }
+
+    if (trimmed.includes("|") && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+      const header = tableCells(trimmed);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim().includes("|") && lines[index].trim()) {
+        rows.push(tableCells(lines[index]));
+        index += 1;
+      }
+      index -= 1;
+
+      blocks.push(
+        <div key={`table-${index}`} className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+          <table className={`min-w-full border-collapse ${compact ? "text-[11px]" : "text-xs"}`}>
+            <thead className="bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200">
+              <tr>
+                {header.map((cell, cellIndex) => (
+                  <th key={cellIndex} className="whitespace-nowrap border-b border-gray-200 px-2 py-2 text-left font-semibold dark:border-gray-700">
+                    {inlineContent(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b border-gray-100 last:border-b-0 dark:border-gray-800">
+                  {header.map((_, cellIndex) => (
+                    <td key={cellIndex} className="px-2 py-2 align-top text-gray-700 dark:text-gray-300">
+                      {inlineContent(row[cellIndex] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    const ordered = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (ordered) {
+      const items: string[] = [ordered[1]];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].trim().match(/^\d+\.\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        index += 1;
+      }
+      blocks.push(
+        <ol key={`ordered-${index}`} className={`list-decimal space-y-1 pl-5 text-gray-700 marker:font-bold marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
+          {items.map((item, itemIndex) => <li key={itemIndex}>{inlineContent(item)}</li>)}
+        </ol>
+      );
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      const items: string[] = [bullet[1]];
+      while (index + 1 < lines.length) {
+        const next = lines[index + 1].trim().match(/^[-*]\s+(.+)$/);
+        if (!next) break;
+        items.push(next[1]);
+        index += 1;
+      }
+      blocks.push(
+        <ul key={`bullet-${index}`} className={`list-disc space-y-1 pl-5 text-gray-700 marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
+          {items.map((item, itemIndex) => <li key={itemIndex}>{inlineContent(item)}</li>)}
+        </ul>
+      );
+      continue;
+    }
+
+    blocks.push(
+      <p key={`paragraph-${index}`} className={`${textClass} text-gray-700 dark:text-gray-300`}>
+        {inlineContent(trimmed)}
+      </p>
+    );
+  }
+
+  return <div className={compact ? "space-y-2" : "space-y-3"}>{blocks}</div>;
+}

@@ -11,6 +11,7 @@ import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIAskResponse, AIConversationMessage } from "@/src/types/ai";
+import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
 function formatCurrency(value: number, language: "th" | "en") {
   return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
@@ -272,7 +273,7 @@ export default function AIAssistantPage() {
               </div>
             )}
             {!error && result?.answer && (
-              <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-gray-200">{result.answer}</div>
+              <AIResponseContent content={result.answer} />
             )}
             {!error && notice && (
               <div className="text-sm leading-7 text-gray-700 dark:text-gray-200">{notice}</div>

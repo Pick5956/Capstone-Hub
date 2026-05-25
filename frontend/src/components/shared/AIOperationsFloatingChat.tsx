@@ -23,6 +23,7 @@ import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
+import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
 type Message = {
   id: string;
@@ -35,89 +36,6 @@ type Message = {
 type StoredMessage = Omit<Message, "createdAt"> & {
   createdAt?: string;
 };
-
-function parseMarkdown(text: string) {
-  // Replace all variations of non-breaking spaces to allow natural browser wrapping!
-  const cleanText = text
-    .replace(/\u00a0/g, " ")
-    .replace(/\u202f/g, " ")
-    .replace(/\u2007/g, " ");
-  
-  const lines = cleanText.split("\n");
-  
-  return lines.map((line, idx) => {
-    const trimmed = line.trim();
-    
-    // Check for bullet points
-    const isBullet = trimmed.startsWith("* ") || trimmed.startsWith("- ");
-    const isNumbered = /^\d+\.\s/.test(trimmed);
-    
-    let content = line;
-    if (isBullet) {
-      content = trimmed.substring(2);
-    } else if (isNumbered) {
-      const match = trimmed.match(/^\d+\.\s/);
-      if (match) {
-        content = trimmed.substring(match[0].length);
-      }
-    }
-    
-    // Parse bold tags: **text**
-    const parts: React.ReactNode[] = [];
-    const regex = /\*\*(.*?)\*\*/g;
-    let match;
-    let lastIndex = 0;
-    
-    while ((match = regex.exec(content)) !== null) {
-      const matchIndex = match.index;
-      if (matchIndex > lastIndex) {
-        parts.push(content.substring(lastIndex, matchIndex));
-      }
-      parts.push(
-        <strong key={matchIndex} className="font-bold text-orange-600 dark:text-orange-400">
-          {match[1]}
-        </strong>
-      );
-      lastIndex = regex.lastIndex;
-    }
-    
-    if (lastIndex < content.length) {
-      parts.push(content.substring(lastIndex));
-    }
-    
-    const renderedContent = parts.length > 0 ? parts : content;
-    
-    if (isBullet) {
-      return (
-        <div key={idx} className="flex items-start gap-2 pl-2 py-0.5 text-xs sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
-          <span className="flex-1">{renderedContent}</span>
-        </div>
-      );
-    }
-    
-    if (isNumbered) {
-      const numMatch = trimmed.match(/^\d+/);
-      const num = numMatch ? numMatch[0] : "1";
-      return (
-        <div key={idx} className="flex items-start gap-2 pl-2 py-0.5 text-xs sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
-          <span className="font-bold text-orange-500 shrink-0">{num}.</span>
-          <span className="flex-1">{renderedContent}</span>
-        </div>
-      );
-    }
-    
-    if (trimmed === "") {
-      return <div key={idx} className="h-1.5" />;
-    }
-    
-    return (
-      <p key={idx} className="text-xs sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 py-0.5">
-        {renderedContent}
-      </p>
-    );
-  });
-}
 
 function formatCurrency(value: number, language: "th" | "en") {
   return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
@@ -713,7 +631,7 @@ export default function AIOperationsFloatingChat() {
                   </div>
                   {/* AI Message Bubble (Rounded on all sides) */}
                   <div className="rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
-                    {parseMarkdown(msg.content)}
+                    <AIResponseContent content={msg.content} compact />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {msg.actions.map((action) => (
