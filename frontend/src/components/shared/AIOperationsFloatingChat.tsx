@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { 
   AlertTriangle, 
@@ -8,29 +9,26 @@ import {
   Loader2, 
   PackageSearch, 
   Send, 
-  Sparkles, 
   TrendingUp, 
   Wallet, 
   X, 
-  MessageSquare,
   BarChart2,
-  ChevronLeft,
-  ChevronRight,
   Lightbulb
 } from "lucide-react";
-import { askOperationsAI } from "@/src/lib/ai";
+import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
+import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIAskResponse, AISnapshot, AIStockRisk } from "@/src/types/ai";
+import type { AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 
 type Message = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   createdAt: Date;
-  actions?: Array<{ label: string; href: string }>;
+  actions?: AIGuidedAction[];
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & {
@@ -229,8 +227,9 @@ export default function AIOperationsFloatingChat() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const snapshotRequestedRef = useRef(false);
 
-  const canUseAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
+  const canAskAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
 
   // Load saved messages on mount
   useEffect(() => {
@@ -283,24 +282,49 @@ export default function AIOperationsFloatingChat() {
 
   // Load snapshot in the background when the chat box is first opened
   useEffect(() => {
-    if (isOpen && !latestSnapshot && !snapshotLoading) {
-      fetchInitialSnapshot();
-    }
-  }, [isOpen]);
-
-  const fetchInitialSnapshot = async () => {
+    if (!isOpen || !canAskAI || snapshotRequestedRef.current) return;
+    snapshotRequestedRef.current = true;
     setSnapshotLoading(true);
-    try {
-      // Send a short, silent summary request to pre-load the snapshot metrics
-      const response = await askOperationsAI(language === "th" ? "สรุปย่อข้อมูลสถิติสั้นๆ เพื่อทำ Snapshot" : "Short operations overview for snapshot");
-      if (response?.data?.snapshot) {
-        setLatestSnapshot(response.data.snapshot);
-      }
-    } catch (err) {
-      console.error("Failed to load initial operations snapshot:", err);
-    } finally {
-      setSnapshotLoading(false);
+    getOperationsSnapshot()
+      .then((response) => {
+        if (response?.data) {
+          setLatestSnapshot(response.data);
+        }
+      })
+      .catch((err) => {
+        snapshotRequestedRef.current = false;
+        console.error("Failed to load initial operations snapshot:", err);
+      })
+      .finally(() => setSnapshotLoading(false));
+  }, [canAskAI, isOpen]);
+
+  const conversationHistory = (): AIConversationMessage[] =>
+    messages
+      .filter((message): message is Message & { role: "user" | "assistant" } => message.role !== "system")
+      .slice(-6)
+      .map((message) => ({ role: message.role, content: message.content }));
+
+  const handleAction = (action: AIGuidedAction) => {
+    if (!action.requiresConfirmation) {
+      router.push(action.href);
+      return;
     }
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: `confirm-${Date.now()}`,
+        role: "assistant",
+        content: action.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing."),
+        createdAt: new Date(),
+        actions: [
+          {
+            ...action,
+            label: language === "th" ? `ยืนยัน: ${action.label}` : `Confirm: ${action.label}`,
+            requiresConfirmation: false,
+          },
+        ],
+      },
+    ]);
   };
 
   const handleSend = async (textToSend = input) => {
@@ -327,7 +351,9 @@ export default function AIOperationsFloatingChat() {
         role: "assistant",
         content: navigation.message,
         createdAt: new Date(),
-        actions: navigation.kind === "suggest" ? navigation.options : undefined,
+        actions: navigation.kind === "suggest"
+          ? navigation.options.map((option) => ({ id: option.href, ...option }))
+          : undefined,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -337,10 +363,25 @@ export default function AIOperationsFloatingChat() {
       return;
     }
 
+    if (!canAskAI) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `permission-${Date.now()}`,
+          role: "assistant",
+          content: language === "th"
+            ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนการวิเคราะห์ยอดขายและคลังต้องใช้สิทธิ์ผู้จัดการหรือเจ้าของร้าน"
+            : "I can guide you to pages you can access. Sales and inventory analysis requires manager or owner access.",
+          createdAt: new Date(),
+        },
+      ]);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await askOperationsAI(trimmed);
+      const response = await askOperationsAI(trimmed, conversationHistory());
       const data: AIAskResponse = response.data;
       
       const assistantMsg: Message = {
@@ -348,6 +389,7 @@ export default function AIOperationsFloatingChat() {
         role: "assistant",
         content: data.answer,
         createdAt: new Date(),
+        actions: getGuidedActions(trimmed, data.answer, activeMembership, language),
       };
       
       setMessages(prev => [...prev, assistantMsg]);
@@ -386,7 +428,7 @@ export default function AIOperationsFloatingChat() {
     }
   };
 
-  if (!canUseAI) return null;
+  if (!activeMembership) return null;
 
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];
@@ -578,21 +620,23 @@ export default function AIOperationsFloatingChat() {
                 </button>
               )}
               {/* Stats Panel Toggle Button with tactile scale click */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowStats(!showStats);
-                }}
-                title={copy.toggleStatsTooltip}
-                className={`hidden rounded-lg p-2 md:inline-flex transition-all duration-300 active:scale-110 ${
-                  showStats
-                    ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                    : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-              >
-                <BarChart2 className="h-4.5 w-4.5" />
-              </button>
+              {canAskAI && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowStats(!showStats);
+                  }}
+                  title={copy.toggleStatsTooltip}
+                  className={`hidden rounded-lg p-2 md:inline-flex transition-all duration-300 active:scale-110 ${
+                    showStats
+                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+                      : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <BarChart2 className="h-4.5 w-4.5" />
+                </button>
+              )}
               {/* Close Panel */}
               <button
                 type="button"
@@ -628,7 +672,7 @@ export default function AIOperationsFloatingChat() {
                     {/* User Avatar */}
                     <div className="h-8 w-8 rounded-full shrink-0 overflow-hidden border border-orange-100 dark:border-gray-800/80 shadow-sm flex-none">
                       {user?.profile_image ? (
-                        <img src={user.profile_image} className="h-full w-full object-cover" alt="" />
+                        <Image src={user.profile_image} width={32} height={32} unoptimized className="h-full w-full object-cover" alt="" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 uppercase">
                           {user?.nickname?.charAt(0) || user?.first_name?.charAt(0) || "U"}
@@ -655,7 +699,7 @@ export default function AIOperationsFloatingChat() {
                           <button
                             key={`${msg.id}-${action.href}`}
                             type="button"
-                            onClick={() => router.push(action.href)}
+                            onClick={() => handleAction(action)}
                             className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition hover:bg-orange-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-orange-950/20"
                           >
                             {action.label}

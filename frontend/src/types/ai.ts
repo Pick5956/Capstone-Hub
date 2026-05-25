@@ -47,6 +47,11 @@ export type AISnapshot = {
   stock_risks: AIStockRisk[];
 };
 
+export type AIConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type AIAskResponse = {
   answer: string;
   model: string;

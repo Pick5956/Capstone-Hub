@@ -35,7 +35,13 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 }
 
 type AIAskRequest struct {
-	Question string `json:"question" binding:"required"`
+	Question string                  `json:"question" binding:"required"`
+	History  []AIConversationMessage `json:"history"`
+}
+
+type AIConversationMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type AIAskResponse struct {
@@ -156,6 +162,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	if len([]rune(question)) > 800 {
 		return nil, errors.New("question is too long")
 	}
+	history := sanitizeConversationHistory(req.History)
 
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
@@ -166,7 +173,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// 1. DYNAMIC CLASSIFICATION (Agentic Router Decision)
 	// We dynamically check if the question requires access to real-time restaurant operational databases.
-	needsDB, err := s.shouldQueryDB(question)
+	needsDB, err := s.shouldQueryDB(questionWithHistory(question, history))
 	if err != nil {
 		fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to YES.\n", err)
 	}
@@ -177,7 +184,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 		// Try Groq first if available
 		if len(groqKeys) > 0 {
-			answer, model, err := s.askGroqWithRotation(question, nil, true)
+			answer, model, err := s.askGroqWithRotation(question, history, nil, true)
 			if err == nil {
 				return &AIAskResponse{
 					Answer:   answer,
@@ -190,7 +197,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 		// Try Gemini
 		if len(geminiKeys) > 0 {
-			answer, model, err := s.askGeminiWithRotation(question, nil, true)
+			answer, model, err := s.askGeminiWithRotation(question, history, nil, true)
 			if err == nil {
 				return &AIAskResponse{
 					Answer:   answer,
@@ -213,7 +220,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Try Groq (Ultra-fast 200ms) with rotated keys
 	if len(groqKeys) > 0 {
-		answer, model, err := s.askGroqWithRotation(question, &snapshot, false)
+		answer, model, err := s.askGroqWithRotation(question, history, &snapshot, false)
 		if err == nil {
 			return &AIAskResponse{
 				Answer:   answer,
@@ -226,7 +233,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Fallback to Gemini (Very large 1M TPM limit) with rotated keys
 	if len(geminiKeys) > 0 {
-		answer, model, err := s.askGeminiWithRotation(question, &snapshot, false)
+		answer, model, err := s.askGeminiWithRotation(question, history, &snapshot, false)
 		if err == nil {
 			return &AIAskResponse{
 				Answer:   answer,
@@ -244,7 +251,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	return nil, errors.New("โควต้าการใช้งาน AI ทั้งหมดของคุณหมดลงชั่วคราวแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
 }
 
-func (s *AIService) askGroqWithRotation(question string, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
+func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
+	snapshot, err := s.buildSnapshot(restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	return &snapshot, nil
+}
+
+func (s *AIService) askGroqWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
 	keys := s.getGroqKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GROQ_API_KEY is not configured")
@@ -261,9 +276,9 @@ func (s *AIService) askGroqWithRotation(question string, snapshot *AISnapshot, i
 		var err error
 
 		if isGreeting {
-			answer, model, err = s.executeGroqGreeting(question, currentKey)
+			answer, model, err = s.executeGroqGreeting(question, history, currentKey)
 		} else {
-			answer, model, err = s.executeGroq(question, *snapshot, currentKey)
+			answer, model, err = s.executeGroq(question, history, *snapshot, currentKey)
 		}
 
 		if err == nil {
@@ -281,7 +296,7 @@ func (s *AIService) askGroqWithRotation(question string, snapshot *AISnapshot, i
 	return "", "", lastErr
 }
 
-func (s *AIService) askGeminiWithRotation(question string, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
+func (s *AIService) askGeminiWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
 	keys := s.getGeminiKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
@@ -298,9 +313,9 @@ func (s *AIService) askGeminiWithRotation(question string, snapshot *AISnapshot,
 		var err error
 
 		if isGreeting {
-			answer, model, err = s.executeGeminiGreeting(question, currentKey)
+			answer, model, err = s.executeGeminiGreeting(question, history, currentKey)
 		} else {
-			answer, model, err = s.executeGemini(question, *snapshot, currentKey)
+			answer, model, err = s.executeGemini(question, history, *snapshot, currentKey)
 		}
 
 		if err == nil {
@@ -511,7 +526,7 @@ User input:
 	return "", errors.New("gemini returned empty classifier response")
 }
 
-func (s *AIService) executeGemini(question string, snapshot AISnapshot, apiKey string) (string, string, error) {
+func (s *AIService) executeGemini(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
 		model = "gemini-2.5-flash"
@@ -530,8 +545,11 @@ Keep the answer practical: summarize the situation, risks, and next actions.
 Restaurant snapshot JSON:
 %s
 
+Recent conversation context:
+%s
+
 User question:
-%s`, string(snapshotJSON), question)
+%s`, string(snapshotJSON), conversationPrompt(history), question)
 
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
@@ -578,7 +596,7 @@ User question:
 	return "", "", errors.New("gemini returned an empty response")
 }
 
-func (s *AIService) executeGeminiGreeting(question string, apiKey string) (string, string, error) {
+func (s *AIService) executeGeminiGreeting(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
 		model = "gemini-2.5-flash"
@@ -589,7 +607,10 @@ Answer in natural, warm, and brief Thai (about 2-3 sentences).
 The user is only greeting you or chatting off-topic. Greet them back warmly, politely, and briefly explain that you are a specialized restaurant operational assistant, and then offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
 
 User question:
-%s`, question)
+%s
+
+Recent conversation context:
+%s`, question, conversationPrompt(history))
 
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
@@ -636,7 +657,7 @@ User question:
 	return "", "", errors.New("gemini returned an empty response")
 }
 
-func (s *AIService) executeGroq(question string, snapshot AISnapshot, apiKey string) (string, string, error) {
+func (s *AIService) executeGroq(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
@@ -655,8 +676,11 @@ Keep the answer practical: summarize the situation, risks, and next actions.
 Restaurant snapshot JSON:
 %s
 
+Recent conversation context:
+%s
+
 User question:
-%s`, string(snapshotJSON), question)
+%s`, string(snapshotJSON), conversationPrompt(history), question)
 
 	payload := groqRequest{
 		Model: model,
@@ -699,7 +723,7 @@ User question:
 	return "", "", errors.New("groq returned an empty response")
 }
 
-func (s *AIService) executeGroqGreeting(question string, apiKey string) (string, string, error) {
+func (s *AIService) executeGroqGreeting(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
@@ -710,7 +734,10 @@ Answer in natural, warm, and brief Thai (about 2-3 sentences).
 The user is only greeting you or chatting off-topic. Greet them back warmly, politely, and briefly explain that you are a specialized restaurant operational assistant, and then offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
 
 User question:
-%s`, question)
+%s
+
+Recent conversation context:
+%s`, question, conversationPrompt(history))
 
 	payload := groqRequest{
 		Model: model,
@@ -758,6 +785,50 @@ func maxFloat(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+func sanitizeConversationHistory(history []AIConversationMessage) []AIConversationMessage {
+	if len(history) > 6 {
+		history = history[len(history)-6:]
+	}
+	cleaned := make([]AIConversationMessage, 0, len(history))
+	for _, message := range history {
+		role := strings.ToLower(strings.TrimSpace(message.Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		content := strings.TrimSpace(message.Content)
+		if content == "" {
+			continue
+		}
+		runes := []rune(content)
+		if len(runes) > 400 {
+			content = string(runes[:400])
+		}
+		cleaned = append(cleaned, AIConversationMessage{Role: role, Content: content})
+	}
+	return cleaned
+}
+
+func conversationPrompt(history []AIConversationMessage) string {
+	if len(history) == 0 {
+		return "(none)"
+	}
+	var builder strings.Builder
+	for _, message := range history {
+		builder.WriteString(message.Role)
+		builder.WriteString(": ")
+		builder.WriteString(message.Content)
+		builder.WriteByte('\n')
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func questionWithHistory(question string, history []AIConversationMessage) string {
+	if len(history) == 0 {
+		return question
+	}
+	return fmt.Sprintf("Recent conversation:\n%s\n\nCurrent question:\n%s", conversationPrompt(history), question)
 }
 
 type geminiGenerateRequest struct {

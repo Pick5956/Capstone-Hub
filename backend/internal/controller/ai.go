@@ -41,3 +41,20 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, result)
 }
+
+func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "view_reports") && !memberCan(c, "manage_inventory") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing AI operations permission"})
+		return
+	}
+	result, err := ctrl.svc.OperationsSnapshot(restaurantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}

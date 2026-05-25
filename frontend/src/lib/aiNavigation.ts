@@ -134,24 +134,22 @@ const navigationEntries: NavigationEntry[] = [
   },
 ];
 
-const navigationVerbs = [
+const navigationPhrases = [
   "go to",
   "take me",
   "bring me",
   "open",
   "navigate",
-  "show me",
   "where is",
   "where can i find",
   "พาไป",
-  "ไป",
-  "เปิด",
-  "เข้า",
-  "พา",
+  "ไปหน้า",
+  "ไปที่",
+  "เปิดหน้า",
+  "เปิดเมนู",
+  "เข้าเมนู",
   "อยู่ตรงไหน",
   "อยู่ไหน",
-  "หน้า",
-  "เมนู",
 ];
 
 function normalize(text: string) {
@@ -166,13 +164,6 @@ function hasPermission(membership: Membership | null | undefined, permission?: P
   if (!permission) return true;
   const permissions = Array.isArray(permission) ? permission : [permission];
   return permissions.some((item) => can(membership, item));
-}
-
-function isNavigationIntent(input: string) {
-  const normalized = normalize(input);
-  if (!normalized) return false;
-  if (navigationVerbs.some((verb) => normalized.includes(verb))) return true;
-  return normalized.split(" ").length <= 3;
 }
 
 function scoreEntry(normalizedInput: string, entry: NavigationEntry) {
@@ -201,9 +192,8 @@ export function resolveNavigationRequest(
   language: "th" | "en",
   currentPathname?: string,
 ): NavigationResolution {
-  if (!isNavigationIntent(input)) return null;
-
   const normalizedInput = normalize(input);
+  if (!normalizedInput) return null;
   const matches: NavigationMatch[] = navigationEntries
     .filter((entry) => hasPermission(membership, entry.permission))
     .map((entry) => ({
@@ -218,9 +208,11 @@ export function resolveNavigationRequest(
 
   const top = matches[0];
   const second = matches[1];
+  const hasNavigationPhrase = navigationPhrases.some((phrase) => normalizedInput.includes(phrase));
+  if (!hasNavigationPhrase) return null;
   const alreadyThere = currentPathname === top.href || Boolean(currentPathname && currentPathname.startsWith(top.href + "/"));
 
-  if (!second || top.score-second.score >= 15 || top.score >= 120) {
+  if (!second || top.score - second.score >= 15 || top.score >= 120) {
     return {
       kind: "navigate",
       href: top.href,

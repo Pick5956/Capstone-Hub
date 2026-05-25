@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI } from "@/src/lib/ai";
+import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
+import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIAskResponse } from "@/src/types/ai";
+import type { AIAskResponse, AIConversationMessage } from "@/src/types/ai";
 
 function formatCurrency(value: number, language: "th" | "en") {
   return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
@@ -105,9 +108,15 @@ function MetricCard({
 export default function AIAssistantPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const router = useRouter();
+  const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
   const [question, setQuestion] = useState(copy.quickQuestions[0]);
   const [result, setResult] = useState<AIAskResponse | null>(null);
+  const [history, setHistory] = useState<AIConversationMessage[]>([]);
+  const [actions, setActions] = useState<AIGuidedAction[]>([]);
+  const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const canUseAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
@@ -116,11 +125,31 @@ export default function AIAssistantPage() {
     const trimmed = nextQuestion.trim();
     if (!trimmed || loading) return;
     setQuestion(trimmed);
+    setNotice("");
+    setActions([]);
+    setPendingAction(null);
+    const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
+    if (navigation) {
+      setResult(null);
+      setNotice(navigation.message);
+      if (navigation.kind === "suggest") {
+        setActions(navigation.options.map((option) => ({ id: option.href, ...option })));
+      } else if (!navigation.alreadyThere) {
+        router.push(navigation.href);
+      }
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const response = await askOperationsAI(trimmed);
+      const response = await askOperationsAI(trimmed, history.slice(-6));
       setResult(response.data);
+      const nextTurn: AIConversationMessage[] = [
+        { role: "user", content: trimmed },
+        { role: "assistant", content: response.data.answer },
+      ];
+      setHistory((previous) => [...previous, ...nextTurn].slice(-6));
+      setActions(getGuidedActions(trimmed, response.data.answer, activeMembership, language));
     } catch (err: unknown) {
       const message =
         typeof err === "object" && err !== null && "response" in err
@@ -130,6 +159,14 @@ export default function AIAssistantPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGuidedAction = (action: AIGuidedAction) => {
+    if (action.requiresConfirmation) {
+      setPendingAction(action);
+      return;
+    }
+    router.push(action.href);
   };
 
   if (!canUseAI) {
@@ -224,7 +261,32 @@ export default function AIAssistantPage() {
             {!error && result?.answer && (
               <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700 dark:text-gray-200">{result.answer}</div>
             )}
-            {!error && !result && (
+            {!error && notice && (
+              <div className="text-sm leading-7 text-gray-700 dark:text-gray-200">{notice}</div>
+            )}
+            {!error && actions.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {actions.map((action) => (
+                  <button key={action.id} type="button" onClick={() => handleGuidedAction(action)} className="rounded-md border border-orange-200 bg-orange-50/40 px-3 py-2 text-xs font-semibold text-orange-700 hover:bg-orange-50 dark:border-orange-900/50 dark:bg-orange-900/10 dark:text-orange-300">
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!error && pendingAction && (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                <p>{pendingAction.description}</p>
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={() => router.push(pendingAction.href)} className="rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+                    {language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
+                  </button>
+                  <button type="button" onClick={() => setPendingAction(null)} className="rounded-md border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-800">
+                    {language === "th" ? "ยกเลิก" : "Cancel"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {!error && !result && !notice && (
               <div className="flex min-h-56 items-center justify-center rounded-md border border-dashed border-gray-200 text-sm text-gray-400 dark:border-gray-800">
                 {copy.noAnswer}
               </div>
