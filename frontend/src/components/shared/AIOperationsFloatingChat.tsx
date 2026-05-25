@@ -15,7 +15,7 @@ import {
   BarChart2,
   ChevronLeft,
   ChevronRight,
-  Search
+  Lightbulb
 } from "lucide-react";
 import { askOperationsAI } from "@/src/lib/ai";
 import { can } from "@/src/lib/rbac";
@@ -484,7 +484,7 @@ export default function AIOperationsFloatingChat() {
             </div>
 
             <div className="flex items-center gap-1.5">
-              {/* Tips Toggle Button (Search magnifying glass) */}
+              {/* Tips Toggle Button (Lightbulb) */}
               {messages.length <= 1 && (
                 <button
                   type="button"
@@ -499,7 +499,7 @@ export default function AIOperationsFloatingChat() {
                       : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
-                  <Search className="h-4.5 w-4.5" />
+                  <Lightbulb className="h-4.5 w-4.5" />
                 </button>
               )}
               {/* Stats Panel Toggle Button with tactile scale click */}
