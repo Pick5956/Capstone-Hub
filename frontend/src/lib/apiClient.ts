@@ -3,6 +3,7 @@ import { authRepository } from "../app/repositories/authRepository";
 import { restaurantRepository } from "../app/repositories/restaurantRepository";
 
 const localhostHosts = new Set(["localhost", "127.0.0.1"]);
+const publicFrontendHosts = new Set(["dishy.pro", "www.dishy.pro"]);
 
 function resolveApiUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
@@ -13,6 +14,10 @@ function resolveApiUrl() {
 
   const currentHost = window.location.hostname;
   const fallbackUrl = `${window.location.protocol}//${currentHost}:8080`;
+
+  if (publicFrontendHosts.has(currentHost)) {
+    return "https://api.dishy.pro";
+  }
 
   if (!configuredUrl) {
     return fallbackUrl;
