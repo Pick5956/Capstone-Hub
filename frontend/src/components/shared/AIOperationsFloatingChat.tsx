@@ -635,7 +635,7 @@ export default function AIOperationsFloatingChat() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={copy.askPlaceholder}
                 disabled={loading}
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-3.5 py-2.5 text-xs text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-100 dark:border-gray-800 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:border-orange-600 dark:focus:ring-orange-950/30"
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium placeholder-gray-400 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 dark:border-gray-800 dark:bg-gray-900 dark:placeholder-gray-400 dark:focus:border-orange-600 dark:focus:ring-orange-950/30 shadow-sm !text-gray-950 dark:!text-gray-50 cursor-text"
               />
               <button
                 type="submit"
