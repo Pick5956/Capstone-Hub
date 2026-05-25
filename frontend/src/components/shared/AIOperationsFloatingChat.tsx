@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { 
   AlertTriangle, 
   Bot, 
@@ -18,6 +19,7 @@ import {
   Lightbulb
 } from "lucide-react";
 import { askOperationsAI } from "@/src/lib/ai";
+import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -28,6 +30,11 @@ type Message = {
   role: "user" | "assistant" | "system";
   content: string;
   createdAt: Date;
+  actions?: Array<{ label: string; href: string }>;
+};
+
+type StoredMessage = Omit<Message, "createdAt"> & {
+  createdAt?: string;
 };
 
 function parseMarkdown(text: string) {
@@ -208,6 +215,8 @@ function MetricCard({
 export default function AIOperationsFloatingChat() {
   const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
+  const router = useRouter();
+  const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -229,12 +238,15 @@ export default function AIOperationsFloatingChat() {
       const saved = localStorage.getItem("restaurant_ai_chat");
       if (saved) {
         try {
-          const parsed = JSON.parse(saved);
+          const parsed: unknown = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const rehydrated = parsed.map((m: any) => ({
+            const rehydrated = parsed.map((m) => {
+              const stored = m as StoredMessage;
+              return {
               ...m,
-              createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
-            }));
+              createdAt: stored.createdAt ? new Date(stored.createdAt) : new Date(),
+              };
+            });
             setMessages(rehydrated);
             return;
           }
@@ -307,6 +319,24 @@ export default function AIOperationsFloatingChat() {
     };
     
     setMessages(prev => [...prev, userMsg]);
+
+    const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
+    if (navigation) {
+      const assistantMsg: Message = {
+        id: `nav-${Date.now()}`,
+        role: "assistant",
+        content: navigation.message,
+        createdAt: new Date(),
+        actions: navigation.kind === "suggest" ? navigation.options : undefined,
+      };
+
+      setMessages(prev => [...prev, assistantMsg]);
+      if (navigation.kind === "navigate" && !navigation.alreadyThere) {
+        router.push(navigation.href);
+      }
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -619,6 +649,20 @@ export default function AIOperationsFloatingChat() {
                   {/* AI Message Bubble (Rounded on all sides) */}
                   <div className="rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
                     {parseMarkdown(msg.content)}
+                    {msg.actions && msg.actions.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {msg.actions.map((action) => (
+                          <button
+                            key={`${msg.id}-${action.href}`}
+                            type="button"
+                            onClick={() => router.push(action.href)}
+                            className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition hover:bg-orange-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-orange-950/20"
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
