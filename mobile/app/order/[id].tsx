@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, Text, TextInput, View } from 'react-native';
 
+import { listMenuItems } from '@/src/api/menu';
 import {
   addOrderItem,
   closeOrder,
@@ -12,12 +13,19 @@ import {
   updateOrderItem,
   updateOrderItemStatus,
 } from '@/src/api/order';
-import { listMenuItems } from '@/src/api/menu';
 import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import { colors, inputStyles, layout, typeScale } from '@/src/theme';
 import type { MenuItem } from '@/src/types/menu';
 import type { Order, OrderItem } from '@/src/types/order';
+
+function StepperButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+  return (
+    <Pressable disabled={disabled} onPress={onPress} style={[layout.secondaryButton, { width: 52, minHeight: 46 }]}>
+      <Text style={layout.secondaryButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export default function OrderDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -93,6 +101,10 @@ export default function OrderDetailScreen() {
     runAction(() => updateOrderItem(orderId, item.ID, { quantity: nextQty, note: item.note }));
   }
 
+  function adjustDraftQuantity(delta: number) {
+    setQuantity(String(Math.max(1, (Number.parseInt(quantity || '1', 10) || 1) + delta)));
+  }
+
   return (
     <MobileScreen
       kicker="POS"
@@ -105,90 +117,110 @@ export default function OrderDetailScreen() {
       {order ? (
         <>
           <View style={layout.panel}>
-            <Text selectable style={typeScale.title}>รายการในออเดอร์</Text>
+            <View style={layout.headerRow}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text selectable style={typeScale.title}>รายการในออเดอร์</Text>
+                <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
+                  {(order.items || []).length} รายการ · {pendingItems.length} ยังไม่ส่งครัว
+                </Text>
+              </View>
+              <Text selectable style={[typeScale.title, { fontVariant: ['tabular-nums'] }]}>{money(order.grand_total)}</Text>
+            </View>
+
             {(order.items || []).length === 0 ? (
               <Text selectable style={[typeScale.caption, { color: colors.muted }]}>ยังไม่มีรายการอาหาร</Text>
             ) : null}
-            {(order.items || []).map((item) => (
-              <View key={item.ID} style={layout.card}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text selectable style={typeScale.cardTitle}>
-                    {item.quantity}x {item.menu_name}
-                  </Text>
-                  <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                    {itemStatusLabel(item.status)} · {money(item.subtotal)}{item.note ? ` · ${item.note}` : ''}
-                  </Text>
-                </View>
-                {item.status === 'pending' ? (
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <Pressable disabled={submitting} onPress={() => editPendingItem(item, -1)} style={layout.secondaryButton}>
-                      <Text style={layout.secondaryButtonText}>-</Text>
-                    </Pressable>
-                    <Pressable disabled={submitting} onPress={() => editPendingItem(item, 1)} style={layout.secondaryButton}>
-                      <Text style={layout.secondaryButtonText}>+</Text>
-                    </Pressable>
+
+            <View style={{ gap: 10 }}>
+              {(order.items || []).map((item) => (
+                <View key={item.ID} style={[layout.card, { alignItems: 'stretch' }]}>
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <View style={layout.headerRow}>
+                      <Text selectable style={[typeScale.cardTitle, { flex: 1 }]}>
+                        {item.quantity}x {item.menu_name}
+                      </Text>
+                      <Text selectable style={[typeScale.cardTitle, { fontVariant: ['tabular-nums'] }]}>{money(item.subtotal)}</Text>
+                    </View>
+                    <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
+                      {itemStatusLabel(item.status)}{item.note ? ` · ${item.note}` : ''}
+                    </Text>
+                    {item.status === 'pending' ? (
+                      <View style={layout.headerRow}>
+                        <StepperButton disabled={submitting} label="-" onPress={() => editPendingItem(item, -1)} />
+                        <Text selectable style={[typeScale.cardTitle, { flex: 1, textAlign: 'center' }]}>
+                          {item.quantity}
+                        </Text>
+                        <StepperButton disabled={submitting} label="+" onPress={() => editPendingItem(item, 1)} />
+                      </View>
+                    ) : null}
+                    {item.status === 'ready' ? (
+                      <Pressable
+                        disabled={submitting}
+                        onPress={() => runAction(() => updateOrderItemStatus(orderId, item.ID, 'served'))}
+                        style={layout.primaryButton}
+                      >
+                        <Text style={layout.primaryButtonText}>เสิร์ฟรายการนี้</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
-                ) : null}
-                {item.status === 'ready' ? (
-                  <Pressable disabled={submitting} onPress={() => runAction(() => updateOrderItemStatus(orderId, item.ID, 'served'))} style={layout.primaryButton}>
-                    <Text style={layout.primaryButtonText}>เสิร์ฟ</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ))}
+                </View>
+              ))}
+            </View>
           </View>
 
           <View style={layout.panel}>
             <Text selectable style={typeScale.title}>เพิ่มเมนู</Text>
             {selectedMenu ? (
-              <View style={{ gap: 12 }}>
-                <Text selectable style={typeScale.cardTitle}>
-                  {selectedMenu.name} · {money(selectedMenu.price)}
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable onPress={() => setQuantity(String(Math.max(1, Number.parseInt(quantity || '1', 10) - 1)))} style={layout.secondaryButton}>
-                    <Text style={layout.secondaryButtonText}>-</Text>
-                  </Pressable>
+              <View style={{ gap: 14 }}>
+                <View style={layout.headerRow}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text selectable style={typeScale.cardTitle}>{selectedMenu.name}</Text>
+                    {selectedMenu.description ? (
+                      <Text selectable numberOfLines={2} style={[typeScale.caption, { color: colors.muted }]}>
+                        {selectedMenu.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text selectable style={typeScale.cardTitle}>{money(selectedMenu.price)}</Text>
+                </View>
+
+                <View style={layout.headerRow}>
+                  <StepperButton label="-" onPress={() => adjustDraftQuantity(-1)} />
                   <TextInput
                     keyboardType="number-pad"
                     onChangeText={setQuantity}
                     style={[inputStyles.input, { flex: 1, textAlign: 'center' }]}
                     value={quantity}
                   />
-                  <Pressable onPress={() => setQuantity(String((Number.parseInt(quantity || '1', 10) || 1) + 1))} style={layout.secondaryButton}>
-                    <Text style={layout.secondaryButtonText}>+</Text>
-                  </Pressable>
+                  <StepperButton label="+" onPress={() => adjustDraftQuantity(1)} />
                 </View>
+
                 <TextInput
                   multiline
                   onChangeText={setNote}
                   placeholder="หมายเหตุอาหาร"
                   placeholderTextColor={colors.placeholder}
-                  style={[inputStyles.input, { minHeight: 76, textAlignVertical: 'top' }]}
+                  style={[inputStyles.input, { minHeight: 82, paddingTop: 12, textAlignVertical: 'top' }]}
                   value={note}
                 />
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Pressable onPress={() => setSelectedMenu(null)} style={[layout.secondaryButton, { flex: 1 }]}>
-                    <Text style={layout.secondaryButtonText}>ยกเลิก</Text>
-                  </Pressable>
-                  <Pressable disabled={submitting} onPress={addSelectedMenu} style={[layout.primaryButton, { flex: 2 }]}>
-                    <Text style={layout.primaryButtonText}>เพิ่มเข้าออเดอร์</Text>
-                  </Pressable>
-                </View>
+
+                <Pressable disabled={submitting} onPress={addSelectedMenu} style={layout.primaryButton}>
+                  <Text style={layout.primaryButtonText}>เพิ่มเข้าออเดอร์</Text>
+                </Pressable>
+                <Pressable onPress={() => setSelectedMenu(null)} style={layout.secondaryButton}>
+                  <Text style={layout.secondaryButtonText}>ยกเลิก</Text>
+                </Pressable>
               </View>
             ) : (
-              <View style={{ gap: 8 }}>
+              <View style={layout.grid}>
                 {menuItems.slice(0, 40).map((item) => (
-                  <Pressable key={item.ID} onPress={() => setSelectedMenu(item)} style={layout.card}>
-                    <View style={{ flex: 1 }}>
-                      <Text selectable style={typeScale.cardTitle}>{item.name}</Text>
-                      {item.description ? (
-                        <Text selectable numberOfLines={1} style={[typeScale.caption, { color: colors.muted }]}>
-                          {item.description}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Text selectable style={typeScale.cardTitle}>{money(item.price)}</Text>
+                  <Pressable
+                    key={item.ID}
+                    onPress={() => setSelectedMenu(item)}
+                    style={({ pressed }) => [layout.tile, { minHeight: 118 }, pressed && { borderColor: colors.primary }]}
+                  >
+                    <Text selectable numberOfLines={2} style={typeScale.cardTitle}>{item.name}</Text>
+                    <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{money(item.price)}</Text>
                   </Pressable>
                 ))}
               </View>

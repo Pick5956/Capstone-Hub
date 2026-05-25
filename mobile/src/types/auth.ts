@@ -13,3 +13,14 @@ export interface User {
   phone: string;
   status?: string;
 }
+
+export interface RegisterInput {
+  first_name: string;
+  last_name: string;
+  nickname?: string;
+  birthday?: string;
+  email: string;
+  address?: string;
+  phone?: string;
+  password: string;
+}

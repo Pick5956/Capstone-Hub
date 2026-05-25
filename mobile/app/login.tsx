@@ -1,8 +1,9 @@
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, Text, TextInput, View } from 'react-native';
 
 import { ApiError, apiUrl } from '@/src/api/client';
+import { MobileScreen } from '@/src/components/mobile-screen';
 import { useAuth } from '@/src/providers/auth-provider';
 import { colors, inputStyles, layout, typeScale } from '@/src/theme';
 
@@ -18,6 +19,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [debugLines, setDebugLines] = useState<DebugLine[]>([]);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   function addDebug(text: string) {
     setDebugLines((current) => [
@@ -68,15 +70,12 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={layout.scrollContainer}>
-        <View style={{ gap: 8 }}>
-          <Text selectable style={typeScale.kicker}>RESTAURANT HUB</Text>
-          <Text selectable style={typeScale.hero}>เข้าใช้งานร้าน</Text>
-          <Text selectable style={[typeScale.body, { color: colors.muted }]}>
-            ใช้บัญชีเดียวกับเว็บ ระบบจะเชื่อมร้านและสิทธิ์จาก backend เดิม
-          </Text>
-        </View>
-
+      <MobileScreen
+        kicker="RESTAURANT HUB"
+        title="เข้าใช้งานร้าน"
+        subtitle="ใช้บัญชีเดียวกับเว็บ ระบบจะดึงร้านและสิทธิ์จาก backend เดิม"
+        showBack={false}
+      >
         <View style={layout.panel}>
           <View style={inputStyles.fieldGroup}>
             <Text selectable style={inputStyles.label}>อีเมล</Text>
@@ -120,34 +119,42 @@ export default function LoginScreen() {
           >
             <Text style={layout.primaryButtonText}>{submitting ? 'กำลังเข้าสู่ระบบ' : 'เข้าสู่ระบบ'}</Text>
           </Pressable>
+          <Pressable onPress={() => router.push('/register' as never)} style={layout.secondaryButton}>
+            <Text style={layout.secondaryButtonText}>สร้างบัญชีใหม่</Text>
+          </Pressable>
         </View>
 
-        <View style={layout.panel}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Text selectable style={typeScale.cardTitle}>Debug login</Text>
-              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                Shows API URL, health check, login status, and response body.
-              </Text>
+        <View style={[layout.panel, { gap: 12 }]}>
+          <View style={layout.headerRow}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text selectable style={typeScale.cardTitle}>สถานะการเชื่อมต่อ</Text>
+              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{apiUrl}</Text>
             </View>
-            <Pressable onPress={testApi} style={layout.secondaryButton}>
-              <Text style={layout.secondaryButtonText}>Test API</Text>
+            <Pressable onPress={() => setDebugOpen((value) => !value)} style={layout.secondaryButton}>
+              <Text style={layout.secondaryButtonText}>{debugOpen ? 'ซ่อน' : 'Log'}</Text>
             </Pressable>
           </View>
 
-          <View style={{ gap: 6 }}>
-            {debugLines.length === 0 ? (
-              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>No logs yet.</Text>
-            ) : (
-              debugLines.map((line) => (
-                <Text key={line.id} selectable style={[typeScale.caption, { color: colors.muted }]}>
-                  {line.text}
-                </Text>
-              ))
-            )}
-          </View>
+          {debugOpen ? (
+            <>
+              <Pressable onPress={testApi} style={layout.secondaryButton}>
+                <Text style={layout.secondaryButtonText}>Test API</Text>
+              </Pressable>
+              <View style={{ gap: 6 }}>
+                {debugLines.length === 0 ? (
+                  <Text selectable style={[typeScale.caption, { color: colors.muted }]}>ยังไม่มี log</Text>
+                ) : (
+                  debugLines.map((line) => (
+                    <Text key={line.id} selectable style={[typeScale.caption, { color: colors.muted }]}>
+                      {line.text}
+                    </Text>
+                  ))
+                )}
+              </View>
+            </>
+          ) : null}
         </View>
-      </ScrollView>
+      </MobileScreen>
     </KeyboardAvoidingView>
   );
 }

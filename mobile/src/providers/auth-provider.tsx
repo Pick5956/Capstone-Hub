@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { getCurrentUser, login } from '@/src/api/auth';
 import { getMyMemberships } from '@/src/api/restaurant';
 import {
+  clearActiveRestaurantId,
   clearSession,
   getActiveRestaurantId,
   getToken,
@@ -23,6 +24,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectRestaurant: (membership: Membership) => Promise<void>;
+  setActiveRestaurantFromMembership: (membership: Membership) => Promise<void>;
   refreshMemberships: () => Promise<void>;
 }
 
@@ -68,11 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const activeExists = membershipResponse.memberships.some(
         (membership) => membership.restaurant_id === storedRestaurantId,
       );
-      const nextRestaurantId = activeExists
-        ? storedRestaurantId
-        : membershipResponse.memberships.length === 1
-          ? membershipResponse.memberships[0].restaurant_id
-          : null;
+      const nextRestaurantId = activeExists ? storedRestaurantId : null;
 
       if (nextRestaurantId) {
         await setActiveRestaurantId(nextRestaurantId);
@@ -102,12 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(response.user);
     setMemberships(response.memberships);
 
-    const nextRestaurantId = response.memberships.length === 1 ? response.memberships[0].restaurant_id : null;
-    if (nextRestaurantId) {
-      await setActiveRestaurantId(nextRestaurantId);
-    }
-    setActiveRestaurantIdState(nextRestaurantId);
-    router.replace(nextRestaurantId ? '/home' : '/restaurants');
+    await clearActiveRestaurantId();
+    setActiveRestaurantIdState(null);
+    router.replace('/restaurants');
   }, []);
 
   const signOut = useCallback(async () => {
@@ -124,6 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace('/home');
   }, []);
 
+  const setActiveRestaurantFromMembership = useCallback(async (membership: Membership) => {
+    await setActiveRestaurantId(membership.restaurant_id);
+    setActiveRestaurantIdState(membership.restaurant_id);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
@@ -133,11 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signOut,
       selectRestaurant,
+      setActiveRestaurantFromMembership,
       refreshMemberships: async () => {
         await refreshMemberships();
       },
     }),
-    [activeMembership, memberships, refreshMemberships, selectRestaurant, signIn, signOut, status, user],
+    [activeMembership, memberships, refreshMemberships, selectRestaurant, setActiveRestaurantFromMembership, signIn, signOut, status, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

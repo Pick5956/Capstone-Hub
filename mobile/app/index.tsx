@@ -22,7 +22,7 @@ export default function IndexScreen() {
     return <Redirect href="/login" />;
   }
 
-  if (!activeMembership && memberships.length > 1) {
+  if (!activeMembership || memberships.length === 0) {
     return <Redirect href="/restaurants" />;
   }
 

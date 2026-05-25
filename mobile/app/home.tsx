@@ -1,8 +1,8 @@
-import { Redirect } from 'expo-router';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
+import { MotionPressable, MotionView } from '@/src/components/motion';
 import { can } from '@/src/lib/rbac';
 import { getWorkModeCopy } from '@/src/lib/work-mode';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -11,17 +11,18 @@ import { colors, layout, typeScale } from '@/src/theme';
 const actions: Array<{
   key: string;
   label: string;
-  href?: Href;
+  href: string;
   permission: string;
   fallback?: string;
+  detail: string;
 }> = [
-  { key: 'tables', label: 'โต๊ะ', href: '/tables', permission: 'view_tables', fallback: 'take_order' },
-  { key: 'orders', label: 'ออเดอร์', href: '/orders', permission: 'view_orders' },
-  { key: 'kitchen', label: 'ครัว', href: '/kitchen', permission: 'view_kitchen', fallback: 'update_order_status' },
-  { key: 'menu', label: 'เมนู', href: '/menu', permission: 'manage_menu', fallback: 'view_menu' },
-  { key: 'reports', label: 'รายงาน', permission: 'view_reports' },
-  { key: 'staff', label: 'พนักงาน', permission: 'manage_staff' },
-  { key: 'settings', label: 'ตั้งค่า', permission: 'manage_table' },
+  { key: 'tables', label: 'รับออเดอร์', href: '/tables', permission: 'view_tables', fallback: 'take_order', detail: 'เปิดโต๊ะและส่งอาหารเข้าครัว' },
+  { key: 'orders', label: 'ออเดอร์', href: '/orders', permission: 'view_orders', detail: 'ดูออเดอร์และสถานะโต๊ะ' },
+  { key: 'kitchen', label: 'ครัว', href: '/kitchen', permission: 'view_kitchen', fallback: 'update_order_status', detail: 'จัดคิวอาหารและทำเสร็จ' },
+  { key: 'menu', label: 'เมนูอาหาร', href: '/menu', permission: 'view_menu', fallback: 'manage_menu', detail: 'ดู/สร้าง/แก้ไขเมนูและหมวด' },
+  { key: 'table-management', label: 'ผังโต๊ะ', href: '/table-management', permission: 'manage_table', detail: 'สร้าง/แก้ไขโต๊ะ โซน tag และ QR' },
+  { key: 'staff', label: 'พนักงาน', href: '/staff', permission: 'manage_staff', detail: 'เชิญพนักงานและจัดสิทธิ์' },
+  { key: 'settings', label: 'ตั้งค่าร้าน', href: '/settings', permission: 'manage_table', detail: 'ข้อมูลร้าน ภาษี และค่าบริการ' },
 ];
 
 export default function HomeScreen() {
@@ -52,30 +53,32 @@ export default function HomeScreen() {
             {restaurant?.branch_name || 'ไม่มีชื่อสาขา'} · {roleName}
           </Text>
         </View>
+        <Pressable onPress={() => router.replace('/restaurants')} style={layout.secondaryButton}>
+          <Text style={layout.secondaryButtonText}>ร้าน</Text>
+        </Pressable>
         <Pressable onPress={signOut} style={layout.secondaryButton}>
           <Text style={layout.secondaryButtonText}>ออก</Text>
         </Pressable>
       </View>
 
-      <View style={layout.panel}>
+      <MotionView delay={60} style={layout.panel}>
         <Text selectable style={typeScale.title}>{workMode.title}</Text>
         <Text selectable style={[typeScale.body, { color: colors.muted }]}>
           {workMode.hint}
         </Text>
-      </View>
+      </MotionView>
 
       <View style={layout.grid}>
-        {availableActions.map((action) => (
-          <Pressable
+        {availableActions.map((action, index) => (
+          <MotionPressable
             key={action.key}
-            onPress={() => action.href ? router.push(action.href) : undefined}
+            delay={90 + index * 35}
+            onPress={() => router.push(action.href as Href)}
             style={({ pressed }) => [layout.tile, pressed && { borderColor: colors.primary }]}
           >
             <Text selectable style={typeScale.cardTitle}>{action.label}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-              {action.href ? 'ดึงข้อมูลจาก backend เดิม' : 'กำลังทำต่อ'}
-            </Text>
-          </Pressable>
+            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{action.detail}</Text>
+          </MotionPressable>
         ))}
       </View>
     </ScrollView>

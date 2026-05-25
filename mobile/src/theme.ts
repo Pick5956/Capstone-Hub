@@ -1,9 +1,9 @@
 import { StyleSheet } from 'react-native';
 
 export const colors = {
-  canvas: '#F8FAFC',
+  canvas: '#F6FAFD',
   surface: '#FFFFFF',
-  border: '#E2E8F0',
+  border: '#DDE5ED',
   text: '#0F172A',
   muted: '#64748B',
   placeholder: '#94A3B8',
@@ -21,8 +21,9 @@ export const typeScale = StyleSheet.create({
   },
   hero: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '900',
+    lineHeight: 36,
   },
   title: {
     color: colors.text,
@@ -31,7 +32,7 @@ export const typeScale = StyleSheet.create({
   },
   cardTitle: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '900',
   },
   body: {
@@ -41,17 +42,17 @@ export const typeScale = StyleSheet.create({
   },
   caption: {
     color: colors.text,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
 
 export const layout = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
-    gap: 18,
-    padding: 18,
-    paddingTop: 52,
+    gap: 20,
+    padding: 20,
+    paddingTop: 58,
     backgroundColor: colors.canvas,
   },
   centered: {
@@ -63,23 +64,25 @@ export const layout = StyleSheet.create({
     backgroundColor: colors.canvas,
   },
   panel: {
+    gap: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+  },
+  card: {
+    minHeight: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     backgroundColor: colors.surface,
-  },
-  card: {
-    minHeight: 76,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
   },
   headerRow: {
     flexDirection: 'row',
@@ -93,16 +96,16 @@ export const layout = StyleSheet.create({
   },
   tile: {
     width: '48%',
-    minHeight: 98,
+    minHeight: 112,
     gap: 8,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     backgroundColor: colors.surface,
   },
   primaryButton: {
-    minHeight: 52,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -115,7 +118,7 @@ export const layout = StyleSheet.create({
     fontWeight: '900',
   },
   secondaryButton: {
-    minHeight: 44,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -141,7 +144,7 @@ export const inputStyles = StyleSheet.create({
     fontWeight: '800',
   },
   input: {
-    minHeight: 50,
+    minHeight: 54,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
