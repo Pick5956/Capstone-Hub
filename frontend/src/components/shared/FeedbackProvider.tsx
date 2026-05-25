@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
 type ToastTone = "success" | "error" | "warning" | "info";
@@ -43,26 +43,34 @@ type ConfirmContextValue = {
 const ToastContext = createContext<ToastContextValue | null>(null);
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
-const toneStyles: Record<ToastTone, { icon: typeof CheckCircle2; className: string; iconClassName: string }> = {
+const toneStyles: Record<ToastTone, { icon: LucideIcon; className: string; accentClassName: string; iconWrapClassName: string; iconClassName: string }> = {
   success: {
     icon: CheckCircle2,
-    className: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100",
-    iconClassName: "text-emerald-600 dark:text-emerald-300",
+    className: "border-gray-900 bg-gray-950 text-white shadow-gray-950/25 dark:border-white/10 dark:bg-white dark:text-gray-950 dark:shadow-black/40",
+    accentClassName: "bg-emerald-500 dark:bg-emerald-500",
+    iconWrapClassName: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white",
+    iconClassName: "text-white",
   },
   error: {
     icon: XCircle,
-    className: "border-red-200 bg-red-50 text-red-950 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100",
-    iconClassName: "text-red-600 dark:text-red-300",
+    className: "border-red-600 bg-red-600 text-white shadow-red-950/25 dark:border-red-500 dark:bg-red-500 dark:text-white dark:shadow-black/40",
+    accentClassName: "bg-white/70",
+    iconWrapClassName: "bg-white/15 text-white",
+    iconClassName: "text-white",
   },
   warning: {
     icon: AlertTriangle,
-    className: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100",
-    iconClassName: "text-amber-600 dark:text-amber-300",
+    className: "border-amber-400 bg-amber-400 text-gray-950 shadow-amber-950/20 dark:border-amber-300 dark:bg-amber-300 dark:text-gray-950 dark:shadow-black/40",
+    accentClassName: "bg-gray-950/75",
+    iconWrapClassName: "bg-gray-950 text-amber-300",
+    iconClassName: "text-amber-300",
   },
   info: {
     icon: Info,
-    className: "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-100",
-    iconClassName: "text-sky-600 dark:text-sky-300",
+    className: "border-sky-600 bg-sky-600 text-white shadow-sky-950/25 dark:border-sky-500 dark:bg-sky-500 dark:text-white dark:shadow-black/40",
+    accentClassName: "bg-white/70",
+    iconWrapClassName: "bg-white/15 text-white",
+    iconClassName: "text-white",
   },
 };
 
@@ -118,25 +126,28 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       <ConfirmContext.Provider value={confirmValue}>
         {children}
 
-        <div className="pointer-events-none fixed right-3 top-3 z-[100] flex w-[min(24rem,calc(100vw-1.5rem))] flex-col gap-2 sm:right-5 sm:top-5">
+        <div className="pointer-events-none fixed left-1/2 top-16 z-[100] flex w-[calc(100dvw-1.5rem)] max-w-sm -translate-x-1/2 flex-col gap-2 sm:top-5">
           {toasts.map((toast) => {
             const styles = toneStyles[toast.tone];
             const Icon = styles.icon;
             return (
               <div
                 key={toast.id}
-                className={`pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-3 shadow-lg shadow-gray-950/10 backdrop-blur dark:shadow-black/30 ${styles.className}`}
+                className={`animate-slide-down pointer-events-auto relative flex min-h-14 items-center gap-3 overflow-hidden rounded-md border py-3 pl-4 pr-2 shadow-2xl backdrop-blur ${styles.className}`}
                 role="status"
               >
-                <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${styles.iconClassName}`} aria-hidden="true" />
+                <span className={`absolute bottom-0 left-0 top-0 w-1 ${styles.accentClassName}`} aria-hidden="true" />
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${styles.iconWrapClassName}`} aria-hidden="true">
+                  <Icon className={`h-5 w-5 ${styles.iconClassName}`} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold leading-5">{toast.title}</p>
-                  {toast.message && <p className="mt-0.5 text-[12px] leading-5 opacity-80">{toast.message}</p>}
+                  <p className="text-[14px] font-semibold leading-5">{toast.title}</p>
+                  {toast.message && <p className="mt-0.5 text-[12px] leading-5 opacity-85">{toast.message}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => dismissToast(toast.id)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70 transition-colors hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md opacity-75 transition-colors hover:bg-white/15 hover:opacity-100 dark:hover:bg-black/10"
                   aria-label={language === "th" ? "ปิดแจ้งเตือน" : "Dismiss notification"}
                 >
                   <X className="h-4 w-4" aria-hidden="true" />

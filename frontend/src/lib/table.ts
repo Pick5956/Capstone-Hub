@@ -13,6 +13,9 @@ export const bulkCreateTables = (data: BulkCreateTablesInput) =>
 export const updateTable = (id: number, data: RestaurantTableInput) =>
   apiClient.put<RestaurantTable>(`/api/v1/tables/${id}`, data);
 
+export const regenerateTableCustomerToken = (id: number) =>
+  apiClient.post<RestaurantTable>(`/api/v1/tables/${id}/regenerate-customer-token`);
+
 export const moveTableZone = (id: number, data: MoveTableZoneInput) =>
   apiClient.patch<RestaurantTable>(`/api/v1/tables/${id}/move-zone`, data);
 

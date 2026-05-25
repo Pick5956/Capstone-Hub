@@ -315,32 +315,7 @@ func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entit
 		if isTerminalOrder(order.Status) {
 			return errors.New("cannot send a closed order to kitchen")
 		}
-		items, err := tx.ListItems(order.ID)
-		if err != nil {
-			return err
-		}
-		now := repository.BangkokNow()
-		maxBatch, err := tx.MaxKitchenBatch(order.ID)
-		if err != nil {
-			return err
-		}
-		nextBatch := maxBatch + 1
-		pendingCount := 0
-		for i := range items {
-			if items[i].Status == entity.OrderItemStatusPending {
-				pendingCount += 1
-				items[i].Status = entity.OrderItemStatusCooking
-				items[i].SentAt = &now
-				items[i].KitchenBatch = nextBatch
-				if err := tx.SaveItem(&items[i]); err != nil {
-					return err
-				}
-			}
-		}
-		if pendingCount == 0 {
-			return errors.New("no pending items to send")
-		}
-		if err := setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch)); err != nil {
+		if err := sendPendingItemsToKitchen(tx, order, userID); err != nil {
 			return err
 		}
 		changed = order.ID
@@ -728,6 +703,48 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		return setOrderStatus(tx, order, entity.OrderStatusCooking, userID, "items in kitchen")
 	}
 	return nil
+}
+
+func sendPendingItemsToKitchen(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
+	return sendPendingItemsToKitchenByIDs(tx, order, userID, nil)
+}
+
+func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entity.Order, userID uint, itemIDs []uint) error {
+	items, err := tx.ListItems(order.ID)
+	if err != nil {
+		return err
+	}
+	targetIDs := map[uint]bool{}
+	for _, id := range itemIDs {
+		if id != 0 {
+			targetIDs[id] = true
+		}
+	}
+	now := repository.BangkokNow()
+	maxBatch, err := tx.MaxKitchenBatch(order.ID)
+	if err != nil {
+		return err
+	}
+	nextBatch := maxBatch + 1
+	pendingCount := 0
+	for i := range items {
+		if len(targetIDs) > 0 && !targetIDs[items[i].ID] {
+			continue
+		}
+		if items[i].Status == entity.OrderItemStatusPending {
+			pendingCount += 1
+			items[i].Status = entity.OrderItemStatusCooking
+			items[i].SentAt = &now
+			items[i].KitchenBatch = nextBatch
+			if err := tx.SaveItem(&items[i]); err != nil {
+				return err
+			}
+		}
+	}
+	if pendingCount == 0 {
+		return errors.New("no pending items to send")
+	}
+	return setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch))
 }
 
 func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {

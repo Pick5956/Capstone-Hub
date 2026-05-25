@@ -1,17 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
-import { useAuth } from '@/src/providers/AuthProvider';
 import LanguageToggle from '@/src/components/shared/LanguageToggle';
+import ThemeToggle from '@/src/components/shared/ThemeToggle';
 
 export default function MobileTopBar() {
   const { setMobileOpen } = useSidebar();
   const { language } = useLanguage();
-  const { activeMembership } = useAuth();
-  const restaurantName = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
-  const currentRestaurant = language === 'th' ? 'ร้านปัจจุบัน' : 'Current restaurant';
 
   return (
     <header
@@ -31,31 +27,9 @@ export default function MobileTopBar() {
         </svg>
       </button>
 
-      <Link href="/restaurants" className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6M9 16h4" />
-          </svg>
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[11px] leading-none text-gray-400 dark:text-gray-500">{currentRestaurant}</span>
-          <span className="mt-1 block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
-        </span>
-      </Link>
-
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <LanguageToggle />
-        <Link
-          href="/restaurants"
-          className="h-8 px-2.5 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-[12px] font-medium text-gray-600 dark:text-gray-300 inline-flex items-center gap-1.5 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6" />
-          </svg>
-          {language === 'th' ? 'ร้าน' : 'Restaurants'}
-        </Link>
+        <ThemeToggle className="h-9 w-9 border border-gray-200 bg-white text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900" />
       </div>
     </header>
   );

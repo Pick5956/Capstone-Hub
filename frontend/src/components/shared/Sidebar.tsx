@@ -6,9 +6,9 @@ import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
-import { useTheme } from '@/src/providers/ThemeProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import LanguageToggle from '@/src/components/shared/LanguageToggle';
+import ThemeToggle from '@/src/components/shared/ThemeToggle';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
@@ -211,7 +211,6 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
           {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
         </div>
         <LanguageCycleButton />
-        <ThemeToggle />
         <button
           onClick={logout}
           title={logoutLabel}
@@ -269,36 +268,6 @@ function LanguageCycleButton({ className = '' }: { className?: string }) {
   );
 }
 
-function ThemeToggle({ className = '' }: { className?: string }) {
-  const { theme, mounted, toggle } = useTheme();
-  const { language } = useLanguage();
-  const isDark = mounted && theme === 'dark';
-  const title = isDark
-    ? language === 'th' ? 'สลับเป็นโหมดสว่าง' : 'Switch to light mode'
-    : language === 'th' ? 'สลับเป็นโหมดมืด' : 'Switch to dark mode';
-
-  return (
-    <button
-      onClick={toggle}
-      title={title}
-      className={`shrink-0 rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${className}`}
-    >
-      {isDark ? (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-        </svg>
-      )}
-    </button>
-  );
-}
-
 function DesktopControls() {
   return (
     <div className="hidden shrink-0 px-3 py-2 lg:block">
@@ -314,7 +283,6 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const restaurantName = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
-  const currentRestaurant = language === 'th' ? 'ร้านปัจจุบัน' : 'Current restaurant';
   const switchLabel = language === 'th' ? 'เปลี่ยน' : 'Switch';
 
   if (collapsed) {
@@ -323,7 +291,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
         <Link
           href="/restaurants"
           onClick={onNavigate}
-          title={`${currentRestaurant}: ${restaurantName}`}
+          title={restaurantName}
           className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white transition-colors hover:bg-orange-700"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -349,8 +317,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
           </svg>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[11px] leading-none text-gray-400 dark:text-gray-500">{currentRestaurant}</span>
-          <span className="mt-1 block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
+          <span className="block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
         </span>
         <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
       </Link>
@@ -400,7 +367,6 @@ export default function Sidebar() {
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
           <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
-            <ThemeToggle />
             <button
               onClick={() => setMobileOpen(false)}
               aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}

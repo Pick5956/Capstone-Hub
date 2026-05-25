@@ -10,6 +10,7 @@ export interface RestaurantTable {
   capacity: number;
   zone: string;
   status: TableStatus;
+  customer_token?: string;
   table_zone?: TableZone | null;
   tags?: TableTag[];
   CreatedAt?: string;
@@ -27,6 +28,7 @@ export interface BulkCreateTablesInput {
   zone_id?: number | null;
   count: number;
   capacity: number;
+  status?: TableStatus;
   tag_ids?: number[];
 }
 

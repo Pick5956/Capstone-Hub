@@ -12,6 +12,7 @@ func SetupRoutes(r *gin.Engine) {
 	api := r.Group("/api")
 	SetupAuthRoutes(api)
 	SetupRoleRoutes(api)
+	SetupCustomerOrderRoutes(api)
 
 	userCtrl := controller.ProvideUserController(config.DB())
 

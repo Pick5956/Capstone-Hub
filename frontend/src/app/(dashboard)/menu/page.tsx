@@ -374,6 +374,10 @@ export default function MenuPage() {
       return acc;
     }, {});
   }, [categories, items]);
+  const categoryFilterOptions = useMemo(() => [
+    { value: "0", label: copy.allCategories },
+    ...categories.map((category) => ({ value: String(category.ID), label: category.name })),
+  ], [categories, copy.allCategories]);
   const activeCategory = categories.find((category) => category.ID === filterCategory);
   const availableCount = items.filter((item) => item.is_available).length;
 
@@ -736,41 +740,18 @@ export default function MenuPage() {
 
       <div className="space-y-4">
         <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 lg:flex-1 lg:pb-0">
-              <button
-                type="button"
-                onClick={() => setFilterCategory(0)}
-                className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-[12px] font-medium transition-colors ${
-                  filterCategory === 0
-                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                    : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
-                }`}
-              >
-                {copy.allCategories}
-                <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${filterCategory === 0 ? "bg-white/15 dark:bg-gray-900/10" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                  {items.length}
-                </span>
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category.ID}
-                  type="button"
-                  onClick={() => setFilterCategory(category.ID)}
-                  className={`inline-flex h-9 max-w-[220px] shrink-0 items-center gap-2 rounded-md px-3 text-[12px] font-medium transition-colors ${
-                    filterCategory === category.ID
-                      ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                      : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
-                  }`}
-                >
-                  <span className={`truncate ${!category.is_active ? "line-through opacity-60" : ""}`}>{category.name}</span>
-                  <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${filterCategory === category.ID ? "bg-white/15 dark:bg-gray-900/10" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                    {categoryCounts[category.ID] ?? 0}
-                  </span>
-                </button>
-              ))}
+          <div className="grid gap-3 lg:grid-cols-[minmax(14rem,20rem)_minmax(16rem,1fr)] lg:items-end">
+            <div>
+              <span className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.itemCategory}</span>
+              <ThemedSelect
+                value={String(filterCategory)}
+                onChange={(next) => setFilterCategory(Number(next))}
+                options={categoryFilterOptions}
+              />
             </div>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 lg:max-w-xs" />
+            <div>
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+            </div>
           </div>
         </div>
 

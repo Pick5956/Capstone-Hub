@@ -39,6 +39,13 @@ export const apiClient = axios.create({
   },
 });
 
+export const publicApiClient = axios.create({
+  baseURL: apiUrl,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
 // Inject Authorization + X-Restaurant-ID on every request.
 // X-Restaurant-ID identifies which restaurant the current user is acting in
 // (a user can be a member of many restaurants).

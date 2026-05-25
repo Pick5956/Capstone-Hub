@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
+import { X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -14,6 +15,7 @@ import type { Bill, Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
+import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
 const terminalStatuses = ["completed", "cancelled"];
 
@@ -270,6 +272,10 @@ export default function PosOrderDetailPage() {
       return item.is_available;
     });
   }, [categoryId, menuItems, search]);
+  const categoryOptions = useMemo(() => [
+    { value: "all", label: copy.all },
+    ...categories.map((category) => ({ value: String(category.ID), label: category.name })),
+  ], [categories, copy.all]);
   const selectedOptionsTotal = selectedMenu?.option_groups?.reduce((sum, group) => {
     const selected = (group.options ?? []).filter((option) => selectedOptionIds.includes(option.ID));
     return sum + selected.reduce((optionSum, option) => optionSum + option.price_delta, 0);
@@ -586,17 +592,14 @@ export default function PosOrderDetailPage() {
         <div className="grid flex-1 items-start gap-4 lg:grid-cols-[1fr_380px]">
           <section className="min-w-0 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-              <div className="soft-scrollbar-hide min-w-0 flex snap-x gap-2 overflow-x-auto pb-2">
-                <button type="button" onClick={() => setCategoryId("all")} className={`ui-press min-h-12 min-w-[72px] shrink-0 snap-start rounded-md px-4 text-[14px] font-semibold sm:min-h-9 sm:min-w-0 sm:px-3 sm:text-[12px] ${categoryId === "all" ? "bg-gray-900 text-white shadow-md shadow-gray-950/10 dark:bg-white dark:text-gray-900 dark:shadow-black/30" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
-                  {copy.all}
-                </button>
-                {categories.map((category) => (
-                  <button key={category.ID} type="button" onClick={() => setCategoryId(category.ID)} className={`ui-press min-h-12 min-w-[92px] shrink-0 snap-start rounded-md px-4 text-[14px] font-semibold sm:min-h-9 sm:min-w-0 sm:px-3 sm:text-[12px] ${categoryId === category.ID ? "bg-gray-900 text-white shadow-md shadow-gray-950/10 dark:bg-white dark:text-gray-900 dark:shadow-black/30" : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
-                    {category.name}
-                  </button>
-                ))}
+              <div className="grid gap-2 sm:grid-cols-[minmax(12rem,16rem)_minmax(16rem,1fr)] sm:items-center">
+                <ThemedSelect
+                  value={categoryId === "all" ? "all" : String(categoryId)}
+                  onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
+                  options={categoryOptions}
+                />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-12 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]" />
               </div>
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="mt-2 h-12 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]" />
             </div>
 
             <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -826,12 +829,17 @@ export default function PosOrderDetailPage() {
       {selectedMenu && (
         <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`} onClick={closeMenuPicker}>
           <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`} onClick={(event) => event.stopPropagation()}>
-            <div className="aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
+            <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
+              <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
               {!selectedMenu.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
             </div>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{selectedMenu.name}</h2>
-              <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <h2 className="min-w-0 text-[15px] font-semibold text-gray-900 dark:text-white">{selectedMenu.name}</h2>
+                <p className="shrink-0 text-right font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
+              </div>
             </div>
             <div className="space-y-3 overflow-y-auto p-4">
               {selectedMenu.option_groups?.length ? (
@@ -871,11 +879,8 @@ export default function PosOrderDetailPage() {
                 <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
               </label>
             </div>
-            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={closeMenuPicker} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
-                {language === "th" ? "ยกเลิก" : "Cancel"}
-              </button>
-              <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+            <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+              <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-11 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                 {copy.add}
               </button>
             </div>

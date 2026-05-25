@@ -1,9 +1,12 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -28,6 +31,7 @@ type BulkCreateTablesRequest struct {
 	ZoneID   *uint  `json:"zone_id"`
 	Count    int    `json:"count" binding:"required"`
 	Capacity int    `json:"capacity"`
+	Status   string `json:"status"`
 	TagIDs   []uint `json:"tag_ids"`
 }
 
@@ -95,6 +99,18 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 	return s.repo.FindTable(restaurantID, table.ID)
 }
 
+func (s *TableService) RegenerateCustomerToken(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
+	table, err := s.repo.FindTable(restaurantID, tableID)
+	if err != nil {
+		return nil, err
+	}
+	table.CustomerToken = GenerateCustomerTableToken()
+	if err := s.repo.UpdateTable(table); err != nil {
+		return nil, err
+	}
+	return s.repo.FindTable(restaurantID, table.ID)
+}
+
 func (s *TableService) DeleteTable(restaurantID, tableID uint) error {
 	table, err := s.repo.FindTable(restaurantID, tableID)
 	if err != nil {
@@ -111,6 +127,13 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 	capacity, err := normalizeCapacity(req.Capacity)
 	if err != nil {
 		return nil, err
+	}
+	status := strings.TrimSpace(req.Status)
+	if status == "" {
+		status = entity.TableStatusFree
+	}
+	if status != entity.TableStatusFree && status != entity.TableStatusOccupied && status != entity.TableStatusReserved {
+		return nil, errors.New("invalid table status")
 	}
 	var created []entity.RestaurantTable
 	err = s.repo.Transaction(func(tx *repository.TableRepository) error {
@@ -140,7 +163,8 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 				SequenceNumber: sequence,
 				Capacity:       capacity,
 				Zone:           zoneName(zone),
-				Status:         entity.TableStatusFree,
+				Status:         status,
+				CustomerToken:  GenerateCustomerTableToken(),
 			}
 			if err := tx.CreateTable(table); err != nil {
 				return err
@@ -320,7 +344,16 @@ func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *
 		Capacity:       normalizedCapacity,
 		Zone:           zoneName(zone),
 		Status:         status,
+		CustomerToken:  GenerateCustomerTableToken(),
 	}, tags, nil
+}
+
+func GenerateCustomerTableToken() string {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
 }
 
 func normalizeCapacity(capacity int) (int, error) {

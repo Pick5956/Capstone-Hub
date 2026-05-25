@@ -18,6 +18,7 @@ type RestaurantTable struct {
 	Capacity       int    `json:"capacity" gorm:"default:2"`
 	Zone           string `json:"zone"`
 	Status         string `json:"status" gorm:"default:'free'"`
+	CustomerToken  string `json:"customer_token" gorm:"size:64;uniqueIndex"`
 
 	Restaurant *Restaurant `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 	TableZone  *TableZone  `json:"table_zone,omitempty" gorm:"foreignKey:ZoneID"`

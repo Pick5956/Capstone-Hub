@@ -107,6 +107,27 @@ func (ctrl *TableController) UpdateTable(c *gin.Context) {
 	c.JSON(http.StatusOK, table)
 }
 
+func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	table, err := ctrl.tableSvc.RegenerateCustomerToken(restaurantID, tableID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
 func (ctrl *TableController) MoveTableZone(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

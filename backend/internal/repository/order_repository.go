@@ -73,6 +73,21 @@ func (r *OrderRepository) FindOpenOrderByTable(restaurantID, tableID uint) (*ent
 	return &order, nil
 }
 
+func (r *OrderRepository) FindCustomerOpenOrderByTable(restaurantID, tableID uint) (*entity.Order, error) {
+	var order entity.Order
+	err := r.db.
+		Preload("Table").
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
+		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Order("opened_at desc").
+		First(&order).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
 	var orders []entity.Order
 	query := r.db.Preload("Table").Preload("Items").Preload("Items.SelectedOptions").Where("restaurant_id = ?", restaurantID)
@@ -202,9 +217,50 @@ func (r *OrderRepository) FindMenuItem(restaurantID, menuID uint) (*entity.MenuI
 	return &item, nil
 }
 
+func (r *OrderRepository) ListPublicCategories(restaurantID uint) ([]entity.Category, error) {
+	var categories []entity.Category
+	err := r.db.
+		Where("restaurant_id = ? AND is_active = ?", restaurantID, true).
+		Order("display_order asc, id asc").
+		Find(&categories).Error
+	return categories, err
+}
+
+func (r *OrderRepository) ListPublicMenuItems(restaurantID uint) ([]entity.MenuItem, error) {
+	var items []entity.MenuItem
+	activeCategoryIDs := r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true)
+	activeLinkedMenuIDs := r.db.Table("menu_item_categories").
+		Select("menu_item_categories.menu_item_id").
+		Joins("JOIN categories ON categories.id = menu_item_categories.category_id").
+		Where("menu_item_categories.restaurant_id = ? AND categories.is_active = ?", restaurantID, true)
+	err := r.db.
+		Preload("Category").
+		Preload("Categories", func(db *gorm.DB) *gorm.DB { return db.Order("id asc") }).
+		Preload("Categories.Category").
+		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
+		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
+		Where("restaurant_id = ? AND is_available = ?", restaurantID, true).
+		Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs).
+		Order("display_order asc, id asc").
+		Find(&items).Error
+	return items, err
+}
+
 func (r *OrderRepository) FindTable(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
 	var table entity.RestaurantTable
 	err := r.db.Where("restaurant_id = ? AND id = ?", restaurantID, tableID).First(&table).Error
+	if err != nil {
+		return nil, err
+	}
+	return &table, nil
+}
+
+func (r *OrderRepository) FindTableByCustomerToken(token string) (*entity.RestaurantTable, error) {
+	var table entity.RestaurantTable
+	err := r.db.
+		Preload("TableZone").
+		Where("customer_token = ?", token).
+		First(&table).Error
 	if err != nil {
 		return nil, err
 	}

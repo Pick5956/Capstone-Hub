@@ -25,6 +25,7 @@ func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 	v1.GET("/tables", tableCtrl.ListTables)
 	v1.POST("/tables", tableCtrl.CreateTable)
 	v1.POST("/tables/bulk-create", tableCtrl.BulkCreateTables)
+	v1.POST("/tables/:id/regenerate-customer-token", tableCtrl.RegenerateCustomerToken)
 	v1.PUT("/tables/:id", tableCtrl.UpdateTable)
 	v1.PATCH("/tables/:id/move-zone", tableCtrl.MoveTableZone)
 	v1.DELETE("/tables/:id", tableCtrl.DeleteTable)

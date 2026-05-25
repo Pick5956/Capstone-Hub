@@ -3,6 +3,8 @@ package config
 import (
 	"Project-M/config/seed"
 	"Project-M/internal/entity"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -92,11 +94,34 @@ func SetupDatabase() *gorm.DB {
 		&entity.IngredientTransaction{},
 	)
 	migrateLegacyTableLayout(db)
+	backfillCustomerTableTokens(db)
 	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
 
 	return db
+}
+
+func backfillCustomerTableTokens(db *gorm.DB) {
+	var tables []entity.RestaurantTable
+	if err := db.Where("customer_token = '' OR customer_token IS NULL").Find(&tables).Error; err != nil {
+		return
+	}
+	for i := range tables {
+		token := randomCustomerTableToken()
+		if token == "" {
+			continue
+		}
+		_ = db.Model(&tables[i]).Update("customer_token", token).Error
+	}
+}
+
+func randomCustomerTableToken() string {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(bytes)
 }
 
 func migrateLegacyTableLayout(db *gorm.DB) {
