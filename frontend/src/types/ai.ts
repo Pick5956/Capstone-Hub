@@ -54,6 +54,7 @@ export type AIConversationMessage = {
 
 export type AIAskResponse = {
   answer: string;
+  intent: "analysis" | "greeting" | "capabilities" | "conversation" | "out_of_scope" | string;
   model: string;
   snapshot: AISnapshot;
 };

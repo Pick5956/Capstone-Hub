@@ -16,6 +16,7 @@ import {
   Lightbulb
 } from "lucide-react";
 import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
+import { resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
@@ -305,6 +306,11 @@ export default function AIOperationsFloatingChat() {
       .map((message) => ({ role: message.role, content: message.content }));
 
   const handleAction = (action: AIGuidedAction) => {
+    if (action.prompt) {
+      handleSend(action.prompt);
+      return;
+    }
+    if (!action.href) return;
     if (!action.requiresConfirmation) {
       router.push(action.href);
       return;
@@ -360,6 +366,21 @@ export default function AIOperationsFloatingChat() {
       if (navigation.kind === "navigate" && !navigation.alreadyThere) {
         router.push(navigation.href);
       }
+      return;
+    }
+
+    const clarification = resolveClarificationRequest(trimmed, activeMembership, language);
+    if (clarification) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `clarify-${Date.now()}`,
+          role: "assistant",
+          content: clarification.message,
+          createdAt: new Date(),
+          actions: clarification.actions,
+        },
+      ]);
       return;
     }
 
@@ -697,7 +718,7 @@ export default function AIOperationsFloatingChat() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         {msg.actions.map((action) => (
                           <button
-                            key={`${msg.id}-${action.href}`}
+                            key={`${msg.id}-${action.id}`}
                             type="button"
                             onClick={() => handleAction(action)}
                             className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition hover:bg-orange-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-orange-950/20"

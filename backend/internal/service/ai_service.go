@@ -18,6 +18,16 @@ import (
 
 var errRateLimit = errors.New("rate limit exceeded")
 
+type AIIntent string
+
+const (
+	AIIntentAnalysis   AIIntent = "analysis"
+	AIIntentGreeting   AIIntent = "greeting"
+	AIIntentCapability AIIntent = "capabilities"
+	AIIntentChat       AIIntent = "conversation"
+	AIIntentOutOfScope AIIntent = "out_of_scope"
+)
+
 type AIService struct {
 	repo           *repository.AIRepository
 	httpClient     *http.Client
@@ -46,6 +56,7 @@ type AIConversationMessage struct {
 
 type AIAskResponse struct {
 	Answer   string     `json:"answer"`
+	Intent   AIIntent   `json:"intent"`
 	Model    string     `json:"model"`
 	Snapshot AISnapshot `json:"snapshot"`
 }
@@ -116,7 +127,7 @@ func (s *AIService) getGeminiKeys() []string {
 	return keys
 }
 
-func (s *AIService) shouldQueryDB(question string) (bool, error) {
+func (s *AIService) classifyIntent(question string) (AIIntent, error) {
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
@@ -129,7 +140,7 @@ func (s *AIService) shouldQueryDB(question string) (bool, error) {
 
 			answer, err := s.executeClassifierGroq(question, currentKey)
 			if err == nil {
-				return strings.Contains(answer, "YES"), nil
+				return parseIntent(answer), nil
 			}
 			fmt.Printf("[AI Classifier] Groq Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
 		}
@@ -144,14 +155,59 @@ func (s *AIService) shouldQueryDB(question string) (bool, error) {
 
 			answer, err := s.executeClassifierGemini(question, currentKey)
 			if err == nil {
-				return strings.Contains(answer, "YES"), nil
+				return parseIntent(answer), nil
 			}
 			fmt.Printf("[AI Classifier] Gemini Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
 		}
 	}
 
-	// Default fallback: if everything fails, assume YES to avoid breaking analytical flows
-	return true, errors.New("failed to classify via any model, falling back to YES")
+	// Preserve analytical usefulness if provider classification is unavailable.
+	return AIIntentAnalysis, errors.New("failed to classify via any model, falling back to analysis")
+}
+
+func parseIntent(answer string) AIIntent {
+	normalized := strings.ToUpper(strings.TrimSpace(answer))
+	labels := []struct {
+		label  string
+		intent AIIntent
+	}{
+		{label: "GREETING", intent: AIIntentGreeting},
+		{label: "CAPABILITIES", intent: AIIntentCapability},
+		{label: "CONVERSATION", intent: AIIntentChat},
+		{label: "OUT_OF_SCOPE", intent: AIIntentOutOfScope},
+		{label: "ANALYSIS", intent: AIIntentAnalysis},
+	}
+	for _, candidate := range labels {
+		if strings.HasPrefix(normalized, candidate.label) {
+			return candidate.intent
+		}
+	}
+	return AIIntentAnalysis
+}
+
+func localIntent(question string) (AIIntent, bool) {
+	normalized := strings.ToLower(strings.Trim(strings.TrimSpace(question), "?!.,"))
+	switch normalized {
+	case "สวัสดี", "สวัสดีครับ", "สวัสดีค่ะ", "หวัดดี", "hello", "hi", "hey":
+		return AIIntentGreeting, true
+	case "ทำอะไรได้บ้าง", "ช่วยอะไรได้บ้าง", "คุณทำอะไรได้บ้าง", "what can you do", "help":
+		return AIIntentCapability, true
+	default:
+		return "", false
+	}
+}
+
+func localIntentAnswer(intent AIIntent) (string, bool) {
+	switch intent {
+	case AIIntentGreeting:
+		return "สวัสดีครับ วันนี้อยากดูยอดขาย เช็กสต๊อก หรือให้ช่วยหาเมนูในระบบครับ?", true
+	case AIIntentCapability:
+		return "ผมช่วยสรุปยอดขายและกำไร ตรวจวัตถุดิบเสี่ยงหมด วิเคราะห์เมนู และพาไปหน้าจัดการที่ต้องการได้ครับ ลองถามว่า \"เมนูไหนกำไรต่ำ\" หรือ \"พาไปหน้าตั้งค่าร้าน\" ได้เลย", true
+	case AIIntentOutOfScope:
+		return "เรื่องนี้อยู่นอกข้อมูลร้านที่ผมเข้าถึงครับ ผมช่วยดูยอดขาย กำไร สต๊อก เมนู หรือพาไปหน้าจัดการในระบบได้", true
+	default:
+		return "", false
+	}
 }
 
 func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskResponse, error) {
@@ -164,6 +220,18 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	}
 	history := sanitizeConversationHistory(req.History)
 
+	intent, locallyResolved := localIntent(question)
+	if locallyResolved {
+		if answer, ok := localIntentAnswer(intent); ok {
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   intent,
+				Model:    "local-router",
+				Snapshot: AISnapshot{},
+			}, nil
+		}
+	}
+
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
@@ -171,23 +239,33 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
 	}
 
-	// 1. DYNAMIC CLASSIFICATION (Agentic Router Decision)
-	// We dynamically check if the question requires access to real-time restaurant operational databases.
-	needsDB, err := s.shouldQueryDB(questionWithHistory(question, history))
-	if err != nil {
-		fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to YES.\n", err)
+	if !locallyResolved {
+		var err error
+		intent, err = s.classifyIntent(questionWithHistory(question, history))
+		if err != nil {
+			fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", err)
+		}
 	}
 
-	// 2. NO-DATA FLOW: Simple greetings, chit-chat, off-topic chat
-	if !needsDB {
-		fmt.Println("[AI Router] Diverting to Conversational/Greeting Bypass flow (0 DB Snapshot load)...")
+	if answer, ok := localIntentAnswer(intent); ok {
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   intent,
+			Model:    "local-router",
+			Snapshot: AISnapshot{},
+		}, nil
+	}
 
-		// Try Groq first if available
+	// Conversational prompts do not load operational data or make business claims.
+	if intent != AIIntentAnalysis {
+		fmt.Printf("[AI Router] Diverting to conversational flow (%s, 0 DB snapshot load)...\n", intent)
+
 		if len(groqKeys) > 0 {
 			answer, model, err := s.askGroqWithRotation(question, history, nil, true)
 			if err == nil {
 				return &AIAskResponse{
 					Answer:   answer,
+					Intent:   intent,
 					Model:    model,
 					Snapshot: AISnapshot{},
 				}, nil
@@ -201,6 +279,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			if err == nil {
 				return &AIAskResponse{
 					Answer:   answer,
+					Intent:   intent,
 					Model:    model,
 					Snapshot: AISnapshot{},
 				}, nil
@@ -211,7 +290,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return nil, errors.New("โควต้าการใช้งาน AI ทั้งหมดของคุณหมดลงชั่วคราวแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ")
 	}
 
-	// 3. ANALYTICAL DATA-DRIVEN FLOW: Queries DB, constructs Snapshot JSON context
+	// Analytical questions load the scoped restaurant snapshot before answering.
 	fmt.Println("[AI Router] Diverting to Rich Analytical business flow (Building DB Snapshot)...")
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
@@ -224,6 +303,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		if err == nil {
 			return &AIAskResponse{
 				Answer:   answer,
+				Intent:   intent,
 				Model:    model,
 				Snapshot: snapshot,
 			}, nil
@@ -237,6 +317,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		if err == nil {
 			return &AIAskResponse{
 				Answer:   answer,
+				Intent:   intent,
 				Model:    model,
 				Snapshot: snapshot,
 			}, nil
@@ -259,7 +340,7 @@ func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
 	return &snapshot, nil
 }
 
-func (s *AIService) askGroqWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
+func (s *AIService) askGroqWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool) (string, string, error) {
 	keys := s.getGroqKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GROQ_API_KEY is not configured")
@@ -275,8 +356,8 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 		var answer, model string
 		var err error
 
-		if isGreeting {
-			answer, model, err = s.executeGroqGreeting(question, history, currentKey)
+		if isConversation {
+			answer, model, err = s.executeGroqConversation(question, history, currentKey)
 		} else {
 			answer, model, err = s.executeGroq(question, history, *snapshot, currentKey)
 		}
@@ -296,7 +377,7 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 	return "", "", lastErr
 }
 
-func (s *AIService) askGeminiWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isGreeting bool) (string, string, error) {
+func (s *AIService) askGeminiWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool) (string, string, error) {
 	keys := s.getGeminiKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
@@ -312,8 +393,8 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		var answer, model string
 		var err error
 
-		if isGreeting {
-			answer, model, err = s.executeGeminiGreeting(question, history, currentKey)
+		if isConversation {
+			answer, model, err = s.executeGeminiConversation(question, history, currentKey)
 		} else {
 			answer, model, err = s.executeGemini(question, history, *snapshot, currentKey)
 		}
@@ -422,8 +503,13 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 		model = "groq/compound-mini"
 	}
 
-	prompt := fmt.Sprintf(`You are a precise routing classifier. Analyze the user's input and determine if answering it requires accessing real-time restaurant operational databases (such as sales history, transaction metrics, menu item profit margins, stock levels, or inventory risk warnings).
-Reply with exactly one word: "YES" or "NO" (without punctuation).
+	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
+Reply with exactly one label:
+- ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
+- GREETING: a greeting only.
+- CAPABILITIES: asks what the assistant can do.
+- OUT_OF_SCOPE: asks for information outside the restaurant system.
+- CONVERSATION: any other request that can be answered without live restaurant data, including unclear short messages.
 
 User input:
 %s`, question)
@@ -475,8 +561,13 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 		model = "gemini-2.5-flash"
 	}
 
-	prompt := fmt.Sprintf(`You are a precise routing classifier. Analyze the user's input and determine if answering it requires accessing real-time restaurant operational databases (such as sales history, transaction metrics, menu item profit margins, stock levels, or inventory risk warnings).
-Reply with exactly one word: "YES" or "NO" (without punctuation).
+	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
+Reply with exactly one label:
+- ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
+- GREETING: a greeting only.
+- CAPABILITIES: asks what the assistant can do.
+- OUT_OF_SCOPE: asks for information outside the restaurant system.
+- CONVERSATION: any other request that can be answered without live restaurant data, including unclear short messages.
 
 User input:
 %s`, question)
@@ -596,15 +687,17 @@ User question:
 	return "", "", errors.New("gemini returned an empty response")
 }
 
-func (s *AIService) executeGeminiGreeting(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
+func (s *AIService) executeGeminiConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
 
-	prompt := fmt.Sprintf(`You are a friendly and polite AI operations assistant for a Thai restaurant management system.
-Answer in natural, warm, and brief Thai (about 2-3 sentences).
-The user is only greeting you or chatting off-topic. Greet them back warmly, politely, and briefly explain that you are a specialized restaurant operational assistant, and then offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
+	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
+Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
+Do not introduce yourself, and do not repeat a welcome message.
+If the message is ambiguous, ask one useful clarification question with concrete options.
+You do not have live restaurant data in this flow, so do not claim sales or stock numbers.
 
 User question:
 %s
@@ -723,15 +816,17 @@ User question:
 	return "", "", errors.New("groq returned an empty response")
 }
 
-func (s *AIService) executeGroqGreeting(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
+func (s *AIService) executeGroqConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
 	}
 
-	prompt := fmt.Sprintf(`You are a friendly and polite AI operations assistant for a Thai restaurant management system.
-Answer in natural, warm, and brief Thai (about 2-3 sentences).
-The user is only greeting you or chatting off-topic. Greet them back warmly, politely, and briefly explain that you are a specialized restaurant operational assistant, and then offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
+	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
+Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
+Do not introduce yourself, and do not repeat a welcome message.
+If the message is ambiguous, ask one useful clarification question with concrete options.
+You do not have live restaurant data in this flow, so do not claim sales or stock numbers.
 
 User question:
 %s

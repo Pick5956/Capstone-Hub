@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI } from "@/src/lib/ai";
+import { resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
@@ -139,6 +140,13 @@ export default function AIAssistantPage() {
       }
       return;
     }
+    const clarification = resolveClarificationRequest(trimmed, activeMembership, language);
+    if (clarification) {
+      setResult(null);
+      setNotice(clarification.message);
+      setActions(clarification.actions);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -162,6 +170,11 @@ export default function AIAssistantPage() {
   };
 
   const handleGuidedAction = (action: AIGuidedAction) => {
+    if (action.prompt) {
+      submitQuestion(action.prompt);
+      return;
+    }
+    if (!action.href) return;
     if (action.requiresConfirmation) {
       setPendingAction(action);
       return;
@@ -277,7 +290,7 @@ export default function AIAssistantPage() {
               <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
                 <p>{pendingAction.description}</p>
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => router.push(pendingAction.href)} className="rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+                  <button type="button" onClick={() => pendingAction.href && router.push(pendingAction.href)} className="rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
                     {language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
                   </button>
                   <button type="button" onClick={() => setPendingAction(null)} className="rounded-md border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-800">

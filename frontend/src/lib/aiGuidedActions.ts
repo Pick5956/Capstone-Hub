@@ -3,7 +3,8 @@ import type { Membership } from "@/src/types/restaurant";
 
 export type AIGuidedAction = {
   id: string;
-  href: string;
+  href?: string;
+  prompt?: string;
   label: string;
   description?: string;
   requiresConfirmation?: boolean;
@@ -22,7 +23,7 @@ export function getGuidedActions(
   const text = `${question} ${answer}`.toLowerCase();
   const actions: AIGuidedAction[] = [];
   const add = (action: AIGuidedAction) => {
-    if (!actions.some((existing) => existing.href === action.href)) {
+    if (!actions.some((existing) => existing.id === action.id)) {
       actions.push(action);
     }
   };
