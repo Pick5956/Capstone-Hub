@@ -76,6 +76,19 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return nil, errors.New("question is too long")
 	}
 
+	// check if the user is sending a simple greeting to bypass database snapshots
+	if s.isGreeting(question) {
+		answer, model, err := s.askGeminiGreeting(question)
+		if err != nil {
+			return nil, err
+		}
+		return &AIAskResponse{
+			Answer:   answer,
+			Model:    model,
+			Snapshot: AISnapshot{},
+		}, nil
+	}
+
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
 		return nil, err
@@ -265,4 +278,89 @@ type geminiGenerateResponse struct {
 	Candidates []struct {
 		Content geminiContent `json:"content"`
 	} `json:"candidates"`
+}
+
+func (s *AIService) isGreeting(q string) bool {
+	q = strings.ToLower(strings.TrimSpace(q))
+	q = strings.ReplaceAll(q, "?", "")
+	q = strings.ReplaceAll(q, "!", "")
+	q = strings.ReplaceAll(q, ".", "")
+	q = strings.ReplaceAll(q, "ครับ", "")
+	q = strings.ReplaceAll(q, "ค่ะ", "")
+	q = strings.ReplaceAll(q, "ดีครับ", "ดี")
+	q = strings.ReplaceAll(q, "ดีค่ะ", "ดี")
+	q = strings.ReplaceAll(q, "ดีจ้า", "ดี")
+	q = strings.ReplaceAll(q, "นะ", "")
+	q = strings.ReplaceAll(q, "จ้า", "")
+	q = strings.TrimSpace(q)
+
+	greetings := []string{
+		"สวัสดี", "หวัดดี", "ดี", "hello", "hi", "hey", "hola", "yo",
+	}
+
+	for _, g := range greetings {
+		if q == g {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *AIService) askGeminiGreeting(question string) (string, string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+	if apiKey == "" {
+		return "", "", errors.New("GEMINI_API_KEY is not configured")
+	}
+	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+
+	prompt := fmt.Sprintf(`You are a friendly and polite AI operations assistant for a Thai restaurant management system.
+Answer in natural, warm, and brief Thai (about 2-3 sentences).
+The user is only greeting you. Greet them back warmly, politely, and briefly offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
+
+User question:
+%s`, question)
+
+	payload := geminiGenerateRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: prompt}}},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", model)
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", apiKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed geminiGenerateResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	for _, candidate := range parsed.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text, model, nil
+			}
+		}
+	}
+	return "", "", errors.New("gemini returned an empty response")
 }

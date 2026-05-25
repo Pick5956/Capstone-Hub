@@ -217,17 +217,44 @@ export default function AIOperationsFloatingChat() {
 
   const canUseAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
 
-  // Load welcome message on init
+  // Load saved messages on mount
   useEffect(() => {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content: copy.welcome,
-        createdAt: new Date(),
-      },
-    ]);
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("restaurant_ai_chat");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const rehydrated = parsed.map((m: any) => ({
+              ...m,
+              createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
+            }));
+            setMessages(rehydrated);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to parse saved chat messages:", e);
+        }
+      }
+      
+      // Default initial welcome message if no history
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          content: copy.welcome,
+          createdAt: new Date(),
+        },
+      ]);
+    }
   }, [copy.welcome]);
+
+  // Save messages to localStorage when updated
+  useEffect(() => {
+    if (typeof window !== "undefined" && messages.length > 0) {
+      localStorage.setItem("restaurant_ai_chat", JSON.stringify(messages));
+    }
+  }, [messages]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
