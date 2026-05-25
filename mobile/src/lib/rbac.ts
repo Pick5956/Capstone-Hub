@@ -1,0 +1,38 @@
+import type { Permission } from '@/src/types/auth';
+import type { Membership } from '@/src/types/restaurant';
+
+const fallbackRolePermissions: Record<string, Permission[]> = {
+  owner: ['*'],
+  manager: [
+    'view_dashboard',
+    'manage_menu',
+    'manage_table',
+    'manage_staff',
+    'manage_inventory',
+    'view_reports',
+    'take_order',
+    'take_payment',
+    'view_orders',
+    'view_kitchen',
+    'update_order_status',
+  ],
+  cashier: ['view_dashboard', 'take_payment', 'view_orders', 'view_tables'],
+  waiter: ['view_dashboard', 'take_order', 'take_payment', 'manage_table', 'view_menu', 'view_orders'],
+  chef: ['view_kitchen', 'update_order_status', 'view_menu', 'view_inventory'],
+};
+
+export function can(membership: Membership | null | undefined, permission: Permission): boolean {
+  const rawPermissions = membership?.role?.permissions;
+  if (rawPermissions) {
+    try {
+      const permissions = JSON.parse(rawPermissions) as Permission[];
+      return permissions.includes('*') || permissions.includes(permission);
+    } catch {
+      // Role fallback keeps the app usable if the backend sends legacy role data.
+    }
+  }
+
+  const roleName = membership?.role?.name ?? '';
+  const permissions = fallbackRolePermissions[roleName] ?? [];
+  return permissions.includes('*') || permissions.includes(permission);
+}

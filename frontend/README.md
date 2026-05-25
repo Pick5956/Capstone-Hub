@@ -4,17 +4,41 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 First, run the development server:
 
-```bash
+```powershell
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## Public Local Tunnel
+
+Use this mode only when the local machine should serve the web app through Cloudflare Tunnel for phones or users on another network.
+
+Keep the backend running first:
+
+```powershell
+cd ../backend
+go run main.go
+```
+
+Then run the Cloudflare named tunnel in another terminal:
+
+```powershell
+npm run tunnel:public
+```
+
+Run the frontend in public mode:
+
+```powershell
+npm run dev:public
+```
+
+Public routes:
+
+- Web app: [https://dishy.pro](https://dishy.pro)
+- API: [https://api.dishy.pro](https://api.dishy.pro)
+
+`npm run dev` stays local and uses `http://localhost:8080` from `.env.local`. `npm run dev:public` loads `.env.public.local` and uses `https://api.dishy.pro`.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
