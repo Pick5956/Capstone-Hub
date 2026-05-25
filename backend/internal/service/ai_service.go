@@ -76,9 +76,18 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return nil, errors.New("question is too long")
 	}
 
+	// Determine if we should use Groq or Gemini (default to Groq if key is present)
+	useGroq := strings.TrimSpace(os.Getenv("GROQ_API_KEY")) != ""
+
 	// check if the user is sending a simple greeting to bypass database snapshots
 	if s.isGreeting(question) {
-		answer, model, err := s.askGeminiGreeting(question)
+		var answer, model string
+		var err error
+		if useGroq {
+			answer, model, err = s.askGroqGreeting(question)
+		} else {
+			answer, model, err = s.askGeminiGreeting(question)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +102,13 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	if err != nil {
 		return nil, err
 	}
-	answer, model, err := s.askGemini(question, snapshot)
+
+	var answer, model string
+	if useGroq {
+		answer, model, err = s.askGroq(question, snapshot)
+	} else {
+		answer, model, err = s.askGemini(question, snapshot)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -369,4 +384,145 @@ User question:
 		}
 	}
 	return "", "", errors.New("gemini returned an empty response")
+}
+
+type groqMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type groqRequest struct {
+	Model    string        `json:"model"`
+	Messages []groqMessage `json:"messages"`
+}
+
+type groqResponse struct {
+	Choices []struct {
+		Message groqMessage `json:"message"`
+	} `json:"choices"`
+}
+
+func (s *AIService) askGroq(question string, snapshot AISnapshot) (string, string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+	if apiKey == "" {
+		return "", "", errors.New("GROQ_API_KEY is not configured")
+	}
+	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
+	if model == "" {
+		model = "llama-3.1-8b-instant"
+	}
+
+	snapshotJSON, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return "", "", err
+	}
+	prompt := fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
+Answer in natural Thai for a restaurant owner or manager.
+Use only the provided restaurant snapshot. Do not invent numbers.
+If the available data is not enough for a confident recommendation, say what is missing.
+Keep the answer practical: summarize the situation, risks, and next actions.
+
+Restaurant snapshot JSON:
+%s
+
+User question:
+%s`, string(snapshotJSON), question)
+
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errors.New("โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+		}
+		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		return parsed.Choices[0].Message.Content, model, nil
+	}
+	return "", "", errors.New("groq returned an empty response")
+}
+
+func (s *AIService) askGroqGreeting(question string) (string, string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+	if apiKey == "" {
+		return "", "", errors.New("GROQ_API_KEY is not configured")
+	}
+	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
+	if model == "" {
+		model = "llama-3.1-8b-instant"
+	}
+
+	prompt := fmt.Sprintf(`You are a friendly and polite AI operations assistant for a Thai restaurant management system.
+Answer in natural, warm, and brief Thai (about 2-3 sentences).
+The user is only greeting you. Greet them back warmly, politely, and briefly offer to help them analyze their restaurant operations (such as sales history, profit margins, or ingredients inventory levels).
+
+User question:
+%s`, question)
+
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errors.New("โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+		}
+		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		return parsed.Choices[0].Message.Content, model, nil
+	}
+	return "", "", errors.New("groq returned an empty response")
 }
