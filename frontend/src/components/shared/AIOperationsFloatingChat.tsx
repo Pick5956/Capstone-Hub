@@ -199,12 +199,13 @@ function MetricCard({
 }
 
 export default function AIOperationsFloatingChat() {
-  const { activeMembership } = useAuth();
+  const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
   const copy = useMemo(() => buildCopy(language), [language]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showTips, setShowTips] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -500,35 +501,60 @@ export default function AIOperationsFloatingChat() {
           </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3.5 scrollbar-thin">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col animate-message-slide ${
-                  msg.role === "user" ? "items-end" : "items-start"
-                }`}
-              >
-                {msg.role === "system" ? (
-                  <div className="w-full text-center py-2 text-xs text-red-500 dark:text-red-400 font-medium">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
+            {messages.map((msg) => {
+              if (msg.role === "system") {
+                return (
+                  <div key={msg.id} className="w-full text-center py-2 text-xs text-red-500 dark:text-red-400 font-medium animate-message-slide">
                     {msg.content}
                   </div>
-                ) : (
-                  <div
-                    className={`max-w-[92%] rounded-2xl px-4 py-3 shadow-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-gradient-to-tr from-orange-600 to-amber-500 text-white rounded-tr-none text-xs sm:text-[13px]"
-                        : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 self-start rounded-tl-none text-xs sm:text-[13px]"
-                    }`}
-                  >
-                    {msg.role === "user" ? msg.content : parseMarkdown(msg.content)}
+                );
+              }
+
+              if (msg.role === "user") {
+                return (
+                  <div key={msg.id} className="flex items-end gap-2.5 justify-end max-w-[90%] ml-auto animate-message-slide">
+                    {/* User Message Bubble (Rounded on all sides) */}
+                    <div className="rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
+                      {msg.content}
+                    </div>
+                    {/* User Avatar */}
+                    <div className="h-8 w-8 rounded-full shrink-0 overflow-hidden border border-orange-100 dark:border-gray-800/80 shadow-sm flex-none">
+                      {user?.profile_image ? (
+                        <img src={user.profile_image} className="h-full w-full object-cover" alt="" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 uppercase">
+                          {user?.nickname?.charAt(0) || user?.first_name?.charAt(0) || "U"}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              }
+
+              // Assistant/AI message
+              return (
+                <div key={msg.id} className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
+                  {/* AI Avatar */}
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shrink-0 border border-orange-100 dark:border-gray-800/40 shadow-sm flex-none">
+                    <Bot className="h-4.5 w-4.5" />
+                  </div>
+                  {/* AI Message Bubble (Rounded on all sides) */}
+                  <div className="rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
+                    {parseMarkdown(msg.content)}
+                  </div>
+                </div>
+              );
+            })}
 
             {loading && (
-              <div className="flex items-start gap-2 animate-message-slide">
-                <div className="rounded-2xl rounded-tl-none bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-2 shadow-sm">
+              <div className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
+                {/* AI Avatar */}
+                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shrink-0 border border-orange-100 dark:border-gray-800/40 shadow-sm flex-none">
+                  <Bot className="h-4.5 w-4.5" />
+                </div>
+                {/* Loading Bubble */}
+                <div className="rounded-2xl bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-2 shadow-sm leading-relaxed">
                   <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
                   <span>{copy.thinking}</span>
                 </div>
@@ -538,9 +564,26 @@ export default function AIOperationsFloatingChat() {
           </div>
 
           {/* Quick Questions suggestion overlay with slide-up entrance */}
-          {messages.length <= 1 && !loading && (
+          {messages.length <= 1 && !loading && showTips && (
             <div className="border-t border-gray-100 bg-gray-50/50 p-3.5 dark:border-gray-800/60 dark:bg-gray-900/10 animate-message-slide">
               <div className="flex flex-col gap-2">
+                {/* Tips Header with Close Button */}
+                <div className="flex items-center justify-between mb-1 px-0.5">
+                  <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                    {language === "th" ? "💡 คำถามแนะนำ" : "💡 Suggested Questions"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTips(false);
+                    }}
+                    className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors cursor-pointer"
+                    title={language === "th" ? "ซ่อนคำแนะนำ" : "Hide Suggestions"}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 {copy.quickQuestions.map((q) => (
                   <button
                     key={q}
@@ -551,7 +594,7 @@ export default function AIOperationsFloatingChat() {
                     }}
                     className="w-full text-left rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition-all dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-orange-950/20 dark:hover:text-orange-400 shadow-sm cursor-pointer"
                   >
-                    💡 {q}
+                    {q}
                   </button>
                 ))}
               </div>
