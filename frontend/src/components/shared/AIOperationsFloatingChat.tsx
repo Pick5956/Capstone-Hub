@@ -390,7 +390,7 @@ export default function AIOperationsFloatingChat() {
                 <p className="mt-3 text-xs">{copy.emptyStats}</p>
               </div>
             ) : (
-              <div className="mt-4 flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin">
+              <div className="mt-4 flex-1 overflow-y-auto space-y-4 px-2 pr-2 scrollbar-thin">
                 <div className="grid grid-cols-1 gap-2.5">
                   <MetricCard
                     icon={<TrendingUp className="h-4.5 w-4.5" />}
