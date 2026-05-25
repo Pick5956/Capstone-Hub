@@ -31,7 +31,13 @@ type Message = {
 };
 
 function parseMarkdown(text: string) {
-  const lines = text.split("\n");
+  // Replace all variations of non-breaking spaces to allow natural browser wrapping!
+  const cleanText = text
+    .replace(/\u00a0/g, " ")
+    .replace(/\u202f/g, " ")
+    .replace(/\u2007/g, " ");
+  
+  const lines = cleanText.split("\n");
   
   return lines.map((line, idx) => {
     const trimmed = line.trim();
@@ -572,7 +578,7 @@ export default function AIOperationsFloatingChat() {
           </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
