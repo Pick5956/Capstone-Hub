@@ -470,6 +470,24 @@ export default function AIOperationsFloatingChat() {
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* Tips Toggle Button (Sparkles) */}
+              {messages.length <= 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowTips(!showTips);
+                  }}
+                  title={language === "th" ? "เปิด/ปิดคำถามแนะนำ" : "Toggle Suggested Questions"}
+                  className={`rounded-lg p-2 transition-all duration-300 active:scale-110 ${
+                    showTips
+                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+                      : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  }`}
+                >
+                  <Sparkles className="h-4.5 w-4.5" />
+                </button>
+              )}
               {/* Stats Panel Toggle Button with tactile scale click */}
               <button
                 type="button"
