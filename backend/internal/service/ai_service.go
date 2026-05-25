@@ -238,6 +238,9 @@ User question:
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errors.New("โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+		}
 		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
 	}
 
@@ -348,6 +351,9 @@ User question:
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errors.New("โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+		}
 		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
 	}
 

@@ -321,10 +321,22 @@ export default function AIOperationsFloatingChat() {
       }
     } catch (err: unknown) {
       console.error(err);
-      const errorMessage =
+      let errorMessage =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : "";
+          
+      // Bulletproof local quota check
+      if (errorMessage && (
+        errorMessage.includes("429") || 
+        errorMessage.includes("quota") || 
+        errorMessage.includes("RESOURCE_EXHAUSTED") || 
+        errorMessage.includes("exhausted")
+      )) {
+        errorMessage = language === "th"
+          ? "โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)"
+          : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
+      }
           
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
