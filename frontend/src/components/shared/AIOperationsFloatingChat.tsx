@@ -344,6 +344,19 @@ export default function AIOperationsFloatingChat() {
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden;
         }
+        @keyframes inputGlow {
+          0%, 100% { 
+            box-shadow: 0 0 4px rgba(249, 115, 22, 0.25), 0 1px 2px rgba(0, 0, 0, 0.05); 
+            border-color: rgba(249, 115, 22, 0.5); 
+          }
+          50% { 
+            box-shadow: 0 0 12px rgba(249, 115, 22, 0.6), 0 2px 4px rgba(249, 115, 22, 0.1); 
+            border-color: rgba(234, 88, 12, 0.85); 
+          }
+        }
+        .focus-glow:focus {
+          animation: inputGlow 2s infinite ease-in-out;
+        }
       `}</style>
 
       {/* Chat Window Panel */}
@@ -635,7 +648,7 @@ export default function AIOperationsFloatingChat() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={copy.askPlaceholder}
                 disabled={loading}
-                className="flex-1 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium placeholder-gray-400 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 dark:border-gray-800 dark:bg-gray-900 dark:placeholder-gray-400 dark:focus:border-orange-600 dark:focus:ring-orange-950/30 shadow-sm !text-gray-950 dark:!text-gray-50 cursor-text"
+                className="flex-1 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium placeholder-gray-400 outline-none transition focus-glow dark:border-gray-800 dark:bg-gray-900 dark:placeholder-gray-400 shadow-sm !text-gray-950 dark:!text-gray-50 cursor-text"
               />
               <button
                 type="submit"
