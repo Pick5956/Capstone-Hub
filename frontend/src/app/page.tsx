@@ -218,7 +218,7 @@ export default function LandingPage() {
             </div>
             <div>
               <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
-              <p className="text-sm font-black tracking-tight leading-snug">HUB</p>
+              <p className="text-sm font-semibold tracking-tight leading-snug">HUB</p>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600 dark:text-gray-400">
@@ -262,7 +262,7 @@ export default function LandingPage() {
             </Reveal>
 
             <Reveal delay={120}>
-              <h1 className="mt-6 text-5xl md:text-7xl font-black tracking-tight leading-[1.05]">
+              <h1 className="mt-6 text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05]">
                 บริหารร้านอาหาร<br />
                 <span className="relative inline-block">
                   <span className="bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 bg-clip-text text-transparent">อย่างมืออาชีพ</span>
@@ -321,7 +321,7 @@ export default function LandingPage() {
                   {["รายได้วันนี้", "ออเดอร์", "โต๊ะที่ใช้", "เมนูขายดี"].map((k, i) => (
                     <div key={i} className="p-4 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
                       <p className="text-[10px] text-gray-400 uppercase tracking-wider">{k}</p>
-                      <p className="mt-2 text-lg font-bold">{["฿48.2K", "127", "18/24", "ผัดไทย"][i]}</p>
+                      <p className="mt-2 text-lg font-semibold">{["฿48.2K", "127", "18/24", "ผัดไทย"][i]}</p>
                       <div className={`mt-2 h-1 rounded-full bg-gradient-to-r ${["from-orange-400 to-red-400", "from-blue-400 to-cyan-400", "from-emerald-400 to-teal-400", "from-purple-400 to-pink-400"][i]}`} />
                     </div>
                   ))}
@@ -350,7 +350,7 @@ export default function LandingPage() {
           ].map((s, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="text-center">
-                <p className="text-4xl md:text-5xl font-black bg-gradient-to-br from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">
+                <p className="text-4xl md:text-5xl font-semibold bg-gradient-to-br from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">
                   <Counter target={s.target} suffix={s.suffix} />
                 </p>
                 <p className="mt-2 text-sm text-gray-500">{s.label}</p>
@@ -365,8 +365,8 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <p className="text-xs font-bold tracking-[0.2em] uppercase text-orange-500 mb-3">Features</p>
-              <h2 className="text-4xl md:text-5xl font-black tracking-tight">
+              <p className="text-xs font-semibold tracking-[0.2em] uppercase text-orange-500 mb-3">Features</p>
+              <h2 className="text-4xl md:text-5xl font-semibold tracking-tight">
                 ทุกอย่างที่ร้านคุณต้องการ<br />
                 <span className="text-gray-400 dark:text-gray-600">ในระบบเดียว</span>
               </h2>
@@ -383,7 +383,7 @@ export default function LandingPage() {
                       {f.icon}
                     </svg>
                   </div>
-                  <h3 className="relative font-bold text-lg mb-2">{f.title}</h3>
+                  <h3 className="relative font-semibold text-lg mb-2">{f.title}</h3>
                   <p className="relative text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{f.desc}</p>
                 </div>
               </Reveal>
@@ -397,8 +397,8 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <p className="text-xs font-bold tracking-[0.2em] uppercase text-orange-500 mb-3">How it works</p>
-              <h2 className="text-4xl md:text-5xl font-black tracking-tight">เริ่มใช้งานใน 3 ขั้นตอน</h2>
+              <p className="text-xs font-semibold tracking-[0.2em] uppercase text-orange-500 mb-3">How it works</p>
+              <h2 className="text-4xl md:text-5xl font-semibold tracking-tight">เริ่มใช้งานใน 3 ขั้นตอน</h2>
             </div>
           </Reveal>
 
@@ -408,9 +408,9 @@ export default function LandingPage() {
               <Reveal key={i} delay={i * 150} from={i === 0 ? "left" : i === 2 ? "right" : "up"}>
                 <div className="relative text-center">
                   <div className="relative mx-auto w-16 h-16 rounded-2xl bg-white dark:bg-gray-900 border-2 border-orange-500 flex items-center justify-center mb-6 shadow-lg shadow-orange-500/10">
-                    <span className="text-sm font-black bg-gradient-to-br from-orange-500 to-red-500 bg-clip-text text-transparent">{s.n}</span>
+                    <span className="text-sm font-semibold bg-gradient-to-br from-orange-500 to-red-500 bg-clip-text text-transparent">{s.n}</span>
                   </div>
-                  <h3 className="font-bold text-xl mb-2">{s.title}</h3>
+                  <h3 className="font-semibold text-xl mb-2">{s.title}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-xs mx-auto">{s.desc}</p>
                 </div>
               </Reveal>
@@ -424,8 +424,8 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6">
           <Reveal>
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <p className="text-xs font-bold tracking-[0.2em] uppercase text-orange-500 mb-3">Testimonials</p>
-              <h2 className="text-4xl md:text-5xl font-black tracking-tight">เจ้าของร้านพูดถึงเรา</h2>
+              <p className="text-xs font-semibold tracking-[0.2em] uppercase text-orange-500 mb-3">Testimonials</p>
+              <h2 className="text-4xl md:text-5xl font-semibold tracking-tight">เจ้าของร้านพูดถึงเรา</h2>
             </div>
           </Reveal>
 
@@ -438,7 +438,7 @@ export default function LandingPage() {
                   </svg>
                   <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-6">&ldquo;{t.quote}&rdquo;</p>
                   <div className="flex items-center gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white font-bold text-sm">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white font-semibold text-sm">
                       {t.name.slice(-1)}
                     </div>
                     <div>
@@ -463,7 +463,7 @@ export default function LandingPage() {
               <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-black/10 blur-3xl" />
 
               <div className="relative">
-                <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
+                <h2 className="text-4xl md:text-5xl font-semibold tracking-tight mb-4">
                   พร้อมยกระดับร้านของคุณแล้วหรือยัง?
                 </h2>
                 <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
@@ -471,7 +471,7 @@ export default function LandingPage() {
                 </p>
                 <button
                   onClick={() => openLoginModal()}
-                  className="group inline-flex items-center gap-2 px-8 py-3.5 bg-white text-gray-900 font-bold rounded-full hover:scale-105 transition-transform shadow-xl"
+                  className="group inline-flex items-center gap-2 px-8 py-3.5 bg-white text-gray-900 font-semibold rounded-full hover:scale-105 transition-transform shadow-xl"
                 >
                   เข้าสู่ระบบเลย
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-4 h-4 group-hover:translate-x-1 transition-transform">

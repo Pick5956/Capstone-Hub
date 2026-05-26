@@ -11,7 +11,7 @@ function inlineContent(text: string) {
   return parts.map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
-        <strong key={index} className="font-bold text-orange-600 dark:text-orange-400">
+        <strong key={index} className="font-semibold text-orange-600 dark:text-orange-400">
           {part.slice(2, -2)}
         </strong>
       );
@@ -56,7 +56,7 @@ export default function AIResponseContent({ content, compact = false }: AIRespon
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       blocks.push(
-        <h3 key={`heading-${index}`} className={`${compact ? "text-sm" : "text-base"} font-bold text-gray-900 dark:text-gray-100`}>
+        <h3 key={`heading-${index}`} className={`${compact ? "text-sm" : "text-base"} font-semibold text-gray-900 dark:text-gray-100`}>
           {inlineContent(heading[2])}
         </h3>
       );
@@ -117,7 +117,7 @@ export default function AIResponseContent({ content, compact = false }: AIRespon
         index += 1;
       }
       blocks.push(
-        <ol key={`ordered-${index}`} className={`list-decimal space-y-1 pl-5 text-gray-700 marker:font-bold marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
+        <ol key={`ordered-${index}`} className={`list-decimal space-y-1 pl-5 text-gray-700 marker:font-semibold marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
           {items.map((item, itemIndex) => <li key={itemIndex}>{inlineContent(item)}</li>)}
         </ol>
       );

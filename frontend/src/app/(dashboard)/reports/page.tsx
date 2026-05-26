@@ -138,7 +138,7 @@ export default function ReportsPage() {
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">{card.label}</span>
                   {card.icon}
                 </div>
-                <p className="mt-3 text-xl font-black tabular-nums">{card.value}</p>
+                <p className="mt-3 text-xl font-semibold tabular-nums">{card.value}</p>
               </div>
             ))}
           </div>
@@ -146,7 +146,7 @@ export default function ReportsPage() {
           <div className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-                <h2 className="text-sm font-bold">{copy.salesDays}</h2>
+                <h2 className="text-sm font-semibold">{copy.salesDays}</h2>
               </div>
               <div className="divide-y divide-slate-100 dark:divide-gray-800">
                 {report.sales_days.length ? report.sales_days.map((day) => (
@@ -161,7 +161,7 @@ export default function ReportsPage() {
 
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-                <h2 className="text-sm font-bold">{copy.menuMargins}</h2>
+                <h2 className="text-sm font-semibold">{copy.menuMargins}</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
@@ -192,7 +192,7 @@ export default function ReportsPage() {
 
           <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-sm font-bold">{copy.stockRisks}</h2>
+              <h2 className="text-sm font-semibold">{copy.stockRisks}</h2>
             </div>
             <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
               {report.stock_risks.length ? report.stock_risks.map((risk) => (

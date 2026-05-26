@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
-import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, uploadMenuImage } from "@/src/lib/menu";
+import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
 import { listIngredients } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
@@ -13,6 +13,7 @@ import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const emptyItem: MenuItemInput = {
   category_id: 0,
@@ -62,9 +63,83 @@ function menuCategoryIds(item: MenuItem) {
   return item.category_id ? [item.category_id] : [];
 }
 
+function menuItemToInput(item: MenuItem, isAvailable = item.is_available): MenuItemInput {
+  const categoryIds = menuCategoryIds(item);
+  return {
+    category_id: categoryIds[0] ?? item.category_id,
+    category_ids: categoryIds,
+    name: item.name,
+    price: item.price,
+    image_url: item.image_url,
+    description: item.description,
+    is_available: isAvailable,
+    display_order: item.display_order,
+    option_groups: (item.option_groups ?? []).map((group) => ({
+      name: group.name,
+      required: group.required,
+      min_select: group.min_select,
+      max_select: group.max_select,
+      display_order: group.display_order,
+      is_active: group.is_active,
+      options: (group.options ?? []).map((option) => ({
+        name: option.name,
+        price_delta: option.price_delta,
+        is_default: option.is_default,
+        display_order: option.display_order,
+        is_active: option.is_active,
+      })),
+    })),
+    ingredients: (item.ingredients ?? []).map((component) => ({
+      ingredient_id: component.ingredient_id,
+      quantity: component.quantity,
+      unit: component.unit || component.ingredient?.unit || "",
+      note: component.note || "",
+    })),
+  };
+}
+
+function AvailabilitySwitch({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={checked}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange();
+      }}
+      className={`flex h-6 w-11 items-center rounded-full border p-0.5 transition-[background-color,border-color,opacity] disabled:cursor-not-allowed disabled:opacity-60 ${
+        checked
+          ? "border-emerald-500 bg-emerald-500 dark:border-emerald-400 dark:bg-emerald-400"
+          : "border-gray-400 bg-gray-300 dark:border-gray-600 dark:bg-gray-700"
+      }`}
+    >
+      <span
+        className={`h-5 w-5 rounded-full border bg-white shadow-sm transition-transform dark:bg-gray-950 ${
+          checked
+            ? "translate-x-[19px] border-white dark:border-white"
+            : "translate-x-0 border-gray-100 shadow-gray-950/20 dark:border-gray-200"
+        }`}
+      />
+    </button>
+  );
+}
+
 type DeleteTarget =
   | { type: "category"; id: number; name: string }
   | { type: "item"; id: number; name: string };
+type AvailabilityFilter = "all" | "available" | "unavailable";
 
 export default function MenuPage() {
   const { activeMembership } = useAuth();
@@ -84,9 +159,11 @@ export default function MenuPage() {
   const [itemForm, setItemForm] = useState<MenuItemInput>(emptyItem);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [filterCategory, setFilterCategory] = useState(0);
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [availabilitySubmittingId, setAvailabilitySubmittingId] = useState<number | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
@@ -140,6 +217,7 @@ export default function MenuPage() {
         actionsColumn: "จัดการ",
         menuSummary: "เมนูทั้งหมด",
         availableSummary: "พร้อมขาย",
+        unavailableSummary: "ปิดขาย",
         categoryManager: "หมวดหมู่เมนู",
         editorTitle: "จัดการเมนู",
         editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
@@ -254,6 +332,7 @@ export default function MenuPage() {
         actionsColumn: "Actions",
         menuSummary: "Total items",
         availableSummary: "Available",
+        unavailableSummary: "Unavailable",
         categoryManager: "Menu categories",
         editorTitle: "Menu editor",
         editorHint: "Add a new item or edit the selected menu item.",
@@ -363,10 +442,13 @@ export default function MenuPage() {
     const keyword = search.trim().toLowerCase();
     return items.filter((item) => {
       const categoryMatch = !filterCategory || menuCategoryIds(item).includes(filterCategory);
+      const availabilityMatch =
+        availabilityFilter === "all" ||
+        (availabilityFilter === "available" ? item.is_available : !item.is_available);
       const searchMatch = !keyword || item.name.toLowerCase().includes(keyword) || item.description.toLowerCase().includes(keyword);
-      return categoryMatch && searchMatch;
+      return categoryMatch && availabilityMatch && searchMatch;
     });
-  }, [filterCategory, items, search]);
+  }, [availabilityFilter, filterCategory, items, search]);
 
   const categoryCounts = useMemo(() => {
     return categories.reduce<Record<number, number>>((acc, category) => {
@@ -380,8 +462,7 @@ export default function MenuPage() {
   ], [categories, copy.allCategories]);
   const activeCategory = categories.find((category) => category.ID === filterCategory);
   const availableCount = items.filter((item) => item.is_available).length;
-
-  if (!canView) return <PermissionDenied title={copy.permissionDenied} />;
+  const unavailableCount = items.length - availableCount;
 
   const normalizeOptionGroups = (groups: MenuOptionGroupInput[]) =>
     groups
@@ -562,39 +643,35 @@ export default function MenuPage() {
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
     setItemErrors({});
-    const categoryIds = menuCategoryIds(item);
-    setItemForm({
-      category_id: categoryIds[0] ?? 0,
-      category_ids: categoryIds,
-      name: item.name,
-      price: item.price,
-      image_url: item.image_url,
-      description: item.description,
-      is_available: item.is_available,
-      display_order: item.display_order,
-      option_groups: (item.option_groups ?? []).map((group) => ({
-        name: group.name,
-        required: group.required,
-        min_select: group.min_select,
-        max_select: group.max_select,
-        display_order: group.display_order,
-        is_active: group.is_active,
-        options: (group.options ?? []).map((option) => ({
-          name: option.name,
-          price_delta: option.price_delta,
-          is_default: option.is_default,
-          display_order: option.display_order,
-          is_active: option.is_active,
-        })),
-      })),
-      ingredients: (item.ingredients ?? []).map((component) => ({
-        ingredient_id: component.ingredient_id,
-        quantity: component.quantity,
-        unit: component.unit || component.ingredient?.unit || "",
-        note: component.note || "",
-      })),
-    });
+    setItemForm(menuItemToInput(item));
     setDrawerOpen(true);
+  };
+
+  const toggleItemAvailability = async (item: MenuItem, nextAvailable: boolean) => {
+    if (!canManage || availabilitySubmittingId === item.ID) return;
+    setAvailabilitySubmittingId(item.ID);
+    setItems((current) => current.map((currentItem) => currentItem.ID === item.ID ? { ...currentItem, is_available: nextAvailable } : currentItem));
+    if (editingItem?.ID === item.ID) {
+      setEditingItem((current) => current ? { ...current, is_available: nextAvailable } : current);
+      setItemForm((current) => ({ ...current, is_available: nextAvailable }));
+    }
+    try {
+      const res = await updateMenuItemAvailability(item.ID, nextAvailable);
+      setItems((current) => current.map((currentItem) => currentItem.ID === res.data.ID ? res.data : currentItem));
+      if (editingItem?.ID === item.ID) {
+        setEditingItem(res.data);
+        setItemForm((current) => ({ ...current, is_available: res.data.is_available }));
+      }
+    } catch {
+      setItems((current) => current.map((currentItem) => currentItem.ID === item.ID ? { ...currentItem, is_available: item.is_available } : currentItem));
+      if (editingItem?.ID === item.ID) {
+        setEditingItem(item);
+        setItemForm((current) => ({ ...current, is_available: item.is_available }));
+      }
+      showToast({ title: copy.itemSaveError, tone: "error" });
+    } finally {
+      setAvailabilitySubmittingId(null);
+    }
   };
 
   const startCreateItem = () => {
@@ -636,6 +713,11 @@ export default function MenuPage() {
       setDeleteClosing(false);
     }, 180);
   };
+  const categoryBackdrop = useBackdropClose(closeCategoryModal);
+  const itemDrawerBackdrop = useBackdropClose(closeItemDrawer);
+  const deleteBackdrop = useBackdropClose(closeDeleteModal);
+
+  if (!canView) return <PermissionDenied title={copy.permissionDenied} />;
 
   const updateOptionGroups = (updater: (groups: MenuOptionGroupInput[]) => MenuOptionGroupInput[]) => {
     setItemForm((current) => ({ ...current, option_groups: updater(current.option_groups ?? []) }));
@@ -763,15 +845,29 @@ export default function MenuPage() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.catalogTitle}</p>
                   <h2 className="mt-0.5 text-[16px] font-semibold text-gray-900 dark:text-white">{activeCategory?.name ?? copy.allCategories}</h2>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] sm:min-w-[220px]">
-                  <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <p className="text-gray-400">{copy.menuSummary}</p>
-                    <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums">{items.length}</p>
-                  </div>
-                  <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                    <p className="text-gray-400">{copy.availableSummary}</p>
-                    <p className="mt-1 font-mono text-[16px] font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">{availableCount}</p>
-                  </div>
+                <div className="grid grid-cols-3 gap-2 text-[11px] sm:min-w-[330px]">
+                  {([
+                    { key: "all" as const, label: copy.menuSummary, value: items.length, valueClass: "text-gray-950 dark:text-white" },
+                    { key: "available" as const, label: copy.availableSummary, value: availableCount, valueClass: "text-emerald-600 dark:text-emerald-300" },
+                    { key: "unavailable" as const, label: copy.unavailableSummary, value: unavailableCount, valueClass: "text-gray-500 dark:text-gray-400" },
+                  ]).map((item) => {
+                    const selected = availabilityFilter === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setAvailabilityFilter(item.key)}
+                        className={`rounded-md border px-3 py-2 text-left transition-[background-color,border-color,box-shadow] ${
+                          selected
+                            ? "border-orange-300 bg-orange-50 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.18)] dark:border-orange-800 dark:bg-orange-950/25"
+                            : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/30 dark:border-gray-800 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/15"
+                        }`}
+                      >
+                        <p className="truncate text-gray-400">{item.label}</p>
+                        <p className={`mt-1 font-mono text-[16px] font-semibold tabular-nums ${item.valueClass}`}>{item.value}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -786,7 +882,18 @@ export default function MenuPage() {
               ) : filteredItems.length ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                   {filteredItems.map((item) => (
-                    <article key={item.ID} className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white transition-[border-color,background-color,box-shadow] hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 ${!item.is_available ? "opacity-60" : ""}`}>
+                    <article
+                      key={item.ID}
+                      role={canManage ? "button" : undefined}
+                      tabIndex={canManage ? 0 : undefined}
+                      onClick={canManage ? () => editItem(item) : undefined}
+                      onKeyDown={canManage ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        editItem(item);
+                      } : undefined}
+                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,background-color,box-shadow,transform] hover:border-orange-200 hover:bg-orange-50/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
+                    >
                       <div
                         className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
                         style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
@@ -813,18 +920,26 @@ export default function MenuPage() {
                             {copy.recipeCost}: {new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", { style: "currency", currency: "THB", maximumFractionDigits: 2 }).format(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients))}
                           </p>
                         ) : null}
-                        <div className="mt-2">
-                          <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                            {item.is_available ? copy.available : copy.unavailable}
-                          </span>
+                        <div className="mt-auto border-t border-gray-100 pt-3 dark:border-gray-800">
+                          {canManage ? (
+                            <div className="flex items-center justify-between gap-3">
+                              <span className={`truncate text-[11px] font-medium ${item.is_available ? "text-emerald-700 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}>
+                                {item.is_available ? copy.available : copy.unavailable}
+                              </span>
+                              <AvailabilitySwitch
+                                checked={item.is_available}
+                                disabled={availabilitySubmittingId === item.ID}
+                                label={item.is_available ? copy.available : copy.unavailable}
+                                onChange={() => void toggleItemAvailability(item, !item.is_available)}
+                              />
+                            </div>
+                          ) : (
+                            <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                              {item.is_available ? copy.available : copy.unavailable}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      {canManage ? (
-                        <div className="grid grid-cols-2 gap-2 border-t border-gray-100 p-2 dark:border-gray-800">
-                          <button type="button" onClick={() => editItem(item)} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.edit}</button>
-                          <button type="button" disabled={submitting} onClick={() => setDeleteTarget({ type: "item", id: item.ID, name: item.name })} className="h-8 rounded-md border border-red-200 px-2 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
-                        </div>
-                      ) : null}
                     </article>
                   ))}
                 </div>
@@ -841,8 +956,8 @@ export default function MenuPage() {
       </div>
 
       {categoryModalOpen && canManage && (
-        <div className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCategoryModal}>
-          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div {...categoryBackdrop} className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
               <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
@@ -896,7 +1011,7 @@ export default function MenuPage() {
 
       {drawerOpen && canManage && (
         <>
-          <button type="button" aria-label={copy.cancel} onClick={closeItemDrawer} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
+          <button type="button" aria-label={copy.cancel} {...itemDrawerBackdrop} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
           <form onSubmit={saveItem} className={`${drawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
@@ -921,13 +1036,12 @@ export default function MenuPage() {
                               key={category.ID}
                               type="button"
                               onClick={() => toggleSelectedCategory(category.ID)}
-                              className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[12px] font-medium transition-colors ${
+                              className={`inline-flex h-8 items-center rounded-[4px] border px-3 text-[12px] font-medium transition-[background-color,border-color,color,box-shadow] ${
                                 selected
-                                  ? "border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500/20 dark:border-orange-500 dark:bg-orange-950/50 dark:text-orange-200 dark:ring-orange-400/20"
+                                  ? "border-orange-300 bg-orange-50 text-orange-800 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.2)] dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
                                   : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-orange-50/70 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-orange-950/30 dark:hover:text-orange-200"
                               }`}
                             >
-                              {selected && <span className="h-1.5 w-1.5 rounded-full bg-orange-500 dark:bg-orange-300" />}
                               {category.name}
                             </button>
                           );
@@ -1123,16 +1237,22 @@ export default function MenuPage() {
                     </div>
                   </div>
                 </div>
-                <label className="flex min-h-9 items-center gap-2 text-[12px]">
-                  <input type="checkbox" checked={itemForm.is_available} onChange={(event) => setItemForm({ ...itemForm, is_available: event.target.checked })} />
-                  {copy.availableInStaffView}
-                </label>
               </div>
             </div>
-            <div className="border-t border-gray-200 p-4 dark:border-gray-800">
-              <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+            <div className="grid gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-[1fr_auto]">
+              <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {editingItem ? copy.saveItem : copy.createItem}
               </button>
+              {editingItem ? (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setDeleteTarget({ type: "item", id: editingItem.ID, name: editingItem.name })}
+                  className="ui-press h-10 rounded-md border border-red-200 bg-white px-4 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                >
+                  {copy.delete}
+                </button>
+              ) : null}
               {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
             </div>
           </form>
@@ -1140,8 +1260,8 @@ export default function MenuPage() {
       )}
 
       {deleteTarget && (
-        <div className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeDeleteModal}>
-          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div {...deleteBackdrop} className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>

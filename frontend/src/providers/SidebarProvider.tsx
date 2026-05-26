@@ -19,12 +19,12 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-w', '240px');
+    document.documentElement.style.setProperty('--sidebar-w', '264px');
   }, []);
 
   const handleSetCollapsed = useCallback((v: boolean) => {
     setCollapsed(v);
-    document.documentElement.style.setProperty('--sidebar-w', v ? '68px' : '240px');
+    document.documentElement.style.setProperty('--sidebar-w', v ? '68px' : '264px');
   }, []);
 
   return (

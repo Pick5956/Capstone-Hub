@@ -8,6 +8,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const Issuer = "AuthService"
+
 type JwtWrapper struct {
 	SecretKey string
 	Issuer    string

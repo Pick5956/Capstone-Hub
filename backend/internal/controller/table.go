@@ -107,6 +107,40 @@ func (ctrl *TableController) UpdateTable(c *gin.Context) {
 	c.JSON(http.StatusOK, table)
 }
 
+func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_table") && !memberCan(c, "take_order") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing table status permission"})
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req struct {
+		ReservationName  string `json:"reservation_name"`
+		Status           string `json:"status" binding:"required"`
+		ReservationPhone string `json:"reservation_phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if !memberCan(c, "manage_table") && req.Status != "free" && req.Status != "reserved" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "take_order can only mark tables free or reserved"})
+		return
+	}
+	table, err := ctrl.tableSvc.UpdateTableStatus(restaurantID, tableID, req.Status, req.ReservationPhone, req.ReservationName)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
 func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

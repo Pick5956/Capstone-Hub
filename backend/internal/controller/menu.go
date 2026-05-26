@@ -276,6 +276,32 @@ func (ctrl *MenuController) UpdateMenuItem(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
+func (ctrl *MenuController) UpdateMenuItemAvailability(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_menu") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
+		return
+	}
+	itemID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.MenuItemAvailabilityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := ctrl.menuSvc.UpdateMenuItemAvailability(restaurantID, itemID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
 func (ctrl *MenuController) DeleteMenuItem(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

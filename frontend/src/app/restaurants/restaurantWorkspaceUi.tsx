@@ -86,7 +86,7 @@ export function BrandMark() {
       </div>
       <div>
         <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
-        <p className="text-sm font-black tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
+        <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
       </div>
     </Link>
   );

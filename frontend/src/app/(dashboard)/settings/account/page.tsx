@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { updateProfile, uploadProfileImage } from "@/src/lib/auth";
+import UserAvatar from "@/src/components/shared/UserAvatar";
 import { Field, SettingsPanel, SettingsShell, StatusMessage } from "../_components/SettingsPrimitives";
 
 function normalizePhone(value: string) {
@@ -88,7 +88,6 @@ export default function AccountSettingsPage() {
       };
 
   const displayName = getDisplayName(user, language);
-  const initials = displayName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "?";
   const isGoogleAccount = user?.auth_provider === "google";
 
   useEffect(() => {
@@ -165,9 +164,7 @@ export default function AccountSettingsPage() {
           <SettingsPanel title={copy.profile} hint={copy.profileHint}>
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-lg font-bold text-orange-700 dark:bg-orange-900/25 dark:text-orange-300">
-                  {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={64} height={64} unoptimized className="h-full w-full object-cover" /> : initials}
-                </div>
+                <UserAvatar src={user?.profile_image} name={displayName} size={64} className="h-16 w-16 text-lg" />
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{displayName}</p>
                   <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{user?.email ?? ""}</p>
@@ -205,7 +202,7 @@ export default function AccountSettingsPage() {
               { label: copy.local, connected: !isGoogleAccount, mark: "@" },
             ].map((account) => (
               <div key={account.label} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-black ${account.connected ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500"}`}>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-semibold ${account.connected ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500"}`}>
                   {account.mark}
                 </div>
                 <p className="min-w-0 truncate text-[13px] font-semibold text-gray-900 dark:text-white">{account.label}</p>

@@ -16,6 +16,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const terminalStatuses = ["completed", "cancelled"];
 
@@ -334,6 +335,10 @@ export default function PosOrderDetailPage() {
       setCancelClosing(false);
     }, 180);
   };
+  const allItemsBackdrop = useBackdropClose(closeAllItemsDrawer);
+  const menuPickerBackdrop = useBackdropClose(closeMenuPicker);
+  const paymentBackdrop = useBackdropClose(closePaymentModal);
+  const cancelBackdrop = useBackdropClose(closeCancelModal);
 
   const toggleOption = (groupOptionIds: number[], optionId: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
@@ -752,8 +757,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {allItemsOpen && order && (
-        <div className={`${allItemsClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:justify-end sm:px-4`} onClick={closeAllItemsDrawer}>
-          <div className={`${allItemsClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-2rem)]`} onClick={(event) => event.stopPropagation()}>
+        <div {...allItemsBackdrop} className={`${allItemsClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:justify-end sm:px-4`}>
+          <div className={`${allItemsClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-2rem)]`}>
             <div className="shrink-0 border-b border-gray-200 p-4 dark:border-gray-800">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -827,8 +832,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {selectedMenu && (
-        <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`} onClick={closeMenuPicker}>
-          <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`} onClick={(event) => event.stopPropagation()}>
+        <div {...menuPickerBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
+          <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
             <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
               <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                 <X className="h-4 w-4" aria-hidden="true" />
@@ -889,7 +894,7 @@ export default function PosOrderDetailPage() {
       )}
 
       {paymentOpen && bill && (
-        <div className={`${paymentClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closePaymentModal}>
+        <div {...paymentBackdrop} className={`${paymentClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
           <style jsx global>{`
             @media print {
               body * {
@@ -909,7 +914,7 @@ export default function PosOrderDetailPage() {
               }
             }
           `}</style>
-          <div className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+          <div className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div id="print-bill" className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -974,8 +979,8 @@ export default function PosOrderDetailPage() {
       )}
 
       {cancelOpen && (
-        <div className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCancelModal}>
-          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div {...cancelBackdrop} className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>

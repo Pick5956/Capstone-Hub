@@ -55,7 +55,7 @@ export default function NotFoundUI() {
             </div>
             <div>
               <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
-              <p className="text-sm font-black tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
+              <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
             </div>
           </Link>
           <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export default function NotFoundUI() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">
                 {language === "th" ? "ไม่พบหน้า" : "Page not found"}
               </p>
-              <h1 className="mt-4 text-7xl sm:text-8xl font-black tracking-tight text-gray-950 dark:text-white">404</h1>
+              <h1 className="mt-4 text-7xl sm:text-8xl font-semibold tracking-tight text-gray-950 dark:text-white">404</h1>
               <p className="mt-3 text-[13px] text-gray-500 dark:text-gray-400">
                 {language === "th"
                   ? "หน้านี้อาจถูกย้าย ลบ หรือคุณอาจไม่มีสิทธิ์เข้าถึง"

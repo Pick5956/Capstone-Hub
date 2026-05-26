@@ -99,6 +99,12 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		if table.Status == entity.TableStatusInactive {
+			return errors.New("table is inactive")
+		}
+		if table.Status == entity.TableStatusReserved {
+			return errors.New("table is reserved")
+		}
 		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
 			return err
 		}
@@ -132,6 +138,8 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			return err
 		}
 		table.Status = entity.TableStatusOccupied
+		table.ReservationName = ""
+		table.ReservationPhone = ""
 		if err := tx.SaveTable(table); err != nil {
 			return err
 		}

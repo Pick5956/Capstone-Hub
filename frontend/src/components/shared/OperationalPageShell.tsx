@@ -46,12 +46,12 @@ export default function OperationalPageShell({
         </header>
 
         {stats?.length ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-1 rounded-md border border-gray-200 bg-white p-1.5 dark:border-gray-800 dark:bg-gray-950 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 dark:sm:bg-transparent">
             {stats.map((stat) => (
-              <div key={stat.label} className="rounded-md border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-gray-950">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">{stat.label}</p>
-                <p className={`mt-1 text-[22px] font-semibold tabular-nums ${statToneClass[stat.tone ?? "neutral"]}`}>{stat.value}</p>
-                {stat.helper ? <p className="text-[12px] text-gray-500 dark:text-gray-400">{stat.helper}</p> : null}
+              <div key={stat.label} className="min-w-0 rounded-[4px] px-2 py-2 text-center sm:rounded-md sm:border sm:border-gray-200 sm:bg-white sm:px-3 sm:py-2.5 sm:text-left sm:dark:border-gray-800 sm:dark:bg-gray-950">
+                <p className="truncate text-[10px] font-medium text-gray-500 dark:text-gray-400 sm:text-[11px]">{stat.label}</p>
+                <p className={`mt-0.5 text-[20px] font-semibold leading-none tabular-nums sm:mt-1 sm:text-[22px] ${statToneClass[stat.tone ?? "neutral"]}`}>{stat.value}</p>
+                {stat.helper ? <p className="mt-1 truncate text-[10px] text-gray-500 dark:text-gray-400 sm:text-[12px]">{stat.helper}</p> : null}
               </div>
             ))}
           </div>

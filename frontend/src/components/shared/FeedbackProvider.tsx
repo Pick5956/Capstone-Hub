@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type ToastTone = "success" | "error" | "warning" | "info";
 type ConfirmTone = "default" | "danger" | "warning";
@@ -120,6 +121,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
     : confirmTone === "warning"
       ? "bg-amber-500 text-gray-950 hover:bg-amber-400"
       : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-orange-400 dark:text-gray-950 dark:hover:bg-orange-300";
+  const confirmBackdrop = useBackdropClose(() => closeConfirm(false));
 
   return (
     <ToastContext.Provider value={toastValue}>
@@ -159,15 +161,14 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
 
         {confirmState && (
           <div
+            {...confirmBackdrop}
             className={`${confirmClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[110] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="global-confirm-title"
-            onClick={() => closeConfirm(false)}
           >
             <div
               className={`${confirmClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-md rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950`}
-              onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start gap-3">
                 <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${confirmTone === "danger" ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300" : confirmTone === "warning" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" : "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300"}`}>

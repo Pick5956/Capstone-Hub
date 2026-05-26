@@ -31,7 +31,7 @@ func Authorizes() gin.HandlerFunc {
 
 		jwtWrapper := JwtWrapper{
 			SecretKey: os.Getenv("JWT_SECRET"),
-			Issuer:    "AuthService",
+			Issuer:    Issuer,
 		}
 
 		claims, err := jwtWrapper.ValidateToken(clientToken)
