@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -140,6 +141,7 @@ type DeleteTarget =
   | { type: "category"; id: number; name: string }
   | { type: "item"; id: number; name: string };
 type AvailabilityFilter = "all" | "available" | "unavailable";
+type ItemEditorTab = "basic" | "options" | "recipe";
 
 export default function MenuPage() {
   const { activeMembership } = useAuth();
@@ -151,7 +153,6 @@ export default function MenuPage() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [recipeIngredients, setRecipeIngredients] = useState<Ingredient[]>([]);
   const [categoryName, setCategoryName] = useState("");
-  const [categoryOrder, setCategoryOrder] = useState("0");
   const [inlineCategoryName, setInlineCategoryName] = useState("");
   const [inlineCategorySaving, setInlineCategorySaving] = useState(false);
   const [inlineCategoryError, setInlineCategoryError] = useState("");
@@ -170,6 +171,7 @@ export default function MenuPage() {
   const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string; options?: string }>({});
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [itemEditorTab, setItemEditorTab] = useState<ItemEditorTab>("basic");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [categoryModalClosing, setCategoryModalClosing] = useState(false);
@@ -198,6 +200,7 @@ export default function MenuPage() {
         itemDeleteError: "ลบเมนูไม่สำเร็จ",
         categoryCreated: "เพิ่มหมวดหมู่แล้ว",
         categoryUpdated: "อัปเดตหมวดหมู่แล้ว",
+        orderUpdated: "อัปเดตลำดับแล้ว",
         itemCreated: "เพิ่มเมนูแล้ว",
         itemUpdated: "อัปเดตเมนูแล้ว",
         categoryDeleted: "ลบหมวดหมู่แล้ว",
@@ -313,6 +316,7 @@ export default function MenuPage() {
         itemDeleteError: "Could not delete menu item.",
         categoryCreated: "Category added",
         categoryUpdated: "Category updated",
+        orderUpdated: "Order updated",
         itemCreated: "Menu item added",
         itemUpdated: "Menu item updated",
         categoryDeleted: "Category deleted",
@@ -456,10 +460,14 @@ export default function MenuPage() {
       return acc;
     }, {});
   }, [categories, items]);
+  const sortedCategories = useMemo(
+    () => [...categories].sort((a, b) => (a.display_order - b.display_order) || (a.ID - b.ID)),
+    [categories],
+  );
   const categoryFilterOptions = useMemo(() => [
     { value: "0", label: copy.allCategories },
-    ...categories.map((category) => ({ value: String(category.ID), label: category.name })),
-  ], [categories, copy.allCategories]);
+    ...sortedCategories.map((category) => ({ value: String(category.ID), label: category.name })),
+  ], [copy.allCategories, sortedCategories]);
   const activeCategory = categories.find((category) => category.ID === filterCategory);
   const availableCount = items.filter((item) => item.is_available).length;
   const unavailableCount = items.length - availableCount;
@@ -536,7 +544,7 @@ export default function MenuPage() {
     try {
       const res = await createCategory({
         name,
-        display_order: categories.length,
+        display_order: Math.max(0, ...categories.map((category) => category.display_order || 0)) + 1,
         is_active: true,
       });
       setCategories((current) => [...current, res.data]);
@@ -563,7 +571,10 @@ export default function MenuPage() {
       setError("");
       setCategoryError("");
       try {
-        const payload = { name, display_order: Number.parseInt(categoryOrder, 10) || 0, is_active: editingCategory?.is_active ?? true };
+        const nextDisplayOrder = editingCategory
+          ? editingCategory.display_order
+          : Math.max(0, ...categories.map((category) => category.display_order || 0)) + 1;
+        const payload = { name, display_order: nextDisplayOrder, is_active: true };
         if (editingCategory) {
           const res = await updateCategory(editingCategory.ID, payload);
           setCategories((current) => current.map((cat) => cat.ID === res.data.ID ? res.data : cat));
@@ -575,7 +586,6 @@ export default function MenuPage() {
           showToast({ title: copy.categoryCreated });
         }
         setCategoryName("");
-        setCategoryOrder("0");
         setEditingCategory(null);
       } catch {
         setCategoryError(copy.categorySaveError);
@@ -595,6 +605,7 @@ export default function MenuPage() {
     };
     if (nextItemErrors.category || nextItemErrors.name || nextItemErrors.options) {
       setItemErrors(nextItemErrors);
+      setItemEditorTab(nextItemErrors.options ? "options" : "basic");
       return;
     }
     await saveItemOnceRef.current(async () => {
@@ -622,7 +633,7 @@ export default function MenuPage() {
           showToast({ title: copy.itemCreated });
         }
         setEditingItem(null);
-        const firstID = categories[0]?.ID ?? 0;
+        const firstID = sortedCategories[0]?.ID ?? 0;
         setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
         closeItemDrawer();
       } catch {
@@ -636,14 +647,59 @@ export default function MenuPage() {
   const editCategory = (category: Category) => {
     setEditingCategory(category);
     setCategoryName(category.name);
-    setCategoryOrder(String(category.display_order));
     setCategoryError("");
+  };
+
+  const toggleCategoryEdit = (category: Category) => {
+    if (editingCategory?.ID === category.ID) {
+      setEditingCategory(null);
+      setCategoryName("");
+      setCategoryError("");
+      return;
+    }
+    editCategory(category);
+  };
+
+  const moveCategoryOrder = async (categoryID: number, direction: -1 | 1) => {
+    const currentIndex = sortedCategories.findIndex((category) => category.ID === categoryID);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= sortedCategories.length) return;
+
+    const reordered = [...sortedCategories];
+    [reordered[currentIndex], reordered[nextIndex]] = [reordered[nextIndex], reordered[currentIndex]];
+    const normalized = reordered.map((category, index) => ({ ...category, display_order: index + 1 }));
+    const previousCategories = categories;
+
+    setSubmitting(true);
+    setCategoryError("");
+    setCategories(normalized);
+    if (editingCategory) {
+      const currentEditingCategory = normalized.find((category) => category.ID === editingCategory.ID);
+      if (currentEditingCategory) {
+        setEditingCategory(currentEditingCategory);
+      }
+    }
+
+    try {
+      await Promise.all(normalized.map((category) => updateCategory(category.ID, {
+        name: category.name,
+        display_order: category.display_order,
+        is_active: true,
+      })));
+      showToast({ title: copy.orderUpdated });
+    } catch {
+      setCategories(previousCategories);
+      setCategoryError(copy.categorySaveError);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
     setItemErrors({});
     setItemForm(menuItemToInput(item));
+    setItemEditorTab("basic");
     setDrawerOpen(true);
   };
 
@@ -677,10 +733,11 @@ export default function MenuPage() {
   const startCreateItem = () => {
     setEditingItem(null);
     setItemErrors({});
-    const firstID = filterCategory || categories[0]?.ID || 0;
+    const firstID = filterCategory || sortedCategories[0]?.ID || 0;
     setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
     setInlineCategoryName("");
     setInlineCategoryError("");
+    setItemEditorTab("basic");
     setDrawerClosing(false);
     setDrawerOpen(true);
   };
@@ -705,8 +762,8 @@ export default function MenuPage() {
     }, 180);
   };
 
-  const closeDeleteModal = () => {
-    if (submitting || deleteClosing) return;
+  const closeDeleteModal = (force = false) => {
+    if (!force && (submitting || deleteClosing)) return;
     setDeleteClosing(true);
     window.setTimeout(() => {
       setDeleteTarget(null);
@@ -751,7 +808,7 @@ export default function MenuPage() {
         setError(copy.categoryDeleteError);
       } finally {
         setSubmitting(false);
-        closeDeleteModal();
+        closeDeleteModal(true);
       }
     });
   };
@@ -764,12 +821,15 @@ export default function MenuPage() {
       try {
         await deleteMenuItem(itemId);
         setItems((current) => current.filter((menuItem) => menuItem.ID !== itemId));
+        if (editingItem?.ID === itemId) {
+          closeItemDrawer();
+        }
         showToast({ title: copy.itemDeleted });
       } catch {
         setError(copy.itemDeleteError);
       } finally {
         setSubmitting(false);
-        closeDeleteModal();
+        closeDeleteModal(true);
       }
     });
   };
@@ -964,19 +1024,62 @@ export default function MenuPage() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <div className="space-y-1">
-                {categories.map((category) => (
-                  <div key={category.ID} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                {sortedCategories.map((category, index) => (
+                  <div
+                    key={category.ID}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={editingCategory?.ID === category.ID}
+                    onClick={() => toggleCategoryEdit(category)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      toggleCategoryEdit(category);
+                    }}
+                    className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
+                      editingCategory?.ID === category.ID
+                        ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/60"
+                    }`}
+                  >
                     <div className="min-w-0">
                       <p className={`truncate text-[13px] font-medium ${!category.is_active ? "text-gray-400 line-through" : "text-gray-900 dark:text-white"}`}>{category.name}</p>
                       <p className="mt-0.5 text-[11px] text-gray-400">{categoryCounts[category.ID] ?? 0} {copy.menuSummary}</p>
                     </div>
                     <div className="flex gap-1">
-                      <button type="button" onClick={() => editCategory(category)} className="h-8 rounded-md px-2 text-[11px] font-medium text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-900/20">{copy.edit}</button>
-                      <button type="button" disabled={submitting} onClick={() => setDeleteTarget({ type: "category", id: category.ID, name: category.name })} className="h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
+                      <span className="flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
+                        <button
+                          type="button"
+                          disabled={submitting || index === 0}
+                          aria-label={language === "th" ? "เลื่อนขึ้น" : "Move up"}
+                          title={language === "th" ? "เลื่อนขึ้น" : "Move up"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void moveCategoryOrder(category.ID, -1);
+                          }}
+                          className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900"
+                        >
+                          <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={submitting || index === sortedCategories.length - 1}
+                          aria-label={language === "th" ? "เลื่อนลง" : "Move down"}
+                          title={language === "th" ? "เลื่อนลง" : "Move down"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void moveCategoryOrder(category.ID, 1);
+                          }}
+                          className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+                        >
+                          <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </span>
+                      <button type="button" disabled={submitting} onClick={(event) => { event.stopPropagation(); setDeleteTarget({ type: "category", id: category.ID, name: category.name }); }} className="h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
                     </div>
                   </div>
                 ))}
-                {!categories.length && <p className="rounded-md border border-gray-200 px-3 py-6 text-center text-[12px] text-gray-500 dark:border-gray-800">{copy.noCategories}</p>}
+                {!sortedCategories.length && <p className="rounded-md border border-gray-200 px-3 py-6 text-center text-[12px] text-gray-500 dark:border-gray-800">{copy.noCategories}</p>}
               </div>
             </div>
             <form onSubmit={saveCategory} className="border-t border-gray-200 p-4 dark:border-gray-800">
@@ -992,16 +1095,13 @@ export default function MenuPage() {
                   aria-invalid={Boolean(categoryError)}
                   className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
                 />
-                <div className="grid grid-cols-[1fr_auto] gap-2">
-                  <input value={categoryOrder} onChange={(event) => setCategoryOrder(event.target.value)} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-                  <button disabled={submitting} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
-                    {editingCategory ? copy.saveCategory : copy.createCategory}
-                  </button>
-                </div>
+                <button disabled={submitting} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                  {editingCategory ? copy.saveCategory : copy.createCategory}
+                </button>
                 {categoryError ? (
                   <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{categoryError}</p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{copy.categoryOrderHelp}</p>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{language === "th" ? "คลิกหมวดเพื่อแก้ชื่อ ใช้ปุ่มลูกศรเพื่อจัดลำดับ" : "Click a category to edit it. Use arrows to reorder."}</p>
                 )}
               </div>
             </form>
@@ -1012,24 +1112,49 @@ export default function MenuPage() {
       {drawerOpen && canManage && (
         <>
           <button type="button" aria-label={copy.cancel} {...itemDrawerBackdrop} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
-          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div>
+          <div className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center px-3 pb-3 pt-10 sm:items-center sm:p-6">
+          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-dialog-exit" : "motion-dialog"} pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950`}>
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
+              <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
-                <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
+                <h2 className="mt-0.5 truncate text-[16px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
               </div>
               <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <div className="space-y-4">
+            <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800 sm:px-5">
+              <div className="flex gap-2 overflow-x-auto">
+                {([
+                  { id: "basic", label: language === "th" ? "ข้อมูลหลัก" : "Basic info" },
+                  { id: "options", label: language === "th" ? "ตัวเลือก" : "Options" },
+                  { id: "recipe", label: language === "th" ? "สูตร/สต็อก" : "Recipe/stock" },
+                ] as { id: ItemEditorTab; label: string }[]).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setItemEditorTab(tab.id)}
+                    className={`h-9 shrink-0 rounded-md border px-3 text-[12px] font-medium transition-colors ${
+                      itemEditorTab === tab.id
+                        ? "border-orange-400 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              {itemEditorTab === "basic" && (
+                <div className="mx-auto max-w-2xl">
+                  <div className="space-y-4">
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
                   <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemCategories}</span>
                   </div>
                   <div className="space-y-3 p-3">
-                    {categories.length ? (
+                    {sortedCategories.length ? (
                       <div className="flex flex-wrap gap-2">
-                        {categories.map((category) => {
+                        {sortedCategories.map((category) => {
                           const selected = selectedCategoryIds.includes(category.ID);
                           return (
                             <button
@@ -1114,6 +1239,10 @@ export default function MenuPage() {
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
                   <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
                 </label>
+                  </div>
+                </div>
+              )}
+              {itemEditorTab === "options" && (
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
                   <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <div>
@@ -1165,6 +1294,8 @@ export default function MenuPage() {
                     {itemErrors.options && <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.options}</p>}
                   </div>
                 </div>
+              )}
+              {itemEditorTab === "recipe" && (
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
                   <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <div>
@@ -1237,7 +1368,7 @@ export default function MenuPage() {
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="grid gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-[1fr_auto]">
               <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
@@ -1256,6 +1387,7 @@ export default function MenuPage() {
               {itemErrors.submit && <p className="mt-2 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.submit}</p>}
             </div>
           </form>
+          </div>
         </>
       )}
 
@@ -1270,7 +1402,7 @@ export default function MenuPage() {
               <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.name}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={closeDeleteModal} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => closeDeleteModal()} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.cancel}
               </button>
               <button
