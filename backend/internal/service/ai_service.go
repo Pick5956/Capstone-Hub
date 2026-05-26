@@ -611,6 +611,9 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 }
 
 func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
+	if s.repo == nil {
+		return AISnapshot{}, errors.New("restaurant repository is not initialized")
+	}
 	since := repository.BangkokNow().AddDate(0, 0, -14)
 	ingredients, err := s.repo.ListIngredients(restaurantID)
 	if err != nil {
