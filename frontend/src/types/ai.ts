@@ -43,6 +43,7 @@ export type AISnapshot = {
   sales_days: AISalesSummary[];
   top_menu_items: AIMenuSummary[];
   menu_margins: AIMenuMarginSummary[];
+  low_margin_menus: AIMenuMarginSummary[];
   inventory_summary: AIInventorySummary;
   stock_risks: AIStockRisk[];
 };

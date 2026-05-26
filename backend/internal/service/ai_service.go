@@ -67,6 +67,7 @@ type AISnapshot struct {
 	SalesDays        []repository.AISalesSummary      `json:"sales_days"`
 	TopMenuItems     []repository.AIMenuSummary       `json:"top_menu_items"`
 	MenuMargins      []repository.AIMenuMarginSummary `json:"menu_margins"`
+	LowMarginMenus   []repository.AIMenuMarginSummary `json:"low_margin_menus"`
 	InventorySummary AIInventorySummary               `json:"inventory_summary"`
 	StockRisks       []AIStockRisk                    `json:"stock_risks"`
 }
@@ -468,6 +469,10 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if err != nil {
 		return AISnapshot{}, err
 	}
+	lowMarginMenus, err := s.repo.LowMarginMenus(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
 	if sales == nil {
 		sales = []repository.AISalesSummary{}
 	}
@@ -476,6 +481,9 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	}
 	if menuMargins == nil {
 		menuMargins = []repository.AIMenuMarginSummary{}
+	}
+	if lowMarginMenus == nil {
+		lowMarginMenus = []repository.AIMenuMarginSummary{}
 	}
 
 	summary := AIInventorySummary{TotalItems: len(ingredients)}
@@ -528,6 +536,7 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 		SalesDays:        sales,
 		TopMenuItems:     topMenus,
 		MenuMargins:      menuMargins,
+		LowMarginMenus:   lowMarginMenus,
 		InventorySummary: summary,
 		StockRisks:       risks,
 	}, nil
@@ -542,11 +551,11 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
 Reply with exactly one label:
 - ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
-- GREETING: a greeting only.
+- GREETING: a greeting only, such as "hello" or "สวัสดี"; do not classify thanks or acknowledgements as greeting.
 - CAPABILITIES: asks what the assistant can do.
 - UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
 - OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other clear request that can be answered without live restaurant data.
+- CONVERSATION: any other clear request that can be answered without live restaurant data, including thanks or acknowledgements.
 
 User input:
 %s`, question)
@@ -601,11 +610,11 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
 Reply with exactly one label:
 - ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
-- GREETING: a greeting only.
+- GREETING: a greeting only, such as "hello" or "สวัสดี"; do not classify thanks or acknowledgements as greeting.
 - CAPABILITIES: asks what the assistant can do.
 - UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
 - OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other clear request that can be answered without live restaurant data.
+- CONVERSATION: any other clear request that can be answered without live restaurant data, including thanks or acknowledgements.
 
 User input:
 %s`, question)

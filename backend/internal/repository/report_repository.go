@@ -57,8 +57,8 @@ func (r *ReportRepository) MenuMargins(restaurantID uint, since time.Time) ([]Re
 				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
 				ELSE 0
 			END AS margin`).
-		Joins("LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id").
-		Where("order_items.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
+		Joins("LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id").
+		Where("order_items.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status <> ? AND order_items.deleted_at IS NULL", restaurantID, since, entity.OrderItemStatusCancelled).
 		Group("order_items.menu_id, order_items.menu_name").
 		Order("profit desc, revenue desc").
 		Limit(12).
@@ -71,7 +71,7 @@ func (r *ReportRepository) TotalFoodCost(restaurantID uint, since time.Time) (fl
 	err := r.db.Table("order_inventory_deductions").
 		Select("COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0)").
 		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
-		Where("order_inventory_deductions.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
+		Where("order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND order_items.created_at >= ? AND order_items.status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
 		Scan(&total).Error
 	return total, err
 }
