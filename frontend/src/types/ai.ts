@@ -26,6 +26,21 @@ export type AIInventorySummary = {
   value: number;
 };
 
+export type AIAnalysisReadiness = {
+  has_sales: boolean;
+  sales_items: number;
+  margin_items: number;
+  costed_margin_items: number;
+  sold_menus: number;
+  sold_menus_with_recipes: number;
+  margin_cost_coverage_percent: number;
+  menu_recipe_coverage_percent: number;
+  can_analyze_revenue: boolean;
+  can_analyze_margin: boolean;
+  can_recommend_business_actions: boolean;
+  warnings: string[];
+};
+
 export type AIStockRisk = {
   name: string;
   category: string;
@@ -44,6 +59,7 @@ export type AISnapshot = {
   top_menu_items: AIMenuSummary[];
   menu_margins: AIMenuMarginSummary[];
   low_margin_menus: AIMenuMarginSummary[];
+  analysis_readiness: AIAnalysisReadiness;
   inventory_summary: AIInventorySummary;
   stock_risks: AIStockRisk[];
 };

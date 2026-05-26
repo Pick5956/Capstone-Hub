@@ -63,13 +63,29 @@ type AIAskResponse struct {
 }
 
 type AISnapshot struct {
-	GeneratedAt      string                           `json:"generated_at"`
-	SalesDays        []repository.AISalesSummary      `json:"sales_days"`
-	TopMenuItems     []repository.AIMenuSummary       `json:"top_menu_items"`
-	MenuMargins      []repository.AIMenuMarginSummary `json:"menu_margins"`
-	LowMarginMenus   []repository.AIMenuMarginSummary `json:"low_margin_menus"`
-	InventorySummary AIInventorySummary               `json:"inventory_summary"`
-	StockRisks       []AIStockRisk                    `json:"stock_risks"`
+	GeneratedAt       string                           `json:"generated_at"`
+	SalesDays         []repository.AISalesSummary      `json:"sales_days"`
+	TopMenuItems      []repository.AIMenuSummary       `json:"top_menu_items"`
+	MenuMargins       []repository.AIMenuMarginSummary `json:"menu_margins"`
+	LowMarginMenus    []repository.AIMenuMarginSummary `json:"low_margin_menus"`
+	AnalysisReadiness AIAnalysisReadiness              `json:"analysis_readiness"`
+	InventorySummary  AIInventorySummary               `json:"inventory_summary"`
+	StockRisks        []AIStockRisk                    `json:"stock_risks"`
+}
+
+type AIAnalysisReadiness struct {
+	HasSales                  bool     `json:"has_sales"`
+	SalesItems                int64    `json:"sales_items"`
+	MarginItems               int64    `json:"margin_items"`
+	CostedMarginItems         int64    `json:"costed_margin_items"`
+	SoldMenus                 int64    `json:"sold_menus"`
+	SoldMenusWithRecipes      int64    `json:"sold_menus_with_recipes"`
+	MarginCostCoveragePercent float64  `json:"margin_cost_coverage_percent"`
+	MenuRecipeCoveragePercent float64  `json:"menu_recipe_coverage_percent"`
+	CanAnalyzeRevenue         bool     `json:"can_analyze_revenue"`
+	CanAnalyzeMargin          bool     `json:"can_analyze_margin"`
+	CanRecommendActions       bool     `json:"can_recommend_business_actions"`
+	Warnings                  []string `json:"warnings"`
 }
 
 type AIInventorySummary struct {
@@ -269,14 +285,19 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		}
 	}
 
+	// Factual margin ranking and explicit business decisions must reach readiness checks deterministically.
+	if requestsBusinessDecision(question) || requestsLowestMarginFact(question) {
+		intent = AIIntentAnalysis
+		locallyResolved = true
+	}
+
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
-	if len(groqKeys) == 0 && len(geminiKeys) == 0 {
-		return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
-	}
-
 	if !locallyResolved {
+		if len(groqKeys) == 0 && len(geminiKeys) == 0 {
+			return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
+		}
 		var err error
 		intent, err = s.classifyIntent(questionWithHistory(question, history))
 		if err != nil {
@@ -332,6 +353,25 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
 		return nil, err
+	}
+	if answer, guarded := localAnalyticalGuardrailAnswer(question, snapshot); guarded {
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   intent,
+			Model:    "local-readiness-guardrail",
+			Snapshot: snapshot,
+		}, nil
+	}
+	if answer, summarized := localLowestMarginFactAnswer(question, snapshot); summarized {
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   intent,
+			Model:    "local-analysis-summary",
+			Snapshot: snapshot,
+		}, nil
+	}
+	if len(groqKeys) == 0 && len(geminiKeys) == 0 {
+		return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
 	}
 
 	// Try Groq (Ultra-fast 200ms) with rotated keys
@@ -473,6 +513,10 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if err != nil {
 		return AISnapshot{}, err
 	}
+	coverage, err := s.repo.AnalysisCoverage(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
 	if sales == nil {
 		sales = []repository.AISalesSummary{}
 	}
@@ -532,14 +576,117 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	}
 
 	return AISnapshot{
-		GeneratedAt:      repository.BangkokNow().Format(time.RFC3339),
-		SalesDays:        sales,
-		TopMenuItems:     topMenus,
-		MenuMargins:      menuMargins,
-		LowMarginMenus:   lowMarginMenus,
-		InventorySummary: summary,
-		StockRisks:       risks,
+		GeneratedAt:       repository.BangkokNow().Format(time.RFC3339),
+		SalesDays:         sales,
+		TopMenuItems:      topMenus,
+		MenuMargins:       menuMargins,
+		LowMarginMenus:    lowMarginMenus,
+		AnalysisReadiness: analysisReadinessFromCoverage(coverage),
+		InventorySummary:  summary,
+		StockRisks:        risks,
 	}, nil
+}
+
+func analysisReadinessFromCoverage(coverage repository.AIAnalysisCoverage) AIAnalysisReadiness {
+	readiness := AIAnalysisReadiness{
+		HasSales:             coverage.SalesItems > 0,
+		SalesItems:           coverage.SalesItems,
+		MarginItems:          coverage.MarginItems,
+		CostedMarginItems:    coverage.CostedMarginItems,
+		SoldMenus:            coverage.SoldMenus,
+		SoldMenusWithRecipes: coverage.SoldMenusWithRecipes,
+		Warnings:             []string{},
+	}
+	if coverage.MarginItems > 0 {
+		readiness.MarginCostCoveragePercent = float64(coverage.CostedMarginItems) / float64(coverage.MarginItems) * 100
+	}
+	if coverage.SoldMenus > 0 {
+		readiness.MenuRecipeCoveragePercent = float64(coverage.SoldMenusWithRecipes) / float64(coverage.SoldMenus) * 100
+	}
+
+	readiness.CanAnalyzeRevenue = readiness.HasSales
+	readiness.CanAnalyzeMargin = coverage.MarginItems > 0 && readiness.MarginCostCoveragePercent >= 100
+	readiness.CanRecommendActions = readiness.CanAnalyzeMargin && readiness.MenuRecipeCoveragePercent >= 100
+
+	if !readiness.HasSales {
+		readiness.Warnings = append(readiness.Warnings, "No recorded sales are available in the analysis period.")
+		return readiness
+	}
+	if coverage.MarginItems == 0 {
+		readiness.Warnings = append(readiness.Warnings, "No served sales are available for confirmed margin analysis.")
+		return readiness
+	}
+	if !readiness.CanAnalyzeMargin {
+		readiness.Warnings = append(readiness.Warnings, "Some served items have no recorded inventory cost deduction; margin and profit are not confirmed.")
+	}
+	if readiness.MenuRecipeCoveragePercent < 100 {
+		readiness.Warnings = append(readiness.Warnings, "Some sold menus have no current ingredient recipe; inventory and business recommendations need setup review.")
+	}
+	return readiness
+}
+
+func localAnalyticalGuardrailAnswer(question string, snapshot AISnapshot) (string, bool) {
+	if snapshot.AnalysisReadiness.CanRecommendActions || !requestsBusinessDecision(question) {
+		return "", false
+	}
+	readiness := snapshot.AnalysisReadiness
+	if !readiness.HasSales {
+		return "ตอนนี้ยังไม่มีข้อมูลยอดขายในช่วงวิเคราะห์ จึงยังแนะนำการปรับราคา ถอดเมนู หรือสั่งซื้อวัตถุดิบไม่ได้ครับ กรุณาบันทึกการขายและตรวจว่าสูตรวัตถุดิบพร้อมก่อน แล้วผมจะช่วยวิเคราะห์ต่อได้", true
+	}
+	return fmt.Sprintf(
+		"ตอนนี้ผมยังแนะนำการปรับราคา ถอดเมนู หรือสั่งซื้อวัตถุดิบจากผลวิเคราะห์ไม่ได้ครับ เพราะข้อมูลต้นทุนหรือสูตรยังไม่ครบ (ต้นทุนครอบคลุม %.0f%%, สูตรครอบคลุม %.0f%%) กรุณาตรวจการผูกสูตรและการตัดสต็อกก่อน แล้วจึงวิเคราะห์การตัดสินใจนี้อีกครั้ง",
+		readiness.MarginCostCoveragePercent,
+		readiness.MenuRecipeCoveragePercent,
+	), true
+}
+
+func requestsBusinessDecision(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	for _, phrase := range []string{
+		"ปรับราคา", "ขึ้นราคา", "ลดราคา", "เปลี่ยนราคา",
+		"ลบเมนู", "ถอดเมนู", "เลิกขาย", "ลดการขาย",
+		"ควรซื้อ", "ซื้อวัตถุดิบ", "สั่งซื้อ",
+		"increase price", "decrease price", "change price",
+		"remove menu", "stop selling", "buy ingredient", "purchase", "restock",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestsLowestMarginFact(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	hasMargin := strings.Contains(normalized, "margin") ||
+		strings.Contains(normalized, "มาร์จิ้น") ||
+		strings.Contains(normalized, "มาร์จิน")
+	hasLowest := strings.Contains(normalized, "ต่ำที่สุด") ||
+		strings.Contains(normalized, "lowest") ||
+		strings.Contains(normalized, "น้อยที่สุด")
+	return hasMargin && hasLowest
+}
+
+func localLowestMarginFactAnswer(question string, snapshot AISnapshot) (string, bool) {
+	if !requestsLowestMarginFact(question) || !snapshot.AnalysisReadiness.CanAnalyzeMargin || len(snapshot.LowMarginMenus) == 0 {
+		return "", false
+	}
+	menu := snapshot.LowMarginMenus[0]
+	if menu.Quantity <= 0 {
+		return "", false
+	}
+	quantity := float64(menu.Quantity)
+	return fmt.Sprintf(
+		"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+		menu.MenuName,
+		menu.Quantity,
+		menu.Revenue,
+		menu.Cost,
+		menu.Profit,
+		menu.Margin,
+		menu.Cost/quantity,
+		menu.Profit/quantity,
+	), true
 }
 
 func (s *AIService) executeClassifierGroq(question string, apiKey string) (string, error) {
@@ -670,26 +817,10 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		model = "gemini-2.5-flash"
 	}
 
-	snapshotJSON, err := json.MarshalIndent(snapshot, "", "  ")
+	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
 		return "", "", err
 	}
-	prompt := fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
-Answer in natural Thai for a restaurant owner or manager.
-Use only the provided restaurant snapshot. Do not invent numbers.
-If the available data is not enough for a confident recommendation, say what is missing.
-Keep the answer practical: summarize the situation, risks, and next actions.
-Format for a narrow chat panel: use short headings and bullet lists.
-Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
-
-Restaurant snapshot JSON:
-%s
-
-Recent conversation context:
-%s
-
-User question:
-%s`, string(snapshotJSON), conversationPrompt(history), question)
 
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
@@ -805,26 +936,10 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		model = "groq/compound-mini"
 	}
 
-	snapshotJSON, err := json.MarshalIndent(snapshot, "", "  ")
+	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
 		return "", "", err
 	}
-	prompt := fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
-Answer in natural Thai for a restaurant owner or manager.
-Use only the provided restaurant snapshot. Do not invent numbers.
-If the available data is not enough for a confident recommendation, say what is missing.
-Keep the answer practical: summarize the situation, risks, and next actions.
-Format for a narrow chat panel: use short headings and bullet lists.
-Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
-
-Restaurant snapshot JSON:
-%s
-
-Recent conversation context:
-%s
-
-User question:
-%s`, string(snapshotJSON), conversationPrompt(history), question)
 
 	payload := groqRequest{
 		Model: model,
@@ -865,6 +980,37 @@ User question:
 		return parsed.Choices[0].Message.Content, model, nil
 	}
 	return "", "", errors.New("groq returned an empty response")
+}
+
+func analyticalPrompt(question string, history []AIConversationMessage, snapshot AISnapshot) (string, error) {
+	snapshotJSON, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
+Answer in natural Thai for a restaurant owner or manager.
+Use only the provided restaurant snapshot. Do not invent numbers.
+The analysis_readiness object is a mandatory reliability guardrail:
+- If can_analyze_revenue is false, explain that sales data is not available and do not rank performance or describe trends.
+- If can_analyze_margin is false, do not present profit or margin as confirmed and do not recommend pricing, menu, or purchasing decisions based on margin.
+- If can_recommend_business_actions is false, recommend only data setup or verification steps; do not recommend changing prices, removing menus, reducing sales, or purchasing quantities.
+- If warnings is non-empty, state the relevant limitation clearly before any suggested next step.
+Even when the data is complete, never claim that you changed restaurant data; changes require the user to review and confirm them in the system.
+Answer only the scope requested by the user:
+- If the user only requests a fact, ranking, or metric, report that result and a brief factual interpretation only. Do not propose price changes, recipe changes, promotions, purchasing, KPI targets, or other business decisions unless the user explicitly requests a recommendation.
+- Clearly distinguish aggregate totals from per-item values. Never describe a total cost or total profit as a per-unit value. Calculate per-item values only from the stated quantity and label them as averages.
+Keep the answer practical: summarize the situation, risks, and next actions.
+Format for a narrow chat panel: use short headings and bullet lists.
+Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
+
+Restaurant snapshot JSON:
+%s
+
+Recent conversation context:
+%s
+
+User question:
+%s`, string(snapshotJSON), conversationPrompt(history), question), nil
 }
 
 func (s *AIService) executeGroqConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {

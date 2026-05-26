@@ -114,6 +114,12 @@ func TestDatabaseBackedSnapshotMatchesPreparedDemo(t *testing.T) {
 	if lowest.Margin > expected.LowestMarginMax {
 		t.Fatalf("lowest margin for %q = %.2f, want no more than %.2f", lowest.MenuName, lowest.Margin, expected.LowestMarginMax)
 	}
+	if !snapshot.AnalysisReadiness.CanAnalyzeRevenue || !snapshot.AnalysisReadiness.CanAnalyzeMargin || !snapshot.AnalysisReadiness.CanRecommendActions {
+		t.Fatalf("prepared demo readiness = %+v, want complete analytical readiness", snapshot.AnalysisReadiness)
+	}
+	if snapshot.AnalysisReadiness.MarginCostCoveragePercent != 100 || snapshot.AnalysisReadiness.MenuRecipeCoveragePercent != 100 {
+		t.Fatalf("prepared demo coverage = %.2f/%.2f, want 100/100", snapshot.AnalysisReadiness.MarginCostCoveragePercent, snapshot.AnalysisReadiness.MenuRecipeCoveragePercent)
+	}
 }
 
 func TestLiveAnalyticalResponseUsesDatabaseSnapshot(t *testing.T) {
