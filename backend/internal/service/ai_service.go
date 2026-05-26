@@ -112,9 +112,6 @@ type AIStockRisk struct {
 func (s *AIService) getGroqKeys() []string {
 	keysStr := os.Getenv("GROQ_API_KEYS")
 	if keysStr == "" {
-		keysStr = os.Getenv("GROQ_API_KEY")
-	}
-	if keysStr == "" {
 		return nil
 	}
 	parts := strings.Split(keysStr, ",")
@@ -130,9 +127,6 @@ func (s *AIService) getGroqKeys() []string {
 
 func (s *AIService) getGeminiKeys() []string {
 	keysStr := os.Getenv("GEMINI_API_KEYS")
-	if keysStr == "" {
-		keysStr = os.Getenv("GEMINI_API_KEY")
-	}
 	if keysStr == "" {
 		return nil
 	}
