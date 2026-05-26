@@ -397,6 +397,23 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	if len(groqKeys) > 0 {
 		answer, model, err := s.askGroqWithRotation(question, history, &snapshot, false)
 		if err == nil {
+			if strings.HasPrefix(answer, "CALL_TOOL:") {
+				toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
+				result, err := executeReadOnlyTool(toolName, snapshot)
+				if err != nil {
+					return nil, err
+				}
+				if toolAnswer, ok := localToolAnswer(result); ok {
+					return &AIAskResponse{
+						Answer:   toolAnswer,
+						Intent:   intent,
+						Task:     taskRoute.Task,
+						Tool:     toolName,
+						Model:    "local-tool-calling-interceptor",
+						Snapshot: snapshot,
+					}, nil
+				}
+			}
 			return &AIAskResponse{
 				Answer:   answer,
 				Intent:   intent,
@@ -412,6 +429,23 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	if len(geminiKeys) > 0 {
 		answer, model, err := s.askGeminiWithRotation(question, history, &snapshot, false)
 		if err == nil {
+			if strings.HasPrefix(answer, "CALL_TOOL:") {
+				toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
+				result, err := executeReadOnlyTool(toolName, snapshot)
+				if err != nil {
+					return nil, err
+				}
+				if toolAnswer, ok := localToolAnswer(result); ok {
+					return &AIAskResponse{
+						Answer:   toolAnswer,
+						Intent:   intent,
+						Task:     taskRoute.Task,
+						Tool:     toolName,
+						Model:    "local-tool-calling-interceptor",
+						Snapshot: snapshot,
+					}, nil
+				}
+			}
 			return &AIAskResponse{
 				Answer:   answer,
 				Intent:   intent,
@@ -836,6 +870,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
+		Tools: s.getGeminiTools(),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -869,6 +904,9 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	}
 	for _, candidate := range parsed.Candidates {
 		for _, part := range candidate.Content.Parts {
+			if part.FunctionCall != nil {
+				return fmt.Sprintf("CALL_TOOL:%s", part.FunctionCall.Name), model, nil
+			}
 			if text := strings.TrimSpace(part.Text); text != "" {
 				return text, model, nil
 			}
@@ -956,6 +994,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		Tools: s.getGroqTools(),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -987,7 +1026,11 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		return "", "", err
 	}
 	if len(parsed.Choices) > 0 {
-		return parsed.Choices[0].Message.Content, model, nil
+		msg := parsed.Choices[0].Message
+		if len(msg.ToolCalls) > 0 {
+			return fmt.Sprintf("CALL_TOOL:%s", msg.ToolCalls[0].Function.Name), model, nil
+		}
+		return msg.Content, model, nil
 	}
 	return "", "", errors.New("groq returned an empty response")
 }
@@ -1133,8 +1176,90 @@ func questionWithHistory(question string, history []AIConversationMessage) strin
 	return fmt.Sprintf("Recent conversation:\n%s\n\nCurrent question:\n%s", conversationPrompt(history), question)
 }
 
+func (s *AIService) getGeminiTools() []geminiTool {
+	return []geminiTool{
+		{
+			FunctionDeclarations: []geminiFunctionDeclaration{
+				{
+					Name:        "get_lowest_margin_menu",
+					Description: "Get details about the menu item with the lowest profit margin.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_low_stock_ingredients",
+					Description: "Get the list of ingredients that are currently low in stock or out of stock.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_top_selling_menus",
+					Description: "Get the list of top-selling menus ranked by popularity and revenue.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_inventory_valuation",
+					Description: "Get the summary of the total inventory value and metrics.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+			},
+		},
+	}
+}
+
+func (s *AIService) getGroqTools() []groqTool {
+	return []groqTool{
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_lowest_margin_menu",
+				Description: "Get details about the menu item with the lowest profit margin.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_low_stock_ingredients",
+				Description: "Get the list of ingredients that are currently low in stock or out of stock.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_top_selling_menus",
+				Description: "Get the list of top-selling menus ranked by popularity and revenue.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_inventory_valuation",
+				Description: "Get the summary of the total inventory value and metrics.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+	}
+}
+
 type geminiGenerateRequest struct {
 	Contents []geminiContent `json:"contents"`
+	Tools    []geminiTool    `json:"tools,omitempty"`
+}
+
+type geminiTool struct {
+	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations"`
+}
+
+type geminiFunctionDeclaration struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Parameters  geminiParameters `json:"parameters"`
+}
+
+type geminiParameters struct {
+	Type       string                 `json:"type"`
+	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
 type geminiContent struct {
@@ -1142,7 +1267,13 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text string `json:"text"`
+	Text         string              `json:"text,omitempty"`
+	FunctionCall *geminiFunctionCall `json:"functionCall,omitempty"`
+}
+
+type geminiFunctionCall struct {
+	Name string                 `json:"name"`
+	Args map[string]interface{} `json:"args"`
 }
 
 type geminiGenerateResponse struct {
@@ -1152,13 +1283,42 @@ type geminiGenerateResponse struct {
 }
 
 type groqMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string         `json:"role"`
+	Content   string         `json:"content"`
+	ToolCalls []groqToolCall `json:"tool_calls,omitempty"`
+}
+
+type groqToolCall struct {
+	Id       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function groqToolFunc `json:"function"`
+}
+
+type groqToolFunc struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 type groqRequest struct {
 	Model    string        `json:"model"`
 	Messages []groqMessage `json:"messages"`
+	Tools    []groqTool    `json:"tools,omitempty"`
+}
+
+type groqTool struct {
+	Type     string               `json:"type"`
+	Function groqFunctionShortcut `json:"function"`
+}
+
+type groqFunctionShortcut struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  groqParameters `json:"parameters"`
+}
+
+type groqParameters struct {
+	Type       string                 `json:"type"`
+	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
 type groqResponse struct {

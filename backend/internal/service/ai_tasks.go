@@ -42,18 +42,6 @@ type AIToolResult struct {
 }
 
 func resolveLocalTask(question string) (AITaskRoute, bool) {
-	if requestsLowestMarginFact(question) {
-		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetLowestMarginMenu}, true
-	}
-	if requestsLowStockFact(question) {
-		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetLowStockIngredients}, true
-	}
-	if requestsTopSellingFact(question) {
-		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetTopSellingMenus}, true
-	}
-	if requestsInventoryValuationFact(question) {
-		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetInventoryValuation}, true
-	}
 	if requestsMarginConceptExplanation(question) {
 		return AITaskRoute{Task: AITaskExplainConcept}, true
 	}
@@ -61,46 +49,6 @@ func resolveLocalTask(question string) (AITaskRoute, bool) {
 		return AITaskRoute{Task: AITaskRecommendAction}, true
 	}
 	return AITaskRoute{}, false
-}
-
-func requestsLowStockFact(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	for _, phrase := range []string{
-		"ใกล้หมด", "เสี่ยงหมด", "หมดสต็อก", "หมดสต๊อก", "ของหมด", "สต็อกเหลือน้อย", "สต๊อกเหลือน้อย", "ของใกล้หมด",
-		"low stock", "out of stock", "running out", "running low", "depleted", "low in stock",
-	} {
-		if strings.Contains(normalized, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-func requestsTopSellingFact(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	for _, phrase := range []string{
-		"ขายดี", "ขายดีที่สุด", "เมนูยอดฮิต", "เมนูยอดนิยม", "รายการยอดนิยม",
-		"best seller", "top seller", "popular menu", "selling well", "top selling",
-	} {
-		if strings.Contains(normalized, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
-func requestsInventoryValuationFact(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	for _, phrase := range []string{
-		"มูลค่าสต็อก", "มูลค่าสต๊อก", "มูลค่าคลัง", "มูลค่าสินค้าคงเหลือ", "มูลค่ารวมคลัง", "มูลค่าคลังสินค้า",
-		"มูลค่ารวมสต็อก", "มูลค่ารวมสต๊อก", "รวมสต็อก", "รวมสต๊อก",
-		"inventory value", "stock valuation", "value of stock", "inventory worth", "how much is my stock worth",
-	} {
-		if strings.Contains(normalized, phrase) {
-			return true
-		}
-	}
-	return false
 }
 
 func requestsMarginConceptExplanation(question string) bool {

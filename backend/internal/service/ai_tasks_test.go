@@ -45,15 +45,49 @@ func TestConceptQuestionAnswersWithoutProviderOrSnapshot(t *testing.T) {
 	}
 }
 
-func TestResolveLocalTaskMapsLowestMarginParaphrasesToReadOnlyTool(t *testing.T) {
-	for _, question := range []string{
-		"เมนูไหนมี Margin ต่ำที่สุด",
-		"จานไหนมาร์จิ้นน้อยที่สุด",
-		"what is the lowest margin menu?",
-	} {
-		route, ok := resolveLocalTask(question)
-		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetLowestMarginMenu {
-			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want lowest-margin tool", question, route, ok)
+func TestGetGeminiToolsSchema(t *testing.T) {
+	svc := &AIService{}
+	tools := svc.getGeminiTools()
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 4 {
+		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
+	}
+	expectedNames := map[string]bool{
+		"get_lowest_margin_menu":    true,
+		"get_low_stock_ingredients": true,
+		"get_top_selling_menus":     true,
+		"get_inventory_valuation":  true,
+	}
+	for _, decl := range tools[0].FunctionDeclarations {
+		if !expectedNames[decl.Name] {
+			t.Errorf("Unexpected tool name in Gemini schema: %s", decl.Name)
+		}
+		if decl.Parameters.Type != "OBJECT" {
+			t.Errorf("Expected OBJECT type parameters in Gemini schema, got %s", decl.Parameters.Type)
+		}
+	}
+}
+
+func TestGetGroqToolsSchema(t *testing.T) {
+	svc := &AIService{}
+	tools := svc.getGroqTools()
+	if len(tools) != 4 {
+		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
+	}
+	expectedNames := map[string]bool{
+		"get_lowest_margin_menu":    true,
+		"get_low_stock_ingredients": true,
+		"get_top_selling_menus":     true,
+		"get_inventory_valuation":  true,
+	}
+	for _, tool := range tools {
+		if tool.Type != "function" {
+			t.Errorf("Expected tool type to be function, got %s", tool.Type)
+		}
+		if !expectedNames[tool.Function.Name] {
+			t.Errorf("Unexpected tool name in Groq schema: %s", tool.Function.Name)
+		}
+		if tool.Function.Parameters.Type != "object" {
+			t.Errorf("Expected object type parameters in Groq schema, got %s", tool.Function.Parameters.Type)
 		}
 	}
 }
@@ -88,45 +122,6 @@ func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T)
 	for _, expected := range []string{"ต้นทุนรวม 1250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
-		}
-	}
-}
-
-func TestResolveLocalTaskMapsLowStockParaphrasesToReadOnlyTool(t *testing.T) {
-	for _, question := range []string{
-		"วัตถุดิบอะไรใกล้หมดบ้าง",
-		"ของชิ้นไหนเสี่ยงหมด",
-		"what is low in stock?",
-	} {
-		route, ok := resolveLocalTask(question)
-		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetLowStockIngredients {
-			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want low-stock tool", question, route, ok)
-		}
-	}
-}
-
-func TestResolveLocalTaskMapsTopSellingParaphrasesToReadOnlyTool(t *testing.T) {
-	for _, question := range []string{
-		"เมนูขายดีที่สุดคืออะไร",
-		" popular menus ",
-		"เมนูยอดนิยมมีอะไรบ้าง",
-	} {
-		route, ok := resolveLocalTask(question)
-		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetTopSellingMenus {
-			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want top-selling tool", question, route, ok)
-		}
-	}
-}
-
-func TestResolveLocalTaskMapsInventoryValuationParaphrasesToReadOnlyTool(t *testing.T) {
-	for _, question := range []string{
-		"มูลค่าคลังสินค้ามีกี่บาท",
-		"how much is the inventory worth?",
-		"มูลค่ารวมสต็อก",
-	} {
-		route, ok := resolveLocalTask(question)
-		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetInventoryValuation {
-			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want inventory-valuation tool", question, route, ok)
 		}
 	}
 }
