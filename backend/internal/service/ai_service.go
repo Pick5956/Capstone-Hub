@@ -109,6 +109,26 @@ type AIStockRisk struct {
 	Status          string  `json:"status"`
 }
 
+type AIVerifyPayload struct {
+	LowestMarginMenuName string  `json:"lowest_margin_menu_name,omitempty"`
+	Quantity             int     `json:"quantity,omitempty"`
+	Revenue              float64 `json:"revenue,omitempty"`
+	Cost                 float64 `json:"cost,omitempty"`
+	Profit               float64 `json:"profit,omitempty"`
+	Margin               float64 `json:"margin,omitempty"`
+	LowStockCount        int     `json:"low_stock_count,omitempty"`
+	OutOfStockCount      int     `json:"out_of_stock_count,omitempty"`
+	TopMenuName          string  `json:"top_menu_name,omitempty"`
+	TopMenuQuantity      int     `json:"top_menu_quantity,omitempty"`
+	TotalItems           int     `json:"total_items,omitempty"`
+	TotalValue           float64 `json:"total_value,omitempty"`
+}
+
+type AIFinalJSONResponse struct {
+	Answer string          `json:"answer"`
+	Verify AIVerifyPayload `json:"verify"`
+}
+
 func (s *AIService) getGroqKeys() []string {
 	keysStr := os.Getenv("GROQ_API_KEYS")
 	if keysStr == "" {
@@ -403,13 +423,35 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 				if err != nil {
 					return nil, err
 				}
+				
+				// Call second round
+				prompt := secondRoundPrompt(question, history, toolName, result)
+				secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
+				if secErr == nil {
+					res, parseErr := cleanAndParseJSONResponse(secAnswer)
+					if parseErr == nil {
+						finalAnswer := s.validateAndIntercept(res, result, snapshot)
+						return &AIAskResponse{
+							Answer:   finalAnswer,
+							Intent:   intent,
+							Task:     taskRoute.Task,
+							Tool:     toolName,
+							Model:    secModel,
+							Snapshot: snapshot,
+						}, nil
+					}
+					fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
+				} else {
+					fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
+				}
+
 				if toolAnswer, ok := localToolAnswer(result); ok {
 					return &AIAskResponse{
 						Answer:   toolAnswer,
 						Intent:   intent,
 						Task:     taskRoute.Task,
 						Tool:     toolName,
-						Model:    "local-tool-calling-interceptor",
+						Model:    "local-tool-calling-fallback",
 						Snapshot: snapshot,
 					}, nil
 				}
@@ -435,13 +477,35 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 				if err != nil {
 					return nil, err
 				}
+				
+				// Call second round
+				prompt := secondRoundPrompt(question, history, toolName, result)
+				secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
+				if secErr == nil {
+					res, parseErr := cleanAndParseJSONResponse(secAnswer)
+					if parseErr == nil {
+						finalAnswer := s.validateAndIntercept(res, result, snapshot)
+						return &AIAskResponse{
+							Answer:   finalAnswer,
+							Intent:   intent,
+							Task:     taskRoute.Task,
+							Tool:     toolName,
+							Model:    secModel,
+							Snapshot: snapshot,
+						}, nil
+					}
+					fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
+				} else {
+					fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
+				}
+
 				if toolAnswer, ok := localToolAnswer(result); ok {
 					return &AIAskResponse{
 						Answer:   toolAnswer,
 						Intent:   intent,
 						Task:     taskRoute.Task,
 						Tool:     toolName,
-						Model:    "local-tool-calling-interceptor",
+						Model:    "local-tool-calling-fallback",
 						Snapshot: snapshot,
 					}, nil
 				}
@@ -1325,4 +1389,334 @@ type groqResponse struct {
 	Choices []struct {
 		Message groqMessage `json:"message"`
 	} `json:"choices"`
+}
+
+func secondRoundPrompt(question string, history []AIConversationMessage, toolName AIToolName, toolResult AIToolResult) string {
+	toolResultJSON, _ := json.MarshalIndent(toolResult, "", "  ")
+	return fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
+You are in the second round of a double round-trip. The backend Go system has successfully executed the tool "%s" and retrieved the actual data.
+
+IMPORTANT: You MUST respond in a valid JSON format only. Do not wrap the JSON in triple backticks or markdown, or if you do, ensure it is a valid JSON block that can be parsed.
+Your response MUST EXACTLY match this structure:
+{
+  "answer": "Your natural Thai conversational explanation here...",
+  "verify": {
+    "lowest_margin_menu_name": "...", 
+    "quantity": 123,
+    "revenue": 123.45,
+    "cost": 123.45,
+    "profit": 123.45,
+    "margin": 12.34,
+    "low_stock_count": 123,
+    "out_of_stock_count": 123,
+    "top_menu_name": "...",
+    "top_menu_quantity": 123,
+    "total_items": 123,
+    "total_value": 123.45
+  }
+}
+
+Rules for the "answer" field:
+1. Answer in natural, polite Thai for a restaurant owner or manager. Use "ครับ" consistently.
+2. Incorporate the conversation history context naturally.
+3. You MUST present the EXACT numbers from the tool result. Do NOT perform any manual mathematical calculations, averages, or totals. Use only the provided numbers.
+4. Do NOT use markdown tables or horizontal rules. Use bullet points or short paragraphs suitable for a narrow chat panel.
+5. Do NOT make up any numbers.
+
+Rules for the "verify" field:
+Fill in the fields of the "verify" object with the EXACT numbers and names you wrote in your "answer" text. If a field is not relevant to the tool result or your answer, you can omit it or set it to 0 or empty string.
+
+Tool result JSON:
+%s
+
+Recent conversation context:
+%s
+
+User question:
+%s`, toolName, string(toolResultJSON), conversationPrompt(history), question)
+}
+
+func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {
+	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+	if model == "" {
+		model = "gemini-2.5-flash"
+	}
+	payload := geminiGenerateRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: prompt}}},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", model)
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", apiKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errRateLimit
+		}
+		return "", "", fmt.Errorf("gemini second round failed: %s", strings.TrimSpace(string(respBody)))
+	}
+	var parsed geminiGenerateResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	for _, candidate := range parsed.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text, model, nil
+			}
+		}
+	}
+	return "", "", errors.New("gemini second round returned empty response")
+}
+
+func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string, string, error) {
+	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
+	if model == "" {
+		model = "groq/compound-mini"
+	}
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 429 {
+			return "", "", errRateLimit
+		}
+		return "", "", fmt.Errorf("groq second round failed: %s", strings.TrimSpace(string(respBody)))
+	}
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		return parsed.Choices[0].Message.Content, model, nil
+	}
+	return "", "", errors.New("groq second round returned empty response")
+}
+
+func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, string, error) {
+	keys := s.getGroqKeys()
+	if len(keys) == 0 {
+		return "", "", errors.New("GROQ_API_KEY is not configured")
+	}
+	var lastErr error
+	numKeys := len(keys)
+	for i := 0; i < numKeys; i++ {
+		idx := atomic.AddUint32(&s.groqKeyIndex, 1) - 1
+		currentKey := keys[idx%uint32(numKeys)]
+		answer, model, err := s.executeSecondRoundGroq(prompt, currentKey)
+		if err == nil {
+			return answer, model, nil
+		}
+		lastErr = err
+		if err == errRateLimit {
+			fmt.Printf("[AI Service] Groq Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
+			continue
+		}
+		fmt.Printf("[AI Service] Groq Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+	}
+	return "", "", lastErr
+}
+
+func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, string, error) {
+	keys := s.getGeminiKeys()
+	if len(keys) == 0 {
+		return "", "", errors.New("GEMINI_API_KEY is not configured")
+	}
+	var lastErr error
+	numKeys := len(keys)
+	for i := 0; i < numKeys; i++ {
+		idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
+		currentKey := keys[idx%uint32(numKeys)]
+		answer, model, err := s.executeSecondRoundGemini(prompt, currentKey)
+		if err == nil {
+			return answer, model, nil
+		}
+		lastErr = err
+		if err == errRateLimit {
+			fmt.Printf("[AI Service] Gemini Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
+			continue
+		}
+		fmt.Printf("[AI Service] Gemini Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+	}
+	return "", "", lastErr
+}
+
+func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, error) {
+	groqKeys := s.getGroqKeys()
+	geminiKeys := s.getGeminiKeys()
+	if len(groqKeys) > 0 {
+		answer, model, err := s.askSecondRoundGroqWithRotation(prompt)
+		if err == nil {
+			return answer, model, nil
+		}
+		fmt.Printf("[AI Service] Second round Groq failed, trying Gemini fallback: %v\n", err)
+	}
+	if len(geminiKeys) > 0 {
+		return s.askSecondRoundGeminiWithRotation(prompt)
+	}
+	return "", "", errors.New("no API keys configured for second round")
+}
+
+func cleanAndParseJSONResponse(raw string) (AIFinalJSONResponse, error) {
+	cleaned := strings.TrimSpace(raw)
+	if strings.HasPrefix(cleaned, "```json") {
+		cleaned = strings.TrimPrefix(cleaned, "```json")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+	} else if strings.HasPrefix(cleaned, "```") {
+		cleaned = strings.TrimPrefix(cleaned, "```")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+	}
+	cleaned = strings.TrimSpace(cleaned)
+	var res AIFinalJSONResponse
+	err := json.Unmarshal([]byte(cleaned), &res)
+	if err != nil {
+		return AIFinalJSONResponse{}, err
+	}
+	return res, nil
+}
+
+func (s *AIService) validateAndIntercept(res AIFinalJSONResponse, result AIToolResult, snapshot AISnapshot) string {
+	answer := res.Answer
+	verify := res.Verify
+	var corrections []string
+
+	switch result.Tool {
+	case AIToolGetLowestMarginMenu:
+		if len(snapshot.LowMarginMenus) > 0 {
+			actual := snapshot.LowMarginMenus[0]
+			mismatch := false
+			if verify.LowestMarginMenuName != "" && verify.LowestMarginMenuName != actual.MenuName {
+				mismatch = true
+			}
+			if verify.Quantity != 0 && verify.Quantity != int(actual.Quantity) {
+				mismatch = true
+			}
+			if verify.Revenue != 0 && !almostEqual(verify.Revenue, actual.Revenue) {
+				mismatch = true
+			}
+			if verify.Cost != 0 && !almostEqual(verify.Cost, actual.Cost) {
+				mismatch = true
+			}
+			if verify.Profit != 0 && !almostEqual(verify.Profit, actual.Profit) {
+				mismatch = true
+			}
+			if verify.Margin != 0 && !almostEqual(verify.Margin, actual.Margin) {
+				mismatch = true
+			}
+			if mismatch {
+				quantity := float64(actual.Quantity)
+				corrections = append(corrections, fmt.Sprintf(
+					"เมนู %s, ขายได้ %d จาน, รายได้ %.2f บาท, ต้นทุน %.2f บาท, กำไร %.2f บาท, Margin %.2f%%, ต้นทุนเฉลี่ยต่อจาน %.2f บาท, กำไรเฉลี่ยต่อจาน %.2f บาท",
+					actual.MenuName,
+					actual.Quantity,
+					actual.Revenue,
+					actual.Cost,
+					actual.Profit,
+					actual.Margin,
+					actual.Cost/quantity,
+					actual.Profit/quantity,
+				))
+			}
+		}
+	case AIToolGetLowStockIngredients:
+		actualOut := snapshot.InventorySummary.OutItems
+		actualLow := snapshot.InventorySummary.LowItems
+		mismatch := false
+		if verify.LowStockCount != 0 && verify.LowStockCount != actualLow {
+			mismatch = true
+		}
+		if verify.OutOfStockCount != 0 && verify.OutOfStockCount != actualOut {
+			mismatch = true
+		}
+		if mismatch {
+			corrections = append(corrections, fmt.Sprintf(
+				"วัตถุดิบใกล้หมด %d รายการ, หมดสต็อก %d รายการ",
+				actualLow,
+				actualOut,
+			))
+		}
+	case AIToolGetTopSellingMenus:
+		if len(snapshot.TopMenuItems) > 0 {
+			actual := snapshot.TopMenuItems[0]
+			mismatch := false
+			if verify.TopMenuName != "" && verify.TopMenuName != actual.MenuName {
+				mismatch = true
+			}
+			if verify.TopMenuQuantity != 0 && verify.TopMenuQuantity != int(actual.Quantity) {
+				mismatch = true
+			}
+			if mismatch {
+				corrections = append(corrections, fmt.Sprintf(
+					"%s ขายได้ %d จาน",
+					actual.MenuName,
+					actual.Quantity,
+				))
+			}
+		}
+	case AIToolGetInventoryValuation:
+		actualTotal := snapshot.InventorySummary.TotalItems
+		actualVal := snapshot.InventorySummary.Value
+		mismatch := false
+		if verify.TotalItems != 0 && verify.TotalItems != actualTotal {
+			mismatch = true
+		}
+		if verify.TotalValue != 0 && !almostEqual(verify.TotalValue, actualVal) {
+			mismatch = true
+		}
+		if mismatch {
+			corrections = append(corrections, fmt.Sprintf(
+				"ทั้งหมด %d รายการ, มูลค่ารวม %.2f บาท",
+				actualTotal,
+				actualVal,
+			))
+		}
+	}
+
+	if len(corrections) > 0 {
+		return fmt.Sprintf("%s\n\n*(หมายเหตุความถูกต้อง: ค่าที่แสดงในบทวิเคราะห์คลาดเคลื่อนจากฐานข้อมูล จริงคือ: %s)*", answer, strings.Join(corrections, "\n"))
+	}
+	return answer
+}
+
+func almostEqual(a, b float64) bool {
+	diff := a - b
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff < 0.05
 }

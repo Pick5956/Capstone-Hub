@@ -215,3 +215,164 @@ func TestInventoryValuationToolFormatsCorrectly(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanAndParseJSONResponse(t *testing.T) {
+	rawMarkdown := "```json\n{\n  \"answer\": \"ทดสอบ\",\n  \"verify\": {\n    \"lowest_margin_menu_name\": \"ข้าวผัดปู\"\n  }\n}\n```"
+	res, err := cleanAndParseJSONResponse(rawMarkdown)
+	if err != nil {
+		t.Fatalf("Failed to parse markdown wrapped JSON: %v", err)
+	}
+	if res.Answer != "ทดสอบ" || res.Verify.LowestMarginMenuName != "ข้าวผัดปู" {
+		t.Fatalf("Incorrect parsed values: %+v", res)
+	}
+
+	rawClean := "{\n  \"answer\": \"ทดสอบที่สอง\",\n  \"verify\": {\n    \"quantity\": 12\n  }\n}"
+	res2, err := cleanAndParseJSONResponse(rawClean)
+	if err != nil {
+		t.Fatalf("Failed to parse clean JSON: %v", err)
+	}
+	if res2.Answer != "ทดสอบที่สอง" || res2.Verify.Quantity != 12 {
+		t.Fatalf("Incorrect parsed values: %+v", res2)
+	}
+}
+
+func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
+	svc := &AIService{}
+	snapshot := AISnapshot{
+		LowMarginMenus: []repository.AIMenuMarginSummary{{
+			MenuName: "ข้าวผัดปู",
+			Quantity: 20,
+			Revenue:  1900.0,
+			Cost:     1250.0,
+			Profit:   650.0,
+			Margin:   34.21,
+		}},
+	}
+	result := AIToolResult{
+		Tool: AIToolGetLowestMarginMenu,
+	}
+
+	// Case 1: Exact matching numbers -> No correction notice
+	responseExact := AIFinalJSONResponse{
+		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 34.21% มีต้นทุน 1250.00 บาท",
+		Verify: AIVerifyPayload{
+			LowestMarginMenuName: "ข้าวผัดปู",
+			Quantity:             20,
+			Revenue:              1900.0,
+			Cost:                 1250.0,
+			Profit:               650.0,
+			Margin:               34.21,
+		},
+	}
+	finalAnswer := svc.validateAndIntercept(responseExact, result, snapshot)
+	if strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
+		t.Fatalf("Expected no correction notice for exact matches, got: %s", finalAnswer)
+	}
+
+	// Case 2: Hallucinated numbers -> Append correction notice
+	responseHallucinated := AIFinalJSONResponse{
+		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 45% มีต้นทุน 1500 บาท",
+		Verify: AIVerifyPayload{
+			LowestMarginMenuName: "ข้าวผัดปู",
+			Quantity:             20,
+			Revenue:              1900.0,
+			Cost:                 1500.0, // Hallucinated cost
+			Profit:               650.0,
+			Margin:               45.0, // Hallucinated margin
+		},
+	}
+	finalAnswer2 := svc.validateAndIntercept(responseHallucinated, result, snapshot)
+	if !strings.Contains(finalAnswer2, "หมายเหตุความถูกต้อง") {
+		t.Fatal("Expected correction notice for hallucinated cost and margin, but none found")
+	}
+	for _, expected := range []string{"เมนู ข้าวผัดปู", "ต้นทุน 1250.00", "Margin 34.21%"} {
+		if !strings.Contains(finalAnswer2, expected) {
+			t.Errorf("Expected correction to mention %q in response: %s", expected, finalAnswer2)
+		}
+	}
+}
+
+func TestValidationInterceptorCorrectsLowStockHallucinations(t *testing.T) {
+	svc := &AIService{}
+	snapshot := AISnapshot{
+		InventorySummary: AIInventorySummary{
+			OutItems: 3,
+			LowItems: 5,
+		},
+	}
+	result := AIToolResult{
+		Tool: AIToolGetLowStockIngredients,
+	}
+
+	// Mismatched count -> correction notice
+	response := AIFinalJSONResponse{
+		Answer: "มีสินค้าใกล้หมด 2 รายการ และหมดสต็อก 1 รายการ",
+		Verify: AIVerifyPayload{
+			LowStockCount:   2,
+			OutOfStockCount: 1,
+		},
+	}
+	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
+	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
+		t.Fatal("Expected correction notice for stock counts, but none found")
+	}
+	if !strings.Contains(finalAnswer, "วัตถุดิบใกล้หมด 5 รายการ, หมดสต็อก 3 รายการ") {
+		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	}
+}
+
+func TestValidationInterceptorCorrectsTopSellingHallucinations(t *testing.T) {
+	svc := &AIService{}
+	snapshot := AISnapshot{
+		TopMenuItems: []repository.AIMenuSummary{{
+			MenuName: "ต้มยำกุ้ง",
+			Quantity: 45,
+		}},
+	}
+	result := AIToolResult{
+		Tool: AIToolGetTopSellingMenus,
+	}
+
+	response := AIFinalJSONResponse{
+		Answer: "เมนูขายดีอันดับหนึ่งคือ ข้าวผัดปู ขายได้ 50 จาน",
+		Verify: AIVerifyPayload{
+			TopMenuName:     "ข้าวผัดปู",
+			TopMenuQuantity: 50,
+		},
+	}
+	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
+	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
+		t.Fatal("Expected correction notice for top seller, but none found")
+	}
+	if !strings.Contains(finalAnswer, "ต้มยำกุ้ง ขายได้ 45 จาน") {
+		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	}
+}
+
+func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testing.T) {
+	svc := &AIService{}
+	snapshot := AISnapshot{
+		InventorySummary: AIInventorySummary{
+			TotalItems: 42,
+			Value:      15450.50,
+		},
+	}
+	result := AIToolResult{
+		Tool: AIToolGetInventoryValuation,
+	}
+
+	response := AIFinalJSONResponse{
+		Answer: "มูลค่าคลังสินค้ารวม 12000 บาท มีวัตถุดิบ 35 รายการ",
+		Verify: AIVerifyPayload{
+			TotalItems: 35,
+			TotalValue: 12000.0,
+		},
+	}
+	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
+	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
+		t.Fatal("Expected correction notice for valuation, but none found")
+	}
+	if !strings.Contains(finalAnswer, "ทั้งหมด 42 รายการ, มูลค่ารวม 15450.50 บาท") {
+		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	}
+}
