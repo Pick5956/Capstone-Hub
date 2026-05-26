@@ -91,3 +91,132 @@ func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T)
 		}
 	}
 }
+
+func TestResolveLocalTaskMapsLowStockParaphrasesToReadOnlyTool(t *testing.T) {
+	for _, question := range []string{
+		"วัตถุดิบอะไรใกล้หมดบ้าง",
+		"ของชิ้นไหนเสี่ยงหมด",
+		"what is low in stock?",
+	} {
+		route, ok := resolveLocalTask(question)
+		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetLowStockIngredients {
+			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want low-stock tool", question, route, ok)
+		}
+	}
+}
+
+func TestResolveLocalTaskMapsTopSellingParaphrasesToReadOnlyTool(t *testing.T) {
+	for _, question := range []string{
+		"เมนูขายดีที่สุดคืออะไร",
+		" popular menus ",
+		"เมนูยอดนิยมมีอะไรบ้าง",
+	} {
+		route, ok := resolveLocalTask(question)
+		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetTopSellingMenus {
+			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want top-selling tool", question, route, ok)
+		}
+	}
+}
+
+func TestResolveLocalTaskMapsInventoryValuationParaphrasesToReadOnlyTool(t *testing.T) {
+	for _, question := range []string{
+		"มูลค่าคลังสินค้ามีกี่บาท",
+		"how much is the inventory worth?",
+		"มูลค่ารวมสต็อก",
+	} {
+		route, ok := resolveLocalTask(question)
+		if !ok || route.Task != AITaskRetrieveFact || route.Tool != AIToolGetInventoryValuation {
+			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want inventory-valuation tool", question, route, ok)
+		}
+	}
+}
+
+func TestLowStockToolFormatsCorrectly(t *testing.T) {
+	snapshot := AISnapshot{
+		StockRisks: []AIStockRisk{
+			{
+				Name:            "ไข่ไก่",
+				Status:          "low",
+				Stock:           10.0,
+				MinStock:        30.0,
+				Unit:            "ฟอง",
+				RestockEstimate: 50.0,
+			},
+			{
+				Name:            "เนื้อหมู",
+				Status:          "out",
+				Stock:           0.0,
+				MinStock:        5.0,
+				Unit:            "กก.",
+				RestockEstimate: 10.0,
+			},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetLowStockIngredients, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("low stock tool should produce an answer")
+	}
+	for _, expected := range []string{"ไข่ไก่", "ใกล้หมด ⚠️", "เนื้อหมู", "หมดสต็อก ❌", "แนะนำเติมเพิ่ม: **10.00** กก."} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("low stock answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestTopSellingToolFormatsCorrectly(t *testing.T) {
+	snapshot := AISnapshot{
+		TopMenuItems: []repository.AIMenuSummary{
+			{
+				MenuName: "ข้าวผัดปู",
+				Quantity: 50,
+				Revenue:  4750.0,
+			},
+			{
+				MenuName: "ต้มยำกุ้ง",
+				Quantity: 20,
+				Revenue:  3800.0,
+			},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetTopSellingMenus, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("top selling tool should produce an answer")
+	}
+	for _, expected := range []string{"1. **ข้าวผัดปู**", "50 จาน", "ราคาเฉลี่ย 95.00 บาท", "2. **ต้มยำกุ้ง**", "20 จาน"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("top selling answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestInventoryValuationToolFormatsCorrectly(t *testing.T) {
+	snapshot := AISnapshot{
+		InventorySummary: AIInventorySummary{
+			TotalItems: 42,
+			OutItems:   3,
+			LowItems:   5,
+			Value:      15450.50,
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetInventoryValuation, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("inventory valuation tool should produce an answer")
+	}
+	for _, expected := range []string{"จำนวนรายการวัตถุดิบทั้งหมด:** 42 รายการ", "วัตถุดิบที่หมดสต็อก:** 3 รายการ", "มูลค่าคลังสินค้ารวม:** **15450.50** บาท"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("inventory valuation answer is missing %q: %s", expected, answer)
+		}
+	}
+}

@@ -22,7 +22,10 @@ const (
 type AIToolName string
 
 const (
-	AIToolGetLowestMarginMenu AIToolName = "get_lowest_margin_menu"
+	AIToolGetLowestMarginMenu    AIToolName = "get_lowest_margin_menu"
+	AIToolGetLowStockIngredients AIToolName = "get_low_stock_ingredients"
+	AIToolGetTopSellingMenus     AIToolName = "get_top_selling_menus"
+	AIToolGetInventoryValuation  AIToolName = "get_inventory_valuation"
 )
 
 type AITaskRoute struct {
@@ -31,13 +34,25 @@ type AITaskRoute struct {
 }
 
 type AIToolResult struct {
-	Tool             AIToolName
-	LowestMarginMenu *repository.AIMenuMarginSummary
+	Tool                AIToolName
+	LowestMarginMenu    *repository.AIMenuMarginSummary
+	LowStockIngredients []AIStockRisk
+	TopSellingMenus     []repository.AIMenuSummary
+	InventoryValuation  *AIInventorySummary
 }
 
 func resolveLocalTask(question string) (AITaskRoute, bool) {
 	if requestsLowestMarginFact(question) {
 		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetLowestMarginMenu}, true
+	}
+	if requestsLowStockFact(question) {
+		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetLowStockIngredients}, true
+	}
+	if requestsTopSellingFact(question) {
+		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetTopSellingMenus}, true
+	}
+	if requestsInventoryValuationFact(question) {
+		return AITaskRoute{Task: AITaskRetrieveFact, Tool: AIToolGetInventoryValuation}, true
 	}
 	if requestsMarginConceptExplanation(question) {
 		return AITaskRoute{Task: AITaskExplainConcept}, true
@@ -46,6 +61,46 @@ func resolveLocalTask(question string) (AITaskRoute, bool) {
 		return AITaskRoute{Task: AITaskRecommendAction}, true
 	}
 	return AITaskRoute{}, false
+}
+
+func requestsLowStockFact(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	for _, phrase := range []string{
+		"ใกล้หมด", "เสี่ยงหมด", "หมดสต็อก", "หมดสต๊อก", "ของหมด", "สต็อกเหลือน้อย", "สต๊อกเหลือน้อย", "ของใกล้หมด",
+		"low stock", "out of stock", "running out", "running low", "depleted", "low in stock",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestsTopSellingFact(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	for _, phrase := range []string{
+		"ขายดี", "ขายดีที่สุด", "เมนูยอดฮิต", "เมนูยอดนิยม", "รายการยอดนิยม",
+		"best seller", "top seller", "popular menu", "selling well", "top selling",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestsInventoryValuationFact(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	for _, phrase := range []string{
+		"มูลค่าสต็อก", "มูลค่าสต๊อก", "มูลค่าคลัง", "มูลค่าสินค้าคงเหลือ", "มูลค่ารวมคลัง", "มูลค่าคลังสินค้า",
+		"มูลค่ารวมสต็อก", "มูลค่ารวมสต๊อก", "รวมสต็อก", "รวมสต๊อก",
+		"inventory value", "stock valuation", "value of stock", "inventory worth", "how much is my stock worth",
+	} {
+		if strings.Contains(normalized, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 func requestsMarginConceptExplanation(question string) bool {
@@ -88,6 +143,12 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot) (AIToolResult, er
 		}
 		menu := snapshot.LowMarginMenus[0]
 		return AIToolResult{Tool: tool, LowestMarginMenu: &menu}, nil
+	case AIToolGetLowStockIngredients:
+		return AIToolResult{Tool: tool, LowStockIngredients: snapshot.StockRisks}, nil
+	case AIToolGetTopSellingMenus:
+		return AIToolResult{Tool: tool, TopSellingMenus: snapshot.TopMenuItems}, nil
+	case AIToolGetInventoryValuation:
+		return AIToolResult{Tool: tool, InventoryValuation: &snapshot.InventorySummary}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
@@ -111,6 +172,64 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			menu.Margin,
 			menu.Cost/quantity,
 			menu.Profit/quantity,
+		), true
+
+	case AIToolGetLowStockIngredients:
+		ingredients := result.LowStockIngredients
+		if len(ingredients) == 0 {
+			return "ปัจจุบันระบบตรวจไม่พบสินค้าคลังที่เสี่ยงหมดหรือหมดสต็อกครับ การจัดการคลังวัตถุดิบทำได้ดีเยี่ยมมากครับ! 👍", true
+		}
+		var sb strings.Builder
+		sb.WriteString("รายการวัตถุดิบที่ใกล้หมดหรือหมดสต็อกมีดังนี้ครับ:\n\n")
+		for _, item := range ingredients {
+			statusStr := "ใกล้หมด ⚠️"
+			if item.Status == "out" {
+				statusStr = "หมดสต็อก ❌"
+			}
+			sb.WriteString(fmt.Sprintf("- **%s** (%s)\n  • สต็อกปัจจุบัน: %.2f %s (เกณฑ์ขั้นต่ำ: %.2f %s)\n  • แนะนำเติมเพิ่ม: **%.2f** %s\n",
+				item.Name, statusStr, item.Stock, item.Unit, item.MinStock, item.Unit, item.RestockEstimate, item.Unit))
+		}
+		sb.WriteString("\nแนะนำให้ทำการสั่งซื้อวัตถุดิบเพื่อป้องกันการขาดแคลนและรักษาความต่อเนื่องในการเสิร์ฟอาหารครับ")
+		return sb.String(), true
+
+	case AIToolGetTopSellingMenus:
+		menus := result.TopSellingMenus
+		if len(menus) == 0 {
+			return "ในช่วง 14 วันที่ผ่านมาร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("เมนูที่ขายดีที่สุดในช่วงวิเคราะห์มีดังนี้ครับ:\n\n")
+		limit := len(menus)
+		if limit > 5 {
+			limit = 5
+		}
+		for i := 0; i < limit; i++ {
+			menu := menus[i]
+			avgPrice := 0.0
+			if menu.Quantity > 0 {
+				avgPrice = menu.Revenue / float64(menu.Quantity)
+			}
+			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • จำนวนที่ขายได้: %d จาน\n  • รายได้รวม: %.2f บาท (ราคาเฉลี่ย %.2f บาท/จาน)\n",
+				i+1, menu.MenuName, menu.Quantity, menu.Revenue, avgPrice))
+		}
+		return sb.String(), true
+
+	case AIToolGetInventoryValuation:
+		val := result.InventoryValuation
+		if val == nil {
+			return "ไม่พบข้อมูลสรุปมูลค่าคลังสินค้าคงเหลือในระบบครับ", true
+		}
+		return fmt.Sprintf(
+			"สรุปมูลค่าคลังสินค้าคงเหลือในปัจจุบันครับ:\n\n"+
+				"- **จำนวนรายการวัตถุดิบทั้งหมด:** %d รายการ\n"+
+				"- **วัตถุดิบที่หมดสต็อก:** %d รายการ\n"+
+				"- **วัตถุดิบที่เหลือน้อย:** %d รายการ\n"+
+				"- **มูลค่าคลังสินค้ารวม:** **%.2f** บาท\n\n"+
+				"หากต้องการเช็กรายชื่อวัตถุดิบที่เหลือน้อย สามารถถามว่า \"มีวัตถุดิบอะไรใกล้หมดบ้าง\" ได้เลยครับ",
+			val.TotalItems,
+			val.OutItems,
+			val.LowItems,
+			val.Value,
 		), true
 	}
 	return "", false
