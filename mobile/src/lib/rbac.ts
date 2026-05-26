@@ -17,7 +17,7 @@ const fallbackRolePermissions: Record<string, Permission[]> = {
     'update_order_status',
   ],
   cashier: ['view_dashboard', 'take_payment', 'view_orders', 'view_tables'],
-  waiter: ['view_dashboard', 'take_order', 'take_payment', 'manage_table', 'view_menu', 'view_orders'],
+  waiter: ['view_dashboard', 'take_order', 'take_payment', 'view_tables', 'view_menu', 'view_orders'],
   chef: ['view_kitchen', 'update_order_status', 'view_menu', 'view_inventory'],
 };
 

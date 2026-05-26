@@ -12,28 +12,21 @@ import (
 func Authorizes() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		clientToken := c.Request.Header.Get("Authorization")
-		if clientToken == "" {
-			// Try to get token from query parameter (for WebSocket)
-			clientToken = c.Query("token")
-		}
-
-		if clientToken == "" {
+		authHeader := strings.TrimSpace(c.Request.Header.Get("Authorization"))
+		if authHeader == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No Authorization header provided"})
 			return
 		}
 
-		extractedToken := strings.Split(clientToken, "Bearer ")
-		if len(extractedToken) == 2 {
-			clientToken = strings.TrimSpace(extractedToken[1])
-		} else {
-			// If not bearer format, maybe it's just the token (common in query param)
-			if len(extractedToken) == 1 && c.Query("token") != "" {
-				clientToken = strings.TrimSpace(extractedToken[0])
-			} else {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Incorrect Format of Authorization Token"})
-				return
-			}
+		clientToken, ok := strings.CutPrefix(authHeader, "Bearer ")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Incorrect Format of Authorization Token"})
+			return
+		}
+		clientToken = strings.TrimSpace(clientToken)
+		if clientToken == "" || strings.ContainsAny(clientToken, " \t\r\n") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Incorrect Format of Authorization Token"})
+			return
 		}
 
 		jwtWrapper := JwtWrapper{
@@ -43,7 +36,7 @@ func Authorizes() gin.HandlerFunc {
 
 		claims, err := jwtWrapper.ValidateToken(clientToken)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
 		}
 		c.Set("user_id", claims.UserID)
@@ -51,4 +44,3 @@ func Authorizes() gin.HandlerFunc {
 		c.Next()
 	}
 }
-

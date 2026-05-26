@@ -5,12 +5,37 @@ import (
 	"Project-M/routes"
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+const maxRequestBodyBytes int64 = 8 << 20
+
+func SecurityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Writer.Header().Set("Referrer-Policy", "no-referrer")
+		c.Writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+			c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		c.Next()
+	}
+}
+
+func RequestSizeLimit(maxBytes int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
+		}
+		c.Next()
+	}
+}
 
 func CORSMiddleware() gin.HandlerFunc {
 	allowedOrigins := configuredAllowedOrigins()
@@ -36,7 +61,7 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func isAllowedDevOrigin(origin string) bool {
-	if os.Getenv("GIN_MODE") == "release" {
+	if isReleaseMode() {
 		return false
 	}
 	parsed, err := url.Parse(origin)
@@ -60,6 +85,10 @@ func isAllowedDevOrigin(origin string) bool {
 	return ip.IsPrivate() || ip.IsLoopback()
 }
 
+func isReleaseMode() bool {
+	return gin.Mode() == gin.ReleaseMode || os.Getenv("GIN_MODE") == gin.ReleaseMode
+}
+
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 	config.ConnectionDB()
@@ -70,11 +99,17 @@ func main() {
 	config.SetupDatabase()
 
 	r := gin.Default()
+	r.MaxMultipartMemory = maxRequestBodyBytes
 	_ = r.SetTrustedProxies(nil)
+	r.Use(SecurityHeaders())
+	r.Use(RequestSizeLimit(maxRequestBodyBytes))
 	r.Use(CORSMiddleware())
 	r.Static("/uploads", "./uploads")
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
+	})
+	r.NoRoute(func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 	})
 
 	routes.SetupRoutes(r)
@@ -86,13 +121,16 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	r.Run(host + ":" + port)
+	if err := r.Run(host + ":" + port); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func configuredAllowedOrigins() map[string]bool {
-	origins := map[string]bool{
-		"http://localhost:3000": true,
-		"http://127.0.0.1:3000": true,
+	origins := map[string]bool{}
+	if !isReleaseMode() {
+		origins["http://localhost:3000"] = true
+		origins["http://127.0.0.1:3000"] = true
 	}
 
 	if frontendURL := strings.TrimRight(strings.TrimSpace(os.Getenv("FRONTEND_URL")), "/"); frontendURL != "" {

@@ -15,7 +15,7 @@ func SeedRoles(db *gorm.DB) {
 		{Name: "owner", Permissions: `["*"]`},
 		{Name: "manager", Permissions: `["view_dashboard","manage_menu","manage_table","manage_staff","manage_inventory","view_reports","manage_promotion","take_payment","view_orders","view_kitchen","update_order_status"]`},
 		{Name: "cashier", Permissions: `["view_dashboard","take_payment","view_orders","view_tables"]`},
-		{Name: "waiter", Permissions: `["view_dashboard","take_order","manage_table","view_menu","view_orders"]`},
+		{Name: "waiter", Permissions: `["view_dashboard","take_order","take_payment","view_tables","view_menu","view_orders"]`},
 		{Name: "chef", Permissions: `["view_kitchen","update_order_status","view_menu","view_inventory"]`},
 	}
 	for i := range roles {

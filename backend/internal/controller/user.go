@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -170,14 +169,9 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
 		return
 	}
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file must be 5MB or smaller"})
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image must be jpg, png, or webp"})
+	ext, err := validateImageUpload(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
