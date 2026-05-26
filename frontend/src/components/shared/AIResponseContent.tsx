@@ -1,12 +1,23 @@
 import React from "react";
+import katex from "katex";
 
 type AIResponseContentProps = {
   content: string;
   compact?: boolean;
 };
 
+function mathMarkup(expression: string, displayMode: boolean) {
+  return katex.renderToString(expression, {
+    displayMode,
+    throwOnError: false,
+    strict: "ignore",
+    trust: false,
+    output: "htmlAndMathml",
+  });
+}
+
 function inlineContent(text: string) {
-  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`)/g).filter(Boolean);
+  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\\\(.+?\\\))/g).filter(Boolean);
 
   return parts.map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -21,6 +32,15 @@ function inlineContent(text: string) {
         <code key={index} className="rounded bg-gray-200/70 px-1 py-0.5 text-[0.92em] dark:bg-gray-700">
           {part.slice(1, -1)}
         </code>
+      );
+    }
+    if (part.startsWith("\\(") && part.endsWith("\\)")) {
+      return (
+        <span
+          key={index}
+          className="inline-block max-w-full align-middle text-[0.98em]"
+          dangerouslySetInnerHTML={{ __html: mathMarkup(part.slice(2, -2), false) }}
+        />
       );
     }
     return <React.Fragment key={index}>{part}</React.Fragment>;
@@ -52,6 +72,38 @@ export default function AIResponseContent({ content, compact = false }: AIRespon
   for (let index = 0; index < lines.length; index += 1) {
     const trimmed = lines[index].trim();
     if (!trimmed) continue;
+
+    const inlineDisplayMath = trimmed.match(/^(?:\\\[|\$\$)([\s\S]*?)(?:\\\]|\$\$)$/);
+    if (inlineDisplayMath) {
+      blocks.push(
+        <div
+          key={`math-${index}`}
+          className={`overflow-x-auto rounded-lg bg-white/50 px-2 py-2 text-gray-900 dark:bg-gray-900/40 dark:text-gray-100 ${compact ? "text-[12px]" : "text-sm"}`}
+          dangerouslySetInnerHTML={{ __html: mathMarkup(inlineDisplayMath[1].trim(), true) }}
+        />
+      );
+      continue;
+    }
+
+    if (trimmed === "\\[" || trimmed === "$$") {
+      const close = trimmed === "\\[" ? "\\]" : "$$";
+      const expression: string[] = [];
+      while (index + 1 < lines.length && lines[index + 1].trim() !== close) {
+        expression.push(lines[index + 1]);
+        index += 1;
+      }
+      if (index + 1 < lines.length) {
+        index += 1;
+      }
+      blocks.push(
+        <div
+          key={`math-${index}`}
+          className={`overflow-x-auto rounded-lg bg-white/50 px-2 py-2 text-gray-900 dark:bg-gray-900/40 dark:text-gray-100 ${compact ? "text-[12px]" : "text-sm"}`}
+          dangerouslySetInnerHTML={{ __html: mathMarkup(expression.join("\n").trim(), true) }}
+        />
+      );
+      continue;
+    }
 
     const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {

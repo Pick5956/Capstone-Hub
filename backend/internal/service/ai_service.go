@@ -58,6 +58,8 @@ type AIConversationMessage struct {
 type AIAskResponse struct {
 	Answer   string     `json:"answer"`
 	Intent   AIIntent   `json:"intent"`
+	Task     AITask     `json:"task,omitempty"`
+	Tool     AIToolName `json:"tool,omitempty"`
 	Model    string     `json:"model"`
 	Snapshot AISnapshot `json:"snapshot"`
 }
@@ -285,8 +287,19 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		}
 	}
 
-	// Factual margin ranking and explicit business decisions must reach readiness checks deterministically.
-	if requestsBusinessDecision(question) || requestsLowestMarginFact(question) {
+	taskRoute, taskResolved := resolveLocalTask(question)
+	if answer, ok := localConceptAnswer(taskRoute); ok {
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   AIIntentChat,
+			Task:     taskRoute.Task,
+			Model:    "local-knowledge",
+			Snapshot: AISnapshot{},
+		}, nil
+	}
+
+	// Read-only tools and explicit business decisions must reach readiness checks deterministically.
+	if taskResolved && taskRoute.Task != AITaskExplainConcept {
 		intent = AIIntentAnalysis
 		locallyResolved = true
 	}
@@ -303,6 +316,9 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		if err != nil {
 			fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", err)
 		}
+	}
+	if intent == AIIntentAnalysis && taskRoute.Task == "" {
+		taskRoute.Task = AITaskAnalyzeData
 	}
 
 	if answer, ok := localIntentAnswer(intent); ok {
@@ -358,17 +374,26 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return &AIAskResponse{
 			Answer:   answer,
 			Intent:   intent,
+			Task:     taskRoute.Task,
 			Model:    "local-readiness-guardrail",
 			Snapshot: snapshot,
 		}, nil
 	}
-	if answer, summarized := localLowestMarginFactAnswer(question, snapshot); summarized {
-		return &AIAskResponse{
-			Answer:   answer,
-			Intent:   intent,
-			Model:    "local-analysis-summary",
-			Snapshot: snapshot,
-		}, nil
+	if taskRoute.Tool != "" {
+		result, err := executeReadOnlyTool(taskRoute.Tool, snapshot)
+		if err != nil {
+			return nil, err
+		}
+		if answer, answered := localToolAnswer(result); answered {
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   intent,
+				Task:     taskRoute.Task,
+				Tool:     taskRoute.Tool,
+				Model:    "local-tool",
+				Snapshot: snapshot,
+			}, nil
+		}
 	}
 	if len(groqKeys) == 0 && len(geminiKeys) == 0 {
 		return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
@@ -381,6 +406,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			return &AIAskResponse{
 				Answer:   answer,
 				Intent:   intent,
+				Task:     taskRoute.Task,
 				Model:    model,
 				Snapshot: snapshot,
 			}, nil
@@ -395,6 +421,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			return &AIAskResponse{
 				Answer:   answer,
 				Intent:   intent,
+				Task:     taskRoute.Task,
 				Model:    model,
 				Snapshot: snapshot,
 			}, nil
@@ -668,25 +695,14 @@ func requestsLowestMarginFact(question string) bool {
 }
 
 func localLowestMarginFactAnswer(question string, snapshot AISnapshot) (string, bool) {
-	if !requestsLowestMarginFact(question) || !snapshot.AnalysisReadiness.CanAnalyzeMargin || len(snapshot.LowMarginMenus) == 0 {
+	if !requestsLowestMarginFact(question) {
 		return "", false
 	}
-	menu := snapshot.LowMarginMenus[0]
-	if menu.Quantity <= 0 {
+	result, err := executeReadOnlyTool(AIToolGetLowestMarginMenu, snapshot)
+	if err != nil {
 		return "", false
 	}
-	quantity := float64(menu.Quantity)
-	return fmt.Sprintf(
-		"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
-		menu.MenuName,
-		menu.Quantity,
-		menu.Revenue,
-		menu.Cost,
-		menu.Profit,
-		menu.Margin,
-		menu.Cost/quantity,
-		menu.Profit/quantity,
-	), true
+	return localToolAnswer(result)
 }
 
 func (s *AIService) executeClassifierGroq(question string, apiKey string) (string, error) {

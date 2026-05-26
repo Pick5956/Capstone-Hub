@@ -220,8 +220,9 @@ func TestAPILowestMarginQuestionReturnsDeterministicSummary(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode lowest margin API response: %v", err)
 	}
-	if response.Intent != service.AIIntentAnalysis || response.Model != "local-analysis-summary" {
-		t.Fatalf("lowest margin API model/intent = %q/%q, want deterministic local summary", response.Model, response.Intent)
+	if response.Intent != service.AIIntentAnalysis || response.Task != service.AITaskRetrieveFact ||
+		response.Tool != service.AIToolGetLowestMarginMenu || response.Model != "local-tool" {
+		t.Fatalf("lowest margin API route = model %q, intent %q, task %q, tool %q; want deterministic read-only tool", response.Model, response.Intent, response.Task, response.Tool)
 	}
 	if !response.Snapshot.AnalysisReadiness.CanAnalyzeMargin || !response.Snapshot.AnalysisReadiness.CanRecommendActions {
 		t.Fatalf("lowest margin API readiness = %+v, want prepared data readiness", response.Snapshot.AnalysisReadiness)
@@ -269,7 +270,7 @@ func TestLiveAPIExplanatoryAnalysisAvoidsUnrequestedBusinessChanges(t *testing.T
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode explanatory analytical API response: %v", err)
 	}
-	if response.Model == "" || response.Model == "local-analysis-summary" || response.Model == "local-readiness-guardrail" {
+	if response.Model == "" || response.Model == "local-tool" || response.Model == "local-analysis-summary" || response.Model == "local-readiness-guardrail" {
 		t.Fatalf("explanatory analytical API model = %q, want live provider", response.Model)
 	}
 	if !strings.Contains(response.Answer, expected.LowestMarginMenu) {

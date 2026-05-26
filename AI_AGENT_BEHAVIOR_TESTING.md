@@ -1,4 +1,4 @@
-# แนวทางทดสอบ AI ผู้ช่วยร้านอาหาร (P0-1 ถึง P0-7)
+# แนวทางทดสอบ AI ผู้ช่วยร้านอาหาร (P0-1 ถึง P0-7 และ P1-0)
 
 เอกสารนี้กำหนด guardrail ของ AI ผู้ช่วย เพื่อให้การปรับ prompt, intent, endpoint หรือ action ในอนาคตไม่ทำให้พฤติกรรมที่ผู้ใช้คาดหวังเสียไป โดยแยกการทดสอบเป็นชั้นที่รันได้สม่ำเสมอโดยไม่เรียกโมเดลจริง และชั้นที่ควรพัฒนาต่อเพื่อประเมิน AI จริง
 
@@ -24,6 +24,8 @@
 | `backend/internal/service/testdata/ai_live_intent_cases.json` | ชุดโจทย์ประเมิน intent ด้วยโมเดลจริงที่เพิ่มแก้ได้โดยไม่แก้โค้ดทดสอบ |
 | `backend/internal/service/ai_service_db_eval_test.go` | ตรวจ snapshot จาก PostgreSQL จริงแบบ read-only และประเมินคำตอบวิเคราะห์กับ provider จริงแบบ opt-in |
 | `backend/internal/service/ai_service_readiness_test.go` | ตรวจ readiness และ guardrail เมื่อร้านไม่มีข้อมูล ต้นทุนไม่ครบ หรือข้อมูลพร้อมวิเคราะห์ |
+| `backend/internal/service/ai_tasks.go` | กำหนด task/tool contract แรก แยกคำถามความรู้ออกจากการอ่านข้อมูลร้าน และเรียก read-only tool สำหรับข้อเท็จจริง Margin |
+| `backend/internal/service/ai_tasks_test.go` | ตรวจ P1-0 ว่าคำถามนิยามไม่โหลด snapshot และคำถาม Margin ต่ำสุดหลายสำนวนถูกส่งเข้า tool ที่ถูกต้อง |
 | `backend/internal/service/ai_service_readiness_db_test.go` | สร้างร้าน scenario ใน transaction แล้ว rollback เพื่อตรวจ readiness กับ query ฐานข้อมูลจริงโดยไม่ทิ้งข้อมูลทดสอบ |
 | `backend/internal/controller/ai_api_eval_test.go` | ยิง endpoint AI จริงสำหรับ local guardrail แบบไม่ใช้ token และ analytical answer แบบเรียก provider เมื่อเปิด flag |
 | `backend/internal/service/testdata/ai_db_snapshot_expectations.json` | ค่าคาดหวังของชุดข้อมูล demo สำหรับวัด low stock และเมนู Margin ต่ำ |
@@ -258,6 +260,32 @@ go test -tags=ai_eval ./internal/controller -run TestAPIReadinessGuardrailReturn
 Remove-Item Env:AI_DB_SCENARIO_EVAL_ENABLED
 ```
 
+## P1-0: Analytical Tool Foundation
+
+ขั้นนี้เริ่มเปลี่ยนจากการส่งข้อมูลร้านทั้งหมดให้ model ตีความเอง ไปเป็นการระบุชนิดงานและเครื่องมืออ่านข้อมูลที่ backend ควบคุมได้:
+
+- `explain_concept`: คำถามความรู้ทั่วไป เช่น `มาร์จิ้นคืออะไร` ตอบโดยไม่โหลด snapshot ร้าน ไม่เรียก provider และไม่เสนอการสั่งซื้อหรือปรับธุรกิจ
+- `retrieve_fact`: คำถามข้อเท็จจริง เช่น `เมนูไหนมี Margin ต่ำที่สุด` ถูก route เข้า read-only tool `get_lowest_margin_menu`
+- `recommend_action`: คำขอที่ต้องตัดสินใจ เช่น การขึ้นราคา ถอดเมนู หรือสั่งซื้อวัตถุดิบ ยังต้องผ่าน readiness guardrail เดิม
+- `analyze_data`: คำถามวิเคราะห์กว้างที่ยังต้องใช้ model จะถูกระบุ task ไว้เพื่อรองรับ tool เพิ่มในรอบต่อไป
+
+tool ตัวแรกยังใช้ snapshot ที่มี guardrail และ response contract เดิมร่วมกับหน้าเว็บ เพื่อไม่ทำให้ panel สถิติเปลี่ยนพฤติกรรมโดยกะทันหัน จุดสำคัญของรอบนี้คือค่าที่รายงานถูกเลือกจากผลคำนวณ backend และมี metadata `task` / `tool` ให้ตรวจสอบเส้นทางได้
+
+เคสอัตโนมัติที่เพิ่ม:
+
+| คำถาม | เส้นทางที่ต้องได้ | พฤติกรรมที่ห้ามเกิด |
+| --- | --- | --- |
+| `มาร์จิ้นคืออะไร` | `task = explain_concept`, `model = local-knowledge` | โหลด snapshot หรือเสนอเพิ่มสต็อก |
+| `Margin หมายถึงอะไร` / `what is margin?` | `task = explain_concept` | เข้า analytical flow จากคำว่า Margin อย่างเดียว |
+| `เมนูไหนมี Margin ต่ำที่สุด` | `task = retrieve_fact`, `tool = get_lowest_margin_menu` | ให้ model เดาตัวเลขหรือเสนอปรับราคาเอง |
+| `จานไหนมาร์จิ้นน้อยที่สุด` / `what is the lowest margin menu?` | tool เดียวกัน | ผูกกับประโยคไทยรูปเดียวเท่านั้น |
+
+ยังไม่รวมใน P1-0 รอบแรก:
+
+- ให้ model เลือก tool ผ่าน native function calling สำหรับคำถามภาษากว้างมากขึ้น
+- tool อ่านยอดขาย สต็อก และเมนูขายดีเพิ่มเติม
+- multi-turn เช่น `แล้วเมื่อวานล่ะ` ที่ต้องสืบต่อบริบทจากคำถามก่อนหน้า
+
 คำสั่งตรวจคำถาม Margin ต่ำที่สุดแบบ deterministic และไม่ใช้ token:
 
 ```powershell
@@ -293,7 +321,7 @@ Remove-Item Env:AI_EVAL_ENABLED
 
 การแก้ไขและผลยืนยัน:
 
-- เพิ่ม `local-analysis-summary` สำหรับคำถามหาเมนู Margin ต่ำสุดเมื่อข้อมูลพร้อม โดยคำนวณยอดรวมและค่าเฉลี่ยต่อจานจาก snapshot โดยตรง ไม่เรียก provider
+- เริ่มจาก `local-analysis-summary` สำหรับคำถามหาเมนู Margin ต่ำสุดเมื่อข้อมูลพร้อม และใน P1-0 เปลี่ยนเส้นทางนี้เป็น `local-tool` / `get_lowest_margin_menu` เพื่อระบุเครื่องมือที่คำนวณยอดรวมและค่าเฉลี่ยต่อจานจากข้อมูล backend โดยตรง ไม่เรียก provider
 - เพิ่ม regression test ผ่าน endpoint จริง ตรวจว่าคำตอบมี `ต้นทุนรวม` และ `ต้นทุนเฉลี่ยต่อจาน` ถูกต้อง พร้อมไม่แนะนำการเปลี่ยนแปลงธุรกิจเอง ผ่าน
 - เพิ่ม scope rule ใน analytical prompt สำหรับคำถามอธิบายแบบปลายเปิด ให้รายงานเฉพาะสิ่งที่ผู้ใช้ถาม และแยก aggregate total กับ per-item average ให้ชัด
 - Live API หลังปรับ prompt อนุญาตให้แนะนำการตรวจสอบข้อเท็จจริง เช่น ต้นทุนหรือส่วนลดเดิม แต่ไม่เสนอการเปลี่ยนราคา สร้างโปรโมชั่น ตั้ง KPI หรือเปลี่ยนสูตรเอง ผ่าน

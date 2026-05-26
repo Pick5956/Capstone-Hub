@@ -72,6 +72,8 @@ export type AIConversationMessage = {
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
+  task?: "explain_concept" | "retrieve_fact" | "analyze_data" | "recommend_action" | string;
+  tool?: "get_lowest_margin_menu" | string;
   model: string;
   snapshot: AISnapshot;
 };
