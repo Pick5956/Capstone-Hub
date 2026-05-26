@@ -11,6 +11,8 @@ func TestLocalIntent(t *testing.T) {
 		{question: "hello", want: AIIntentGreeting},
 		{question: "ทำอะไรได้บ้าง", want: AIIntentCapability},
 		{question: "rytyt", want: AIIntentUnclear},
+		{question: "asdfgh", want: AIIntentUnclear},
+		{question: "123123", want: AIIntentUnclear},
 	}
 
 	for _, tc := range cases {
@@ -45,9 +47,16 @@ func TestParseIntentFallsBackToAnalysis(t *testing.T) {
 }
 
 func TestUnclearInputPreservesKnownOperationalTerms(t *testing.T) {
-	for _, question := range []string{"menu", "stock", "sales", "margin", "price"} {
+	for _, question := range []string{"menu", "stock", "inventory", "sales", "report", "settings", "margin", "price"} {
 		if looksLikeUnclearInput(question) {
 			t.Fatalf("looksLikeUnclearInput(%q) = true; known operational terms should continue through normal routing", question)
 		}
+	}
+}
+
+func TestLocalIntentAnswerForUnclearInputOffersRecovery(t *testing.T) {
+	answer, ok := localIntentAnswer(AIIntentUnclear)
+	if !ok || answer == "" {
+		t.Fatal("localIntentAnswer(AIIntentUnclear) should provide a recovery message")
 	}
 }

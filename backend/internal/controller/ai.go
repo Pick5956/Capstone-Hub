@@ -11,13 +11,20 @@ import (
 )
 
 type AIController struct {
-	svc *service.AIService
+	svc AIOperationsService
+}
+
+type AIOperationsService interface {
+	AskOperations(restaurantID uint, req *service.AIAskRequest) (*service.AIAskResponse, error)
+	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 }
 
 func ProvideAIController(db *gorm.DB) *AIController {
-	return &AIController{
-		svc: service.ProvideAIService(repository.NewAIRepository(db)),
-	}
+	return NewAIController(service.ProvideAIService(repository.NewAIRepository(db)))
+}
+
+func NewAIController(svc AIOperationsService) *AIController {
+	return &AIController{svc: svc}
 }
 
 func (ctrl *AIController) AskOperations(c *gin.Context) {
