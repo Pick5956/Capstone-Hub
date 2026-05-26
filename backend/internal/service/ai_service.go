@@ -25,6 +25,7 @@ const (
 	AIIntentGreeting   AIIntent = "greeting"
 	AIIntentCapability AIIntent = "capabilities"
 	AIIntentChat       AIIntent = "conversation"
+	AIIntentUnclear    AIIntent = "unclear"
 	AIIntentOutOfScope AIIntent = "out_of_scope"
 )
 
@@ -173,6 +174,7 @@ func parseIntent(answer string) AIIntent {
 	}{
 		{label: "GREETING", intent: AIIntentGreeting},
 		{label: "CAPABILITIES", intent: AIIntentCapability},
+		{label: "UNCLEAR", intent: AIIntentUnclear},
 		{label: "CONVERSATION", intent: AIIntentChat},
 		{label: "OUT_OF_SCOPE", intent: AIIntentOutOfScope},
 		{label: "ANALYSIS", intent: AIIntentAnalysis},
@@ -192,9 +194,41 @@ func localIntent(question string) (AIIntent, bool) {
 		return AIIntentGreeting, true
 	case "ทำอะไรได้บ้าง", "ช่วยอะไรได้บ้าง", "คุณทำอะไรได้บ้าง", "what can you do", "help":
 		return AIIntentCapability, true
-	default:
-		return "", false
 	}
+	if looksLikeUnclearInput(normalized) {
+		return AIIntentUnclear, true
+	}
+	return "", false
+}
+
+func looksLikeUnclearInput(input string) bool {
+	if input == "" {
+		return false
+	}
+	knownSingleWords := map[string]bool{
+		"menu": true, "stock": true, "inventory": true, "sales": true,
+		"report": true, "reports": true, "settings": true, "profit": true,
+		"margin": true, "revenue": true, "orders": true, "kitchen": true,
+		"staff": true, "table": true, "tables": true, "price": true,
+	}
+	if knownSingleWords[input] {
+		return false
+	}
+	if strings.ContainsAny(input, " \t\n") || len([]rune(input)) > 24 {
+		return false
+	}
+	hasLetterOrDigit := false
+	for _, char := range input {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
+			hasLetterOrDigit = true
+			continue
+		}
+		if strings.ContainsRune("_-+=/\\", char) {
+			continue
+		}
+		return false
+	}
+	return hasLetterOrDigit
 }
 
 func localIntentAnswer(intent AIIntent) (string, bool) {
@@ -203,6 +237,8 @@ func localIntentAnswer(intent AIIntent) (string, bool) {
 		return "สวัสดีครับ วันนี้อยากดูยอดขาย เช็กสต๊อก หรือให้ช่วยหาเมนูในระบบครับ?", true
 	case AIIntentCapability:
 		return "ผมช่วยสรุปยอดขายและกำไร ตรวจวัตถุดิบเสี่ยงหมด วิเคราะห์เมนู และพาไปหน้าจัดการที่ต้องการได้ครับ ลองถามว่า \"เมนูไหนกำไรต่ำ\" หรือ \"พาไปหน้าตั้งค่าร้าน\" ได้เลย", true
+	case AIIntentUnclear:
+		return "ผมยังไม่เข้าใจคำขอนี้ครับ เลือกสิ่งที่ต้องการด้านล่าง หรือพิมพ์คำขอใหม่ได้เลย", true
 	case AIIntentOutOfScope:
 		return "เรื่องนี้อยู่นอกข้อมูลร้านที่ผมเข้าถึงครับ ผมช่วยดูยอดขาย กำไร สต๊อก เมนู หรือพาไปหน้าจัดการในระบบได้", true
 	default:
@@ -508,8 +544,9 @@ Reply with exactly one label:
 - ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
 - GREETING: a greeting only.
 - CAPABILITIES: asks what the assistant can do.
+- UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
 - OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other request that can be answered without live restaurant data, including unclear short messages.
+- CONVERSATION: any other clear request that can be answered without live restaurant data.
 
 User input:
 %s`, question)
@@ -566,8 +603,9 @@ Reply with exactly one label:
 - ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
 - GREETING: a greeting only.
 - CAPABILITIES: asks what the assistant can do.
+- UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
 - OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other request that can be answered without live restaurant data, including unclear short messages.
+- CONVERSATION: any other clear request that can be answered without live restaurant data.
 
 User input:
 %s`, question)

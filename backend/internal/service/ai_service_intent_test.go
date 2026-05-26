@@ -10,6 +10,7 @@ func TestLocalIntent(t *testing.T) {
 		{question: "สวัสดี", want: AIIntentGreeting},
 		{question: "hello", want: AIIntentGreeting},
 		{question: "ทำอะไรได้บ้าง", want: AIIntentCapability},
+		{question: "rytyt", want: AIIntentUnclear},
 	}
 
 	for _, tc := range cases {
@@ -35,7 +36,18 @@ func TestParseIntentFallsBackToAnalysis(t *testing.T) {
 	if got := parseIntent("CONVERSATION."); got != AIIntentChat {
 		t.Fatalf("parseIntent(CONVERSATION.) = %q, want %q", got, AIIntentChat)
 	}
+	if got := parseIntent("UNCLEAR"); got != AIIntentUnclear {
+		t.Fatalf("parseIntent(UNCLEAR) = %q, want %q", got, AIIntentUnclear)
+	}
 	if got := parseIntent("unexpected"); got != AIIntentAnalysis {
 		t.Fatalf("parseIntent(unexpected) = %q, want safe analysis fallback", got)
+	}
+}
+
+func TestUnclearInputPreservesKnownOperationalTerms(t *testing.T) {
+	for _, question := range []string{"menu", "stock", "sales", "margin", "price"} {
+		if looksLikeUnclearInput(question) {
+			t.Fatalf("looksLikeUnclearInput(%q) = true; known operational terms should continue through normal routing", question)
+		}
 	}
 }
