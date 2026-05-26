@@ -456,36 +456,7 @@ export default function AIOperationsFloatingChat() {
             filter: blur(26px);
           }
         }
-        @keyframes aiThinkingDotBounce {
-          0%, 80%, 100% {
-            transform: translateY(0);
-            opacity: 0.35;
-          }
-          40% {
-            transform: translateY(-5px);
-            opacity: 1;
-          }
-        }
-        .ai-thinking-dot {
-          display: inline-block;
-          height: 6px;
-          width: 6px;
-          border-radius: 9999px;
-          background: rgb(249 115 22);
-          animation: aiThinkingDotBounce 0.92s ease-in-out infinite;
-        }
-        .ai-thinking-dot:nth-child(2) {
-          animation-delay: 0.14s;
-        }
-        .ai-thinking-dot:nth-child(3) {
-          animation-delay: 0.28s;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .ai-thinking-dot {
-            animation: none;
-            opacity: 0.72;
-          }
-        }
+
         @keyframes inputGlow {
           0%, 100% { 
             box-shadow: 0 0 4px rgba(249, 115, 22, 0.25), 0 1px 2px rgba(0, 0, 0, 0.05); 
@@ -752,7 +723,7 @@ export default function AIOperationsFloatingChat() {
                   className="rounded-2xl bg-gray-100 px-3.5 py-3 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center shadow-sm leading-relaxed"
                 >
                   <span className="sr-only">{copy.thinking}</span>
-                  <span aria-hidden="true" className="flex items-center gap-1.5">
+                  <span aria-hidden="true" className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
                     <span className="ai-thinking-dot"></span>
                     <span className="ai-thinking-dot"></span>
                     <span className="ai-thinking-dot"></span>

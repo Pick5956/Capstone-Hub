@@ -462,3 +462,32 @@ select option {
   outline: none !important;
 }
 
+
+/* AI Thinking Indicator */
+.ai-thinking-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background-color: currentColor;
+  border-radius: 50%;
+  animation: ai-thinking-bounce 1.4s infinite ease-in-out both;
+}
+
+.ai-thinking-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.ai-thinking-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes ai-thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
