@@ -843,7 +843,7 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Tools:   s.getGroqTools(),
+		Tools:   nil,
 		Think:   false,
 		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
@@ -1399,7 +1399,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
-		Tools: s.getGeminiTools(),
+		Tools: nil,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -1526,7 +1526,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Tools: s.getGroqTools(),
+		Tools: nil,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
