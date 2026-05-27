@@ -43,8 +43,21 @@ type updateMemberRoleRequest struct {
 	RoleID uint `json:"role_id" binding:"required"`
 }
 
+type updateMemberPermissionsRequest struct {
+	UseRolePermissions bool     `json:"use_role_permissions"`
+	Permissions        []string `json:"permissions"`
+}
+
 func canManageRestaurantProfile(memberRoleName string) bool {
 	return memberRoleName == "owner" || memberRoleName == "manager"
+}
+
+func canManageStaff(c *gin.Context) bool {
+	member, ok := contextMember(c)
+	if !ok || member.Role == nil {
+		return false
+	}
+	return canManageRestaurantProfile(member.Role.Name) && memberCan(c, "manage_staff")
 }
 
 func contextUserID(c *gin.Context) (uint, bool) {
@@ -250,13 +263,13 @@ func (ctrl *RestaurantController) ListMembers(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
 
-	includeInactive := member.Role != nil && (member.Role.Name == "owner" || member.Role.Name == "manager")
+	includeInactive := canManageStaff(c)
 	members, err := ctrl.restaurantSvc.ListMembersWithStatus(restaurantID, includeInactive)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -329,6 +342,42 @@ func (ctrl *RestaurantController) UpdateMemberRole(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"member": member})
 }
 
+// PATCH /api/v1/restaurants/:id/members/:memberId/permissions
+func (ctrl *RestaurantController) UpdateMemberPermissions(c *gin.Context) {
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	restaurantID, err := parseIDParam(c, "id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	memberID, err := parseIDParam(c, "memberId")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var req updateMemberPermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var permissionsOverride *([]string)
+	if !req.UseRolePermissions {
+		permissionsOverride = &req.Permissions
+	}
+	member, err := ctrl.restaurantSvc.UpdateMemberPermissions(userID, restaurantID, memberID, permissionsOverride)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"member": member})
+}
+
 // GET /api/v1/restaurants/:id/audit-logs
 func (ctrl *RestaurantController) ListAuditLogs(c *gin.Context) {
 	userID, ok := contextUserID(c)
@@ -384,12 +433,12 @@ func (ctrl *RestaurantController) CreateInvitation(c *gin.Context) {
 		return
 	}
 
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || (member.Role.Name != "owner" && member.Role.Name != "manager") {
+	if !canManageStaff(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can invite"})
 		return
 	}
@@ -421,12 +470,12 @@ func (ctrl *RestaurantController) ListPendingInvitations(c *gin.Context) {
 		return
 	}
 
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || (member.Role.Name != "owner" && member.Role.Name != "manager") {
+	if !canManageStaff(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can list invitations"})
 		return
 	}
@@ -457,12 +506,12 @@ func (ctrl *RestaurantController) RevokeInvitation(c *gin.Context) {
 		return
 	}
 
-	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || (member.Role.Name != "owner" && member.Role.Name != "manager") {
+	if !canManageStaff(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can revoke"})
 		return
 	}

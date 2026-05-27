@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -261,8 +262,17 @@ func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if !canAssignMemberRole(actor, role) {
+	if !roleAssignableToRestaurant(role, restaurantID) || !canAssignMemberRole(actor, role) {
 		return nil, errors.New("you do not have permission to assign this role")
+	}
+	if role.RestaurantID == nil {
+		hidden, err := s.roleRepo.IsRoleHiddenForRestaurant(restaurantID, role.ID)
+		if err != nil {
+			return nil, err
+		}
+		if hidden {
+			return nil, errors.New("role is not available for this restaurant")
+		}
 	}
 	if target.Role != nil && target.Role.Name == role.Name {
 		return target, nil
@@ -290,8 +300,70 @@ func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID
 		nil,
 		map[string]any{
 			"from_role": previousRole,
-			"to_role":   role.Name,
+			"to_role":   roleName(role),
 			"status":    updated.Status,
+		},
+	)
+
+	return updated, nil
+}
+
+func (s *RestaurantService) UpdateMemberPermissions(actorUserID, restaurantID, memberID uint, permissionsOverride *([]string)) (*entity.RestaurantMember, error) {
+	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID)
+	if err != nil {
+		return nil, err
+	}
+	if !canManageMember(actor, target) {
+		return nil, errors.New("you do not have permission to manage this member")
+	}
+
+	previous := target.PermissionsOverride
+	if permissionsOverride == nil {
+		target.PermissionsOverride = nil
+	} else {
+		normalized, err := normalizePermissions(*permissionsOverride)
+		if err != nil {
+			return nil, err
+		}
+		raw, err := json.Marshal(normalized)
+		if err != nil {
+			return nil, err
+		}
+		next := string(raw)
+		target.PermissionsOverride = &next
+	}
+
+	if err := s.memberRepo.Update(target); err != nil {
+		return nil, err
+	}
+
+	updated, err := s.memberRepo.FindByID(target.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var previousValue any
+	if previous != nil {
+		previousValue = *previous
+	}
+	var nextValue any
+	if updated.PermissionsOverride != nil {
+		nextValue = *updated.PermissionsOverride
+	}
+	actorID := actor.UserID
+	targetUserID := updated.UserID
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionMemberPermissionsChanged,
+		&actorID,
+		&targetUserID,
+		nil,
+		map[string]any{
+			"from_permissions_override": previousValue,
+			"to_permissions_override":   nextValue,
+			"role_name":                 roleName(updated.Role),
+			"status":                    updated.Status,
 		},
 	)
 
@@ -387,10 +459,7 @@ func normalizeBusinessTime(value, fallback string) string {
 }
 
 func canManageInvites(member *entity.RestaurantMember) bool {
-	if member == nil || member.Role == nil {
-		return false
-	}
-	return member.Role.Name == "owner" || member.Role.Name == "manager"
+	return isOwnerOrManager(member) && memberHasPermission(member, "manage_staff")
 }
 
 func canManageTeam(member *entity.RestaurantMember) bool {
@@ -404,6 +473,9 @@ func canManageMember(actor, target *entity.RestaurantMember) bool {
 	if actor.UserID == target.UserID {
 		return false
 	}
+	if !memberHasPermission(actor, "manage_staff") {
+		return false
+	}
 
 	switch actor.Role.Name {
 	case "owner":
@@ -413,6 +485,36 @@ func canManageMember(actor, target *entity.RestaurantMember) bool {
 	default:
 		return false
 	}
+}
+
+func isOwnerOrManager(member *entity.RestaurantMember) bool {
+	return member != nil && member.Role != nil && (member.Role.Name == "owner" || member.Role.Name == "manager")
+}
+
+func memberHasPermission(member *entity.RestaurantMember, permission string) bool {
+	if member == nil || member.Role == nil {
+		return false
+	}
+	if member.PermissionsOverride != nil {
+		return permissionJSONContains(*member.PermissionsOverride, permission)
+	}
+	if member.Role.Permissions != "" {
+		return permissionJSONContains(member.Role.Permissions, permission)
+	}
+	return false
+}
+
+func permissionJSONContains(raw string, permission string) bool {
+	var permissions []string
+	if err := json.Unmarshal([]byte(raw), &permissions); err != nil {
+		return false
+	}
+	for _, item := range permissions {
+		if item == "*" || item == permission {
+			return true
+		}
+	}
+	return false
 }
 
 func canAssignMemberRole(actor *entity.RestaurantMember, role *entity.Role) bool {
@@ -430,9 +532,16 @@ func canAssignMemberRole(actor *entity.RestaurantMember, role *entity.Role) bool
 	}
 }
 
+func roleAssignableToRestaurant(role *entity.Role, restaurantID uint) bool {
+	return role != nil && (role.RestaurantID == nil || *role.RestaurantID == restaurantID)
+}
+
 func roleName(role *entity.Role) string {
 	if role == nil {
 		return ""
+	}
+	if strings.TrimSpace(role.DisplayName) != "" {
+		return role.DisplayName
 	}
 	return role.Name
 }

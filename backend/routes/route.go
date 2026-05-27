@@ -15,6 +15,7 @@ func SetupRoutes(r *gin.Engine) {
 	SetupCustomerOrderRoutes(api)
 
 	userCtrl := controller.ProvideUserController(config.DB())
+	roleCtrl := controller.ProvideRoleController(config.DB())
 
 	v1 := api.Group("v1")
 	v1.Use(auth.Authorizes())
@@ -23,6 +24,11 @@ func SetupRoutes(r *gin.Engine) {
 		v1.GET("/users/profile", userCtrl.GetProfile)
 		v1.PATCH("/users/profile", userCtrl.UpdateProfile)
 		v1.POST("/users/profile/upload-image", userCtrl.UploadProfileImage)
+		v1.GET("/roles", roleCtrl.GetScopedRoles)
+		v1.POST("/roles", roleCtrl.CreateCustomRole)
+		v1.PATCH("/roles/:roleId", roleCtrl.UpdateCustomRole)
+		v1.DELETE("/roles/:roleId", roleCtrl.DeleteCustomRole)
+		v1.PATCH("/roles/:roleId/permissions", roleCtrl.UpdateRolePermissions)
 	}
 
 	// Restaurants + invitations.

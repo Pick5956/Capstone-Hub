@@ -69,6 +69,7 @@ func SetupDatabase() *gorm.DB {
 
 	db.AutoMigrate(
 		&entity.Role{},
+		&entity.RestaurantRoleHidden{},
 		&entity.User{},
 		&entity.Restaurant{},
 		&entity.RestaurantMember{},

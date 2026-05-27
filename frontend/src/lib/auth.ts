@@ -1,6 +1,7 @@
 import { apiClient } from "./apiClient";
 import { User } from "../types/auth";
 import { Membership } from "../types/restaurant";
+import { Role } from "../types/role";
 
 export interface LoginResponse {
   token: string;
@@ -40,4 +41,18 @@ export const resetPassword = (token: string, password: string) =>
   apiClient.post("/api/reset-password", { token, password }).catch(() => null);
 
 export const getRoles = () =>
-  apiClient.get("/api/roles").catch(() => null);
+  apiClient.get<{ data: Role[] }>("/api/v1/roles").catch(() => null);
+
+export const updateRolePermissions = (roleId: number, permissions: string[]) =>
+  apiClient.patch<{ role: Role }>(`/api/v1/roles/${roleId}/permissions`, {
+    permissions,
+  });
+
+export const createRole = (data: { display_name: string; permissions: string[] }) =>
+  apiClient.post<{ role: Role }>("/api/v1/roles", data);
+
+export const updateRole = (roleId: number, data: { display_name: string }) =>
+  apiClient.patch<{ role: Role }>(`/api/v1/roles/${roleId}`, data);
+
+export const deleteRole = (roleId: number) =>
+  apiClient.delete<{ status: string }>(`/api/v1/roles/${roleId}`);
