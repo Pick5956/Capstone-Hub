@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
+import AppLogo from "@/src/components/shared/AppLogo";
 
 function ThemeButton() {
   const { theme, mounted, toggle } = useTheme();
@@ -47,12 +48,7 @@ export default function NotFoundUI() {
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur">
         <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-md bg-orange-600 flex items-center justify-center shadow-sm">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-                <path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
-              </svg>
-            </div>
+            <AppLogo size={36} />
             <div>
               <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
               <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
-import { createRole, deleteRole, getRoles, updateRole, updateRolePermissions } from "@/src/lib/auth";
+import { createRole, deleteRole, getRoles, updateRolePermissions } from "@/src/lib/auth";
 import { createInvitation, listPendingInvitations, revokeInvitation } from "@/src/lib/invitation";
 import { listAuditLogs, listMembers, updateMemberPermissions, updateMemberRole, updateMemberStatus } from "@/src/lib/restaurant";
 import type { Invitation, Membership, MembershipStatus, RestaurantAuditLog } from "@/src/types/restaurant";
@@ -15,6 +15,7 @@ import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import UserAvatar from "@/src/components/shared/UserAvatar";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { ChevronRight } from "lucide-react";
 
 const ROLE_LABELS: Record<Language, Record<string, string>> = {
   th: {
@@ -371,7 +372,6 @@ export default function StaffPage() {
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<number | "">("");
   const [newRoleName, setNewRoleName] = useState("");
-  const [roleNameDrafts, setRoleNameDrafts] = useState<Record<number, string>>({});
   const [roleActionIds, setRoleActionIds] = useState<number[]>([]);
   const [creatingRole, setCreatingRole] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState("7");
@@ -390,6 +390,10 @@ export default function StaffPage() {
   const [permissionSaving, setPermissionSaving] = useState(false);
   const [useRolePermissions, setUseRolePermissions] = useState(false);
   const [permissionClosing, setPermissionClosing] = useState(false);
+  const [roleManagerOpen, setRoleManagerOpen] = useState(false);
+  const [roleManagerClosing, setRoleManagerClosing] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteModalClosing, setInviteModalClosing] = useState(false);
 
   const copy = language === "th"
     ? {
@@ -404,7 +408,7 @@ export default function StaffPage() {
         revokeError: "ยกเลิกคำเชิญไม่สำเร็จ",
         memberError: "อัปเดตข้อมูลสมาชิกไม่สำเร็จ",
         inviteCreated: "สร้างลิงก์เชิญแล้ว",
-        inviteCopied: "คัดลอกลิงก์เชิญแล้ว",
+        inviteCopied: "คัดลอกลิงก์ไปยังคลิปบอร์ดแล้ว",
         inviteRevoked: "ยกเลิกคำเชิญแล้ว",
         memberUpdated: "อัปเดตข้อมูลพนักงานแล้ว",
         roleCreated: "สร้างบทบาทแล้ว",
@@ -413,19 +417,21 @@ export default function StaffPage() {
         roleError: "จัดการบทบาทไม่สำเร็จ",
         roleRequired: "กรอกชื่อบทบาทก่อน",
         rolePanelTitle: "บทบาทในร้าน",
-        rolePanelHint: "สร้างบทบาทเอง แล้วกำหนดสิทธิ์เริ่มต้นให้เหมาะกับทีมของร้าน",
+        rolePanelAction: "เปิดการจัดการบทบาท",
+        rolePanelSummary: "ตรวจสอบและปรับบทบาทมาตรฐานของร้านก่อนส่งคำเชิญพนักงาน",
+        roleManagerTitle: "จัดการบทบาทและสิทธิ์",
+        roleManagerHint: "เพิ่มบทบาทใหม่ แก้ชื่อบทบาทที่ปรับแต่งได้ และกำหนดชุดสิทธิ์ให้แต่ละบทบาท",
         customRoleTitle: "สร้างบทบาทใหม่",
         roleNameLabel: "ชื่อบทบาท",
         roleNamePlaceholder: "เช่น หัวหน้ากะ",
         createRole: "เพิ่มบทบาท",
         creatingRole: "กำลังเพิ่ม...",
         editPermissions: "สิทธิ์",
-        saveRoleName: "บันทึกชื่อ",
         deleteRole: "ลบ",
-        customRoleBadge: "สร้างเอง",
-        systemRoleBadge: "ค่าเริ่มต้น",
+        customRoleBadge: "ปรับแต่ง",
+        systemRoleBadge: "ระบบ",
         confirmRoleDeleteTitle: "ลบบทบาทนี้?",
-        confirmRoleDeleteBody: "ลบได้เฉพาะบทบาทที่ไม่มีพนักงานหรือคำเชิญรอรับใช้งานอยู่ บทบาทค่าเริ่มต้นจะหายจากร้านนี้ด้วย",
+        confirmRoleDeleteBody: "ลบได้เฉพาะบทบาทที่ไม่มีพนักงานหรือคำเชิญรอรับใช้งานอยู่ บทบาทที่ลบแล้วจะหายจากร้านนี้ด้วย",
         confirmRevokeTitle: "ยกเลิกคำเชิญนี้?",
         confirmRevokeBody: "ลิงก์นี้จะใช้งานไม่ได้ทันที และพนักงานต้องขอลิงก์ใหม่หากยังต้องเข้าร่วมร้าน",
         confirmMemberTitle: "ยืนยันการเปลี่ยนแปลงพนักงาน?",
@@ -480,12 +486,12 @@ export default function StaffPage() {
         noExpiry: "ไม่หมดอายุ",
         creating: "กำลังสร้างคำเชิญ...",
         createLink: "สร้างลิงก์เชิญ",
-        flowTitle: "Flow การเข้าร่วมแบบสมบูรณ์",
+        flowTitle: "ขั้นตอนรับคำเชิญ",
         flow: [
-          "1. เจ้าของหรือผู้จัดการสร้างลิงก์เชิญพร้อมบทบาท",
-          "2. พนักงานเปิด `/invitations/[token]` เพื่อตรวจร้าน อีเมล และวันหมดอายุ",
-          "3. ถ้ายังไม่ login ให้เข้าสู่ระบบก่อนในหน้าเดียวกัน",
-          "4. กดรับคำเชิญแล้วระบบสร้างหรือกู้คืน membership พร้อมเลือก active restaurant ให้อัตโนมัติ",
+          "เจ้าของหรือผู้จัดการกำหนดบทบาทและสร้างลิงก์คำเชิญ",
+          "พนักงานเปิดลิงก์เพื่อตรวจสอบร้าน อีเมล และวันหมดอายุ",
+          "เข้าสู่ระบบหรือสมัครบัญชีในหน้าเดียวกันหากยังไม่ได้ login",
+          "กดรับคำเชิญแล้วระบบเพิ่มสมาชิกและเลือกร้านให้อัตโนมัติ",
         ],
       }
     : {
@@ -500,7 +506,7 @@ export default function StaffPage() {
         revokeError: "Could not revoke invitation.",
         memberError: "Could not update member details.",
         inviteCreated: "Invitation link created",
-        inviteCopied: "Invitation link copied",
+        inviteCopied: "Invitation link copied to clipboard",
         inviteRevoked: "Invitation revoked",
         memberUpdated: "Staff details updated",
         roleCreated: "Role created",
@@ -509,16 +515,18 @@ export default function StaffPage() {
         roleError: "Could not manage role.",
         roleRequired: "Enter a role name first.",
         rolePanelTitle: "Restaurant roles",
-        rolePanelHint: "Create custom roles and set their default permissions for this restaurant.",
+        rolePanelAction: "Open role management",
+        rolePanelSummary: "Review and adjust restaurant roles before sending staff invitations.",
+        roleManagerTitle: "Manage roles and permissions",
+        roleManagerHint: "Add roles, rename custom roles, and set the default permissions for each role.",
         customRoleTitle: "Create new role",
         roleNameLabel: "Role name",
         roleNamePlaceholder: "e.g. Shift lead",
         createRole: "Add role",
         creatingRole: "Adding...",
         editPermissions: "Permissions",
-        saveRoleName: "Save name",
         deleteRole: "Delete",
-        customRoleBadge: "Custom",
+        customRoleBadge: "Editable",
         systemRoleBadge: "Default",
         confirmRoleDeleteTitle: "Delete this role?",
         confirmRoleDeleteBody: "Only roles with no assigned staff or pending invitations can be deleted. Default roles will also be removed from this restaurant.",
@@ -576,12 +584,12 @@ export default function StaffPage() {
         noExpiry: "No expiry",
         creating: "Creating invitation...",
         createLink: "Create invitation link",
-        flowTitle: "Complete join flow",
+        flowTitle: "Invitation acceptance steps",
         flow: [
-          "1. Owner or manager creates an invitation link with a role.",
-          "2. Staff opens `/invitations/[token]` to review the restaurant, email, and expiry.",
-          "3. If they are not signed in, they sign in on the same page.",
-          "4. Accepting the invitation creates or restores the membership and selects the restaurant automatically.",
+          "Owner or manager sets the role and creates an invitation link.",
+          "Staff opens the link to review the restaurant, email, and expiry.",
+          "Staff signs in or registers on the same screen if needed.",
+          "Accepting the invitation adds the membership and selects the restaurant automatically.",
         ],
       };
 
@@ -607,7 +615,6 @@ export default function StaffPage() {
       setAuditHasMore(Boolean(logsRes.data.has_more));
       setAuditMobilePage(0);
       setRoles(roleList);
-      setRoleNameDrafts(Object.fromEntries(roleList.map((role) => [role.ID, roleLabel(role, language)])));
       if (!roleId) {
         const nextDefault = nextInviteRoles.find((role) => role.name === "waiter") ?? nextInviteRoles[0];
         if (nextDefault) setRoleId(nextDefault.ID);
@@ -662,6 +669,20 @@ export default function StaffPage() {
     }
   };
 
+  const openInviteModal = () => {
+    setInviteModalClosing(false);
+    setInviteModalOpen(true);
+  };
+
+  const closeInviteModal = (force = false) => {
+    if (!force && (inviteModalClosing || submitting)) return;
+    setInviteModalClosing(true);
+    window.setTimeout(() => {
+      setInviteModalOpen(false);
+      setInviteModalClosing(false);
+    }, 180);
+  };
+
   const createInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!restaurantId || !allowed || !roleId) return;
@@ -683,10 +704,19 @@ export default function StaffPage() {
           email: trimmedEmail,
           expires_in_days: Number.isFinite(days) ? days : 0,
         });
-        setInvitations((current) => [res.data, ...current]);
+        const createdInvitation = res.data;
+        setInvitations((current) => [createdInvitation, ...current]);
         setEmail("");
-        setCopiedToken("");
-        showToast({ title: copy.inviteCreated });
+        try {
+          await navigator.clipboard.writeText(inviteUrl(createdInvitation.token));
+          setCopiedToken(createdInvitation.token);
+          showToast({ title: copy.inviteCopied });
+        } catch {
+          setCopiedToken("");
+          setError(copy.copyError);
+          showToast({ title: copy.inviteCreated });
+        }
+        closeInviteModal(true);
         await refresh();
       } catch {
         setInviteError(copy.createError);
@@ -779,7 +809,6 @@ export default function StaffPage() {
       const res = await createRole({ display_name: displayName, permissions: [] });
       const nextRole = res.data.role;
       setRoles((current) => [...current, nextRole]);
-      setRoleNameDrafts((current) => ({ ...current, [nextRole.ID]: roleLabel(nextRole, language) }));
       setRoleId(nextRole.ID);
       setNewRoleName("");
       showToast({ title: copy.roleCreated });
@@ -790,24 +819,6 @@ export default function StaffPage() {
     } finally {
       setCreatingRole(false);
     }
-  };
-
-  const saveRoleName = async (role: Role) => {
-    const displayName = (roleNameDrafts[role.ID] ?? "").trim();
-    if (!displayName) {
-      setError(copy.roleRequired);
-      return;
-    }
-    if (displayName === roleLabel(role, language)) return;
-    await withRoleAction(role.ID, async () => {
-      const res = await updateRole(role.ID, { display_name: displayName });
-      setRoles((current) => current.map((item) => (item.ID === res.data.role.ID ? res.data.role : item)));
-      setMembers((current) => current.map((member) => member.role_id === res.data.role.ID ? { ...member, role: res.data.role } : member));
-      setInvitations((current) => current.map((invitation) => invitation.role_id === res.data.role.ID ? { ...invitation, role: res.data.role } : invitation));
-      setRoleNameDrafts((current) => ({ ...current, [res.data.role.ID]: roleLabel(res.data.role, language) }));
-      showToast({ title: copy.roleUpdated });
-      await refresh();
-    });
   };
 
   const removeRole = async (role: Role) => {
@@ -822,11 +833,7 @@ export default function StaffPage() {
     await withRoleAction(role.ID, async () => {
       await deleteRole(role.ID);
       setRoles((current) => current.filter((item) => item.ID !== role.ID));
-      setRoleNameDrafts((current) => {
-        const next = { ...current };
-        delete next[role.ID];
-        return next;
-      });
+      setPermissionTarget((current) => current?.type === "role" && current.role.ID === role.ID ? null : current);
       if (roleId === role.ID) {
         const nextRole = inviteRoles.find((item) => item.ID !== role.ID);
         setRoleId(nextRole?.ID ?? "");
@@ -900,6 +907,20 @@ export default function StaffPage() {
     }, 180);
   };
 
+  const openRoleManager = () => {
+    setRoleManagerClosing(false);
+    setRoleManagerOpen(true);
+  };
+
+  const closeRoleManager = (force = false) => {
+    if (!force && (roleManagerClosing || creatingRole)) return;
+    setRoleManagerClosing(true);
+    window.setTimeout(() => {
+      setRoleManagerOpen(false);
+      setRoleManagerClosing(false);
+    }, 180);
+  };
+
   const setPermissionRow = (permissions: string[], enabled: boolean) => {
     setPermissionDraft((current) => {
       const next = new Set(current);
@@ -944,6 +965,8 @@ export default function StaffPage() {
   const auditCanGoBack = auditMobilePage > 0;
   const auditCanGoNext = auditMobileStart + MOBILE_AUDIT_PAGE_SIZE < auditLogs.length || auditHasMore;
   const permissionBackdrop = useBackdropClose(closePermissionModal);
+  const roleManagerBackdrop = useBackdropClose(closeRoleManager);
+  const inviteModalBackdrop = useBackdropClose(closeInviteModal);
 
   if (!restaurantId) return null;
 
@@ -977,8 +1000,53 @@ export default function StaffPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_360px]">
+      <div className="space-y-4">
         <section className="space-y-4">
+          {allowed && (
+            <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+              <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div className="min-w-0">
+                  <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
+                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={openInviteModal}
+                    className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+                  >
+                    {copy.createLink}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openRoleManager}
+                    className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+                  >
+                    {copy.rolePanelAction}
+                  </button>
+                </div>
+              </div>
+              <div className="grid border-t border-gray-200 dark:border-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-gray-200 sm:dark:divide-gray-800">
+                <div className="px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.rolePanelSummary}</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 dark:divide-gray-800 dark:border-gray-800 sm:border-t-0">
+                  <div className="px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.role}</p>
+                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">{allowedRoleOptions(activeRole, roles).length}</p>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.customRoleBadge}</p>
+                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">
+                      {allowedRoleOptions(activeRole, roles).filter(isCustomRole).length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.membersTitle}</h2>
@@ -992,7 +1060,7 @@ export default function StaffPage() {
                 </div>
               ) : members.length ? (
                 <div className="space-y-2">
-                  <div className="hidden grid-cols-[minmax(220px,1.15fr)_minmax(220px,0.9fr)_120px_160px_minmax(170px,auto)] gap-4 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800 lg:grid">
+                  <div className="hidden grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] gap-3 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800 lg:grid">
                     <span>{copy.name}</span>
                     <span>{copy.role}</span>
                     <span>{copy.status}</span>
@@ -1005,7 +1073,7 @@ export default function StaffPage() {
                     const busy = updatingMemberIds.includes(member.ID);
 
                     return (
-                      <div key={member.ID} className="relative grid gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 lg:grid-cols-[minmax(220px,1.15fr)_minmax(220px,0.9fr)_120px_160px_minmax(170px,auto)] lg:items-center lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-3 lg:last:border-b-0 lg:dark:bg-transparent">
+                      <div key={member.ID} className="relative grid gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 lg:grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] lg:items-center lg:gap-3 lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-3 lg:last:border-b-0 lg:dark:bg-transparent">
                         <div className="flex min-w-0 items-center gap-3">
                           <UserAvatar src={member.user?.profile_image} name={displayUserName(member, language)} size={40} className="h-10 w-10 text-[12px]" />
                           <div className="min-w-0">
@@ -1018,7 +1086,7 @@ export default function StaffPage() {
                           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.role}</p>
                           {manageable ? (
                             <ThemedSelect
-                              className="max-w-full lg:w-[220px]"
+                              className="max-w-full lg:w-full xl:w-[220px]"
                               value={String(member.role_id)}
                               onChange={(next) => void changeMemberRole(member.ID, next)}
                               disabled={busy}
@@ -1034,34 +1102,34 @@ export default function StaffPage() {
                           )}
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.status}</p>
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${statusTone(member.status)}`}>
                             {STATUS_LABELS[language][member.status] ?? member.status}
                           </span>
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.joined}</p>
-                          <p className="text-[12px] text-gray-500 dark:text-gray-400">{formatDate(member.joined_at, language)}</p>
+                          <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">{formatDate(member.joined_at, language)}</p>
                         </div>
 
-                        <div>
+                        <div className="min-w-0">
                           {manageable ? (
-                            <div className="flex flex-wrap gap-2 lg:justify-end">
-                              <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+                            <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-1 xl:grid-cols-2">
+                              <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 xl:col-span-2">
                                 {language === "th" ? "สิทธิ์" : "Permissions"}
                               </button>
                               {member.status !== "active" ? (
-                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-9 rounded-md border border-emerald-200 bg-white px-3 text-[12px] font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-8 min-w-0 rounded-md border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
                                   {copy.restore}
                                 </button>
                               ) : (
-                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-9 rounded-md border border-amber-200 bg-white px-3 text-[12px] font-medium text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-950 dark:text-amber-300 dark:hover:bg-amber-900/20">
+                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-8 min-w-0 rounded-md border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-950 dark:text-amber-300 dark:hover:bg-amber-900/20">
                                   {copy.suspend}
                                 </button>
                               )}
-                              <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
+                              <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-8 min-w-0 rounded-md border border-red-200 bg-white px-2 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
                                 {copy.remove}
                               </button>
                             </div>
@@ -1224,166 +1292,198 @@ export default function StaffPage() {
             </div>
           </div>
         </section>
+      </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.rolePanelTitle}</h2>
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.rolePanelHint}</p>
+      {inviteModalOpen && (
+        <div
+          {...inviteModalBackdrop}
+          className={`${inviteModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-50 flex h-dvh w-dvw items-center justify-center overflow-y-auto bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}
+        >
+          <form
+            onSubmit={createInvite}
+            className={`${inviteModalClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] w-[calc(100dvw-1.5rem)] max-w-lg flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+          >
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
+                <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
+              </div>
+              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
-            <form onSubmit={(event) => void createCustomRole(event)} className="border-b border-gray-200 p-4 dark:border-gray-800">
-              <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.customRoleTitle}</p>
-              <label className="mt-3 block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.roleNameLabel}</span>
-                <input
-                  type="text"
-                  value={newRoleName}
-                  onChange={(event) => setNewRoleName(event.target.value)}
-                  placeholder={copy.roleNamePlaceholder}
-                  disabled={!allowed || creatingRole}
-                  className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                />
-              </label>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.emailLabel}</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setInviteError("");
+                    }}
+                    placeholder={copy.emailPlaceholder}
+                    disabled={!allowed}
+                    aria-invalid={Boolean(inviteError)}
+                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-900 ${
+                      inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
+                    }`}
+                  />
+                  <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+                    {inviteError || copy.emailHelp}
+                  </p>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.role}</span>
+                  <ThemedSelect
+                    value={String(roleId || inviteRoles[0]?.ID || "")}
+                    onChange={(next) => setRoleId(Number(next))}
+                    disabled={!allowed}
+                    options={inviteRoles.map((role) => ({
+                      value: String(role.ID),
+                      label: roleLabel(role, language),
+                    }))}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.expiry}</span>
+                  <ThemedSelect
+                    value={expiresInDays}
+                    onChange={setExpiresInDays}
+                    disabled={!allowed}
+                    options={[
+                      { value: "1", label: `1 ${copy.day}` },
+                      { value: "3", label: `3 ${copy.day}` },
+                      { value: "7", label: `7 ${copy.day}` },
+                      { value: "14", label: `14 ${copy.day}` },
+                      { value: "0", label: copy.noExpiry },
+                    ]}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
+                <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.flowTitle}</p>
+                <ol className="mt-3 space-y-2 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
+                  {copy.flow.map((item, index) => (
+                    <li key={item} className="grid grid-cols-[20px_minmax(0,1fr)] gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-[10px] font-semibold tabular-nums text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+                        {index + 1}
+                      </span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+
+            <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
               <button
-                type="submit"
-                disabled={!allowed || creatingRole}
-                className="mt-3 h-10 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                type="button"
+                onClick={() => closeInviteModal()}
+                disabled={submitting}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
               >
-                {creatingRole ? copy.creatingRole : copy.createRole}
+                {copy.cancelAction}
               </button>
-            </form>
-            <div className="space-y-2 p-4">
-              {allowedRoleOptions(activeRole, roles).map((role) => (
-                <div
-                  key={role.ID}
-                  className="rounded-md border border-gray-200 p-3 dark:border-gray-800"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold text-gray-900 dark:text-white">{roleLabel(role, language)}</span>
-                      <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">{permissionSummary(role, language)}</span>
-                    </span>
-                    <span className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold ${isCustomRole(role) ? "bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
-                      {isCustomRole(role) ? copy.customRoleBadge : copy.systemRoleBadge}
-                    </span>
-                  </div>
-                  {isCustomRole(role) && (
-                    <label className="mt-3 block">
-                      <span className="sr-only">{copy.roleNameLabel}</span>
-                      <input
-                        type="text"
-                        value={roleNameDrafts[role.ID] ?? roleLabel(role, language)}
-                        onChange={(event) => setRoleNameDrafts((current) => ({ ...current, [role.ID]: event.target.value }))}
-                        disabled={!allowed || roleActionIds.includes(role.ID)}
-                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                      />
-                    </label>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {isCustomRole(role) && (
-                      <button
-                        type="button"
-                        onClick={() => void saveRoleName(role)}
-                        disabled={!allowed || roleActionIds.includes(role.ID) || (roleNameDrafts[role.ID] ?? roleLabel(role, language)).trim() === roleLabel(role, language)}
-                        className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
-                      >
-                        {copy.saveRoleName}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => openRolePermissions(role)}
-                      disabled={!allowed || roleActionIds.includes(role.ID)}
-                      className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[11px] font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
-                    >
-                      {copy.editPermissions}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void removeRole(role)}
-                      disabled={!allowed || roleActionIds.includes(role.ID)}
-                      className="h-8 rounded-md border border-red-200 bg-white px-3 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
-                    >
-                      {copy.deleteRole}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <form onSubmit={createInvite} className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-green-500">
-              <h2 className="text-[14px] font-semibold text-gray-900 dark:text-green-500">{copy.inviteTitle}</h2>
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
-            </div>
-            <div className="space-y-3 p-4">
-              <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.emailLabel}</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    setInviteError("");
-                  }}
-                  placeholder={copy.emailPlaceholder}
-                  disabled={!allowed}
-                  aria-invalid={Boolean(inviteError)}
-                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-900 ${
-                    inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
-                  }`}
-                />
-                <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
-                  {inviteError || copy.emailHelp}
-                </p>
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.role}</span>
-                <ThemedSelect
-                  value={String(roleId || inviteRoles[0]?.ID || "")}
-                  onChange={(next) => setRoleId(Number(next))}
-                  disabled={!allowed}
-                  options={inviteRoles.map((role) => ({
-                    value: String(role.ID),
-                    label: roleLabel(role, language),
-                  }))}
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.expiry}</span>
-                <ThemedSelect
-                  value={expiresInDays}
-                  onChange={setExpiresInDays}
-                  disabled={!allowed}
-                  options={[
-                    { value: "1", label: `1 ${copy.day}` },
-                    { value: "3", label: `3 ${copy.day}` },
-                    { value: "7", label: `7 ${copy.day}` },
-                    { value: "14", label: `14 ${copy.day}` },
-                    { value: "0", label: copy.noExpiry },
-                  ]}
-                />
-              </label>
-
-              <button type="submit" disabled={!allowed || !roleId || submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-400 dark:text-gray-950">
+              <button type="submit" disabled={!allowed || !roleId || submitting} className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">
                 {submitting ? copy.creating : copy.createLink}
               </button>
             </div>
           </form>
+        </div>
+      )}
 
-          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.flowTitle}</p>
-            <div className="mt-3 space-y-2 text-[12px] text-gray-500 dark:text-gray-400">
-              {copy.flow.map((item) => (
-                <p key={item}>{item}</p>
-              ))}
+      {roleManagerOpen && (
+        <>
+          <button
+            type="button"
+            aria-label={copy.cancelAction}
+            {...roleManagerBackdrop}
+            className={`${roleManagerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-40 cursor-default bg-gray-950/45 backdrop-blur-sm`}
+          />
+          <aside className={`${roleManagerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{copy.roleManagerTitle}</h2>
+                <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.roleManagerHint}</p>
+              </div>
+              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
-          </div>
-        </aside>
-      </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <form onSubmit={(event) => void createCustomRole(event)} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+                <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.customRoleTitle}</p>
+                <label className="mt-3 block">
+                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.roleNameLabel}</span>
+                  <input
+                    type="text"
+                    value={newRoleName}
+                    onChange={(event) => setNewRoleName(event.target.value)}
+                    placeholder={copy.roleNamePlaceholder}
+                    disabled={!allowed || creatingRole}
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  disabled={!allowed || creatingRole}
+                  className="mt-3 h-10 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                >
+                  {creatingRole ? copy.creatingRole : copy.createRole}
+                </button>
+              </form>
+
+              <div className="mt-4 space-y-2">
+                {allowedRoleOptions(activeRole, roles).map((role) => {
+                  const busy = roleActionIds.includes(role.ID);
+                  const roleCardDisabled = !allowed || busy;
+
+                  return (
+                    <div
+                      key={role.ID}
+                      role="button"
+                      tabIndex={roleCardDisabled ? -1 : 0}
+                      aria-label={`${copy.editPermissions}: ${roleLabel(role, language)}`}
+                      onClick={() => {
+                        if (!roleCardDisabled) openRolePermissions(role);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!roleCardDisabled && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault();
+                          openRolePermissions(role);
+                        }
+                      }}
+                      className={`group/card rounded-md border border-gray-200 bg-white p-2.5 outline-none transition-colors dark:border-gray-800 dark:bg-gray-950 ${
+                        roleCardDisabled
+                          ? "cursor-not-allowed opacity-70"
+                          : "cursor-pointer hover:border-gray-300 hover:bg-gray-50 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:hover:border-gray-700 dark:hover:bg-gray-900"
+                      }`}
+                    >
+                      <div className="grid grid-cols-[minmax(0,1fr)_40px] items-center gap-2">
+                        <div className="min-w-0">
+                          <span className="inline-flex max-w-full min-w-0 items-center">
+                            <span className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{roleLabel(role, language)}</span>
+                          </span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{permissionSummary(role, language)}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center justify-center">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-400 transition-colors group-hover/card:bg-gray-100 group-hover/card:text-gray-700 dark:group-hover/card:bg-gray-800 dark:group-hover/card:text-gray-200">
+                            <ChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
 
       {permissionTarget && (
         <div {...permissionBackdrop} className={`${permissionClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-stretch justify-center bg-gray-950/45 p-2 backdrop-blur-sm sm:p-4 lg:p-6`}>
@@ -1497,7 +1597,19 @@ export default function StaffPage() {
                 ))}
               </div>
             </div>
-            <div className="flex shrink-0 justify-end border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-6">
+            <div className="flex shrink-0 flex-col gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <div>
+                {permissionTarget.type === "role" && (
+                  <button
+                    type="button"
+                    onClick={() => void removeRole(permissionTarget.role)}
+                    disabled={roleActionIds.includes(permissionTarget.role.ID) || permissionSaving}
+                    className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                  >
+                    {copy.deleteRole}
+                  </button>
+                )}
+              </div>
               <button type="button" onClick={() => void savePermissions()} disabled={permissionSaving} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {permissionSaving ? (language === "th" ? "กำลังบันทึก..." : "Saving...") : (language === "th" ? "บันทึกสิทธิ์" : "Save permissions")}
               </button>

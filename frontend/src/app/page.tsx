@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
+import AppLogo from "@/src/components/shared/AppLogo";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // ── theme toggle ───────────────────────────────────────────────────────────
@@ -210,12 +211,7 @@ export default function LandingPage() {
       >
         <div className="w-full px-6 md:px-10 h-full flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2"/><path d="M7 2v20"/>
-                <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3"/><path d="M21 15v7"/>
-              </svg>
-            </div>
+            <AppLogo size={36} priority />
             <div>
               <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
               <p className="text-sm font-semibold tracking-tight leading-snug">HUB</p>
@@ -251,18 +247,8 @@ export default function LandingPage() {
 
         <div className="max-w-6xl mx-auto px-6">
           <div className="max-w-3xl mx-auto text-center">
-            <Reveal>
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-full text-xs font-medium text-gray-600 dark:text-gray-400 shadow-sm">
-                <span className="relative flex w-1.5 h-1.5">
-                  <span className="absolute inset-0 rounded-full bg-orange-500 animate-ping opacity-75" />
-                  <span className="relative w-1.5 h-1.5 rounded-full bg-orange-500" />
-                </span>
-                ใหม่ · AI วิเคราะห์ยอดขายให้อัตโนมัติ
-              </div>
-            </Reveal>
-
             <Reveal delay={120}>
-              <h1 className="mt-6 text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05]">
+              <h1 className="text-5xl md:text-7xl font-semibold tracking-tight leading-[1.05]">
                 บริหารร้านอาหาร<br />
                 <span className="relative inline-block">
                   <span className="bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 bg-clip-text text-transparent">อย่างมืออาชีพ</span>
@@ -488,12 +474,7 @@ export default function LandingPage() {
       <footer className="border-t border-gray-100 dark:border-gray-800 py-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2"/><path d="M7 2v20"/>
-                <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3"/><path d="M21 15v7"/>
-              </svg>
-            </div>
+            <AppLogo size={28} />
             <span className="text-sm font-semibold">Restaurant Hub</span>
           </div>
           <p className="text-xs text-gray-400">© 2025 Restaurant Hub. All rights reserved.</p>

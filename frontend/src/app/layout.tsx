@@ -18,6 +18,11 @@ const fontKanit = Kanit({
 export const metadata: Metadata = {
   title: "Restaurant Hub",
   description: "Restaurant management system",
+  icons: {
+    icon: "/web-logo.png",
+    shortcut: "/web-logo.png",
+    apple: "/web-logo.png",
+  },
 };
 
 export default function RootLayout({

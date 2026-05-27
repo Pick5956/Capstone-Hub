@@ -9,6 +9,7 @@ import { useLanguage } from '@/src/providers/LanguageProvider';
 import LanguageToggle from '@/src/components/shared/LanguageToggle';
 import ThemeToggle from '@/src/components/shared/ThemeToggle';
 import UserAvatar from '@/src/components/shared/UserAvatar';
+import AppLogo from '@/src/components/shared/AppLogo';
 import { useBackdropClose } from '@/src/hooks/useBackdropClose';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
@@ -283,12 +284,9 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
           href="/restaurants"
           onClick={onNavigate}
           title={restaurantName}
-          className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
+          className="transition-opacity hover:opacity-90"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6M9 16h4" />
-          </svg>
+          <AppLogo size={36} />
         </Link>
       </div>
     );
@@ -301,12 +299,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
         onClick={onNavigate}
         className="flex min-w-0 items-center gap-2.5 rounded-md border border-transparent px-1.5 py-1.5 transition-colors hover:border-gray-200 hover:bg-white dark:hover:border-gray-800 dark:hover:bg-gray-900"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6M9 16h4" />
-          </svg>
-        </span>
+        <AppLogo size={32} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
         </span>
