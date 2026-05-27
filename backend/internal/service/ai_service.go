@@ -769,7 +769,12 @@ Task descriptions:
 
 Rules:
 1. "needs_restaurant_data" MUST be true only for "restaurant_data" or "recommend_action" tasks.
-2. "needs_tool" MUST be true if the query refers to: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
+2. "needs_tool" MUST be true if the query refers to one of these tasks. You MUST match the "suggested_tool" exactly as follows:
+   - "get_lowest_margin_menu": when the query asks about poorly selling items, items with lowest margins/profits, or items to consider removing (e.g. "อะไรขายไม่ดี", "เมนูกำไรน้อยที่สุด", "เมนูที่มาร์จิ้นต่ำสุด", "lowest margin menu", "poorly selling menu").
+   - "get_low_stock_ingredients": when the query asks about low stock ingredients, out of stock ingredients, raw material stock risks, or ingredient counts (e.g. "วัตถุดิบอะไรใกล้หมด", "มีวัตถุดิบอะไรหมดบ้าง", "เช็กสต็อกวัตถุดิบ", "low stock ingredients", "out of stock").
+   - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
+   - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
+   - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
 3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only when the user orders the assistant to perform a change. A request for advice such as "ควรขึ้นราคาเมนูนี้ไหม" is "recommend_action" with risk "low".
 5. Set "task" to "out_of_scope" for anything unrelated to restaurants.
@@ -1224,7 +1229,12 @@ Task descriptions:
 
 Rules:
 1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data", "recommend_action", or a specific data report is requested.
-2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks. You MUST match the "suggested_tool" exactly as follows:
+   - "get_lowest_margin_menu": when the query asks about poorly selling items, items with lowest margins/profits, or items to consider removing (e.g. "อะไรขายไม่ดี", "เมนูกำไรน้อยที่สุด", "เมนูที่มาร์จิ้นต่ำสุด", "lowest margin menu", "poorly selling menu").
+   - "get_low_stock_ingredients": when the query asks about low stock ingredients, out of stock ingredients, raw material stock risks, or ingredient counts (e.g. "วัตถุดิบอะไรใกล้หมด", "มีวัตถุดิบอะไรหมดบ้าง", "เช็กสต็อกวัตถุดิบ", "low stock ingredients", "out of stock").
+   - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
+   - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
+   - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
@@ -1312,7 +1322,12 @@ Task descriptions:
 
 Rules:
 1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data", "recommend_action", or a specific data report is requested.
-2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks. You MUST match the "suggested_tool" exactly as follows:
+   - "get_lowest_margin_menu": when the query asks about poorly selling items, items with lowest margins/profits, or items to consider removing (e.g. "อะไรขายไม่ดี", "เมนูกำไรน้อยที่สุด", "เมนูที่มาร์จิ้นต่ำสุด", "lowest margin menu", "poorly selling menu").
+   - "get_low_stock_ingredients": when the query asks about low stock ingredients, out of stock ingredients, raw material stock risks, or ingredient counts (e.g. "วัตถุดิบอะไรใกล้หมด", "มีวัตถุดิบอะไรหมดบ้าง", "เช็กสต็อกวัตถุดิบ", "low stock ingredients", "out of stock").
+   - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
+   - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
+   - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
