@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -12,6 +12,7 @@ import { Skeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const emptyTableForm: RestaurantTableInput = { zone_id: null, capacity: 2, status: "free", tag_ids: [] };
 const emptyZoneForm: TableZoneInput = { name: "", prefix: "", display_order: 0, is_active: true };
@@ -22,10 +23,25 @@ function statusMeta(language: "th" | "en") {
     free: { label: language === "th" ? "ว่าง" : "Free", cls: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-200" },
     occupied: { label: language === "th" ? "ใช้งาน" : "Occupied", cls: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200" },
     reserved: { label: language === "th" ? "จอง" : "Reserved", cls: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-900/20 dark:text-sky-200" },
+    inactive: { label: language === "th" ? "ปิดใช้งาน" : "Inactive", cls: "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300" },
   } satisfies Record<TableStatus, { label: string; cls: string }>;
 }
 
-const tagBadgeClass = "border-gray-950 bg-white/85 text-gray-950 shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)] dark:border-white/80 dark:bg-gray-950/80 dark:text-white";
+const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-950 dark:text-white";
+
+function tableAccentClass(status: TableStatus) {
+  if (status === "inactive") return "bg-gray-400";
+  if (status === "occupied") return "bg-amber-500";
+  if (status === "reserved") return "bg-sky-500";
+  return "bg-emerald-500";
+}
+
+function tableStatusPillClass(status: TableStatus) {
+  if (status === "inactive") return "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700";
+  if (status === "occupied") return "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:ring-amber-900/70";
+  if (status === "reserved") return "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:ring-sky-900/70";
+  return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:ring-emerald-900/70";
+}
 
 function safeQrFileName(label: string) {
   const safeLabel = label.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-") || "table";
@@ -77,6 +93,7 @@ export default function TablesPage() {
         total: "โต๊ะทั้งหมด",
         occupied: "ใช้งาน",
         reserved: "จอง",
+        inactive: "ปิดใช้งาน",
         zones: "โซน",
         allZones: "ทุกโซน",
         noZone: "ไม่มีโซน",
@@ -99,11 +116,16 @@ export default function TablesPage() {
         zoneManager: "จัดการโซน",
         tagManager: "จัดการ tags",
         zoneName: "ชื่อโซน",
-        prefix: "Prefix",
+        prefix: "ตัวอักษรนำหน้าเลขโต๊ะ (ไม่บังคับ)",
+        prefixPlaceholder: "เช่น R สำหรับริมน้ำ",
+        prefixHelp: "ถ้าใส่ R ระบบจะสร้างเลขโต๊ะเป็น R01, R02 ตอนเพิ่มโต๊ะเป็นชุด",
         displayOrder: "ลำดับ",
         active: "เปิดใช้งาน",
         addZone: "เพิ่มโซน",
         saveZone: "บันทึกโซน",
+        moveUp: "เลื่อนขึ้น",
+        moveDown: "เลื่อนลง",
+        orderUpdated: "อัปเดตลำดับแล้ว",
         tagName: "ชื่อ tag",
         color: "สี",
         addTag: "เพิ่ม tag",
@@ -153,6 +175,7 @@ export default function TablesPage() {
         total: "Total tables",
         occupied: "Occupied",
         reserved: "Reserved",
+        inactive: "Inactive",
         zones: "Zones",
         allZones: "All zones",
         noZone: "No zone",
@@ -175,11 +198,16 @@ export default function TablesPage() {
         zoneManager: "Manage zones",
         tagManager: "Manage tags",
         zoneName: "Zone name",
-        prefix: "Prefix",
+        prefix: "Table number letters (optional)",
+        prefixPlaceholder: "e.g. R for riverside",
+        prefixHelp: "If you enter R, bulk-created tables become R01, R02.",
         displayOrder: "Display order",
         active: "Active",
         addZone: "Add zone",
         saveZone: "Save zone",
+        moveUp: "Move up",
+        moveDown: "Move down",
+        orderUpdated: "Order updated",
         tagName: "Tag name",
         color: "Color",
         addTag: "Add tag",
@@ -243,8 +271,16 @@ export default function TablesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, language]);
 
-  const activeZones = zones.filter((zone) => zone.is_active);
-  const activeTags = tags.filter((tag) => tag.is_active);
+  const sortedZones = useMemo(
+    () => [...zones].sort((a, b) => (a.display_order - b.display_order) || (a.ID - b.ID)),
+    [zones],
+  );
+  const sortedTags = useMemo(
+    () => [...tags].sort((a, b) => (a.display_order - b.display_order) || (a.ID - b.ID)),
+    [tags],
+  );
+  const activeZones = sortedZones;
+  const activeTags = sortedTags;
   const filteredTables = useMemo(() => {
     return tables.filter((table) => {
       const zoneMatch = zoneFilter === "all" || (zoneFilter === "none" ? !table.zone_id : table.zone_id === Number(zoneFilter));
@@ -253,7 +289,7 @@ export default function TablesPage() {
     });
   }, [tagFilter, tables, zoneFilter]);
   const occupiedCount = tables.filter((table) => table.status === "occupied").length;
-  const reservedCount = tables.filter((table) => table.status === "reserved").length;
+  const inactiveCount = tables.filter((table) => table.status === "inactive").length;
   const bulkPreview = useMemo(() => {
     const count = Math.max(1, Number(bulkCount) || 1);
     const zone = activeZones.find((item) => item.ID === tableForm.zone_id);
@@ -267,8 +303,6 @@ export default function TablesPage() {
     return `${window.location.origin}/customer/t/${editingTable.customer_token}`;
   }, [editingTable]);
   const customerOrderQr = customerOrderLink ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(customerOrderLink)}` : "";
-
-  if (!canView) return <PermissionDenied title={copy.denied} />;
 
   const toggleTableTag = (id: number) => setTableForm((current) => ({ ...current, tag_ids: current.tag_ids?.includes(id) ? current.tag_ids.filter((item) => item !== id) : [...(current.tag_ids ?? []), id] }));
 
@@ -346,9 +380,27 @@ export default function TablesPage() {
       setSubmitting(true);
       setFormError("");
       try {
-        const payload = { ...zoneForm, name: zoneForm.name.trim(), prefix: zoneForm.prefix?.trim().toUpperCase(), display_order: Number(zoneForm.display_order) || 0 };
+        const nextDisplayOrder = editingZone
+          ? Number(zoneForm.display_order) || editingZone.display_order
+          : Math.max(0, ...zones.map((zone) => zone.display_order || 0)) + 1;
+        const payload = { ...zoneForm, name: zoneForm.name.trim(), prefix: zoneForm.prefix?.trim().toUpperCase(), display_order: nextDisplayOrder, is_active: true };
         const res = editingZone ? await updateTableZone(editingZone.ID, payload) : await createTableZone(payload);
         setZones((current) => editingZone ? current.map((zone) => zone.ID === res.data.ID ? res.data : zone) : [...current, res.data]);
+        if (editingZone) {
+          setTables((current) => current.map((table) => {
+            if (table.zone_id !== res.data.ID) return table;
+            const nextLabel = payload.prefix
+              ? `${payload.prefix}${String(table.sequence_number).padStart(2, "0")}`
+              : `Z${String(table.sequence_number).padStart(2, "0")}`;
+            return {
+              ...table,
+              table_number: nextLabel,
+              display_label: nextLabel,
+              zone: res.data.name,
+              table_zone: res.data,
+            };
+          }));
+        }
         showToast({ title: editingZone ? copy.zoneUpdated : copy.zoneCreated });
         setEditingZone(null);
         setZoneForm(emptyZoneForm);
@@ -358,6 +410,43 @@ export default function TablesPage() {
         setSubmitting(false);
       }
     });
+  };
+
+  const moveZoneOrder = async (zoneID: number, direction: -1 | 1) => {
+    const currentIndex = sortedZones.findIndex((zone) => zone.ID === zoneID);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= sortedZones.length) return;
+
+    const reordered = [...sortedZones];
+    [reordered[currentIndex], reordered[nextIndex]] = [reordered[nextIndex], reordered[currentIndex]];
+    const normalized = reordered.map((zone, index) => ({ ...zone, display_order: index + 1 }));
+    const previousZones = zones;
+
+    setSubmitting(true);
+    setFormError("");
+    setZones(normalized);
+    if (editingZone) {
+      const currentEditingZone = normalized.find((zone) => zone.ID === editingZone.ID);
+      if (currentEditingZone) {
+        setEditingZone(currentEditingZone);
+        setZoneForm((current) => ({ ...current, display_order: currentEditingZone.display_order }));
+      }
+    }
+
+    try {
+      await Promise.all(normalized.map((zone) => updateTableZone(zone.ID, {
+        name: zone.name,
+        prefix: zone.prefix,
+        display_order: zone.display_order,
+        is_active: true,
+      })));
+      showToast({ title: copy.orderUpdated });
+    } catch {
+      setZones(previousZones);
+      setFormError(copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const saveTag = async (event: React.FormEvent) => {
@@ -370,9 +459,18 @@ export default function TablesPage() {
       setSubmitting(true);
       setFormError("");
       try {
-        const payload = { ...tagForm, name: tagForm.name.trim(), color: "gray" as const, display_order: Number(tagForm.display_order) || 0 };
+        const nextDisplayOrder = editingTag
+          ? Number(tagForm.display_order) || editingTag.display_order
+          : Math.max(0, ...tags.map((tag) => tag.display_order || 0)) + 1;
+        const payload = { ...tagForm, name: tagForm.name.trim(), color: "gray" as const, display_order: nextDisplayOrder, is_active: true };
         const res = editingTag ? await updateTableTag(editingTag.ID, payload) : await createTableTag(payload);
         setTags((current) => editingTag ? current.map((tag) => tag.ID === res.data.ID ? res.data : tag) : [...current, res.data]);
+        if (editingTag) {
+          setTables((current) => current.map((table) => ({
+            ...table,
+            tags: table.tags?.map((tag) => tag.ID === res.data.ID ? { ...tag, ...res.data } : tag) ?? table.tags,
+          })));
+        }
         showToast({ title: editingTag ? copy.tagUpdated : copy.tagCreated });
         setEditingTag(null);
         setTagForm(emptyTagForm);
@@ -384,6 +482,49 @@ export default function TablesPage() {
     });
   };
 
+  const moveTagOrder = async (tagID: number, direction: -1 | 1) => {
+    const currentIndex = sortedTags.findIndex((tag) => tag.ID === tagID);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= sortedTags.length) return;
+
+    const reordered = [...sortedTags];
+    [reordered[currentIndex], reordered[nextIndex]] = [reordered[nextIndex], reordered[currentIndex]];
+    const normalized = reordered.map((tag, index) => ({ ...tag, display_order: index + 1 }));
+    const previousTags = tags;
+
+    setSubmitting(true);
+    setFormError("");
+    setTags(normalized);
+    if (editingTag) {
+      const currentEditingTag = normalized.find((tag) => tag.ID === editingTag.ID);
+      if (currentEditingTag) {
+        setEditingTag(currentEditingTag);
+        setTagForm((current) => ({ ...current, display_order: currentEditingTag.display_order }));
+      }
+    }
+
+    try {
+      await Promise.all(normalized.map((tag) => updateTableTag(tag.ID, {
+        name: tag.name,
+        color: tag.color,
+        display_order: tag.display_order,
+        is_active: true,
+      })));
+      setTables((current) => current.map((table) => ({
+        ...table,
+        tags: table.tags
+          ?.map((tableTag) => normalized.find((tag) => tag.ID === tableTag.ID) ?? tableTag)
+          .sort((a, b) => (a.display_order - b.display_order) || (a.ID - b.ID)) ?? table.tags,
+      })));
+      showToast({ title: copy.orderUpdated });
+    } catch {
+      setTags(previousTags);
+      setFormError(copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const toggleZoneEdit = (zone: TableZone) => {
     setFormError("");
     if (editingZone?.ID === zone.ID) {
@@ -392,7 +533,7 @@ export default function TablesPage() {
       return;
     }
     setEditingZone(zone);
-    setZoneForm({ name: zone.name, prefix: zone.prefix, display_order: zone.display_order, is_active: zone.is_active });
+    setZoneForm({ name: zone.name, prefix: zone.prefix, display_order: zone.display_order, is_active: true });
   };
 
   const toggleTagEdit = (tag: TableTag) => {
@@ -403,7 +544,7 @@ export default function TablesPage() {
       return;
     }
     setEditingTag(tag);
-    setTagForm({ name: tag.name, color: "gray", display_order: tag.display_order, is_active: tag.is_active });
+    setTagForm({ name: tag.name, color: "gray", display_order: tag.display_order, is_active: true });
   };
 
   const confirmDelete = async () => {
@@ -428,6 +569,10 @@ export default function TablesPage() {
         if (deleteTarget.type === "tag") {
           await deleteTableTag(deleteTarget.tag.ID);
           setTags((current) => current.filter((tag) => tag.ID !== deleteTarget.tag.ID));
+          setTables((current) => current.map((table) => ({
+            ...table,
+            tags: table.tags?.filter((tag) => tag.ID !== deleteTarget.tag.ID) ?? table.tags,
+          })));
           if (editingTag?.ID === deleteTarget.tag.ID) {
             setEditingTag(null);
             setTagForm(emptyTagForm);
@@ -451,6 +596,10 @@ export default function TablesPage() {
       setDeleteClosing(false);
     }, 180);
   };
+  const tableDrawerBackdrop = useBackdropClose(closeTableDrawer);
+  const deleteBackdrop = useBackdropClose(closeDeleteModal);
+
+  if (!canView) return <PermissionDenied title={copy.denied} />;
 
   const copyCustomerOrderLink = async () => {
     if (!customerOrderLink) return;
@@ -526,7 +675,7 @@ export default function TablesPage() {
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.reserved, value: reservedCount }, { label: copy.zones, value: zones.length }].map((item) => (
+        {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.inactive, value: inactiveCount }, { label: copy.zones, value: zones.length }].map((item) => (
           <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
             <p className="text-[11px] text-gray-400">{item.label}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">{item.value}</p>
@@ -542,28 +691,42 @@ export default function TablesPage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-32" />)}
+            <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
+              {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-[118px]" />)}
             </div>
           ) : filteredTables.length ? (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
-              {filteredTables.map((table) => (
-                <button key={table.ID} type="button" disabled={!canManage} onClick={() => startEditTable(table)} className={`min-h-36 rounded-md border p-4 text-left transition-[transform,box-shadow] ${canManage ? "ui-press hover:-translate-y-0.5 hover:shadow-sm" : ""} ${STATUS[table.status].cls}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-2xl font-semibold">{table.display_label || table.table_number}</h2>
-                      <p className="mt-1 truncate text-[12px] opacity-80">{table.table_zone?.name || table.zone || copy.noZone}</p>
+            <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
+              {filteredTables.map((table) => {
+                const shownTags = table.tags?.slice(0, 2) ?? [];
+                const extraTags = Math.max((table.tags?.length ?? 0) - shownTags.length, 0);
+
+                return (
+                  <button
+                    key={table.ID}
+                    type="button"
+                    disabled={!canManage}
+                    onClick={() => startEditTable(table)}
+                    className={`group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-950 ${canManage ? "ui-press hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700" : ""}`}
+                  >
+                    <span className={`w-1.5 shrink-0 ${tableAccentClass(table.status)}`} />
+                    <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h2 className="truncate text-[22px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</h2>
+                          <p className="mt-2 truncate text-[12px] font-medium text-gray-500 dark:text-gray-400">{table.table_zone?.name || table.zone || copy.noZone} · {table.capacity} {copy.seats}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold leading-none ${tableStatusPillClass(table.status)}`}>{STATUS[table.status].label}</span>
+                      </div>
+                      <div className="mt-auto">
+                        <div className="flex min-h-[22px] flex-wrap items-start gap-1 overflow-hidden">
+                          {shownTags.map((tag) => <span key={tag.ID} className={`rounded-[4px] px-2 py-0.5 text-[10px] font-extrabold leading-4 tracking-[0.01em] ${tagBadgeClass}`}>{tag.name}</span>)}
+                          {extraTags > 0 ? <span className="rounded-[4px] border-2 border-gray-950 bg-white px-2 py-0.5 text-[10px] font-extrabold leading-4 text-gray-950 dark:border-white dark:bg-gray-950 dark:text-white">+{extraTags}</span> : null}
+                        </div>
+                      </div>
                     </div>
-                    <span className="rounded-md bg-white/70 px-2 py-1 text-[11px] font-semibold dark:bg-gray-950/35">{STATUS[table.status].label}</span>
-                  </div>
-                  <p className="mt-4 text-[12px] opacity-80">{table.capacity} {copy.seats}</p>
-                  {table.tags?.length ? (
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {table.tags.map((tag) => <span key={tag.ID} className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${tagBadgeClass}`}>{tag.name}</span>)}
-                    </div>
-                  ) : null}
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-950">
@@ -577,7 +740,7 @@ export default function TablesPage() {
 
       {tableDrawerOpen && canManage && (
         <>
-          <button type="button" aria-label={copy.cancel} onClick={closeTableDrawer} className={`${tableDrawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
+          <button type="button" aria-label={copy.cancel} {...tableDrawerBackdrop} className={`${tableDrawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
           <form onSubmit={saveTable} className={`${tableDrawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
@@ -599,7 +762,7 @@ export default function TablesPage() {
                       <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.zone}</span>
                       <ThemedSelect value={tableForm.zone_id ? String(tableForm.zone_id) : "none"} onChange={(next) => setTableForm((current) => ({ ...current, zone_id: next === "none" ? null : Number(next) }))} options={[{ value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: `${zone.name}${zone.prefix ? ` (${zone.prefix})` : ""}` }))]} />
                     </label>
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className={`grid gap-3 ${editingTable ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
                       {!editingTable && (
                         <label className="block">
                           <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.count}</span>
@@ -612,7 +775,18 @@ export default function TablesPage() {
                       </label>
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.status}</span>
-                        <ThemedSelect value={tableForm.status} onChange={(next) => setTableForm((current) => ({ ...current, status: next as TableStatus }))} options={[{ value: "free", label: STATUS.free.label }, { value: "occupied", label: STATUS.occupied.label }, { value: "reserved", label: STATUS.reserved.label }]} />
+                        <span className="flex h-10 items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-900">
+                          <span className="truncate text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                            {tableForm.status === "inactive" ? STATUS.inactive.label : copy.active}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={tableForm.status !== "inactive"}
+                            onChange={(event) => setTableForm((current) => ({ ...current, status: event.target.checked ? "free" : "inactive" }))}
+                            className="h-5 w-9 cursor-pointer appearance-none rounded-full bg-gray-200 transition-[background-color] checked:bg-gray-900 before:block before:h-5 before:w-5 before:rounded-full before:bg-white before:shadow-sm before:transition-transform checked:before:translate-x-4 dark:bg-gray-700 dark:checked:bg-white dark:checked:before:bg-gray-900"
+                            aria-label={copy.status}
+                          />
+                        </span>
                       </label>
                     </div>
                     {!editingTable && (
@@ -624,7 +798,7 @@ export default function TablesPage() {
                       <p className="mb-1.5 text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.tags}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {activeTags.map((tag) => (
-                          <button key={tag.ID} type="button" onClick={() => toggleTableTag(tag.ID)} className={`rounded-md border px-2 py-1 text-[11px] font-medium ${tableForm.tag_ids?.includes(tag.ID) ? tagBadgeClass : "border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-900"}`}>{tag.name}</button>
+                          <button key={tag.ID} type="button" onClick={() => toggleTableTag(tag.ID)} className={`rounded-[4px] px-2 py-1 text-[11px] font-bold ${tableForm.tag_ids?.includes(tag.ID) ? tagBadgeClass : "border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{tag.name}</button>
                         ))}
                       </div>
                     </div>
@@ -677,15 +851,31 @@ export default function TablesPage() {
       {zoneManagerOpen && (
         <ManagerModal title={copy.zoneManager} onClose={() => setZoneManagerOpen(false)}>
           <div className="space-y-2">
-            {zones.map((zone) => <ManagerRow key={zone.ID} title={`${zone.name}${zone.prefix ? ` (${zone.prefix})` : ""}`} muted={!zone.is_active} selected={editingZone?.ID === zone.ID} onToggle={() => toggleZoneEdit(zone)} onDelete={() => setDeleteTarget({ type: "zone", zone })} copy={copy} />)}
+            {sortedZones.map((zone, index) => (
+              <ManagerRow
+                key={zone.ID}
+                title={`${zone.name}${zone.prefix ? ` (${zone.prefix})` : ""}`}
+                muted={false}
+                selected={editingZone?.ID === zone.ID}
+                onToggle={() => toggleZoneEdit(zone)}
+                onDelete={() => setDeleteTarget({ type: "zone", zone })}
+                onMoveUp={() => void moveZoneOrder(zone.ID, -1)}
+                onMoveDown={() => void moveZoneOrder(zone.ID, 1)}
+                moveUpDisabled={submitting || index === 0}
+                moveDownDisabled={submitting || index === sortedZones.length - 1}
+                copy={copy}
+              />
+            ))}
           </div>
           <form onSubmit={saveZone} className="mt-4 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-800">
             <input value={zoneForm.name} onChange={(event) => setZoneForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.zoneName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-            <div className="grid grid-cols-2 gap-2">
-              <input value={zoneForm.prefix} onChange={(event) => setZoneForm((current) => ({ ...current, prefix: event.target.value }))} placeholder={copy.prefix} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-              <input type="number" value={zoneForm.display_order || ""} onChange={(event) => setZoneForm((current) => ({ ...current, display_order: Number(event.target.value) || 0 }))} placeholder={copy.displayOrder} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+            <div className="grid gap-2">
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.prefix}</span>
+                <input value={zoneForm.prefix} onChange={(event) => setZoneForm((current) => ({ ...current, prefix: event.target.value }))} placeholder={copy.prefixPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{copy.prefixHelp}</span>
+              </label>
             </div>
-            <label className="flex h-9 items-center gap-2 text-[12px]"><input type="checkbox" checked={zoneForm.is_active} onChange={(event) => setZoneForm((current) => ({ ...current, is_active: event.target.checked }))} />{copy.active}</label>
             <button disabled={submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingZone ? copy.saveZone : copy.addZone}</button>
           </form>
         </ManagerModal>
@@ -694,20 +884,33 @@ export default function TablesPage() {
       {tagManagerOpen && (
         <ManagerModal title={copy.tagManager} onClose={() => setTagManagerOpen(false)}>
           <div className="space-y-2">
-            {tags.map((tag) => <ManagerRow key={tag.ID} title={tag.name} muted={!tag.is_active} badgeClass={tagBadgeClass} selected={editingTag?.ID === tag.ID} onToggle={() => toggleTagEdit(tag)} onDelete={() => setDeleteTarget({ type: "tag", tag })} copy={copy} />)}
+            {sortedTags.map((tag, index) => (
+              <ManagerRow
+                key={tag.ID}
+                title={tag.name}
+                muted={false}
+                badgeClass={tagBadgeClass}
+                selected={editingTag?.ID === tag.ID}
+                onToggle={() => toggleTagEdit(tag)}
+                onDelete={() => setDeleteTarget({ type: "tag", tag })}
+                onMoveUp={() => void moveTagOrder(tag.ID, -1)}
+                onMoveDown={() => void moveTagOrder(tag.ID, 1)}
+                moveUpDisabled={submitting || index === 0}
+                moveDownDisabled={submitting || index === sortedTags.length - 1}
+                copy={copy}
+              />
+            ))}
           </div>
           <form onSubmit={saveTag} className="mt-4 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-800">
             <input value={tagForm.name} onChange={(event) => setTagForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.tagName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-            <input type="number" value={tagForm.display_order || ""} onChange={(event) => setTagForm((current) => ({ ...current, display_order: Number(event.target.value) || 0 }))} placeholder={copy.displayOrder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-            <label className="flex h-9 items-center gap-2 text-[12px]"><input type="checkbox" checked={tagForm.is_active} onChange={(event) => setTagForm((current) => ({ ...current, is_active: event.target.checked }))} />{copy.active}</label>
             <button disabled={submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingTag ? copy.saveTag : copy.addTag}</button>
           </form>
         </ManagerModal>
       )}
 
       {deleteTarget && (
-        <div className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeDeleteModal}>
-          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div {...deleteBackdrop} className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
@@ -730,10 +933,11 @@ function ManagerModal({ title, onClose, children }: { title: string; onClose: ()
     setClosing(true);
     window.setTimeout(onClose, 180);
   };
+  const backdrop = useBackdropClose(close);
 
   return (
-    <div className={`${closing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={close}>
-      <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+    <div {...backdrop} className={`${closing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+      <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{title}</h2>
           <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
@@ -744,7 +948,31 @@ function ManagerModal({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-function ManagerRow({ title, muted, badgeClass, selected, onToggle, onDelete, copy }: { title: string; muted?: boolean; badgeClass?: string; selected?: boolean; onToggle: () => void; onDelete: () => void; copy: Record<string, string> }) {
+function ManagerRow({
+  title,
+  muted,
+  badgeClass,
+  selected,
+  onToggle,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  moveUpDisabled,
+  moveDownDisabled,
+  copy,
+}: {
+  title: string;
+  muted?: boolean;
+  badgeClass?: string;
+  selected?: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  moveUpDisabled?: boolean;
+  moveDownDisabled?: boolean;
+  copy: Record<string, string>;
+}) {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -764,8 +992,38 @@ function ManagerRow({ title, muted, badgeClass, selected, onToggle, onDelete, co
           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/60"
       }`}
     >
-      <p className={`truncate text-[13px] font-medium ${muted ? "text-gray-400 line-through" : badgeClass ? `w-fit rounded-md border px-2 py-1 ${badgeClass}` : "text-gray-900 dark:text-white"}`}>{title}</p>
+      <p className={`truncate text-[13px] font-medium ${muted ? "text-gray-400 line-through" : badgeClass ? `w-fit rounded-[4px] px-2 py-1 ${badgeClass}` : "text-gray-900 dark:text-white"}`}>{title}</p>
       <div className="flex gap-1">
+        {onMoveUp && onMoveDown ? (
+          <span className="flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
+            <button
+              type="button"
+              disabled={moveUpDisabled}
+              aria-label={copy.moveUp}
+              title={copy.moveUp}
+              onClick={(event) => {
+                event.stopPropagation();
+                onMoveUp();
+              }}
+              className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900"
+            >
+              <ChevronUp className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              disabled={moveDownDisabled}
+              aria-label={copy.moveDown}
+              title={copy.moveDown}
+              onClick={(event) => {
+                event.stopPropagation();
+                onMoveDown();
+              }}
+              className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </span>
+        ) : null}
         <button type="button" onClick={(event) => { event.stopPropagation(); onDelete(); }} className="h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
       </div>
     </div>

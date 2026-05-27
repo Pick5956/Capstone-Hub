@@ -20,6 +20,7 @@ func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/menu-items", menuCtrl.CreateMenuItem)
 	v1.POST("/menu-items/upload-image", menuCtrl.UploadMenuImage)
 	v1.PUT("/menu-items/:id", menuCtrl.UpdateMenuItem)
+	v1.PATCH("/menu-items/:id/availability", menuCtrl.UpdateMenuItemAvailability)
 	v1.DELETE("/menu-items/:id", menuCtrl.DeleteMenuItem)
 
 	v1.GET("/tables", tableCtrl.ListTables)
@@ -27,6 +28,7 @@ func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/tables/bulk-create", tableCtrl.BulkCreateTables)
 	v1.POST("/tables/:id/regenerate-customer-token", tableCtrl.RegenerateCustomerToken)
 	v1.PUT("/tables/:id", tableCtrl.UpdateTable)
+	v1.PATCH("/tables/:id/status", tableCtrl.UpdateTableStatus)
 	v1.PATCH("/tables/:id/move-zone", tableCtrl.MoveTableZone)
 	v1.DELETE("/tables/:id", tableCtrl.DeleteTable)
 

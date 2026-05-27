@@ -92,8 +92,8 @@ export default function ResetPasswordPage() {
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center">
         <section className="w-full overflow-hidden rounded-md border border-white/10 bg-gray-900 shadow-2xl">
           <div className="border-b border-white/10 px-5 py-5">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-orange-400">{copy.eyebrow}</p>
-            <h1 className="mt-2 text-2xl font-black tracking-tight">{copy.title}</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-400">{copy.eyebrow}</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">{copy.title}</h1>
             <p className="mt-2 text-sm leading-6 text-gray-400">{copy.subtitle}</p>
           </div>
 
@@ -136,7 +136,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={loading || !token}
-              className="h-11 w-full rounded-md bg-white text-sm font-bold text-gray-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-11 w-full rounded-md bg-white text-sm font-semibold text-gray-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? copy.submitting : copy.submit}
             </button>

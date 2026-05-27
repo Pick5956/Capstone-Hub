@@ -59,7 +59,7 @@ export const updateMemberRole = (restaurantId: number, memberId: number, roleId:
     role_id: roleId,
   });
 
-export const listAuditLogs = (restaurantId: number, limit = 20) =>
-  apiClient.get<{ logs: RestaurantAuditLog[] }>(`/api/v1/restaurants/${restaurantId}/audit-logs`, {
-    params: { limit },
+export const listAuditLogs = (restaurantId: number, limit = 20, offset = 0) =>
+  apiClient.get<{ logs: RestaurantAuditLog[]; has_more?: boolean; next_offset?: number }>(`/api/v1/restaurants/${restaurantId}/audit-logs`, {
+    params: { limit, offset },
   });

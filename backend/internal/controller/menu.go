@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -70,7 +69,7 @@ func memberCan(c *gin.Context, permission string) bool {
 		return role == "owner" || role == "manager" || role == "cashier" || role == "waiter"
 	}
 	if permission == "manage_table" {
-		return role == "owner" || role == "manager" || role == "waiter"
+		return role == "owner" || role == "manager"
 	}
 	if permission == "take_order" {
 		return role == "owner" || role == "manager" || role == "waiter"
@@ -277,6 +276,32 @@ func (ctrl *MenuController) UpdateMenuItem(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
+func (ctrl *MenuController) UpdateMenuItemAvailability(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !memberCan(c, "manage_menu") {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
+		return
+	}
+	itemID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.MenuItemAvailabilityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := ctrl.menuSvc.UpdateMenuItemAvailability(restaurantID, itemID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
 func (ctrl *MenuController) DeleteMenuItem(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
@@ -312,14 +337,9 @@ func (ctrl *MenuController) UploadMenuImage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
 		return
 	}
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file must be 5MB or smaller"})
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image must be jpg, png, or webp"})
+	ext, err := validateImageUpload(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

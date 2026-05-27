@@ -35,6 +35,10 @@ type MenuItemRequest struct {
 	Ingredients  []MenuIngredientRequest  `json:"ingredients"`
 }
 
+type MenuItemAvailabilityRequest struct {
+	IsAvailable bool `json:"is_available"`
+}
+
 type MenuIngredientRequest struct {
 	IngredientID uint    `json:"ingredient_id"`
 	Quantity     float64 `json:"quantity"`
@@ -207,6 +211,18 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 		return nil, err
 	}
 	if err := s.repo.ReplaceMenuCategories(item, categoryLinks(restaurantID, item.ID, categoryIDs)); err != nil {
+		return nil, err
+	}
+	return s.repo.FindMenuItem(restaurantID, item.ID)
+}
+
+func (s *MenuService) UpdateMenuItemAvailability(restaurantID, itemID uint, req *MenuItemAvailabilityRequest) (*entity.MenuItem, error) {
+	item, err := s.repo.FindMenuItem(restaurantID, itemID)
+	if err != nil {
+		return nil, err
+	}
+	item.IsAvailable = req.IsAvailable
+	if err := s.repo.UpdateMenuItem(item); err != nil {
 		return nil, err
 	}
 	return s.repo.FindMenuItem(restaurantID, item.ID)

@@ -8,6 +8,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+const Issuer = "AuthService"
+
 type JwtWrapper struct {
 	SecretKey string
 	Issuer    string
@@ -30,6 +32,9 @@ func (j *JwtWrapper) ValidateToken(tokenString string) (*JwtClaims, error) {
 		func(token *jwt.Token) (interface{}, error) {
 			return []byte(j.SecretKey), nil
 		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		jwt.WithIssuer(j.Issuer),
+		jwt.WithExpirationRequired(),
 	)
 
 	if err != nil {
@@ -41,8 +46,11 @@ func (j *JwtWrapper) ValidateToken(tokenString string) (*JwtClaims, error) {
 		return nil, errors.New("invalid token")
 	}
 
-	if claims.ExpiresAt.Time.Before(time.Now()) {
+	if claims.ExpiresAt == nil || claims.ExpiresAt.Time.Before(time.Now()) {
 		return nil, errors.New("token expired")
+	}
+	if claims.UserID == 0 {
+		return nil, errors.New("invalid token subject")
 	}
 
 	return claims, nil

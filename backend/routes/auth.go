@@ -26,10 +26,13 @@ type authRateBucket struct {
 
 var authRateState = struct {
 	sync.Mutex
-	buckets map[string]authRateBucket
+	buckets   map[string]authRateBucket
+	lastSweep time.Time
 }{
 	buckets: map[string]authRateBucket{},
 }
+
+const maxAuthRateBuckets = 10000
 
 func rateLimitAuth(limit int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -37,6 +40,18 @@ func rateLimitAuth(limit int, window time.Duration) gin.HandlerFunc {
 		key := c.ClientIP() + ":" + c.FullPath()
 
 		authRateState.Lock()
+		if now.Sub(authRateState.lastSweep) > window {
+			for bucketKey, bucket := range authRateState.buckets {
+				if now.After(bucket.ResetAfter) {
+					delete(authRateState.buckets, bucketKey)
+				}
+			}
+			authRateState.lastSweep = now
+		}
+		if len(authRateState.buckets) > maxAuthRateBuckets {
+			authRateState.buckets = map[string]authRateBucket{}
+			authRateState.lastSweep = now
+		}
 		bucket := authRateState.buckets[key]
 		if bucket.ResetAfter.IsZero() || now.After(bucket.ResetAfter) {
 			bucket = authRateBucket{ResetAfter: now.Add(window)}

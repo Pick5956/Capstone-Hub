@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
@@ -13,6 +12,7 @@ import { RestaurantCardSkeleton, Skeleton } from "@/src/components/shared/Skelet
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
+import UserAvatar from "@/src/components/shared/UserAvatar";
 
 const ROLE_LABELS: Record<Language, Record<string, string>> = {
   th: {
@@ -138,6 +138,9 @@ function statusTone(status: string) {
   return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
 }
 
+const AUDIT_PAGE_SIZE = 20;
+const MOBILE_AUDIT_PAGE_SIZE = 5;
+
 function parseAuditDetails(details: string) {
   try {
     return JSON.parse(details) as Record<string, unknown>;
@@ -206,6 +209,9 @@ export default function StaffPage() {
   const [members, setMembers] = useState<Membership[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [auditLogs, setAuditLogs] = useState<RestaurantAuditLog[]>([]);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [auditMobilePage, setAuditMobilePage] = useState(0);
   const [roles, setRoles] = useState<Role[]>([]);
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<number | "">("");
@@ -277,6 +283,10 @@ export default function StaffPage() {
         target: "เป้าหมาย",
         noAudit: "ยังไม่มีประวัติในช่วงนี้",
         auditDenied: "เฉพาะเจ้าของร้านหรือผู้จัดการเท่านั้นที่ดู audit log ได้",
+        loadMoreAudit: "โหลดประวัติเพิ่ม",
+        loadingMoreAudit: "กำลังโหลด...",
+        previousAuditPage: "ก่อนหน้า",
+        nextAuditPage: "หน้าถัดไป",
         inviteTitle: "เพิ่มพนักงาน",
         inviteHint: "เลือกบทบาทแล้วสร้างลิงก์เชิญ จากนั้นคัดลอกหรือเปิดอีเมลเพื่อนำส่งต่อ",
         emailLabel: "อีเมลพนักงาน",
@@ -350,6 +360,10 @@ export default function StaffPage() {
         target: "Target",
         noAudit: "No recent activity yet.",
         auditDenied: "Only owners and managers can view the audit log.",
+        loadMoreAudit: "Load more history",
+        loadingMoreAudit: "Loading...",
+        previousAuditPage: "Previous",
+        nextAuditPage: "Next page",
         inviteTitle: "Invite staff",
         inviteHint: "Choose a role, create an invitation link, then copy it or open an email handoff.",
         emailLabel: "Staff email",
@@ -380,7 +394,7 @@ export default function StaffPage() {
         listMembers(restaurantId),
         getRoles(),
         allowed ? listPendingInvitations(restaurantId) : Promise.resolve({ data: { invitations: [] } }),
-        allowed ? listAuditLogs(restaurantId, 25) : Promise.resolve({ data: { logs: [] } }),
+        allowed ? listAuditLogs(restaurantId, AUDIT_PAGE_SIZE) : Promise.resolve({ data: { logs: [], has_more: false } }),
       ]);
 
       const roleList = (rolesRes?.data?.data ?? []) as Role[];
@@ -388,6 +402,8 @@ export default function StaffPage() {
       setMembers(membersRes.data.members ?? []);
       setInvitations(invitationsRes.data.invitations ?? []);
       setAuditLogs(logsRes.data.logs ?? []);
+      setAuditHasMore(Boolean(logsRes.data.has_more));
+      setAuditMobilePage(0);
       setRoles(roleList);
       if (!roleId) {
         const nextDefault = nextInviteRoles.find((role) => role.name === "waiter") ?? nextInviteRoles[0];
@@ -404,6 +420,44 @@ export default function StaffPage() {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId, allowed, language]);
+
+  const loadMoreAuditLogs = async () => {
+    if (!restaurantId || !allowed || auditLoadingMore || !auditHasMore) return false;
+    setAuditLoadingMore(true);
+    setError("");
+    try {
+      const res = await listAuditLogs(restaurantId, AUDIT_PAGE_SIZE, auditLogs.length);
+      const nextLogs = res.data.logs ?? [];
+      setAuditLogs((current) => {
+        const seen = new Set(current.map((log) => log.ID));
+        return [...current, ...nextLogs.filter((log) => !seen.has(log.ID))];
+      });
+      setAuditHasMore(Boolean(res.data.has_more));
+      return nextLogs.length > 0;
+    } catch {
+      setError(copy.loadError);
+      return false;
+    } finally {
+      setAuditLoadingMore(false);
+    }
+  };
+
+  const goToPreviousAuditPage = () => {
+    setAuditMobilePage((current) => Math.max(0, current - 1));
+  };
+
+  const goToNextAuditPage = async () => {
+    const nextStart = (auditMobilePage + 1) * MOBILE_AUDIT_PAGE_SIZE;
+    if (nextStart < auditLogs.length) {
+      setAuditMobilePage((current) => current + 1);
+      return;
+    }
+    if (!auditHasMore) return;
+    const loaded = await loadMoreAuditLogs();
+    if (loaded) {
+      setAuditMobilePage((current) => current + 1);
+    }
+  };
 
   const createInvite = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -533,6 +587,11 @@ export default function StaffPage() {
     });
   };
 
+  const auditMobileStart = auditMobilePage * MOBILE_AUDIT_PAGE_SIZE;
+  const auditMobileLogs = auditLogs.slice(auditMobileStart, auditMobileStart + MOBILE_AUDIT_PAGE_SIZE);
+  const auditCanGoBack = auditMobilePage > 0;
+  const auditCanGoNext = auditMobileStart + MOBILE_AUDIT_PAGE_SIZE < auditLogs.length || auditHasMore;
+
   if (!restaurantId) return null;
 
   return (
@@ -595,13 +654,7 @@ export default function StaffPage() {
                     return (
                       <div key={member.ID} className="relative grid gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 lg:grid-cols-[minmax(220px,1.15fr)_minmax(220px,0.9fr)_120px_160px_minmax(170px,auto)] lg:items-center lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-3 lg:last:border-b-0 lg:dark:bg-transparent">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-[12px] font-bold text-orange-700 dark:bg-orange-900/25 dark:text-orange-300">
-                            {member.user?.profile_image ? (
-                              <Image src={member.user.profile_image} alt={displayUserName(member, language)} width={40} height={40} unoptimized className="h-full w-full object-cover" />
-                            ) : (
-                              displayUserName(member, language).slice(0, 2).toUpperCase()
-                            )}
-                          </div>
+                          <UserAvatar src={member.user?.profile_image} name={displayUserName(member, language)} size={40} className="h-10 w-10 text-[12px]" />
                           <div className="min-w-0">
                             <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{displayUserName(member, language)}</p>
                             <p className="truncate text-[11px] text-gray-400">{member.user?.email}</p>
@@ -739,21 +792,69 @@ export default function StaffPage() {
                 </div>
               ) : allowed ? (
                 auditLogs.length ? (
-                  <div className="space-y-2">
-                    {auditLogs.map((log) => (
+                  <div className="space-y-3">
+                    <div className="space-y-3 sm:hidden">
+                      <div className="space-y-2">
+                        {auditMobileLogs.map((log) => (
+                          <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+                            <div className="space-y-1.5">
+                              <p className="break-words text-[12px] font-medium text-gray-900 dark:text-white">{auditMessage(log, language)}</p>
+                              <p className="break-words text-[11px] text-gray-500 dark:text-gray-400">
+                                {copy.by} {actorName(log, language)}
+                                {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
+                              </p>
+                              <p className="text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={goToPreviousAuditPage}
+                          disabled={!auditCanGoBack}
+                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                        >
+                          {copy.previousAuditPage}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void goToNextAuditPage()}
+                          disabled={!auditCanGoNext || auditLoadingMore}
+                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-45 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                        >
+                          {auditLoadingMore ? copy.loadingMoreAudit : copy.nextAuditPage}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="hidden max-h-[min(52vh,520px)] overflow-y-auto pr-1 sm:block">
+                      <div className="space-y-2">
+                        {auditLogs.map((log) => (
                       <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <div className="min-w-0">
-                            <p className="text-[12px] font-medium text-gray-900 dark:text-white">{auditMessage(log, language)}</p>
-                            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                            <p className="break-words text-[12px] font-medium text-gray-900 dark:text-white">{auditMessage(log, language)}</p>
+                            <p className="mt-0.5 break-words text-[11px] text-gray-500 dark:text-gray-400">
                               {copy.by} {actorName(log, language)}
                               {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
                             </p>
                           </div>
-                          <span className="shrink-0 text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</span>
+                          <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</span>
                         </div>
                       </div>
-                    ))}
+                        ))}
+                      </div>
+                    </div>
+                    {auditHasMore && (
+                      <button
+                        type="button"
+                        onClick={() => void loadMoreAuditLogs()}
+                        disabled={auditLoadingMore}
+                        className="hidden h-10 w-full rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 sm:block"
+                      >
+                        {auditLoadingMore ? copy.loadingMoreAudit : copy.loadMoreAudit}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">

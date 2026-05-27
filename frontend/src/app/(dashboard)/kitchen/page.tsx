@@ -260,7 +260,7 @@ export default function KitchenPage() {
                 )}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{copy.table} {order.table?.table_number ?? order.table_id}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{copy.table} {order.table?.table_number ?? order.table_id}</p>
                     <h2 className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{order.order_number}</h2>
                   </div>
                   <div className="text-right">

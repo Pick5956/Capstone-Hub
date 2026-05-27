@@ -100,7 +100,7 @@ function MetricCard({
         </span>
         <div className="min-w-0">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="mt-1 truncate text-lg font-bold text-gray-950 dark:text-white">{value}</p>
+          <p className="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">{value}</p>
         </div>
       </div>
     </div>

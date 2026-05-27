@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import axios from "axios";
 import { X } from "lucide-react";
 import { getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -256,6 +257,8 @@ export default function CustomerTableOrderPage() {
       setSummaryClosing(false);
     }, 180);
   };
+  const summaryBackdrop = useBackdropClose(closeSummary);
+  const menuBackdrop = useBackdropClose(closeMenu);
 
   const addToCart = () => {
     if (!canOrder || !selectedMenu || requiredOptionsMissing) return;
@@ -414,9 +417,9 @@ export default function CustomerTableOrderPage() {
       </div>
 
       {summaryOpen && (
-        <div className={`${summaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`} onClick={closeSummary}>
+        <div {...summaryBackdrop} className={`${summaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>
           <div className="fixed left-1/2 top-1/2 w-[calc(100dvw-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2">
-            <div className={`${summaryClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] min-h-0 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+            <div className={`${summaryClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] min-h-0 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
               <div className="shrink-0 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.summaryTitle}</h2>
                 <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">{copy.summaryHint}</p>
@@ -455,9 +458,9 @@ export default function CustomerTableOrderPage() {
       )}
 
       {selectedMenu && (
-        <div className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`} onClick={closeMenu}>
+        <div {...menuBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>
           <div className="fixed left-1/2 top-1/2 w-[calc(100dvw-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2">
-            <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+            <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
               <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
                 <button type="button" aria-label={copy.close} onClick={closeMenu} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                   <X className="h-4 w-4" aria-hidden="true" />

@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
@@ -9,6 +8,8 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import LanguageToggle from '@/src/components/shared/LanguageToggle';
 import ThemeToggle from '@/src/components/shared/ThemeToggle';
+import UserAvatar from '@/src/components/shared/UserAvatar';
+import { useBackdropClose } from '@/src/hooks/useBackdropClose';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
@@ -132,24 +133,24 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   };
 
   return (
-    <nav className="sidebar-nav-scroll flex-1 space-y-2 overflow-y-auto overscroll-contain px-2 py-2 [@media(max-height:760px)]:space-y-1.5 [@media(max-height:760px)]:py-1.5">
+    <nav className="sidebar-nav-scroll flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2">
       {nav.map(({ group, items }, groupIndex) => (
         <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
           {!collapsed && group && (
-            <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-0.5 [@media(max-height:760px)]:text-[9px]">{group}</p>
+            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-1 [@media(max-height:760px)]:text-[9px]">{group}</p>
           )}
           <div className="space-y-0.5">
             {items.filter((item) => canSee(item.permission)).map(({ label, href, icon, badge, comingSoon }) => {
               const active = !comingSoon && isActive(href);
-              const itemClassName = `relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition-colors [@media(max-height:760px)]:py-1.5 ${
+              const itemClassName = `relative flex items-center gap-2.5 rounded-md border px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow] [@media(max-height:760px)]:py-1.5 ${
                 active
-                  ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+                  ? 'border-gray-200 bg-white text-gray-950 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white'
+                  : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-white hover:text-gray-950 dark:text-gray-400 dark:hover:border-gray-800 dark:hover:bg-gray-900 dark:hover:text-white'
               } ${collapsed ? 'justify-center' : ''} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
               const content = (
                 <>
-                  {active && <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r bg-orange-500" />}
-                  <span className={active ? 'text-orange-500' : ''}>{icon}</span>
+                  {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-orange-500" />}
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>{icon}</span>
                   {!collapsed && (
                     <span className="flex min-w-0 flex-1 items-center gap-2">
                       <span className="truncate">{label}</span>
@@ -157,7 +158,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                     </span>
                   )}
                   {!collapsed && badge && (
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-[10px] font-black text-white">
+                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-semibold text-white">
                       {badge}
                     </span>
                   )}
@@ -196,20 +197,12 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
   const { user, logout } = useAuth();
   const { language } = useLanguage();
   const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === '-' ? '' : user.last_name}`.trim()) : language === 'th' ? 'ผู้ใช้งาน' : 'User';
-  const initials = displayName
-    .split(' ')
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || '?';
   const logoutLabel = language === 'th' ? 'ออกจากระบบ' : 'Sign out';
 
   if (collapsed) {
     return (
-      <div className="flex shrink-0 flex-col items-center gap-2 border-t border-gray-100 px-3 py-4 dark:border-gray-800">
-        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-          {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
-        </div>
+      <div className="flex shrink-0 flex-col items-center gap-2 border-t border-gray-200 px-3 py-4 dark:border-gray-800">
+        <UserAvatar src={user?.profile_image} name={displayName} size={32} className="h-8 w-8 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
         <LanguageCycleButton />
         <button
           onClick={logout}
@@ -227,11 +220,9 @@ function UserFooter({ collapsed }: { collapsed: boolean }) {
   }
 
   return (
-    <div className="shrink-0 border-t border-gray-100 px-4 py-3 dark:border-gray-800 [@media(max-height:760px)]:py-2">
-      <div className="group flex items-center gap-3 rounded-md px-2 py-2">
-        <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-          {user?.profile_image ? <Image src={user.profile_image} alt={displayName} width={32} height={32} unoptimized className="h-full w-full object-cover" /> : initials}
-        </div>
+    <div className="shrink-0 border-t border-gray-200 px-3 py-3 dark:border-gray-800 [@media(max-height:760px)]:py-2">
+      <div className="group flex items-center gap-3 rounded-md border border-transparent px-2 py-2 hover:border-gray-200 hover:bg-white dark:hover:border-gray-800 dark:hover:bg-gray-900">
+        <UserAvatar src={user?.profile_image} name={displayName} size={32} className="h-8 w-8 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200">{displayName}</p>
           <p className="truncate text-[10px] text-gray-400">{user?.email ?? ''}</p>
@@ -261,7 +252,7 @@ function LanguageCycleButton({ className = '' }: { className?: string }) {
       type="button"
       onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}
       title={title}
-      className={`shrink-0 rounded-md p-2 text-[11px] font-bold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white ${className}`}
+      className={`shrink-0 rounded-md p-2 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white ${className}`}
     >
       {language.toUpperCase()}
     </button>
@@ -271,7 +262,7 @@ function LanguageCycleButton({ className = '' }: { className?: string }) {
 function DesktopControls() {
   return (
     <div className="hidden shrink-0 px-3 py-2 lg:block">
-      <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-gray-900">
         <LanguageToggle className="h-8 border-0 bg-transparent shadow-none dark:bg-transparent" />
         <ThemeToggle className="h-8 w-8 border-0 bg-transparent p-0 text-gray-600 shadow-none hover:bg-white hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white" />
       </div>
@@ -287,12 +278,12 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
 
   if (collapsed) {
     return (
-      <div className="flex h-14 shrink-0 items-center justify-center border-b border-gray-100 dark:border-gray-800">
+      <div className="flex h-14 shrink-0 items-center justify-center border-b border-gray-200 dark:border-gray-800">
         <Link
           href="/restaurants"
           onClick={onNavigate}
           title={restaurantName}
-          className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white transition-colors hover:bg-orange-700"
+          className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
@@ -308,16 +299,16 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
       <Link
         href="/restaurants"
         onClick={onNavigate}
-        className="flex min-w-0 items-center gap-2.5 rounded-md px-1.5 py-1 transition-colors hover:bg-orange-50 dark:hover:bg-orange-900/20"
+        className="flex min-w-0 items-center gap-2.5 rounded-md border border-transparent px-1.5 py-1.5 transition-colors hover:border-gray-200 hover:bg-white dark:hover:border-gray-800 dark:hover:bg-gray-900"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
             <path d="M9 12h6M9 16h4" />
           </svg>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold leading-tight text-gray-900 dark:text-white">{restaurantName}</span>
+          <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
         </span>
         <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
       </Link>
@@ -329,6 +320,7 @@ export default function Sidebar() {
   const { mobileOpen, setMobileOpen, collapsed, setCollapsed } = useSidebar();
   const { language } = useLanguage();
   const mobileDrawerRef = useRef<HTMLElement>(null);
+  const mobileBackdrop = useBackdropClose(() => setMobileOpen(false));
   const collapseTitle = collapsed
     ? language === 'th' ? 'ขยายแถบด้านข้าง' : 'Expand sidebar'
     : language === 'th' ? 'ย่อแถบด้านข้าง' : 'Collapse sidebar';
@@ -345,8 +337,8 @@ export default function Sidebar() {
     <>
       {mobileOpen && (
         <div
+          {...mobileBackdrop}
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
         />
       )}
 
@@ -360,11 +352,11 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-100 bg-white shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-gray-800 dark:bg-gray-950 lg:hidden
+          fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-200 bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-gray-800 dark:bg-gray-950 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
           <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
             <button
@@ -385,11 +377,11 @@ export default function Sidebar() {
 
       <aside
         className={`
-          fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden border-r border-gray-100 bg-white transition-[width] duration-200 ease-out will-change-[width] dark:border-gray-800 dark:bg-gray-950 lg:flex
-          ${collapsed ? 'w-[68px]' : 'w-60'}
+          fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden border-r border-gray-200 bg-slate-50 transition-[width] duration-200 ease-out will-change-[width] dark:border-gray-800 dark:bg-gray-950 lg:flex
+          ${collapsed ? 'w-[68px]' : 'w-[264px]'}
         `}
       >
-        <div className={`flex h-14 shrink-0 items-center border-b border-gray-100 px-3 dark:border-gray-800 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+        <div className={`flex h-14 shrink-0 items-center border-b border-gray-200 px-3 dark:border-gray-800 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
           {!collapsed && <RestaurantHeader collapsed={false} />}
           <div className="flex items-center gap-0.5">
             <button

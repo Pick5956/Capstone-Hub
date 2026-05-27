@@ -298,7 +298,7 @@ func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID
 	return updated, nil
 }
 
-func (s *RestaurantService) ListAuditLogs(actorUserID, restaurantID uint, limit int) ([]entity.RestaurantAuditLog, error) {
+func (s *RestaurantService) ListAuditLogs(actorUserID, restaurantID uint, limit int, offset int) ([]entity.RestaurantAuditLog, error) {
 	actor, err := s.GetMembership(actorUserID, restaurantID)
 	if err != nil {
 		return nil, err
@@ -306,7 +306,7 @@ func (s *RestaurantService) ListAuditLogs(actorUserID, restaurantID uint, limit 
 	if !canManageTeam(actor) {
 		return nil, errors.New("only owner or manager can view audit logs")
 	}
-	return s.auditRepo.ListByRestaurant(restaurantID, limit)
+	return s.auditRepo.ListByRestaurant(restaurantID, limit, offset)
 }
 
 func (s *RestaurantService) GetRestaurant(restaurantID uint) (*entity.Restaurant, error) {

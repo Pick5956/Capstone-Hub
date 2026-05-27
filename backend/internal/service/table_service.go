@@ -90,6 +90,10 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 	}
 	table.Capacity = next.Capacity
 	table.Status = next.Status
+	if table.Status != entity.TableStatusReserved {
+		table.ReservationName = ""
+		table.ReservationPhone = ""
+	}
 	if err := s.repo.UpdateTable(table); err != nil {
 		return nil, err
 	}
@@ -97,6 +101,49 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 		return nil, err
 	}
 	return s.repo.FindTable(restaurantID, table.ID)
+}
+
+func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status string, reservationPhone string, reservationName string) (*entity.RestaurantTable, error) {
+	status = strings.TrimSpace(status)
+	if !isValidTableStatus(status) {
+		return nil, errors.New("invalid table status")
+	}
+	reservationPhone = strings.TrimSpace(reservationPhone)
+	reservationName = strings.TrimSpace(reservationName)
+	if status == entity.TableStatusReserved && !isValidReservationPhone(reservationPhone) {
+		return nil, errors.New("reservation phone is required")
+	}
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if hasOpenOrder && status != entity.TableStatusOccupied {
+			return errors.New("table has an open order")
+		}
+		table.Status = status
+		if status == entity.TableStatusReserved {
+			table.ReservationName = reservationName
+			table.ReservationPhone = reservationPhone
+		} else {
+			table.ReservationName = ""
+			table.ReservationPhone = ""
+		}
+		if err := tx.UpdateTable(table); err != nil {
+			return err
+		}
+		updatedID = table.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindTable(restaurantID, updatedID)
 }
 
 func (s *TableService) RegenerateCustomerToken(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
@@ -132,7 +179,7 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 	if status == "" {
 		status = entity.TableStatusFree
 	}
-	if status != entity.TableStatusFree && status != entity.TableStatusOccupied && status != entity.TableStatusReserved {
+	if !isValidTableStatus(status) {
 		return nil, errors.New("invalid table status")
 	}
 	var created []entity.RestaurantTable
@@ -231,22 +278,49 @@ func (s *TableService) CreateZone(restaurantID uint, req *TableZoneRequest) (*en
 }
 
 func (s *TableService) UpdateZone(restaurantID, zoneID uint, req *TableZoneRequest) (*entity.TableZone, error) {
-	zone, err := s.repo.FindZone(restaurantID, zoneID)
+	var updated *entity.TableZone
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		zone, err := tx.FindZone(restaurantID, zoneID)
+		if err != nil {
+			return err
+		}
+		next, err := zoneFromRequest(tx, restaurantID, zoneID, req)
+		if err != nil {
+			return err
+		}
+		prefixChanged := strings.TrimSpace(zone.Prefix) != strings.TrimSpace(next.Prefix)
+		nameChanged := zone.Name != next.Name
+		zone.Name = next.Name
+		zone.Prefix = next.Prefix
+		zone.DisplayOrder = next.DisplayOrder
+		zone.IsActive = next.IsActive
+		if err := tx.UpdateZone(zone); err != nil {
+			return err
+		}
+		if prefixChanged || nameChanged {
+			tables, err := tx.ListTablesInZone(restaurantID, zone.ID)
+			if err != nil {
+				return err
+			}
+			for i := range tables {
+				tables[i].Zone = zone.Name
+				if prefixChanged {
+					label := tableLabel(zone, tables[i].SequenceNumber)
+					tables[i].TableNumber = label
+					tables[i].DisplayLabel = label
+				}
+				if err := tx.UpdateTable(&tables[i]); err != nil {
+					return err
+				}
+			}
+		}
+		updated = zone
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	next, err := zoneFromRequest(s.repo, restaurantID, zoneID, req)
-	if err != nil {
-		return nil, err
-	}
-	zone.Name = next.Name
-	zone.Prefix = next.Prefix
-	zone.DisplayOrder = next.DisplayOrder
-	zone.IsActive = next.IsActive
-	if err := s.repo.UpdateZone(zone); err != nil {
-		return nil, err
-	}
-	return zone, nil
+	return updated, nil
 }
 
 func (s *TableService) DeleteZone(restaurantID, zoneID uint) error {
@@ -316,7 +390,7 @@ func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *
 	if status == "" {
 		status = entity.TableStatusFree
 	}
-	if status != entity.TableStatusFree && status != entity.TableStatusOccupied && status != entity.TableStatusReserved {
+	if !isValidTableStatus(status) {
 		return nil, nil, errors.New("invalid table status")
 	}
 	zone, zoneID, err := zoneContext(repo, restaurantID, req.ZoneID)
@@ -346,6 +420,23 @@ func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *
 		Status:         status,
 		CustomerToken:  GenerateCustomerTableToken(),
 	}, tags, nil
+}
+
+func isValidTableStatus(status string) bool {
+	return status == entity.TableStatusFree ||
+		status == entity.TableStatusOccupied ||
+		status == entity.TableStatusReserved ||
+		status == entity.TableStatusInactive
+}
+
+func isValidReservationPhone(phone string) bool {
+	digits := 0
+	for _, char := range phone {
+		if char >= '0' && char <= '9' {
+			digits++
+		}
+	}
+	return digits >= 9
 }
 
 func GenerateCustomerTableToken() string {

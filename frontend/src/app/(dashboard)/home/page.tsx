@@ -28,7 +28,7 @@ import type { Membership } from "@/src/types/restaurant";
 import type { RestaurantTable } from "@/src/types/table";
 
 type LaneStatus = "delayed" | "cooking" | "ready";
-type FloorStatus = "occupied" | "available" | "reserved";
+type FloorStatus = "occupied" | "available" | "reserved" | "inactive";
 type FloorTable = {
   id: string;
   status: FloorStatus;
@@ -45,7 +45,7 @@ type KitchenTicket = {
   total: number;
   status: LaneStatus;
 };
-type HourlyPoint = { hour: string; orders: number };
+type HourlyPoint = { dateTime: string; hour: string; orders: number };
 type Copy = ReturnType<typeof buildCopy>;
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
@@ -63,6 +63,15 @@ function formatCurrency(value: number, language: "th" | "en") {
     currency: "THB",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatDateTime(value: Date) {
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return [
+    value.getFullYear(),
+    pad(value.getMonth() + 1),
+    pad(value.getDate()),
+  ].join("-") + ` ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
 }
 
 function userNameOf(member: Membership, language: "th" | "en") {
@@ -119,6 +128,7 @@ function buildCopy(language: "th" | "en") {
         occupied: "ใช้งาน",
         available: "ว่าง",
         reserved: "จองไว้",
+        inactive: "ปิดใช้งาน",
         people: "คน",
         loading: "กำลังโหลดข้อมูล",
         tableLoadError: "โหลดสถานะโต๊ะไม่สำเร็จ",
@@ -169,6 +179,7 @@ function buildCopy(language: "th" | "en") {
         occupied: "Occupied",
         available: "Available",
         reserved: "Reserved",
+        inactive: "Inactive",
         people: "people",
         loading: "Loading operations",
         tableLoadError: "Could not load table status.",
@@ -219,12 +230,12 @@ function ChartBox({ data, copy }: { data: HourlyPoint[]; copy: Copy }) {
       {size.width > 0 && size.height > 0 ? (
         <BarChart width={size.width} height={size.height} data={data} margin={{ top: 10, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="hour" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
+          <XAxis dataKey="dateTime" tickFormatter={(_, index) => data[index]?.hour ?? ""} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
           <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
           <Tooltip
             cursor={{ fill: "rgba(249, 115, 22, 0.06)" }}
             formatter={(value) => [`${value} ${copy.orders}`, copy.ordersByHour]}
-            labelFormatter={(label) => `${label}:00`}
+            labelFormatter={(label) => String(label)}
           />
           <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
             {data.map((point) => (
@@ -347,7 +358,10 @@ export default function Home() {
   const endHour = Math.max(...orderHours, 19);
   const hourly: HourlyPoint[] = Array.from({ length: endHour - startHour + 1 }, (_, index) => {
     const hourNumber = startHour + index;
+    const pointDate = new Date(now);
+    pointDate.setHours(hourNumber, 0, 0, 0);
     return {
+      dateTime: formatDateTime(pointDate),
       hour: String(hourNumber).padStart(2, "0"),
       orders: orders.filter((order) => new Date(order.opened_at).getHours() === hourNumber).length,
     };
@@ -398,16 +412,17 @@ export default function Home() {
     occupied: { label: copy.occupied, className: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" },
     available: { label: copy.available, className: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200" },
     reserved: { label: copy.reserved, className: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200" },
+    inactive: { label: copy.inactive, className: "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300" },
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="flex w-full flex-col gap-4">
+    <div className="min-h-screen bg-[#f7f8fa] px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+      <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-4">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex w-full flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex w-full flex-col gap-4 border-b border-gray-200 pb-4 dark:border-gray-800 md:flex-row md:items-end md:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-md bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <span className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-gray-950 dark:text-emerald-300">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" />
                   {copy.open}
                 </span>
@@ -415,8 +430,8 @@ export default function Home() {
                   {dateLabel} · {timeLabel}
                 </span>
               </div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">
+              <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
+              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-600 dark:text-gray-400">
                 {user ? `${copy.greeting} ${user.nickname?.trim() || user.first_name} · ` : ""}
                 {copy.subtitle}
               </p>
@@ -431,7 +446,7 @@ export default function Home() {
                 type="button"
                 onClick={() => void loadOperations()}
                 disabled={loading}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {copy.refresh}
@@ -439,7 +454,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => router.push("/pos/tables")}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-gray-950 px-3 text-[12px] font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-950 px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <ShoppingBag className="h-4 w-4" />
                 {copy.newOrder}
@@ -448,7 +463,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
               { icon: AlertTriangle, label: copy.kitchenDelayed, value: delayed.length, helper: copy.kitchenDelayedHelp, tone: "text-red-600 dark:text-red-300" },
               { icon: LayoutGrid, label: copy.activeTables, value: `${occupied.length}/${tables.length}`, helper: `${guestCount} ${copy.activeTablesHelp}`, tone: "text-amber-600 dark:text-amber-300" },
@@ -457,24 +472,25 @@ export default function Home() {
             ].map((stat) => {
               const Icon = stat.icon;
               return (
-                <div key={stat.label} className="rounded-md border border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                <div key={stat.label} className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
                       <Icon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
                       <p className="text-[11px] text-gray-500 dark:text-gray-400">{stat.label}</p>
-                      <p className={`mt-1 truncate text-xl font-semibold tabular-nums ${stat.tone}`}>{stat.value}</p>
+                      <p className={`mt-1 truncate text-[22px] font-semibold leading-none tabular-nums ${stat.tone}`}>{stat.value}</p>
                       <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{stat.helper}</p>
                     </div>
                   </div>
+                  <div className="h-1 bg-gradient-to-r from-orange-500 via-orange-300 to-transparent" />
                 </div>
               );
             })}
           </div>
 
         <main className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(330px,0.8fr)]">
-          <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.mainFlow}</p>
@@ -536,7 +552,7 @@ export default function Home() {
           </section>
 
           <aside className="flex flex-col gap-4">
-            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.needsAttention}</p>
                 <h2 className="mt-1 text-[15px] font-semibold text-gray-950 dark:text-white">{copy.sideSignals}</h2>
@@ -562,7 +578,7 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <Users className="h-4 w-4 text-orange-500" />
                 <h2 className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.teamNotes}</h2>
@@ -593,7 +609,7 @@ export default function Home() {
         </main>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.shiftPulse}</p>
@@ -615,7 +631,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
             <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <Sparkles className="h-4 w-4 text-orange-500" />
               <h2 className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.topItems}</h2>
@@ -624,7 +640,7 @@ export default function Home() {
               {topItems.length ? (
                 topItems.map((item, index) => (
                   <div key={item.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-orange-50 text-[12px] font-bold text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-orange-50 text-[12px] font-semibold text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
                       {index + 1}
                     </span>
                     <span className="min-w-0">
@@ -643,7 +659,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+        <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.floorStatus}</p>
@@ -652,7 +668,7 @@ export default function Home() {
             {floorError ? <p className="text-[12px] text-red-600 dark:text-red-300">{floorError}</p> : null}
           </div>
           <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 md:grid-cols-3">
-            {(["occupied", "available", "reserved"] as FloorStatus[]).map((status) => (
+            {(["occupied", "available", "inactive"] as FloorStatus[]).map((status) => (
               <div key={status} className="bg-white px-4 py-3 dark:bg-gray-950">
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">{floorMeta[status].label}</p>
                 <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950 dark:text-white">{tables.filter((table) => table.status === status).length}</p>

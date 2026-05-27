@@ -1,4 +1,4 @@
-export type TableStatus = "free" | "occupied" | "reserved";
+export type TableStatus = "free" | "occupied" | "reserved" | "inactive";
 
 export interface RestaurantTable {
   ID: number;
@@ -11,6 +11,8 @@ export interface RestaurantTable {
   zone: string;
   status: TableStatus;
   customer_token?: string;
+  reservation_name?: string;
+  reservation_phone?: string;
   table_zone?: TableZone | null;
   tags?: TableTag[];
   CreatedAt?: string;

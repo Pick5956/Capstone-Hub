@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
@@ -206,14 +205,9 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
 		return
 	}
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file must be 5MB or smaller"})
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image must be jpg, png, or webp"})
+	ext, err := validateImageUpload(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -350,17 +344,31 @@ func (ctrl *RestaurantController) ListAuditLogs(c *gin.Context) {
 
 	limit := 20
 	if raw := c.Query("limit"); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 50 {
 			limit = parsed
 		}
 	}
+	offset := 0
+	if raw := c.Query("offset"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			offset = parsed
+		}
+	}
 
-	logs, err := ctrl.restaurantSvc.ListAuditLogs(userID, restaurantID, limit)
+	logs, err := ctrl.restaurantSvc.ListAuditLogs(userID, restaurantID, limit+1, offset)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"logs": logs})
+	hasMore := len(logs) > limit
+	if hasMore {
+		logs = logs[:limit]
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"logs":        logs,
+		"has_more":    hasMore,
+		"next_offset": offset + len(logs),
+	})
 }
 
 // POST /api/v1/restaurants/:id/invitations

@@ -28,6 +28,8 @@ type AuthService struct {
 
 var ErrPasswordResetGoogleAccount = errors.New("use google login for this account")
 
+const defaultProfileImage = "/default-avatar.svg"
+
 func ProvideAuthService(userRepo *repository.UserRepository, memberRepo *repository.RestaurantMemberRepository) *AuthService {
 	return &AuthService{
 		userRepo:   userRepo,
@@ -70,6 +72,7 @@ func (s *AuthService) Register(user *entity.User) (*entity.User, error) {
 	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
 	user.AuthProvider = "local"
 	user.GoogleID = nil
+	user.ProfileImage = defaultProfileImage
 	if err := user.Validation(); err != nil {
 		return nil, err
 	}
@@ -129,6 +132,13 @@ func (s *AuthService) GoogleLogin(req *GoogleLoginRequest) (*LoginResponse, erro
 			user.GoogleID = &googleClaims.Subject
 			if err := s.userRepo.UpdateGoogleID(user); err != nil {
 				return nil, err
+			}
+			if strings.TrimSpace(user.ProfileImage) == "" {
+				updated, err := s.userRepo.UpdateProfileImage(user.ID, profileImageFromGoogle(googleClaims.Picture))
+				if err != nil {
+					return nil, err
+				}
+				user = updated
 			}
 		}
 	}
@@ -201,7 +211,7 @@ func (s *AuthService) ResetPassword(req *ResetPasswordRequest) error {
 func (s *AuthService) buildLoginResponse(user *entity.User) (*LoginResponse, error) {
 	jwtWrapper := &auth.JwtWrapper{
 		SecretKey: os.Getenv("JWT_SECRET"),
-		Issuer:    "project-management",
+		Issuer:    auth.Issuer,
 	}
 
 	token, err := jwtWrapper.GenerateToken(user.ID, "user")
@@ -251,7 +261,7 @@ func (s *AuthService) createGoogleUser(claims *auth.GoogleIDTokenClaims) (*entit
 		LastName:     lastName,
 		Email:        strings.TrimSpace(strings.ToLower(claims.Email)),
 		Password:     hashed,
-		ProfileImage: claims.Picture,
+		ProfileImage: profileImageFromGoogle(claims.Picture),
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -259,6 +269,13 @@ func (s *AuthService) createGoogleUser(claims *auth.GoogleIDTokenClaims) (*entit
 	}
 
 	return s.userRepo.FindByGoogleID(claims.Subject)
+}
+
+func profileImageFromGoogle(picture string) string {
+	if trimmed := strings.TrimSpace(picture); trimmed != "" {
+		return trimmed
+	}
+	return defaultProfileImage
 }
 
 func randomPassword() (string, error) {

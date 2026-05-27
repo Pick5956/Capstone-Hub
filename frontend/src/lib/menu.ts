@@ -24,6 +24,9 @@ export const createMenuItem = (data: MenuItemInput) =>
 export const updateMenuItem = (id: number, data: MenuItemInput) =>
   apiClient.put<MenuItem>(`/api/v1/menu-items/${id}`, data);
 
+export const updateMenuItemAvailability = (id: number, isAvailable: boolean) =>
+  apiClient.patch<MenuItem>(`/api/v1/menu-items/${id}/availability`, { is_available: isAvailable });
+
 export const deleteMenuItem = (id: number) =>
   apiClient.delete(`/api/v1/menu-items/${id}`);
 

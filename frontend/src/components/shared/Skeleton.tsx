@@ -114,7 +114,7 @@ export function WorkspacePageSkeleton() {
 export function DashboardPageSkeleton() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-950">
-      <div className="hidden lg:block fixed inset-y-0 left-0 w-60 border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+      <div className="hidden lg:block fixed inset-y-0 left-0 w-[264px] border-r border-gray-200 bg-slate-50 p-4 dark:border-gray-800 dark:bg-gray-950">
         <div className="flex items-center gap-2.5">
           <Skeleton className="h-9 w-9" />
           <div className="space-y-1.5">

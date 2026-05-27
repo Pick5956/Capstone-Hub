@@ -122,7 +122,7 @@ function MetricCard({
         </span>
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-gray-500">{label}</p>
-          <p className="mt-0.5 truncate text-base font-bold text-gray-900 dark:text-white">{value}</p>
+          <p className="mt-0.5 truncate text-base font-semibold text-gray-900 dark:text-white">{value}</p>
         </div>
       </div>
     </div>
@@ -496,7 +496,7 @@ export default function AIOperationsFloatingChat() {
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
               <div className="flex items-center gap-2">
                 <BarChart2 className="h-5 w-5 text-orange-500 animate-pulse" />
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{copy.snapshot}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{copy.snapshot}</h3>
               </div>
               <button
                 type="button"
@@ -538,20 +538,20 @@ export default function AIOperationsFloatingChat() {
                 <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden shadow-sm">
                   <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-3.5 py-2.5 bg-gray-50/50 dark:bg-gray-900/20">
                     <PackageSearch className="h-4.5 w-4.5 text-orange-500" />
-                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{copy.stockRisks}</span>
+                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{copy.stockRisks}</span>
                   </div>
                   <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[220px] overflow-y-auto scrollbar-thin">
                     {stockRisks.map((item) => (
                       <div key={item.name} className="p-3 transition-colors hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{item.name}</p>
+                            <p className="truncate text-xs font-semibold text-gray-900 dark:text-white">{item.name}</p>
                             <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
                               {formatNumber(item.stock, language)} {item.unit}
                             </p>
                           </div>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wider ${
+                            className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider ${
                               item.status === "out"
                                 ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
                                 : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
@@ -561,7 +561,7 @@ export default function AIOperationsFloatingChat() {
                           </span>
                         </div>
                         <p className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">
-                          {copy.restock} <span className="font-bold text-orange-600 dark:text-orange-400">{formatNumber(item.restock_estimate, language)}</span> {item.unit}
+                          {copy.restock} <span className="font-semibold text-orange-600 dark:text-orange-400">{formatNumber(item.restock_estimate, language)}</span> {item.unit}
                         </p>
                       </div>
                     ))}
@@ -592,7 +592,7 @@ export default function AIOperationsFloatingChat() {
                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500 dark:border-gray-950"></span>
               </div>
               <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{copy.title}</h2>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{copy.title}</h2>
                 <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">{copy.subtitle}</p>
               </div>
             </div>
@@ -674,7 +674,7 @@ export default function AIOperationsFloatingChat() {
                       {user?.profile_image ? (
                         <Image src={user.profile_image} width={32} height={32} unoptimized className="h-full w-full object-cover" alt="" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 uppercase">
+                        <div className="flex h-full w-full items-center justify-center bg-orange-100 text-[11px] font-semibold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 uppercase">
                           {user?.nickname?.charAt(0) || user?.first_name?.charAt(0) || "U"}
                         </div>
                       )}
@@ -742,7 +742,7 @@ export default function AIOperationsFloatingChat() {
               <div className="flex flex-col gap-2">
                 {/* Tips Header with Close Button */}
                 <div className="flex items-center justify-between mb-1 px-0.5">
-                  <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     {language === "th" ? "💡 คำถามแนะนำ" : "💡 Suggested Questions"}
                   </span>
                   <button

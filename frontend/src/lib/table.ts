@@ -1,5 +1,5 @@
 import { apiClient } from "./apiClient";
-import type { BulkCreateTablesInput, MoveTableZoneInput, RestaurantTable, RestaurantTableInput, TableTag, TableTagInput, TableZone, TableZoneInput } from "../types/table";
+import type { BulkCreateTablesInput, MoveTableZoneInput, RestaurantTable, RestaurantTableInput, TableStatus, TableTag, TableTagInput, TableZone, TableZoneInput } from "../types/table";
 
 export const listTables = () =>
   apiClient.get<{ tables: RestaurantTable[] }>("/api/v1/tables");
@@ -12,6 +12,9 @@ export const bulkCreateTables = (data: BulkCreateTablesInput) =>
 
 export const updateTable = (id: number, data: RestaurantTableInput) =>
   apiClient.put<RestaurantTable>(`/api/v1/tables/${id}`, data);
+
+export const updateTableStatus = (id: number, status: TableStatus, reservationPhone = "", reservationName = "") =>
+  apiClient.patch<RestaurantTable>(`/api/v1/tables/${id}/status`, { status, reservation_phone: reservationPhone, reservation_name: reservationName });
 
 export const regenerateTableCustomerToken = (id: number) =>
   apiClient.post<RestaurantTable>(`/api/v1/tables/${id}/regenerate-customer-token`);

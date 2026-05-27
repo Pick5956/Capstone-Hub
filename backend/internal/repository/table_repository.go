@@ -50,6 +50,14 @@ func (r *TableRepository) FindTable(restaurantID, tableID uint) (*entity.Restaur
 	return &table, nil
 }
 
+func (r *TableRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&entity.Order{}).
+		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Count(&count).Error
+	return count > 0, err
+}
+
 func (r *TableRepository) UpdateTable(table *entity.RestaurantTable) error {
 	return r.db.Omit(clause.Associations).Save(table).Error
 }
@@ -83,6 +91,15 @@ func (r *TableRepository) CreateZone(zone *entity.TableZone) error {
 
 func (r *TableRepository) UpdateZone(zone *entity.TableZone) error {
 	return r.db.Omit(clause.Associations).Save(zone).Error
+}
+
+func (r *TableRepository) ListTablesInZone(restaurantID, zoneID uint) ([]entity.RestaurantTable, error) {
+	var tables []entity.RestaurantTable
+	err := r.db.
+		Where("restaurant_id = ? AND zone_id = ?", restaurantID, zoneID).
+		Order("sequence_number asc, id asc").
+		Find(&tables).Error
+	return tables, err
 }
 
 func (r *TableRepository) DeleteZone(zone *entity.TableZone) error {

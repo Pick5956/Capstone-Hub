@@ -175,7 +175,7 @@ function BrandLine() {
       </div>
       <div className="leading-none">
         <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Restaurant</p>
-        <p className="text-[13px] font-black tracking-tight text-gray-900 dark:text-white">HUB</p>
+        <p className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">HUB</p>
       </div>
     </div>
   );

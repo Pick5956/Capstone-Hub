@@ -23,6 +23,7 @@ import type { Order, OrderStatus } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type StatusFilter = "all" | "active" | "closed" | OrderStatus;
 type PaymentFilter = "all" | "unpaid" | "paid";
@@ -292,6 +293,7 @@ export default function OrdersPage() {
       setCancelClosing(false);
     }, 180);
   };
+  const cancelBackdrop = useBackdropClose(closeCancelModal);
 
   const cancelSelected = async () => {
     if (!selectedOrder || !cancelReason.trim()) return;
@@ -388,7 +390,7 @@ export default function OrdersPage() {
 
         <div className="grid min-h-[520px] gap-0 2xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="min-w-0">
-            <div className="hidden border-b border-gray-200 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400 dark:border-gray-800 lg:grid lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px]">
+            <div className="hidden border-b border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:border-gray-800 lg:grid lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px]">
               <span>{copy.order}</span>
               <span>{copy.status}</span>
               <span>{copy.payment}</span>
@@ -455,7 +457,7 @@ export default function OrdersPage() {
               <div className="2xl:sticky 2xl:top-4">
                 <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder)}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder)}</p>
                     <h2 className="mt-1 truncate font-mono text-2xl font-semibold text-gray-900 dark:text-white">{selectedOrder.order_number}</h2>
                     <p className="mt-1 text-[12px] text-gray-500">{formatTime(selectedOrder.opened_at)}</p>
                   </div>
@@ -591,8 +593,8 @@ export default function OrdersPage() {
       </section>
 
       {cancelOpen && (
-        <div className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`} onClick={closeCancelModal}>
-          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`} onClick={(event) => event.stopPropagation()}>
+        <div {...cancelBackdrop} className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>
