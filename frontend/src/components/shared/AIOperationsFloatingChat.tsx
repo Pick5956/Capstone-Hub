@@ -16,12 +16,13 @@ import {
   Lightbulb
 } from "lucide-react";
 import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
-import { resolveClarificationRequest } from "@/src/lib/aiClarification";
+import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import type { AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
@@ -132,12 +133,14 @@ function MetricCard({
 export default function AIOperationsFloatingChat() {
   const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
+  const { showAIAssistant } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [hasOpenedStats, setHasOpenedStats] = useState(false);
   const [showTips, setShowTips] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -328,7 +331,11 @@ export default function AIOperationsFloatingChat() {
         role: "assistant",
         content: data.answer,
         createdAt: new Date(),
-        actions: getGuidedActions(trimmed, data.answer, activeMembership, language),
+        actions: data.intent === "unclear"
+          ? getUnclearRequestActions(activeMembership, language)
+          : data.intent === "analysis"
+            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+            : undefined,
       };
       
       setMessages(prev => [...prev, assistantMsg]);
@@ -367,7 +374,7 @@ export default function AIOperationsFloatingChat() {
     }
   };
 
-  if (!activeMembership) return null;
+  if (!activeMembership || !showAIAssistant) return null;
 
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];
@@ -389,6 +396,17 @@ export default function AIOperationsFloatingChat() {
           0% { transform: translateY(16px) scale(0.97); opacity: 0; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
         }
+        @keyframes statsDrawerBounceIn {
+          0% { transform: translateX(28px) scale(0.9); opacity: 0; }
+          52% { transform: translateX(-7px) scale(1.035); opacity: 1; }
+          74% { transform: translateX(2px) scale(0.992); opacity: 1; }
+          100% { transform: translateX(0) scale(1); opacity: 1; }
+        }
+        @keyframes statsDrawerBounceOut {
+          0% { transform: translateX(0) scale(1); opacity: 1; }
+          24% { transform: translateX(-3px) scale(1.012); opacity: 1; }
+          100% { transform: translateX(28px) scale(0.9); opacity: 0; }
+        }
         .animate-bot-float {
           animation: botFloat 3s ease-in-out infinite;
         }
@@ -401,6 +419,48 @@ export default function AIOperationsFloatingChat() {
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden;
         }
+        .animate-stats-bounce-in {
+          animation: statsDrawerBounceIn 0.38s cubic-bezier(0.22, 0.9, 0.22, 1) both;
+        }
+        .animate-stats-bounce-out {
+          animation: statsDrawerBounceOut 0.34s cubic-bezier(0.4, 0, 0.7, 0.35) both;
+        }
+        @keyframes aiAnalysisAuraPulse {
+          0%, 100% {
+            opacity: 0.58;
+            transform: scale(0.995);
+            filter: blur(23px);
+          }
+          50% {
+            opacity: 0.96;
+            transform: scale(1.016);
+            filter: blur(32px);
+          }
+        }
+        .ai-analysis-aura::before {
+          content: "";
+          position: absolute;
+          inset: -11px;
+          z-index: -1;
+          pointer-events: none;
+          border-radius: inherit;
+          background: radial-gradient(
+            ellipse at 50% 52%,
+            rgba(251, 146, 60, 0.22) 48%,
+            rgba(249, 115, 22, 0.54) 69%,
+            rgba(245, 158, 11, 0.28) 84%,
+            rgba(249, 115, 22, 0) 100%
+          );
+          animation: aiAnalysisAuraPulse 1.7s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .ai-analysis-aura::before {
+            animation: none;
+            opacity: 0.66;
+            filter: blur(26px);
+          }
+        }
+
         @keyframes inputGlow {
           0%, 100% { 
             box-shadow: 0 0 4px rgba(249, 115, 22, 0.25), 0 1px 2px rgba(0, 0, 0, 0.05); 
@@ -418,26 +478,23 @@ export default function AIOperationsFloatingChat() {
 
       {/* Chat Window Panel */}
       <div 
-        className={`fixed top-4 bottom-4 right-4 sm:top-4 sm:bottom-6 sm:right-6 left-4 sm:left-auto z-[9998] flex items-stretch gap-4 origin-bottom-right transition-all duration-500 ${
+        className={`fixed top-4 bottom-4 right-4 sm:top-4 sm:bottom-6 sm:right-6 left-4 sm:left-auto z-[9998] flex items-stretch origin-bottom-right transition-all duration-500 ${
           isOpen
             ? "opacity-100 scale-100 pointer-events-auto ease-[cubic-bezier(0.34,1.56,0.64,1)]"
             : "opacity-0 scale-90 pointer-events-none ease-[cubic-bezier(0.25,1,0.5,1)]"
-        } ${
-          showStats 
-            ? "sm:w-[380px] md:w-[776px]" 
-            : "sm:w-[380px] md:w-[400px]"
-        }`}
+        } sm:w-[380px] md:w-[400px]`}
       >
-        {/* Collapsible Stats Side Drawer (Desktop Only) - Smooth width/slide transition */}
+        {/* Stats drawer moves and scales as one surface so its cards enter together. */}
         <div 
-          className={`hidden md:flex flex-col rounded-2xl bg-white/95 shadow-2xl backdrop-blur-md dark:bg-gray-950/95 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-            showStats 
-              ? "w-[360px] p-4 border border-gray-200/60 dark:border-gray-800/60 opacity-100 translate-x-0 mr-1" 
-              : "w-0 p-0 border-0 opacity-0 -translate-x-6 pointer-events-none overflow-hidden mr-0"
+          className={`absolute inset-y-0 right-[416px] hidden w-[360px] flex-col rounded-2xl border border-gray-200/60 bg-white/95 p-4 shadow-2xl backdrop-blur-md transform-gpu origin-right transition-[opacity,transform] duration-300 ease-out will-change-transform dark:border-gray-800/60 dark:bg-gray-950/95 md:flex ${
+            showStats
+              ? "animate-stats-bounce-in pointer-events-auto"
+              : hasOpenedStats
+                ? "animate-stats-bounce-out pointer-events-none"
+                : "pointer-events-none translate-x-5 scale-[0.94] opacity-0"
           }`}
         >
-          {/* Inner fixed width container to prevent squishing text/layouts during transitions */}
-          <div className="w-[328px] shrink-0 flex flex-col h-full">
+          <div className="flex h-full w-full shrink-0 flex-col">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
               <div className="flex items-center gap-2">
                 <BarChart2 className="h-5 w-5 text-orange-500 animate-pulse" />
@@ -523,7 +580,10 @@ export default function AIOperationsFloatingChat() {
         </div>
 
         {/* Main Chat Overlay Box */}
-        <div className="flex h-full w-full sm:w-[380px] md:w-[400px] shrink-0 flex-col rounded-2xl border border-gray-200/60 bg-white/95 shadow-[0_20px_50px_-12px_rgba(249,115,22,0.18)] dark:shadow-[0_20px_50px_-12px_rgba(249,115,22,0.08)] backdrop-blur-md dark:border-gray-800/60 dark:bg-gray-950/95 overflow-hidden transition-all duration-300">
+        <div className={`relative isolate flex h-full w-full sm:w-[380px] md:w-[400px] shrink-0 rounded-2xl ${
+          loading ? "ai-analysis-aura" : ""
+        }`}>
+          <div className="relative z-[1] flex h-full w-full flex-col rounded-2xl border border-gray-200/60 bg-white/95 shadow-[0_20px_50px_-12px_rgba(249,115,22,0.18)] dark:shadow-[0_20px_50px_-12px_rgba(249,115,22,0.08)] backdrop-blur-md dark:border-gray-800/60 dark:bg-gray-950/95 overflow-hidden transition-all duration-300">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-orange-500/10 to-amber-500/5 px-4 py-3.5 dark:border-gray-800">
             <div className="flex items-center gap-2.5">
@@ -564,6 +624,9 @@ export default function AIOperationsFloatingChat() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (!showStats) {
+                      setHasOpenedStats(true);
+                    }
                     setShowStats(!showStats);
                   }}
                   title={copy.toggleStatsTooltip}
@@ -658,9 +721,17 @@ export default function AIOperationsFloatingChat() {
                   <Bot className="h-4.5 w-4.5" />
                 </div>
                 {/* Loading Bubble */}
-                <div className="rounded-2xl bg-gray-100 px-3.5 py-2.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-2 shadow-sm leading-relaxed">
-                  <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
-                  <span>{copy.thinking}</span>
+                <div
+                  role="status"
+                  aria-label={copy.thinking}
+                  className="rounded-2xl bg-gray-100 px-3.5 py-3 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center shadow-sm leading-relaxed"
+                >
+                  <span className="sr-only">{copy.thinking}</span>
+                  <span aria-hidden="true" className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
+                    <span className="ai-thinking-dot"></span>
+                    <span className="ai-thinking-dot"></span>
+                    <span className="ai-thinking-dot"></span>
+                  </span>
                 </div>
               </div>
             )}
@@ -732,6 +803,7 @@ export default function AIOperationsFloatingChat() {
               </button>
             </div>
           </form>
+          </div>
         </div>
       </div>
 

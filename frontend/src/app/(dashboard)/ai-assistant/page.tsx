@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI } from "@/src/lib/ai";
-import { resolveClarificationRequest } from "@/src/lib/aiClarification";
+import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
@@ -158,7 +158,11 @@ export default function AIAssistantPage() {
         { role: "assistant", content: response.data.answer },
       ];
       setHistory((previous) => [...previous, ...nextTurn].slice(-6));
-      setActions(getGuidedActions(trimmed, response.data.answer, activeMembership, language));
+      setActions(response.data.intent === "unclear"
+        ? getUnclearRequestActions(activeMembership, language)
+        : response.data.intent === "analysis"
+          ? getGuidedActions(trimmed, response.data.answer, activeMembership, language)
+          : []);
     } catch (err: unknown) {
       const message =
         typeof err === "object" && err !== null && "response" in err
