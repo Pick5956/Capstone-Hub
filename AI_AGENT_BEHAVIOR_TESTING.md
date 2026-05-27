@@ -1,4 +1,4 @@
-# แนวทางทดสอบ AI ผู้ช่วยร้านอาหาร (P0-1 ถึง P0-7 และ P1-0)
+# แนวทางทดสอบ AI ผู้ช่วยร้านอาหาร (P0-1 ถึง P0-7 และ P1-0 ถึง P1-3)
 
 เอกสารนี้กำหนด guardrail ของ AI ผู้ช่วย เพื่อให้การปรับ prompt, intent, endpoint หรือ action ในอนาคตไม่ทำให้พฤติกรรมที่ผู้ใช้คาดหวังเสียไป โดยแยกการทดสอบเป็นชั้นที่รันได้สม่ำเสมอโดยไม่เรียกโมเดลจริง และชั้นที่ควรพัฒนาต่อเพื่อประเมิน AI จริง
 
@@ -24,8 +24,8 @@
 | `backend/internal/service/testdata/ai_live_intent_cases.json` | ชุดโจทย์ประเมิน intent ด้วยโมเดลจริงที่เพิ่มแก้ได้โดยไม่แก้โค้ดทดสอบ |
 | `backend/internal/service/ai_service_db_eval_test.go` | ตรวจ snapshot จาก PostgreSQL จริงแบบ read-only และประเมินคำตอบวิเคราะห์กับ provider จริงแบบ opt-in |
 | `backend/internal/service/ai_service_readiness_test.go` | ตรวจ readiness และ guardrail เมื่อร้านไม่มีข้อมูล ต้นทุนไม่ครบ หรือข้อมูลพร้อมวิเคราะห์ |
-| `backend/internal/service/ai_tasks.go` | กำหนด task/tool contract แรก แยกคำถามความรู้ออกจากการอ่านข้อมูลร้าน และเรียก read-only tool สำหรับข้อเท็จจริง Margin |
-| `backend/internal/service/ai_tasks_test.go` | ตรวจ P1-0 ว่าคำถามนิยามไม่โหลด snapshot และคำถาม Margin ต่ำสุดหลายสำนวนถูกส่งเข้า tool ที่ถูกต้อง |
+| `backend/internal/service/ai_tasks.go` | กำหนด task/tool contract แยกคำถามความรู้ออกจากการอ่านข้อมูลร้าน และรวม read-only tools สำหรับ Margin, สต๊อก, เมนูขายดี และมูลค่าคลัง |
+| `backend/internal/service/ai_tasks_test.go` | ตรวจ P1-0 ถึง P1-3 ตั้งแต่ task routing, tool schema, formatter ของผลลัพธ์ และ validation interceptor |
 | `backend/internal/service/ai_service_readiness_db_test.go` | สร้างร้าน scenario ใน transaction แล้ว rollback เพื่อตรวจ readiness กับ query ฐานข้อมูลจริงโดยไม่ทิ้งข้อมูลทดสอบ |
 | `backend/internal/controller/ai_api_eval_test.go` | ยิง endpoint AI จริงสำหรับ local guardrail แบบไม่ใช้ token และ analytical answer แบบเรียก provider เมื่อเปิด flag |
 | `backend/internal/service/testdata/ai_db_snapshot_expectations.json` | ค่าคาดหวังของชุดข้อมูล demo สำหรับวัด low stock และเมนู Margin ต่ำ |
@@ -112,7 +112,7 @@ Remove-Item Env:AI_EVAL_ENABLED
 | Snapshot endpoint | `GET /ai/operations/snapshot` | ส่ง payload หรือแปลง service error เป็น `500` | Automated |
 | Live model intent | fixture ข้อความมั่ว, วิเคราะห์ร้าน, นอกขอบเขต, บทสนทนา | provider จริงคืน intent ที่กำหนด | Opt-in Live |
 | Live model answer | `ขอบคุณครับ ช่วยได้มากเลย` | conversation flow ตอบจริง ไม่ว่าง และมี model provider | Opt-in Live |
-| Follow-up | `แล้วเมื่อวานล่ะ` หลังถามยอดขาย | ใช้บริบทเดิมได้ถูกต้อง | Next |
+| Follow-up | `แล้วเมื่อวานล่ะ` หลังถามยอดขาย | ใช้บริบทเดิมได้ถูกต้องผ่าน prompt รอบสองและ history | Automated |
 | ภาษาไทยหน้าตั้งค่า | `พาไปหน้าตั้งค่าร้าน` | ไปหน้าที่ถูกต้องตามสิทธิ์ | Next |
 | เสียงรบกวนรูปแบบอื่น | `...`, `???`, emoji เดี่ยว | ถามต่ออย่างสุภาพ | Next |
 | Snapshot วิเคราะห์จริง | ข้อมูล demo ที่ผูกสูตรและ backfill แล้ว | พบ low stock และ `ข้าวผัดปู` เป็นเมนู Margin ต่ำสุด | Opt-in DB |
@@ -277,14 +277,15 @@ tool ตัวแรกยังใช้ snapshot ที่มี guardrail แ
 | --- | --- | --- |
 | `มาร์จิ้นคืออะไร` | `task = explain_concept`, `model = local-knowledge` | โหลด snapshot หรือเสนอเพิ่มสต็อก |
 | `Margin หมายถึงอะไร` / `what is margin?` | `task = explain_concept` | เข้า analytical flow จากคำว่า Margin อย่างเดียว |
+| `ผมสามารถถามข้อมูลนอกเรื่องนายได้ไหม` / `คุณคือใคร` | AI Router คืน `task = scope_question` แล้วเข้า conversation provider โดยไม่โหลด snapshot | ใช้ local guard, โหลด snapshot หรือแสดงปุ่มคลัง/เมนู |
 | `เมนูไหนมี Margin ต่ำที่สุด` | `task = retrieve_fact`, `tool = get_lowest_margin_menu` | ให้ model เดาตัวเลขหรือเสนอปรับราคาเอง |
 | `จานไหนมาร์จิ้นน้อยที่สุด` / `what is the lowest margin menu?` | tool เดียวกัน | ผูกกับประโยคไทยรูปเดียวเท่านั้น |
 
-ยังไม่รวมใน P1-0 รอบแรก:
+ขอบเขตที่ P1-0 ยังไม่ทำในรอบแรก แต่ถูกต่อยอดแล้วใน P1-1 ถึง P1-3:
 
-- ให้ model เลือก tool ผ่าน native function calling สำหรับคำถามภาษากว้างมากขึ้น
-- tool อ่านยอดขาย สต็อก และเมนูขายดีเพิ่มเติม
-- multi-turn เช่น `แล้วเมื่อวานล่ะ` ที่ต้องสืบต่อบริบทจากคำถามก่อนหน้า
+- ให้ model เลือก tool ผ่าน native function calling สำหรับคำถามภาษากว้างมากขึ้น ถูกเพิ่มใน P1-2
+- tool อ่านยอดขาย สต็อก เมนูขายดี และมูลค่าคลัง ถูกเพิ่มใน P1-1
+- multi-turn และคำถามต่อเนื่อง เช่น `แล้วเมื่อวานล่ะ` ถูกส่งเข้า prompt รอบสองพร้อม history ใน P1-3
 
 คำสั่งตรวจคำถาม Margin ต่ำที่สุดแบบ deterministic และไม่ใช้ token:
 
@@ -305,6 +306,99 @@ go test -tags=ai_eval ./internal/controller -run "TestLiveAPI(ExplanatoryAnalysi
 Remove-Item Env:AI_API_EVAL_ENABLED
 Remove-Item Env:AI_EVAL_ENABLED
 ```
+
+## P1-1: Read-only Tools เพิ่มเติม
+
+ขั้นนี้ขยายจาก tool แรก `get_lowest_margin_menu` ไปเป็นชุดเครื่องมืออ่านข้อมูลร้านที่ backend ควบคุมตัวเลขเองทั้งหมด:
+
+- `get_lowest_margin_menu`: หาเมนู Margin ต่ำที่สุด พร้อมแยกยอดรวมและค่าเฉลี่ยต่อจาน
+- `get_low_stock_ingredients`: รายงานวัตถุดิบใกล้หมดหรือหมดสต๊อก พร้อมจำนวนที่ควรเติม
+- `get_top_selling_menus`: รายงานเมนูขายดีตามจำนวนขายและรายได้
+- `get_inventory_valuation`: รายงานมูลค่าคลังรวม จำนวนวัตถุดิบ และจำนวนรายการเสี่ยง
+
+หลักการของ P1-1 คือให้ model เลือกหรืออธิบายผลได้ แต่ตัวเลขที่ใช้ตอบต้องมาจาก `AISnapshot` และ formatter ของ backend ก่อน ไม่ให้ model คิดเลขเองจากข้อความยาว ๆ
+
+เคสอัตโนมัติที่เพิ่ม:
+
+| Tool | สิ่งที่ตรวจ |
+| --- | --- |
+| `get_lowest_margin_menu` | แสดงต้นทุนรวม ต้นทุนเฉลี่ยต่อจาน และกำไรเฉลี่ยต่อจานถูกต้อง |
+| `get_low_stock_ingredients` | แสดงสถานะหมด/ใกล้หมด จำนวนคงเหลือขั้นต่ำ และจำนวนแนะนำให้เติม |
+| `get_top_selling_menus` | เรียงและแสดงเมนูขายดีพร้อมจำนวนขาย/รายได้ |
+| `get_inventory_valuation` | แสดงมูลค่าคลัง จำนวนวัตถุดิบ และจำนวนรายการเสี่ยง |
+
+## P1-2: Native Function Calling
+
+ขั้นนี้เพิ่ม schema ให้ provider รู้จัก tools ของร้านโดยตรง:
+
+- Gemini ใช้ `getGeminiTools()` เพื่อประกาศ `functionDeclarations`
+- Groq ใช้ `getGroqTools()` เพื่อประกาศ `tools` แบบ `function`
+- เมื่อ provider เลือก tool ระบบจะแปลงเป็น `CALL_TOOL:<tool_name>`
+- service รับ `CALL_TOOL` แล้วเรียก `executeReadOnlyTool()` ฝั่ง Go เพื่อดึงผลลัพธ์จริงจาก snapshot
+- หาก provider หรือรอบสองล้มเหลว ระบบ fallback เป็น `localToolAnswer()` เพื่อให้ผู้ใช้ยังได้คำตอบที่ถูกต้องจาก backend
+
+จุดสำคัญคือ function calling ใช้ model เพื่อเลือกงาน แต่ไม่ได้ให้ model เป็นคนสร้างตัวเลขสุดท้ายเอง ตัวเลขยังถูกตรวจจาก backend เสมอ
+
+เคสอัตโนมัติที่เพิ่ม:
+
+| Provider | สิ่งที่ตรวจ |
+| --- | --- |
+| Gemini | schema มี tools ครบ 4 รายการและชื่อถูกต้อง |
+| Groq | schema มี tools ครบ 4 รายการ เป็นชนิด `function` และ parameters เป็น object |
+
+## P1-3: Double Round-Trip และ Validation Interceptor
+
+ขั้นนี้เพิ่มการตอบสองรอบเพื่อให้คำตอบเป็นธรรมชาติโดยยังไม่เสียความแม่น:
+
+1. รอบแรก model เลือก tool จากคำถามและ history
+2. Backend เรียก tool จริงและได้ผลลัพธ์แบบ structured
+3. รอบสอง model เรียบเรียงคำตอบจาก tool result JSON เท่านั้น
+4. `validateAndIntercept()` ตรวจคำตอบสุดท้าย หากพบตัวเลขหรือรายการสำคัญคลาดจาก tool result จะแทนด้วยคำตอบ deterministic จาก backend
+
+แนวนี้ช่วยให้ AI ตอบลื่นขึ้นโดยยังกัน hallucination ได้ดีกว่าให้ model คิดเลขจาก snapshot ทั้งก้อนเอง
+
+ระบบยังเพิ่มการรองรับ streaming ผ่าน `POST /api/v1/ai/operations/ask?stream=true`:
+
+- controller ส่ง `Content-Type: text/event-stream`
+- stream คำตอบเป็น event `token`
+- ส่ง metadata สุดท้ายผ่าน event `metadata`
+- ปิดงานด้วย event `end`
+
+เคสอัตโนมัติที่เพิ่ม:
+
+| กลุ่ม | สิ่งที่ตรวจ |
+| --- | --- |
+| Lowest margin validation | ถ้า model ตอบชื่อเมนูหรือตัวเลขคลาด ต้องถูกแทนด้วยค่าจริงจาก tool |
+| Low stock validation | ถ้า model อ้างวัตถุดิบผิด ต้องใช้รายการจริงจาก snapshot |
+| Top selling validation | ถ้า model อ้างเมนูขายดีผิด ต้องใช้รายการจริงจาก tool |
+| Inventory valuation validation | ถ้า model อ้างมูลค่าคลังผิด ต้องถูกแก้ด้วยค่าใน snapshot |
+
+## P1-3 Fix: nil Repository Guard
+
+หลังเพิ่ม test สำหรับ function calling และ validation มีกรณีที่สร้าง `AIService` แบบไม่มี repository เพื่อทดสอบ schema/tool behavior จึงเพิ่ม guard ใน `buildSnapshot`:
+
+- หาก `repo == nil` ให้คืน snapshot ว่างแทนการ panic
+- ช่วยให้ test ที่ไม่ต้องแตะ database รันได้โดยไม่ต้องสร้าง repository ปลอม
+- production path ยังใช้ repository จริงจาก dependency injection ตามเดิม
+
+## P1-4: AI Router Provider Policy และ Ollama Flow
+
+ขั้นนี้ให้ AI Router เป็นเส้นทางหลักในการจำแนกคำขอ โดยเก็บ local helper ไว้ในโค้ดแต่ไม่ใช้เป็น flow หลักหรือ contract ของ test:
+
+- `scope_question`, `general_chat`, `restaurant_content` และ `product_help` ตอบผ่าน conversational provider โดยไม่โหลด snapshot
+- `out_of_scope` เช่น ขอแต่งกลอนทั่วไปหรือถามเรื่องที่ไม่เกี่ยวกับระบบร้าน ให้ตอบปฏิเสธอย่างสุภาพ
+- `restaurant_data` จึงจะเข้าสู่ snapshot และ read-only tools
+- `risky_action` ยังคงถูก safety policy ป้องกันการแก้ข้อมูลผ่านแชท
+
+เมื่อกำหนด `AI_PROVIDER=ollama` ระบบต้องใช้ Ollama ให้ครบทั้ง classifier, conversation, analytical response, second round หลังเรียก tool และข้อความปฏิเสธคำขอนอกขอบเขต โดยไม่ต้องมี Groq/Gemini key
+
+การทดสอบ deterministic ของขั้นนี้ใช้ mock Ollama HTTP server เพื่อยืนยัน router/policy flow โดยไม่ใช้ token และไม่พึ่ง local guard:
+
+| เคส | สิ่งที่ตรวจ |
+| --- | --- |
+| `คุณคือใคร` | Router ส่งเป็น `scope_question`, ตอบผ่าน Ollama conversation และไม่โหลด snapshot |
+| `ช่วยแต่งกลอนความรักให้หน่อย` | Router ส่งเป็น `out_of_scope`, ข้อความปฏิเสธตอบผ่าน Ollama ที่กำหนดไว้ |
+| second round | เมื่อเลือก Ollama แล้ว การเรียบเรียงผลหลัง tool call ต้องใช้ Ollama ด้วย |
 
 ### ผลการประเมิน P0-7 (26 พฤษภาคม 2026)
 

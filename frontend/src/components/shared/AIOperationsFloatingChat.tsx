@@ -331,7 +331,9 @@ export default function AIOperationsFloatingChat() {
         createdAt: new Date(),
         actions: data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
-          : getGuidedActions(trimmed, data.answer, activeMembership, language),
+          : data.intent === "analysis"
+            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+            : undefined,
       };
       
       setMessages(prev => [...prev, assistantMsg]);

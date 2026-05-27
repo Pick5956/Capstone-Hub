@@ -160,7 +160,9 @@ export default function AIAssistantPage() {
       setHistory((previous) => [...previous, ...nextTurn].slice(-6));
       setActions(response.data.intent === "unclear"
         ? getUnclearRequestActions(activeMembership, language)
-        : getGuidedActions(trimmed, response.data.answer, activeMembership, language));
+        : response.data.intent === "analysis"
+          ? getGuidedActions(trimmed, response.data.answer, activeMembership, language)
+          : []);
     } catch (err: unknown) {
       const message =
         typeof err === "object" && err !== null && "response" in err

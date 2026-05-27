@@ -1,47 +1,94 @@
 package service
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/repository"
 )
 
-func TestResolveLocalTaskSeparatesConceptQuestionsFromRestaurantAnalysis(t *testing.T) {
-	for _, question := range []string{
-		"มาร์จิ้นคืออะไร",
-		"Margin หมายถึงอะไร",
-		"what is margin?",
-	} {
-		route, ok := resolveLocalTask(question)
-		if !ok || route.Task != AITaskExplainConcept || route.Tool != "" {
-			t.Fatalf("resolveLocalTask(%q) = %+v, %t; want explain_concept without a data tool", question, route, ok)
+func newOllamaRouterTestService(t *testing.T, answers ...string) (*AIService, *int) {
+	t.Helper()
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls >= len(answers) {
+			t.Fatalf("received unexpected Ollama request %d", calls+1)
 		}
+		answer := answers[calls]
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"content": answer}}},
+		})
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("AI_PROVIDER", "ollama")
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
+	t.Setenv("OLLAMA_MODEL", "test-ollama")
+	t.Setenv("GROQ_API_KEYS", "")
+	t.Setenv("GEMINI_API_KEYS", "")
+	return &AIService{httpClient: server.Client()}, &calls
+}
+
+func TestAIRouterScopeQuestionUsesConversationFlowWithoutSnapshot(t *testing.T) {
+	svc, calls := newOllamaRouterTestService(t,
+		`{"task":"scope_question","confidence":0.97,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
+		"ผมเป็นผู้ช่วย AI ของระบบจัดการร้านอาหารครับ ช่วยดูยอดขาย สต๊อก เมนู และการใช้งานระบบได้ครับ",
+	)
+
+	response, err := svc.AskOperations(1, &AIAskRequest{Question: "คุณคือใคร"})
+	if err != nil {
+		t.Fatalf("AskOperations identity question: %v", err)
+	}
+	if response.Intent != AIIntentCapability || response.Task != AITaskScopeQuestion || response.Model != "test-ollama" {
+		t.Fatalf("identity route = intent %q, task %q, model %q", response.Intent, response.Task, response.Model)
+	}
+	if response.Snapshot.GeneratedAt != "" || len(response.Snapshot.StockRisks) != 0 {
+		t.Fatalf("identity question loaded operational data unexpectedly: %+v", response.Snapshot)
+	}
+	if *calls != 2 {
+		t.Fatalf("identity question made %d Ollama requests, want router plus conversation response", *calls)
 	}
 }
 
-func TestConceptQuestionAnswersWithoutProviderOrSnapshot(t *testing.T) {
-	svc := &AIService{}
+func TestAIRouterOutOfScopeUsesConfiguredOllamaRefusal(t *testing.T) {
+	svc, calls := newOllamaRouterTestService(t,
+		`{"task":"out_of_scope","confidence":0.99,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
+		"เรื่องนี้อยู่นอกขอบเขตผู้ช่วยร้านอาหารครับ ผมช่วยดูยอดขายหรือคลังวัตถุดิบให้ได้ครับ",
+	)
 
-	response, err := svc.AskOperations(1, &AIAskRequest{Question: "มาร์จิ้นคืออะไร"})
+	response, err := svc.AskOperations(1, &AIAskRequest{Question: "ช่วยแต่งกลอนความรักให้หน่อย"})
 	if err != nil {
-		t.Fatalf("AskOperations margin concept: %v", err)
+		t.Fatalf("AskOperations out-of-scope request: %v", err)
 	}
-	if response.Intent != AIIntentChat || response.Task != AITaskExplainConcept || response.Model != "local-knowledge" {
-		t.Fatalf("margin concept response route = intent %q, task %q, model %q", response.Intent, response.Task, response.Model)
+	if response.Intent != AIIntentOutOfScope || response.Task != AITaskOutOfScope || response.Model != "test-ollama" {
+		t.Fatalf("out-of-scope route = intent %q, task %q, model %q", response.Intent, response.Task, response.Model)
 	}
-	if response.Snapshot.GeneratedAt != "" || len(response.Snapshot.LowMarginMenus) != 0 {
-		t.Fatalf("margin concept loaded operational data unexpectedly: %+v", response.Snapshot)
+	if response.Snapshot.GeneratedAt != "" {
+		t.Fatalf("out-of-scope request loaded operational data unexpectedly: %+v", response.Snapshot)
 	}
-	for _, expected := range []string{"Margin", "รายได้", "ต้นทุน", "40%"} {
-		if !strings.Contains(response.Answer, expected) {
-			t.Fatalf("margin concept answer is missing %q: %s", expected, response.Answer)
-		}
+	if *calls != 2 {
+		t.Fatalf("out-of-scope request made %d Ollama requests, want router plus refusal response", *calls)
 	}
-	for _, unrelated := range []string{"สั่งซื้อ", "เพิ่มสต็อก", "มัสมั่น"} {
-		if strings.Contains(response.Answer, unrelated) {
-			t.Fatalf("margin concept answer contains unrelated action %q: %s", unrelated, response.Answer)
-		}
+}
+
+func TestSecondRoundUsesConfiguredOllamaProvider(t *testing.T) {
+	svc, calls := newOllamaRouterTestService(t, `{"answer":"ผลจากข้อมูลจริงครับ","verify":{}}`)
+
+	answer, model, err := svc.askSecondRoundWithRotation("second-round tool result prompt")
+	if err != nil {
+		t.Fatalf("askSecondRoundWithRotation with Ollama: %v", err)
+	}
+	if model != "test-ollama" || !strings.Contains(answer, "ผลจากข้อมูลจริง") {
+		t.Fatalf("second round answer/model = %q/%q", answer, model)
+	}
+	if *calls != 1 {
+		t.Fatalf("second round made %d requests, want one Ollama request", *calls)
 	}
 }
 
@@ -55,7 +102,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 		"get_lowest_margin_menu":    true,
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
-		"get_inventory_valuation":  true,
+		"get_inventory_valuation":   true,
 	}
 	for _, decl := range tools[0].FunctionDeclarations {
 		if !expectedNames[decl.Name] {
@@ -77,7 +124,7 @@ func TestGetGroqToolsSchema(t *testing.T) {
 		"get_lowest_margin_menu":    true,
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
-		"get_inventory_valuation":  true,
+		"get_inventory_valuation":   true,
 	}
 	for _, tool := range tools {
 		if tool.Type != "function" {
@@ -374,5 +421,146 @@ func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testin
 	}
 	if !strings.Contains(finalAnswer, "ทั้งหมด 42 รายการ, มูลค่ารวม 15450.50 บาท") {
 		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	}
+}
+
+func TestParseRouterJSON(t *testing.T) {
+	cases := []struct {
+		name     string
+		raw      string
+		wantTask AITask
+		wantErr  bool
+	}{
+		{
+			name:     "Clean JSON",
+			raw:      `{"task": "general_chat", "confidence": 0.95, "needs_restaurant_data": false}`,
+			wantTask: AITaskGeneralChat,
+			wantErr:  false,
+		},
+		{
+			name:     "Markdown Wrapped JSON",
+			raw:      "```json\n{\n  \"task\": \"restaurant_content\",\n  \"confidence\": 0.88,\n  \"needs_restaurant_data\": false\n}\n```",
+			wantTask: AITaskRestaurantContent,
+			wantErr:  false,
+		},
+		{
+			name:     "Invalid JSON",
+			raw:      `{invalid-json}`,
+			wantTask: "",
+			wantErr:  true,
+		},
+		{
+			name:     "Out of Scope JSON",
+			raw:      `{"task": "out_of_scope", "confidence": 0.99, "needs_restaurant_data": false}`,
+			wantTask: AITaskOutOfScope,
+			wantErr:  false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := parseRouterJSON(tc.raw)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("parseRouterJSON() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !tc.wantErr && res.Task != tc.wantTask {
+				t.Fatalf("parseRouterJSON() res.Task = %q, want %q", res.Task, tc.wantTask)
+			}
+		})
+	}
+}
+
+func TestLiveAITaskRouterIntegration(t *testing.T) {
+	groqKey := strings.TrimSpace(os.Getenv("GROQ_API_KEYS"))
+	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEYS"))
+	if groqKey == "" && geminiKey == "" {
+		t.Skip("Skipping Live Task Router integration test: no API keys configured in environment")
+	}
+
+	svc := &AIService{
+		httpClient: &http.Client{
+			Timeout: 15 * time.Second,
+		},
+	}
+
+	question := "เมนูไหนมีกำไรน้อยสุดในร้าน"
+
+	res, err := svc.classifyIntent(question)
+	if err != nil {
+		t.Fatalf("classifyIntent live API call failed: %v", err)
+	}
+
+	t.Logf("Live Router Result: %+v", res)
+
+	if res.Task != "restaurant_data" && res.Task != AITaskAnalyzeData {
+		t.Errorf("Expected live router to map %q to restaurant_data or analyze_data, got %q", question, res.Task)
+	}
+
+	if !res.NeedsRestaurantData {
+		t.Errorf("Expected NeedsRestaurantData to be true for analytical query, got false")
+	}
+
+	if res.NeedsTool && res.SuggestedTool != AIToolGetLowestMarginMenu {
+		t.Errorf("Expected SuggestedTool to be get_lowest_margin_menu, got %q", res.SuggestedTool)
+	}
+}
+
+func TestLiveAITaskRouterOutOfScopeIntegration(t *testing.T) {
+	groqKey := strings.TrimSpace(os.Getenv("GROQ_API_KEYS"))
+	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEYS"))
+	if groqKey == "" && geminiKey == "" {
+		t.Skip("Skipping Live Task Router Out of Scope integration test: no API keys configured")
+	}
+
+	svc := &AIService{
+		httpClient: &http.Client{
+			Timeout: 15 * time.Second,
+		},
+	}
+
+	question := "ช่วยแต่งกลอน 8 เกี่ยวกับความรักให้หน่อย"
+
+	res, err := svc.classifyIntent(question)
+	if err != nil {
+		t.Fatalf("classifyIntent live API call failed: %v", err)
+	}
+
+	t.Logf("Live Out-of-Scope Router Result: %+v", res)
+
+	if res.Task != AITaskOutOfScope {
+		t.Errorf("Expected live router to map %q to out_of_scope, got %q", question, res.Task)
+	}
+}
+
+func TestLiveOllamaRouterIntegration(t *testing.T) {
+	ollamaURL := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL"))
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
+	if ollamaURL == "" || provider != "ollama" {
+		t.Skip("Skipping Ollama integration test: set AI_PROVIDER=ollama and OLLAMA_BASE_URL to run")
+	}
+
+	svc := &AIService{
+		httpClient: &http.Client{
+			Timeout: 60 * time.Second, // Ollama on CPU can be slow
+		},
+	}
+
+	question := "เมนูไหนมีกำไรน้อยสุดในร้าน"
+	res, err := svc.classifyIntent(question)
+	if err != nil {
+		t.Fatalf("Ollama classifyIntent failed: %v", err)
+	}
+
+	t.Logf("Ollama Router Result: task=%s confidence=%.2f needs_data=%v tool=%s",
+		res.Task, res.Confidence, res.NeedsRestaurantData, res.SuggestedTool)
+
+	if res.Task == "" {
+		t.Error("Expected a non-empty task from Ollama router")
+	}
+	if res.Confidence <= 0 {
+		t.Error("Expected confidence > 0 from Ollama router")
+	}
+	if !res.NeedsRestaurantData {
+		t.Errorf("Expected NeedsRestaurantData=true for %q, got false", question)
 	}
 }

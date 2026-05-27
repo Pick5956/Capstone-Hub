@@ -161,12 +161,40 @@ func (s *AIService) getGeminiKeys() []string {
 	return keys
 }
 
-func (s *AIService) classifyIntent(question string) (AIIntent, error) {
+// getAIProvider returns the configured AI provider mode.
+// Valid values: "auto" | "groq" | "gemini" | "ollama" (default: "auto")
+func (s *AIService) getAIProvider() string {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
+	switch v {
+	case "groq", "gemini", "ollama":
+		return v
+	}
+	return "auto"
+}
+
+func (s *AIService) getOllamaBaseURL() string {
+	if u := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	return "http://localhost:11434"
+}
+
+func (s *AIService) getOllamaModel() string {
+	if m := strings.TrimSpace(os.Getenv("OLLAMA_MODEL")); m != "" {
+		return m
+	}
+	return "llama3.2"
+}
+
+func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
+	provider := s.getAIProvider()
 
-	// 1. Try Groq Classifier (Ultra-fast LPUs)
-	if len(groqKeys) > 0 {
+	if provider == "groq" || provider == "auto" {
+		if len(groqKeys) == 0 && provider == "groq" {
+			return AIRouterResult{}, errors.New("GROQ_API_KEYS is not configured")
+		}
 		numKeys := len(groqKeys)
 		for i := 0; i < numKeys; i++ {
 			idx := atomic.AddUint32(&s.groqKeyIndex, 1) - 1
@@ -174,14 +202,21 @@ func (s *AIService) classifyIntent(question string) (AIIntent, error) {
 
 			answer, err := s.executeClassifierGroq(question, currentKey)
 			if err == nil {
-				return parseIntent(answer), nil
+				res, parseErr := parseRouterJSON(answer)
+				if parseErr == nil {
+					return res, nil
+				}
+				fmt.Printf("[AI Classifier] Groq Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+			} else {
+				fmt.Printf("[AI Classifier] Groq Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
 			}
-			fmt.Printf("[AI Classifier] Groq Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
 		}
 	}
 
-	// 2. Try Gemini Classifier Fallback
-	if len(geminiKeys) > 0 {
+	if provider == "gemini" || provider == "auto" {
+		if len(geminiKeys) == 0 && provider == "gemini" {
+			return AIRouterResult{}, errors.New("GEMINI_API_KEYS is not configured")
+		}
 		numKeys := len(geminiKeys)
 		for i := 0; i < numKeys; i++ {
 			idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
@@ -189,35 +224,55 @@ func (s *AIService) classifyIntent(question string) (AIIntent, error) {
 
 			answer, err := s.executeClassifierGemini(question, currentKey)
 			if err == nil {
-				return parseIntent(answer), nil
+				res, parseErr := parseRouterJSON(answer)
+				if parseErr == nil {
+					return res, nil
+				}
+				fmt.Printf("[AI Classifier] Gemini Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+			} else {
+				fmt.Printf("[AI Classifier] Gemini Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
 			}
-			fmt.Printf("[AI Classifier] Gemini Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		}
+	}
+
+	if provider == "ollama" || provider == "auto" {
+		answer, err := s.executeClassifierOllama(question)
+		if err == nil {
+			res, parseErr := parseRouterJSON(answer)
+			if parseErr == nil {
+				return res, nil
+			}
+			fmt.Printf("[AI Classifier] Ollama succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+		} else {
+			fmt.Printf("[AI Classifier] Ollama failed: %v\n", err)
 		}
 	}
 
 	// Preserve analytical usefulness if provider classification is unavailable.
-	return AIIntentAnalysis, errors.New("failed to classify via any model, falling back to analysis")
+	return AIRouterResult{
+		Task:                AITaskAnalyzeData,
+		Confidence:          0.5,
+		NeedsRestaurantData: true,
+		Risk:                "low",
+	}, errors.New("failed to classify via any model, falling back to default analysis")
 }
 
-func parseIntent(answer string) AIIntent {
-	normalized := strings.ToUpper(strings.TrimSpace(answer))
-	labels := []struct {
-		label  string
-		intent AIIntent
-	}{
-		{label: "GREETING", intent: AIIntentGreeting},
-		{label: "CAPABILITIES", intent: AIIntentCapability},
-		{label: "UNCLEAR", intent: AIIntentUnclear},
-		{label: "CONVERSATION", intent: AIIntentChat},
-		{label: "OUT_OF_SCOPE", intent: AIIntentOutOfScope},
-		{label: "ANALYSIS", intent: AIIntentAnalysis},
+func parseRouterJSON(raw string) (AIRouterResult, error) {
+	cleaned := strings.TrimSpace(raw)
+	if strings.HasPrefix(cleaned, "```json") {
+		cleaned = strings.TrimPrefix(cleaned, "```json")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+	} else if strings.HasPrefix(cleaned, "```") {
+		cleaned = strings.TrimPrefix(cleaned, "```")
+		cleaned = strings.TrimSuffix(cleaned, "```")
 	}
-	for _, candidate := range labels {
-		if strings.HasPrefix(normalized, candidate.label) {
-			return candidate.intent
-		}
+	cleaned = strings.TrimSpace(cleaned)
+	var res AIRouterResult
+	err := json.Unmarshal([]byte(cleaned), &res)
+	if err != nil {
+		return AIRouterResult{}, err
 	}
-	return AIIntentAnalysis
+	return res, nil
 }
 
 func localIntent(question string) (AIIntent, bool) {
@@ -279,6 +334,27 @@ func localIntentAnswer(intent AIIntent) (string, bool) {
 	}
 }
 
+func mapTaskToIntent(task AITask) AIIntent {
+	switch task {
+	case AITaskGeneralChat:
+		return AIIntentChat
+	case AITaskExplainConcept, AITaskScopeQuestion, AITaskProductHelp:
+		return AIIntentCapability
+	case AITaskRestaurantAdvice, AITaskRestaurantContent:
+		return AIIntentChat
+	case AITaskAnalyzeData, AITaskRetrieveFact, AITaskRecommendAction, "restaurant_data":
+		return AIIntentAnalysis
+	case AITaskRiskyAction:
+		return AIIntentAnalysis
+	case AITaskUnclear:
+		return AIIntentUnclear
+	case AITaskOutOfScope:
+		return AIIntentOutOfScope
+	default:
+		return AIIntentAnalysis
+	}
+}
+
 func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskResponse, error) {
 	question := strings.TrimSpace(req.Question)
 	if question == "" {
@@ -289,96 +365,151 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	}
 	history := sanitizeConversationHistory(req.History)
 
-	intent, locallyResolved := localIntent(question)
-	if locallyResolved {
-		if answer, ok := localIntentAnswer(intent); ok {
-			return &AIAskResponse{
-				Answer:   answer,
-				Intent:   intent,
-				Model:    "local-router",
-				Snapshot: AISnapshot{},
-			}, nil
-		}
-	}
+	// Step 1a: Local guards DISABLED — AI Router handles 100% of intent classification.
 
-	taskRoute, taskResolved := resolveLocalTask(question)
-	if answer, ok := localConceptAnswer(taskRoute); ok {
-		return &AIAskResponse{
-			Answer:   answer,
-			Intent:   AIIntentChat,
-			Task:     taskRoute.Task,
-			Model:    "local-knowledge",
-			Snapshot: AISnapshot{},
-		}, nil
-	}
-
-	// Read-only tools and explicit business decisions must reach readiness checks deterministically.
-	if taskResolved && taskRoute.Task != AITaskExplainConcept {
-		intent = AIIntentAnalysis
-		locallyResolved = true
-	}
+	var taskRoute AITaskRoute
+	var intent AIIntent
+	locallyResolved := false
 
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
+	// Step 2: Structured JSON AI Router (Escalated to Model for non-exact queries)
+	var routerResult AIRouterResult
+	var routerErr error
 	if !locallyResolved {
-		if len(groqKeys) == 0 && len(geminiKeys) == 0 {
-			return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
+		routerResult, routerErr = s.classifyIntent(question)
+		if routerErr != nil {
+			fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", routerErr)
 		}
-		var err error
-		intent, err = s.classifyIntent(questionWithHistory(question, history))
-		if err != nil {
-			fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", err)
+	} else {
+		// Mimic expected AIRouterResult from local resolution
+		routerResult = AIRouterResult{
+			Task:                taskRoute.Task,
+			Confidence:          1.0,
+			NeedsRestaurantData: taskRoute.Task != AITaskExplainConcept,
+			SuggestedTool:       taskRoute.Tool,
 		}
-	}
-	if intent == AIIntentAnalysis && taskRoute.Task == "" {
-		taskRoute.Task = AITaskAnalyzeData
 	}
 
-	if answer, ok := localIntentAnswer(intent); ok {
+	// Step 3: Check Confidence Level and Unclear Input
+	if routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear {
 		return &AIAskResponse{
-			Answer:   answer,
-			Intent:   intent,
-			Model:    "local-router",
+			Answer:   "ผมยังไม่ค่อยมั่นใจในคำถามครับ รบกวนช่วยพิมพ์ระบุความต้องการให้ชัดเจนขึ้นอีกนิดได้ไหมครับ เช่น ถามเรื่องยอดขาย หรือให้ช่วยคิดแคปชั่นโปรโมทร้านครับ",
+			Intent:   AIIntentUnclear,
+			Task:     AITaskUnclear,
+			Model:    "local-router-fallback",
 			Snapshot: AISnapshot{},
 		}, nil
 	}
 
-	// Conversational prompts do not load operational data or make business claims.
-	if intent != AIIntentAnalysis {
-		fmt.Printf("[AI Router] Diverting to conversational flow (%s, 0 DB snapshot load)...\n", intent)
-
-		if len(groqKeys) > 0 {
-			answer, model, err := s.askGroqWithRotation(question, history, nil, true)
-			if err == nil {
-				return &AIAskResponse{
-					Answer:   answer,
-					Intent:   intent,
-					Model:    model,
-					Snapshot: AISnapshot{},
-				}, nil
-			}
-			fmt.Printf("[AI Service] Conversational fallback from Groq to Gemini due to error: %v\n", err)
-		}
-
-		// Try Gemini
-		if len(geminiKeys) > 0 {
-			answer, model, err := s.askGeminiWithRotation(question, history, nil, true)
-			if err == nil {
-				return &AIAskResponse{
-					Answer:   answer,
-					Intent:   intent,
-					Model:    model,
-					Snapshot: AISnapshot{},
-				}, nil
-			}
-			return nil, err
-		}
-
-		return nil, errors.New("โควต้าการใช้งาน AI ทั้งหมดของคุณหมดลงชั่วคราวแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ")
+	// Step 4: Block Risky Operations (Readiness & Safety Policy Guard)
+	if routerResult.Task == AITaskRiskyAction || routerResult.Risk == "high" || routerResult.Risk == "medium" {
+		return &AIAskResponse{
+			Answer:   "ระบบความปลอดภัยไม่อนุญาตให้แก้ไขข้อมูลร้าน ลบข้อมูล หรือสั่งซื้อสินค้าโดยตรงผ่านแชทเพื่อป้องกันความผิดพลาดครับ รบกวนดำเนินการด้วยตนเองในหน้าเมนูจัดการที่เกี่ยวข้องนะครับ",
+			Intent:   AIIntentAnalysis,
+			Task:     AITaskRiskyAction,
+			Model:    "local-safety-guard",
+			Snapshot: AISnapshot{},
+		}, nil
 	}
 
-	// Analytical questions load the scoped restaurant snapshot before answering.
+	// Block Out-of-Scope Requests (Focus Guard Policy - Dynamic AI Refusal)
+	if routerResult.Task == AITaskOutOfScope {
+		fmt.Printf("[AI Router] Diverting to Dynamic Out-of-Scope Refusal flow...\n")
+		answer, model, err := s.askOutOfScopeWithRotation(question, history)
+		if err == nil {
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   AIIntentOutOfScope,
+				Task:     AITaskOutOfScope,
+				Model:    model,
+				Snapshot: AISnapshot{},
+			}, nil
+		}
+		fmt.Printf("[AI Router] Dynamic Out-of-Scope failed: %v. Falling back to static message.\n", err)
+		return &AIAskResponse{
+			Answer:   "เรื่องนี้อยู่นอกขอบเขตที่ผมดูแลในฐานะผู้ช่วยร้านอาหารครับ ผมช่วยได้ในเรื่องยอดขาย วัตถุดิบ กำไรเมนู หรือแคปชั่นโปรโมทร้านครับ",
+			Intent:   AIIntentOutOfScope,
+			Task:     AITaskOutOfScope,
+			Model:    "local-focus-guard-fallback",
+			Snapshot: AISnapshot{},
+		}, nil
+	}
+
+	intent = mapTaskToIntent(routerResult.Task)
+	needsData := routerResult.NeedsRestaurantData || intent == AIIntentAnalysis
+
+	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
+	if !needsData {
+		fmt.Printf("[AI Router] Diverting to conversational flow (%s / %s, 0 DB snapshot load)...\n", routerResult.Task, intent)
+
+		provider := s.getAIProvider()
+
+		tryConv := func(name string, fn func() (string, string, error)) (string, string, bool) {
+			a, m, e := fn()
+			if e == nil {
+				return a, m, true
+			}
+			fmt.Printf("[AI Service] Conversational %s failed: %v\n", name, e)
+			return "", "", false
+		}
+
+		var convOrder []func() (string, string, error)
+		switch provider {
+		case "groq":
+			if len(groqKeys) > 0 {
+				convOrder = append(convOrder, func() (string, string, error) {
+					return s.askGroqWithRotation(question, history, nil, true)
+				})
+			}
+		case "gemini":
+			if len(geminiKeys) > 0 {
+				convOrder = append(convOrder, func() (string, string, error) {
+					return s.askGeminiWithRotation(question, history, nil, true)
+				})
+			}
+		case "ollama":
+			convOrder = append(convOrder, func() (string, string, error) {
+				return s.askOllamaWithRotation(question, history, nil, true)
+			})
+		default: // auto: Groq → Gemini → Ollama
+			if len(groqKeys) > 0 {
+				convOrder = append(convOrder, func() (string, string, error) {
+					return s.askGroqWithRotation(question, history, nil, true)
+				})
+			}
+			if len(geminiKeys) > 0 {
+				convOrder = append(convOrder, func() (string, string, error) {
+					return s.askGeminiWithRotation(question, history, nil, true)
+				})
+			}
+			convOrder = append(convOrder, func() (string, string, error) {
+				return s.askOllamaWithRotation(question, history, nil, true)
+			})
+		}
+
+		providerNames := []string{"Groq", "Gemini", "Ollama"}
+		for i, fn := range convOrder {
+			name := ""
+			if i < len(providerNames) {
+				name = providerNames[i]
+			}
+			if a, m, ok := tryConv(name, fn); ok {
+				return &AIAskResponse{
+					Answer:   a,
+					Intent:   intent,
+					Task:     routerResult.Task,
+					Model:    m,
+					Snapshot: AISnapshot{},
+				}, nil
+			}
+		}
+
+		return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
+	}
+
+	// Step 6: Analytical Flow (Needs Data = True, DB snapshot load)
 	fmt.Println("[AI Router] Diverting to Rich Analytical business flow (Building DB Snapshot)...")
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
@@ -388,13 +519,20 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return &AIAskResponse{
 			Answer:   answer,
 			Intent:   intent,
-			Task:     taskRoute.Task,
+			Task:     routerResult.Task,
 			Model:    "local-readiness-guardrail",
 			Snapshot: snapshot,
 		}, nil
 	}
-	if taskRoute.Tool != "" {
-		result, err := executeReadOnlyTool(taskRoute.Tool, snapshot)
+
+	// Retrieve correct tool to run
+	toolToRun := routerResult.SuggestedTool
+	if toolToRun == "" && taskRoute.Tool != "" {
+		toolToRun = taskRoute.Tool
+	}
+
+	if toolToRun != "" {
+		result, err := executeReadOnlyTool(toolToRun, snapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -402,130 +540,114 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			return &AIAskResponse{
 				Answer:   answer,
 				Intent:   intent,
-				Task:     taskRoute.Task,
-				Tool:     taskRoute.Tool,
+				Task:     routerResult.Task,
+				Tool:     toolToRun,
 				Model:    "local-tool",
 				Snapshot: snapshot,
 			}, nil
 		}
 	}
-	if len(groqKeys) == 0 && len(geminiKeys) == 0 {
-		return nil, errors.New("neither GROQ_API_KEY nor GEMINI_API_KEY is configured")
-	}
+	provider := s.getAIProvider()
 
-	// Try Groq (Ultra-fast 200ms) with rotated keys
-	if len(groqKeys) > 0 {
-		answer, model, err := s.askGroqWithRotation(question, history, &snapshot, false)
-		if err == nil {
-			if strings.HasPrefix(answer, "CALL_TOOL:") {
-				toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
-				result, err := executeReadOnlyTool(toolName, snapshot)
-				if err != nil {
-					return nil, err
-				}
-				
-				// Call second round
-				prompt := secondRoundPrompt(question, history, toolName, result)
-				secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
-				if secErr == nil {
-					res, parseErr := cleanAndParseJSONResponse(secAnswer)
-					if parseErr == nil {
-						finalAnswer := s.validateAndIntercept(res, result, snapshot)
-						return &AIAskResponse{
-							Answer:   finalAnswer,
-							Intent:   intent,
-							Task:     taskRoute.Task,
-							Tool:     toolName,
-							Model:    secModel,
-							Snapshot: snapshot,
-						}, nil
-					}
-					fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
-				} else {
-					fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
-				}
-
-				if toolAnswer, ok := localToolAnswer(result); ok {
+	// executeAnalytical runs one provider's analytical call and handles CALL_TOOL responses.
+	type analyticalFn func() (string, string, error)
+	executeAnalytical := func(callFn analyticalFn, providerName string) (*AIAskResponse, error) {
+		answer, model, err := callFn()
+		if err != nil {
+			fmt.Printf("[AI Service] Analytical %s failed: %v\n", providerName, err)
+			return nil, err
+		}
+		if strings.HasPrefix(answer, "CALL_TOOL:") {
+			toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
+			result, err := executeReadOnlyTool(toolName, snapshot)
+			if err != nil {
+				return nil, err
+			}
+			prompt := secondRoundPrompt(question, history, toolName, result)
+			secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
+			if secErr == nil {
+				res, parseErr := cleanAndParseJSONResponse(secAnswer)
+				if parseErr == nil {
+					finalAnswer := s.validateAndIntercept(res, result, snapshot)
 					return &AIAskResponse{
-						Answer:   toolAnswer,
+						Answer:   finalAnswer,
 						Intent:   intent,
-						Task:     taskRoute.Task,
+						Task:     routerResult.Task,
 						Tool:     toolName,
-						Model:    "local-tool-calling-fallback",
+						Model:    secModel,
 						Snapshot: snapshot,
 					}, nil
 				}
+				fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
+			} else {
+				fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
 			}
-			return &AIAskResponse{
-				Answer:   answer,
-				Intent:   intent,
-				Task:     taskRoute.Task,
-				Model:    model,
-				Snapshot: snapshot,
-			}, nil
+			if toolAnswer, ok := localToolAnswer(result); ok {
+				return &AIAskResponse{
+					Answer:   toolAnswer,
+					Intent:   intent,
+					Task:     routerResult.Task,
+					Tool:     toolName,
+					Model:    "local-tool-calling-fallback",
+					Snapshot: snapshot,
+				}, nil
+			}
 		}
-		fmt.Printf("[AI Service] Analytical fallback from Groq to Gemini due to error: %v\n", err)
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   intent,
+			Task:     routerResult.Task,
+			Model:    model,
+			Snapshot: snapshot,
+		}, nil
 	}
 
-	// Fallback to Gemini (Very large 1M TPM limit) with rotated keys
-	if len(geminiKeys) > 0 {
-		answer, model, err := s.askGeminiWithRotation(question, history, &snapshot, false)
-		if err == nil {
-			if strings.HasPrefix(answer, "CALL_TOOL:") {
-				toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
-				result, err := executeReadOnlyTool(toolName, snapshot)
-				if err != nil {
-					return nil, err
-				}
-				
-				// Call second round
-				prompt := secondRoundPrompt(question, history, toolName, result)
-				secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
-				if secErr == nil {
-					res, parseErr := cleanAndParseJSONResponse(secAnswer)
-					if parseErr == nil {
-						finalAnswer := s.validateAndIntercept(res, result, snapshot)
-						return &AIAskResponse{
-							Answer:   finalAnswer,
-							Intent:   intent,
-							Task:     taskRoute.Task,
-							Tool:     toolName,
-							Model:    secModel,
-							Snapshot: snapshot,
-						}, nil
-					}
-					fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
-				} else {
-					fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
-				}
-
-				if toolAnswer, ok := localToolAnswer(result); ok {
-					return &AIAskResponse{
-						Answer:   toolAnswer,
-						Intent:   intent,
-						Task:     taskRoute.Task,
-						Tool:     toolName,
-						Model:    "local-tool-calling-fallback",
-						Snapshot: snapshot,
-					}, nil
-				}
-			}
-			return &AIAskResponse{
-				Answer:   answer,
-				Intent:   intent,
-				Task:     taskRoute.Task,
-				Model:    model,
-				Snapshot: snapshot,
-			}, nil
+	// Build ordered list of analytical providers by config
+	type namedAnalytical struct {
+		name string
+		fn   analyticalFn
+	}
+	var analyticalOrder []namedAnalytical
+	switch provider {
+	case "groq":
+		if len(groqKeys) > 0 {
+			analyticalOrder = append(analyticalOrder, namedAnalytical{"Groq", func() (string, string, error) {
+				return s.askGroqWithRotation(question, history, &snapshot, false)
+			}})
 		}
-		// If Gemini also fails due to rate limits after rotation, return friendly message
-		if err == errRateLimit {
-			return nil, errors.New("โควต้าการใช้งาน AI ทั้งหมดของคุณหมดลงชั่วคราวแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+	case "gemini":
+		if len(geminiKeys) > 0 {
+			analyticalOrder = append(analyticalOrder, namedAnalytical{"Gemini", func() (string, string, error) {
+				return s.askGeminiWithRotation(question, history, &snapshot, false)
+			}})
 		}
-		return nil, err
+	case "ollama":
+		analyticalOrder = append(analyticalOrder, namedAnalytical{"Ollama", func() (string, string, error) {
+			return s.askOllamaWithRotation(question, history, &snapshot, false)
+		}})
+	default: // auto: Groq → Gemini → Ollama
+		if len(groqKeys) > 0 {
+			analyticalOrder = append(analyticalOrder, namedAnalytical{"Groq", func() (string, string, error) {
+				return s.askGroqWithRotation(question, history, &snapshot, false)
+			}})
+		}
+		if len(geminiKeys) > 0 {
+			analyticalOrder = append(analyticalOrder, namedAnalytical{"Gemini", func() (string, string, error) {
+				return s.askGeminiWithRotation(question, history, &snapshot, false)
+			}})
+		}
+		analyticalOrder = append(analyticalOrder, namedAnalytical{"Ollama", func() (string, string, error) {
+			return s.askOllamaWithRotation(question, history, &snapshot, false)
+		}})
 	}
 
-	return nil, errors.New("โควต้าการใช้งาน AI ทั้งหมดของคุณหมดลงชั่วคราวแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)")
+	for _, p := range analyticalOrder {
+		if resp, err := executeAnalytical(p.fn, p.name); err == nil {
+			return resp, nil
+		}
+	}
+
+	return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
 }
 
 func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
@@ -608,6 +730,264 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 	}
 
 	return "", "", lastErr
+}
+
+// ---------------------------------------------------------------------------
+// Ollama provider (OpenAI-compatible local API)
+// ---------------------------------------------------------------------------
+
+func (s *AIService) askOllamaWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool) (string, string, error) {
+	var answer, model string
+	var err error
+	if isConversation {
+		answer, model, err = s.executeOllamaConversation(question, history)
+	} else {
+		answer, model, err = s.executeOllama(question, history, *snapshot)
+	}
+	return answer, model, err
+}
+
+// executeClassifierOllama runs the JSON AI Router prompt against a local Ollama instance.
+func (s *AIService) executeClassifierOllama(question string) (string, error) {
+	baseURL := s.getOllamaBaseURL()
+	model := s.getOllamaModel()
+	fmt.Printf("[AI Classifier] Calling Ollama %s at %s\n", model, baseURL)
+
+	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
+You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
+
+Response format:
+{
+  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "confidence": 0.0 to 1.0,
+  "needs_restaurant_data": true | false,
+  "needs_tool": true | false,
+  "risk": "low" | "medium" | "high",
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+}
+
+Task descriptions:
+- scope_question: user asking what you can do outside the restaurant system.
+- general_chat: small talk, greetings, thanks, jokes, or basic chitchat.
+- restaurant_data: requests for live numbers, sales, profits, top menus, low stock, inventory, margins.
+- restaurant_advice: business advice, promotion ideas, or pricing tips without live data.
+- restaurant_content: generating captions, menu descriptions, promotion text.
+- product_help: instructions on how to use the restaurant management system.
+- risky_action: asking to make changes, modify data, delete, or order stock.
+- unclear: unreadable text, keyboard mashing, meaningless words.
+- out_of_scope: completely unrelated to restaurants, food, or restaurant software.
+
+Rules:
+1. "needs_restaurant_data" MUST be true only for "restaurant_data" task.
+2. "needs_tool" MUST be true if the query refers to: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
+4. Set risk to "high" or "medium" for risky actions (delete, modify, purchase).
+5. Set "task" to "out_of_scope" for anything unrelated to restaurants.
+
+User question:
+%s`, question)
+
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer ollama")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("ollama classifier: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("ollama classifier failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", err
+	}
+	if len(parsed.Choices) > 0 {
+		return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+	}
+	return "", errors.New("ollama returned empty classifier response")
+}
+
+// executeOllama runs the full analytical prompt (with tool calling) against a local Ollama instance.
+func (s *AIService) executeOllama(question string, history []AIConversationMessage, snapshot AISnapshot) (string, string, error) {
+	baseURL := s.getOllamaBaseURL()
+	model := s.getOllamaModel()
+	fmt.Printf("[AI Request] Calling Ollama (Analytical) %s at %s\n", model, baseURL)
+
+	prompt, err := analyticalPrompt(question, history, snapshot)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Attempt tool calling — not all Ollama models support it, so we omit Tools
+	// and rely on the CALL_TOOL: text protocol instead (same as Groq analytical).
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+		Tools: s.getGroqTools(),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer ollama")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", fmt.Errorf("ollama analytical: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("ollama analytical failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		content := strings.TrimSpace(parsed.Choices[0].Message.Content)
+		if content != "" {
+			return content, model, nil
+		}
+		// Handle tool_calls from models that support it
+		if tc := parsed.Choices[0].Message.ToolCalls; len(tc) > 0 {
+			return fmt.Sprintf("CALL_TOOL:%s", tc[0].Function.Name), model, nil
+		}
+	}
+	return "", "", errors.New("ollama returned empty analytical response")
+}
+
+// executeOllamaConversation runs a lightweight conversational prompt against a local Ollama instance.
+func (s *AIService) executeOllamaConversation(question string, history []AIConversationMessage) (string, string, error) {
+	baseURL := s.getOllamaBaseURL()
+	model := s.getOllamaModel()
+	fmt.Printf("[AI Request] Calling Ollama (Conversation) %s at %s\n", model, baseURL)
+
+	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
+Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
+Do not introduce yourself, and do not repeat a welcome message.
+If the user asks who you are, say you are the AI assistant for this restaurant management system and briefly mention you can help with sales, inventory, menus, and system navigation.
+If the message is ambiguous, ask one useful clarification question with concrete options.
+You do not have live restaurant data in this flow, so do not claim sales or stock numbers.
+
+User question:
+%s
+
+Recent conversation context:
+%s`, question, conversationPrompt(history))
+
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer ollama")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", fmt.Errorf("ollama conversation: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("ollama conversation failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		if content := strings.TrimSpace(parsed.Choices[0].Message.Content); content != "" {
+			return content, model, nil
+		}
+	}
+	return "", "", errors.New("ollama returned empty conversation response")
+}
+
+// executeSecondRoundOllama renders a prompt through the configured local
+// provider for tool-result narration and policy responses.
+func (s *AIService) executeSecondRoundOllama(prompt string) (string, string, error) {
+	baseURL := s.getOllamaBaseURL()
+	model := s.getOllamaModel()
+	fmt.Printf("[AI Second Round] Calling Ollama %s at %s\n", model, baseURL)
+
+	payload := groqRequest{
+		Model: model,
+		Messages: []groqMessage{
+			{Role: "user", Content: prompt},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", "", err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return "", "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer ollama")
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return "", "", fmt.Errorf("ollama second round: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("ollama second round failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var parsed groqResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", "", err
+	}
+	if len(parsed.Choices) > 0 {
+		if content := strings.TrimSpace(parsed.Choices[0].Message.Content); content != "" {
+			return content, model, nil
+		}
+	}
+	return "", "", errors.New("ollama second round returned empty response")
 }
 
 func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
@@ -800,22 +1180,52 @@ func localLowestMarginFactAnswer(question string, snapshot AISnapshot) (string, 
 	return localToolAnswer(result)
 }
 
+func maskAPIKey(key string) string {
+	if len(key) <= 10 {
+		return "***"
+	}
+	return fmt.Sprintf("%s...%s", key[:6], key[len(key)-4:])
+}
+
 func (s *AIService) executeClassifierGroq(question string, apiKey string) (string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
 	}
+	fmt.Printf("[AI Classifier] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
 
-	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
-Reply with exactly one label:
-- ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
-- GREETING: a greeting only, such as "hello" or "สวัสดี"; do not classify thanks or acknowledgements as greeting.
-- CAPABILITIES: asks what the assistant can do.
-- UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
-- OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other clear request that can be answered without live restaurant data, including thanks or acknowledgements.
+	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
+You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
 
-User input:
+Response format:
+{
+  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "confidence": 0.0 to 1.0,
+  "needs_restaurant_data": true | false,
+  "needs_tool": true | false,
+  "risk": "low" | "medium" | "high",
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+}
+
+Task descriptions:
+- scope_question: user asking what you can do outside the restaurant system, if you can chat off-topic, or the limits of your capabilities.
+- general_chat: small talk, greetings (e.g. "สวัสดี", "hello", "hi"), thanks, jokes, or basic chitchat.
+- restaurant_data: requests for actual live numbers, sales, profits, top menus, low stock, inventory, margins, or any specific calculations from the restaurant's operational database.
+- restaurant_advice: requests for business advice, promotion ideas, or pricing tips that DO NOT require live data (general advice only, e.g. "how to price menu in rainy season").
+- restaurant_content: requests for generating captions, menu item descriptions, promotion posters, or advertising text (e.g. "ช่วยคิดแคปชั่นโปรโมท").
+- product_help: asking for instructions on how to use the restaurant management system (e.g. "how to add a menu in settings").
+- risky_action: asking the assistant to make changes, modify data, change settings, or perform dangerous operations (e.g. delete a menu, place a purchase order, change inventory count).
+- unclear: unreadable text, keyboard mashing, meaningless words, or extremely vague queries (e.g. "asdfghjk", "ok", "yes").
+- out_of_scope: requests for information completely unrelated to restaurants, food, cooking, restaurant operations, marketing a restaurant, or using the restaurant management software (e.g. asking to write general poems, homework, general programming, sports, non-restaurant news, politics).
+
+Rules:
+1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data" or a specific data report is requested.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
+4. If the user asks a risky action (e.g. delete menu, up prices, buy stock), set risk to "high" or "medium".
+5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
+
+User question:
 %s`, question)
 
 	payload := groqRequest{
@@ -854,7 +1264,7 @@ User input:
 		return "", err
 	}
 	if len(parsed.Choices) > 0 {
-		return strings.ToUpper(strings.TrimSpace(parsed.Choices[0].Message.Content)), nil
+		return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 	}
 	return "", errors.New("groq returned empty classifier response")
 }
@@ -864,17 +1274,40 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
+	fmt.Printf("[AI Classifier] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
 
-	prompt := fmt.Sprintf(`You classify requests for a restaurant operations assistant.
-Reply with exactly one label:
-- ANALYSIS: needs restaurant sales, profit, menu performance, stock, or inventory data.
-- GREETING: a greeting only, such as "hello" or "สวัสดี"; do not classify thanks or acknowledgements as greeting.
-- CAPABILITIES: asks what the assistant can do.
-- UNCLEAR: unreadable, random, meaningless, or too vague to answer usefully, such as "rytyt" or keyboard mashing.
-- OUT_OF_SCOPE: asks for information outside the restaurant system.
-- CONVERSATION: any other clear request that can be answered without live restaurant data, including thanks or acknowledgements.
+	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
+You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
 
-User input:
+Response format:
+{
+  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "confidence": 0.0 to 1.0,
+  "needs_restaurant_data": true | false,
+  "needs_tool": true | false,
+  "risk": "low" | "medium" | "high",
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+}
+
+Task descriptions:
+- scope_question: user asking what you can do outside the restaurant system, if you can chat off-topic, or the limits of your capabilities.
+- general_chat: small talk, greetings (e.g. "สวัสดี", "hello", "hi"), thanks, jokes, or basic chitchat.
+- restaurant_data: requests for actual live numbers, sales, profits, top menus, low stock, inventory, margins, or any specific calculations from the restaurant's operational database.
+- restaurant_advice: requests for business advice, promotion ideas, or pricing tips that DO NOT require live data (general advice only, e.g. "how to price menu in rainy season").
+- restaurant_content: requests for generating captions, menu item descriptions, promotion posters, or advertising text (e.g. "ช่วยคิดแคปชั่นโปรโมท").
+- product_help: asking for instructions on how to use the restaurant management system (e.g. "how to add a menu in settings").
+- risky_action: asking the assistant to make changes, modify data, change settings, or perform dangerous operations (e.g. delete a menu, place a purchase order, change inventory count).
+- unclear: unreadable text, keyboard mashing, meaningless words, or extremely vague queries (e.g. "asdfghjk", "ok", "yes").
+- out_of_scope: requests for information completely unrelated to restaurants, food, cooking, restaurant operations, marketing a restaurant, or using the restaurant management software (e.g. asking to write general poems, homework, general programming, sports, non-restaurant news, politics).
+
+Rules:
+1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data" or a specific data report is requested.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
+4. If the user asks a risky action (e.g. delete menu, up prices, buy stock), set risk to "high" or "medium".
+5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
+
+User question:
 %s`, question)
 
 	payload := geminiGenerateRequest{
@@ -915,7 +1348,7 @@ User input:
 	for _, candidate := range parsed.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if text := strings.TrimSpace(part.Text); text != "" {
-				return strings.ToUpper(text), nil
+				return text, nil
 			}
 		}
 	}
@@ -927,6 +1360,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
+	fmt.Printf("[AI Request] Calling Gemini (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -987,10 +1421,12 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
+	fmt.Printf("[AI Request] Calling Gemini (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
 Do not introduce yourself, and do not repeat a welcome message.
+If the user asks who you are, say you are the AI assistant for this restaurant management system and briefly mention you can help with sales, inventory, menus, and system navigation.
 If the message is ambiguous, ask one useful clarification question with concrete options.
 You do not have live restaurant data in this flow, so do not claim sales or stock numbers.
 
@@ -1050,6 +1486,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	if model == "" {
 		model = "groq/compound-mini"
 	}
+	fmt.Printf("[AI Request] Calling Groq (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -1138,10 +1575,12 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 	if model == "" {
 		model = "groq/compound-mini"
 	}
+	fmt.Printf("[AI Request] Calling Groq (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
 Do not introduce yourself, and do not repeat a welcome message.
+If the user asks who you are, say you are the AI assistant for this restaurant management system and briefly mention you can help with sales, inventory, menus, and system navigation.
 If the message is ambiguous, ask one useful clarification question with concrete options.
 You do not have live restaurant data in this flow, so do not claim sales or stock numbers.
 
@@ -1444,6 +1883,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
+	fmt.Printf("[AI Second Round] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -1492,6 +1932,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	if model == "" {
 		model = "groq/compound-mini"
 	}
+	fmt.Printf("[AI Second Round] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
 	payload := groqRequest{
 		Model: model,
 		Messages: []groqMessage{
@@ -1582,17 +2023,30 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, error) {
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
-	if len(groqKeys) > 0 {
-		answer, model, err := s.askSecondRoundGroqWithRotation(prompt)
-		if err == nil {
-			return answer, model, nil
-		}
-		fmt.Printf("[AI Service] Second round Groq failed, trying Gemini fallback: %v\n", err)
-	}
-	if len(geminiKeys) > 0 {
+	switch s.getAIProvider() {
+	case "groq":
+		return s.askSecondRoundGroqWithRotation(prompt)
+	case "gemini":
 		return s.askSecondRoundGeminiWithRotation(prompt)
+	case "ollama":
+		return s.executeSecondRoundOllama(prompt)
+	default:
+		if len(groqKeys) > 0 {
+			answer, model, err := s.askSecondRoundGroqWithRotation(prompt)
+			if err == nil {
+				return answer, model, nil
+			}
+			fmt.Printf("[AI Service] Second round Groq failed, trying Gemini fallback: %v\n", err)
+		}
+		if len(geminiKeys) > 0 {
+			answer, model, err := s.askSecondRoundGeminiWithRotation(prompt)
+			if err == nil {
+				return answer, model, nil
+			}
+			fmt.Printf("[AI Service] Second round Gemini failed, trying Ollama fallback: %v\n", err)
+		}
+		return s.executeSecondRoundOllama(prompt)
 	}
-	return "", "", errors.New("no API keys configured for second round")
 }
 
 func cleanAndParseJSONResponse(raw string) (AIFinalJSONResponse, error) {
@@ -1722,4 +2176,47 @@ func almostEqual(a, b float64) bool {
 		diff = -diff
 	}
 	return diff < 0.05
+}
+
+// parseIntent is kept for backward compatibility and testing purposes.
+func parseIntent(answer string) AIIntent {
+	normalized := strings.ToUpper(strings.TrimSpace(answer))
+	labels := []struct {
+		label  string
+		intent AIIntent
+	}{
+		{label: "GREETING", intent: AIIntentGreeting},
+		{label: "CAPABILITIES", intent: AIIntentCapability},
+		{label: "UNCLEAR", intent: AIIntentUnclear},
+		{label: "CONVERSATION", intent: AIIntentChat},
+		{label: "OUT_OF_SCOPE", intent: AIIntentOutOfScope},
+		{label: "ANALYSIS", intent: AIIntentAnalysis},
+	}
+	for _, candidate := range labels {
+		if strings.HasPrefix(normalized, candidate.label) {
+			return candidate.intent
+		}
+	}
+	return AIIntentAnalysis
+}
+
+func outOfScopePrompt(question string, history []AIConversationMessage) string {
+	return fmt.Sprintf(`You are a Thai restaurant management assistant. The user asked something outside your scope.
+
+STRICT RULES — follow exactly:
+1. Reply in Thai, using "ครับ" consistently.
+2. Write EXACTLY 2 sentences — no more, no less.
+   - Sentence 1: Politely say this topic is outside what you handle as a restaurant assistant.
+   - Sentence 2: Briefly mention 1-2 things you CAN help with (sales analysis, inventory, menu profit, marketing captions).
+3. Do NOT fulfill their request. Do NOT write analogies or relate their question to restaurants. Do NOT use bullet points or lists.
+4. Keep it concise and friendly. Total response must be under 60 words.
+
+User question: %s
+
+Recent context: %s`, question, conversationPrompt(history))
+}
+
+func (s *AIService) askOutOfScopeWithRotation(question string, history []AIConversationMessage) (string, string, error) {
+	prompt := outOfScopePrompt(question, history)
+	return s.askSecondRoundWithRotation(prompt)
 }

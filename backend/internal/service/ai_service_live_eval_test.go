@@ -26,8 +26,8 @@ func liveAIServiceOrSkip(t *testing.T) *AIService {
 
 	_ = godotenv.Load(filepath.Join("..", "..", ".env"))
 	svc := ProvideAIService(nil)
-	if len(svc.getGroqKeys()) == 0 && len(svc.getGeminiKeys()) == 0 {
-		t.Skip("live provider evaluation enabled, but no GROQ/GEMINI API key is configured")
+	if svc.getAIProvider() != "ollama" && len(svc.getGroqKeys()) == 0 && len(svc.getGeminiKeys()) == 0 {
+		t.Skip("live provider evaluation enabled, but no configured provider is available")
 	}
 	return svc
 }
@@ -46,12 +46,13 @@ func TestLiveProviderIntentEvaluation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			intent, err := svc.classifyIntent(tc.Question)
+			result, err := svc.classifyIntent(tc.Question)
 			if err != nil {
 				t.Fatalf("classifyIntent(%q): %v", tc.Question, err)
 			}
+			intent := mapTaskToIntent(result.Task)
 			if intent != tc.ExpectedIntent {
-				t.Fatalf("classifyIntent(%q) = %q, want %q", tc.Question, intent, tc.ExpectedIntent)
+				t.Fatalf("classifyIntent(%q) routed task %q to intent %q, want %q", tc.Question, result.Task, intent, tc.ExpectedIntent)
 			}
 		})
 	}
