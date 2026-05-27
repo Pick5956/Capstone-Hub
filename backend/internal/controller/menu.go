@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,8 +56,11 @@ func memberCan(c *gin.Context, permission string) bool {
 	if !ok || member.Role == nil {
 		return false
 	}
-	if member.Role.Permissions == `["*"]` {
-		return true
+	if member.PermissionsOverride != nil {
+		return permissionListContains(*member.PermissionsOverride, permission)
+	}
+	if member.Role.Permissions != "" {
+		return permissionListContains(member.Role.Permissions, permission)
 	}
 	role := member.Role.Name
 	if permission == "view_menu" {
@@ -98,6 +102,28 @@ func memberCan(c *gin.Context, permission string) bool {
 	return false
 }
 
+func memberCanAny(c *gin.Context, permissions ...string) bool {
+	for _, permission := range permissions {
+		if memberCan(c, permission) {
+			return true
+		}
+	}
+	return false
+}
+
+func permissionListContains(raw string, permission string) bool {
+	var permissions []string
+	if err := json.Unmarshal([]byte(raw), &permissions); err != nil {
+		return false
+	}
+	for _, item := range permissions {
+		if item == "*" || item == permission {
+			return true
+		}
+	}
+	return false
+}
+
 func requireRestaurant(c *gin.Context) (uint, bool) {
 	restaurantID, ok := contextRestaurantID(c)
 	if !ok || restaurantID == 0 {
@@ -122,7 +148,7 @@ func (ctrl *MenuController) ListCategories(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !memberCan(c, "view_menu") && !memberCan(c, "manage_menu") {
+	if !memberCanAny(c, "view_menu", "manage_menu", "take_order") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "missing menu permission"})
 		return
 	}
@@ -207,7 +233,7 @@ func (ctrl *MenuController) ListMenuItems(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !memberCan(c, "view_menu") && !memberCan(c, "manage_menu") {
+	if !memberCanAny(c, "view_menu", "manage_menu", "take_order") {
 		c.JSON(http.StatusForbidden, gin.H{"error": "missing menu permission"})
 		return
 	}

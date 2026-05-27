@@ -17,11 +17,27 @@ const fallbackRolePermissions: Record<string, Permission[]> = {
     'update_order_status',
   ],
   cashier: ['view_dashboard', 'take_payment', 'view_orders', 'view_tables'],
-  waiter: ['view_dashboard', 'take_order', 'take_payment', 'view_tables', 'view_menu', 'view_orders'],
-  chef: ['view_kitchen', 'update_order_status', 'view_menu', 'view_inventory'],
+  waiter: ['view_dashboard', 'take_order', 'take_payment', 'view_tables', 'view_orders'],
+  chef: ['view_kitchen', 'update_order_status', 'view_inventory'],
 };
 
+const deprecatedPermissions = new Set<Permission>(['view_menu']);
+
 export function can(membership: Membership | null | undefined, permission: Permission): boolean {
+  if (deprecatedPermissions.has(permission)) {
+    return false;
+  }
+
+  const memberOverride = membership?.permissions_override;
+  if (memberOverride) {
+    try {
+      const permissions = JSON.parse(memberOverride) as Permission[];
+      return permissions.includes('*') || permissions.includes(permission);
+    } catch {
+      return false;
+    }
+  }
+
   const rawPermissions = membership?.role?.permissions;
   if (rawPermissions) {
     try {

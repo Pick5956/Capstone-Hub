@@ -8,6 +8,7 @@ import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import AppLogo from "@/src/components/shared/AppLogo";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -165,14 +166,7 @@ const InputField = ({
 function BrandLine() {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-red-600 shadow-sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-          <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-          <path d="M7 2v20" />
-          <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3" />
-          <path d="M21 15v7" />
-        </svg>
-      </div>
+      <AppLogo size={28} />
       <div className="leading-none">
         <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Restaurant</p>
         <p className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">HUB</p>

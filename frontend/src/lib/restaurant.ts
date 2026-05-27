@@ -59,6 +59,12 @@ export const updateMemberRole = (restaurantId: number, memberId: number, roleId:
     role_id: roleId,
   });
 
+export const updateMemberPermissions = (restaurantId: number, memberId: number, permissions: string[] | null) =>
+  apiClient.patch<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/permissions`, {
+    use_role_permissions: permissions === null,
+    permissions: permissions ?? [],
+  });
+
 export const listAuditLogs = (restaurantId: number, limit = 20, offset = 0) =>
   apiClient.get<{ logs: RestaurantAuditLog[]; has_more?: boolean; next_offset?: number }>(`/api/v1/restaurants/${restaurantId}/audit-logs`, {
     params: { limit, offset },
