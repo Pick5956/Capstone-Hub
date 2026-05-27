@@ -534,25 +534,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		}, nil
 	}
 
-	// Retrieve correct tool to run
 	toolToRun := routerResult.SuggestedTool
-
-	if toolToRun != "" {
-		result, err := executeReadOnlyTool(toolToRun, snapshot, question)
-		if err != nil {
-			return nil, err
-		}
-		if answer, answered := localToolAnswer(result); answered {
-			return &AIAskResponse{
-				Answer:   answer,
-				Intent:   intent,
-				Task:     routerResult.Task,
-				Tool:     toolToRun,
-				Model:    "local-tool",
-				Snapshot: snapshot,
-			}, nil
-		}
-	}
 	provider := s.getAIProvider()
 
 	// executeAnalytical runs one provider's analytical call and handles CALL_TOOL responses.
@@ -632,6 +614,23 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	for _, p := range analyticalOrder {
 		if resp, err := executeAnalytical(p.fn, p.name); err == nil {
 			return resp, nil
+		}
+	}
+
+	// Fallback to local hardcoded tool template only if the LLM analytical loop fails
+	if toolToRun != "" {
+		result, err := executeReadOnlyTool(toolToRun, snapshot, question)
+		if err == nil {
+			if answer, answered := localToolAnswer(result); answered {
+				return &AIAskResponse{
+					Answer:   answer,
+					Intent:   intent,
+					Task:     routerResult.Task,
+					Tool:     toolToRun,
+					Model:    "local-tool-fallback",
+					Snapshot: snapshot,
+				}, nil
+			}
 		}
 	}
 
