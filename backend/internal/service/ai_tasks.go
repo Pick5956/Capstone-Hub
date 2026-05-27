@@ -36,6 +36,7 @@ const (
 	AIToolGetLowStockIngredients AIToolName = "get_low_stock_ingredients"
 	AIToolGetTopSellingMenus     AIToolName = "get_top_selling_menus"
 	AIToolGetInventoryValuation  AIToolName = "get_inventory_valuation"
+	AIToolGetSalesSummary        AIToolName = "get_sales_summary"
 )
 
 type AITaskRoute struct {
@@ -58,6 +59,77 @@ type AIToolResult struct {
 	LowStockIngredients []AIStockRisk
 	TopSellingMenus     []repository.AIMenuSummary
 	InventoryValuation  *AIInventorySummary
+	SalesSummary        *AISalesSummary
+}
+
+type AISalesSummary struct {
+	Days    int
+	Orders  int64
+	Revenue float64
+}
+
+func isSupportedReadOnlyTool(tool AIToolName) bool {
+	switch tool {
+	case AIToolGetLowestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary:
+		return true
+	default:
+		return false
+	}
+}
+
+// enforceRouterPolicy treats model routing as a proposal. The backend decides
+// which data and tools may actually be used.
+func enforceRouterPolicy(result AIRouterResult) (AIRouterResult, error) {
+	if result.Confidence < 0 || result.Confidence > 1 {
+		return AIRouterResult{}, errors.New("AI router returned confidence outside 0..1")
+	}
+	result.Risk = strings.ToLower(strings.TrimSpace(result.Risk))
+	switch result.Risk {
+	case "", "low":
+		result.Risk = "low"
+	case "medium", "high":
+	default:
+		return AIRouterResult{}, errors.New("AI router returned unsupported risk level")
+	}
+
+	switch result.Task {
+	case AITask("restaurant_data"), AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction:
+		// These flows are read-only; readiness and tool policy guard any
+		// recommendation before a user performs a change.
+		result.Risk = "low"
+		result.NeedsRestaurantData = true
+		if result.SuggestedTool != "" {
+			if !isSupportedReadOnlyTool(result.SuggestedTool) {
+				return AIRouterResult{}, errors.New("AI router returned unsupported read-only tool")
+			}
+			result.NeedsTool = true
+			if result.Task == AITask("restaurant_data") || result.Task == AITaskAnalyzeData {
+				result.Task = AITaskRetrieveFact
+			}
+			return result, nil
+		}
+		if result.NeedsTool || result.Task == AITaskRetrieveFact {
+			return AIRouterResult{}, errors.New("AI router requested a fact tool without a supported tool name")
+		}
+		if result.Task == AITask("restaurant_data") {
+			result.Task = AITaskAnalyzeData
+		}
+		result.NeedsTool = false
+		return result, nil
+	case AITaskRiskyAction:
+		result.NeedsRestaurantData = false
+		result.NeedsTool = false
+		result.SuggestedTool = ""
+		return result, nil
+	case AITaskExplainConcept, AITaskScopeQuestion, AITaskGeneralChat, AITaskRestaurantAdvice,
+		AITaskRestaurantContent, AITaskProductHelp, AITaskUnclear, AITaskOutOfScope:
+		result.NeedsRestaurantData = false
+		result.NeedsTool = false
+		result.SuggestedTool = ""
+		return result, nil
+	default:
+		return AIRouterResult{}, errors.New("AI router returned unsupported task")
+	}
 }
 
 func resolveLocalTask(question string) (AITaskRoute, bool) {
@@ -96,10 +168,10 @@ func localConceptAnswer(route AITaskRoute) (string, bool) {
 	if route.Task != AITaskExplainConcept {
 		return "", false
 	}
-	return "Margin หรืออัตรากำไร คือสัดส่วนกำไรที่เหลือหลังหักต้นทุนจากรายได้ครับ\n\n" +
+	return "มาร์จิ้น (Margin) คือเปอร์เซ็นต์กำไรเทียบกับรายได้ครับ\n\n" +
 		"- สูตร: `(รายได้ - ต้นทุน) / รายได้ x 100`\n" +
-		"- ตัวอย่าง: ขายอาหาร 100 บาท ต้นทุนวัตถุดิบ 60 บาท กำไร 40 บาท เท่ากับ Margin 40%\n\n" +
-		"ในระบบร้านของเรา Margin เมนูจะอ้างอิงรายการที่เสิร์ฟแล้วและมีการบันทึกต้นทุนวัตถุดิบครบ เพื่อให้ตัวเลขไม่คลาดเคลื่อนครับ", true
+		"- ตัวอย่าง: ขาย 100 บาท ต้นทุน 60 บาท Margin เท่ากับ 40%\n\n" +
+		"ในระบบนี้จะยืนยัน Margin เมื่อรายการขายมีต้นทุนวัตถุดิบครบครับ", true
 }
 
 func requestsAssistantScopeExplanation(question string) bool {
@@ -147,6 +219,13 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot) (AIToolResult, er
 		return AIToolResult{Tool: tool, TopSellingMenus: snapshot.TopMenuItems}, nil
 	case AIToolGetInventoryValuation:
 		return AIToolResult{Tool: tool, InventoryValuation: &snapshot.InventorySummary}, nil
+	case AIToolGetSalesSummary:
+		summary := AISalesSummary{Days: len(snapshot.SalesDays)}
+		for _, day := range snapshot.SalesDays {
+			summary.Orders += day.Orders
+			summary.Revenue += day.Revenue
+		}
+		return AIToolResult{Tool: tool, SalesSummary: &summary}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
@@ -157,7 +236,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetLowestMarginMenu:
 		menu := result.LowestMarginMenu
 		if menu == nil || menu.Quantity <= 0 {
-			return "", false
+			return "ตอนนี้ยังไม่มีข้อมูล Margin ของเมนูที่ยืนยันได้จากรายการขายและต้นทุนที่บันทึกครบครับ", true
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
@@ -228,6 +307,17 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			val.OutItems,
 			val.LowItems,
 			val.Value,
+		), true
+	case AIToolGetSalesSummary:
+		summary := result.SalesSummary
+		if summary == nil {
+			return "ยังไม่มีข้อมูลยอดขายที่ยืนยันได้ในช่วง 14 วันล่าสุดครับ", true
+		}
+		return fmt.Sprintf(
+			"ยอดขายรวมช่วง 14 วันล่าสุดคือ %.2f บาทครับ\n\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			summary.Revenue,
+			summary.Orders,
+			summary.Days,
 		), true
 	}
 	return "", false

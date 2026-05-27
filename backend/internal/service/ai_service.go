@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -186,6 +187,15 @@ func (s *AIService) getOllamaModel() string {
 	return "llama3.2"
 }
 
+func (s *AIService) getOllamaContextLength() int {
+	if raw := strings.TrimSpace(os.Getenv("OLLAMA_CONTEXT_LENGTH")); raw != "" {
+		if value, err := strconv.Atoi(raw); err == nil && value > 0 {
+			return value
+		}
+	}
+	return 4096
+}
+
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
@@ -272,7 +282,7 @@ func parseRouterJSON(raw string) (AIRouterResult, error) {
 	if err != nil {
 		return AIRouterResult{}, err
 	}
-	return res, nil
+	return enforceRouterPolicy(res)
 }
 
 func localIntent(question string) (AIIntent, bool) {
@@ -351,7 +361,7 @@ func mapTaskToIntent(task AITask) AIIntent {
 	case AITaskOutOfScope:
 		return AIIntentOutOfScope
 	default:
-		return AIIntentAnalysis
+		return AIIntentUnclear
 	}
 }
 
@@ -365,31 +375,17 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	}
 	history := sanitizeConversationHistory(req.History)
 
-	// Step 1a: Local guards DISABLED — AI Router handles 100% of intent classification.
-
-	var taskRoute AITaskRoute
+	// Local intent guards remain disabled: the AI Router handles classification,
+	// while backend policy validates its proposed task and tool.
 	var intent AIIntent
-	locallyResolved := false
 
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
-	// Step 2: Structured JSON AI Router (Escalated to Model for non-exact queries)
-	var routerResult AIRouterResult
-	var routerErr error
-	if !locallyResolved {
-		routerResult, routerErr = s.classifyIntent(question)
-		if routerErr != nil {
-			fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", routerErr)
-		}
-	} else {
-		// Mimic expected AIRouterResult from local resolution
-		routerResult = AIRouterResult{
-			Task:                taskRoute.Task,
-			Confidence:          1.0,
-			NeedsRestaurantData: taskRoute.Task != AITaskExplainConcept,
-			SuggestedTool:       taskRoute.Tool,
-		}
+	// Step 2: Structured JSON AI Router followed by backend policy enforcement.
+	routerResult, routerErr := s.classifyIntent(question)
+	if routerErr != nil {
+		fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", routerErr)
 	}
 
 	// Step 3: Check Confidence Level and Unclear Input
@@ -410,6 +406,19 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			Intent:   AIIntentAnalysis,
 			Task:     AITaskRiskyAction,
 			Model:    "local-safety-guard",
+			Snapshot: AISnapshot{},
+		}, nil
+	}
+
+	// The Router selects this known concept flow; backend supplies an exact,
+	// stable definition instead of allowing a provider to redefine Margin.
+	if routerResult.Task == AITaskExplainConcept && requestsMarginConceptExplanation(question) {
+		answer, _ := localConceptAnswer(AITaskRoute{Task: AITaskExplainConcept})
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   AIIntentCapability,
+			Task:     AITaskExplainConcept,
+			Model:    "local-concept-policy",
 			Snapshot: AISnapshot{},
 		}, nil
 	}
@@ -527,9 +536,6 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Retrieve correct tool to run
 	toolToRun := routerResult.SuggestedTool
-	if toolToRun == "" && taskRoute.Tool != "" {
-		toolToRun = taskRoute.Tool
-	}
 
 	if toolToRun != "" {
 		result, err := executeReadOnlyTool(toolToRun, snapshot)
@@ -563,35 +569,17 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			if err != nil {
 				return nil, err
 			}
-			prompt := secondRoundPrompt(question, history, toolName, result)
-			secAnswer, secModel, secErr := s.askSecondRoundWithRotation(prompt)
-			if secErr == nil {
-				res, parseErr := cleanAndParseJSONResponse(secAnswer)
-				if parseErr == nil {
-					finalAnswer := s.validateAndIntercept(res, result, snapshot)
-					return &AIAskResponse{
-						Answer:   finalAnswer,
-						Intent:   intent,
-						Task:     routerResult.Task,
-						Tool:     toolName,
-						Model:    secModel,
-						Snapshot: snapshot,
-					}, nil
-				}
-				fmt.Printf("[AI Service] Failed to parse second round JSON: %v, falling back to localToolAnswer\n", parseErr)
-			} else {
-				fmt.Printf("[AI Service] Second round failed: %v, falling back to localToolAnswer\n", secErr)
-			}
 			if toolAnswer, ok := localToolAnswer(result); ok {
 				return &AIAskResponse{
 					Answer:   toolAnswer,
 					Intent:   intent,
 					Task:     routerResult.Task,
 					Tool:     toolName,
-					Model:    "local-tool-calling-fallback",
+					Model:    "local-tool-confirmed",
 					Snapshot: snapshot,
 				}, nil
 			}
+			return nil, errors.New("read-only AI tool returned no presentable result")
 		}
 		return &AIAskResponse{
 			Answer:   answer,
@@ -758,19 +746,21 @@ You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block f
 
 Response format:
 {
-  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "task": "explain_concept" | "scope_question" | "general_chat" | "restaurant_data" | "recommend_action" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
   "confidence": 0.0 to 1.0,
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | ""
 }
 
 Task descriptions:
+- explain_concept: asking what Margin means or how Margin is calculated, without requesting this restaurant's numbers.
 - scope_question: user asking what you can do outside the restaurant system.
 - general_chat: small talk, greetings, thanks, jokes, or basic chitchat.
 - restaurant_data: requests for live numbers, sales, profits, top menus, low stock, inventory, margins.
-- restaurant_advice: business advice, promotion ideas, or pricing tips without live data.
+- recommend_action: asking whether this restaurant should change a price, remove a menu, buy/restock ingredients, or take another decision that needs current restaurant data.
+- restaurant_advice: general business ideas or pricing tips that do not depend on this restaurant's current data.
 - restaurant_content: generating captions, menu descriptions, promotion text.
 - product_help: instructions on how to use the restaurant management system.
 - risky_action: asking to make changes, modify data, delete, or order stock.
@@ -778,20 +768,26 @@ Task descriptions:
 - out_of_scope: completely unrelated to restaurants, food, or restaurant software.
 
 Rules:
-1. "needs_restaurant_data" MUST be true only for "restaurant_data" task.
-2. "needs_tool" MUST be true if the query refers to: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+1. "needs_restaurant_data" MUST be true only for "restaurant_data" or "recommend_action" tasks.
+2. "needs_tool" MUST be true if the query refers to: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
 3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
-4. Set risk to "high" or "medium" for risky actions (delete, modify, purchase).
+4. Set risk to "high" or "medium" only when the user orders the assistant to perform a change. A request for advice such as "ควรขึ้นราคาเมนูนี้ไหม" is "recommend_action" with risk "low".
 5. Set "task" to "out_of_scope" for anything unrelated to restaurants.
+6. "out_of_scope" takes priority over "general_chat": greetings and thanks are chat, but requests for unrelated information or content are not chat.
+7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even if phrased casually.
+8. Questions such as "มาร์จิ้นคืออะไร" or "Margin คำนวณอย่างไร" MUST be "explain_concept" with no restaurant data and no tool.
+9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" and the "get_sales_summary" tool.
 
 User question:
 %s`, question)
 
-	payload := groqRequest{
+	payload := ollamaRequest{
 		Model: model,
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		Think:   false,
+		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -838,12 +834,14 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 
 	// Attempt tool calling — not all Ollama models support it, so we omit Tools
 	// and rely on the CALL_TOOL: text protocol instead (same as Groq analytical).
-	payload := groqRequest{
+	payload := ollamaRequest{
 		Model: model,
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Tools: s.getGroqTools(),
+		Tools:   s.getGroqTools(),
+		Think:   false,
+		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -903,11 +901,13 @@ User question:
 Recent conversation context:
 %s`, question, conversationPrompt(history))
 
-	payload := groqRequest{
+	payload := ollamaRequest{
 		Model: model,
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		Think:   false,
+		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -950,11 +950,13 @@ func (s *AIService) executeSecondRoundOllama(prompt string) (string, string, err
 	model := s.getOllamaModel()
 	fmt.Printf("[AI Second Round] Calling Ollama %s at %s\n", model, baseURL)
 
-	payload := groqRequest{
+	payload := ollamaRequest{
 		Model: model,
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		Think:   false,
+		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -1199,19 +1201,21 @@ You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block f
 
 Response format:
 {
-  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "task": "explain_concept" | "scope_question" | "general_chat" | "restaurant_data" | "recommend_action" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
   "confidence": 0.0 to 1.0,
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | ""
 }
 
 Task descriptions:
+- explain_concept: questions asking what Margin means or how Margin is calculated, without requesting this restaurant's live numbers.
 - scope_question: user asking what you can do outside the restaurant system, if you can chat off-topic, or the limits of your capabilities.
 - general_chat: small talk, greetings (e.g. "สวัสดี", "hello", "hi"), thanks, jokes, or basic chitchat.
 - restaurant_data: requests for actual live numbers, sales, profits, top menus, low stock, inventory, margins, or any specific calculations from the restaurant's operational database.
-- restaurant_advice: requests for business advice, promotion ideas, or pricing tips that DO NOT require live data (general advice only, e.g. "how to price menu in rainy season").
+- recommend_action: requests asking whether this restaurant should change prices, remove menus, buy/restock ingredients, or take another business decision using current restaurant data (e.g. "ควรขึ้นราคาเมนูนี้ไหม").
+- restaurant_advice: requests for general business ideas or pricing tips that DO NOT depend on this restaurant's current data (e.g. "how to price menus in rainy season").
 - restaurant_content: requests for generating captions, menu item descriptions, promotion posters, or advertising text (e.g. "ช่วยคิดแคปชั่นโปรโมท").
 - product_help: asking for instructions on how to use the restaurant management system (e.g. "how to add a menu in settings").
 - risky_action: asking the assistant to make changes, modify data, change settings, or perform dangerous operations (e.g. delete a menu, place a purchase order, change inventory count).
@@ -1219,11 +1223,15 @@ Task descriptions:
 - out_of_scope: requests for information completely unrelated to restaurants, food, cooking, restaurant operations, marketing a restaurant, or using the restaurant management software (e.g. asking to write general poems, homework, general programming, sports, non-restaurant news, politics).
 
 Rules:
-1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data" or a specific data report is requested.
-2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data", "recommend_action", or a specific data report is requested.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
-4. If the user asks a risky action (e.g. delete menu, up prices, buy stock), set risk to "high" or "medium".
+4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
+6. "out_of_scope" has priority over "general_chat": greetings and thanks are chat, but requests for unrelated information or generated content are not chat.
+7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even when written casually.
+8. Questions such as "มาร์จิ้นคืออะไร" or "how is Margin calculated?" MUST use "explain_concept" with no restaurant data and no tool.
+9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" with the "get_sales_summary" tool.
 
 User question:
 %s`, question)
@@ -1281,19 +1289,21 @@ You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block f
 
 Response format:
 {
-  "task": "scope_question" | "general_chat" | "restaurant_data" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
+  "task": "explain_concept" | "scope_question" | "general_chat" | "restaurant_data" | "recommend_action" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
   "confidence": 0.0 to 1.0,
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | ""
 }
 
 Task descriptions:
+- explain_concept: questions asking what Margin means or how Margin is calculated, without requesting this restaurant's live numbers.
 - scope_question: user asking what you can do outside the restaurant system, if you can chat off-topic, or the limits of your capabilities.
 - general_chat: small talk, greetings (e.g. "สวัสดี", "hello", "hi"), thanks, jokes, or basic chitchat.
 - restaurant_data: requests for actual live numbers, sales, profits, top menus, low stock, inventory, margins, or any specific calculations from the restaurant's operational database.
-- restaurant_advice: requests for business advice, promotion ideas, or pricing tips that DO NOT require live data (general advice only, e.g. "how to price menu in rainy season").
+- recommend_action: requests asking whether this restaurant should change prices, remove menus, buy/restock ingredients, or take another business decision using current restaurant data (e.g. "ควรขึ้นราคาเมนูนี้ไหม").
+- restaurant_advice: requests for general business ideas or pricing tips that DO NOT depend on this restaurant's current data (e.g. "how to price menus in rainy season").
 - restaurant_content: requests for generating captions, menu item descriptions, promotion posters, or advertising text (e.g. "ช่วยคิดแคปชั่นโปรโมท").
 - product_help: asking for instructions on how to use the restaurant management system (e.g. "how to add a menu in settings").
 - risky_action: asking the assistant to make changes, modify data, change settings, or perform dangerous operations (e.g. delete a menu, place a purchase order, change inventory count).
@@ -1301,11 +1311,15 @@ Task descriptions:
 - out_of_scope: requests for information completely unrelated to restaurants, food, cooking, restaurant operations, marketing a restaurant, or using the restaurant management software (e.g. asking to write general poems, homework, general programming, sports, non-restaurant news, politics).
 
 Rules:
-1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data" or a specific data report is requested.
-2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, or inventory valuation.
+1. "needs_restaurant_data" MUST be true if and only if the task is "restaurant_data", "recommend_action", or a specific data report is requested.
+2. "needs_tool" MUST be true if the query specifically refers to one of these tasks: lowest margin menu, low/out of stock ingredients, top-selling menus, inventory valuation, or total/recent sales revenue.
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
-4. If the user asks a risky action (e.g. delete menu, up prices, buy stock), set risk to "high" or "medium".
+4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
+6. "out_of_scope" has priority over "general_chat": greetings and thanks are chat, but requests for unrelated information or generated content are not chat.
+7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even when written casually.
+8. Questions such as "มาร์จิ้นคืออะไร" or "how is Margin calculated?" MUST use "explain_concept" with no restaurant data and no tool.
+9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" with the "get_sales_summary" tool.
 
 User question:
 %s`, question)
@@ -1706,6 +1720,11 @@ func (s *AIService) getGeminiTools() []geminiTool {
 					Description: "Get the summary of the total inventory value and metrics.",
 					Parameters:  geminiParameters{Type: "OBJECT"},
 				},
+				{
+					Name:        "get_sales_summary",
+					Description: "Get the verified total revenue and order count in the recent 14-day analysis period.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
 			},
 		},
 	}
@@ -1742,6 +1761,14 @@ func (s *AIService) getGroqTools() []groqTool {
 			Function: groqFunctionShortcut{
 				Name:        "get_inventory_valuation",
 				Description: "Get the summary of the total inventory value and metrics.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_sales_summary",
+				Description: "Get the verified total revenue and order count in the recent 14-day analysis period.",
 				Parameters:  groqParameters{Type: "object"},
 			},
 		},
@@ -1809,6 +1836,18 @@ type groqRequest struct {
 	Model    string        `json:"model"`
 	Messages []groqMessage `json:"messages"`
 	Tools    []groqTool    `json:"tools,omitempty"`
+}
+
+type ollamaRequest struct {
+	Model    string        `json:"model"`
+	Messages []groqMessage `json:"messages"`
+	Tools    []groqTool    `json:"tools,omitempty"`
+	Think    bool          `json:"think"`
+	Options  ollamaOptions `json:"options"`
+}
+
+type ollamaOptions struct {
+	NumCtx int `json:"num_ctx"`
 }
 
 type groqTool struct {
@@ -2068,6 +2107,9 @@ func cleanAndParseJSONResponse(raw string) (AIFinalJSONResponse, error) {
 }
 
 func (s *AIService) validateAndIntercept(res AIFinalJSONResponse, result AIToolResult, snapshot AISnapshot) string {
+	if toolAnswer, ok := localToolAnswer(result); ok {
+		return toolAnswer
+	}
 	answer := res.Answer
 	verify := res.Verify
 	var corrections []string

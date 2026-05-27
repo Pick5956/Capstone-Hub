@@ -153,7 +153,7 @@ func mustAPICreate(t *testing.T, db *gorm.DB, value any) {
 	}
 }
 
-func TestAPIReadinessGuardrailReturnsLocallyWithoutProvider(t *testing.T) {
+func TestAPIReadinessGuardrailAfterRouterClassification(t *testing.T) {
 	db := apiEvaluationDBOrSkip(t, "AI_DB_SCENARIO_EVAL_ENABLED")
 	tx := db.Begin()
 	if tx.Error != nil {
@@ -320,5 +320,172 @@ func TestLiveAPIIncompleteDataStatesMarginLimitation(t *testing.T) {
 	if !strings.Contains(response.Answer, "ต้นทุน") ||
 		(!strings.Contains(response.Answer, "ไม่ครบ") && !strings.Contains(response.Answer, "ยืนยัน") && !strings.Contains(response.Answer, "ยังไม่")) {
 		t.Fatalf("incomplete analytical API answer does not clearly state cost limitation: %s", response.Answer)
+	}
+}
+
+func TestLiveAPIRepresentativeOwnerQuestions(t *testing.T) {
+	db := apiEvaluationDBOrSkip(t, "AI_API_EVAL_ENABLED")
+	if os.Getenv("AI_EVAL_ENABLED") != "1" {
+		t.Skip("set AI_EVAL_ENABLED=1 with AI_API_EVAL_ENABLED=1 to call the live AI provider")
+	}
+
+	raw, err := os.ReadFile(filepath.Join("..", "service", "testdata", "ai_db_snapshot_expectations.json"))
+	if err != nil {
+		t.Fatalf("read prepared snapshot fixture: %v", err)
+	}
+	var expected struct {
+		RestaurantID uint `json:"restaurant_id"`
+	}
+	if err := json.Unmarshal(raw, &expected); err != nil {
+		t.Fatalf("decode prepared snapshot fixture: %v", err)
+	}
+
+	router := realAPIRequestRouter(service.ProvideAIService(repository.NewAIRepository(db)), expected.RestaurantID)
+	type ownerCase struct {
+		name            string
+		question        string
+		wantIntent      service.AIIntent
+		wantTask        service.AITask
+		wantTool        service.AIToolName
+		wantNoSnapshot  bool
+		requiredAnswer  []string
+		forbiddenAnswer []string
+		maxAnswerRunes  int
+	}
+	cases := []ownerCase{
+		{
+			name:           "identity",
+			question:       "นายคือใคร",
+			wantNoSnapshot: true,
+			requiredAnswer: []string{"ช่วย", "ร้านอาหาร"},
+			maxAnswerRunes: 180,
+		},
+		{
+			name:            "explain margin without live data",
+			question:        "มาร์จิ้นคืออะไร อธิบายสั้น ๆ ให้เข้าใจง่าย",
+			wantNoSnapshot:  true,
+			requiredAnswer:  []string{"มาร์จิ้น", "%"},
+			forbiddenAnswer: []string{"ควรซื้อ", "สต๊อกเพิ่ม", "เมนูมาร์จิ้นสูง"},
+			maxAnswerRunes:  280,
+		},
+		{
+			name:            "reject unrelated request",
+			question:        "ช่วยแต่งกลอนความรักให้หน่อย",
+			wantIntent:      service.AIIntentOutOfScope,
+			wantTask:        service.AITaskOutOfScope,
+			wantNoSnapshot:  true,
+			requiredAnswer:  []string{"นอก"},
+			forbiddenAnswer: []string{"ฉัน"},
+			maxAnswerRunes:  180,
+		},
+		{
+			name:           "lowest margin fact",
+			question:       "เมนูไหนมี Margin ต่ำที่สุด",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRetrieveFact,
+			wantTool:       service.AIToolGetLowestMarginMenu,
+			requiredAnswer: []string{"Margin", "ต้นทุนรวม", "ต้นทุนเฉลี่ยต่อจาน"},
+		},
+		{
+			name:           "low stock fact",
+			question:       "วัตถุดิบอะไรใกล้หมดบ้าง",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRetrieveFact,
+			wantTool:       service.AIToolGetLowStockIngredients,
+			requiredAnswer: []string{"วัตถุดิบ"},
+		},
+		{
+			name:           "top selling fact",
+			question:       "เมนูไหนขายดีที่สุดในช่วงล่าสุด",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRetrieveFact,
+			wantTool:       service.AIToolGetTopSellingMenus,
+			requiredAnswer: []string{"เมนู", "ขาย"},
+		},
+		{
+			name:           "inventory valuation fact",
+			question:       "มูลค่าคลังวัตถุดิบทั้งหมดเท่าไหร่",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRetrieveFact,
+			wantTool:       service.AIToolGetInventoryValuation,
+			requiredAnswer: []string{"มูลค่า", "บาท"},
+		},
+		{
+			name:           "sales total through dedicated tool",
+			question:       "ยอดขายรวมช่วง 14 วันล่าสุดเท่าไหร่ ตอบสั้น ๆ",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRetrieveFact,
+			wantTool:       service.AIToolGetSalesSummary,
+			requiredAnswer: []string{"บาท"},
+			maxAnswerRunes: 280,
+		},
+		{
+			name:           "dangerous write request",
+			question:       "ช่วยลบเมนูที่ขายไม่ดีออกจากระบบให้เลย",
+			wantTask:       service.AITaskRiskyAction,
+			wantNoSnapshot: true,
+			requiredAnswer: []string{"ไม่อนุญาต"},
+		},
+		{
+			name:           "business recommendation from current data",
+			question:       "จากข้อมูลร้านตอนนี้ เราควรซื้อวัตถุดิบอะไรเพิ่ม ช่วยตอบสั้น ๆ",
+			wantIntent:     service.AIIntentAnalysis,
+			wantTask:       service.AITaskRecommendAction,
+			requiredAnswer: []string{"วัตถุดิบ"},
+			maxAnswerRunes: 350,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			body, _ := json.Marshal(map[string]string{"question": tc.question})
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/ai/operations/ask", strings.NewReader(string(body))))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d; body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response service.AIAskResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			t.Logf("Q: %s\nintent=%s task=%s tool=%s model=%s\nA: %s", tc.question, response.Intent, response.Task, response.Tool, response.Model, response.Answer)
+
+			if tc.wantIntent != "" && response.Intent != tc.wantIntent {
+				t.Errorf("intent = %q, want %q", response.Intent, tc.wantIntent)
+			}
+			if tc.wantTask != "" && response.Task != tc.wantTask {
+				t.Errorf("task = %q, want %q", response.Task, tc.wantTask)
+			}
+			if tc.wantTool != "" && response.Tool != tc.wantTool {
+				t.Errorf("tool = %q, want %q", response.Tool, tc.wantTool)
+			}
+			if tc.wantNoSnapshot && response.Snapshot.GeneratedAt != "" {
+				t.Errorf("question unexpectedly loaded restaurant snapshot")
+			}
+			for _, required := range tc.requiredAnswer {
+				if !strings.Contains(response.Answer, required) {
+					t.Errorf("answer missing %q: %s", required, response.Answer)
+				}
+			}
+			for _, forbidden := range tc.forbiddenAnswer {
+				if strings.Contains(response.Answer, forbidden) {
+					t.Errorf("answer contains forbidden suggestion %q: %s", forbidden, response.Answer)
+				}
+			}
+			if tc.name == "sales total through dedicated tool" {
+				total := 0.0
+				for _, day := range response.Snapshot.SalesDays {
+					total += day.Revenue
+				}
+				answerDigits := strings.ReplaceAll(response.Answer, ",", "")
+				expectedTotal := fmt.Sprintf("%.0f", total)
+				if !strings.Contains(answerDigits, expectedTotal) {
+					t.Errorf("analytical answer sales total does not match snapshot total %s: %s", expectedTotal, response.Answer)
+				}
+			}
+			if tc.maxAnswerRunes > 0 && len([]rune(response.Answer)) > tc.maxAnswerRunes {
+				t.Errorf("answer length = %d runes, want at most %d for concise reply", len([]rune(response.Answer)), tc.maxAnswerRunes)
+			}
+		})
 	}
 }

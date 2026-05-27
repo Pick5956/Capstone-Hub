@@ -23,8 +23,8 @@ func TestMapTaskToIntentUsesRouterPolicy(t *testing.T) {
 	}
 }
 
-func TestRouterUnknownTaskFallsBackToAnalyticalPolicy(t *testing.T) {
-	if got := mapTaskToIntent(AITask("unexpected")); got != AIIntentAnalysis {
-		t.Fatalf("mapTaskToIntent(unexpected) = %q, want safe analysis fallback", got)
+func TestRouterUnknownTaskDoesNotEnterAnalyticalPolicy(t *testing.T) {
+	if got := mapTaskToIntent(AITask("unexpected")); got != AIIntentUnclear {
+		t.Fatalf("mapTaskToIntent(unexpected) = %q, want unclear safety fallback", got)
 	}
 }

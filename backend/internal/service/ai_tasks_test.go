@@ -77,6 +77,26 @@ func TestAIRouterOutOfScopeUsesConfiguredOllamaRefusal(t *testing.T) {
 	}
 }
 
+func TestAIRouterMarginConceptUsesAuthoritativeDefinitionWithoutSnapshot(t *testing.T) {
+	svc, calls := newOllamaRouterTestService(t,
+		`{"task":"explain_concept","confidence":0.99,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
+	)
+
+	response, err := svc.AskOperations(1, &AIAskRequest{Question: "มาร์จิ้นคืออะไร"})
+	if err != nil {
+		t.Fatalf("AskOperations margin concept: %v", err)
+	}
+	if response.Task != AITaskExplainConcept || response.Model != "local-concept-policy" {
+		t.Fatalf("margin concept route = task %q model %q, want authoritative concept response", response.Task, response.Model)
+	}
+	if response.Snapshot.GeneratedAt != "" || !strings.Contains(response.Answer, "%") || !strings.Contains(response.Answer, "มาร์จิ้น") {
+		t.Fatalf("margin concept answer/snapshot = %q / %+v", response.Answer, response.Snapshot)
+	}
+	if *calls != 1 {
+		t.Fatalf("margin concept made %d Ollama requests, want router only", *calls)
+	}
+}
+
 func TestSecondRoundUsesConfiguredOllamaProvider(t *testing.T) {
 	svc, calls := newOllamaRouterTestService(t, `{"answer":"ผลจากข้อมูลจริงครับ","verify":{}}`)
 
@@ -92,10 +112,57 @@ func TestSecondRoundUsesConfiguredOllamaProvider(t *testing.T) {
 	}
 }
 
+func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
+	var requests []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode Ollama request: %v", err)
+		}
+		requests = append(requests, request)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"content": `{"task":"general_chat"}`}}},
+		})
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
+	t.Setenv("OLLAMA_MODEL", "test-ollama")
+	t.Setenv("OLLAMA_CONTEXT_LENGTH", "2048")
+
+	svc := &AIService{httpClient: server.Client()}
+	if _, err := svc.executeClassifierOllama("สวัสดี"); err != nil {
+		t.Fatalf("executeClassifierOllama: %v", err)
+	}
+	if _, _, err := svc.executeOllamaConversation("สวัสดี", nil); err != nil {
+		t.Fatalf("executeOllamaConversation: %v", err)
+	}
+	if _, _, err := svc.executeOllama("ยอดขายวันนี้", nil, AISnapshot{}); err != nil {
+		t.Fatalf("executeOllama: %v", err)
+	}
+	if _, _, err := svc.executeSecondRoundOllama("tool result prompt"); err != nil {
+		t.Fatalf("executeSecondRoundOllama: %v", err)
+	}
+
+	if len(requests) != 4 {
+		t.Fatalf("captured %d Ollama requests, want 4", len(requests))
+	}
+	for i, request := range requests {
+		think, ok := request["think"].(bool)
+		if !ok || think {
+			t.Fatalf("Ollama request %d think = %#v, want explicit false", i+1, request["think"])
+		}
+		options, ok := request["options"].(map[string]any)
+		if !ok || options["num_ctx"] != float64(2048) {
+			t.Fatalf("Ollama request %d options = %#v, want num_ctx 2048", i+1, request["options"])
+		}
+	}
+}
+
 func TestGetGeminiToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 4 {
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 5 {
 		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -103,6 +170,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
+		"get_sales_summary":         true,
 	}
 	for _, decl := range tools[0].FunctionDeclarations {
 		if !expectedNames[decl.Name] {
@@ -117,7 +185,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 func TestGetGroqToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGroqTools()
-	if len(tools) != 4 {
+	if len(tools) != 5 {
 		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -125,6 +193,7 @@ func TestGetGroqToolsSchema(t *testing.T) {
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
+		"get_sales_summary":         true,
 	}
 	for _, tool := range tools {
 		if tool.Type != "function" {
@@ -263,6 +332,28 @@ func TestInventoryValuationToolFormatsCorrectly(t *testing.T) {
 	}
 }
 
+func TestSalesSummaryToolFormatsVerifiedTotal(t *testing.T) {
+	snapshot := AISnapshot{
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-05-25", Orders: 3, Revenue: 1200},
+			{OrderDate: "2026-05-26", Orders: 2, Revenue: 800.50},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetSalesSummary, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("sales summary tool should produce an answer")
+	}
+	for _, expected := range []string{"2000.50 บาท", "5 ออเดอร์", "2 วัน"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("sales summary answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
 func TestCleanAndParseJSONResponse(t *testing.T) {
 	rawMarkdown := "```json\n{\n  \"answer\": \"ทดสอบ\",\n  \"verify\": {\n    \"lowest_margin_menu_name\": \"ข้าวผัดปู\"\n  }\n}\n```"
 	res, err := cleanAndParseJSONResponse(rawMarkdown)
@@ -295,11 +386,14 @@ func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
 			Margin:   34.21,
 		}},
 	}
+	lowest := snapshot.LowMarginMenus[0]
 	result := AIToolResult{
-		Tool: AIToolGetLowestMarginMenu,
+		Tool:             AIToolGetLowestMarginMenu,
+		LowestMarginMenu: &lowest,
 	}
 
-	// Case 1: Exact matching numbers -> No correction notice
+	// Even a matching model explanation is replaced by the authoritative
+	// backend rendering for a fact tool.
 	responseExact := AIFinalJSONResponse{
 		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 34.21% มีต้นทุน 1250.00 บาท",
 		Verify: AIVerifyPayload{
@@ -312,11 +406,11 @@ func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
 		},
 	}
 	finalAnswer := svc.validateAndIntercept(responseExact, result, snapshot)
-	if strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
-		t.Fatalf("Expected no correction notice for exact matches, got: %s", finalAnswer)
+	if !strings.Contains(finalAnswer, "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท") {
+		t.Fatalf("Expected deterministic backend rendering for exact result, got: %s", finalAnswer)
 	}
 
-	// Case 2: Hallucinated numbers -> Append correction notice
+	// Hallucinated numbers never reach the user; backend tool facts replace them.
 	responseHallucinated := AIFinalJSONResponse{
 		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 45% มีต้นทุน 1500 บาท",
 		Verify: AIVerifyPayload{
@@ -329,12 +423,12 @@ func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
 		},
 	}
 	finalAnswer2 := svc.validateAndIntercept(responseHallucinated, result, snapshot)
-	if !strings.Contains(finalAnswer2, "หมายเหตุความถูกต้อง") {
-		t.Fatal("Expected correction notice for hallucinated cost and margin, but none found")
+	if strings.Contains(finalAnswer2, "1500") || strings.Contains(finalAnswer2, "45%") {
+		t.Fatalf("Hallucinated numbers leaked into final tool answer: %s", finalAnswer2)
 	}
-	for _, expected := range []string{"เมนู ข้าวผัดปู", "ต้นทุน 1250.00", "Margin 34.21%"} {
+	for _, expected := range []string{"ข้าวผัดปู", "ต้นทุนรวม 1250.00", "Margin 34.21%"} {
 		if !strings.Contains(finalAnswer2, expected) {
-			t.Errorf("Expected correction to mention %q in response: %s", expected, finalAnswer2)
+			t.Errorf("Expected authoritative answer to mention %q: %s", expected, finalAnswer2)
 		}
 	}
 }
@@ -346,12 +440,16 @@ func TestValidationInterceptorCorrectsLowStockHallucinations(t *testing.T) {
 			OutItems: 3,
 			LowItems: 5,
 		},
+		StockRisks: []AIStockRisk{{
+			Name: "ไข่ไก่", Status: "low", Stock: 2, MinStock: 10, Unit: "ฟอง", RestockEstimate: 8,
+		}},
 	}
 	result := AIToolResult{
-		Tool: AIToolGetLowStockIngredients,
+		Tool:                AIToolGetLowStockIngredients,
+		LowStockIngredients: snapshot.StockRisks,
 	}
 
-	// Mismatched count -> correction notice
+	// Mismatched count -> deterministic tool rendering.
 	response := AIFinalJSONResponse{
 		Answer: "มีสินค้าใกล้หมด 2 รายการ และหมดสต็อก 1 รายการ",
 		Verify: AIVerifyPayload{
@@ -360,11 +458,8 @@ func TestValidationInterceptorCorrectsLowStockHallucinations(t *testing.T) {
 		},
 	}
 	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
-		t.Fatal("Expected correction notice for stock counts, but none found")
-	}
-	if !strings.Contains(finalAnswer, "วัตถุดิบใกล้หมด 5 รายการ, หมดสต็อก 3 รายการ") {
-		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	if strings.Contains(finalAnswer, "มีสินค้าใกล้หมด 2 รายการ") || !strings.Contains(finalAnswer, "ไข่ไก่") {
+		t.Fatalf("Hallucinated low-stock answer was not replaced: %s", finalAnswer)
 	}
 }
 
@@ -377,7 +472,8 @@ func TestValidationInterceptorCorrectsTopSellingHallucinations(t *testing.T) {
 		}},
 	}
 	result := AIToolResult{
-		Tool: AIToolGetTopSellingMenus,
+		Tool:            AIToolGetTopSellingMenus,
+		TopSellingMenus: snapshot.TopMenuItems,
 	}
 
 	response := AIFinalJSONResponse{
@@ -388,11 +484,8 @@ func TestValidationInterceptorCorrectsTopSellingHallucinations(t *testing.T) {
 		},
 	}
 	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
-		t.Fatal("Expected correction notice for top seller, but none found")
-	}
-	if !strings.Contains(finalAnswer, "ต้มยำกุ้ง ขายได้ 45 จาน") {
-		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	if strings.Contains(finalAnswer, "ข้าวผัดปู") || !strings.Contains(finalAnswer, "ต้มยำกุ้ง") || !strings.Contains(finalAnswer, "45 จาน") {
+		t.Fatalf("Hallucinated top seller was not replaced: %s", finalAnswer)
 	}
 }
 
@@ -405,7 +498,8 @@ func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testin
 		},
 	}
 	result := AIToolResult{
-		Tool: AIToolGetInventoryValuation,
+		Tool:               AIToolGetInventoryValuation,
+		InventoryValuation: &snapshot.InventorySummary,
 	}
 
 	response := AIFinalJSONResponse{
@@ -416,11 +510,8 @@ func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testin
 		},
 	}
 	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if !strings.Contains(finalAnswer, "หมายเหตุความถูกต้อง") {
-		t.Fatal("Expected correction notice for valuation, but none found")
-	}
-	if !strings.Contains(finalAnswer, "ทั้งหมด 42 รายการ, มูลค่ารวม 15450.50 บาท") {
-		t.Fatalf("Incorrect correction text: %s", finalAnswer)
+	if strings.Contains(finalAnswer, "12000") || !strings.Contains(finalAnswer, "42 รายการ") || !strings.Contains(finalAnswer, "15450.50") {
+		t.Fatalf("Hallucinated valuation was not replaced: %s", finalAnswer)
 	}
 }
 
@@ -454,6 +545,27 @@ func TestParseRouterJSON(t *testing.T) {
 			raw:      `{"task": "out_of_scope", "confidence": 0.99, "needs_restaurant_data": false}`,
 			wantTask: AITaskOutOfScope,
 			wantErr:  false,
+		},
+		{
+			name:     "Data Tool Normalizes To Retrieve Fact",
+			raw:      `{"task":"restaurant_data","confidence":0.99,"needs_restaurant_data":true,"needs_tool":true,"risk":"low","suggested_tool":"get_lowest_margin_menu"}`,
+			wantTask: AITaskRetrieveFact,
+			wantErr:  false,
+		},
+		{
+			name:    "Reject Unknown Task",
+			raw:     `{"task":"delete_everything","confidence":0.99,"risk":"low"}`,
+			wantErr: true,
+		},
+		{
+			name:    "Reject Requested Unsupported Tool",
+			raw:     `{"task":"restaurant_data","confidence":0.99,"needs_restaurant_data":true,"needs_tool":true,"risk":"low","suggested_tool":"drop_database"}`,
+			wantErr: true,
+		},
+		{
+			name:    "Reject Tool Requirement Without Tool",
+			raw:     `{"task":"restaurant_data","confidence":0.99,"needs_restaurant_data":true,"needs_tool":true,"risk":"low","suggested_tool":""}`,
+			wantErr: true,
 		},
 	}
 
@@ -492,16 +604,16 @@ func TestLiveAITaskRouterIntegration(t *testing.T) {
 
 	t.Logf("Live Router Result: %+v", res)
 
-	if res.Task != "restaurant_data" && res.Task != AITaskAnalyzeData {
-		t.Errorf("Expected live router to map %q to restaurant_data or analyze_data, got %q", question, res.Task)
+	if res.Task != AITaskRetrieveFact {
+		t.Errorf("Expected live router to normalize %q to retrieve_fact, got %q", question, res.Task)
 	}
 
 	if !res.NeedsRestaurantData {
 		t.Errorf("Expected NeedsRestaurantData to be true for analytical query, got false")
 	}
 
-	if res.NeedsTool && res.SuggestedTool != AIToolGetLowestMarginMenu {
-		t.Errorf("Expected SuggestedTool to be get_lowest_margin_menu, got %q", res.SuggestedTool)
+	if !res.NeedsTool || res.SuggestedTool != AIToolGetLowestMarginMenu {
+		t.Errorf("Expected lowest-margin fact to require get_lowest_margin_menu, got needsTool=%t tool=%q", res.NeedsTool, res.SuggestedTool)
 	}
 }
 
@@ -545,22 +657,37 @@ func TestLiveOllamaRouterIntegration(t *testing.T) {
 		},
 	}
 
-	question := "เมนูไหนมีกำไรน้อยสุดในร้าน"
-	res, err := svc.classifyIntent(question)
-	if err != nil {
-		t.Fatalf("Ollama classifyIntent failed: %v", err)
+	cases := []struct {
+		name     string
+		question string
+		tool     AIToolName
+	}{
+		{name: "lowest margin", question: "เมนูไหนมีกำไรน้อยสุดในร้าน", tool: AIToolGetLowestMarginMenu},
+		{name: "low stock", question: "วัตถุดิบอะไรใกล้หมดบ้าง", tool: AIToolGetLowStockIngredients},
+		{name: "top selling", question: "เมนูไหนขายดีที่สุด", tool: AIToolGetTopSellingMenus},
+		{name: "inventory value", question: "มูลค่าคลังวัตถุดิบทั้งหมดเท่าไหร่", tool: AIToolGetInventoryValuation},
+		{name: "sales summary", question: "ยอดขายรวมช่วง 14 วันล่าสุดเท่าไหร่", tool: AIToolGetSalesSummary},
 	}
 
-	t.Logf("Ollama Router Result: task=%s confidence=%.2f needs_data=%v tool=%s",
-		res.Task, res.Confidence, res.NeedsRestaurantData, res.SuggestedTool)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := svc.classifyIntent(tc.question)
+			if err != nil {
+				t.Fatalf("Ollama classifyIntent failed: %v", err)
+			}
 
-	if res.Task == "" {
-		t.Error("Expected a non-empty task from Ollama router")
-	}
-	if res.Confidence <= 0 {
-		t.Error("Expected confidence > 0 from Ollama router")
-	}
-	if !res.NeedsRestaurantData {
-		t.Errorf("Expected NeedsRestaurantData=true for %q, got false", question)
+			t.Logf("Ollama Router Result: task=%s confidence=%.2f needs_data=%v tool=%s",
+				res.Task, res.Confidence, res.NeedsRestaurantData, res.SuggestedTool)
+
+			if res.Task != AITaskRetrieveFact {
+				t.Errorf("Expected Ollama to normalize %q to retrieve_fact, got %q", tc.question, res.Task)
+			}
+			if res.Confidence <= 0 || !res.NeedsRestaurantData {
+				t.Errorf("Expected valid data route for %q, got confidence=%.2f needsData=%t", tc.question, res.Confidence, res.NeedsRestaurantData)
+			}
+			if !res.NeedsTool || res.SuggestedTool != tc.tool {
+				t.Errorf("Expected Ollama to choose %q, got needsTool=%t tool=%q", tc.tool, res.NeedsTool, res.SuggestedTool)
+			}
+		})
 	}
 }
