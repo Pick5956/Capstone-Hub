@@ -308,6 +308,31 @@ func TestTopSellingToolFormatsCorrectly(t *testing.T) {
 	}
 }
 
+func TestTopSellingToolRespectsRequestedRankingLimit(t *testing.T) {
+	snapshot := AISnapshot{
+		TopMenuItems: []repository.AIMenuSummary{
+			{MenuName: "สังขยาใบเตย", Quantity: 36, Revenue: 1980},
+			{MenuName: "โรตีกล้วย", Quantity: 34, Revenue: 2346},
+			{MenuName: "พะแนงหมู", Quantity: 32, Revenue: 4128},
+		},
+	}
+
+	result, err := executeReadOnlyTool(AIToolGetTopSellingMenus, snapshot, "เมนูไหนขายดีที่สุด 2 อันดับแรก")
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("top selling tool should produce an answer")
+	}
+	if !strings.Contains(answer, "1. **สังขยาใบเตย**") || !strings.Contains(answer, "2. **โรตีกล้วย**") {
+		t.Fatalf("top selling answer does not contain requested first two menus: %s", answer)
+	}
+	if strings.Contains(answer, "พะแนงหมู") {
+		t.Fatalf("top selling answer contains a menu outside requested limit: %s", answer)
+	}
+}
+
 func TestInventoryValuationToolFormatsCorrectly(t *testing.T) {
 	snapshot := AISnapshot{
 		InventorySummary: AIInventorySummary{

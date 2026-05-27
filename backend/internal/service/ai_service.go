@@ -538,7 +538,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	toolToRun := routerResult.SuggestedTool
 
 	if toolToRun != "" {
-		result, err := executeReadOnlyTool(toolToRun, snapshot)
+		result, err := executeReadOnlyTool(toolToRun, snapshot, question)
 		if err != nil {
 			return nil, err
 		}
@@ -565,7 +565,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		}
 		if strings.HasPrefix(answer, "CALL_TOOL:") {
 			toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
-			result, err := executeReadOnlyTool(toolName, snapshot)
+			result, err := executeReadOnlyTool(toolName, snapshot, question)
 			if err != nil {
 				return nil, err
 			}

@@ -22,6 +22,7 @@ import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import type { AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
@@ -132,6 +133,7 @@ function MetricCard({
 export default function AIOperationsFloatingChat() {
   const { activeMembership, user } = useAuth();
   const { language } = useLanguage();
+  const { showAIAssistant } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
@@ -372,7 +374,7 @@ export default function AIOperationsFloatingChat() {
     }
   };
 
-  if (!activeMembership) return null;
+  if (!activeMembership || !showAIAssistant) return null;
 
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];

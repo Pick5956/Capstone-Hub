@@ -159,17 +159,18 @@ export default function AIResponseContent({ content, compact = false }: AIRespon
       continue;
     }
 
-    const ordered = trimmed.match(/^\d+\.\s+(.+)$/);
+    const ordered = trimmed.match(/^(\d+)\.\s+(.+)$/);
     if (ordered) {
-      const items: string[] = [ordered[1]];
+      const start = Number.parseInt(ordered[1], 10);
+      const items: string[] = [ordered[2]];
       while (index + 1 < lines.length) {
         const next = lines[index + 1].trim().match(/^\d+\.\s+(.+)$/);
         if (!next) break;
-        items.push(next[1]);
+        items.push(next[2]);
         index += 1;
       }
       blocks.push(
-        <ol key={`ordered-${index}`} className={`list-decimal space-y-1 pl-5 text-gray-700 marker:font-semibold marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
+        <ol start={start} key={`ordered-${index}`} className={`list-decimal space-y-1 pl-5 text-gray-700 marker:font-semibold marker:text-orange-500 dark:text-gray-300 ${textClass}`}>
           {items.map((item, itemIndex) => <li key={itemIndex}>{inlineContent(item)}</li>)}
         </ol>
       );

@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"Project-M/internal/repository"
@@ -202,7 +204,26 @@ func localScopeAnswer(route AITaskRoute) (string, bool) {
 		"ถ้าเป็นเรื่องนอกระบบร้าน ผมจะตอบแบบข้อมูลทั่วไปเท่านั้น และจะไม่อ้างว่ารู้ข้อมูลจริงที่ระบบร้านไม่ได้ให้มาครับ", true
 }
 
-func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot) (AIToolResult, error) {
+func requestedTopSellingLimit(question string) (int, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(\d+)\s*(?:อันดับ|รายการ|เมนู)`),
+		regexp.MustCompile(`(?:top|first)\s*(\d+)`),
+	}
+	for _, pattern := range patterns {
+		match := pattern.FindStringSubmatch(normalized)
+		if len(match) < 2 {
+			continue
+		}
+		limit, err := strconv.Atoi(match[1])
+		if err == nil && limit > 0 {
+			return limit, true
+		}
+	}
+	return 0, false
+}
+
+func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...string) (AIToolResult, error) {
 	switch tool {
 	case AIToolGetLowestMarginMenu:
 		if !snapshot.AnalysisReadiness.CanAnalyzeMargin {
@@ -216,7 +237,17 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot) (AIToolResult, er
 	case AIToolGetLowStockIngredients:
 		return AIToolResult{Tool: tool, LowStockIngredients: snapshot.StockRisks}, nil
 	case AIToolGetTopSellingMenus:
-		return AIToolResult{Tool: tool, TopSellingMenus: snapshot.TopMenuItems}, nil
+		menus := snapshot.TopMenuItems
+		limit := 5
+		if len(question) > 0 {
+			if requested, ok := requestedTopSellingLimit(question[0]); ok {
+				limit = requested
+			}
+		}
+		if limit < len(menus) {
+			menus = menus[:limit]
+		}
+		return AIToolResult{Tool: tool, TopSellingMenus: menus}, nil
 	case AIToolGetInventoryValuation:
 		return AIToolResult{Tool: tool, InventoryValuation: &snapshot.InventorySummary}, nil
 	case AIToolGetSalesSummary:

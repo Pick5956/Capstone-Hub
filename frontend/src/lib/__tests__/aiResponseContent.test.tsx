@@ -30,4 +30,26 @@ describe("AIResponseContent", () => {
     expect(markup).toContain("katex");
     expect(markup).not.toContain("\\(40");
   });
+
+  it("preserves ordered list numbers when detail paragraphs split menu ranking items", () => {
+    const markup = renderToStaticMarkup(
+      <AIResponseContent
+        content={`เมนูที่ขายดีที่สุดในช่วงวิเคราะห์มีดังนี้ครับ:
+
+1. **สังขยาใบเตย**
+• จำนวนที่ขายได้: 36 จาน
+
+2. **โรตีกล้วย**
+• จำนวนที่ขายได้: 34 จาน
+
+3. **พะแนงหมู**
+• จำนวนที่ขายได้: 32 จาน`}
+        compact
+      />
+    );
+
+    expect(markup).toContain('<ol start="1"');
+    expect(markup).toContain('<ol start="2"');
+    expect(markup).toContain('<ol start="3"');
+  });
 });
