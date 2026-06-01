@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
 import type { Order, OrderItem } from "@/src/types/order";
@@ -21,26 +22,6 @@ function urgencyClass(minutes: number) {
   if (minutes >= 10) return "border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20";
   if (minutes >= 5) return "border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20";
   return "border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/15";
-}
-
-function apiErrorMessage(error: unknown) {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-}
-
-function playBeep() {
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.frequency.value = 740;
-  oscillator.type = "square";
-  gain.gain.value = 0.04;
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.18);
 }
 
 function isOrderReady(order: Order) {
@@ -128,7 +109,7 @@ export default function KitchenPage() {
       const nextIds = new Set(res.data.orders.map((order) => ticketKey(order)));
       const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
       setOrders(res.data.orders);
-      if (hasNewTicket) playBeep();
+      if (hasNewTicket) playBeep(740, "square", 0.04, 0.18);
       ticketIdsRef.current = nextIds;
       setLastUpdated(new Date());
       hasLoadedRef.current = true;

@@ -21,12 +21,8 @@ func ProvideReportController(db *gorm.DB) *ReportController {
 }
 
 func (ctrl *ReportController) ManagerReport(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "view_reports", "missing view_reports permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_reports") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing view_reports permission"})
 		return
 	}
 	report, err := ctrl.reportSvc.ManagerReport(restaurantID, boundedQueryInt(c, "days", 14, 1, 90))

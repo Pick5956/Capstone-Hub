@@ -18,6 +18,7 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { formatCurrency } from "@/src/lib/format";
 import { listIngredients } from "@/src/lib/ingredient";
 import { kitchenQueue, listOrders } from "@/src/lib/order";
 import { listMembers } from "@/src/lib/restaurant";
@@ -55,14 +56,6 @@ function minutesSince(value?: string | null) {
   const time = new Date(value).getTime();
   if (Number.isNaN(time)) return 0;
   return Math.max(0, Math.floor((Date.now() - time) / 60000));
-}
-
-function formatCurrency(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    style: "currency",
-    currency: "THB",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function formatDateTime(value: Date) {

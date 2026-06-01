@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import axios from "axios";
 import { X } from "lucide-react";
 import { getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { menuCategoryIds } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
@@ -18,20 +19,6 @@ type CartItem = CustomerCartItemInput & {
   options_total: number;
   selected_options: { id: number; group: string; name: string; price_delta: number }[];
 };
-
-function menuCategoryIds(item: MenuItem) {
-  const ids = new Set<number>();
-  if (item.category_id) ids.add(item.category_id);
-  for (const link of item.categories ?? []) {
-    if (link.category_id) ids.add(link.category_id);
-  }
-  return Array.from(ids);
-}
-
-function apiErrorMessage(error: unknown) {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-}
 
 export default function CustomerTableOrderPage() {
   const params = useParams<{ token: string }>();

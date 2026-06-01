@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import axios from "axios";
 import { X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { playBeep } from "@/src/lib/browserAudio";
+import { menuCategoryIds } from "@/src/lib/menuUtils";
+import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { can } from "@/src/lib/rbac";
 import { addOrderItem, cancelOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
@@ -19,92 +22,6 @@ import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const terminalStatuses = ["completed", "cancelled"];
-
-function menuCategoryIds(item: MenuItem) {
-  const ids = new Set<number>();
-  if (item.category_id) ids.add(item.category_id);
-  for (const link of item.categories ?? []) {
-    if (link.category_id) ids.add(link.category_id);
-  }
-  return Array.from(ids);
-}
-
-function playBeep(frequency = 880) {
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.frequency.value = frequency;
-  oscillator.type = "sine";
-  gain.gain.value = 0.05;
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.16);
-}
-
-type OrderItemGroup = {
-  key: string;
-  firstItem: OrderItem;
-  items: OrderItem[];
-  quantity: number;
-  subtotal: number;
-  statusQuantities: Record<OrderItem["status"], number>;
-  pendingItems: OrderItem[];
-  readyItems: OrderItem[];
-};
-
-const groupOrderItems = (items: OrderItem[] = []) => {
-  const groups = new Map<string, OrderItemGroup>();
-
-  for (const item of items) {
-    const optionKey = [...(item.selected_options ?? [])]
-      .sort((first, second) => first.menu_option_id - second.menu_option_id)
-      .map((option) => `${option.option_group_id}:${option.menu_option_id}:${option.price_delta}`)
-      .join("|");
-    const key = [item.menu_id, item.menu_name, item.unit_price, item.options_total, item.note ?? "", optionKey].join("::");
-    const existing = groups.get(key);
-
-    if (existing) {
-      existing.items.push(item);
-      existing.quantity += item.quantity;
-      existing.subtotal += item.subtotal;
-      existing.statusQuantities[item.status] = (existing.statusQuantities[item.status] ?? 0) + item.quantity;
-      if (item.status === "pending") existing.pendingItems.push(item);
-      if (item.status === "ready") existing.readyItems.push(item);
-      continue;
-    }
-
-    groups.set(key, {
-      key,
-      firstItem: item,
-      items: [item],
-      quantity: item.quantity,
-      subtotal: item.subtotal,
-      statusQuantities: {
-        pending: item.status === "pending" ? item.quantity : 0,
-        cooking: item.status === "cooking" ? item.quantity : 0,
-        ready: item.status === "ready" ? item.quantity : 0,
-        served: item.status === "served" ? item.quantity : 0,
-        cancelled: item.status === "cancelled" ? item.quantity : 0,
-      },
-      pendingItems: item.status === "pending" ? [item] : [],
-      readyItems: item.status === "ready" ? [item] : [],
-    });
-  }
-
-  return Array.from(groups.values()).sort((first, second) => {
-    const firstUpdated = first.items.at(-1)?.UpdatedAt ?? first.items.at(-1)?.CreatedAt ?? "";
-    const secondUpdated = second.items.at(-1)?.UpdatedAt ?? second.items.at(-1)?.CreatedAt ?? "";
-    return secondUpdated.localeCompare(firstUpdated);
-  });
-};
-
-const apiErrorMessage = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-};
 
 export default function PosOrderDetailPage() {
   const params = useParams<{ id: string }>();

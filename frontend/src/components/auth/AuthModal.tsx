@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { useRouter } from "next/navigation";
 import { User } from "../../types/auth";
 import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
+import { apiErrorCode } from "@/src/lib/apiErrors";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
 
@@ -462,7 +462,7 @@ export default function AuthModal({
         setError(copy.resetRequestFailed);
       }
     } catch (err) {
-      const code = axios.isAxiosError(err) ? err.response?.data?.code : undefined;
+      const code = apiErrorCode(err);
       setError(code === "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN" ? copy.resetGoogleAccount : copy.resetRequestFailed);
     } finally {
       setLoading(false);

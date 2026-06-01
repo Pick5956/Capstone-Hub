@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -49,10 +48,8 @@ func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	memberValue, ok := c.Get("restaurant_member")
-	member, memberOK := memberValue.(*entity.RestaurantMember)
-	if !ok || !memberOK || !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_staff permission"})
+	member, ok := requireManageStaffMember(c)
+	if !ok {
 		return
 	}
 
@@ -96,10 +93,8 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	memberValue, ok := c.Get("restaurant_member")
-	member, memberOK := memberValue.(*entity.RestaurantMember)
-	if !ok || !memberOK || !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_staff permission"})
+	member, ok := requireManageStaffMember(c)
+	if !ok {
 		return
 	}
 	var req roleRequest
@@ -123,10 +118,8 @@ func (ctrl *RoleController) UpdateCustomRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	memberValue, ok := c.Get("restaurant_member")
-	member, memberOK := memberValue.(*entity.RestaurantMember)
-	if !ok || !memberOK || !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_staff permission"})
+	member, ok := requireManageStaffMember(c)
+	if !ok {
 		return
 	}
 	roleID, err := parseRoleID(c)
@@ -154,10 +147,8 @@ func (ctrl *RoleController) DeleteCustomRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	memberValue, ok := c.Get("restaurant_member")
-	member, memberOK := memberValue.(*entity.RestaurantMember)
-	if !ok || !memberOK || !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_staff permission"})
+	member, ok := requireManageStaffMember(c)
+	if !ok {
 		return
 	}
 	roleID, err := parseRoleID(c)

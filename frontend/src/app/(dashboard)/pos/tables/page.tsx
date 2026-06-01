@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
 import { Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
 import { createOrder, listOrders, updateOrderItemStatus } from "@/src/lib/order";
 import { listTables, updateTableStatus } from "@/src/lib/table";
@@ -28,11 +28,6 @@ type ReadyTableSummary = {
   oldestReadyAt: string;
   items: OrderItem[];
   itemSummary: string;
-};
-
-const apiErrorMessage = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
 };
 
 const hasValidPhone = (value: string) => value.replace(/\D/g, "").length >= 9;
