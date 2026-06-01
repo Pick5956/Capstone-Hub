@@ -179,15 +179,48 @@ func statusLog(orderID uint, from, to string, userID uint, note string) *entity.
 	}
 }
 
-func releaseTableIfNoOpenOrder(tx *repository.OrderRepository, restaurantID, tableID uint) error {
-	hasOpen, err := tx.HasOpenOrderForTable(restaurantID, tableID)
+func normalizeOrderType(value string) (string, error) {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return entity.OrderTypeDineIn, nil
+	}
+	switch normalized {
+	case entity.OrderTypeDineIn, entity.OrderTypeTakeaway:
+		return normalized, nil
+	default:
+		return "", errors.New("invalid order type")
+	}
+}
+
+func normalizeOrderItemFulfillment(value, orderType string) (string, error) {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		if orderType == entity.OrderTypeTakeaway {
+			return entity.OrderItemFulfillmentTakeaway, nil
+		}
+		return entity.OrderItemFulfillmentDineIn, nil
+	}
+	switch normalized {
+	case entity.OrderItemFulfillmentDineIn, entity.OrderItemFulfillmentTakeaway:
+		return normalized, nil
+	default:
+		return "", errors.New("invalid item fulfillment type")
+	}
+}
+
+func releaseTableIfNoOpenOrder(tx *repository.OrderRepository, restaurantID uint, tableID *uint) error {
+	if tableID == nil || *tableID == 0 {
+		return nil
+	}
+	id := *tableID
+	hasOpen, err := tx.HasOpenOrderForTable(restaurantID, id)
 	if err != nil {
 		return err
 	}
 	if hasOpen {
 		return nil
 	}
-	table, err := tx.FindTable(restaurantID, tableID)
+	table, err := tx.FindTable(restaurantID, id)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ import { kitchenQueue, listOrders } from "@/src/lib/order";
 import { listMembers } from "@/src/lib/restaurant";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
-import type { Order } from "@/src/types/order";
+import type { Order, OrderItem } from "@/src/types/order";
 import type { Membership } from "@/src/types/restaurant";
 import type { RestaurantTable } from "@/src/types/table";
 
@@ -251,6 +251,21 @@ function toFloorTable(table: RestaurantTable, activeOrder?: Order): FloorTable {
   };
 }
 
+function orderLocationLabel(order: Order, language: "th" | "en") {
+  if (order.order_type === "takeaway") {
+    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
+    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
+  }
+  return order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
+}
+
+function itemSummaryLabel(item: OrderItem, language: "th" | "en") {
+  const prefix = item.fulfillment_type === "takeaway"
+    ? language === "th" ? "[กลับบ้าน] " : "[Takeaway] "
+    : "";
+  return `${prefix}${item.quantity}x ${item.menu_name}`;
+}
+
 export default function Home() {
   const router = useRouter();
   const { activeMembership, user } = useAuth();
@@ -284,8 +299,8 @@ export default function Home() {
       const nextOrders = orderRes.data.orders ?? [];
       const activeOrderByTable = new Map<number, Order>();
       nextOrders
-        .filter((order) => activeOrderStatuses.includes(order.status))
-        .forEach((order) => activeOrderByTable.set(order.table_id, order));
+        .filter((order) => activeOrderStatuses.includes(order.status) && order.table_id)
+        .forEach((order) => activeOrderByTable.set(order.table_id as number, order));
       setOrders(nextOrders);
       setKitchenOrders(kitchenRes.data.orders ?? []);
       setTables((tableRes.data.tables ?? []).map((table) => toFloorTable(table, activeOrderByTable.get(table.ID))));
@@ -319,8 +334,8 @@ export default function Home() {
     return {
       id: order.ID,
       orderNumber: order.order_number,
-      table: order.table?.display_label || order.table?.table_number || String(order.table_id),
-      items: order.items?.map((item) => `${item.quantity}x ${item.menu_name}`) ?? [],
+      table: orderLocationLabel(order, language),
+      items: order.items?.map((item) => itemSummaryLabel(item, language)) ?? [],
       waited,
       total: order.grand_total || order.total_amount,
       status: waited >= 10 ? "delayed" : hasCooking ? "cooking" : "ready",

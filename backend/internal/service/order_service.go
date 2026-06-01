@@ -20,8 +20,11 @@ func ProvideOrderService(repo *repository.OrderRepository) *OrderService {
 }
 
 type OpenOrderRequest struct {
-	TableID       uint   `json:"table_id" binding:"required"`
+	TableID       *uint  `json:"table_id"`
+	OrderType     string `json:"order_type"`
 	CustomerCount int    `json:"customer_count"`
+	CustomerName  string `json:"customer_name"`
+	CustomerPhone string `json:"customer_phone"`
 	Note          string `json:"note"`
 }
 
@@ -34,6 +37,7 @@ type AddOrderItemRequest struct {
 	MenuID            uint   `json:"menu_id" binding:"required"`
 	Quantity          int    `json:"quantity"`
 	Note              string `json:"note"`
+	FulfillmentType   string `json:"fulfillment_type"`
 	SelectedOptionIDs []uint `json:"selected_option_ids"`
 }
 
@@ -88,20 +92,32 @@ type selectedMenuOption struct {
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
 	var created *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		table, err := tx.FindTable(restaurantID, req.TableID)
+		orderType, err := normalizeOrderType(req.OrderType)
 		if err != nil {
-			return errors.New("table not found")
-		}
-		if _, err := tx.FindOpenOrderByTable(restaurantID, req.TableID); err == nil {
-			return errors.New("table already has an open order")
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		if table.Status == entity.TableStatusInactive {
-			return errors.New("table is inactive")
-		}
-		if table.Status == entity.TableStatusReserved {
-			return errors.New("table is reserved")
+		var table *entity.RestaurantTable
+		var tableID *uint
+		if orderType == entity.OrderTypeDineIn {
+			if req.TableID == nil || *req.TableID == 0 {
+				return errors.New("table_id is required for dine-in orders")
+			}
+			tableID = req.TableID
+			table, err = tx.FindTable(restaurantID, *req.TableID)
+			if err != nil {
+				return errors.New("table not found")
+			}
+			if _, err := tx.FindOpenOrderByTable(restaurantID, *req.TableID); err == nil {
+				return errors.New("table already has an open order")
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if table.Status == entity.TableStatusInactive {
+				return errors.New("table is inactive")
+			}
+			if table.Status == entity.TableStatusReserved {
+				return errors.New("table is reserved")
+			}
 		}
 		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
 			return err
@@ -118,11 +134,14 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		}
 		order := &entity.Order{
 			RestaurantID:  restaurantID,
-			TableID:       req.TableID,
+			TableID:       tableID,
+			OrderType:     orderType,
 			OrderNumber:   orderNumberFromIndex(int(count) + 1),
 			OrderDate:     orderDate,
 			StaffID:       userID,
 			CustomerCount: customerCount,
+			CustomerName:  strings.TrimSpace(req.CustomerName),
+			CustomerPhone: strings.TrimSpace(req.CustomerPhone),
 			Status:        entity.OrderStatusOpen,
 			PaymentStatus: "unpaid",
 			Note:          strings.TrimSpace(req.Note),
@@ -132,14 +151,20 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		if err := tx.CreateOrder(order); err != nil {
 			return err
 		}
-		if err := tx.CreateStatusLog(statusLog(order.ID, "", entity.OrderStatusOpen, userID, "order opened")); err != nil {
+		logNote := "order opened"
+		if orderType == entity.OrderTypeTakeaway {
+			logNote = "takeaway order opened"
+		}
+		if err := tx.CreateStatusLog(statusLog(order.ID, "", entity.OrderStatusOpen, userID, logNote)); err != nil {
 			return err
 		}
-		table.Status = entity.TableStatusOccupied
-		table.ReservationName = ""
-		table.ReservationPhone = ""
-		if err := tx.SaveTable(table); err != nil {
-			return err
+		if table != nil {
+			table.Status = entity.TableStatusOccupied
+			table.ReservationName = ""
+			table.ReservationPhone = ""
+			if err := tx.SaveTable(table); err != nil {
+				return err
+			}
 		}
 		created = order
 		return nil
@@ -210,6 +235,10 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 		if !menu.IsAvailable {
 			return errors.New("menu item is unavailable")
 		}
+		fulfillmentType, err := normalizeOrderItemFulfillment(req.FulfillmentType, order.OrderType)
+		if err != nil {
+			return err
+		}
 		qty := req.Quantity
 		if qty <= 0 {
 			qty = 1
@@ -219,16 +248,17 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 			return err
 		}
 		item := &entity.OrderItem{
-			OrderID:      order.ID,
-			RestaurantID: restaurantID,
-			MenuID:       menu.ID,
-			MenuName:     menu.Name,
-			UnitPrice:    menu.Price,
-			OptionsTotal: optionsTotal,
-			Quantity:     qty,
-			Subtotal:     (menu.Price + optionsTotal) * float64(qty),
-			Note:         strings.TrimSpace(req.Note),
-			Status:       entity.OrderItemStatusPending,
+			OrderID:         order.ID,
+			RestaurantID:    restaurantID,
+			MenuID:          menu.ID,
+			MenuName:        menu.Name,
+			UnitPrice:       menu.Price,
+			OptionsTotal:    optionsTotal,
+			Quantity:        qty,
+			Subtotal:        (menu.Price + optionsTotal) * float64(qty),
+			FulfillmentType: fulfillmentType,
+			Note:            strings.TrimSpace(req.Note),
+			Status:          entity.OrderItemStatusPending,
 		}
 		if err := tx.CreateItem(item); err != nil {
 			return err

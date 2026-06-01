@@ -1,4 +1,6 @@
-import type { Order, OrderStatus } from "@/src/types/order";
+import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
+
+type Language = "th" | "en";
 
 export const statusClass: Record<OrderStatus, string> = {
   open: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-900/20 dark:text-sky-300",
@@ -10,13 +12,34 @@ export const statusClass: Record<OrderStatus, string> = {
   cancelled: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300",
 };
 
-export function tableName(order: Order) {
+export function isTakeawayOrder(order: Order) {
+  return order.order_type === "takeaway";
+}
+
+export function takeawayLabel(order: Order, language: Language = "en") {
+  const label = language === "th" ? "กลับบ้าน" : "Takeaway";
+  return order.customer_name?.trim() ? `${label} · ${order.customer_name.trim()}` : label;
+}
+
+export function itemFulfillmentType(item: OrderItem) {
+  return item.fulfillment_type === "takeaway" ? "takeaway" : "dine_in";
+}
+
+export function itemFulfillmentLabel(item: OrderItem, language: Language = "en") {
+  return itemFulfillmentType(item) === "takeaway"
+    ? language === "th" ? "กลับบ้าน" : "Takeaway"
+    : language === "th" ? "ทานที่ร้าน" : "Dine-in";
+}
+
+export function tableName(order: Order, language: Language = "en") {
+  if (isTakeawayOrder(order)) return takeawayLabel(order, language);
   const table = order.table;
-  if (!table) return `#${order.table_id}`;
-  return table.display_label || table.table_number || `#${order.table_id}`;
+  if (!table) return order.table_id ? `#${order.table_id}` : "-";
+  return table.display_label || table.table_number || (order.table_id ? `#${order.table_id}` : "-");
 }
 
 export function zoneName(order: Order) {
+  if (isTakeawayOrder(order)) return "";
   return order.table?.table_zone?.name || order.table?.zone || "";
 }
 

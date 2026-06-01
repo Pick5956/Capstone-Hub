@@ -117,9 +117,11 @@ func createIncompleteAPIScenario(t *testing.T, db *gorm.DB) uint {
 		Unit:         "g",
 	})
 	now := repository.BangkokNow()
+	tableID := table.ID
 	order := entity.Order{
 		RestaurantID:  restaurant.ID,
-		TableID:       table.ID,
+		TableID:       &tableID,
+		OrderType:     entity.OrderTypeDineIn,
 		OrderNumber:   "API-001",
 		OrderDate:     now.Format("2006-01-02"),
 		StaffID:       user.ID,

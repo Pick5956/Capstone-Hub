@@ -19,7 +19,7 @@ export const groupOrderItems = (items: OrderItem[] = []) => {
       .sort((first, second) => first.menu_option_id - second.menu_option_id)
       .map((option) => `${option.option_group_id}:${option.menu_option_id}:${option.price_delta}`)
       .join("|");
-    const key = [item.menu_id, item.menu_name, item.unit_price, item.options_total, item.note ?? "", optionKey].join("::");
+    const key = [item.menu_id, item.menu_name, item.unit_price, item.options_total, item.fulfillment_type ?? "dine_in", item.note ?? "", optionKey].join("::");
     const existing = groups.get(key);
 
     if (existing) {

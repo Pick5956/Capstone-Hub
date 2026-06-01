@@ -24,7 +24,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
-import { itemCount, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
+import { itemCount, itemFulfillmentLabel, itemFulfillmentType, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
 
 type StatusFilter = "all" | "active" | "closed" | OrderStatus;
 type PaymentFilter = "all" | "unpaid" | "paid";
@@ -208,8 +208,10 @@ export default function OrdersPage() {
         const paymentMatched = paymentFilter === "all" || order.payment_status === paymentFilter;
         const queryMatched = !normalizedQuery || [
           order.order_number,
-          tableName(order),
+          tableName(order, language),
           zoneName(order),
+          order.customer_name,
+          order.customer_phone,
           order.staff?.nickname,
           order.staff?.first_name,
           order.staff?.last_name,
@@ -217,7 +219,7 @@ export default function OrdersPage() {
         return statusMatched && paymentMatched && queryMatched;
       })
       .sort((a, b) => new Date(orderTime(b) || 0).getTime() - new Date(orderTime(a) || 0).getTime());
-  }, [orders, paymentFilter, query, statusFilter]);
+  }, [language, orders, paymentFilter, query, statusFilter]);
 
   const summary = useMemo(() => {
     const active = orders.filter((order) => activeStatuses.includes(order.status)).length;
@@ -393,7 +395,7 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-gray-500 dark:text-gray-400">
-                        <span className="font-semibold text-gray-700 dark:text-gray-200">{tableName(order)}</span>
+                        <span className="font-semibold text-gray-700 dark:text-gray-200">{tableName(order, language)}</span>
                         {zoneName(order) && <span>{zoneName(order)}</span>}
                         <span>{formatTime(orderTime(order))}</span>
                       </div>
@@ -425,7 +427,7 @@ export default function OrdersPage() {
               <div className="2xl:sticky 2xl:top-4">
                 <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder)}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder, language)}</p>
                     <h2 className="mt-1 truncate font-mono text-2xl font-semibold text-gray-900 dark:text-white">{selectedOrder.order_number}</h2>
                     <p className="mt-1 text-[12px] text-gray-500">{formatTime(selectedOrder.opened_at)}</p>
                   </div>
@@ -504,7 +506,16 @@ export default function OrdersPage() {
                             <div key={item.ID} className="p-3">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      itemFulfillmentType(item) === "takeaway"
+                                        ? "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-200"
+                                        : "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300"
+                                    }`}>
+                                      {itemFulfillmentLabel(item, language)}
+                                    </span>
+                                  </div>
                                   {item.selected_options?.length ? (
                                     <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
                                       {item.selected_options.map((option) => (

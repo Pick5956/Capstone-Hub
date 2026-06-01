@@ -96,6 +96,8 @@ func SetupDatabase() *gorm.DB {
 	)
 	migrateLegacyTableLayout(db)
 	backfillCustomerTableTokens(db)
+	ensureOrderTakeawayColumns(db)
+	ensureOrderItemFulfillmentColumns(db)
 	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
@@ -212,4 +214,26 @@ func ensureOrderNumberIndex(db *gorm.DB) {
 		_ = db.Migrator().DropIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
 	}
 	_ = db.Migrator().CreateIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
+}
+
+func ensureOrderTakeawayColumns(db *gorm.DB) {
+	if db.Migrator().HasTable(&entity.Order{}) && db.Migrator().HasColumn(&entity.Order{}, "table_id") {
+		_ = db.Exec("ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL").Error
+	}
+	_ = db.Model(&entity.Order{}).
+		Where("order_type = '' OR order_type IS NULL").
+		Update("order_type", entity.OrderTypeDineIn).Error
+}
+
+func ensureOrderItemFulfillmentColumns(db *gorm.DB) {
+	if !db.Migrator().HasTable(&entity.OrderItem{}) || !db.Migrator().HasColumn(&entity.OrderItem{}, "fulfillment_type") {
+		return
+	}
+	_ = db.Exec(`
+		UPDATE order_items
+		SET fulfillment_type = COALESCE(NULLIF(orders.order_type, ''), ?)
+		FROM orders
+		WHERE order_items.order_id = orders.id
+			AND (order_items.fulfillment_type = '' OR order_items.fulfillment_type IS NULL)
+	`, entity.OrderItemFulfillmentDineIn).Error
 }

@@ -23,6 +23,29 @@ import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const terminalStatuses = ["completed", "cancelled"];
 
+function orderLocationLabel(order: Order, language: "th" | "en") {
+  if (order.order_type === "takeaway") {
+    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
+    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
+  }
+  return order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
+}
+
+function itemFulfillmentType(item: OrderItem) {
+  return item.fulfillment_type === "takeaway" ? "takeaway" : "dine_in";
+}
+
+function fulfillmentLabel(value: "dine_in" | "takeaway", language: "th" | "en") {
+  if (value === "takeaway") return language === "th" ? "กลับบ้าน" : "Takeaway";
+  return language === "th" ? "ทานที่ร้าน" : "Dine-in";
+}
+
+function fulfillmentBadgeClass(value: "dine_in" | "takeaway") {
+  return value === "takeaway"
+    ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/30 dark:text-orange-200 dark:ring-orange-900/60"
+    : "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-800";
+}
+
 export default function PosOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -42,6 +65,7 @@ export default function PosOrderDetailPage() {
   const [allItemsOpen, setAllItemsOpen] = useState(false);
   const [allItemsClosing, setAllItemsClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
+  const [selectedFulfillment, setSelectedFulfillment] = useState<"dine_in" | "takeaway">("dine_in");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -61,7 +85,7 @@ export default function PosOrderDetailPage() {
   const copy = language === "th"
     ? {
         denied: "ไม่มีสิทธิ์รับออเดอร์",
-        back: "กลับไปเลือกโต๊ะ",
+        back: "กลับไปหน้า POS",
         search: "ค้นหาเมนู",
         all: "ทั้งหมด",
         add: "เพิ่ม",
@@ -97,7 +121,7 @@ export default function PosOrderDetailPage() {
         cancelOrder: "ยกเลิกออเดอร์",
         cancelReason: "เหตุผลที่ยกเลิก",
         cancelTitle: "ยกเลิกออเดอร์นี้?",
-        cancelBody: "ใช้เมื่อเปิดโต๊ะผิดหรือยังไม่ได้ส่งเข้าครัว",
+        cancelBody: "ใช้เมื่อเปิดออเดอร์ผิดหรือยังไม่ได้ส่งเข้าครัว",
         keepOrder: "เก็บออเดอร์ไว้",
         confirmCancel: "ยืนยันยกเลิก",
         remove: "ลบ",
@@ -108,7 +132,7 @@ export default function PosOrderDetailPage() {
       }
     : {
         denied: "You do not have permission to take orders.",
-        back: "Back to tables",
+        back: "Back to POS",
         search: "Search menu",
         all: "All",
         add: "Add",
@@ -144,7 +168,7 @@ export default function PosOrderDetailPage() {
         cancelOrder: "Cancel order",
         cancelReason: "Cancel reason",
         cancelTitle: "Cancel this order?",
-        cancelBody: "Use this when the table was opened by mistake before sending to kitchen.",
+        cancelBody: "Use this when the order was opened by mistake before sending to kitchen.",
         keepOrder: "Keep order",
         confirmCancel: "Confirm cancel",
         remove: "Remove",
@@ -162,7 +186,12 @@ export default function PosOrderDetailPage() {
   const servedToastTitle = language === "th" ? "เสิร์ฟรายการพร้อมทั้งหมดแล้ว" : "Ready items served";
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
   const currentCartLabel = language === "th" ? "รายการรอบนี้" : "Current round";
-  const tableItemsLabel = language === "th" ? "รายการทั้งหมดของโต๊ะ" : "All table items";
+  const fulfillmentTitle = language === "th" ? "รูปแบบรายการ" : "Item type";
+  const dineInItemLabel = fulfillmentLabel("dine_in", language);
+  const takeawayItemLabel = fulfillmentLabel("takeaway", language);
+  const tableItemsLabel = order?.order_type === "takeaway"
+    ? language === "th" ? "รายการทั้งหมดของออเดอร์" : "All order items"
+    : language === "th" ? "รายการทั้งหมดของโต๊ะ" : "All table items";
   const viewAllItemsLabel = language === "th" ? "ดูรายการทั้งหมด" : "View all items";
   const sentItemsLabel = language === "th" ? "รายการที่ส่งแล้ว" : "Sent items";
   const emptyCurrentCart = language === "th" ? "ยังไม่มีรายการในรอบนี้" : "No items in this round";
@@ -211,6 +240,7 @@ export default function PosOrderDetailPage() {
     setSelectedMenuClosing(false);
     setSelectedMenu(item);
     setSelectedOptionIds(defaultOptionIds);
+    setSelectedFulfillment(order?.order_type === "takeaway" ? "takeaway" : "dine_in");
     setQuantity(1);
     setNote("");
   };
@@ -221,6 +251,7 @@ export default function PosOrderDetailPage() {
     window.setTimeout(() => {
       setSelectedMenu(null);
       setSelectedOptionIds([]);
+      setSelectedFulfillment(order?.order_type === "takeaway" ? "takeaway" : "dine_in");
       setSelectedMenuClosing(false);
     }, 180);
   };
@@ -326,10 +357,11 @@ export default function PosOrderDetailPage() {
       return;
     }
     await runAction(async () => {
-      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, selected_option_ids: selectedOptionIds });
+      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, fulfillment_type: selectedFulfillment, selected_option_ids: selectedOptionIds });
       closeMenuPicker();
       setQuantity(1);
       setNote("");
+      setSelectedFulfillment(order.order_type === "takeaway" ? "takeaway" : "dine_in");
       return res.data;
     });
   };
@@ -423,6 +455,7 @@ export default function PosOrderDetailPage() {
   const renderOrderItemGroup = (group: OrderItemGroup) => {
     if (!order) return null;
     const item = group.firstItem;
+    const fulfillment = itemFulfillmentType(item);
     const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
 
     return (
@@ -432,6 +465,9 @@ export default function PosOrderDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
               <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">x{group.quantity}</span>
+              <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${fulfillmentBadgeClass(fulfillment)}`}>
+                {fulfillmentLabel(fulfillment, language)}
+              </span>
             </div>
             <p className="mt-1 text-[12px] text-gray-500">฿{item.unit_price.toLocaleString()}{group.quantity > 1 ? ` × ${group.quantity}` : ""}</p>
             {item.selected_options?.length ? (
@@ -491,7 +527,7 @@ export default function PosOrderDetailPage() {
           </button>
           {order && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white">{order.table?.table_number ?? order.table_id}</span>
+              <span className="rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white">{orderLocationLabel(order, language)}</span>
               <span className="rounded-md bg-gray-900 px-3 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-gray-900">{order.order_number}</span>
             </div>
           )}
@@ -583,6 +619,7 @@ export default function PosOrderDetailPage() {
             <div className="divide-y divide-gray-200 dark:divide-gray-800 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
               {pendingGroupedOrderItems.length ? pendingGroupedOrderItems.map((group) => {
                 const item = group.firstItem;
+                const fulfillment = itemFulfillmentType(item);
                 const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
 
                 return (
@@ -593,6 +630,9 @@ export default function PosOrderDetailPage() {
                           <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
                           <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
                             x{group.quantity}
+                          </span>
+                          <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${fulfillmentBadgeClass(fulfillment)}`}>
+                            {fulfillmentLabel(fulfillment, language)}
                           </span>
                         </div>
                         <p className="mt-1 text-[12px] text-gray-500">
@@ -796,6 +836,25 @@ export default function PosOrderDetailPage() {
                   <button type="button" onClick={() => setQuantity((current) => current + 1)} className="h-10 w-10 rounded-md border border-gray-200 text-lg font-semibold dark:border-gray-800">+</button>
                 </div>
               </label>
+              <div>
+                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{fulfillmentTitle}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["dine_in", "takeaway"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSelectedFulfillment(value)}
+                      className={`h-10 rounded-md border px-3 text-[12px] font-semibold transition-colors ${
+                        selectedFulfillment === value
+                          ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                      }`}
+                    >
+                      {value === "takeaway" ? takeawayItemLabel : dineInItemLabel}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
                 <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
@@ -836,7 +895,7 @@ export default function PosOrderDetailPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>
-                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{bill.order.table?.table_number ?? bill.order.table_id}</p>
+                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{orderLocationLabel(bill.order, language)}</p>
                 </div>
                 <p className="font-mono text-xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{bill.grand_total.toLocaleString()}</p>
               </div>
@@ -844,7 +903,12 @@ export default function PosOrderDetailPage() {
                 {bill.items.map((item) => (
                   <div key={item.ID} className="grid grid-cols-[1fr_auto] gap-3 py-2">
                     <div>
-                      <span>{item.quantity}x {item.menu_name}</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{item.quantity}x {item.menu_name}</span>
+                        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${fulfillmentBadgeClass(itemFulfillmentType(item))}`}>
+                          {fulfillmentLabel(itemFulfillmentType(item), language)}
+                        </span>
+                      </div>
                       {item.selected_options?.length ? (
                         <div className="mt-0.5 space-y-0.5 text-[11px] text-gray-500">
                           {item.selected_options.map((option) => (
