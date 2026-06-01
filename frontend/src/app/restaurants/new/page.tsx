@@ -194,18 +194,31 @@ function validateTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
+const RESTAURANT_TYPE_SETUP_DEFAULTS: Record<string, { openTime: string; closeTime: string; tableCount: number }> = {
+  "ร้านอาหาร": { openTime: "17:00", closeTime: "00:00", tableCount: 12 },
+  "คาเฟ่": { openTime: "08:00", closeTime: "20:00", tableCount: 8 },
+  "ชาบู/ปิ้งย่าง": { openTime: "11:00", closeTime: "22:00", tableCount: 16 },
+  "เดลิเวอรี": { openTime: "10:00", closeTime: "22:00", tableCount: 4 },
+  "ฟู้ดทรัค": { openTime: "16:00", closeTime: "22:00", tableCount: 4 },
+};
+
+function setupDefaultsFor(type: string) {
+  return RESTAURANT_TYPE_SETUP_DEFAULTS[type] ?? RESTAURANT_TYPE_SETUP_DEFAULTS["ร้านอาหาร"];
+}
+
 export default function NewRestaurantPage() {
   const router = useRouter();
   const { setActiveRestaurant, refreshMemberships } = useAuth();
   const { language } = useLanguage();
+  const initialSetup = setupDefaultsFor(RESTAURANT_TYPES[0]);
   const [type, setType] = useState(RESTAURANT_TYPES[0]);
   const [name, setName] = useState("");
   const [branch, setBranch] = useState(language === "th" ? "สาขาหลัก" : "Main branch");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [openTime, setOpenTime] = useState("17:00");
-  const [closeTime, setCloseTime] = useState("00:00");
-  const [initialTables, setInitialTables] = useState("12");
+  const [openTime, setOpenTime] = useState(initialSetup.openTime);
+  const [closeTime, setCloseTime] = useState(initialSetup.closeTime);
+  const [initialTables, setInitialTables] = useState(String(initialSetup.tableCount));
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const submitOnceRef = useRef(createSingleFlight());
@@ -225,6 +238,7 @@ export default function NewRestaurantPage() {
         branchPlaceholder: "สาขาหลัก",
         branchHelp: "ถ้ามีร้านเดียวให้ใช้สาขาหลัก",
         typeLabel: "ประเภทร้าน",
+        typeSeedHelp: "เลือกแล้วระบบจะตั้งเวลา จำนวนโต๊ะ เมนู และโซนโต๊ะเริ่มต้นให้ตามประเภทร้าน",
         contactSectionTitle: "ข้อมูลติดต่อ",
         contactSectionDescription: "ใช้แสดงบนเอกสารและช่วยให้ทีมตรวจสอบสาขาถูก",
         phoneLabel: "เบอร์ร้าน",
@@ -256,7 +270,7 @@ export default function NewRestaurantPage() {
         serviceStep: "ตั้งค่าการให้บริการ",
         serviceStepDesc: "เวลาเปิดปิดและจำนวนโต๊ะถูกต้อง",
         afterCreateTitle: "หลังสร้างร้านแล้ว",
-        afterCreateItems: ["เพิ่มเมนูขายจริง", "จัดผังโต๊ะ", "เชิญผู้จัดการหรือพนักงาน"],
+        afterCreateItems: ["สร้างเมนูตัวอย่างตามประเภทร้าน", "สร้างโซนโต๊ะและโต๊ะเริ่มต้นให้พร้อมรับออเดอร์", "ยังแก้ไขเมนู โต๊ะ และเวลาเปิดปิดได้ภายหลัง"],
         restaurantNameFallback: "ชื่อร้าน",
         branchFallback: "สาขาหลัก",
         submitError: "สร้างร้านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
@@ -282,6 +296,7 @@ export default function NewRestaurantPage() {
         branchPlaceholder: "Main branch",
         branchHelp: "Use Main branch if you only have one location.",
         typeLabel: "Restaurant type",
+        typeSeedHelp: "Changing this sets starter hours, table count, menu items, and table zones for the selected type.",
         contactSectionTitle: "Contact details",
         contactSectionDescription: "Used on documents and helps the team verify the correct branch.",
         phoneLabel: "Restaurant phone",
@@ -313,7 +328,7 @@ export default function NewRestaurantPage() {
         serviceStep: "Set service defaults",
         serviceStepDesc: "Hours and table count are valid",
         afterCreateTitle: "After creating the restaurant",
-        afterCreateItems: ["Add live menu items", "Arrange the table layout", "Invite managers or staff"],
+        afterCreateItems: ["Seed starter menu items for the selected type", "Create starter table zones and tables for order testing", "You can still edit menus, tables, and hours later"],
         restaurantNameFallback: "Restaurant name",
         branchFallback: "Main branch",
         submitError: "Could not create the restaurant. Please try again.",
@@ -332,6 +347,14 @@ export default function NewRestaurantPage() {
   const previewName = trimmedName || copy.restaurantNameFallback;
   const previewBranch = trimmedBranch || copy.branchFallback;
   const validTableCount = Number.isFinite(tableCount) && tableCount >= 1 && tableCount <= 500;
+
+  const applyRestaurantType = (nextType: string) => {
+    const nextSetup = setupDefaultsFor(nextType);
+    setType(nextType);
+    setOpenTime(nextSetup.openTime);
+    setCloseTime(nextSetup.closeTime);
+    setInitialTables(String(nextSetup.tableCount));
+  };
 
   const completion = useMemo(() => {
     const checks = [
@@ -433,12 +456,13 @@ export default function NewRestaurantPage() {
                       <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.typeLabel}</span>
                       <ThemedSelect
                         value={type}
-                        onChange={setType}
+                        onChange={applyRestaurantType}
                         options={RESTAURANT_TYPES.map((item) => ({
                           value: item,
                           label: getRestaurantTypeLabel(item, language),
                         }))}
                       />
+                      <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{copy.typeSeedHelp}</p>
                     </label>
                   </div>
                 </Section>
