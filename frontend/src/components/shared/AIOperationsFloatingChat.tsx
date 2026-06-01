@@ -593,9 +593,8 @@ export default function AIOperationsFloatingChat() {
                 </span>
                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500 dark:border-gray-950"></span>
               </div>
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{copy.title}</h2>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">{copy.subtitle}</p>
+              <div className="flex items-center">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-none">{copy.title}</h2>
               </div>
             </div>
 

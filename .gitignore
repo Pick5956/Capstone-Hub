@@ -45,3 +45,7 @@ AGENTS.md
 *.session.md
 *.transcript.md
 /.obsidian
+
+# AI Agent Capstone Docs - Local Only
+AI_AGENT_BEHAVIOR_TESTING.md
+AI_AGENT_OVERVIEW.md
