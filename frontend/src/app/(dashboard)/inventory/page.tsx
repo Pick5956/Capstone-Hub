@@ -729,7 +729,6 @@ export default function InventoryPage() {
               <SectionCard
                 label={copy.total}
                 value={formatNumber(totalItems, lang)}
-                helper={`${formatNumber(filtered.length, lang)} ${copy.tableSummary.toLowerCase()}`}
               />
               <SectionCard
                 label={copy.totalValue}
@@ -740,7 +739,6 @@ export default function InventoryPage() {
               <SectionCard
                 label={copy.urgentItems}
                 value={formatNumber(lowCount + outCount, lang)}
-                helper={outCount > 0 ? copy.alertOut(outCount) : copy.alertLow(lowCount)}
                 tone={lowCount + outCount > 0 ? "danger" : "default"}
               />
               <SectionCard
@@ -1071,16 +1069,6 @@ export default function InventoryPage() {
               </div>
             )}
 
-            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/90 px-5 py-3 text-xs text-slate-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-slate-400">
-              <span>
-                {copy.tableSummary} {formatNumber(filtered.length, lang)} {lang === "th" ? "รายการ" : "items"}
-              </span>
-              {ingredients.length !== filtered.length && (
-                <span>
-                  {lang === "th" ? "จากทั้งหมด" : "of"} {formatNumber(ingredients.length, lang)}
-                </span>
-              )}
-            </div>
           </div>
         </div>
 

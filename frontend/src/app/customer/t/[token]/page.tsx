@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { X } from "lucide-react";
 import { getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
-import { menuCategoryIds } from "@/src/lib/menuUtils";
+import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
@@ -110,6 +110,12 @@ export default function CustomerTableOrderPage() {
         openTime: "Open",
       };
 
+  const optionLimitLabel = (selected: number, minSelect: number, maxSelect: number) => {
+    if (maxSelect <= 1) return selected ? (language === "th" ? "เลือกแล้ว" : "Selected") : (language === "th" ? "เลือก 1 อย่าง" : "Choose 1");
+    const range = minSelect > 0 && minSelect !== maxSelect ? `${minSelect}-${maxSelect}` : String(maxSelect);
+    return language === "th" ? `เลือก ${selected}/${range}` : `${selected}/${range} selected`;
+  };
+
   const load = async () => {
     setLoading(true);
     setError("");
@@ -155,7 +161,7 @@ export default function CustomerTableOrderPage() {
   const selectedOptionsTotal = selectedOptions.reduce((sum, option) => sum + option.price_delta, 0);
   const requiredOptionsMissing = Boolean(selectedMenu?.option_groups?.some((group) => {
     if (!group.is_active) return false;
-    const minSelect = group.required ? Math.max(1, group.min_select || 0) : group.min_select || 0;
+    const { minSelect } = menuOptionLimits(group);
     if (minSelect <= 0) return false;
     const count = (group.options ?? []).filter((option) => option.is_active && selectedOptionIds.includes(option.ID)).length;
     return count < minSelect;
@@ -177,9 +183,13 @@ export default function CustomerTableOrderPage() {
       setError(copy.noActiveOrderBody);
       return;
     }
-    const defaultOptionIds = (item.option_groups ?? []).flatMap((group) =>
-      (group.options ?? []).filter((option) => option.is_active && option.is_default).map((option) => option.ID)
-    );
+    const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => {
+      const { maxSelect } = menuOptionLimits(group);
+      return (group.options ?? [])
+        .filter((option) => option.is_active && option.is_default)
+        .slice(0, maxSelect)
+        .map((option) => option.ID);
+    });
     setSelectedMenuClosing(false);
     setSelectedMenu(item);
     setSelectedOptionIds(defaultOptionIds);
@@ -199,14 +209,17 @@ export default function CustomerTableOrderPage() {
     }, 180);
   };
 
-  const toggleOption = (groupOptionIds: number[], optionId: number, maxSelect: number) => {
+  const toggleOption = (groupOptionIds: number[], optionId: number, minSelect: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
+      const selectedInGroup = current.filter((id) => groupOptionIds.includes(id));
       const withoutGroup = current.filter((id) => !groupOptionIds.includes(id));
-      if (current.includes(optionId)) return withoutGroup;
+      if (selectedInGroup.includes(optionId)) {
+        if (selectedInGroup.length <= minSelect) return current;
+        return [...withoutGroup, ...selectedInGroup.filter((id) => id !== optionId)];
+      }
       if (maxSelect <= 1) return [...withoutGroup, optionId];
-      const currentInGroup = current.filter((id) => groupOptionIds.includes(id));
-      if (currentInGroup.length >= maxSelect) return [...withoutGroup, ...currentInGroup.slice(1), optionId];
-      return [...current, optionId];
+      if (selectedInGroup.length >= maxSelect) return current;
+      return [...withoutGroup, ...selectedInGroup, optionId];
     });
   };
 
@@ -303,10 +316,6 @@ export default function CustomerTableOrderPage() {
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <LanguageToggle />
-            <div className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2.5 dark:border-gray-800 dark:bg-gray-950">
-              <span className="text-[11px] font-medium text-gray-500">{copy.cart}</span>
-              <span className="font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{cartTotal.toLocaleString()}</span>
-            </div>
           </div>
         </div>
       </header>
@@ -389,7 +398,7 @@ export default function CustomerTableOrderPage() {
             <div className="min-w-0 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
               <span className="block text-[10px] font-medium text-gray-500 dark:text-gray-400">{copy.currentRound}</span>
               <span className="mt-0.5 block truncate font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">
-                ฿{cartTotal.toLocaleString()} · {cartItemCount} {copy.itemUnit}
+                ฿{cartTotal.toLocaleString()}
               </span>
             </div>
             <div className="flex min-w-[76px] flex-col justify-center rounded-md border border-gray-200 px-3 text-center dark:border-gray-800">
@@ -398,7 +407,7 @@ export default function CustomerTableOrderPage() {
             </div>
           </div>
           <button type="button" onClick={openSummary} disabled={!canOrder || !cartItemCount || submitting} className="h-12 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">
-            {submitting ? copy.submitting : `${copy.reviewOrder} (${cartItemCount})`}
+            {submitting ? copy.submitting : copy.reviewOrder}
           </button>
         </div>
       </div>
@@ -415,7 +424,7 @@ export default function CustomerTableOrderPage() {
                 {cart.map((item) => (
                   <div key={item.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 py-3 text-[13px]">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-gray-900 dark:text-white">{item.quantity}x {item.name}</p>
+                      <p className="truncate font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       {item.selected_options.map((option) => <p key={option.id} className="mt-0.5 text-[11px] text-gray-500">{option.group}: {option.name}</p>)}
                       {item.note ? <p className="mt-1 text-[11px] text-gray-500">{copy.note}: {item.note}</p> : null}
                       <p className="mt-1 font-mono text-[12px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{((item.unit_price + item.options_total) * item.quantity).toLocaleString()}</p>
@@ -462,20 +471,30 @@ export default function CustomerTableOrderPage() {
               <div className="space-y-3 p-4">
                 {selectedMenu.option_groups?.filter((group) => group.is_active).map((group) => {
                   const options = (group.options ?? []).filter((option) => option.is_active);
-                  const maxSelect = Math.max(1, group.max_select || 1);
+                  const { minSelect, maxSelect } = menuOptionLimits(group);
+                  const selectedCount = options.filter((option) => selectedOptionIds.includes(option.ID)).length;
                   return (
                     <div key={group.ID}>
                       <div className="mb-1.5 flex items-center justify-between gap-2 text-[12px] font-medium">
                         <span>{group.name}</span>
-                        {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.required}</span>}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                            {optionLimitLabel(selectedCount, minSelect, maxSelect)}
+                          </span>
+                          {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.required}</span>}
+                        </div>
                       </div>
                       <div className="grid gap-2">
-                        {options.map((option) => (
-                          <button key={option.ID} type="button" onClick={() => toggleOption(options.map((current) => current.ID), option.ID, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] ${selectedOptionIds.includes(option.ID) ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-300"}`}>
-                            <span>{option.name}</span>
-                            <span className="font-mono">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
-                          </button>
-                        ))}
+                        {options.map((option) => {
+                          const selected = selectedOptionIds.includes(option.ID);
+                          const limitReached = maxSelect > 1 && selectedCount >= maxSelect && !selected;
+                          return (
+                            <button key={option.ID} type="button" disabled={limitReached} aria-pressed={selected} onClick={() => toggleOption(options.map((current) => current.ID), option.ID, minSelect, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-300"}`}>
+                              <span>{option.name}</span>
+                              <span className="font-mono">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   );

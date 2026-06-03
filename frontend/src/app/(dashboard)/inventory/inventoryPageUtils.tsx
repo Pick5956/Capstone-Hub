@@ -65,7 +65,7 @@ export function SectionCard({
 }: {
   label: string;
   value: string;
-  helper: string;
+  helper?: string;
   tone?: "default" | "warm" | "danger" | "success";
 }) {
   const toneClass =
@@ -81,7 +81,7 @@ export function SectionCard({
     <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
       <span className="text-[11px] text-slate-400">{label}</span>
       <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helper}</p>
+      {helper ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helper}</p> : null}
     </div>
   );
 }
