@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ShoppingBag } from "lucide-react";
+import { Bell, Search, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -15,6 +15,7 @@ import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 const tableRefreshIntervalMs = 3_000;
@@ -98,7 +99,7 @@ export default function PosTablesPage() {
         title: "เลือกโต๊ะ",
         subtitle: "แตะโต๊ะว่างเพื่อเปิดออเดอร์ หรือแตะโต๊ะที่ใช้งานเพื่อทำรายการต่อ",
         search: "ค้นหาโต๊ะ",
-        takeaway: "กลับบ้าน",
+        takeaway: "สั่งกลับบ้าน",
         openTakeaway: "เปิดออเดอร์กลับบ้าน",
         takeawayHelp: "ใช้สำหรับลูกค้าที่ไม่ได้นั่งโต๊ะ",
         customerName: "ชื่อลูกค้า (ไม่บังคับ)",
@@ -125,7 +126,7 @@ export default function PosTablesPage() {
         cancel: "ยกเลิก",
         confirm: "เปิดโต๊ะ",
         free: "ว่าง",
-        occupied: "มีออเดอร์",
+        occupied: "ใช้งาน",
         reserved: "จอง",
         inactive: "ปิดใช้งาน",
         ready: "พร้อมเสิร์ฟ",
@@ -196,6 +197,8 @@ export default function PosTablesPage() {
         inactiveNotice: "This table is inactive and cannot open orders.",
         reservedSuccess: "Table reserved.",
       };
+
+  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
   const activeOrderByTable = useMemo(() => {
     const map = new Map<number, Order>();
@@ -501,33 +504,47 @@ export default function PosTablesPage() {
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <OperationalPageShell
-      eyebrow={copy.eyebrow}
-      title={copy.title}
-      subtitle={copy.subtitle}
-      actions={(
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <button
-            type="button"
-            onClick={openTakeawaySheet}
-            className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900 sm:h-10"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            {copy.takeaway}
-          </button>
-          <label className="relative w-full sm:w-80">
+    <>
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0">
+        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
+          <label className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={copy.search}
-              className="h-11 w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+              className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
               aria-label={copy.search}
             />
           </label>
+          <button
+            type="button"
+            onClick={openTakeawaySheet}
+            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#dfe3e8] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {copy.takeaway}
+          </button>
+          <div aria-hidden="true" className="hidden lg:block" />
+          <button
+            type="button"
+            aria-label={notificationLabel}
+            className="ui-press hidden h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900 lg:inline-flex"
+          >
+            <Bell className="h-4 w-4" strokeWidth={2} />
+          </button>
+          <div className="hidden lg:block">
+            <DashboardAccountMenu />
+          </div>
         </div>
-      )}
-    >
+      </div>
+      <div aria-hidden="true" className="h-[104px] lg:h-[62px]" />
+      <OperationalPageShell
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        subtitle={copy.subtitle}
+        showHeader={false}
+      >
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
@@ -767,6 +784,7 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
-    </OperationalPageShell>
+      </OperationalPageShell>
+    </>
   );
 }

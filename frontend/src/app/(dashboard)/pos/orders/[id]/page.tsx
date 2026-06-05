@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Bell, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -19,6 +19,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const terminalStatuses = ["completed", "cancelled"];
@@ -379,39 +380,31 @@ export default function PosOrderDetailPage() {
   useEffect(() => {
     if (!modalScrollLocked) return;
 
-    const body = document.body;
-    const html = document.documentElement;
+    const scrollX = window.scrollX;
     const scrollY = window.scrollY;
-    const scrollbarWidth = window.innerWidth - html.clientWidth;
-    const previousBodyStyles = {
-      overflow: body.style.overflow,
-      paddingRight: body.style.paddingRight,
-      position: body.style.position,
-      top: body.style.top,
-      width: body.style.width,
+    const scrollKeys = new Set(["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "]);
+    const isInsideModalScroll = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("[data-pos-modal-scroll]"));
+    const restoreScroll = () => {
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
     };
-    const previousHtmlStyles = {
-      overflow: html.style.overflow,
-      overscrollBehavior: html.style.overscrollBehavior,
+    const preventOutsideScroll = (event: WheelEvent | TouchEvent) => {
+      if (!isInsideModalScroll(event.target)) event.preventDefault();
+    };
+    const preventOutsideKeyScroll = (event: KeyboardEvent) => {
+      if (scrollKeys.has(event.key) && !isInsideModalScroll(event.target)) event.preventDefault();
     };
 
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
-    html.style.overflow = "hidden";
-    html.style.overscrollBehavior = "none";
+    window.addEventListener("scroll", restoreScroll, { passive: true });
+    document.addEventListener("wheel", preventOutsideScroll, { capture: true, passive: false });
+    document.addEventListener("touchmove", preventOutsideScroll, { capture: true, passive: false });
+    document.addEventListener("keydown", preventOutsideKeyScroll, { capture: true });
 
     return () => {
-      body.style.overflow = previousBodyStyles.overflow;
-      body.style.paddingRight = previousBodyStyles.paddingRight;
-      body.style.position = previousBodyStyles.position;
-      body.style.top = previousBodyStyles.top;
-      body.style.width = previousBodyStyles.width;
-      html.style.overflow = previousHtmlStyles.overflow;
-      html.style.overscrollBehavior = previousHtmlStyles.overscrollBehavior;
-      window.scrollTo(0, scrollY);
+      window.removeEventListener("scroll", restoreScroll);
+      document.removeEventListener("wheel", preventOutsideScroll, { capture: true });
+      document.removeEventListener("touchmove", preventOutsideScroll, { capture: true });
+      document.removeEventListener("keydown", preventOutsideKeyScroll, { capture: true });
+      window.scrollTo(scrollX, scrollY);
     };
   }, [modalScrollLocked]);
 
@@ -503,6 +496,7 @@ export default function PosOrderDetailPage() {
 
   const changeAmount = bill ? Math.max(0, Number(receivedAmount || 0) - bill.grand_total) : 0;
   const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
   const statusToneClass = (status: OrderItem["status"]) => {
     if (status === "pending") return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300";
     if (status === "cooking") return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300";
@@ -613,24 +607,24 @@ export default function PosOrderDetailPage() {
 
   const headerNoticeCount = (error ? 1 : 0) + (hasReadyItems ? 1 : 0);
   const posHeaderSpacerClass = headerNoticeCount === 0
-    ? "h-[102px] lg:h-[56px]"
+    ? "h-[102px] lg:h-[62px]"
     : headerNoticeCount === 1
-      ? "h-[144px] lg:h-[98px]"
-      : "h-[186px] lg:h-[140px]";
+      ? "h-[152px] lg:h-[112px]"
+      : "h-[202px] lg:h-[162px]";
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
     <div className="min-h-screen w-full bg-slate-50 pb-6 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <div className="fixed inset-x-0 top-14 z-20 border-b border-gray-200 bg-slate-50/95 px-3 py-2 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:px-4 lg:left-[var(--sidebar-w)] lg:top-0 lg:px-5">
-        <div className="grid gap-1.5 lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,1fr)_auto] lg:items-center">
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0">
+        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
-            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 lg:order-1">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
-                <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} aria-label={viewAllItemsLabel} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-gray-200 bg-white px-2.5 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-orange-200 hover:bg-orange-50/30 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/20 lg:flex-none">
+                <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} aria-label={viewAllItemsLabel} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-orange-200 hover:bg-orange-50/30 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/20 lg:flex-none">
                   {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
                 </button>
                 {hasPrimaryOrderAction && (
@@ -649,14 +643,31 @@ export default function PosOrderDetailPage() {
                 onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
                 options={categoryOptions}
               />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 lg:order-3" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 min-w-0 rounded-md border border-[#dfe3e8] bg-white px-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900 lg:order-3" />
+            </div>
+          )}
+          <div aria-hidden="true" className="hidden lg:order-5 lg:block" />
+          {order && (
+            <div className="hidden items-center gap-1.5 justify-self-end lg:order-6 lg:flex">
+              <button
+                type="button"
+                aria-label={notificationLabel}
+                className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
+              >
+                <Bell className="h-4 w-4" strokeWidth={2} />
+              </button>
+              <DashboardAccountMenu />
             </div>
           )}
         </div>
-        {error && <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-        {hasReadyItems && (
-          <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-            {copy.readyAlert}: {readyItems.length}
+        {(error || hasReadyItems) && (
+          <div className="space-y-2 px-3 py-2 sm:px-4 lg:px-5">
+            {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+            {hasReadyItems && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                {copy.readyAlert}: {readyItems.length}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -718,7 +729,7 @@ export default function PosOrderDetailPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
+            <div data-pos-modal-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
               {pendingGroupedOrderItems.length ? (
                 <section className="rounded-md border border-blue-300 border-l-4 bg-blue-50/70 p-3 shadow-[0_1px_0_rgba(37,99,235,0.08)] dark:border-blue-800 dark:bg-blue-950/25">
                   <div className="mb-3 flex items-start justify-between gap-3">
@@ -808,7 +819,7 @@ export default function PosOrderDetailPage() {
                 <p className="shrink-0 text-right font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
               </div>
             </div>
-            <div className="space-y-3 overflow-y-auto p-4">
+            <div data-pos-modal-scroll className="space-y-3 overflow-y-auto p-4">
               {selectedMenu.option_groups?.length ? (
                 <div className="space-y-3">
                   {selectedMenu.option_groups.filter((group) => group.is_active).map((group) => {
@@ -905,7 +916,7 @@ export default function PosOrderDetailPage() {
               }
             }
           `}</style>
-          <div className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div data-pos-modal-scroll className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div id="print-bill" className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>

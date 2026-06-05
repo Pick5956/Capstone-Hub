@@ -30,8 +30,8 @@ export default function ThemedSelect({
   const selected = options.find((option) => option.value === value);
   const fallbackPlaceholder = language === "th" ? "เลือก" : "Select";
   const buttonState = open
-    ? "border-gray-300 bg-gray-50 shadow-[inset_0_0_0_1px_rgba(17,24,39,0.04)] dark:border-gray-600 dark:bg-gray-800/60"
-    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600 dark:hover:bg-gray-800/60";
+    ? "border-[#d6dbe2] bg-gray-50 shadow-[inset_0_0_0_1px_rgba(17,24,39,0.04)] dark:border-[#2c3848] dark:bg-gray-800/60"
+    : "border-[#dfe3e8] bg-white hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-900 dark:hover:border-[#2c3848] dark:hover:bg-gray-800/60";
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -59,7 +59,7 @@ export default function ThemedSelect({
       </button>
 
       {open && !disabled && (
-        <div className="absolute z-50 mt-1.5 max-h-64 min-w-full overflow-auto rounded-md border border-gray-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)] dark:border-gray-700 dark:bg-gray-900 dark:shadow-[0_16px_40px_rgba(0,0,0,0.45)] sm:w-max sm:min-w-[max(100%,14rem)]">
+        <div className="absolute z-50 mt-1.5 max-h-64 min-w-full overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)] dark:border-[#253142] dark:bg-gray-900 dark:shadow-[0_16px_40px_rgba(0,0,0,0.45)] sm:w-max sm:min-w-[max(100%,14rem)]">
           {options.map((option) => {
             const active = option.value === value;
             return (

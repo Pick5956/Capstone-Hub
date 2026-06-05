@@ -2,8 +2,8 @@
 
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
-import LanguageToggle from '@/src/components/shared/LanguageToggle';
-import ThemeToggle from '@/src/components/shared/ThemeToggle';
+import { Bell } from 'lucide-react';
+import DashboardAccountMenu from '@/src/components/shared/DashboardAccountMenu';
 
 export default function MobileTopBar() {
   const { setMobileOpen } = useSidebar();
@@ -11,7 +11,7 @@ export default function MobileTopBar() {
 
   return (
     <header
-      className="fixed inset-x-0 top-0 z-30 flex h-14 max-w-full items-center gap-3 overflow-hidden px-4 lg:hidden
+      className="fixed inset-x-0 top-0 z-30 flex h-14 max-w-full items-center gap-3 overflow-visible px-4 lg:hidden
       bg-white/90 dark:bg-gray-950/90 backdrop-blur-md
       border-b border-gray-100 dark:border-gray-800 shadow-sm"
     >
@@ -27,9 +27,15 @@ export default function MobileTopBar() {
         </svg>
       </button>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <LanguageToggle />
-        <ThemeToggle className="h-9 w-9 border border-gray-200 bg-white text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900" />
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          aria-label={language === 'th' ? 'การแจ้งเตือน' : 'Notifications'}
+          className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
+        >
+          <Bell className="h-4 w-4" strokeWidth={2} />
+        </button>
+        <DashboardAccountMenu />
       </div>
     </header>
   );

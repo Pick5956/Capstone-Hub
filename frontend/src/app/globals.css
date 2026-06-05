@@ -7,6 +7,9 @@
   --background: #ffffff;
   --foreground: #171717;
   --app-text-scale: 1;
+  --sidebar-w: 264px;
+  --dashboard-shell-row: 62px;
+  --dashboard-shell-border: #dfe3e8;
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-thumb-hover: #94a3b8;
@@ -16,6 +19,7 @@
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --dashboard-shell-border: #253142;
   --scrollbar-track: #020617;
   --scrollbar-thumb: #334155;
   --scrollbar-thumb-hover: #64748b;
@@ -346,6 +350,30 @@ html[data-font-size="extra-large"] {
 
 .ui-press:active:not(:disabled) {
   transform: translateY(1px) scale(0.99);
+}
+
+.dashboard-shell-row {
+  height: var(--dashboard-shell-row);
+  min-height: var(--dashboard-shell-row);
+}
+
+.dashboard-shell-border-b {
+  border-bottom: 1px solid var(--dashboard-shell-border);
+}
+
+.dashboard-shell-border-r {
+  border-right: 0;
+}
+
+.dashboard-shell-border-r::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  background: var(--dashboard-shell-border);
 }
 
 .sidebar-nav-scroll {
