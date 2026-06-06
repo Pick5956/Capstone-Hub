@@ -576,7 +576,7 @@ export default function PosTablesPage() {
                   type="button"
                   disabled={servingOrderId === item.order.ID}
                   onClick={() => void serveReadyItems(item)}
-                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-gray-950 dark:hover:bg-emerald-400"
+                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
                 >
                   {servingOrderId === item.order.ID ? copy.serving : copy.serveAll}
                 </button>
@@ -768,7 +768,7 @@ export default function PosTablesPage() {
                 </div>
                 <div className={`${takeawayOpen ? "grid-cols-2" : "grid-cols-3"} grid gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800`}>
                   {!takeawayOpen && (
-                    <button type="button" disabled={submitting} onClick={reserveTable} className={`${reservationDraftOpen ? "bg-sky-700 text-white hover:bg-sky-800 dark:bg-sky-300 dark:text-gray-950 dark:hover:bg-sky-200" : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50"} ui-press h-11 rounded-md px-3 text-[13px] font-semibold disabled:opacity-50 sm:h-9 sm:text-[12px]`}>
+                    <button type="button" disabled={submitting} onClick={reserveTable} className={`${reservationDraftOpen ? "bg-sky-700 text-white hover:bg-sky-800 dark:bg-sky-300 dark:text-sky-950 dark:hover:bg-sky-200" : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50"} ui-press h-11 rounded-md px-3 text-[13px] font-semibold disabled:opacity-50 sm:h-9 sm:text-[12px]`}>
                       {reservationDraftOpen ? copy.confirmReservation : copy.reserveTable}
                     </button>
                   )}

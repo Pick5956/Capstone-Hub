@@ -830,7 +830,12 @@ export default function MenuPage() {
                 </div>
               ) : filteredItems.length ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {filteredItems.map((item) => (
+                  {filteredItems.map((item) => {
+                    const availabilityBadgeClassName = item.is_available
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                      : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+
+                    return (
                     <article
                       key={item.ID}
                       role={canManage ? "button" : undefined}
@@ -883,14 +888,15 @@ export default function MenuPage() {
                               />
                             </div>
                           ) : (
-                            <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${item.is_available ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                            <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${availabilityBadgeClassName}`}>
                               {item.is_available ? copy.available : copy.unavailable}
                             </span>
                           )}
                         </div>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="px-4 py-10 text-center">
@@ -1053,7 +1059,7 @@ export default function MenuPage() {
                               className={`inline-flex h-8 items-center rounded-[4px] border px-3 text-[12px] font-medium transition-[background-color,border-color,color,box-shadow] ${
                                 selected
                                   ? "border-orange-300 bg-orange-50 text-orange-800 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.2)] dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
-                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-orange-50/70 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-orange-950/30 dark:hover:text-orange-200"
+                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-gray-900 dark:hover:text-orange-200"
                               }`}
                             >
                               {category.name}

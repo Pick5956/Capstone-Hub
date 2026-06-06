@@ -67,6 +67,15 @@ const ClearIcon = () => (
   </svg>
 );
 
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
 type InputFieldLabels = {
   clear: string;
   hidePassword: string;
@@ -210,6 +219,8 @@ export default function AuthModal({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const router = useRouter();
 
   const copy = language === "th"
@@ -306,6 +317,7 @@ export default function AuthModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setAuthMode(initialMode);
     setError("");
     setNotice("");
@@ -325,6 +337,15 @@ export default function AuthModal({
   });
   const [showRegisterPw, setShowRegisterPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const targetId = authMode === "forgot" ? "forgot-email" : authMode === "register" ? "firstName" : "login-email";
+    const timer = window.setTimeout(() => {
+      document.getElementById(targetId)?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [authMode, isOpen]);
 
   const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRegisterForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -527,6 +548,41 @@ export default function AuthModal({
     setShowConfirmPw(false);
   };
 
+  const closeAndRestoreFocus = useCallback(() => {
+    onClose();
+    const restoreTarget = restoreFocusRef.current;
+    window.setTimeout(() => {
+      restoreTarget?.focus();
+    }, 0);
+  }, [onClose]);
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAndRestoreFocus();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
+      .filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null);
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const isLogin = authMode === "login";
   const isForgot = authMode === "forgot";
   const title = isForgot ? copy.forgotTitle : isLogin ? copy.loginTitle : copy.registerTitle;
@@ -541,9 +597,11 @@ export default function AuthModal({
       }`}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-title"
+        onKeyDown={handleDialogKeyDown}
         className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
         } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
@@ -560,7 +618,7 @@ export default function AuthModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeAndRestoreFocus}
             aria-label={copy.close}
             className="-mr-1.5 -mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >

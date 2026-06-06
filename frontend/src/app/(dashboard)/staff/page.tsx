@@ -1250,7 +1250,7 @@ export default function StaffPage() {
                                       onClick={() => setPermissionRow(row.permissions, false)}
                                       className={`flex h-8 w-9 items-center justify-center text-[15px] font-semibold transition-colors ${
                                         checked
-                                          ? "text-gray-400 hover:bg-red-50 hover:text-red-700 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:text-gray-500 dark:hover:bg-red-950/25 dark:hover:text-red-300"
+                                          ? "text-red-600 hover:bg-red-50 hover:text-red-700 disabled:hover:bg-transparent disabled:hover:text-red-600 dark:text-red-300 dark:hover:bg-red-950/25 dark:hover:text-red-200"
                                           : "bg-red-600 text-white dark:bg-red-500 dark:text-white"
                                       } disabled:cursor-not-allowed`}
                                     >
@@ -1265,7 +1265,7 @@ export default function StaffPage() {
                                       className={`flex h-8 w-9 items-center justify-center border-l border-gray-200 text-[14px] font-semibold transition-colors dark:border-gray-800 ${
                                         checked
                                           ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-white"
-                                          : "text-gray-400 hover:bg-emerald-50 hover:text-emerald-700 disabled:hover:bg-transparent disabled:hover:text-gray-400 dark:text-gray-500 dark:hover:bg-emerald-950/25 dark:hover:text-emerald-300"
+                                          : "text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:hover:bg-transparent disabled:hover:text-emerald-600 dark:text-emerald-300 dark:hover:bg-emerald-950/25 dark:hover:text-emerald-200"
                                       } disabled:cursor-not-allowed`}
                                     >
                                       ✓

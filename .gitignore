@@ -36,10 +36,14 @@ docs/
 docs/wiki/
 .claude/
 .codex/
+.codex-runtime/
 .agent/
 .agents/
+.impeccable/
 CLAUDE.md
 AGENTS.md
+DESIGN.md
+PRODUCT.md
 *.chat.md
 *.prompt.md
 *.session.md

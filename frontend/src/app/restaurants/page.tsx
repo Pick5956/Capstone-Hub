@@ -65,17 +65,22 @@ function RestaurantCard({
   const roleName = roleNameOf(membership);
   const membershipStyle = ROLE_TONE[roleName] ?? ROLE_TONE.waiter;
   const roleLabel = roleLabelOf(membership, language);
+  const restaurantName = restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant");
   const branchName = restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch");
   const restaurantType = getRestaurantTypeLabel(restaurant?.restaurant_type?.trim() || "ร้านอาหาร", language);
   const hours = restaurant?.open_time && restaurant?.close_time
     ? `${restaurant.open_time}-${restaurant.close_time}`
     : language === "th" ? "ยังไม่ระบุเวลา" : "Hours not set";
   const tableCount = restaurant?.table_count ? `${restaurant.table_count} ${language === "th" ? "โต๊ะ" : "tables"}` : language === "th" ? "ยังไม่ระบุโต๊ะ" : "Tables not set";
+  const selectedLabel = language === "th" ? "เลือกร้านนี้อยู่" : "Selected restaurant";
+  const chooseLabel = language === "th" ? "เลือกร้านนี้" : "Select this restaurant";
 
   return (
     <button
       type="button"
       onClick={onSelect}
+      aria-pressed={selected}
+      aria-label={`${selected ? selectedLabel : chooseLabel}: ${restaurantName}, ${branchName}, ${roleLabel}`}
       className={`w-full rounded-md border bg-white p-4 text-left transition-colors dark:bg-gray-950 ${
         selected
           ? "border-orange-500 ring-2 ring-orange-500/15"
@@ -88,7 +93,7 @@ function RestaurantCard({
             {restaurant?.logo ? (
               <Image
                 src={restaurant.logo}
-                alt={`${language === "th" ? "โลโก้ร้าน" : "Restaurant logo"} ${restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant")}`}
+                alt={`${language === "th" ? "โลโก้ร้าน" : "Restaurant logo"} ${restaurantName}`}
                 width={40}
                 height={40}
                 unoptimized
@@ -104,10 +109,11 @@ function RestaurantCard({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">
-                {restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant")}
+                {restaurantName}
               </h3>
               {selected && (
                 <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white">
+                  <span className="sr-only">{selectedLabel}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>

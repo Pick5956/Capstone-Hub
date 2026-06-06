@@ -14,6 +14,13 @@
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-thumb-hover: #94a3b8;
   --scrollbar-corner: #f1f5f9;
+  --z-sticky: 20;
+  --z-modal-backdrop: 40;
+  --z-chat: 45;
+  --z-dropdown: 50;
+  --z-modal: 55;
+  --z-toast: 60;
+  --z-tooltip: 70;
 }
 
 .dark {
@@ -277,6 +284,48 @@ html[data-font-size="extra-large"] {
   }
 }
 
+@keyframes select-menu-enter {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 6px);
+    filter: saturate(0.96);
+    transform: translateY(-6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 6px);
+    filter: saturate(1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes select-menu-exit {
+  from {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 6px);
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0 round 6px);
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+
+@keyframes select-option-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-fade-in {
   animation: modal-fade-in 0.2s ease-out forwards;
 }
@@ -352,6 +401,23 @@ html[data-font-size="extra-large"] {
   transform: translateY(1px) scale(0.99);
 }
 
+.themed-select-menu {
+  animation: select-menu-enter 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  contain: paint;
+  transform-origin: top center;
+  will-change: transform, opacity, clip-path;
+}
+
+.themed-select-menu-exit {
+  animation: select-menu-exit 140ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+
+.themed-select-option {
+  animation: select-option-enter 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: min(calc(var(--select-option-index, 0) * 18ms), 120ms);
+}
+
 .dashboard-shell-row {
   height: var(--dashboard-shell-row);
   min-height: var(--dashboard-shell-row);
@@ -425,12 +491,17 @@ html[data-font-size="extra-large"] {
   .kitchen-ticket-complete,
   .kitchen-ticket-success,
   .kitchen-success-icon,
+  .themed-select-menu,
+  .themed-select-menu-exit,
+  .themed-select-option,
   .animate-fade-in,
   .animate-slide-down {
     animation: none !important;
   }
 
-  .ui-press {
+  .ui-press,
+  .themed-select-menu,
+  .themed-select-option {
     transition: none !important;
   }
 }

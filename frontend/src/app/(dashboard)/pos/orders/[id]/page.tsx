@@ -624,7 +624,7 @@ export default function PosOrderDetailPage() {
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
-                <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} aria-label={viewAllItemsLabel} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-orange-200 hover:bg-orange-50/30 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/20 lg:flex-none">
+                <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} aria-label={viewAllItemsLabel} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color,color] hover:border-[#d6dbe2] hover:bg-gray-50 hover:text-gray-950 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 dark:hover:text-white lg:flex-none">
                   {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
                 </button>
                 {hasPrimaryOrderAction && (
@@ -687,7 +687,7 @@ export default function PosOrderDetailPage() {
                 return (
                   <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
                     {orderedQuantity > 0 && (
-                      <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
+                      <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
                         {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
                       </span>
                     )}
@@ -731,17 +731,20 @@ export default function PosOrderDetailPage() {
 
             <div data-pos-modal-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
               {pendingGroupedOrderItems.length ? (
-                <section className="rounded-md border border-blue-300 border-l-4 bg-blue-50/70 p-3 shadow-[0_1px_0_rgba(37,99,235,0.08)] dark:border-blue-800 dark:bg-blue-950/25">
+                <section className="rounded-md border border-blue-300 bg-blue-50/70 p-3 shadow-[0_1px_0_rgba(37,99,235,0.08)] ring-1 ring-blue-100 dark:border-blue-800 dark:bg-blue-950/25 dark:ring-blue-900/40">
                   <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-[14px] font-bold text-blue-950 dark:text-blue-100">{currentCartLabel}</h3>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-300" aria-hidden="true" />
+                        <h3 className="truncate text-[14px] font-bold text-blue-950 dark:text-blue-100">{currentCartLabel}</h3>
+                      </div>
                       <p className="mt-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">{language === "th" ? "ยังไม่ส่งเข้าครัว" : "Not sent to kitchen yet"}</p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[13px] font-bold leading-5 text-blue-950 dark:text-blue-100">
                         {pendingFulfillmentSummary.quantity} {language === "th" ? "รายการ" : "items"}
                       </p>
-                      <p className="font-mono text-[15px] font-extrabold leading-5 tabular-nums text-gray-950 dark:text-white">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
+                      <p className="font-mono text-[15px] font-extrabold leading-5 tabular-nums text-blue-950 dark:text-blue-50">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
                     </div>
                   </div>
                   <div className="space-y-2">

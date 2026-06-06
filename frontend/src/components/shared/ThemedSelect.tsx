@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
 export type ThemedSelectOption = {
@@ -26,64 +26,236 @@ export default function ThemedSelect({
 }) {
   const { language } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [renderMenu, setRenderMenu] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 256 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const buttonId = useId();
+  const listboxId = useId();
   const selected = options.find((option) => option.value === value);
+  const selectedIndex = options.findIndex((option) => option.value === value);
   const fallbackPlaceholder = language === "th" ? "เลือก" : "Select";
+  const firstEnabledIndex = options.findIndex((option) => !option.disabled);
   const buttonState = open
     ? "border-[#d6dbe2] bg-gray-50 shadow-[inset_0_0_0_1px_rgba(17,24,39,0.04)] dark:border-[#2c3848] dark:bg-gray-800/60"
     : "border-[#dfe3e8] bg-white hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-900 dark:hover:border-[#2c3848] dark:hover:bg-gray-800/60";
 
+  const enabledIndexFrom = useCallback((start: number, direction: 1 | -1) => {
+    if (!options.length) return -1;
+    let next = start;
+    for (let step = 0; step < options.length; step += 1) {
+      next = (next + direction + options.length) % options.length;
+      if (!options[next]?.disabled) return next;
+    }
+    return -1;
+  }, [options]);
+
+  const updateMenuPosition = useCallback(() => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const margin = 8;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(viewportWidth - margin * 2, Math.max(rect.width, 224));
+    const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
+    const below = viewportHeight - rect.bottom - margin;
+    const above = rect.top - margin;
+    const opensAbove = below < 176 && above > below;
+    const availableHeight = Math.max(128, opensAbove ? above : below);
+    const maxHeight = Math.min(256, availableHeight);
+    const top = opensAbove
+      ? Math.max(margin, rect.top - maxHeight - 6)
+      : Math.min(rect.bottom + 6, viewportHeight - margin - maxHeight);
+
+    setMenuPosition({ left, top, width, maxHeight });
+  }, []);
+
+  const openMenu = useCallback(() => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    updateMenuPosition();
+    const nextActive = selectedIndex >= 0 && !options[selectedIndex]?.disabled ? selectedIndex : firstEnabledIndex;
+    setActiveIndex(nextActive);
+    setClosing(false);
+    setRenderMenu(true);
+    setOpen(true);
+  }, [firstEnabledIndex, options, selectedIndex, updateMenuPosition]);
+
+  const closeMenu = useCallback(() => {
+    if (!renderMenu || closing) return;
+
+    setOpen(false);
+    setActiveIndex(-1);
+    setClosing(true);
+
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      setRenderMenu(false);
+      setClosing(false);
+      closeTimerRef.current = null;
+    }, 150);
+  }, [closing, renderMenu]);
+
+  const commitOption = useCallback((index: number) => {
+    const option = options[index];
+    if (!option || option.disabled) return;
+    onChange(option.value);
+    closeMenu();
+  }, [closeMenu, onChange, options]);
+
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) closeMenu();
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
+  }, [closeMenu]);
+
+  useEffect(() => {
+    if (!renderMenu) return;
+    const frame = window.requestAnimationFrame(updateMenuPosition);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [renderMenu, updateMenuPosition]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
   }, []);
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
       <button
+        id={buttonId}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+            return;
+          }
+          openMenu();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            if (!open) {
+              openMenu();
+              return;
+            }
+            setActiveIndex((current) => enabledIndexFrom(current >= 0 ? current : firstEnabledIndex - 1, 1));
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            if (!open) {
+              openMenu();
+              return;
+            }
+            setActiveIndex((current) => enabledIndexFrom(current >= 0 ? current : (firstEnabledIndex >= 0 ? firstEnabledIndex : 0), -1));
+            return;
+          }
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            if (open && activeIndex >= 0) {
+              commitOption(activeIndex);
+              return;
+            }
+            openMenu();
+            return;
+          }
+          if (event.key === "Escape") {
+            closeMenu();
+          }
+        }}
         aria-expanded={open}
-        className={`h-10 w-full rounded-md border px-3 pr-9 text-left text-[13px] text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState}`}
+        aria-haspopup="listbox"
+        aria-controls={renderMenu ? listboxId : undefined}
+        aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
+        className={`h-10 w-full rounded-md border px-3 pr-9 text-left text-[13px] text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] active:translate-y-px focus-visible:border-orange-500 focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState}`}
       >
-        <span className={`${selected ? "" : "text-gray-400"} block truncate`}>
+        <span className={`${selected ? "" : "text-gray-500 dark:text-gray-400"} block truncate`}>
           {selected?.label ?? (placeholder || fallbackPlaceholder)}
         </span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+        >
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
 
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1.5 max-h-64 min-w-full overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14)] dark:border-[#253142] dark:bg-gray-900 dark:shadow-[0_16px_40px_rgba(0,0,0,0.45)] sm:w-max sm:min-w-[max(100%,14rem)]">
-          {options.map((option) => {
+      {renderMenu && !disabled && (
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-labelledby={buttonId}
+          className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed z-[var(--z-dropdown)] overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
+          style={{ left: menuPosition.left, top: menuPosition.top, width: menuPosition.width, maxHeight: menuPosition.maxHeight }}
+        >
+          {options.map((option, optionIndex) => {
             const active = option.value === value;
+            const highlighted = options[activeIndex]?.value === option.value;
             return (
               <button
                 key={option.value}
+                id={`${listboxId}-option-${optionIndex}`}
+                role="option"
+                aria-selected={active}
+                aria-disabled={option.disabled || undefined}
                 type="button"
                 disabled={option.disabled}
-                onClick={() => {
-                  if (option.disabled) return;
-                  onChange(option.value);
-                  setOpen(false);
+                onMouseEnter={() => {
+                  if (!option.disabled) setActiveIndex(optionIndex);
                 }}
-                className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13px] transition-[background-color,color] disabled:cursor-not-allowed disabled:opacity-50 ${
+                onClick={() => {
+                  commitOption(optionIndex);
+                }}
+                style={{ "--select-option-index": optionIndex } as CSSProperties}
+                className={`themed-select-option flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13px] transition-[background-color,color] disabled:cursor-not-allowed disabled:opacity-50 ${
                   active
                     ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
-                    : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/70"
+                    : highlighted
+                      ? "bg-gray-50 text-gray-900 dark:bg-gray-800/70 dark:text-white"
+                      : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/70"
                 }`}
               >
                 <span className="truncate">{option.label}</span>
-                {active && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-orange-500">
+                {active ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5 shrink-0 text-orange-500"
+                  >
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
-                )}
+                ) : null}
               </button>
             );
           })}

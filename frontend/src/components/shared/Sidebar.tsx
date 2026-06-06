@@ -265,7 +265,7 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-[#dfe3e8] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-[#253142] dark:bg-gray-950 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-[#dfe3e8] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-[#253142] dark:bg-gray-950 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
@@ -289,7 +289,7 @@ export default function Sidebar() {
 
       <aside
         className={`
-          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-slate-50 transition-[width] duration-200 ease-out will-change-[width] dark:bg-gray-950 lg:flex
+          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-slate-50 dark:bg-gray-950 lg:flex
           ${collapsed ? 'w-[68px]' : 'w-[264px]'}
         `}
       >

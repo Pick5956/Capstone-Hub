@@ -14,7 +14,7 @@ export default function DashboardTopBar() {
 
   return (
     <>
-      <header className="dashboard-shell-row dashboard-shell-border-b fixed inset-x-0 top-0 z-20 hidden items-center justify-end gap-1.5 bg-slate-50 px-5 transition-[left] duration-200 ease-out dark:bg-gray-950 lg:left-[var(--sidebar-w)] lg:flex">
+      <header className="dashboard-shell-row dashboard-shell-border-b fixed inset-x-0 top-0 z-[var(--z-sticky)] hidden items-center justify-end gap-1.5 bg-slate-50 px-5 dark:bg-gray-950 lg:left-[var(--sidebar-w)] lg:flex">
         <button
           type="button"
           aria-label={language === "th" ? "การแจ้งเตือน" : "Notifications"}

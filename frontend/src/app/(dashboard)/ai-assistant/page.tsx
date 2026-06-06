@@ -228,7 +228,7 @@ export default function AIAssistantPage() {
                   type="button"
                   onClick={() => submitQuestion(item)}
                   disabled={loading}
-                  className="rounded-md border border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-orange-900/20 dark:hover:text-orange-300"
+                  className="rounded-md border border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-gray-900 dark:hover:text-orange-300"
                 >
                   {item}
                 </button>
