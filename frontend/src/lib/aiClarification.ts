@@ -78,3 +78,32 @@ export function resolveClarificationRequest(
 
   return null;
 }
+
+export function getUnclearRequestActions(
+  membership: Membership | null | undefined,
+  language: "th" | "en",
+): AIGuidedAction[] {
+  const actions: AIGuidedAction[] = [];
+  if (canAnalyze(membership)) {
+    actions.push({
+      id: "unclear-stock-risk",
+      prompt: language === "th" ? "วัตถุดิบอะไรใกล้หมดและควรเติมก่อน?" : "Which ingredients are low and should be restocked first?",
+      label: language === "th" ? "ตรวจสต๊อก" : "Check stock",
+    });
+    if (can(membership, "view_reports")) {
+      actions.push({
+        id: "unclear-sales-summary",
+        prompt: language === "th" ? "สรุปยอดขายและกำไรในช่วง 14 วันล่าสุดให้หน่อย" : "Summarize sales and profit for the last 14 days.",
+        label: language === "th" ? "ดูยอดขาย" : "View sales",
+      });
+    }
+  }
+  if (can(membership, "view_menu") || can(membership, "manage_menu")) {
+    actions.push({
+      id: "unclear-menu-page",
+      href: "/menu",
+      label: language === "th" ? "ไปหน้าเมนู" : "Open menu",
+    });
+  }
+  return actions.slice(0, 3);
+}

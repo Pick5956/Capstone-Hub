@@ -6,9 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
-import LanguageToggle from '@/src/components/shared/LanguageToggle';
-import ThemeToggle from '@/src/components/shared/ThemeToggle';
-import UserAvatar from '@/src/components/shared/UserAvatar';
+import AppLogo from '@/src/components/shared/AppLogo';
 import { useBackdropClose } from '@/src/hooks/useBackdropClose';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
@@ -144,8 +142,8 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
               const active = !comingSoon && isActive(href);
               const itemClassName = `relative flex items-center gap-2.5 rounded-md border px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow] [@media(max-height:760px)]:py-1.5 ${
                 active
-                  ? 'border-gray-200 bg-white text-gray-950 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-white'
-                  : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-white hover:text-gray-950 dark:text-gray-400 dark:hover:border-gray-800 dark:hover:bg-gray-900 dark:hover:text-white'
+                  ? 'border-[#dfe3e8] bg-white text-gray-950 shadow-sm dark:border-[#253142] dark:bg-gray-900 dark:text-white'
+                  : 'border-transparent text-gray-600 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-400 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
               } ${collapsed ? 'justify-center' : ''} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
               const content = (
                 <>
@@ -193,83 +191,6 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   );
 }
 
-function UserFooter({ collapsed }: { collapsed: boolean }) {
-  const { user, logout } = useAuth();
-  const { language } = useLanguage();
-  const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === '-' ? '' : user.last_name}`.trim()) : language === 'th' ? 'ผู้ใช้งาน' : 'User';
-  const logoutLabel = language === 'th' ? 'ออกจากระบบ' : 'Sign out';
-
-  if (collapsed) {
-    return (
-      <div className="flex shrink-0 flex-col items-center gap-2 border-t border-gray-200 px-3 py-4 dark:border-gray-800">
-        <UserAvatar src={user?.profile_image} name={displayName} size={32} className="h-8 w-8 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
-        <LanguageCycleButton />
-        <button
-          onClick={logout}
-          title={logoutLabel}
-          className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="shrink-0 border-t border-gray-200 px-3 py-3 dark:border-gray-800 [@media(max-height:760px)]:py-2">
-      <div className="group flex items-center gap-3 rounded-md border border-transparent px-2 py-2 hover:border-gray-200 hover:bg-white dark:hover:border-gray-800 dark:hover:bg-gray-900">
-        <UserAvatar src={user?.profile_image} name={displayName} size={32} className="h-8 w-8 text-xs text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-gray-800 dark:text-gray-200">{displayName}</p>
-          <p className="truncate text-[10px] text-gray-400">{user?.email ?? ''}</p>
-        </div>
-        <button
-          onClick={logout}
-          title={logoutLabel}
-          className="shrink-0 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LanguageCycleButton({ className = '' }: { className?: string }) {
-  const { language, setLanguage } = useLanguage();
-  const title = language === 'th' ? 'Switch to English' : 'สลับเป็นภาษาไทย';
-
-  return (
-    <button
-      type="button"
-      onClick={() => setLanguage(language === 'th' ? 'en' : 'th')}
-      title={title}
-      className={`shrink-0 rounded-md p-2 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white ${className}`}
-    >
-      {language.toUpperCase()}
-    </button>
-  );
-}
-
-function DesktopControls() {
-  return (
-    <div className="hidden shrink-0 px-3 py-2 lg:block">
-      <div className="flex items-center justify-between gap-2 rounded-md border border-gray-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-gray-900">
-        <LanguageToggle className="h-8 border-0 bg-transparent shadow-none dark:bg-transparent" />
-        <ThemeToggle className="h-8 w-8 border-0 bg-transparent p-0 text-gray-600 shadow-none hover:bg-white hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white" />
-      </div>
-    </div>
-  );
-}
-
 function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -278,17 +199,14 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
 
   if (collapsed) {
     return (
-      <div className="flex h-14 shrink-0 items-center justify-center border-b border-gray-200 dark:border-gray-800">
+      <div className="dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center justify-center">
         <Link
           href="/restaurants"
           onClick={onNavigate}
           title={restaurantName}
-          className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20 transition-colors hover:bg-orange-700"
+          className="transition-opacity hover:opacity-90"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6M9 16h4" />
-          </svg>
+          <AppLogo size={36} />
         </Link>
       </div>
     );
@@ -299,14 +217,9 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
       <Link
         href="/restaurants"
         onClick={onNavigate}
-        className="flex min-w-0 items-center gap-2.5 rounded-md border border-transparent px-1.5 py-1.5 transition-colors hover:border-gray-200 hover:bg-white dark:hover:border-gray-800 dark:hover:bg-gray-900"
+        className="flex min-w-0 items-center gap-2.5 rounded-md border border-transparent px-1.5 py-1.5 transition-colors hover:border-[#dfe3e8] hover:bg-white dark:hover:border-[#253142] dark:hover:bg-gray-900"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white shadow-sm shadow-orange-600/20">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M3 7h18M6 7V5a2 2 0 012-2h8a2 2 0 012 2v2M6 7v12a2 2 0 002 2h8a2 2 0 002-2V7" />
-            <path d="M9 12h6M9 16h4" />
-          </svg>
-        </span>
+        <AppLogo size={32} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
         </span>
@@ -352,11 +265,11 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-gray-200 bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-gray-800 dark:bg-gray-950 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-[#dfe3e8] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-[#253142] dark:bg-gray-950 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 px-3 dark:border-gray-800">
+        <div className="dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center justify-between gap-2 px-3">
           <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
             <button
@@ -372,16 +285,15 @@ export default function Sidebar() {
         </div>
 
         <NavLinks collapsed={false} onNavigate={() => setMobileOpen(false)} />
-        <UserFooter collapsed={false} />
       </aside>
 
       <aside
         className={`
-          fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden border-r border-gray-200 bg-slate-50 transition-[width] duration-200 ease-out will-change-[width] dark:border-gray-800 dark:bg-gray-950 lg:flex
+          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-slate-50 dark:bg-gray-950 lg:flex
           ${collapsed ? 'w-[68px]' : 'w-[264px]'}
         `}
       >
-        <div className={`flex h-14 shrink-0 items-center border-b border-gray-200 px-3 dark:border-gray-800 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+        <div className={`dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center px-3 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
           {!collapsed && <RestaurantHeader collapsed={false} />}
           <div className="flex items-center gap-0.5">
             <button
@@ -400,8 +312,6 @@ export default function Sidebar() {
 
         {collapsed && <RestaurantHeader collapsed={true} />}
         <NavLinks collapsed={collapsed} />
-        {!collapsed && <DesktopControls />}
-        <UserFooter collapsed={collapsed} />
       </aside>
     </>
   );

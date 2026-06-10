@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "katex/dist/katex.min.css";
 
 import { Kanit } from "next/font/google";
 import { AuthProvider } from "@/src/providers/AuthProvider";
@@ -17,6 +18,11 @@ const fontKanit = Kanit({
 export const metadata: Metadata = {
   title: "Restaurant Hub",
   description: "Restaurant management system",
+  icons: {
+    icon: "/web-logo.png",
+    shortcut: "/web-logo.png",
+    apple: "/web-logo.png",
+  },
 };
 
 export default function RootLayout({

@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -55,8 +56,11 @@ func memberCan(c *gin.Context, permission string) bool {
 	if !ok || member.Role == nil {
 		return false
 	}
-	if member.Role.Permissions == `["*"]` {
-		return true
+	if member.PermissionsOverride != nil {
+		return permissionListContains(*member.PermissionsOverride, permission)
+	}
+	if member.Role.Permissions != "" {
+		return permissionListContains(member.Role.Permissions, permission)
 	}
 	role := member.Role.Name
 	if permission == "view_menu" {
@@ -98,6 +102,28 @@ func memberCan(c *gin.Context, permission string) bool {
 	return false
 }
 
+func memberCanAny(c *gin.Context, permissions ...string) bool {
+	for _, permission := range permissions {
+		if memberCan(c, permission) {
+			return true
+		}
+	}
+	return false
+}
+
+func permissionListContains(raw string, permission string) bool {
+	var permissions []string
+	if err := json.Unmarshal([]byte(raw), &permissions); err != nil {
+		return false
+	}
+	for _, item := range permissions {
+		if item == "*" || item == permission {
+			return true
+		}
+	}
+	return false
+}
+
 func requireRestaurant(c *gin.Context) (uint, bool) {
 	restaurantID, ok := contextRestaurantID(c)
 	if !ok || restaurantID == 0 {
@@ -118,12 +144,8 @@ func parseUintParam(c *gin.Context, key string) (uint, bool) {
 }
 
 func (ctrl *MenuController) ListCategories(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing menu permission", "view_menu", "manage_menu", "take_order")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_menu") && !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing menu permission"})
 		return
 	}
 	categories, err := ctrl.menuSvc.ListCategories(restaurantID, memberCan(c, "manage_menu"))
@@ -135,12 +157,8 @@ func (ctrl *MenuController) ListCategories(c *gin.Context) {
 }
 
 func (ctrl *MenuController) CreateCategory(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	var req service.CategoryRequest
@@ -157,12 +175,8 @@ func (ctrl *MenuController) CreateCategory(c *gin.Context) {
 }
 
 func (ctrl *MenuController) UpdateCategory(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	categoryID, ok := parseUintParam(c, "id")
@@ -183,12 +197,8 @@ func (ctrl *MenuController) UpdateCategory(c *gin.Context) {
 }
 
 func (ctrl *MenuController) DeleteCategory(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	categoryID, ok := parseUintParam(c, "id")
@@ -203,22 +213,13 @@ func (ctrl *MenuController) DeleteCategory(c *gin.Context) {
 }
 
 func (ctrl *MenuController) ListMenuItems(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing menu permission", "view_menu", "manage_menu", "take_order")
 	if !ok {
 		return
 	}
-	if !memberCan(c, "view_menu") && !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing menu permission"})
+	categoryID, ok := optionalUintQuery(c, "category_id", "invalid category_id")
+	if !ok {
 		return
-	}
-	var categoryID uint
-	if raw := c.Query("category_id"); raw != "" {
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category_id"})
-			return
-		}
-		categoryID = uint(id)
 	}
 	items, err := ctrl.menuSvc.ListMenuItems(restaurantID, memberCan(c, "manage_menu"), categoryID)
 	if err != nil {
@@ -229,12 +230,8 @@ func (ctrl *MenuController) ListMenuItems(c *gin.Context) {
 }
 
 func (ctrl *MenuController) CreateMenuItem(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	var req service.MenuItemRequest
@@ -251,12 +248,8 @@ func (ctrl *MenuController) CreateMenuItem(c *gin.Context) {
 }
 
 func (ctrl *MenuController) UpdateMenuItem(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	itemID, ok := parseUintParam(c, "id")
@@ -277,12 +270,8 @@ func (ctrl *MenuController) UpdateMenuItem(c *gin.Context) {
 }
 
 func (ctrl *MenuController) UpdateMenuItemAvailability(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	itemID, ok := parseUintParam(c, "id")
@@ -303,12 +292,8 @@ func (ctrl *MenuController) UpdateMenuItemAvailability(c *gin.Context) {
 }
 
 func (ctrl *MenuController) DeleteMenuItem(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 	itemID, ok := parseUintParam(c, "id")
@@ -323,12 +308,8 @@ func (ctrl *MenuController) DeleteMenuItem(c *gin.Context) {
 }
 
 func (ctrl *MenuController) UploadMenuImage(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_menu") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_menu permission"})
 		return
 	}
 

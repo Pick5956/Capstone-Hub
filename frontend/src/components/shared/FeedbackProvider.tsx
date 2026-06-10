@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
@@ -61,10 +61,10 @@ const toneStyles: Record<ToastTone, { icon: LucideIcon; className: string; accen
   },
   warning: {
     icon: AlertTriangle,
-    className: "border-amber-400 bg-amber-400 text-gray-950 shadow-amber-950/20 dark:border-amber-300 dark:bg-amber-300 dark:text-gray-950 dark:shadow-black/40",
+    className: "border-amber-400 bg-amber-400 text-amber-950 shadow-amber-950/20 dark:border-amber-300 dark:bg-amber-300 dark:text-amber-950 dark:shadow-black/40",
     accentClassName: "bg-gray-950/75",
-    iconWrapClassName: "bg-gray-950 text-amber-300",
-    iconClassName: "text-amber-300",
+    iconWrapClassName: "bg-amber-950 text-amber-100",
+    iconClassName: "text-amber-100",
   },
   info: {
     icon: Info,
@@ -80,6 +80,10 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [confirmClosing, setConfirmClosing] = useState(false);
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  const confirmStateRef = useRef<ConfirmState | null>(null);
+  const confirmClosingRef = useRef(false);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
@@ -98,6 +102,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const confirm = useCallback((input: ConfirmInput) => {
     return new Promise<boolean>((resolve) => {
       setConfirmClosing(false);
+      confirmClosingRef.current = false;
       setConfirmState({ ...input, resolve });
     });
   }, []);
@@ -105,22 +110,82 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
   const toastValue = useMemo(() => ({ showToast, dismissToast }), [dismissToast, showToast]);
   const confirmValue = useMemo(() => ({ confirm }), [confirm]);
 
-  const closeConfirm = (confirmed: boolean) => {
-    if (!confirmState || confirmClosing) return;
+  useEffect(() => {
+    confirmStateRef.current = confirmState;
+    confirmClosingRef.current = confirmClosing;
+  }, [confirmClosing, confirmState]);
+
+  const closeConfirm = useCallback((confirmed: boolean) => {
+    const currentConfirm = confirmStateRef.current;
+    if (!currentConfirm || confirmClosingRef.current) return;
+    confirmClosingRef.current = true;
     setConfirmClosing(true);
     window.setTimeout(() => {
-      confirmState.resolve(confirmed);
+      currentConfirm.resolve(confirmed);
       setConfirmState(null);
       setConfirmClosing(false);
+      confirmClosingRef.current = false;
     }, 180);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!confirmState) return;
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const target = confirmDialogRef.current?.querySelector<HTMLElement>("[data-confirm-autofocus]");
+      target?.focus();
+    });
+
+    const focusableSelector = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeConfirm(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(confirmDialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+        .filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+      if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    };
+  }, [closeConfirm, confirmState]);
 
   const confirmTone = confirmState?.tone ?? "default";
   const confirmButtonClass = confirmTone === "danger"
     ? "bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-400"
     : confirmTone === "warning"
-      ? "bg-amber-500 text-gray-950 hover:bg-amber-400"
-      : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-orange-400 dark:text-gray-950 dark:hover:bg-orange-300";
+      ? "bg-amber-500 text-amber-950 hover:bg-amber-400"
+      : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-orange-400 dark:text-orange-950 dark:hover:bg-orange-300";
   const confirmBackdrop = useBackdropClose(() => closeConfirm(false));
 
   return (
@@ -128,15 +193,18 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       <ConfirmContext.Provider value={confirmValue}>
         {children}
 
-        <div className="pointer-events-none fixed left-1/2 top-16 z-[100] flex w-[calc(100dvw-1.5rem)] max-w-sm -translate-x-1/2 flex-col gap-2 sm:top-5">
+        <div className="pointer-events-none fixed left-1/2 top-16 z-[var(--z-toast)] flex w-[calc(100dvw-1.5rem)] max-w-sm -translate-x-1/2 flex-col gap-2 sm:top-5">
           {toasts.map((toast) => {
             const styles = toneStyles[toast.tone];
             const Icon = styles.icon;
+            const urgent = toast.tone === "error" || toast.tone === "warning";
             return (
               <div
                 key={toast.id}
                 className={`animate-slide-down pointer-events-auto relative flex min-h-14 items-center gap-3 overflow-hidden rounded-md border py-3 pl-4 pr-2 shadow-2xl backdrop-blur ${styles.className}`}
-                role="status"
+                role={urgent ? "alert" : "status"}
+                aria-live={urgent ? "assertive" : "polite"}
+                aria-atomic="true"
               >
                 <span className={`absolute bottom-0 left-0 top-0 w-1 ${styles.accentClassName}`} aria-hidden="true" />
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${styles.iconWrapClassName}`} aria-hidden="true">
@@ -162,12 +230,15 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
         {confirmState && (
           <div
             {...confirmBackdrop}
-            className={`${confirmClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[110] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}
+            className={`${confirmClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="global-confirm-title"
+            aria-describedby={confirmState.message ? "global-confirm-message" : undefined}
           >
             <div
+              ref={confirmDialogRef}
+              tabIndex={-1}
               className={`${confirmClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-md rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950`}
             >
               <div className="flex items-start gap-3">
@@ -178,13 +249,14 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
                   <h2 id="global-confirm-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">
                     {confirmState.title}
                   </h2>
-                  {confirmState.message && <p className="mt-1 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{confirmState.message}</p>}
+                  {confirmState.message && <p id="global-confirm-message" className="mt-1 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{confirmState.message}</p>}
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => closeConfirm(false)}
+                  data-confirm-autofocus
                   className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
                 >
                   {confirmState.cancelLabel ?? (language === "th" ? "ยกเลิก" : "Cancel")}

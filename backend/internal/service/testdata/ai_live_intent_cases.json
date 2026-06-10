@@ -1,0 +1,22 @@
+[
+  {
+    "name": "random keyboard input",
+    "question": "rytyt",
+    "expected_intent": "unclear"
+  },
+  {
+    "name": "restaurant analysis request",
+    "question": "ช่วยวิเคราะห์วัตถุดิบที่เสี่ยงหมดให้หน่อย",
+    "expected_intent": "analysis"
+  },
+  {
+    "name": "outside restaurant scope",
+    "question": "วันนี้อากาศที่กรุงเทพเป็นอย่างไร",
+    "expected_intent": "out_of_scope"
+  },
+  {
+    "name": "ordinary conversation",
+    "question": "ขอบคุณครับ ช่วยได้มากเลย",
+    "expected_intent": "conversation"
+  }
+]

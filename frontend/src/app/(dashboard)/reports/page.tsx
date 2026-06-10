@@ -4,25 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BarChart3, RefreshCw, TrendingUp, Wallet } from "lucide-react";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
+import { formatCurrency, formatNumber } from "@/src/lib/format";
 import { can } from "@/src/lib/rbac";
 import { getManagerReport } from "@/src/lib/report";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { ManagerReport } from "@/src/types/report";
-
-function money(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    style: "currency",
-    currency: "THB",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function number(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    maximumFractionDigits: 2,
-  }).format(value);
-}
 
 export default function ReportsPage() {
   const { activeMembership } = useAuth();
@@ -127,11 +114,11 @@ export default function ReportsPage() {
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              { label: copy.revenue, value: money(report.summary.revenue, lang), icon: <Wallet className="h-4 w-4" /> },
-              { label: copy.orders, value: number(report.summary.orders, lang), icon: <BarChart3 className="h-4 w-4" /> },
-              { label: copy.foodCost, value: money(report.summary.cost, lang), icon: <AlertTriangle className="h-4 w-4" /> },
-              { label: copy.profit, value: money(report.summary.profit, lang), icon: <TrendingUp className="h-4 w-4" /> },
-              { label: copy.margin, value: `${number(report.summary.margin, lang)}%`, icon: <TrendingUp className="h-4 w-4" /> },
+              { label: copy.revenue, value: formatCurrency(report.summary.revenue, lang), icon: <Wallet className="h-4 w-4" /> },
+              { label: copy.orders, value: formatNumber(report.summary.orders, lang), icon: <BarChart3 className="h-4 w-4" /> },
+              { label: copy.foodCost, value: formatCurrency(report.summary.cost, lang), icon: <AlertTriangle className="h-4 w-4" /> },
+              { label: copy.profit, value: formatCurrency(report.summary.profit, lang), icon: <TrendingUp className="h-4 w-4" /> },
+              { label: copy.margin, value: `${formatNumber(report.summary.margin, lang)}%`, icon: <TrendingUp className="h-4 w-4" /> },
             ].map((card) => (
               <div key={card.label} className="rounded-md border border-slate-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
                 <div className="flex items-center justify-between gap-3 text-slate-400">
@@ -152,8 +139,8 @@ export default function ReportsPage() {
                 {report.sales_days.length ? report.sales_days.map((day) => (
                   <div key={day.order_date} className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 text-sm">
                     <span className="font-medium">{day.order_date}</span>
-                    <span className="text-slate-500">{number(day.orders, lang)} {copy.orders}</span>
-                    <span className="font-semibold tabular-nums">{money(day.revenue, lang)}</span>
+                    <span className="text-slate-500">{formatNumber(day.orders, lang)} {copy.orders}</span>
+                    <span className="font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</span>
                   </div>
                 )) : <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}
               </div>
@@ -178,10 +165,10 @@ export default function ReportsPage() {
                     {report.menu_margins.length ? report.menu_margins.map((item) => (
                       <tr key={`${item.menu_id}-${item.menu_name}`}>
                         <td className="px-4 py-3 font-medium">{item.menu_name}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{number(item.quantity, lang)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{money(item.revenue, lang)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{money(item.cost, lang)}</td>
-                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{number(item.margin, lang)}%</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatNumber(item.quantity, lang)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.revenue, lang)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.cost, lang)}</td>
+                        <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(item.margin, lang)}%</td>
                       </tr>
                     )) : <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">{copy.noData}</td></tr>}
                   </tbody>
@@ -207,7 +194,7 @@ export default function ReportsPage() {
                     </span>
                   </div>
                   <p className="mt-3 text-xs text-slate-500">
-                    {number(risk.stock, lang)} / {number(risk.min_stock, lang)} {risk.unit} · {copy.restock} {number(risk.restock_estimate, lang)} {risk.unit}
+                    {formatNumber(risk.stock, lang)} / {formatNumber(risk.min_stock, lang)} {risk.unit} · {copy.restock} {formatNumber(risk.restock_estimate, lang)} {risk.unit}
                   </p>
                 </div>
               )) : <p className="col-span-full px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}

@@ -20,6 +20,7 @@ export default function OperationalPageShell({
   title,
   subtitle,
   actions,
+  showHeader = true,
   stats,
   lastUpdated,
   children,
@@ -28,6 +29,7 @@ export default function OperationalPageShell({
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  showHeader?: boolean;
   stats?: OperationalStat[];
   lastUpdated?: string;
   children: React.ReactNode;
@@ -35,15 +37,17 @@ export default function OperationalPageShell({
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <div className="w-full space-y-5">
-        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
-            {subtitle ? <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
-            {lastUpdated ? <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{lastUpdated}</p> : null}
-          </div>
-          {actions ? <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{actions}</div> : null}
-        </header>
+        {showHeader ? (
+          <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+              {subtitle ? <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
+              {lastUpdated ? <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">{lastUpdated}</p> : null}
+            </div>
+            {actions ? <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{actions}</div> : null}
+          </header>
+        ) : null}
 
         {stats?.length ? (
           <div className="grid grid-cols-3 gap-1 rounded-md border border-gray-200 bg-white p-1.5 dark:border-gray-800 dark:bg-gray-950 sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 dark:sm:bg-transparent">

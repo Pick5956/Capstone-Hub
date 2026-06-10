@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import axios from "axios";
-import { X } from "lucide-react";
+import { ArrowLeft, Bell, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { playBeep } from "@/src/lib/browserAudio";
+import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
+import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { can } from "@/src/lib/rbac";
 import { addOrderItem, cancelOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
@@ -16,95 +19,54 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 const terminalStatuses = ["completed", "cancelled"];
 
-function menuCategoryIds(item: MenuItem) {
-  const ids = new Set<number>();
-  if (item.category_id) ids.add(item.category_id);
-  for (const link of item.categories ?? []) {
-    if (link.category_id) ids.add(link.category_id);
+function orderLocationLabel(order: Order, language: "th" | "en") {
+  if (order.order_type === "takeaway") {
+    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
+    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
   }
-  return Array.from(ids);
+  return order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
 }
 
-function playBeep(frequency = 880) {
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.frequency.value = frequency;
-  oscillator.type = "sine";
-  gain.gain.value = 0.05;
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.16);
+function itemFulfillmentType(item: OrderItem) {
+  return item.fulfillment_type === "takeaway" ? "takeaway" : "dine_in";
 }
 
-type OrderItemGroup = {
-  key: string;
-  firstItem: OrderItem;
-  items: OrderItem[];
+function fulfillmentLabel(value: "dine_in" | "takeaway", language: "th" | "en") {
+  if (value === "takeaway") return language === "th" ? "กลับบ้าน" : "Takeaway";
+  return language === "th" ? "ทานที่ร้าน" : "Dine-in";
+}
+
+function fulfillmentBadgeClass(value: "dine_in" | "takeaway") {
+  return value === "takeaway"
+    ? "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-200 dark:ring-cyan-900/60"
+    : "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-800";
+}
+
+type FulfillmentSection = {
+  key: "dine_in" | "takeaway";
+  groups: OrderItemGroup[];
   quantity: number;
   subtotal: number;
-  statusQuantities: Record<OrderItem["status"], number>;
-  pendingItems: OrderItem[];
-  readyItems: OrderItem[];
 };
 
-const groupOrderItems = (items: OrderItem[] = []) => {
-  const groups = new Map<string, OrderItemGroup>();
-
-  for (const item of items) {
-    const optionKey = [...(item.selected_options ?? [])]
-      .sort((first, second) => first.menu_option_id - second.menu_option_id)
-      .map((option) => `${option.option_group_id}:${option.menu_option_id}:${option.price_delta}`)
-      .join("|");
-    const key = [item.menu_id, item.menu_name, item.unit_price, item.options_total, item.note ?? "", optionKey].join("::");
-    const existing = groups.get(key);
-
-    if (existing) {
-      existing.items.push(item);
-      existing.quantity += item.quantity;
-      existing.subtotal += item.subtotal;
-      existing.statusQuantities[item.status] = (existing.statusQuantities[item.status] ?? 0) + item.quantity;
-      if (item.status === "pending") existing.pendingItems.push(item);
-      if (item.status === "ready") existing.readyItems.push(item);
-      continue;
-    }
-
-    groups.set(key, {
-      key,
-      firstItem: item,
-      items: [item],
-      quantity: item.quantity,
-      subtotal: item.subtotal,
-      statusQuantities: {
-        pending: item.status === "pending" ? item.quantity : 0,
-        cooking: item.status === "cooking" ? item.quantity : 0,
-        ready: item.status === "ready" ? item.quantity : 0,
-        served: item.status === "served" ? item.quantity : 0,
-        cancelled: item.status === "cancelled" ? item.quantity : 0,
-      },
-      pendingItems: item.status === "pending" ? [item] : [],
-      readyItems: item.status === "ready" ? [item] : [],
-    });
-  }
-
-  return Array.from(groups.values()).sort((first, second) => {
-    const firstUpdated = first.items.at(-1)?.UpdatedAt ?? first.items.at(-1)?.CreatedAt ?? "";
-    const secondUpdated = second.items.at(-1)?.UpdatedAt ?? second.items.at(-1)?.CreatedAt ?? "";
-    return secondUpdated.localeCompare(firstUpdated);
-  });
-};
-
-const apiErrorMessage = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-};
+function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
+  return (["dine_in", "takeaway"] as const)
+    .map((key) => {
+      const sectionGroups = groups.filter((group) => itemFulfillmentType(group.firstItem) === key);
+      return {
+        key,
+        groups: sectionGroups,
+        quantity: sectionGroups.reduce((sum, group) => sum + group.quantity, 0),
+        subtotal: sectionGroups.reduce((sum, group) => sum + group.subtotal, 0),
+      };
+    })
+    .filter((section) => section.groups.length > 0);
+}
 
 export default function PosOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -125,6 +87,7 @@ export default function PosOrderDetailPage() {
   const [allItemsOpen, setAllItemsOpen] = useState(false);
   const [allItemsClosing, setAllItemsClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
+  const [selectedFulfillment, setSelectedFulfillment] = useState<"dine_in" | "takeaway">("dine_in");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -144,7 +107,7 @@ export default function PosOrderDetailPage() {
   const copy = language === "th"
     ? {
         denied: "ไม่มีสิทธิ์รับออเดอร์",
-        back: "กลับไปเลือกโต๊ะ",
+        back: "กลับไปหน้า POS",
         search: "ค้นหาเมนู",
         all: "ทั้งหมด",
         add: "เพิ่ม",
@@ -180,7 +143,7 @@ export default function PosOrderDetailPage() {
         cancelOrder: "ยกเลิกออเดอร์",
         cancelReason: "เหตุผลที่ยกเลิก",
         cancelTitle: "ยกเลิกออเดอร์นี้?",
-        cancelBody: "ใช้เมื่อเปิดโต๊ะผิดหรือยังไม่ได้ส่งเข้าครัว",
+        cancelBody: "ใช้เมื่อเปิดออเดอร์ผิดหรือยังไม่ได้ส่งเข้าครัว",
         keepOrder: "เก็บออเดอร์ไว้",
         confirmCancel: "ยืนยันยกเลิก",
         remove: "ลบ",
@@ -191,7 +154,7 @@ export default function PosOrderDetailPage() {
       }
     : {
         denied: "You do not have permission to take orders.",
-        back: "Back to tables",
+        back: "Back to POS",
         search: "Search menu",
         all: "All",
         add: "Add",
@@ -227,7 +190,7 @@ export default function PosOrderDetailPage() {
         cancelOrder: "Cancel order",
         cancelReason: "Cancel reason",
         cancelTitle: "Cancel this order?",
-        cancelBody: "Use this when the table was opened by mistake before sending to kitchen.",
+        cancelBody: "Use this when the order was opened by mistake before sending to kitchen.",
         keepOrder: "Keep order",
         confirmCancel: "Confirm cancel",
         remove: "Remove",
@@ -239,23 +202,38 @@ export default function PosOrderDetailPage() {
 
   const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
   const serveAllLabel = language === "th" ? "เสิร์ฟทั้งหมด" : "Serve all ready";
-  const billLockedTitle = language === "th" ? "คิดเงินได้เมื่อเสิร์ฟครบแล้ว" : "Bill after all items are served";
-  const billLockedDetail = language === "th" ? "ถ้ามีอาหารพร้อมแล้วให้กดเสิร์ฟก่อน แล้วปุ่มออกบิลจะขึ้นตรงนี้" : "Serve ready food first, then the bill button will appear here.";
   const noPaymentPermission = language === "th" ? "บัญชีนี้ไม่มีสิทธิ์รับเงิน" : "This account cannot take payment.";
   const servedToastTitle = language === "th" ? "เสิร์ฟรายการพร้อมทั้งหมดแล้ว" : "Ready items served";
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
   const currentCartLabel = language === "th" ? "รายการรอบนี้" : "Current round";
-  const tableItemsLabel = language === "th" ? "รายการทั้งหมดของโต๊ะ" : "All table items";
+  const fulfillmentTitle = language === "th" ? "รูปแบบรายการ" : "Item type";
+  const dineInItemLabel = fulfillmentLabel("dine_in", language);
+  const takeawayItemLabel = fulfillmentLabel("takeaway", language);
+  const optionLimitLabel = (selected: number, minSelect: number, maxSelect: number) => {
+    if (maxSelect <= 1) return selected ? (language === "th" ? "เลือกแล้ว" : "Selected") : (language === "th" ? "เลือก 1 อย่าง" : "Choose 1");
+    const range = minSelect > 0 && minSelect !== maxSelect ? `${minSelect}-${maxSelect}` : String(maxSelect);
+    return language === "th" ? `เลือก ${selected}/${range}` : `${selected}/${range} selected`;
+  };
+  const sectionMeta = (key: "dine_in" | "takeaway") => ({
+    label: fulfillmentLabel(key, language),
+  });
+  const tableItemsLabel = order?.order_type === "takeaway"
+    ? language === "th" ? "รายการทั้งหมดของออเดอร์" : "All order items"
+    : language === "th" ? "รายการทั้งหมดของโต๊ะ" : "All table items";
   const viewAllItemsLabel = language === "th" ? "ดูรายการทั้งหมด" : "View all items";
   const sentItemsLabel = language === "th" ? "รายการที่ส่งแล้ว" : "Sent items";
-  const emptyCurrentCart = language === "th" ? "ยังไม่มีรายการในรอบนี้" : "No items in this round";
-  const emptyCurrentCartHint = language === "th" ? "เลือกเมนูเพื่อเพิ่มเข้าตะกร้า หรือเปิดรายการทั้งหมดเพื่อดูอาหารที่ส่งครัวแล้ว" : "Add menu items here, or open all items to review food already sent to kitchen.";
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
   const hasPending = Boolean(order?.items?.some((item) => item.status === "pending"));
   const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
   const hasReadyItems = readyItems.length > 0;
   const pendingGroupedOrderItems = useMemo(() => groupOrderItems((order?.items ?? []).filter((item) => item.status === "pending")), [order?.items]);
   const sentGroupedOrderItems = useMemo(() => groupOrderItems((order?.items ?? []).filter((item) => item.status !== "pending")), [order?.items]);
+  const pendingFulfillmentSections = useMemo(() => fulfillmentSections(pendingGroupedOrderItems), [pendingGroupedOrderItems]);
+  const sentFulfillmentSections = useMemo(() => fulfillmentSections(sentGroupedOrderItems), [sentGroupedOrderItems]);
+  const pendingFulfillmentSummary = useMemo(() => ({
+    quantity: pendingFulfillmentSections.reduce((sum, section) => sum + section.quantity, 0),
+    subtotal: pendingFulfillmentSections.reduce((sum, section) => sum + section.subtotal, 0),
+  }), [pendingFulfillmentSections]);
   const menuOrderQuantities = useMemo(() => {
     const quantities = new Map<number, number>();
     for (const item of order?.items ?? []) {
@@ -283,17 +261,24 @@ export default function PosOrderDetailPage() {
   }, 0) ?? 0;
   const requiredOptionsMissing = Boolean(selectedMenu?.option_groups?.some((group) => {
     if (!group.is_active) return false;
-    const minSelect = group.required ? Math.max(1, group.min_select || 0) : group.min_select || 0;
+    const { minSelect } = menuOptionLimits(group);
     if (minSelect <= 0) return false;
     const selectedCount = (group.options ?? []).filter((option) => option.is_active && selectedOptionIds.includes(option.ID)).length;
     return selectedCount < minSelect;
   }));
 
   const openMenuPicker = (item: MenuItem) => {
-    const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => (group.options ?? []).filter((option) => option.is_active && option.is_default).map((option) => option.ID));
+    const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => {
+      const { maxSelect } = menuOptionLimits(group);
+      return (group.options ?? [])
+        .filter((option) => option.is_active && option.is_default)
+        .slice(0, maxSelect)
+        .map((option) => option.ID);
+    });
     setSelectedMenuClosing(false);
     setSelectedMenu(item);
     setSelectedOptionIds(defaultOptionIds);
+    setSelectedFulfillment(order?.order_type === "takeaway" ? "takeaway" : "dine_in");
     setQuantity(1);
     setNote("");
   };
@@ -304,6 +289,7 @@ export default function PosOrderDetailPage() {
     window.setTimeout(() => {
       setSelectedMenu(null);
       setSelectedOptionIds([]);
+      setSelectedFulfillment(order?.order_type === "takeaway" ? "takeaway" : "dine_in");
       setSelectedMenuClosing(false);
     }, 180);
   };
@@ -339,15 +325,19 @@ export default function PosOrderDetailPage() {
   const menuPickerBackdrop = useBackdropClose(closeMenuPicker);
   const paymentBackdrop = useBackdropClose(closePaymentModal);
   const cancelBackdrop = useBackdropClose(closeCancelModal);
+  const modalScrollLocked = Boolean(allItemsOpen || selectedMenu || paymentOpen || cancelOpen);
 
-  const toggleOption = (groupOptionIds: number[], optionId: number, maxSelect: number) => {
+  const toggleOption = (groupOptionIds: number[], optionId: number, minSelect: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
+      const selectedInGroup = current.filter((id) => groupOptionIds.includes(id));
       const withoutGroup = current.filter((id) => !groupOptionIds.includes(id));
-      if (current.includes(optionId)) return withoutGroup;
+      if (selectedInGroup.includes(optionId)) {
+        if (selectedInGroup.length <= minSelect) return current;
+        return [...withoutGroup, ...selectedInGroup.filter((id) => id !== optionId)];
+      }
       if (maxSelect <= 1) return [...withoutGroup, optionId];
-      const currentInGroup = current.filter((id) => groupOptionIds.includes(id));
-      if (currentInGroup.length >= maxSelect) return [...withoutGroup, ...currentInGroup.slice(1), optionId];
-      return [...current, optionId];
+      if (selectedInGroup.length >= maxSelect) return current;
+      return [...withoutGroup, ...selectedInGroup, optionId];
     });
   };
 
@@ -387,6 +377,37 @@ export default function PosOrderDetailPage() {
     readyItemIdsRef.current = readyIds;
   }, [order?.items]);
 
+  useEffect(() => {
+    if (!modalScrollLocked) return;
+
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const scrollKeys = new Set(["ArrowDown", "ArrowLeft", "ArrowRight", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "]);
+    const isInsideModalScroll = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("[data-pos-modal-scroll]"));
+    const restoreScroll = () => {
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) window.scrollTo(scrollX, scrollY);
+    };
+    const preventOutsideScroll = (event: WheelEvent | TouchEvent) => {
+      if (!isInsideModalScroll(event.target)) event.preventDefault();
+    };
+    const preventOutsideKeyScroll = (event: KeyboardEvent) => {
+      if (scrollKeys.has(event.key) && !isInsideModalScroll(event.target)) event.preventDefault();
+    };
+
+    window.addEventListener("scroll", restoreScroll, { passive: true });
+    document.addEventListener("wheel", preventOutsideScroll, { capture: true, passive: false });
+    document.addEventListener("touchmove", preventOutsideScroll, { capture: true, passive: false });
+    document.addEventListener("keydown", preventOutsideKeyScroll, { capture: true });
+
+    return () => {
+      window.removeEventListener("scroll", restoreScroll);
+      document.removeEventListener("wheel", preventOutsideScroll, { capture: true });
+      document.removeEventListener("touchmove", preventOutsideScroll, { capture: true });
+      document.removeEventListener("keydown", preventOutsideKeyScroll, { capture: true });
+      window.scrollTo(scrollX, scrollY);
+    };
+  }, [modalScrollLocked]);
+
   const runAction = async (action: () => Promise<Order>) => {
     setSubmitting(true);
     actionInFlightRef.current = true;
@@ -409,10 +430,11 @@ export default function PosOrderDetailPage() {
       return;
     }
     await runAction(async () => {
-      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, selected_option_ids: selectedOptionIds });
+      const res = await addOrderItem(order.ID, { menu_id: selectedMenu.ID, quantity, note, fulfillment_type: selectedFulfillment, selected_option_ids: selectedOptionIds });
       closeMenuPicker();
       setQuantity(1);
       setNote("");
+      setSelectedFulfillment(order.order_type === "takeaway" ? "takeaway" : "dine_in");
       return res.data;
     });
   };
@@ -474,17 +496,22 @@ export default function PosOrderDetailPage() {
 
   const changeAmount = bill ? Math.max(0, Number(receivedAmount || 0) - bill.grand_total) : 0;
   const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const pendingItemCount = order?.items?.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const pendingTotal = order?.items?.filter((item) => item.status === "pending").reduce((sum, item) => sum + item.subtotal, 0) ?? 0;
+  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
   const statusToneClass = (status: OrderItem["status"]) => {
-    if (status === "pending") return "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-900/20 dark:text-orange-300";
+    if (status === "pending") return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300";
     if (status === "cooking") return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300";
     if (status === "ready") return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300";
     if (status === "served") return "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300";
     return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300";
   };
-  const mobileActionLabel = hasPending ? copy.sendKitchen : hasReadyItems ? serveAllLabel : order?.status === "served" ? copy.close : viewAllItemsLabel;
-  const mobileActionDisabled = submitting || isTerminal;
+  const hasPrimaryOrderAction = hasPending || hasReadyItems || order?.status === "served";
+  const primaryActionLabel = hasPending ? copy.sendKitchen : hasReadyItems ? serveAllLabel : copy.close;
+  const compactPrimaryActionLabel = hasPending
+    ? language === "th" ? "ส่งครัว" : "Send"
+    : hasReadyItems
+      ? language === "th" ? "เสิร์ฟ" : "Serve"
+      : language === "th" ? "รับเงิน" : "Pay";
+  const mobileActionDisabled = submitting || isTerminal || (order?.status === "served" && !canPay);
   const runMobilePrimaryAction = () => {
     if (!order) return;
     if (hasPending) {
@@ -507,16 +534,18 @@ export default function PosOrderDetailPage() {
     if (!order) return null;
     const item = group.firstItem;
     const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
+    const statusBadges = (["pending", "cooking", "ready", "served", "cancelled"] as OrderItem["status"][])
+      .map((status) => ({ status, quantity: group.statusQuantities[status] ?? 0 }))
+      .filter(({ status, quantity }) => quantity && !(status === "pending" && group.pendingItems.length === group.quantity));
 
     return (
-      <div key={group.key} className="p-3">
+      <div key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+              <p className="min-w-0 text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
               <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">x{group.quantity}</span>
             </div>
-            <p className="mt-1 text-[12px] text-gray-500">฿{item.unit_price.toLocaleString()}{group.quantity > 1 ? ` × ${group.quantity}` : ""}</p>
             {item.selected_options?.length ? (
               <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-500">
                 {item.selected_options.map((option) => (
@@ -527,17 +556,15 @@ export default function PosOrderDetailPage() {
               </div>
             ) : null}
             {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(["pending", "cooking", "ready", "served", "cancelled"] as OrderItem["status"][]).map((status) => {
-                const statusQuantity = group.statusQuantities[status] ?? 0;
-                if (!statusQuantity) return null;
-                return (
+            {statusBadges.length ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {statusBadges.map(({ status, quantity }) => (
                   <span key={status} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${statusToneClass(status)}`}>
-                    {statusLabel(status)} x{statusQuantity}
+                    {statusLabel(status)} x{quantity}
                   </span>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -563,63 +590,109 @@ export default function PosOrderDetailPage() {
     );
   };
 
+  const renderFulfillmentSection = (section: FulfillmentSection, tone: "highlight" | "plain" = "plain") => {
+    const meta = sectionMeta(section.key);
+
+    return (
+      <section key={section.key} className="space-y-2">
+        <div className={`px-1 text-[12px] font-semibold ${tone === "highlight" ? "text-blue-900 dark:text-blue-100" : "text-gray-700 dark:text-gray-200"}`}>
+          <span>{meta.label}</span>
+        </div>
+        <div className="space-y-2">
+          {section.groups.map(renderOrderItemGroup)}
+        </div>
+      </section>
+    );
+  };
+
+  const headerNoticeCount = (error ? 1 : 0) + (hasReadyItems ? 1 : 0);
+  const posHeaderSpacerClass = headerNoticeCount === 0
+    ? "h-[102px] lg:h-[62px]"
+    : headerNoticeCount === 1
+      ? "h-[152px] lg:h-[112px]"
+      : "h-[202px] lg:h-[162px]";
+
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-slate-50 px-3 py-3 pb-28 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 sm:pb-6 lg:px-8 lg:py-6">
-      <div className="-mx-3 mb-3 border-b border-gray-200 bg-slate-50 px-3 pb-3 pt-1 dark:border-gray-800 dark:bg-gray-950 sm:mx-0 sm:mb-4 sm:border-0 sm:bg-transparent sm:p-0">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press h-11 w-fit rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            {copy.back}
-          </button>
+    <div className="min-h-screen w-full bg-slate-50 pb-6 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0">
+        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
+          <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {order && (
+              <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
+                <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} aria-label={viewAllItemsLabel} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color,color] hover:border-[#d6dbe2] hover:bg-gray-50 hover:text-gray-950 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 dark:hover:text-white lg:flex-none">
+                  {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
+                </button>
+                {hasPrimaryOrderAction && (
+                  <button type="button" disabled={mobileActionDisabled} onClick={runMobilePrimaryAction} aria-label={primaryActionLabel} className="ui-press h-10 shrink-0 rounded-md bg-gray-900 px-2.5 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                    {compactPrimaryActionLabel}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           {order && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white">{order.table?.table_number ?? order.table_id}</span>
-              <span className="rounded-md bg-gray-900 px-3 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-gray-900">{order.order_number}</span>
+            <div className="grid grid-cols-[minmax(7.5rem,10rem)_minmax(0,1fr)] gap-1.5 lg:contents">
+              <ThemedSelect
+                className="lg:order-2"
+                value={categoryId === "all" ? "all" : String(categoryId)}
+                onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
+                options={categoryOptions}
+              />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 min-w-0 rounded-md border border-[#dfe3e8] bg-white px-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900 lg:order-3" />
+            </div>
+          )}
+          <div aria-hidden="true" className="hidden lg:order-5 lg:block" />
+          {order && (
+            <div className="hidden items-center gap-1.5 justify-self-end lg:order-6 lg:flex">
+              <button
+                type="button"
+                aria-label={notificationLabel}
+                className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
+              >
+                <Bell className="h-4 w-4" strokeWidth={2} />
+              </button>
+              <DashboardAccountMenu />
             </div>
           )}
         </div>
+        {(error || hasReadyItems) && (
+          <div className="space-y-2 px-3 py-2 sm:px-4 lg:px-5">
+            {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+            {hasReadyItems && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
+                {copy.readyAlert}: {readyItems.length}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-
-      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-      {hasReadyItems && (
-        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-          {copy.readyAlert}: {readyItems.length}
-        </div>
-      )}
+      <div aria-hidden="true" className={posHeaderSpacerClass} />
 
       {loading && !order ? (
-        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-          <Skeleton className="h-[520px]" />
+        <div className="grid gap-4 px-3 py-4 sm:px-4 lg:px-5">
           <Skeleton className="h-[520px]" />
         </div>
       ) : order ? (
-        <div className="grid flex-1 items-start gap-4 lg:grid-cols-[1fr_380px]">
-          <section className="min-w-0 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 p-3 dark:border-gray-800">
-              <div className="grid gap-2 sm:grid-cols-[minmax(12rem,16rem)_minmax(16rem,1fr)] sm:items-center">
-                <ThemedSelect
-                  value={categoryId === "all" ? "all" : String(categoryId)}
-                  onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
-                  options={categoryOptions}
-                />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-12 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 xl:grid-cols-4">
+        <div className="px-3 py-3 sm:px-4 lg:px-5">
+          <section className="min-w-0">
+            <div className="grid auto-rows-max grid-cols-2 content-start items-start gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
                   <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
                     {orderedQuantity > 0 && (
-                      <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
+                      <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
                         {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
                       </span>
                     )}
                     <div
-                      className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
+                      className="aspect-[4/3] shrink-0 bg-gray-100 bg-cover bg-center dark:bg-gray-900"
                       style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
                       aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
                     >
@@ -638,187 +711,58 @@ export default function PosOrderDetailPage() {
             </div>
           </section>
 
-          <aside id="order-cart" className="hidden scroll-mt-28 flex-col rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 lg:sticky lg:top-6 lg:flex lg:h-[calc(100vh-3rem)] lg:max-h-[calc(100vh-3rem)] lg:min-h-[420px] lg:overflow-hidden">
-            <div className="shrink-0 border-b border-gray-200 p-4 dark:border-gray-800">
-              <div className="flex flex-col gap-3">
-                <div>
-                  <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{currentCartLabel}</h2>
-                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{pendingTotal.toLocaleString()}</p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <span className="w-fit rounded-md bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                    {pendingItemCount} {language === "th" ? "รายการใหม่" : "new items"}
-                  </span>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                    <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} className="ui-press h-11 w-full rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
-                      {viewAllItemsLabel} ({orderItemCount})
-                    </button>
-                    {hasPending && (
-                      <button type="button" disabled={submitting} onClick={() => runAction(async () => (await sendOrderToKitchen(order.ID)).data)} className="ui-press h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                        {copy.sendKitchen}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="divide-y divide-gray-200 dark:divide-gray-800 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
-              {pendingGroupedOrderItems.length ? pendingGroupedOrderItems.map((group) => {
-                const item = group.firstItem;
-                const singlePendingItem = group.pendingItems.length === 1 ? group.pendingItems[0] : null;
-
-                return (
-                  <div key={group.key} className="p-3">
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
-                          <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                            x{group.quantity}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[12px] text-gray-500">
-                          ฿{item.unit_price.toLocaleString()}{group.quantity > 1 ? ` × ${group.quantity}` : ""}
-                        </p>
-                        {item.selected_options?.length ? (
-                          <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-500">
-                            {item.selected_options.map((option) => (
-                              <span key={option.ID} className="rounded-md bg-gray-100 px-2 py-0.5 dark:bg-gray-900">
-                                {option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {(["pending", "cooking", "ready", "served", "cancelled"] as OrderItem["status"][]).map((status) => {
-                            const statusQuantity = group.statusQuantities[status] ?? 0;
-                            if (!statusQuantity) return null;
-                            return (
-                              <span key={status} className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${statusToneClass(status)}`}>
-                                {statusLabel(status)} x{statusQuantity}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <p className="mr-auto font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white lg:mr-0">฿{group.subtotal.toLocaleString()}</p>
-                        {group.readyItems.length > 0 && (
-                          <button type="button" disabled={submitting} onClick={() => serveReadyItems(group.readyItems)} className="ui-press h-9 rounded-md border border-emerald-200 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                            {copy.markServed}
-                          </button>
-                        )}
-                        {singlePendingItem && (
-                          <>
-                            <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity - 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">-</button>
-                            <span className="min-w-8 text-center font-mono text-[14px] font-semibold tabular-nums">{singlePendingItem.quantity}</span>
-                            <button type="button" disabled={submitting} onClick={() => bumpItem(singlePendingItem, singlePendingItem.quantity + 1)} className="ui-press h-9 w-9 rounded-md border border-gray-200 text-[16px] font-semibold hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:hover:bg-gray-900">+</button>
-                            <button type="button" disabled={submitting} onClick={() => runAction(async () => (await deleteOrderItem(order.ID, singlePendingItem.ID)).data)} className="ui-press h-9 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
-                              {copy.remove}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }) : (
-                <div className="px-4 py-12 text-center text-[13px] text-gray-500">
-                  <p className="font-semibold text-gray-700 dark:text-gray-300">{emptyCurrentCart}</p>
-                  <p className="mt-1 leading-5">{emptyCurrentCartHint}</p>
-                </div>
-              )}
-            </div>
-
-          </aside>
         </div>
       ) : null}
 
-      {order && (
-        <div className="fixed inset-x-3 bottom-3 z-30 rounded-md border border-gray-200 bg-white/95 p-3 shadow-[0_16px_48px_rgba(15,23,42,0.2)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 dark:shadow-black/40 sm:hidden">
-          <div className="mb-2 grid grid-cols-[1fr_auto] items-center gap-2">
-            <button type="button" onClick={() => document.getElementById("order-cart")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="min-w-0 rounded-md border border-gray-200 px-3 py-2 text-left dark:border-gray-800">
-              <span className="block text-[10px] font-medium text-gray-500 dark:text-gray-400">{currentCartLabel}</span>
-              <span className="mt-0.5 block truncate font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">
-                ฿{pendingTotal.toLocaleString()} · {pendingItemCount} {language === "th" ? "รายการ" : "items"}
-              </span>
-            </button>
-            <button type="button" onClick={() => { setAllItemsClosing(false); setAllItemsOpen(true); }} className="h-full rounded-md border border-gray-200 px-3 text-[11px] font-semibold text-gray-700 dark:border-gray-800 dark:text-gray-200">
-              {language === "th" ? "ทั้งหมด" : "All"} {orderItemCount}
-            </button>
-          </div>
-          <button type="button" disabled={mobileActionDisabled} onClick={runMobilePrimaryAction} className="h-12 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">
-            {mobileActionLabel}
-          </button>
-        </div>
-      )}
-
       {allItemsOpen && order && (
-        <div {...allItemsBackdrop} className={`${allItemsClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:justify-end sm:px-4`}>
-          <div className={`${allItemsClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-2rem)]`}>
-            <div className="shrink-0 border-b border-gray-200 p-4 dark:border-gray-800">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{tableItemsLabel}</h2>
-                  <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
-                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{orderItemCount} {language === "th" ? "รายการทั้งหมด" : "items total"}</p>
+        <div {...allItemsBackdrop} className={`${allItemsClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
+          <div className={`${allItemsClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100dvh-2rem)]`}>
+            <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)} · {order.order_number}</p>
+                  <h2 className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{tableItemsLabel}</h2>
                 </div>
-                <button type="button" onClick={closeAllItemsDrawer} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                <button type="button" onClick={closeAllItemsDrawer} className="ui-press h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 transition-[background-color,border-color] hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
                   {language === "th" ? "ปิด" : "Close"}
                 </button>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {hasReadyItems && (
-                  <button type="button" disabled={submitting} onClick={() => serveReadyItems()} className="ui-press h-11 rounded-md border border-emerald-200 px-4 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                    {serveAllLabel}
-                  </button>
-                )}
-                {order.status === "served" && (
-                  <button type="button" disabled={submitting || !canPay} onClick={openPayment} className="ui-press h-11 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                    {copy.close}
-                  </button>
-                )}
-                {canCancelFromPos && (
-                  <button type="button" disabled={submitting} onClick={() => { setCancelClosing(false); setCancelOpen(true); }} className="h-11 rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
-                    {copy.cancelOrder}
-                  </button>
-                )}
-              </div>
-              {order.status !== "served" && !isTerminal && (
-                <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] leading-5 text-gray-600 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-400">
-                  <p className="font-semibold text-gray-900 dark:text-white">{billLockedTitle}</p>
-                  <p>{billLockedDetail}</p>
-                </div>
-              )}
-              {order.status === "served" && !canPay && (
-                <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300">
-                  {noPaymentPermission}
-                </div>
-              )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div data-pos-modal-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
               {pendingGroupedOrderItems.length ? (
-                <section>
-                  <div className="sticky top-0 z-10 border-b border-orange-200 bg-orange-50 px-3 py-2 text-[12px] font-semibold text-orange-800 dark:border-orange-900/50 dark:bg-orange-950 dark:text-orange-200">
-                    {currentCartLabel} ({pendingItemCount})
+                <section className="rounded-md border border-blue-300 bg-blue-50/70 p-3 shadow-[0_1px_0_rgba(37,99,235,0.08)] ring-1 ring-blue-100 dark:border-blue-800 dark:bg-blue-950/25 dark:ring-blue-900/40">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-300" aria-hidden="true" />
+                        <h3 className="truncate text-[14px] font-bold text-blue-950 dark:text-blue-100">{currentCartLabel}</h3>
+                      </div>
+                      <p className="mt-0.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300">{language === "th" ? "ยังไม่ส่งเข้าครัว" : "Not sent to kitchen yet"}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[13px] font-bold leading-5 text-blue-950 dark:text-blue-100">
+                        {pendingFulfillmentSummary.quantity} {language === "th" ? "รายการ" : "items"}
+                      </p>
+                      <p className="font-mono text-[15px] font-extrabold leading-5 tabular-nums text-blue-950 dark:text-blue-50">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
+                    </div>
                   </div>
-                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {pendingGroupedOrderItems.map(renderOrderItemGroup)}
+                  <div className="space-y-2">
+                    {pendingFulfillmentSections.map((section) => renderFulfillmentSection(section, "highlight"))}
                   </div>
                 </section>
               ) : null}
 
               {sentGroupedOrderItems.length ? (
-                <section>
-                  <div className="sticky top-0 z-10 border-y border-gray-200 bg-gray-50 px-3 py-2 text-[12px] font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                    {sentItemsLabel} ({orderItemCount - pendingItemCount})
+                <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                  <div className="mb-3">
+                    <div>
+                      <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{sentItemsLabel}</h3>
+                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{language === "th" ? "ติดตามสถานะอาหารที่ส่งแล้ว" : "Track items already sent"}</p>
+                    </div>
                   </div>
-                  <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {sentGroupedOrderItems.map(renderOrderItemGroup)}
+                  <div className="space-y-2">
+                    {sentFulfillmentSections.map((section) => renderFulfillmentSection(section))}
                   </div>
                 </section>
               ) : null}
@@ -826,6 +770,38 @@ export default function PosOrderDetailPage() {
               {!pendingGroupedOrderItems.length && !sentGroupedOrderItems.length ? (
                 <div className="px-4 py-12 text-center text-[13px] text-gray-500">{copy.emptyCart}</div>
               ) : null}
+            </div>
+
+            <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="mr-auto min-w-24">
+                  <p className="text-[10px] font-bold leading-4 text-gray-500 dark:text-gray-400">{copy.total}</p>
+                  <p className="font-mono text-[16px] font-extrabold leading-5 tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
+                </div>
+                {order.status === "served" && !canPay && (
+                  <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">{noPaymentPermission}</p>
+                )}
+                {hasPending && (
+                  <button type="button" disabled={submitting} onClick={() => runAction(async () => (await sendOrderToKitchen(order.ID)).data)} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                    {copy.sendKitchen}
+                  </button>
+                )}
+                {hasReadyItems && (
+                  <button type="button" disabled={submitting} onClick={() => serveReadyItems()} className="ui-press h-10 rounded-md border border-emerald-200 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                    {serveAllLabel}
+                  </button>
+                )}
+                {order.status === "served" && (
+                  <button type="button" disabled={submitting || !canPay} onClick={openPayment} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                    {copy.close}
+                  </button>
+                )}
+                {canCancelFromPos && (
+                  <button type="button" disabled={submitting} onClick={() => { setCancelClosing(false); setCancelOpen(true); }} className="h-10 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">
+                    {copy.cancelOrder}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -846,25 +822,35 @@ export default function PosOrderDetailPage() {
                 <p className="shrink-0 text-right font-mono text-[16px] font-semibold tabular-nums">฿{(selectedMenu.price + selectedOptionsTotal).toLocaleString()}</p>
               </div>
             </div>
-            <div className="space-y-3 overflow-y-auto p-4">
+            <div data-pos-modal-scroll className="space-y-3 overflow-y-auto p-4">
               {selectedMenu.option_groups?.length ? (
                 <div className="space-y-3">
                   {selectedMenu.option_groups.filter((group) => group.is_active).map((group) => {
                     const options = (group.options ?? []).filter((option) => option.is_active);
-                    const maxSelect = Math.max(1, group.max_select || 1);
+                    const { minSelect, maxSelect } = menuOptionLimits(group);
+                    const selectedCount = options.filter((option) => selectedOptionIds.includes(option.ID)).length;
                     return (
                       <div key={group.ID}>
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{group.name}</span>
-                          {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.requiredOption}</span>}
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                              {optionLimitLabel(selectedCount, minSelect, maxSelect)}
+                            </span>
+                            {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.requiredOption}</span>}
+                          </div>
                         </div>
                         <div className="grid gap-2">
-                          {options.map((option) => (
-                            <button key={option.ID} type="button" onClick={() => toggleOption(options.map((current) => current.ID), option.ID, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] ${selectedOptionIds.includes(option.ID) ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
-                              <span>{option.name}</span>
-                              <span className="font-mono tabular-nums">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
-                            </button>
-                          ))}
+                          {options.map((option) => {
+                            const selected = selectedOptionIds.includes(option.ID);
+                            const limitReached = maxSelect > 1 && selectedCount >= maxSelect && !selected;
+                            return (
+                              <button key={option.ID} type="button" disabled={limitReached} aria-pressed={selected} onClick={() => toggleOption(options.map((current) => current.ID), option.ID, minSelect, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
+                                <span>{option.name}</span>
+                                <span className="font-mono tabular-nums">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -879,6 +865,25 @@ export default function PosOrderDetailPage() {
                   <button type="button" onClick={() => setQuantity((current) => current + 1)} className="h-10 w-10 rounded-md border border-gray-200 text-lg font-semibold dark:border-gray-800">+</button>
                 </div>
               </label>
+              <div>
+                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{fulfillmentTitle}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["dine_in", "takeaway"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSelectedFulfillment(value)}
+                      className={`h-10 rounded-md border px-3 text-[12px] font-semibold transition-colors ${
+                        selectedFulfillment === value
+                          ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                      }`}
+                    >
+                      {value === "takeaway" ? takeawayItemLabel : dineInItemLabel}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
                 <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
@@ -914,20 +919,22 @@ export default function PosOrderDetailPage() {
               }
             }
           `}</style>
-          <div className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div data-pos-modal-scroll className={`${paymentClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[90vh] w-full max-w-lg overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div id="print-bill" className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>
-                  <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{bill.order.table?.table_number ?? bill.order.table_id}</p>
-                </div>
-                <p className="font-mono text-xl font-semibold tabular-nums text-gray-900 dark:text-white">฿{bill.grand_total.toLocaleString()}</p>
+              <div>
+                <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>
+                <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{orderLocationLabel(bill.order, language)}</p>
               </div>
               <div className="mt-4 divide-y divide-gray-200 text-[12px] dark:divide-gray-800">
                 {bill.items.map((item) => (
                   <div key={item.ID} className="grid grid-cols-[1fr_auto] gap-3 py-2">
                     <div>
-                      <span>{item.quantity}x {item.menu_name}</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>{item.quantity}x {item.menu_name}</span>
+                        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${fulfillmentBadgeClass(itemFulfillmentType(item))}`}>
+                          {fulfillmentLabel(itemFulfillmentType(item), language)}
+                        </span>
+                      </div>
                       {item.selected_options?.length ? (
                         <div className="mt-0.5 space-y-0.5 text-[11px] text-gray-500">
                           {item.selected_options.map((option) => (
@@ -964,7 +971,6 @@ export default function PosOrderDetailPage() {
                 <div className="rounded-md border border-gray-200 p-3 text-center dark:border-gray-800">
                   {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-900">No QR</div>}
                   <p className="mt-2 text-[13px] font-semibold text-gray-900 dark:text-white">{bill.promptpay_name || copy.qr}</p>
-                  <p className="font-mono text-lg font-semibold tabular-nums">฿{bill.grand_total.toLocaleString()}</p>
                 </div>
               )}
             </div>

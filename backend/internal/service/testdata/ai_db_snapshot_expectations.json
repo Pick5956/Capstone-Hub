@@ -1,0 +1,11 @@
+{
+  "restaurant_id": 1,
+  "minimum_total_ingredients": 39,
+  "minimum_low_items": 7,
+  "required_stock_risks": [
+    "กุ้งสด",
+    "เนื้อหมู"
+  ],
+  "lowest_margin_menu": "ข้าวผัดปู",
+  "lowest_margin_max": 40
+}

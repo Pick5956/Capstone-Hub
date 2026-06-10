@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
+
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { getCurrentUser } from "@/src/lib/auth";
-import LanguageToggle from "@/src/components/shared/LanguageToggle";
+import AppLogo from "@/src/components/shared/AppLogo";
+import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import type { User } from "@/src/types/auth";
 
 export const RESTAURANT_TYPES = ["ร้านอาหาร", "คาเฟ่", "ชาบู/ปิ้งย่าง", "เดลิเวอรี", "ฟู้ดทรัค"];
@@ -58,16 +61,40 @@ export function ThemeButton() {
       type="button"
       onClick={toggle}
       aria-label={language === "th" ? "สลับธีม" : "Toggle theme"}
-      title={isDark ? (language === "th" ? "สลับเป็น Light mode" : "Switch to light mode") : language === "th" ? "สลับเป็น Dark mode" : "Switch to dark mode"}
-      className="h-9 w-9 inline-flex items-center justify-center rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+      title={
+        isDark
+          ? language === "th"
+            ? "สลับเป็น Light mode"
+            : "Switch to light mode"
+          : language === "th"
+            ? "สลับเป็น Dark mode"
+            : "Switch to dark mode"
+      }
+      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
     >
       {isDark ? (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
           <circle cx="12" cy="12" r="5" />
           <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
         </svg>
       ) : (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
           <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
         </svg>
       )}
@@ -78,15 +105,10 @@ export function ThemeButton() {
 export function BrandMark() {
   return (
     <Link href="/restaurants" className="flex items-center gap-2.5">
-      <div className="h-9 w-9 rounded-md bg-orange-600 flex items-center justify-center shadow-sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-          <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-          <path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
-        </svg>
-      </div>
+      <AppLogo size={36} />
       <div>
-        <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
-        <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
+        <p className="text-[10px] font-semibold uppercase leading-none text-gray-400">Restaurant</p>
+        <p className="text-sm font-semibold leading-snug tracking-tight text-gray-900 dark:text-white">HUB</p>
       </div>
     </Link>
   );
@@ -96,46 +118,41 @@ export function WorkspaceShell({
   title,
   description,
   children,
+  hideIntro = false,
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  hideIntro?: boolean;
 }) {
-  const { logout } = useAuth();
   const { language } = useLanguage();
-  const user = useWorkspaceUser();
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-      <header className="sticky top-0 z-20 border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur">
-        <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
+        <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <BrandMark />
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <ThemeButton />
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={logout}
-              className="h-9 px-3 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+              aria-label={language === "th" ? "การแจ้งเตือน" : "Notifications"}
+              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
             >
-              {language === "th" ? "ออกจากระบบ" : "Log out"}
+              <Bell className="h-4 w-4" strokeWidth={2} />
             </button>
+            <DashboardAccountMenu />
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {!hideIntro ? (
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">Restaurant workspace</p>
-            <h1 className="mt-2 text-2xl sm:text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+            <p className="text-[11px] font-semibold uppercase text-orange-600 dark:text-orange-400">Restaurant workspace</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white sm:text-3xl">{title}</h1>
             <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">{description}</p>
           </div>
-          <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 py-2 text-[12px] text-gray-600 dark:text-gray-300">
-            {language === "th" ? "เข้าสู่ระบบในชื่อ " : "Signed in as "}
-            <span className="font-semibold text-gray-900 dark:text-white">{formatUserName(user, language)}</span>
-          </div>
-        </div>
+        ) : null}
 
         {children}
       </main>
@@ -149,9 +166,17 @@ export function BackToRestaurants() {
   return (
     <Link
       href="/restaurants"
-      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
     >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3.5 w-3.5"
+      >
         <path d="M19 12H5M12 19l-7-7 7-7" />
       </svg>
       {language === "th" ? "กลับไปเลือกร้าน" : "Back to restaurants"}

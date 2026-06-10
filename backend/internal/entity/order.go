@@ -15,6 +15,12 @@ const (
 	OrderStatusCompleted     = "completed"
 	OrderStatusCancelled     = "cancelled"
 
+	OrderTypeDineIn   = "dine_in"
+	OrderTypeTakeaway = "takeaway"
+
+	OrderItemFulfillmentDineIn   = "dine_in"
+	OrderItemFulfillmentTakeaway = "takeaway"
+
 	OrderItemStatusPending   = "pending"
 	OrderItemStatusCooking   = "cooking"
 	OrderItemStatusReady     = "ready"
@@ -25,11 +31,14 @@ const (
 type Order struct {
 	gorm.Model
 	RestaurantID        uint       `json:"restaurant_id" gorm:"not null;index:idx_orders_restaurant_status_opened,priority:1;index:idx_orders_restaurant_table,priority:1;uniqueIndex:idx_orders_restaurant_day_number,priority:1"`
-	TableID             uint       `json:"table_id" gorm:"not null;index:idx_orders_restaurant_table,priority:2"`
+	TableID             *uint      `json:"table_id" gorm:"index:idx_orders_restaurant_table,priority:2"`
+	OrderType           string     `json:"order_type" gorm:"size:32;not null;default:'dine_in';index"`
 	OrderNumber         string     `json:"order_number" gorm:"not null;uniqueIndex:idx_orders_restaurant_day_number,priority:3"`
 	OrderDate           string     `json:"order_date" gorm:"size:10;not null;uniqueIndex:idx_orders_restaurant_day_number,priority:2"`
 	StaffID             uint       `json:"staff_id" gorm:"not null;index"`
 	CustomerCount       int        `json:"customer_count" gorm:"default:1"`
+	CustomerName        string     `json:"customer_name" gorm:"size:80"`
+	CustomerPhone       string     `json:"customer_phone" gorm:"size:32"`
 	Status              string     `json:"status" gorm:"size:32;not null;default:'open';index:idx_orders_restaurant_status_opened,priority:2"`
 	Subtotal            float64    `json:"subtotal" gorm:"not null;default:0"`
 	DiscountAmount      float64    `json:"discount_amount" gorm:"not null;default:0"`
@@ -66,6 +75,7 @@ type OrderItem struct {
 	OptionsTotal    float64    `json:"options_total" gorm:"not null;default:0"`
 	Quantity        int        `json:"quantity" gorm:"not null"`
 	Subtotal        float64    `json:"subtotal" gorm:"not null"`
+	FulfillmentType string     `json:"fulfillment_type" gorm:"size:32;not null;default:'dine_in';index"`
 	Note            string     `json:"note"`
 	Status          string     `json:"status" gorm:"size:32;not null;default:'pending';index:idx_order_items_status_sent,priority:1"`
 	SentAt          *time.Time `json:"sent_at" gorm:"index:idx_order_items_status_sent,priority:2"`

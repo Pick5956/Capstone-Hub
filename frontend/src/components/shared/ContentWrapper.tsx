@@ -37,7 +37,6 @@ export default function ContentWrapper({ children }: { children: React.ReactNode
     <div
       ref={ref}
       className="flex-1 flex min-w-0 max-w-full flex-col overflow-x-clip"
-      style={{ transition: 'margin-left 200ms ease-out' }}
     >
       {children}
     </div>

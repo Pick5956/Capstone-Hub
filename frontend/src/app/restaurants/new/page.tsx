@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { useAuth } from "@/src/providers/AuthProvider";
-import { createRestaurant } from "@/src/lib/restaurant";
+import { createRestaurant, type CreateRestaurantInput } from "@/src/lib/restaurant";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -16,575 +17,704 @@ import {
   getRestaurantTypeLabel,
 } from "../restaurantWorkspaceUi";
 
-type FormErrors = Partial<
-  Record<"name" | "branch" | "phone" | "address" | "openTime" | "closeTime" | "initialTables" | "submit", string>
->;
+type FormErrors = Partial<{
+  name: string;
+  branch: string;
+  phone: string;
+  address: string;
+  openTime: string;
+  closeTime: string;
+  initialTables: string;
+  submit: string;
+}>;
+
+const SETUP_STEPS = ["identity", "service", "contact", "review"] as const;
+type SetupStepId = (typeof SETUP_STEPS)[number];
+
+type StepCopy = {
+  id: SetupStepId;
+  title: string;
+  description: string;
+};
+
+type RestaurantType = string;
+
+type FieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  error?: string;
+  help?: string;
+  required?: boolean;
+  type?: "text" | "tel" | "number";
+  min?: number;
+  max?: number;
+  disabled?: boolean;
+};
 
 function Field({
   label,
-  placeholder,
-  type = "text",
   value,
   onChange,
-  help,
+  placeholder,
   error,
-  inputMode,
+  help,
+  required,
+  type = "text",
   min,
   max,
-}: {
-  label: string;
-  placeholder?: string;
-  type?: string;
-  value: string;
-  onChange: (value: string) => void;
-  help?: string;
-  error?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-  min?: number;
-  max?: number;
-}) {
+  disabled,
+}: FieldProps) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
-      {type === "time" ? (
-        <ThemedTimeInput value={value} onChange={onChange} error={error} help={help} />
-      ) : (
-        <>
-          <input
-            type={type}
-            value={value}
-            inputMode={inputMode}
-            min={min}
-            max={max}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={placeholder}
-            aria-invalid={Boolean(error)}
-            className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors dark:bg-gray-900 ${
-              error
-                ? "border-red-300 text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-red-900/60 dark:text-red-200"
-                : "border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700"
-            }`}
-          />
-          {(error || help) && (
-            <p className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
-              {error || help}
-            </p>
-          )}
-        </>
-      )}
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-gray-800">
+        {label}
+        {required ? <span className="ml-1 text-orange-600">*</span> : null}
+      </span>
+      <input
+        className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 disabled:bg-gray-50 disabled:text-gray-500 ${
+          error ? "border-red-300" : "border-gray-300"
+        }`}
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        min={min}
+        max={max}
+        disabled={disabled}
+        aria-invalid={error ? "true" : undefined}
+      />
+      {help ? <p className="text-xs text-gray-500">{help}</p> : null}
+      {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
     </label>
   );
 }
 
 function TextAreaField({
   label,
-  placeholder,
   value,
   onChange,
-  help,
+  placeholder,
   error,
+  help,
 }: {
   label: string;
-  placeholder?: string;
   value: string;
   onChange: (value: string) => void;
-  help?: string;
+  placeholder?: string;
   error?: string;
+  help?: string;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{label}</span>
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-gray-800">{label}</span>
       <textarea
+        className={`min-h-24 w-full resize-y rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 ${
+          error ? "border-red-300" : "border-gray-300"
+        }`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        rows={3}
-        aria-invalid={Boolean(error)}
-        className={`w-full resize-none rounded-md border bg-white px-3 py-2 text-[13px] outline-none transition-colors dark:bg-gray-900 ${
-          error
-            ? "border-red-300 text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-red-900/60 dark:text-red-200"
-            : "border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700"
-        }`}
+        aria-invalid={error ? "true" : undefined}
       />
-      {(error || help) && (
-        <p className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
-          {error || help}
-        </p>
-      )}
+      {help ? <p className="text-xs text-gray-500">{help}</p> : null}
+      {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
     </label>
   );
 }
 
-function Section({
-  title,
-  description,
-  children,
+function TimeField({
+  label,
+  value,
+  onChange,
+  error,
 }: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
 }) {
   return (
-    <section className="border-t border-gray-200 px-4 py-4 first:border-t-0 dark:border-gray-800">
-      <div className="mb-3">
-        <h3 className="text-[14px] font-semibold text-gray-900 dark:text-white">{title}</h3>
-        <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{description}</p>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function SetupStep({
-  done,
-  title,
-  description,
-}: {
-  done: boolean;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-3 rounded-md border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-gray-950">
-      <span
-        className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-          done
-            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-            : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"
-        }`}
-      >
-        {done ? (
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-3.5 w-3.5"
-          >
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        ) : (
-          "•"
-        )}
+    <div className="block space-y-2">
+      <span className="text-sm font-medium text-gray-800">
+        {label}
+        <span className="ml-1 text-orange-600">*</span>
       </span>
-      <div className="min-w-0">
-        <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{title}</p>
-        <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{description}</p>
-      </div>
+      <ThemedTimeInput value={value} onChange={onChange} error={error} />
     </div>
   );
 }
 
-function PreviewRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-gray-100 py-2 first:border-t-0 dark:border-gray-800">
-      <span className="text-[11px] text-gray-400 dark:text-gray-500">{label}</span>
-      <span className="min-w-0 truncate text-right text-[12px] font-medium text-gray-800 dark:text-gray-200">{value}</span>
+    <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-b-0">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className="max-w-56 text-right text-sm font-semibold text-gray-900">{value}</span>
     </div>
   );
+}
+
+const RESTAURANT_TYPE_SETUP_DEFAULTS = [
+  { openTime: "17:00", closeTime: "00:00", tables: "12" },
+  { openTime: "08:00", closeTime: "20:00", tables: "8" },
+  { openTime: "11:00", closeTime: "22:00", tables: "16" },
+  { openTime: "10:00", closeTime: "22:00", tables: "4" },
+  { openTime: "16:00", closeTime: "22:00", tables: "4" },
+];
+
+function setupDefaultsFor(type: RestaurantType) {
+  const index = RESTAURANT_TYPES.indexOf(type);
+  return RESTAURANT_TYPE_SETUP_DEFAULTS[index] ?? RESTAURANT_TYPE_SETUP_DEFAULTS[0];
 }
 
 function normalizePhone(value: string) {
-  return value.replace(/[^\d+\-\s]/g, "").slice(0, 24);
+  return value.replace(/[()\s-]/g, "");
 }
 
-function validateTime(value: string) {
+function isValidTime(value: string) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function firstStepForErrors(errors: FormErrors): SetupStepId {
+  if (errors.name || errors.branch) {
+    return "identity";
+  }
+
+  if (errors.openTime || errors.closeTime || errors.initialTables) {
+    return "service";
+  }
+
+  if (errors.phone || errors.address) {
+    return "contact";
+  }
+
+  return "review";
 }
 
 export default function NewRestaurantPage() {
   const router = useRouter();
-  const { setActiveRestaurant, refreshMemberships } = useAuth();
   const { language } = useLanguage();
-  const [type, setType] = useState(RESTAURANT_TYPES[0]);
+  const { setActiveRestaurant, refreshMemberships } = useAuth();
+  const [activeStep, setActiveStep] = useState<SetupStepId>("identity");
+  const initialType = RESTAURANT_TYPES[0] ?? "restaurant";
+  const [type, setType] = useState<RestaurantType>(initialType);
   const [name, setName] = useState("");
   const [branch, setBranch] = useState(language === "th" ? "สาขาหลัก" : "Main branch");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [openTime, setOpenTime] = useState("17:00");
-  const [closeTime, setCloseTime] = useState("00:00");
-  const [initialTables, setInitialTables] = useState("12");
+  const defaults = useMemo(() => setupDefaultsFor(initialType), [initialType]);
+  const [openTime, setOpenTime] = useState(defaults.openTime);
+  const [closeTime, setCloseTime] = useState(defaults.closeTime);
+  const [initialTables, setInitialTables] = useState(defaults.tables);
   const [seedMockupData, setSeedMockupData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewSubmitReady, setReviewSubmitReady] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const submitOnceRef = useRef(createSingleFlight());
 
+  useEffect(() => {
+    if (activeStep !== "review") {
+      setReviewSubmitReady(false);
+      return;
+    }
+
+    const readyTimer = window.setTimeout(() => setReviewSubmitReady(true), 150);
+    return () => window.clearTimeout(readyTimer);
+  }, [activeStep]);
+
   const copy = language === "th"
     ? {
-        pageTitle: "สร้างร้านใหม่",
-        pageDescription: "ตั้งค่าข้อมูลหลักให้พร้อมก่อนเข้าหน้าภาพรวม ร้านจะถูกผูกกับบัญชีนี้ในบทบาทเจ้าของร้าน",
-        starterTitle: "ข้อมูลเริ่มต้นของร้าน",
-        starterDescription: "ข้อมูลชุดนี้จะใช้ในใบเสร็จ หน้าภาพรวม และการตั้งค่าร้าน",
-        completion: "ความครบถ้วน",
-        restaurantSectionTitle: "ข้อมูลร้าน",
-        restaurantSectionDescription: "ชื่อร้านและประเภทร้านจะช่วยให้ทีมแยกร้านหรือสาขาได้ถูกต้อง",
-        nameLabel: "ชื่อร้าน",
-        namePlaceholder: "เช่น ครัวบ้านส้ม",
-        branchLabel: "ชื่อสาขา",
-        branchPlaceholder: "สาขาหลัก",
-        branchHelp: "ถ้ามีร้านเดียวให้ใช้สาขาหลัก",
-        typeLabel: "ประเภทร้าน",
-        contactSectionTitle: "ข้อมูลติดต่อ",
-        contactSectionDescription: "ใช้แสดงบนเอกสารและช่วยให้ทีมตรวจสอบสาขาถูก",
-        phoneLabel: "เบอร์ร้าน",
-        phonePlaceholder: "044-000-000",
-        phoneHelp: "ใส่ได้ทั้งเบอร์มือถือหรือเบอร์หน้าร้าน",
-        addressLabel: "ที่อยู่ร้าน",
-        addressPlaceholder: "ที่อยู่สำหรับใบเสร็จและข้อมูลร้าน",
-        scheduleSectionTitle: "เวลาเปิดปิดและโต๊ะ",
-        scheduleSectionDescription: "ใช้เป็นค่าเริ่มต้นสำหรับหน้าภาพรวม ผังโต๊ะ และรอบการทำงาน",
-        openLabel: "เวลาเปิด",
-        closeLabel: "เวลาปิด",
-        tablesLabel: "จำนวนโต๊ะเริ่มต้น",
+        back: "กลับไปร้านของฉัน",
+        title: "สร้างร้านใหม่",
+        subtitle: "ตั้งค่าทีละขั้นตอนให้พร้อมใช้งานจริง ก่อนเปิด dashboard ร้าน",
+        stepLabel: "ขั้นตอน",
+        stepNavigationLabel: "ขั้นตอนการสร้างร้าน",
+        identityTitle: "ข้อมูลร้าน",
+        identityDescription: "ตั้งชื่อร้าน สาขา และประเภทร้านเพื่อสร้างบริบทหลัก",
+        serviceTitle: "เวลาและโต๊ะ",
+        serviceDescription: "กำหนดเวลาทำการและจำนวนโต๊ะเริ่มต้นสำหรับหน้าร้าน",
+        contactTitle: "ข้อมูลใบเสร็จ",
+        contactDescription: "เพิ่มข้อมูลติดต่อสำหรับบิลและโปรไฟล์ร้าน หรือข้ามไปก่อน",
+        reviewTitle: "ตรวจสอบ",
+        reviewDescription: "เช็กข้อมูลสุดท้ายก่อนสร้างร้าน",
+        name: "ชื่อร้าน",
+        branch: "ชื่อสาขา",
+        type: "ประเภทร้าน",
+        phone: "เบอร์โทร",
+        address: "ที่อยู่ร้าน",
+        openTime: "เวลาเปิด",
+        closeTime: "เวลาปิด",
+        initialTables: "จำนวนโต๊ะเริ่มต้น",
+        optional: "ไม่บังคับ",
+        phonePlaceholder: "เช่น 081-234-5678",
+        addressPlaceholder: "ที่อยู่สำหรับแสดงบนบิลหรือข้อมูลร้าน",
+        typeHelp: "การเลือกประเภทจะตั้งค่าเวลาและจำนวนโต๊ะเริ่มต้นให้แก้ต่อได้",
+        tableHelp: "ระบบจะสร้างโต๊ะตัวอย่างตามจำนวนนี้หลังสร้างร้าน",
+        contactHelp: "ข้อมูลนี้แก้ได้ภายหลังในหน้าตั้งค่าร้าน",
+        nextService: "ต่อไป: เวลาและโต๊ะ",
+        nextContact: "ต่อไป: ข้อมูลใบเสร็จ",
+        nextReview: "ต่อไป: ตรวจสอบ",
+        skipContact: "ข้ามข้อมูลเสริม",
+        previous: "ย้อนกลับ",
         mockupSectionTitle: "ข้อมูลตัวอย่าง",
         mockupSectionDescription: "เลือกได้ว่าจะให้ระบบสร้างเมนูและวัตถุดิบตัวอย่างตามประเภทร้านหรือเริ่มจากหมวดหมู่ว่าง",
         mockupLabel: "สร้างเมนูและวัตถุดิบตัวอย่าง",
         mockupHelp: "ระบบจะเพิ่มรายการตัวอย่างตามประเภทร้านที่เลือก เพื่อให้ทดลองใช้งานได้ทันที",
         submitIdle: "สร้างร้านและเข้า dashboard",
         submitBusy: "กำลังสร้างร้าน...",
-        previewTitle: "ตัวอย่างข้อมูลร้าน",
-        previewDescription: "สรุปแบบเดียวกับที่จะเห็นในหน้าเลือกร้าน",
-        previewStoreName: "ชื่อร้าน",
-        previewBranch: "สาขา",
-        previewPhone: "เบอร์",
-        previewHours: "เวลาเปิด",
-        previewTables: "โต๊ะ",
-        previewAddress: "ที่อยู่",
-        unknown: "ยังไม่ระบุ",
-        invalid: "ยังไม่ถูกต้อง",
-        identityStep: "ระบุตัวตนร้าน",
-        identityStepDesc: "ชื่อร้านและสาขาพร้อมใช้งาน",
-        contactStep: "ข้อมูลติดต่อ",
-        contactStepDesc: "เบอร์หรือที่อยู่สำหรับเอกสาร",
-        serviceStep: "ตั้งค่าการให้บริการ",
-        serviceStepDesc: "เวลาเปิดปิดและจำนวนโต๊ะถูกต้อง",
-        afterCreateTitle: "หลังสร้างร้านแล้ว",
-        afterCreateItems: ["เพิ่มเมนูขายจริง", "จัดผังโต๊ะ", "เชิญผู้จัดการหรือพนักงาน"],
-        restaurantNameFallback: "ชื่อร้าน",
-        branchFallback: "สาขาหลัก",
-        submitError: "สร้างร้านไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
-        validationNameRequired: "กรุณากรอกชื่อร้าน",
-        validationNameLong: "ชื่อร้านยาวเกินไป",
-        validationBranchRequired: "กรุณาระบุชื่อสาขา",
-        validationPhone: "เบอร์โทรควรมีอย่างน้อย 9 หลัก",
-        validationOpen: "เวลาเปิดต้องอยู่ในรูปแบบ HH:mm",
-        validationClose: "เวลาปิดต้องอยู่ในรูปแบบ HH:mm",
-        validationTables: "จำนวนโต๊ะต้องอยู่ระหว่าง 1 ถึง 500",
+        reviewHeading: "ข้อมูลที่จะสร้าง",
+        reviewNote: "ระบบจะใช้ข้อมูลนี้สร้าง workspace ร้านและพาคุณไปตั้งค่าต่อใน dashboard",
+        asideTitle: "ภาพรวมร้านใหม่",
+        asideHint: "ข้อมูลจะแสดงตามสิ่งที่กรอกในแต่ละขั้น",
+        setupTitle: "หลังสร้าง ระบบจะเตรียมให้",
+        setupItems: [
+          "เมนูเริ่มต้นตามประเภทร้าน",
+          "โต๊ะเริ่มต้นสำหรับรับออเดอร์",
+          "สิทธิ์เจ้าของร้านสำหรับบัญชีนี้",
+        ],
+        emptyName: "ยังไม่ได้ตั้งชื่อร้าน",
+        emptyBranch: "ยังไม่ได้ตั้งชื่อสาขา",
+        emptyPhone: "ยังไม่ใส่เบอร์โทร",
+        emptyAddress: "ยังไม่ใส่ที่อยู่",
+        tablesUnit: "โต๊ะ",
+        tableWord: "โต๊ะ",
+        createFailed: "สร้างร้านไม่สำเร็จ กรุณาลองใหม่",
+        validation: {
+          nameRequired: "กรุณากรอกชื่อร้าน",
+          nameTooLong: "ชื่อร้านต้องไม่เกิน 120 ตัวอักษร",
+          branchRequired: "กรุณากรอกชื่อสาขา",
+          branchTooLong: "ชื่อสาขาต้องไม่เกิน 80 ตัวอักษร",
+          phoneInvalid: "เบอร์โทรควรมี 9-15 หลัก",
+          openTimeInvalid: "กรุณาระบุเวลาเปิดให้ถูกต้อง",
+          closeTimeInvalid: "กรุณาระบุเวลาปิดให้ถูกต้อง",
+          tablesInvalid: "จำนวนโต๊ะต้องอยู่ระหว่าง 1-300",
+        },
       }
     : {
-        pageTitle: "Create a restaurant",
-        pageDescription: "Set up the core details before entering the operations view. This account will become the owner of the restaurant.",
-        starterTitle: "Restaurant starter details",
-        starterDescription: "These details appear in receipts, the command center, and restaurant settings.",
-        completion: "Completion",
-        restaurantSectionTitle: "Restaurant details",
-        restaurantSectionDescription: "Restaurant name and type help your team distinguish each location correctly.",
-        nameLabel: "Restaurant name",
-        namePlaceholder: "For example, Baan Som Kitchen",
-        branchLabel: "Branch name",
-        branchPlaceholder: "Main branch",
-        branchHelp: "Use Main branch if you only have one location.",
-        typeLabel: "Restaurant type",
-        contactSectionTitle: "Contact details",
-        contactSectionDescription: "Used on documents and helps the team verify the correct branch.",
-        phoneLabel: "Restaurant phone",
-        phonePlaceholder: "044-000-000",
-        phoneHelp: "You can use a mobile number or the shop number.",
-        addressLabel: "Restaurant address",
-        addressPlaceholder: "Address for receipts and restaurant info",
-        scheduleSectionTitle: "Opening hours and tables",
-        scheduleSectionDescription: "Used as the default setup for the command center, table layout, and daily operations.",
-        openLabel: "Open time",
-        closeLabel: "Close time",
-        tablesLabel: "Starting tables",
+        back: "Back to restaurants",
+        title: "Create a restaurant",
+        subtitle: "Set up the restaurant step by step before opening its dashboard.",
+        stepLabel: "Step",
+        stepNavigationLabel: "Restaurant setup steps",
+        identityTitle: "Restaurant identity",
+        identityDescription: "Name the restaurant, branch, and operating concept.",
+        serviceTitle: "Hours and tables",
+        serviceDescription: "Set starter service hours and table count for the floor.",
+        contactTitle: "Receipt details",
+        contactDescription: "Add receipt/profile contact details now, or skip them.",
+        reviewTitle: "Review",
+        reviewDescription: "Check the final setup before creating the restaurant.",
+        name: "Restaurant name",
+        branch: "Branch name",
+        type: "Restaurant type",
+        phone: "Phone",
+        address: "Restaurant address",
+        openTime: "Opening time",
+        closeTime: "Closing time",
+        initialTables: "Initial tables",
+        optional: "Optional",
+        phonePlaceholder: "e.g. 081-234-5678",
+        addressPlaceholder: "Address shown on bills or restaurant profile",
+        typeHelp: "Changing the type seeds editable starter hours and table count.",
+        tableHelp: "The system will create starter tables using this count.",
+        contactHelp: "You can edit these details later in restaurant settings.",
+        nextService: "Next: hours and tables",
+        nextContact: "Next: receipt details",
+        nextReview: "Next: review",
+        skipContact: "Skip optional details",
+        previous: "Back",
         mockupSectionTitle: "Sample data",
         mockupSectionDescription: "Choose whether to create sample menu items and ingredients for this restaurant type or start with empty categories.",
         mockupLabel: "Create sample menu items and ingredients",
         mockupHelp: "The system will add starter sample records based on the selected restaurant type so you can try the workflow immediately.",
-        submitIdle: "Create restaurant and enter dashboard",
+        submitIdle: "Create restaurant and open dashboard",
         submitBusy: "Creating restaurant...",
-        previewTitle: "Restaurant preview",
-        previewDescription: "This is how it will appear in the restaurant selector.",
-        previewStoreName: "Restaurant",
-        previewBranch: "Branch",
-        previewPhone: "Phone",
-        previewHours: "Hours",
-        previewTables: "Tables",
-        previewAddress: "Address",
-        unknown: "Not set",
-        invalid: "Needs fixing",
-        identityStep: "Set the identity",
-        identityStepDesc: "Restaurant and branch names are ready to use",
-        contactStep: "Add contact details",
-        contactStepDesc: "Phone or address for documents",
-        serviceStep: "Set service defaults",
-        serviceStepDesc: "Hours and table count are valid",
-        afterCreateTitle: "After creating the restaurant",
-        afterCreateItems: ["Add live menu items", "Arrange the table layout", "Invite managers or staff"],
-        restaurantNameFallback: "Restaurant name",
-        branchFallback: "Main branch",
-        submitError: "Could not create the restaurant. Please try again.",
-        validationNameRequired: "Please enter the restaurant name.",
-        validationNameLong: "The restaurant name is too long.",
-        validationBranchRequired: "Please enter the branch name.",
-        validationPhone: "The phone number should have at least 9 digits.",
-        validationOpen: "Open time must use the HH:mm format.",
-        validationClose: "Close time must use the HH:mm format.",
-        validationTables: "The table count must be between 1 and 500.",
+        reviewHeading: "Setup to create",
+        reviewNote: "The system will use this information to create the restaurant workspace.",
+        asideTitle: "New restaurant overview",
+        asideHint: "This preview updates as you complete each step.",
+        setupTitle: "After creation, the system prepares",
+        setupItems: [
+          "Starter menu based on restaurant type",
+          "Starter tables for taking orders",
+          "Owner access for this account",
+        ],
+        emptyName: "Restaurant name not set",
+        emptyBranch: "Branch name not set",
+        emptyPhone: "Phone not added",
+        emptyAddress: "Address not added",
+        tablesUnit: "tables",
+        tableWord: "tables",
+        createFailed: "Could not create the restaurant. Please try again.",
+        validation: {
+          nameRequired: "Restaurant name is required",
+          nameTooLong: "Restaurant name must be 120 characters or less",
+          branchRequired: "Branch name is required",
+          branchTooLong: "Branch name must be 80 characters or less",
+          phoneInvalid: "Phone number should contain 9-15 digits",
+          openTimeInvalid: "Enter a valid opening time",
+          closeTimeInvalid: "Enter a valid closing time",
+          tablesInvalid: "Table count must be between 1 and 300",
+        },
       };
 
+  const steps: StepCopy[] = [
+    {
+      id: "identity",
+      title: copy.identityTitle,
+      description: copy.identityDescription,
+    },
+    {
+      id: "service",
+      title: copy.serviceTitle,
+      description: copy.serviceDescription,
+    },
+    {
+      id: "contact",
+      title: copy.contactTitle,
+      description: copy.contactDescription,
+    },
+    {
+      id: "review",
+      title: copy.reviewTitle,
+      description: copy.reviewDescription,
+    },
+  ];
+
+  const activeStepIndex = SETUP_STEPS.indexOf(activeStep);
+  const currentStep = steps[activeStepIndex] ?? steps[0];
+  const restaurantTypeLabel = getRestaurantTypeLabel(type, language);
   const trimmedName = name.trim();
   const trimmedBranch = branch.trim();
-  const tableCount = Number.parseInt(initialTables, 10);
-  const previewName = trimmedName || copy.restaurantNameFallback;
-  const previewBranch = trimmedBranch || copy.branchFallback;
-  const validTableCount = Number.isFinite(tableCount) && tableCount >= 1 && tableCount <= 500;
+  const trimmedPhone = phone.trim();
+  const trimmedAddress = address.trim();
+  const tableCount = Number(initialTables);
+  const contactButtonLabel = trimmedPhone || trimmedAddress ? copy.nextReview : copy.skipContact;
 
-  const completion = useMemo(() => {
-    const checks = [
-      trimmedName.length > 0,
-      trimmedBranch.length > 0,
-      phone.trim().length > 0,
-      address.trim().length > 0,
-      validateTime(openTime),
-      validateTime(closeTime),
-      validTableCount,
-    ];
-    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [address, closeTime, openTime, phone, trimmedBranch, trimmedName, validTableCount]);
+  function applyRestaurantType(nextType: RestaurantType) {
+    setType(nextType);
+    const nextDefaults = setupDefaultsFor(nextType);
+    setOpenTime(nextDefaults.openTime);
+    setCloseTime(nextDefaults.closeTime);
+    setInitialTables(nextDefaults.tables);
+  }
 
-  const validate = () => {
-    const next: FormErrors = {};
-    if (!trimmedName) next.name = copy.validationNameRequired;
-    if (trimmedName.length > 120) next.name = copy.validationNameLong;
-    if (!trimmedBranch) next.branch = copy.validationBranchRequired;
-    if (phone.trim() && phone.replace(/\D/g, "").length < 9) next.phone = copy.validationPhone;
-    if (!validateTime(openTime)) next.openTime = copy.validationOpen;
-    if (!validateTime(closeTime)) next.closeTime = copy.validationClose;
-    if (!validTableCount) next.initialTables = copy.validationTables;
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
+  function validateStepValues(step: SetupStepId): FormErrors {
+    const nextErrors: FormErrors = {};
 
-  const submit = async (event: React.FormEvent) => {
+    if (step === "identity" || step === "review") {
+      if (!trimmedName) {
+        nextErrors.name = copy.validation.nameRequired;
+      } else if (trimmedName.length > 120) {
+        nextErrors.name = copy.validation.nameTooLong;
+      }
+
+      if (!trimmedBranch) {
+        nextErrors.branch = copy.validation.branchRequired;
+      } else if (trimmedBranch.length > 80) {
+        nextErrors.branch = copy.validation.branchTooLong;
+      }
+    }
+
+    if (step === "service" || step === "review") {
+      if (!isValidTime(openTime)) {
+        nextErrors.openTime = copy.validation.openTimeInvalid;
+      }
+
+      if (!isValidTime(closeTime)) {
+        nextErrors.closeTime = copy.validation.closeTimeInvalid;
+      }
+
+      if (!Number.isInteger(tableCount) || tableCount < 1 || tableCount > 300) {
+        nextErrors.initialTables = copy.validation.tablesInvalid;
+      }
+    }
+
+    if (step === "contact" || step === "review") {
+      const normalizedPhone = normalizePhone(trimmedPhone);
+      if (normalizedPhone && !/^\+?\d{9,15}$/.test(normalizedPhone)) {
+        nextErrors.phone = copy.validation.phoneInvalid;
+      }
+    }
+
+    return nextErrors;
+  }
+
+  function mergeStepErrors(step: SetupStepId, stepErrors: FormErrors) {
+    setErrors((current) => {
+      const merged = { ...current };
+      const keysByStep: Record<SetupStepId, (keyof FormErrors)[]> = {
+        identity: ["name", "branch"],
+        service: ["openTime", "closeTime", "initialTables"],
+        contact: ["phone", "address"],
+        review: [
+          "name",
+          "branch",
+          "openTime",
+          "closeTime",
+          "initialTables",
+          "phone",
+          "address",
+        ],
+      };
+
+      keysByStep[step].forEach((key) => {
+        delete merged[key];
+      });
+
+      delete merged.submit;
+      return { ...merged, ...stepErrors };
+    });
+  }
+
+  function handleNext() {
+    const stepErrors = validateStepValues(activeStep);
+    mergeStepErrors(activeStep, stepErrors);
+
+    if (Object.keys(stepErrors).length > 0) {
+      return;
+    }
+
+    const nextStep = SETUP_STEPS[Math.min(activeStepIndex + 1, SETUP_STEPS.length - 1)];
+    setActiveStep(nextStep);
+  }
+
+  function handlePrevious() {
+    const previousStep = SETUP_STEPS[Math.max(activeStepIndex - 1, 0)];
+    setActiveStep(previousStep);
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setErrors({});
-    if (!validate()) return;
+    if (!reviewSubmitReady || submitting) {
+      return;
+    }
 
+    const nextErrors = validateStepValues("review");
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      setActiveStep(firstStepForErrors(nextErrors));
+      return;
+    }
+
+    setErrors({});
     await submitOnceRef.current(async () => {
       setSubmitting(true);
       try {
-        const res = await createRestaurant({
+        const payload: CreateRestaurantInput = {
           name: trimmedName,
           branch_name: trimmedBranch,
           restaurant_type: type,
-          address: address.trim(),
-          phone: phone.trim(),
+          phone: trimmedPhone || undefined,
+          address: trimmedAddress || undefined,
           open_time: openTime,
           close_time: closeTime,
           table_count: tableCount,
           seed_mockup_data: seedMockupData,
-        });
+        };
+
+        const res = await createRestaurant(payload);
         const membership = res.data.membership;
         restaurantRepository.setActiveId(membership.restaurant_id);
         setActiveRestaurant(membership.restaurant_id);
         await refreshMemberships();
         router.push("/home");
-      } catch {
-        setErrors({ submit: copy.submitError });
+      } catch (error) {
+        console.error(error);
+        setErrors({ submit: copy.createFailed });
+        setActiveStep("review");
       } finally {
         setSubmitting(false);
       }
     });
-  };
+  }
+
+  const nextButtonLabel = activeStep === "identity"
+    ? copy.nextService
+    : activeStep === "service"
+      ? copy.nextContact
+      : contactButtonLabel;
+  const progressPercent = ((activeStepIndex + 1) / SETUP_STEPS.length) * 100;
 
   return (
-    <WorkspaceShell title={copy.pageTitle} description={copy.pageDescription}>
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <BackToRestaurants />
-      </div>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.starterTitle}</h2>
-                  <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{copy.starterDescription}</p>
-                </div>
-                <div className="min-w-[140px]">
-                  <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-                    <span>{copy.completion}</span>
-                    <span className="font-mono tabular-nums">{completion}%</span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-900">
-                    <div className="h-full rounded-full bg-orange-600 transition-all" style={{ width: `${completion}%` }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={submit}>
-                <Section title={copy.restaurantSectionTitle} description={copy.restaurantSectionDescription}>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label={copy.nameLabel} placeholder={copy.namePlaceholder} value={name} onChange={setName} error={errors.name} />
-                    <Field
-                      label={copy.branchLabel}
-                      placeholder={copy.branchPlaceholder}
-                      value={branch}
-                      onChange={setBranch}
-                      error={errors.branch}
-                      help={copy.branchHelp}
-                    />
-                    <label className="block sm:col-span-2">
-                      <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.typeLabel}</span>
-                      <ThemedSelect
-                        value={type}
-                        onChange={setType}
-                        options={RESTAURANT_TYPES.map((item) => ({
-                          value: item,
-                          label: getRestaurantTypeLabel(item, language),
-                        }))}
-                      />
-                    </label>
-                  </div>
-                </Section>
-
-                <Section title={copy.contactSectionTitle} description={copy.contactSectionDescription}>
-                  <div className="grid grid-cols-1 gap-3">
-                    <Field
-                      label={copy.phoneLabel}
-                      placeholder={copy.phonePlaceholder}
-                      value={phone}
-                      onChange={(value) => setPhone(normalizePhone(value))}
-                      error={errors.phone}
-                      inputMode="tel"
-                      help={copy.phoneHelp}
-                    />
-                    <TextAreaField
-                      label={copy.addressLabel}
-                      placeholder={copy.addressPlaceholder}
-                      value={address}
-                      onChange={setAddress}
-                      error={errors.address}
-                    />
-                  </div>
-                </Section>
-
-                <Section title={copy.scheduleSectionTitle} description={copy.scheduleSectionDescription}>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <Field label={copy.openLabel} type="time" value={openTime} onChange={setOpenTime} error={errors.openTime} />
-                    <Field label={copy.closeLabel} type="time" value={closeTime} onChange={setCloseTime} error={errors.closeTime} />
-                    <Field
-                      label={copy.tablesLabel}
-                      type="number"
-                      value={initialTables}
-                      onChange={setInitialTables}
-                      error={errors.initialTables}
-                      inputMode="numeric"
-                      min={1}
-                      max={500}
-                    />
-                  </div>
-                </Section>
-
-                <Section title={copy.mockupSectionTitle} description={copy.mockupSectionDescription}>
-                  <label className="flex cursor-pointer gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900">
-                    <input
-                      type="checkbox"
-                      checked={seedMockupData}
-                      onChange={(event) => setSeedMockupData(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-950"
-                    />
-                    <span>
-                      <span className="block text-[13px] font-semibold text-gray-900 dark:text-white">{copy.mockupLabel}</span>
-                      <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">{copy.mockupHelp}</span>
-                    </span>
-                  </label>
-                </Section>
-
-                <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-800">
-                  {errors.submit && (
-                    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
-                      {errors.submit}
-                    </div>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900"
-                  >
-                    {submitting ? copy.submitBusy : copy.submitIdle}
-                  </button>
-                </div>
-            </form>
-          </div>
+    <WorkspaceShell title={copy.title} description={copy.subtitle} hideIntro>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <BackToRestaurants />
+          <span className="hidden h-6 w-px bg-gray-200 dark:bg-gray-800 sm:block" aria-hidden="true" />
+          <h1 className="text-base font-semibold text-gray-950 dark:text-white">{copy.title}</h1>
         </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.previewTitle}</p>
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.previewDescription}</p>
-            </div>
-            <div className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-orange-600 text-white">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-                    <path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-semibold text-gray-900 dark:text-white">{previewName}</p>
-                  <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">
-                    {previewBranch} · {getRestaurantTypeLabel(type, language)}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <PreviewRow label={copy.previewStoreName} value={previewName} />
-                <PreviewRow label={copy.previewBranch} value={previewBranch} />
-                <PreviewRow label={copy.previewPhone} value={phone.trim() || copy.unknown} />
-                <PreviewRow label={copy.previewHours} value={`${openTime || "--:--"}-${closeTime || "--:--"}`} />
-                <PreviewRow
-                  label={copy.previewTables}
-                  value={validTableCount ? `${tableCount} ${copy.previewTables.toLowerCase()}` : copy.invalid}
-                />
-                <PreviewRow label={copy.previewAddress} value={address.trim() || copy.unknown} />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <SetupStep done={Boolean(trimmedName && trimmedBranch)} title={copy.identityStep} description={copy.identityStepDesc} />
-            <SetupStep done={Boolean(phone.trim() || address.trim())} title={copy.contactStep} description={copy.contactStepDesc} />
-            <SetupStep
-              done={validateTime(openTime) && validateTime(closeTime) && validTableCount}
-              title={copy.serviceStep}
-              description={copy.serviceStepDesc}
-            />
-          </div>
-
-          <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.afterCreateTitle}</p>
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              {copy.afterCreateItems.map((item) => (
-                <div
-                  key={item}
-                  className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[12px] font-medium text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
-                >
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </aside>
       </div>
+
+      <form onSubmit={handleSubmit} className="mx-auto mt-3 max-w-3xl">
+        <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-gray-500">
+                {copy.stepLabel} {activeStepIndex + 1} / {SETUP_STEPS.length}
+              </span>
+            </div>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+              <div className="h-full rounded-full bg-gray-950 transition-[width]" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <h2 className="mt-4 text-xl font-bold text-gray-950">{currentStep.title}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-gray-600">{currentStep.description}</p>
+          </div>
+
+          <div className="px-4 py-5 sm:px-6">
+            {activeStep === "identity" ? (
+              <div className="grid gap-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label={copy.name}
+                    value={name}
+                    onChange={setName}
+                    placeholder={language === "th" ? "เช่น กะเย็นซันนี่" : "e.g. Sunny Dinner"}
+                    error={errors.name}
+                    required
+                  />
+                  <Field
+                    label={copy.branch}
+                    value={branch}
+                    onChange={setBranch}
+                    placeholder={language === "th" ? "เช่น สาขาหลัก" : "e.g. Main branch"}
+                    error={errors.branch}
+                    required
+                  />
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium text-gray-800">{copy.type}</span>
+                  <ThemedSelect
+                    value={type}
+                    onChange={(value) => applyRestaurantType(value as RestaurantType)}
+                    options={RESTAURANT_TYPES.map((option) => ({
+                      value: option,
+                      label: getRestaurantTypeLabel(option, language),
+                    }))}
+                  />
+                  <p className="text-xs text-gray-500">{copy.typeHelp}</p>
+                </label>
+              </div>
+            ) : null}
+
+            {activeStep === "service" ? (
+              <div className="grid gap-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <TimeField
+                    label={copy.openTime}
+                    value={openTime}
+                    onChange={setOpenTime}
+                    error={errors.openTime}
+                  />
+                  <TimeField
+                    label={copy.closeTime}
+                    value={closeTime}
+                    onChange={setCloseTime}
+                    error={errors.closeTime}
+                  />
+                </div>
+
+                <Field
+                  label={copy.initialTables}
+                  value={initialTables}
+                  onChange={setInitialTables}
+                  type="number"
+                  min={1}
+                  max={300}
+                  error={errors.initialTables}
+                  help={copy.tableHelp}
+                  required
+                />
+              </div>
+            ) : null}
+
+            {activeStep === "contact" ? (
+              <div className="grid gap-5">
+                <Field
+                  label={`${copy.phone} (${copy.optional})`}
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder={copy.phonePlaceholder}
+                  type="tel"
+                  error={errors.phone}
+                  help={copy.contactHelp}
+                />
+
+                <TextAreaField
+                  label={`${copy.address} (${copy.optional})`}
+                  value={address}
+                  onChange={setAddress}
+                  placeholder={copy.addressPlaceholder}
+                  error={errors.address}
+                />
+              </div>
+            ) : null}
+
+            {activeStep === "review" ? (
+              <div className="grid gap-5">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-950">{copy.reviewHeading}</h3>
+                  <p className="mt-1 text-sm text-gray-600">{copy.reviewNote}</p>
+                </div>
+
+                <div className="rounded-md border border-gray-200 px-4">
+                  <SummaryRow label={copy.name} value={trimmedName || copy.emptyName} />
+                  <SummaryRow label={copy.branch} value={trimmedBranch || copy.emptyBranch} />
+                  <SummaryRow label={copy.type} value={restaurantTypeLabel} />
+                  <SummaryRow label={copy.openTime} value={openTime} />
+                  <SummaryRow label={copy.closeTime} value={closeTime} />
+                  <SummaryRow
+                    label={copy.initialTables}
+                    value={`${Number.isFinite(tableCount) ? initialTables : "-"} ${copy.tableWord}`}
+                  />
+                  <SummaryRow label={copy.phone} value={trimmedPhone || copy.emptyPhone} />
+                  <SummaryRow label={copy.address} value={trimmedAddress || copy.emptyAddress} />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t border-gray-200 px-4 py-4 sm:px-6">
+            {errors.submit ? (
+              <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                {errors.submit}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                className="inline-flex justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handlePrevious}
+                disabled={activeStepIndex === 0 || submitting}
+              >
+                {copy.previous}
+              </button>
+
+              {activeStep === "review" ? (
+                <button
+                  type="submit"
+                  className="inline-flex justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting || !reviewSubmitReady}
+                >
+                  {submitting ? copy.submitBusy : copy.submitIdle}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
+                  onClick={handleNext}
+                >
+                  {nextButtonLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      </form>
     </WorkspaceShell>
   );
 }

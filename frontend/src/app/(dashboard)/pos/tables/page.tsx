@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
-import { Search } from "lucide-react";
+import { Bell, Search, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
 import { createOrder, listOrders, updateOrderItemStatus } from "@/src/lib/order";
 import { listTables, updateTableStatus } from "@/src/lib/table";
@@ -15,6 +15,7 @@ import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 const tableRefreshIntervalMs = 3_000;
@@ -30,12 +31,23 @@ type ReadyTableSummary = {
   itemSummary: string;
 };
 
-const apiErrorMessage = (error: unknown) => {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-};
-
 const hasValidPhone = (value: string) => value.replace(/\D/g, "").length >= 9;
+
+function orderLocationLabel(order: Order, tables: RestaurantTable[], language: "th" | "en") {
+  if (order.order_type === "takeaway") {
+    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
+    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
+  }
+  const table = tables.find((item) => item.ID === order.table_id);
+  return order.table?.display_label || order.table?.table_number || table?.display_label || table?.table_number || (order.table_id ? String(order.table_id) : "-");
+}
+
+function itemSummaryLabel(item: OrderItem, language: "th" | "en") {
+  const prefix = item.fulfillment_type === "takeaway"
+    ? language === "th" ? "[กลับบ้าน] " : "[Takeaway] "
+    : "";
+  return `${prefix}${item.quantity}x ${item.menu_name}`;
+}
 
 function tableAccentClass(status: TableStatus, readyCount: number) {
   if (readyCount > 0) return "bg-emerald-500";
@@ -61,9 +73,12 @@ export default function PosTablesPage() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
+  const [takeawayOpen, setTakeawayOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<TableSheetMode>("open");
   const [sheetClosing, setSheetClosing] = useState(false);
   const [customerCount, setCustomerCount] = useState(1);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [note, setNote] = useState("");
   const [reservationName, setReservationName] = useState("");
   const [reservationPhone, setReservationPhone] = useState("");
@@ -84,6 +99,14 @@ export default function PosTablesPage() {
         title: "เลือกโต๊ะ",
         subtitle: "แตะโต๊ะว่างเพื่อเปิดออเดอร์ หรือแตะโต๊ะที่ใช้งานเพื่อทำรายการต่อ",
         search: "ค้นหาโต๊ะ",
+        takeaway: "สั่งกลับบ้าน",
+        openTakeaway: "เปิดออเดอร์กลับบ้าน",
+        takeawayHelp: "ใช้สำหรับลูกค้าที่ไม่ได้นั่งโต๊ะ",
+        customerName: "ชื่อลูกค้า (ไม่บังคับ)",
+        customerNamePlaceholder: "เช่น คุณแนน",
+        customerPhone: "เบอร์ลูกค้า (ไม่บังคับ)",
+        customerPhonePlaceholder: "เช่น 081-234-5678",
+        confirmTakeaway: "เปิดออเดอร์",
         noSearchResults: "ไม่พบโต๊ะที่ตรงกับคำค้นหา",
         openOrder: "เปิดออเดอร์",
         reserveTable: "จองไว้",
@@ -103,7 +126,7 @@ export default function PosTablesPage() {
         cancel: "ยกเลิก",
         confirm: "เปิดโต๊ะ",
         free: "ว่าง",
-        occupied: "มีออเดอร์",
+        occupied: "ใช้งาน",
         reserved: "จอง",
         inactive: "ปิดใช้งาน",
         ready: "พร้อมเสิร์ฟ",
@@ -128,6 +151,14 @@ export default function PosTablesPage() {
         title: "Select table",
         subtitle: "Tap a free table to open an order, or continue an active table.",
         search: "Search tables",
+        takeaway: "Takeaway",
+        openTakeaway: "Open takeaway order",
+        takeawayHelp: "Use this for customers who are not seated at a table.",
+        customerName: "Customer name (optional)",
+        customerNamePlaceholder: "For example, Nan",
+        customerPhone: "Customer phone (optional)",
+        customerPhonePlaceholder: "For example, 081-234-5678",
+        confirmTakeaway: "Open order",
         noSearchResults: "No tables match your search.",
         openOrder: "Open order",
         reserveTable: "Reserve",
@@ -167,9 +198,13 @@ export default function PosTablesPage() {
         reservedSuccess: "Table reserved.",
       };
 
+  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
+
   const activeOrderByTable = useMemo(() => {
     const map = new Map<number, Order>();
-    orders.filter((order) => activeOrderStatuses.includes(order.status)).forEach((order) => map.set(order.table_id, order));
+    orders
+      .filter((order) => activeOrderStatuses.includes(order.status) && order.table_id)
+      .forEach((order) => map.set(order.table_id as number, order));
     return map;
   }, [orders]);
 
@@ -178,23 +213,22 @@ export default function PosTablesPage() {
       .filter((order) => activeOrderStatuses.includes(order.status))
       .map((order) => {
         const readyItems = order.items?.filter((item) => item.status === "ready") ?? [];
-        const table = tables.find((item) => item.ID === order.table_id);
         const oldestReadyAt = readyItems.reduce<string>((oldest, item) => {
           const value = item.ready_at || item.UpdatedAt || item.CreatedAt || order.opened_at;
           return !oldest || new Date(value) < new Date(oldest) ? value : oldest;
         }, "");
         return {
           order,
-          tableLabel: order.table?.display_label || order.table?.table_number || table?.display_label || table?.table_number || String(order.table_id),
+          tableLabel: orderLocationLabel(order, tables, language),
           readyCount: readyItems.reduce((sum, item) => sum + item.quantity, 0),
           oldestReadyAt,
           items: readyItems,
-          itemSummary: readyItems.map((item) => `${item.quantity}x ${item.menu_name}`).join(" · "),
+          itemSummary: readyItems.map((item) => itemSummaryLabel(item, language)).join(" · "),
         };
       })
       .filter((item) => item.readyCount > 0)
       .sort((a, b) => new Date(a.oldestReadyAt || a.order.opened_at).getTime() - new Date(b.oldestReadyAt || b.order.opened_at).getTime());
-  }, [orders, tables]);
+  }, [language, orders, tables]);
 
   const readyCountByOrderId = useMemo(() => {
     const map = new Map<number, number>();
@@ -255,16 +289,47 @@ export default function PosTablesPage() {
     };
   }, [load]);
 
-  const openTable = async () => {
-    if (!selectedTable) return;
+  const openTakeawaySheet = () => {
+    setNotice("");
+    setSheetError("");
+    setSelectedTable(null);
+    setTakeawayOpen(true);
+    setSheetMode("open");
+    setSheetClosing(false);
+    setCustomerCount(1);
+    setCustomerName("");
+    setCustomerPhone("");
+    setNote("");
+    setReservationName("");
+    setReservationPhone("");
+    setReservationDraftOpen(false);
+  };
+
+  const openOrder = async () => {
+    if (!selectedTable && !takeawayOpen) return;
+    const tableID = selectedTable?.ID;
+    if (!takeawayOpen && !tableID) return;
     setSubmitting(true);
     setError("");
     try {
-      const res = await createOrder({ table_id: selectedTable.ID, customer_count: customerCount, note });
+      const res = await createOrder(takeawayOpen
+        ? {
+            order_type: "takeaway",
+            customer_count: customerCount,
+            customer_name: customerName.trim(),
+            customer_phone: customerPhone.trim(),
+            note,
+          }
+        : {
+            table_id: tableID,
+            order_type: "dine_in",
+            customer_count: customerCount,
+            note,
+          });
       router.push(`/pos/orders/${res.data.ID}`);
     } catch (error) {
       const message = apiErrorMessage(error);
-      if (message.includes("table already has an open order")) {
+      if (selectedTable && message.includes("table already has an open order")) {
         const orderRes = await listOrders();
         const activeOrder = orderRes.data.orders.find((order) => order.table_id === selectedTable.ID && activeOrderStatuses.includes(order.status));
         if (activeOrder) {
@@ -288,11 +353,14 @@ export default function PosTablesPage() {
     }
     if (table.status === "reserved") {
       setSelectedTable(table);
+      setTakeawayOpen(false);
       setSheetMode("reserved");
       setSheetClosing(false);
       setReservationName(table.reservation_name ?? "");
       setReservationPhone(table.reservation_phone ?? "");
       setCustomerCount(Math.max(1, Math.min(table.capacity || 1, 6)));
+      setCustomerName("");
+      setCustomerPhone("");
       setNote("");
       setReservationDraftOpen(false);
       return;
@@ -302,9 +370,12 @@ export default function PosTablesPage() {
       return;
     }
     setSelectedTable(table);
+    setTakeawayOpen(false);
     setSheetMode("open");
     setSheetClosing(false);
     setCustomerCount(Math.max(1, Math.min(table.capacity || 1, 6)));
+    setCustomerName("");
+    setCustomerPhone("");
     setNote("");
     setReservationName("");
     setReservationPhone("");
@@ -316,8 +387,11 @@ export default function PosTablesPage() {
     setSheetClosing(true);
     window.setTimeout(() => {
       setSelectedTable(null);
+      setTakeawayOpen(false);
       setSheetMode("open");
       setSheetClosing(false);
+      setCustomerName("");
+      setCustomerPhone("");
       setReservationName("");
       setReservationPhone("");
       setSheetError("");
@@ -430,23 +504,47 @@ export default function PosTablesPage() {
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <OperationalPageShell
-      eyebrow={copy.eyebrow}
-      title={copy.title}
-      subtitle={copy.subtitle}
-      actions={(
-        <label className="relative w-full sm:w-80">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={copy.search}
-            className="h-11 w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
-            aria-label={copy.search}
-          />
-        </label>
-      )}
-    >
+    <>
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0">
+        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
+          <label className="relative min-w-0">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={copy.search}
+              className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+              aria-label={copy.search}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={openTakeawaySheet}
+            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#dfe3e8] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {copy.takeaway}
+          </button>
+          <div aria-hidden="true" className="hidden lg:block" />
+          <button
+            type="button"
+            aria-label={notificationLabel}
+            className="ui-press hidden h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900 lg:inline-flex"
+          >
+            <Bell className="h-4 w-4" strokeWidth={2} />
+          </button>
+          <div className="hidden lg:block">
+            <DashboardAccountMenu />
+          </div>
+        </div>
+      </div>
+      <div aria-hidden="true" className="h-[104px] lg:h-[62px]" />
+      <OperationalPageShell
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        subtitle={copy.subtitle}
+        showHeader={false}
+      >
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
@@ -454,7 +552,7 @@ export default function PosTablesPage() {
         <section className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-100">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-[14px] font-semibold">{copy.readyBannerTitle} · {readyTables.length} {language === "th" ? "โต๊ะ" : "tables"}</h2>
+              <h2 className="text-[14px] font-semibold">{copy.readyBannerTitle} · {readyTables.length} {language === "th" ? "ออเดอร์" : "orders"}</h2>
               <p className="mt-0.5 text-[12px] opacity-80">{copy.readyBannerHelp}</p>
             </div>
           </div>
@@ -478,7 +576,7 @@ export default function PosTablesPage() {
                   type="button"
                   disabled={servingOrderId === item.order.ID}
                   onClick={() => void serveReadyItems(item)}
-                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-gray-950 dark:hover:bg-emerald-400"
+                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
                 >
                   {servingOrderId === item.order.ID ? copy.serving : copy.serveAll}
                 </button>
@@ -563,14 +661,17 @@ export default function PosTablesPage() {
         </div>
       )}
 
-      {selectedTable && (
+      {(selectedTable || takeawayOpen) && (
         <div {...openOrderBackdrop} className={`${sheetClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm`}>
           <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{sheetMode === "reserved" ? copy.reserved : copy.openOrder} · {selectedTable.table_number}</h2>
+              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">
+                {takeawayOpen ? copy.openTakeaway : `${sheetMode === "reserved" ? copy.reserved : copy.openOrder} · ${selectedTable?.table_number ?? ""}`}
+              </h2>
+              {takeawayOpen && <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.takeawayHelp}</p>}
             </div>
             {sheetError && <div className="mx-4 mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{sheetError}</div>}
-            {sheetMode === "reserved" ? (
+            {sheetMode === "reserved" && selectedTable ? (
               <>
                 <div className="space-y-3 p-4">
                   <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-semibold text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
@@ -593,6 +694,29 @@ export default function PosTablesPage() {
             ) : (
               <>
                 <div className="space-y-3 p-4">
+                  {takeawayOpen && (
+                    <div className="grid gap-3">
+                      <label className="block">
+                        <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerName}</span>
+                        <input
+                          value={customerName}
+                          onChange={(event) => setCustomerName(event.target.value)}
+                          placeholder={copy.customerNamePlaceholder}
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerPhone}</span>
+                        <input
+                          value={customerPhone}
+                          onChange={(event) => setCustomerPhone(event.target.value)}
+                          inputMode="tel"
+                          placeholder={copy.customerPhonePlaceholder}
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                        />
+                      </label>
+                    </div>
+                  )}
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerCount}</span>
                     <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
@@ -642,15 +766,17 @@ export default function PosTablesPage() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-                  <button type="button" disabled={submitting} onClick={reserveTable} className={`${reservationDraftOpen ? "bg-sky-700 text-white hover:bg-sky-800 dark:bg-sky-300 dark:text-gray-950 dark:hover:bg-sky-200" : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50"} ui-press h-11 rounded-md px-3 text-[13px] font-semibold disabled:opacity-50 sm:h-9 sm:text-[12px]`}>
-                    {reservationDraftOpen ? copy.confirmReservation : copy.reserveTable}
-                  </button>
+                <div className={`${takeawayOpen ? "grid-cols-2" : "grid-cols-3"} grid gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800`}>
+                  {!takeawayOpen && (
+                    <button type="button" disabled={submitting} onClick={reserveTable} className={`${reservationDraftOpen ? "bg-sky-700 text-white hover:bg-sky-800 dark:bg-sky-300 dark:text-sky-950 dark:hover:bg-sky-200" : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50"} ui-press h-11 rounded-md px-3 text-[13px] font-semibold disabled:opacity-50 sm:h-9 sm:text-[12px]`}>
+                      {reservationDraftOpen ? copy.confirmReservation : copy.reserveTable}
+                    </button>
+                  )}
                   <button type="button" onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
                     {copy.cancel}
                   </button>
-                  <button type="button" disabled={submitting} onClick={openTable} className="ui-press h-11 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900 sm:h-9 sm:text-[12px]">
-                    {copy.confirm}
+                  <button type="button" disabled={submitting} onClick={openOrder} className="ui-press h-11 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900 sm:h-9 sm:text-[12px]">
+                    {takeawayOpen ? copy.confirmTakeaway : copy.confirm}
                   </button>
                 </div>
               </>
@@ -658,6 +784,7 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
-    </OperationalPageShell>
+      </OperationalPageShell>
+    </>
   );
 }

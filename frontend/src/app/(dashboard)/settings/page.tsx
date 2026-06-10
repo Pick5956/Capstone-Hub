@@ -50,8 +50,6 @@ export default function SettingsHubPage() {
         noAccess: "ไม่มีสิทธิ์",
         accountTitle: "โปรไฟล์และบัญชี",
         accountDesc: "แก้ชื่อ รูปโปรไฟล์ ชื่อเล่น และข้อมูลติดต่อส่วนตัว",
-        displayTitle: "ภาษาและการแสดงผล",
-        displayDesc: "เลือกภาษาและขนาดตัวอักษรที่ใช้ในเว็บนี้",
         restaurantTitle: "ข้อมูลร้านและการคิดเงิน",
         restaurantDesc: "ตั้งค่าชื่อร้าน เวลาเปิดปิด Service charge, VAT และ PromptPay",
         teamTitle: "ทีมและสิทธิ์",
@@ -75,8 +73,6 @@ export default function SettingsHubPage() {
         noAccess: "No access",
         accountTitle: "Profile and account",
         accountDesc: "Edit your name, photo, nickname, and contact details.",
-        displayTitle: "Language and display",
-        displayDesc: "Choose the app language and font size used on this device.",
         restaurantTitle: "Restaurant and billing",
         restaurantDesc: "Manage restaurant identity, service hours, service charge, VAT, and PromptPay.",
         teamTitle: "Team and permissions",
@@ -91,7 +87,6 @@ export default function SettingsHubPage() {
 
   const personalCards: SettingsCard[] = [
     { href: "/settings/account", title: copy.accountTitle, description: copy.accountDesc, badge: copy.everyone },
-    { href: "/settings/display", title: copy.displayTitle, description: copy.displayDesc, badge: copy.everyone },
     { title: copy.securityTitle, description: copy.securityDesc, badge: copy.soon, disabled: true },
   ];
   const restaurantCards: SettingsCard[] = [

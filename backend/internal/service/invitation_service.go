@@ -49,8 +49,17 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if role.Name == "owner" {
-		return nil, errors.New("owner role cannot be invited")
+	if !roleAssignableToRestaurant(role, restaurantID) || role.Name == "owner" {
+		return nil, errors.New("role cannot be invited")
+	}
+	if role.RestaurantID == nil {
+		hidden, err := s.roleRepo.IsRoleHiddenForRestaurant(restaurantID, role.ID)
+		if err != nil {
+			return nil, err
+		}
+		if hidden {
+			return nil, errors.New("role cannot be invited")
+		}
 	}
 
 	email := strings.TrimSpace(strings.ToLower(req.Email))
@@ -98,7 +107,7 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 			&loaded.ID,
 			map[string]any{
 				"email":      loaded.Email,
-				"role_name":  role.Name,
+				"role_name":  roleName(role),
 				"expires_at": loaded.ExpiresAt,
 			},
 		)
@@ -114,7 +123,7 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 		&inv.ID,
 		map[string]any{
 			"email":      inv.Email,
-			"role_name":  role.Name,
+			"role_name":  roleName(role),
 			"expires_at": inv.ExpiresAt,
 		},
 	)

@@ -3,14 +3,16 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
-type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
+export type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
 
 interface ThemeCtx {
   theme: Theme;
   fontSize: FontSize;
+  showAIAssistant: boolean;
   mounted: boolean;
   toggle: () => void;
   setFontSize: (size: FontSize) => void;
+  setShowAIAssistant: (show: boolean) => void;
 }
 
 const FONT_SIZES: FontSize[] = ['small', 'normal', 'large', 'extra-large'];
@@ -18,9 +20,11 @@ const FONT_SIZES: FontSize[] = ['small', 'normal', 'large', 'extra-large'];
 const ThemeContext = createContext<ThemeCtx>({
   theme: 'light',
   fontSize: 'large',
+  showAIAssistant: true,
   mounted: false,
   toggle: () => {},
   setFontSize: () => {},
+  setShowAIAssistant: () => {},
 });
 
 function getInitialTheme(): Theme {
@@ -36,10 +40,17 @@ function getInitialFontSize(): FontSize {
   return stored && FONT_SIZES.includes(stored) ? stored : 'large';
 }
 
+function getInitialShowAIAssistant(): boolean {
+  if (typeof window === 'undefined') return true;
+  const stored = localStorage.getItem('showAIAssistant');
+  return stored === null ? true : stored === 'true';
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<Theme>('light');
   const [fontSize, setFontSizeState] = useState<FontSize>('large');
+  const [showAIAssistant, setShowAIAssistantState] = useState<boolean>(true);
 
   const applyTheme = useCallback((t: Theme) => {
     setTheme(t);
@@ -49,10 +60,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setFontSizeState(size);
   }, []);
 
+  const applyShowAIAssistant = useCallback((show: boolean) => {
+    setShowAIAssistantState(show);
+  }, []);
+
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setTheme(getInitialTheme());
       setFontSizeState(getInitialFontSize());
+      setShowAIAssistantState(getInitialShowAIAssistant());
       setMounted(true);
     });
 
@@ -65,12 +81,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.fontSize = fontSize;
     localStorage.setItem('theme', theme);
     localStorage.setItem('fontSize', fontSize);
-  }, [fontSize, mounted, theme]);
+    localStorage.setItem('showAIAssistant', String(showAIAssistant));
+  }, [fontSize, mounted, theme, showAIAssistant]);
 
   const toggle = () => applyTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
-    <ThemeContext.Provider value={{ theme, fontSize, mounted, toggle, setFontSize: applyFontSize }}>
+    <ThemeContext.Provider value={{ 
+      theme, 
+      fontSize, 
+      showAIAssistant, 
+      mounted, 
+      toggle, 
+      setFontSize: applyFontSize,
+      setShowAIAssistant: applyShowAIAssistant
+    }}>
       {children}
     </ThemeContext.Provider>
   );

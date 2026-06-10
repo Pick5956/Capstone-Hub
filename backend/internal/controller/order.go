@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"Project-M/internal/entity"
@@ -65,14 +64,9 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	if !requireOrderAccess(c, "view_orders") {
 		return
 	}
-	tableID := uint(0)
-	if raw := c.Query("table_id"); raw != "" {
-		parsed, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table_id"})
-			return
-		}
-		tableID = uint(parsed)
+	tableID, ok := optionalUintQuery(c, "table_id", "invalid table_id")
+	if !ok {
+		return
 	}
 	page := boundedQueryInt(c, "page", 1, 1, 100000)
 	limit := boundedQueryInt(c, "limit", 100, 1, 200)
@@ -82,24 +76,6 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
-}
-
-func boundedQueryInt(c *gin.Context, key string, fallback, min, max int) int {
-	raw := strings.TrimSpace(c.Query(key))
-	if raw == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(raw)
-	if err != nil {
-		return fallback
-	}
-	if parsed < min {
-		return min
-	}
-	if parsed > max {
-		return max
-	}
-	return parsed
 }
 
 func (ctrl *OrderController) GetOrder(c *gin.Context) {

@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
+	"time"
 
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
@@ -11,13 +14,20 @@ import (
 )
 
 type AIController struct {
-	svc *service.AIService
+	svc AIOperationsService
+}
+
+type AIOperationsService interface {
+	AskOperations(restaurantID uint, req *service.AIAskRequest) (*service.AIAskResponse, error)
+	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 }
 
 func ProvideAIController(db *gorm.DB) *AIController {
-	return &AIController{
-		svc: service.ProvideAIService(repository.NewAIRepository(db)),
-	}
+	return NewAIController(service.ProvideAIService(repository.NewAIRepository(db)))
+}
+
+func NewAIController(svc AIOperationsService) *AIController {
+	return &AIController{svc: svc}
 }
 
 func (ctrl *AIController) AskOperations(c *gin.Context) {
@@ -39,6 +49,42 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	isStream := c.Query("stream") == "true"
+	if isStream {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Transfer-Encoding", "chunked")
+
+		c.Stream(func(w io.Writer) bool {
+			// Stream audited Thai text smoothly (chunking runes for fluid typography)
+			runes := []rune(result.Answer)
+			chunkSize := 3
+			for i := 0; i < len(runes); i += chunkSize {
+				end := i + chunkSize
+				if end > len(runes) {
+					end = len(runes)
+				}
+				chunk := string(runes[i:end])
+				c.SSEvent("token", chunk)
+				c.Writer.Flush()
+				time.Sleep(15 * time.Millisecond)
+			}
+
+			// Stream final structural metadata
+			metaJSON, _ := json.Marshal(result)
+			c.SSEvent("metadata", string(metaJSON))
+			c.Writer.Flush()
+
+			// Signal end of stream
+			c.SSEvent("end", "done")
+			c.Writer.Flush()
+			return false
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, result)
 }
 

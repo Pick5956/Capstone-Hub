@@ -4,6 +4,8 @@ import type { User } from "./auth";
 
 export type OrderStatus = "open" | "sent_to_kitchen" | "cooking" | "ready" | "served" | "completed" | "cancelled";
 export type OrderItemStatus = "pending" | "cooking" | "ready" | "served" | "cancelled";
+export type OrderType = "dine_in" | "takeaway";
+export type OrderItemFulfillmentType = "dine_in" | "takeaway";
 
 export interface OrderItem {
   ID: number;
@@ -15,6 +17,7 @@ export interface OrderItem {
   options_total: number;
   quantity: number;
   subtotal: number;
+  fulfillment_type?: OrderItemFulfillmentType;
   note: string;
   status: OrderItemStatus;
   sent_at?: string | null;
@@ -54,11 +57,14 @@ export interface OrderStatusLog {
 export interface Order {
   ID: number;
   restaurant_id: number;
-  table_id: number;
+  table_id?: number | null;
+  order_type: OrderType;
   order_number: string;
   order_date: string;
   staff_id: number;
   customer_count: number;
+  customer_name?: string;
+  customer_phone?: string;
   status: OrderStatus;
   subtotal: number;
   discount_amount: number;
@@ -117,8 +123,11 @@ export interface Bill {
 }
 
 export interface OpenOrderInput {
-  table_id: number;
+  table_id?: number | null;
+  order_type?: OrderType;
   customer_count: number;
+  customer_name?: string;
+  customer_phone?: string;
   note?: string;
 }
 
@@ -126,5 +135,6 @@ export interface AddOrderItemInput {
   menu_id: number;
   quantity: number;
   note?: string;
+  fulfillment_type?: OrderItemFulfillmentType;
   selected_option_ids?: number[];
 }

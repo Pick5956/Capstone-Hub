@@ -3,9 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strings"
-	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -22,8 +20,11 @@ func ProvideOrderService(repo *repository.OrderRepository) *OrderService {
 }
 
 type OpenOrderRequest struct {
-	TableID       uint   `json:"table_id" binding:"required"`
+	TableID       *uint  `json:"table_id"`
+	OrderType     string `json:"order_type"`
 	CustomerCount int    `json:"customer_count"`
+	CustomerName  string `json:"customer_name"`
+	CustomerPhone string `json:"customer_phone"`
 	Note          string `json:"note"`
 }
 
@@ -36,6 +37,7 @@ type AddOrderItemRequest struct {
 	MenuID            uint   `json:"menu_id" binding:"required"`
 	Quantity          int    `json:"quantity"`
 	Note              string `json:"note"`
+	FulfillmentType   string `json:"fulfillment_type"`
 	SelectedOptionIDs []uint `json:"selected_option_ids"`
 }
 
@@ -90,20 +92,32 @@ type selectedMenuOption struct {
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
 	var created *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		table, err := tx.FindTable(restaurantID, req.TableID)
+		orderType, err := normalizeOrderType(req.OrderType)
 		if err != nil {
-			return errors.New("table not found")
-		}
-		if _, err := tx.FindOpenOrderByTable(restaurantID, req.TableID); err == nil {
-			return errors.New("table already has an open order")
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		if table.Status == entity.TableStatusInactive {
-			return errors.New("table is inactive")
-		}
-		if table.Status == entity.TableStatusReserved {
-			return errors.New("table is reserved")
+		var table *entity.RestaurantTable
+		var tableID *uint
+		if orderType == entity.OrderTypeDineIn {
+			if req.TableID == nil || *req.TableID == 0 {
+				return errors.New("table_id is required for dine-in orders")
+			}
+			tableID = req.TableID
+			table, err = tx.FindTable(restaurantID, *req.TableID)
+			if err != nil {
+				return errors.New("table not found")
+			}
+			if _, err := tx.FindOpenOrderByTable(restaurantID, *req.TableID); err == nil {
+				return errors.New("table already has an open order")
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if table.Status == entity.TableStatusInactive {
+				return errors.New("table is inactive")
+			}
+			if table.Status == entity.TableStatusReserved {
+				return errors.New("table is reserved")
+			}
 		}
 		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
 			return err
@@ -120,11 +134,14 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		}
 		order := &entity.Order{
 			RestaurantID:  restaurantID,
-			TableID:       req.TableID,
+			TableID:       tableID,
+			OrderType:     orderType,
 			OrderNumber:   orderNumberFromIndex(int(count) + 1),
 			OrderDate:     orderDate,
 			StaffID:       userID,
 			CustomerCount: customerCount,
+			CustomerName:  strings.TrimSpace(req.CustomerName),
+			CustomerPhone: strings.TrimSpace(req.CustomerPhone),
 			Status:        entity.OrderStatusOpen,
 			PaymentStatus: "unpaid",
 			Note:          strings.TrimSpace(req.Note),
@@ -134,14 +151,20 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		if err := tx.CreateOrder(order); err != nil {
 			return err
 		}
-		if err := tx.CreateStatusLog(statusLog(order.ID, "", entity.OrderStatusOpen, userID, "order opened")); err != nil {
+		logNote := "order opened"
+		if orderType == entity.OrderTypeTakeaway {
+			logNote = "takeaway order opened"
+		}
+		if err := tx.CreateStatusLog(statusLog(order.ID, "", entity.OrderStatusOpen, userID, logNote)); err != nil {
 			return err
 		}
-		table.Status = entity.TableStatusOccupied
-		table.ReservationName = ""
-		table.ReservationPhone = ""
-		if err := tx.SaveTable(table); err != nil {
-			return err
+		if table != nil {
+			table.Status = entity.TableStatusOccupied
+			table.ReservationName = ""
+			table.ReservationPhone = ""
+			if err := tx.SaveTable(table); err != nil {
+				return err
+			}
 		}
 		created = order
 		return nil
@@ -212,6 +235,10 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 		if !menu.IsAvailable {
 			return errors.New("menu item is unavailable")
 		}
+		fulfillmentType, err := normalizeOrderItemFulfillment(req.FulfillmentType, order.OrderType)
+		if err != nil {
+			return err
+		}
 		qty := req.Quantity
 		if qty <= 0 {
 			qty = 1
@@ -221,16 +248,17 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 			return err
 		}
 		item := &entity.OrderItem{
-			OrderID:      order.ID,
-			RestaurantID: restaurantID,
-			MenuID:       menu.ID,
-			MenuName:     menu.Name,
-			UnitPrice:    menu.Price,
-			OptionsTotal: optionsTotal,
-			Quantity:     qty,
-			Subtotal:     (menu.Price + optionsTotal) * float64(qty),
-			Note:         strings.TrimSpace(req.Note),
-			Status:       entity.OrderItemStatusPending,
+			OrderID:         order.ID,
+			RestaurantID:    restaurantID,
+			MenuID:          menu.ID,
+			MenuName:        menu.Name,
+			UnitPrice:       menu.Price,
+			OptionsTotal:    optionsTotal,
+			Quantity:        qty,
+			Subtotal:        (menu.Price + optionsTotal) * float64(qty),
+			FulfillmentType: fulfillmentType,
+			Note:            strings.TrimSpace(req.Note),
+			Status:          entity.OrderItemStatusPending,
 		}
 		if err := tx.CreateItem(item); err != nil {
 			return err
@@ -679,227 +707,3 @@ func billFromOrder(order *entity.Order, restaurant *entity.Restaurant) *BillResp
 		Payments:             order.Payments,
 	}
 }
-
-func roundMoney(value float64) float64 {
-	return math.Round(value*100) / 100
-}
-
-func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
-	items, err := tx.ListItems(order.ID)
-	if err != nil {
-		return err
-	}
-	active := make([]entity.OrderItem, 0, len(items))
-	for _, item := range items {
-		if item.Status != entity.OrderItemStatusCancelled {
-			active = append(active, item)
-		}
-	}
-	if len(active) == 0 {
-		return nil
-	}
-	if allItems(active, entity.OrderItemStatusServed) {
-		return setOrderStatus(tx, order, entity.OrderStatusServed, userID, "all items served")
-	}
-	if allItems(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusReady, userID, "all items ready")
-	}
-	if order.Status == entity.OrderStatusSentToKitchen && anyItem(active, entity.OrderItemStatusCooking) {
-		return nil
-	}
-	if anyItem(active, entity.OrderItemStatusCooking) || anyItem(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusCooking, userID, "items in kitchen")
-	}
-	return nil
-}
-
-func sendPendingItemsToKitchen(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
-	return sendPendingItemsToKitchenByIDs(tx, order, userID, nil)
-}
-
-func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entity.Order, userID uint, itemIDs []uint) error {
-	items, err := tx.ListItems(order.ID)
-	if err != nil {
-		return err
-	}
-	targetIDs := map[uint]bool{}
-	for _, id := range itemIDs {
-		if id != 0 {
-			targetIDs[id] = true
-		}
-	}
-	now := repository.BangkokNow()
-	maxBatch, err := tx.MaxKitchenBatch(order.ID)
-	if err != nil {
-		return err
-	}
-	nextBatch := maxBatch + 1
-	pendingCount := 0
-	for i := range items {
-		if len(targetIDs) > 0 && !targetIDs[items[i].ID] {
-			continue
-		}
-		if items[i].Status == entity.OrderItemStatusPending {
-			pendingCount += 1
-			items[i].Status = entity.OrderItemStatusCooking
-			items[i].SentAt = &now
-			items[i].KitchenBatch = nextBatch
-			if err := tx.SaveItem(&items[i]); err != nil {
-				return err
-			}
-		}
-	}
-	if pendingCount == 0 {
-		return errors.New("no pending items to send")
-	}
-	return setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch))
-}
-
-func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
-	components, err := tx.ListRecipeComponents(restaurantID, item.MenuID)
-	if err != nil {
-		return err
-	}
-	if len(components) == 0 {
-		return nil
-	}
-	for _, component := range components {
-		required := component.Quantity * float64(item.Quantity)
-		if required <= 0 {
-			continue
-		}
-		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, component.IngredientID)
-		if err != nil {
-			return err
-		}
-		if alreadyDeducted {
-			continue
-		}
-		ingredient, err := tx.FindIngredientForUpdate(restaurantID, component.IngredientID)
-		if err != nil {
-			return err
-		}
-		if ingredient.Stock < required {
-			return fmt.Errorf("%s stock is not enough for %s", ingredient.Name, item.MenuName)
-		}
-		ingredient.Stock -= required
-		if err := tx.SaveIngredient(ingredient); err != nil {
-			return err
-		}
-		cost := recipeComponentCost(required, ingredient.CostPerUnit, ingredient.YieldPercent)
-		deduction := &entity.OrderInventoryDeduction{
-			RestaurantID: restaurantID,
-			OrderID:      order.ID,
-			OrderItemID:  item.ID,
-			MenuItemID:   item.MenuID,
-			IngredientID: ingredient.ID,
-			Quantity:     required,
-			CostSnapshot: cost,
-			Note:         fmt.Sprintf("auto deduction for order %s / %s", order.OrderNumber, item.MenuName),
-			CreatedByID:  userID,
-		}
-		if err := tx.CreateInventoryDeduction(deduction); err != nil {
-			return err
-		}
-		stockTx := &entity.IngredientTransaction{
-			RestaurantID: restaurantID,
-			IngredientID: ingredient.ID,
-			Type:         "out",
-			Quantity:     required,
-			Note:         deduction.Note,
-			CreatedByID:  userID,
-		}
-		if err := tx.CreateIngredientTransaction(stockTx); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func recipeComponentCost(quantity, costPerUnit, yieldPercent float64) float64 {
-	if quantity <= 0 || costPerUnit <= 0 {
-		return 0
-	}
-	if yieldPercent <= 0 {
-		yieldPercent = 100
-	}
-	return roundMoney(quantity * costPerUnit / (yieldPercent / 100))
-}
-
-func setOrderStatus(tx *repository.OrderRepository, order *entity.Order, next string, userID uint, note string) error {
-	if order.Status == next {
-		return tx.SaveOrder(order)
-	}
-	from := order.Status
-	order.Status = next
-	if err := tx.SaveOrder(order); err != nil {
-		return err
-	}
-	return tx.CreateStatusLog(statusLog(order.ID, from, next, userID, note))
-}
-
-func statusLog(orderID uint, from, to string, userID uint, note string) *entity.OrderStatusLog {
-	return &entity.OrderStatusLog{
-		OrderID:    orderID,
-		FromStatus: from,
-		ToStatus:   to,
-		ChangedBy:  userID,
-		ChangedAt:  repository.BangkokNow(),
-		Note:       strings.TrimSpace(note),
-	}
-}
-
-func releaseTableIfNoOpenOrder(tx *repository.OrderRepository, restaurantID, tableID uint) error {
-	hasOpen, err := tx.HasOpenOrderForTable(restaurantID, tableID)
-	if err != nil {
-		return err
-	}
-	if hasOpen {
-		return nil
-	}
-	table, err := tx.FindTable(restaurantID, tableID)
-	if err != nil {
-		return err
-	}
-	table.Status = entity.TableStatusFree
-	return tx.SaveTable(table)
-}
-
-func isTerminalOrder(status string) bool {
-	return status == entity.OrderStatusCompleted || status == entity.OrderStatusCancelled
-}
-
-func canTransitionItem(from, to string) bool {
-	switch from {
-	case entity.OrderItemStatusPending:
-		return to == entity.OrderItemStatusCooking || to == entity.OrderItemStatusCancelled
-	case entity.OrderItemStatusCooking:
-		return to == entity.OrderItemStatusReady || to == entity.OrderItemStatusCancelled
-	case entity.OrderItemStatusReady:
-		return to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
-	case entity.OrderItemStatusServed, entity.OrderItemStatusCancelled:
-		return false
-	default:
-		return false
-	}
-}
-
-func allItems(items []entity.OrderItem, status string) bool {
-	for _, item := range items {
-		if item.Status != status {
-			return false
-		}
-	}
-	return true
-}
-
-func anyItem(items []entity.OrderItem, status string) bool {
-	for _, item := range items {
-		if item.Status == status {
-			return true
-		}
-	}
-	return false
-}
-
-var _ = time.Time{}

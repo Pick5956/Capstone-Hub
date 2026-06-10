@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, Clock } from "lucide-react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
@@ -9,8 +9,8 @@ const MINUTES = Array.from({ length: 60 }, (_, index) => index.toString().padSta
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const HIDDEN_SCROLLBAR =
   "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
-const PICKER_WIDTH = 146;
-const PICKER_HEIGHT = 160;
+const PICKER_WIDTH = 178;
+const PICKER_HEIGHT = 184;
 
 function normalizeTime(value: string) {
   const match = value.match(TIME_PATTERN);
@@ -42,6 +42,9 @@ export default function ThemedTimeInput({
 }) {
   const { language } = useLanguage();
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonId = useId();
+  const pickerId = useId();
+  const descriptionId = useId();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [draft, setDraft] = useState(() => normalizeTime(value));
@@ -114,9 +117,13 @@ export default function ThemedTimeInput({
     <div ref={rootRef} className="relative">
       <button
         type="button"
+        id={buttonId}
         disabled={disabled}
         aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? pickerId : undefined}
         aria-label={copy.choose}
+        aria-describedby={error || help ? descriptionId : undefined}
         onClick={() => {
           if (open) {
             setOpen(false);
@@ -153,14 +160,18 @@ export default function ThemedTimeInput({
       </button>
 
       {(error || help) && (
-        <p className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+        <p id={descriptionId} className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
           {error || help}
         </p>
       )}
 
       {open && !disabled && (
         <div
-          className="fixed z-50 w-max rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          id={pickerId}
+          role="dialog"
+          aria-labelledby={buttonId}
+          aria-label={copy.choose}
+          className="fixed z-[var(--z-dropdown)] w-max rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-900"
           style={{ left: position.left, top: position.top }}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -171,19 +182,24 @@ export default function ThemedTimeInput({
         >
           <div className="flex items-center gap-2">
             <div
+              role="listbox"
               aria-label={copy.hour}
-              className={`h-36 w-14 snap-y overflow-y-auto rounded-md bg-orange-50 p-1 ${HIDDEN_SCROLLBAR} dark:bg-orange-500/15`}
+              aria-activedescendant={`${pickerId}-hour-${draftHour}`}
+              className={`h-40 w-16 snap-y overflow-y-auto rounded-md bg-orange-50 p-1 ${HIDDEN_SCROLLBAR} dark:bg-orange-500/15`}
             >
               {HOURS.map((hour) => {
                 const active = hour === draftHour;
                 return (
                   <button
                     key={hour}
+                    id={`${pickerId}-hour-${hour}`}
                     type="button"
+                    role="option"
+                    aria-selected={active}
                     aria-label={`${copy.hour} ${hour}`}
                     onClick={() => commitDraft(hour, draftMinute)}
                     data-active-hour={active ? "true" : undefined}
-                    className={`mb-1 flex h-8 w-full snap-center items-center justify-center rounded-md font-mono text-[18px] font-semibold leading-none tabular-nums transition-colors last:mb-0 ${
+                    className={`mb-1 flex h-11 w-full snap-center items-center justify-center rounded-md font-mono text-[18px] font-semibold leading-none tabular-nums transition-colors last:mb-0 ${
                       active
                         ? "bg-orange-500 text-white shadow-sm dark:bg-orange-500 dark:text-white"
                         : "text-gray-500 hover:bg-white/70 dark:text-gray-400 dark:hover:bg-gray-800"
@@ -198,19 +214,24 @@ export default function ThemedTimeInput({
             <span className="font-mono text-[22px] font-semibold leading-none text-gray-700 dark:text-gray-200">:</span>
 
             <div
+              role="listbox"
               aria-label={copy.minute}
-              className={`h-36 w-14 snap-y overflow-y-auto rounded-md bg-gray-100 p-1 ${HIDDEN_SCROLLBAR} dark:bg-gray-800`}
+              aria-activedescendant={`${pickerId}-minute-${draftMinute}`}
+              className={`h-40 w-16 snap-y overflow-y-auto rounded-md bg-gray-100 p-1 ${HIDDEN_SCROLLBAR} dark:bg-gray-800`}
             >
               {MINUTES.map((minute) => {
                 const active = minute === draftMinute;
                 return (
                   <button
                     key={minute}
+                    id={`${pickerId}-minute-${minute}`}
                     type="button"
+                    role="option"
+                    aria-selected={active}
                     aria-label={`${copy.minute} ${minute}`}
                     onClick={() => commitDraft(draftHour, minute)}
                     data-active-minute={active ? "true" : undefined}
-                    className={`mb-1 flex h-8 w-full snap-center items-center justify-center rounded-md font-mono text-[18px] font-semibold leading-none tabular-nums transition-colors last:mb-0 ${
+                    className={`mb-1 flex h-11 w-full snap-center items-center justify-center rounded-md font-mono text-[18px] font-semibold leading-none tabular-nums transition-colors last:mb-0 ${
                       active
                         ? "bg-gray-700 text-white shadow-sm dark:bg-gray-100 dark:text-gray-900"
                         : "text-gray-500 hover:bg-white/70 dark:text-gray-400 dark:hover:bg-gray-700"

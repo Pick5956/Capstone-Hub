@@ -76,7 +76,7 @@ export default function CreateRestaurantScreen() {
           <Pressable disabled={submitting} onPress={submit} style={[layout.primaryButton, submitting && { opacity: 0.7 }]}>
             <Text style={layout.primaryButtonText}>{submitting ? 'กำลังสร้างร้าน' : 'สร้างร้าน'}</Text>
           </Pressable>
-        </View>
+        </View> 
       </ScrollView>
     </KeyboardAvoidingView>
   );
