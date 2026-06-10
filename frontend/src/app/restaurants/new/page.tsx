@@ -206,6 +206,7 @@ export default function NewRestaurantPage() {
   const [openTime, setOpenTime] = useState("17:00");
   const [closeTime, setCloseTime] = useState("00:00");
   const [initialTables, setInitialTables] = useState("12");
+  const [seedMockupData, setSeedMockupData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const submitOnceRef = useRef(createSingleFlight());
@@ -237,6 +238,10 @@ export default function NewRestaurantPage() {
         openLabel: "เวลาเปิด",
         closeLabel: "เวลาปิด",
         tablesLabel: "จำนวนโต๊ะเริ่มต้น",
+        mockupSectionTitle: "ข้อมูลตัวอย่าง",
+        mockupSectionDescription: "เลือกได้ว่าจะให้ระบบสร้างเมนูและวัตถุดิบตัวอย่างตามประเภทร้านหรือเริ่มจากหมวดหมู่ว่าง",
+        mockupLabel: "สร้างเมนูและวัตถุดิบตัวอย่าง",
+        mockupHelp: "ระบบจะเพิ่มรายการตัวอย่างตามประเภทร้านที่เลือก เพื่อให้ทดลองใช้งานได้ทันที",
         submitIdle: "สร้างร้านและเข้า dashboard",
         submitBusy: "กำลังสร้างร้าน...",
         previewTitle: "ตัวอย่างข้อมูลร้าน",
@@ -294,6 +299,10 @@ export default function NewRestaurantPage() {
         openLabel: "Open time",
         closeLabel: "Close time",
         tablesLabel: "Starting tables",
+        mockupSectionTitle: "Sample data",
+        mockupSectionDescription: "Choose whether to create sample menu items and ingredients for this restaurant type or start with empty categories.",
+        mockupLabel: "Create sample menu items and ingredients",
+        mockupHelp: "The system will add starter sample records based on the selected restaurant type so you can try the workflow immediately.",
         submitIdle: "Create restaurant and enter dashboard",
         submitBusy: "Creating restaurant...",
         previewTitle: "Restaurant preview",
@@ -376,6 +385,7 @@ export default function NewRestaurantPage() {
           open_time: openTime,
           close_time: closeTime,
           table_count: tableCount,
+          seed_mockup_data: seedMockupData,
         });
         const membership = res.data.membership;
         restaurantRepository.setActiveId(membership.restaurant_id);
@@ -479,6 +489,21 @@ export default function NewRestaurantPage() {
                       max={500}
                     />
                   </div>
+                </Section>
+
+                <Section title={copy.mockupSectionTitle} description={copy.mockupSectionDescription}>
+                  <label className="flex cursor-pointer gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900">
+                    <input
+                      type="checkbox"
+                      checked={seedMockupData}
+                      onChange={(event) => setSeedMockupData(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-950"
+                    />
+                    <span>
+                      <span className="block text-[13px] font-semibold text-gray-900 dark:text-white">{copy.mockupLabel}</span>
+                      <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">{copy.mockupHelp}</span>
+                    </span>
+                  </label>
                 </Section>
 
                 <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-800">

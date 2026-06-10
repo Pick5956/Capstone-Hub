@@ -21,6 +21,8 @@ type RestaurantService struct {
 	memberRepo     *repository.RestaurantMemberRepository
 	roleRepo       *repository.RoleRepository
 	auditRepo      *repository.RestaurantAuditLogRepository
+	menuRepo       *repository.MenuRepository
+	ingredientRepo *repository.IngredientRepository
 }
 
 func ProvideRestaurantService(
@@ -28,13 +30,176 @@ func ProvideRestaurantService(
 	memberRepo *repository.RestaurantMemberRepository,
 	roleRepo *repository.RoleRepository,
 	auditRepo *repository.RestaurantAuditLogRepository,
+	menuRepo *repository.MenuRepository,
+	ingredientRepo *repository.IngredientRepository,
 ) *RestaurantService {
 	return &RestaurantService{
 		restaurantRepo: restaurantRepo,
 		memberRepo:     memberRepo,
 		roleRepo:       roleRepo,
 		auditRepo:      auditRepo,
+		menuRepo:       menuRepo,
+		ingredientRepo: ingredientRepo,
 	}
+}
+
+type starterCategories struct {
+	Menu       []string
+	Ingredient []string
+}
+
+type starterIngredient struct {
+	Name                    string
+	SKU                     string
+	Unit                    string
+	BaseUnit                string
+	PurchaseUnitDefault     string
+	ConversionFactorDefault float64
+	Stock                   float64
+	MinStock                float64
+	CostPerUnit             float64
+	YieldPercent            float64
+	StorageType             string
+}
+
+type starterMenuItem struct {
+	Name        string
+	Price       float64
+	Description string
+}
+
+type starterMockupData struct {
+	Ingredients map[string][]starterIngredient
+	MenuItems   map[string][]starterMenuItem
+}
+
+var restaurantTypeStarterCategories = map[string]starterCategories{
+	"ร้านอาหาร": {
+		Menu:       []string{"อาหารจานเดียว", "กับข้าว", "เส้น", "ของทานเล่น", "เครื่องดื่ม"},
+		Ingredient: []string{"เนื้อสัตว์", "ผัก", "เครื่องปรุง", "ของแห้ง", "เครื่องดื่ม"},
+	},
+	"คาเฟ่": {
+		Menu:       []string{"กาแฟ", "ชา", "เครื่องดื่มเย็น", "เบเกอรี่", "ของหวาน"},
+		Ingredient: []string{"เมล็ดกาแฟ", "ชาและผงชง", "นมและครีม", "ไซรัป", "เบเกอรี่"},
+	},
+	"ชาบู/ปิ้งย่าง": {
+		Menu:       []string{"ชุดเซ็ต", "เนื้อสัตว์", "ผัก", "น้ำจิ้ม", "เครื่องดื่ม"},
+		Ingredient: []string{"เนื้อสัตว์", "ซีฟู้ด", "ผักสด", "น้ำซุปและซอส", "ของแช่แข็ง"},
+	},
+	"เดลิเวอรี": {
+		Menu:       []string{"เมนูขายดี", "อาหารจานเดียว", "ชุดคอมโบ", "ของทานเล่น", "เครื่องดื่ม"},
+		Ingredient: []string{"วัตถุดิบหลัก", "เครื่องปรุง", "บรรจุภัณฑ์", "ของแช่เย็น", "เครื่องดื่ม"},
+	},
+	"ฟู้ดทรัค": {
+		Menu:       []string{"เมนูหลัก", "เมนูทานเล่น", "ชุดคอมโบ", "ซอสและท็อปปิ้ง", "เครื่องดื่ม"},
+		Ingredient: []string{"วัตถุดิบหลัก", "ของแห้ง", "ซอสและท็อปปิ้ง", "บรรจุภัณฑ์", "เครื่องดื่ม"},
+	},
+}
+
+var restaurantTypeStarterMockups = map[string]starterMockupData{
+	"ร้านอาหาร": {
+		Ingredients: map[string][]starterIngredient{
+			"เนื้อสัตว์": {
+				{Name: "เนื้อหมู", SKU: "ING-PORK", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 15000, MinStock: 2000, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
+				{Name: "เนื้อไก่", SKU: "ING-CHICKEN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
+			},
+			"ผัก": {
+				{Name: "ใบกะเพรา", SKU: "ING-BASIL", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 2500, MinStock: 400, CostPerUnit: 0.05, YieldPercent: 85, StorageType: "chilled"},
+				{Name: "ผักคะน้า", SKU: "ING-KALE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 6000, MinStock: 1000, CostPerUnit: 0.045, YieldPercent: 85, StorageType: "chilled"},
+			},
+			"เครื่องปรุง": {
+				{Name: "น้ำปลา", SKU: "ING-FISH-SAUCE", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ขวด", ConversionFactorDefault: 700, Stock: 7000, MinStock: 1400, CostPerUnit: 0.04, YieldPercent: 100, StorageType: "room_temp"},
+			},
+		},
+		MenuItems: map[string][]starterMenuItem{
+			"อาหารจานเดียว": {
+				{Name: "ข้าวกะเพราไก่ไข่ดาว", Price: 79, Description: "ไก่ผัดกะเพรารสจัดเสิร์ฟพร้อมไข่ดาว"},
+				{Name: "ผัดซีอิ๊วหมู", Price: 75, Description: "เส้นใหญ่ผัดซีอิ๊วกับหมูและคะน้า"},
+			},
+			"ของทานเล่น": {
+				{Name: "ปีกไก่ทอดน้ำปลา", Price: 99, Description: "ปีกไก่ทอดกรอบเคลือบน้ำปลา"},
+			},
+		},
+	},
+	"คาเฟ่": {
+		Ingredients: map[string][]starterIngredient{
+			"เมล็ดกาแฟ": {
+				{Name: "เมล็ดกาแฟคั่วกลาง", SKU: "ING-COFFEE-BEAN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 5000, MinStock: 1000, CostPerUnit: 0.55, YieldPercent: 100, StorageType: "room_temp"},
+			},
+			"นมและครีม": {
+				{Name: "นมสด", SKU: "ING-MILK", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ลิตร", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.055, YieldPercent: 100, StorageType: "chilled"},
+			},
+			"ไซรัป": {
+				{Name: "ไซรัปวานิลลา", SKU: "ING-VANILLA-SYRUP", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ขวด", ConversionFactorDefault: 750, Stock: 3000, MinStock: 750, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "room_temp"},
+			},
+		},
+		MenuItems: map[string][]starterMenuItem{
+			"กาแฟ": {
+				{Name: "อเมริกาโน่เย็น", Price: 65, Description: "กาแฟดำเย็นหอมเข้ม"},
+				{Name: "ลาเต้เย็น", Price: 75, Description: "เอสเพรสโซ่ผสมนมสดเนียนนุ่ม"},
+			},
+			"เบเกอรี่": {
+				{Name: "ครัวซองต์เนยสด", Price: 85, Description: "ครัวซองต์อบใหม่หอมเนย"},
+			},
+		},
+	},
+	"ชาบู/ปิ้งย่าง": {
+		Ingredients: map[string][]starterIngredient{
+			"เนื้อสัตว์": {
+				{Name: "หมูสไลซ์", SKU: "ING-PORK-SLICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 20000, MinStock: 3000, CostPerUnit: 0.22, YieldPercent: 100, StorageType: "frozen"},
+				{Name: "เนื้อวัวสไลซ์", SKU: "ING-BEEF-SLICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.48, YieldPercent: 100, StorageType: "frozen"},
+			},
+			"ผักสด": {
+				{Name: "ผักกาดขาว", SKU: "ING-NAPA", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 8000, MinStock: 1500, CostPerUnit: 0.035, YieldPercent: 85, StorageType: "chilled"},
+			},
+		},
+		MenuItems: map[string][]starterMenuItem{
+			"ชุดเซ็ต": {
+				{Name: "ชุดหมูรวม", Price: 299, Description: "หมูสไลซ์ ลูกชิ้น ผักสด และน้ำจิ้ม"},
+				{Name: "ชุดเนื้อพรีเมียม", Price: 459, Description: "เนื้อวัวสไลซ์คัดพิเศษพร้อมผักสด"},
+			},
+		},
+	},
+	"เดลิเวอรี": {
+		Ingredients: map[string][]starterIngredient{
+			"วัตถุดิบหลัก": {
+				{Name: "ข้าวหอมมะลิ", SKU: "ING-RICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระสอบ", ConversionFactorDefault: 15000, Stock: 45000, MinStock: 10000, CostPerUnit: 0.035, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "เนื้อไก่", SKU: "ING-DELIVERY-CHICKEN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 15000, MinStock: 2500, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
+			},
+			"บรรจุภัณฑ์": {
+				{Name: "กล่องอาหาร", SKU: "PACK-BOX", Unit: "ใบ", BaseUnit: "ใบ", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 50, Stock: 500, MinStock: 100, CostPerUnit: 2.5, YieldPercent: 100, StorageType: "room_temp"},
+			},
+		},
+		MenuItems: map[string][]starterMenuItem{
+			"เมนูขายดี": {
+				{Name: "ข้าวไก่กระเทียม", Price: 75, Description: "ข้าวกล่องไก่กระเทียมพร้อมน้ำจิ้ม"},
+				{Name: "ข้าวกะเพราหมู", Price: 75, Description: "เมนูยอดนิยมสำหรับเดลิเวอรี"},
+			},
+			"ชุดคอมโบ": {
+				{Name: "คอมโบข้าวกะเพรา+ชาเย็น", Price: 109, Description: "เซ็ตขายดีพร้อมเครื่องดื่ม"},
+			},
+		},
+	},
+	"ฟู้ดทรัค": {
+		Ingredients: map[string][]starterIngredient{
+			"วัตถุดิบหลัก": {
+				{Name: "ขนมปังเบอร์เกอร์", SKU: "ING-BURGER-BUN", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 12, Stock: 120, MinStock: 24, CostPerUnit: 8, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "หมูบด", SKU: "ING-GROUND-PORK", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 10000, MinStock: 1500, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
+			},
+			"ซอสและท็อปปิ้ง": {
+				{Name: "ชีสแผ่น", SKU: "ING-CHEESE", Unit: "แผ่น", BaseUnit: "แผ่น", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 20, Stock: 100, MinStock: 20, CostPerUnit: 5.5, YieldPercent: 100, StorageType: "chilled"},
+			},
+		},
+		MenuItems: map[string][]starterMenuItem{
+			"เมนูหลัก": {
+				{Name: "เบอร์เกอร์หมูชีส", Price: 129, Description: "เบอร์เกอร์หมูย่างพร้อมชีสและซอสสูตรพิเศษ"},
+				{Name: "ข้าวหมูย่างฟู้ดทรัค", Price: 89, Description: "ข้าวหมูย่างเสิร์ฟเร็วพร้อมน้ำจิ้ม"},
+			},
+			"เครื่องดื่ม": {
+				{Name: "เลมอนโซดา", Price: 55, Description: "เครื่องดื่มซ่าสดชื่น"},
+			},
+		},
+	},
 }
 
 type CreateRestaurantRequest struct {
@@ -47,6 +212,7 @@ type CreateRestaurantRequest struct {
 	OpenTime             string  `json:"open_time"`
 	CloseTime            string  `json:"close_time"`
 	TableCount           int     `json:"table_count"`
+	SeedMockupData       bool    `json:"seed_mockup_data"`
 	ServiceChargeEnabled bool    `json:"service_charge_enabled"`
 	ServiceChargeRate    float64 `json:"service_charge_rate"`
 	VATEnabled           bool    `json:"vat_enabled"`
@@ -151,6 +317,14 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 	if err := s.memberRepo.Create(member); err != nil {
 		return nil, nil, err
 	}
+	if err := s.createStarterCategories(restaurant.ID, fields.RestaurantType); err != nil {
+		return nil, nil, err
+	}
+	if req.SeedMockupData {
+		if err := s.createStarterMockupData(restaurant.ID, fields.RestaurantType); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	// reload with relationships for response
 	loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, restaurant.ID)
@@ -159,6 +333,106 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 	}
 
 	return restaurant, member, nil
+}
+
+func (s *RestaurantService) createStarterCategories(restaurantID uint, restaurantType string) error {
+	starter, ok := restaurantTypeStarterCategories[restaurantType]
+	if !ok {
+		starter = restaurantTypeStarterCategories["ร้านอาหาร"]
+	}
+	for i, name := range starter.Menu {
+		if err := s.menuRepo.CreateCategory(&entity.Category{
+			RestaurantID: restaurantID,
+			Name:         name,
+			DisplayOrder: i + 1,
+			IsActive:     true,
+		}); err != nil {
+			return err
+		}
+	}
+	for i, name := range starter.Ingredient {
+		if err := s.ingredientRepo.CreateCategory(&entity.IngredientCategory{
+			RestaurantID: restaurantID,
+			Name:         name,
+			DisplayOrder: i + 1,
+			IsActive:     true,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *RestaurantService) createStarterMockupData(restaurantID uint, restaurantType string) error {
+	mockup, ok := restaurantTypeStarterMockups[restaurantType]
+	if !ok {
+		mockup = restaurantTypeStarterMockups["ร้านอาหาร"]
+	}
+	ingredientCategoryIDs, err := s.seedStarterIngredients(restaurantID, mockup.Ingredients)
+	if err != nil {
+		return err
+	}
+	return s.seedStarterMenuItems(restaurantID, mockup.MenuItems, ingredientCategoryIDs)
+}
+
+func (s *RestaurantService) seedStarterIngredients(restaurantID uint, seeds map[string][]starterIngredient) (map[string]uint, error) {
+	categoryIDs := map[string]uint{}
+	for categoryName, ingredients := range seeds {
+		category, err := s.ingredientRepo.FindCategoryByName(restaurantID, categoryName)
+		if err != nil {
+			return nil, err
+		}
+		categoryIDs[categoryName] = category.ID
+		for _, seed := range ingredients {
+			categoryID := category.ID
+			if err := s.ingredientRepo.Create(&entity.Ingredient{
+				RestaurantID:            restaurantID,
+				Name:                    strings.TrimSpace(seed.Name),
+				SKU:                     strings.TrimSpace(seed.SKU),
+				CategoryID:              &categoryID,
+				Unit:                    strings.TrimSpace(seed.Unit),
+				BaseUnit:                strings.TrimSpace(seed.BaseUnit),
+				PurchaseUnitDefault:     strings.TrimSpace(seed.PurchaseUnitDefault),
+				ConversionFactorDefault: seed.ConversionFactorDefault,
+				Stock:                   seed.Stock,
+				MinStock:                seed.MinStock,
+				CostPerUnit:             seed.CostPerUnit,
+				YieldPercent:            seed.YieldPercent,
+				StorageType:             strings.TrimSpace(seed.StorageType),
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return categoryIDs, nil
+}
+
+func (s *RestaurantService) seedStarterMenuItems(restaurantID uint, seeds map[string][]starterMenuItem, ingredientCategoryIDs map[string]uint) error {
+	for categoryName, items := range seeds {
+		category, err := s.menuRepo.FindCategoryByName(restaurantID, categoryName)
+		if err != nil {
+			return err
+		}
+		for i, seed := range items {
+			item := &entity.MenuItem{
+				RestaurantID: restaurantID,
+				CategoryID:   category.ID,
+				Name:         strings.TrimSpace(seed.Name),
+				Price:        seed.Price,
+				Description:  strings.TrimSpace(seed.Description),
+				IsAvailable:  true,
+				DisplayOrder: i + 1,
+			}
+			if err := s.menuRepo.CreateMenuItem(item); err != nil {
+				return err
+			}
+			if err := s.menuRepo.ReplaceMenuCategories(item, categoryLinks(restaurantID, item.ID, []uint{category.ID})); err != nil {
+				return err
+			}
+		}
+	}
+	_ = ingredientCategoryIDs
+	return nil
 }
 
 func (s *RestaurantService) ListMyMemberships(userID uint) ([]entity.RestaurantMember, error) {
