@@ -37,6 +37,15 @@ func (r *MenuRepository) FindCategory(restaurantID, categoryID uint) (*entity.Ca
 	return &category, nil
 }
 
+func (r *MenuRepository) FindCategoryByName(restaurantID uint, name string) (*entity.Category, error) {
+	var category entity.Category
+	err := r.db.Where("restaurant_id = ? AND name = ?", restaurantID, name).First(&category).Error
+	if err != nil {
+		return nil, err
+	}
+	return &category, nil
+}
+
 func (r *MenuRepository) UpdateCategory(category *entity.Category) error {
 	return r.db.Save(category).Error
 }

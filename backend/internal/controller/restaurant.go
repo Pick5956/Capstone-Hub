@@ -29,9 +29,11 @@ func ProvideRestaurantController(db *gorm.DB) *RestaurantController {
 	userRepo := repository.NewUserRepository(db)
 	auditRepo := repository.NewRestaurantAuditLogRepository(db)
 	setupRepo := repository.NewRestaurantSetupRepository(db)
+	menuRepo := repository.NewMenuRepository(db)
+	ingredientRepo := repository.NewIngredientRepository(db)
 
 	return &RestaurantController{
-		restaurantSvc: service.ProvideRestaurantService(restaurantRepo, memberRepo, roleRepo, auditRepo, setupRepo),
+		restaurantSvc: service.ProvideRestaurantService(restaurantRepo, memberRepo, roleRepo, auditRepo, setupRepo, menuRepo, ingredientRepo),
 		invitationSvc: service.ProvideInvitationService(invRepo, memberRepo, roleRepo, userRepo, auditRepo),
 	}
 }
