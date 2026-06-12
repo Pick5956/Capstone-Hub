@@ -24,27 +24,6 @@ type starterMenuCategory struct {
 	Items []starterMenuItem
 }
 
-type starterMenuItem struct {
-	Name         string
-	Price        float64
-	Description  string
-	OptionGroups []starterOptionGroup
-}
-
-type starterOptionGroup struct {
-	Name      string
-	Required  bool
-	MinSelect int
-	MaxSelect int
-	Options   []starterOption
-}
-
-type starterOption struct {
-	Name       string
-	PriceDelta float64
-	IsDefault  bool
-}
-
 func seedRestaurantStarterSetup(repo *repository.RestaurantSetupRepository, restaurantID uint, restaurantType string, tableCount int) error {
 	profile := starterProfileFor(restaurantType)
 	if err := seedStarterMenu(repo, restaurantID, profile.Categories); err != nil {

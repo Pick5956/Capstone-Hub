@@ -129,7 +129,7 @@ export function WorkspaceShell({
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
+      <header className="fixed inset-x-0 top-0 z-[var(--z-sticky)] border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
         <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <BrandMark />
           <div className="flex items-center gap-1.5">
@@ -145,7 +145,7 @@ export function WorkspaceShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <main className="mx-auto w-full max-w-6xl px-4 pb-6 pt-[calc(4rem+1.5rem)] sm:px-6 lg:px-8 lg:pb-8 lg:pt-[calc(4rem+2rem)]">
         {!hideIntro ? (
           <div>
             <p className="text-[11px] font-semibold uppercase text-orange-600 dark:text-orange-400">Restaurant workspace</p>

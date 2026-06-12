@@ -67,9 +67,24 @@ type starterIngredient struct {
 }
 
 type starterMenuItem struct {
-	Name        string
-	Price       float64
-	Description string
+	Name         string
+	Price        float64
+	Description  string
+	OptionGroups []starterOptionGroup
+}
+
+type starterOptionGroup struct {
+	Name      string
+	Required  bool
+	MinSelect int
+	MaxSelect int
+	Options   []starterOption
+}
+
+type starterOption struct {
+	Name       string
+	PriceDelta float64
+	IsDefault  bool
 }
 
 type starterMockupData struct {
