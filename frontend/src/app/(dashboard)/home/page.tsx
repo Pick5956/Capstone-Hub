@@ -7,13 +7,10 @@ import {
   ArrowRight,
   CheckCircle2,
   ChefHat,
-  LayoutGrid,
+  Clock,
   Loader2,
-  RefreshCw,
-  ShoppingBag,
   Sparkles,
   Users,
-  Wallet,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -226,13 +223,13 @@ function ChartBox({ data, copy }: { data: HourlyPoint[]; copy: Copy }) {
           <XAxis dataKey="dateTime" tickFormatter={(_, index) => data[index]?.hour ?? ""} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} />
           <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#9ca3af" }} allowDecimals={false} />
           <Tooltip
-            cursor={{ fill: "rgba(249, 115, 22, 0.06)" }}
+            cursor={{ fill: "rgba(148, 163, 184, 0.06)" }}
             formatter={(value) => [`${value} ${copy.orders}`, copy.ordersByHour]}
             labelFormatter={(label) => String(label)}
           />
           <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
             {data.map((point) => (
-              <Cell key={point.hour} fill={point.orders >= 4 ? "#f97316" : point.orders >= 2 ? "#fb923c" : "#cbd5e1"} />
+              <Cell key={point.hour} fill={point.orders >= 4 ? "#475569" : point.orders >= 2 ? "#94a3b8" : "#e2e8f0"} />
             ))}
           </Bar>
         </BarChart>
@@ -350,6 +347,7 @@ export default function Home() {
   const shiftRevenue = revenueOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0);
   const avgTicket = revenueOrders.length ? Math.round(shiftRevenue / revenueOrders.length) : 0;
   const guestCount = occupied.reduce((sum, table) => sum + (table.guests ?? 0), 0);
+  const takeawayOrdersCount = orders.filter((order) => order.order_type === "takeaway" && activeOrderStatuses.includes(order.status)).length;
 
   const topItems = Array.from(
     orders.reduce((map, order) => {
@@ -416,139 +414,119 @@ export default function Home() {
     { key: "ready" as const, icon: CheckCircle2, title: copy.ready, items: ready, color: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
   ];
 
-  const floorMeta = {
-    occupied: { label: copy.occupied, className: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200" },
-    available: { label: copy.available, className: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200" },
-    reserved: { label: copy.reserved, className: "border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200" },
-    inactive: { label: copy.inactive, className: "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-300" },
-  };
 
   return (
-    <div className="min-h-screen bg-[#f7f8fa] px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mx-auto flex w-full max-w-[1360px] flex-col gap-4">
-        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex w-full flex-col gap-4 border-b border-gray-200 pb-4 dark:border-gray-800 md:flex-row md:items-end md:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 shadow-sm dark:border-emerald-900/60 dark:bg-gray-950 dark:text-emerald-300">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  {copy.open}
-                </span>
-                <span className="text-[12px] text-gray-500 dark:text-gray-400">
-                  {dateLabel} · {timeLabel}
-                </span>
+    <div className="min-h-screen bg-[#f8fafc] px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+      <div className="flex w-full flex-col gap-6">
+        <header className="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-gray-800 md:flex-row md:items-end md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>{copy.open}</span>
               </div>
-              <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-600 dark:text-gray-400">
-                {user ? `${copy.greeting} ${user.nickname?.trim() || user.first_name} · ` : ""}
-                {copy.subtitle}
-              </p>
-              {lastUpdated ? (
-                <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
-                  {copy.updated} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-              ) : null}
+              <span className="text-gray-300 dark:text-gray-700">·</span>
+              <span>
+                {dateLabel} · {timeLabel}
+              </span>
             </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void loadOperations()}
-                disabled={loading}
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
-              >
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {copy.refresh}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/pos/tables")}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-950 px-3 text-[12px] font-semibold text-white shadow-sm transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                <ShoppingBag className="h-4 w-4" />
-                {copy.newOrder}
-              </button>
-            </div>
+            <h1 className="mt-2 text-[26px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
+            <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">
+              {user ? `${copy.greeting} ${user.nickname?.trim() || user.first_name} · ` : ""}
+              {copy.subtitle}
+            </p>
           </div>
+          {lastUpdated ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 md:mb-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80 animate-pulse" />
+              <span>
+                {copy.updated} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ) : null}
         </header>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              { icon: AlertTriangle, label: copy.kitchenDelayed, value: delayed.length, helper: copy.kitchenDelayedHelp, tone: "text-red-600 dark:text-red-300" },
-              { icon: LayoutGrid, label: copy.activeTables, value: `${occupied.length}/${tables.length}`, helper: `${guestCount} ${copy.activeTablesHelp}`, tone: "text-amber-600 dark:text-amber-300" },
-              { icon: CheckCircle2, label: copy.readyToServe, value: ready.length, helper: copy.readyToServeHelp, tone: "text-emerald-600 dark:text-emerald-300" },
-              { icon: Wallet, label: copy.shiftRevenue, value: formatCurrency(shiftRevenue, language), helper: `${copy.shiftRevenueHelp} ${formatCurrency(avgTicket, language)}`, tone: "text-gray-950 dark:text-white" },
-            ].map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <div key={stat.label} className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-                  <div className="flex items-start gap-3 px-4 py-3">
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
-                      <Icon className="h-4 w-4" />
+        {/* Stats Grid Strip */}
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 xl:grid-cols-4">
+          {[
+            { label: copy.kitchenDelayed, value: delayed.length, helper: copy.kitchenDelayedHelp, active: delayed.length > 0, statusColor: "bg-red-500" },
+            { label: copy.activeTables, value: `${occupied.length}/${tables.length}`, helper: `${guestCount} ${copy.activeTablesHelp}`, active: occupied.length > 0, statusColor: "bg-amber-500" },
+            { label: copy.readyToServe, value: ready.length, helper: copy.readyToServeHelp, active: ready.length > 0, statusColor: "bg-emerald-500" },
+            { label: copy.shiftRevenue, value: formatCurrency(shiftRevenue, language), helper: `${copy.shiftRevenueHelp} ${formatCurrency(avgTicket, language)}`, active: false, statusColor: "bg-slate-500" },
+          ].map((stat) => {
+            return (
+              <div key={stat.label} className="relative bg-white p-4 dark:bg-gray-950">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500">{stat.label}</p>
+                  {stat.active && (
+                    <span className="flex h-2 w-2 rounded-full relative">
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${stat.statusColor}`} />
+                      <span className={`relative inline-flex rounded-full h-2 w-2 ${stat.statusColor}`} />
                     </span>
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{stat.label}</p>
-                      <p className={`mt-1 truncate text-[22px] font-semibold leading-none tabular-nums ${stat.tone}`}>{stat.value}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{stat.helper}</p>
-                    </div>
-                  </div>
-                  <div className="h-1 bg-gradient-to-r from-orange-500 via-orange-300 to-transparent" />
+                  )}
                 </div>
-              );
-            })}
-          </div>
-
-        <main className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(330px,0.8fr)]">
-          <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.mainFlow}</p>
-                <h2 className="mt-1 text-[15px] font-semibold text-gray-950 dark:text-white">{copy.kitchenQueue}</h2>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{stat.value}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{stat.helper}</p>
               </div>
-              <p className="text-[12px] text-gray-500 dark:text-gray-400">
+            );
+          })}
+        </div>
+
+        {/* Main Work lanes & Signals split */}
+        <main className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(300px,0.78fr)]">
+          {/* Kitchen Queue Grid Panel */}
+          <div className="flex flex-col rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-900/10">
+              <h2 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.kitchenQueue}</h2>
+              <span className="font-mono text-[11px] text-gray-400">
                 {tickets.length} {copy.tickets}
-              </p>
+              </span>
             </div>
 
-            <div className="grid gap-px bg-gray-200 dark:bg-gray-800 lg:grid-cols-3">
+            <div className="grid gap-px bg-gray-200 dark:bg-gray-800 md:grid-cols-3">
               {lanes.map((lane) => {
                 const Icon = lane.icon;
                 return (
-                  <div key={lane.key} className="min-w-0 bg-white dark:bg-gray-950">
-                    <div className="flex items-center justify-between px-4 py-3">
+                  <div key={lane.key} className="flex flex-col bg-white dark:bg-gray-950">
+                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800/60 bg-gray-50/20 dark:bg-gray-900/5">
                       <div className="flex items-center gap-2">
-                        <span className={`flex h-8 w-8 items-center justify-center rounded-md ${lane.bg} ${lane.color}`}>
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-[13px] font-semibold text-gray-950 dark:text-white">{lane.title}</p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400">{lane.items.length} {copy.tickets}</p>
-                        </div>
+                        <Icon className={`h-4 w-4 ${lane.color}`} />
+                        <h3 className="text-[12px] font-semibold text-gray-900 dark:text-white">
+                          {lane.title} <span className="font-mono text-gray-400">({lane.items.length})</span>
+                        </h3>
                       </div>
                     </div>
-                    <div className="border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex-1 divide-y divide-gray-100 dark:divide-gray-800/60">
                       {lane.items.length === 0 ? (
-                        <div className="px-4 py-5 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+                        <div className="px-4 py-8 text-center text-[12px] text-gray-400 dark:text-gray-500">
+                          {copy.noItems}
+                        </div>
                       ) : (
                         lane.items.slice(0, 5).map((ticket) => (
                           <button
                             key={ticket.id}
                             type="button"
-                            onClick={() => router.push(`/pos/orders/${ticket.id}`)}
-                            className="group grid w-full grid-cols-[1fr_auto] gap-3 border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-orange-50/50 dark:border-gray-800 dark:hover:bg-orange-950/20"
+                            onClick={() => router.push(`/pos/orders/${ticket.orderNumber}`)}
+                            className="group block w-full px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900"
                           >
-                            <span className="min-w-0">
-                              <span className="flex items-center gap-2">
-                                <span className="text-[13px] font-semibold text-gray-950 dark:text-white">{ticket.table}</span>
-                                <span className="font-mono text-[11px] text-gray-400">#{ticket.orderNumber}</span>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[13px] font-semibold text-gray-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                                {ticket.table}
                               </span>
-                              <span className="mt-1 block truncate text-[12px] text-gray-500 dark:text-gray-400">{ticket.items.join(" · ") || copy.noItems}</span>
-                            </span>
-                            <span className="text-right">
-                              <span className={`block text-[13px] font-semibold tabular-nums ${lane.color}`}>
+                              <span className="font-mono text-[11px] text-gray-400">#{ticket.orderNumber}</span>
+                            </div>
+                            <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">
+                              {ticket.items.join(" · ") || copy.noItems}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${lane.color}`}>
+                                <span className="h-1.5 w-1.5 rounded-full bg-current" />
                                 {ticket.waited} {copy.minutes}
                               </span>
-                              <span className="text-[11px] text-gray-400">{formatCurrency(ticket.total, language)}</span>
-                            </span>
+                              <span className="font-mono text-[11px] text-gray-400">{formatCurrency(ticket.total, language)}</span>
+                            </div>
                           </button>
                         ))
                       )}
@@ -557,161 +535,197 @@ export default function Home() {
                 );
               })}
             </div>
-          </section>
+          </div>
 
-          <aside className="flex flex-col gap-4">
-            <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.needsAttention}</p>
-                <h2 className="mt-1 text-[15px] font-semibold text-gray-950 dark:text-white">{copy.sideSignals}</h2>
-                <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.needsAttentionHelp}</p>
-              </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          {/* Sidebar Signals Panel */}
+          <div className="flex flex-col rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800/60">
+            {/* Stock Notes */}
+            <div className="p-4">
+              <h3 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.stockNotes}</h3>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{copy.needsAttentionHelp}</p>
+              <ul className="mt-3 divide-y divide-gray-100 dark:divide-gray-800/60">
                 {lowStock.length ? lowStock.map((item) => (
-                  <div key={item.name} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-semibold text-gray-950 dark:text-white">{item.name}</p>
-                      <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">{item.critical ? copy.refillSoon : copy.lowStock}</p>
+                  <li key={item.name} className="flex items-center justify-between py-2.5 text-[12px] first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`h-1.5 w-1.5 rounded-full ${item.critical ? "bg-red-500 animate-pulse" : "bg-amber-500"}`} />
+                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{item.name}</span>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-[13px] font-semibold tabular-nums ${item.critical ? "text-red-600 dark:text-red-300" : "text-amber-600 dark:text-amber-300"}`}>
-                        {item.left.toLocaleString()} {item.unit}
-                      </p>
-                      <p className="text-[11px] text-gray-400">{item.critical ? copy.refillSoon : copy.lowStock}</p>
-                    </div>
-                  </div>
+                    <span className="font-mono font-semibold text-gray-950 dark:text-white shrink-0">
+                      {item.left.toLocaleString()} {item.unit}
+                    </span>
+                  </li>
                 )) : (
-                  <div className="px-4 py-5 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+                  <li className="py-2.5 text-[12px] text-gray-400 dark:text-gray-500">{copy.noItems}</li>
                 )}
-              </div>
-            </section>
+              </ul>
+            </div>
 
-            <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-              <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                <Users className="h-4 w-4 text-orange-500" />
-                <h2 className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.teamNotes}</h2>
+            {/* Team Notes */}
+            <div className="p-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-gray-400" />
+                <h3 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.teamNotes}</h3>
               </div>
-              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <ul className="mt-3 divide-y divide-gray-100 dark:divide-gray-800/60">
                 {staff.length ? staff.map((member) => {
                   const full = member.on === member.total;
                   return (
-                    <div key={member.role} className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
-                      <div>
-                        <p className="text-[13px] font-semibold text-gray-950 dark:text-white">{member.role}</p>
-                        <p className="text-[12px] text-gray-500 dark:text-gray-400">{member.lead}</p>
+                    <li key={member.role} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0 text-[12px]">
+                      <div className="min-w-0">
+                        <span className="font-medium text-gray-800 dark:text-gray-200 truncate block">{member.role}</span>
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate block">{member.lead}</span>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-[13px] font-semibold tabular-nums ${full ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}`}>
+                      <div className="text-right shrink-0">
+                        <span className={`font-mono font-semibold ${full ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                           {member.on}/{member.total}
-                        </p>
-                        <p className="text-[11px] text-gray-400">{full ? copy.fullShift : copy.missingSome}</p>
+                        </span>
                       </div>
-                    </div>
+                    </li>
                   );
                 }) : (
-                  <div className="px-4 py-5 text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+                  <li className="py-2.5 text-[12px] text-gray-400 dark:text-gray-500">{copy.noItems}</li>
                 )}
-              </div>
-            </section>
-          </aside>
+              </ul>
+            </div>
+          </div>
         </main>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-          <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.shiftPulse}</p>
-                <h2 className="mt-1 text-[15px] font-semibold text-gray-950 dark:text-white">{copy.ordersByHour}</h2>
-              </div>
-              <div className="hidden gap-5 text-right sm:flex">
-                <div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.openOrders}</p>
-                  <p className="text-[15px] font-semibold tabular-nums text-gray-950 dark:text-white">{orders.filter((order) => activeOrderStatuses.includes(order.status)).length}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.averageBill}</p>
-                  <p className="text-[15px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(avgTicket, language)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="px-4 py-4">
-              <ChartBox data={hourly} copy={copy} />
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <Sparkles className="h-4 w-4 text-orange-500" />
-              <h2 className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.topItems}</h2>
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {topItems.length ? (
-                topItems.map((item, index) => (
-                  <div key={item.name} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-orange-50 text-[12px] font-semibold text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold text-gray-950 dark:text-white">{item.name}</span>
-                      <span className="block truncate text-[12px] text-gray-500 dark:text-gray-400">{copy.stockGoodPull}</span>
-                    </span>
-                    <span className="text-right text-[13px] font-semibold tabular-nums text-gray-950 dark:text-white">
-                      {item.sold}
-                    </span>
+        {/* Pulse and Top Selling Section */}
+        <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+          <div className="grid gap-px bg-gray-200 dark:bg-gray-800 xl:grid-cols-[1.15fr_0.85fr]">
+            {/* Hourly Chart Column */}
+            <div className="bg-white p-4 dark:bg-gray-950">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
+                <h2 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.ordersByHour}</h2>
+                <div className="hidden gap-5 text-right sm:flex">
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 mr-2">{copy.openOrders}</span>
+                    <span className="text-[13px] font-semibold tabular-nums text-gray-950 dark:text-white">{orders.filter((order) => activeOrderStatuses.includes(order.status)).length}</span>
                   </div>
-                ))
-              ) : (
-                <div className="px-4 py-6 text-[12px] text-gray-500 dark:text-gray-400">{copy.noTopItems}</div>
-              )}
+                  <div>
+                    <span className="text-[11px] text-gray-400 dark:text-gray-500 mr-2">{copy.averageBill}</span>
+                    <span className="text-[13px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(avgTicket, language)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <ChartBox data={hourly} copy={copy} />
+              </div>
+            </div>
+
+            {/* Top Selling Items Column */}
+            <div className="bg-white p-4 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800 xl:border-t-0">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-3 dark:border-gray-800">
+                <Sparkles className="h-4 w-4 text-gray-400" />
+                <h2 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.topItems}</h2>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800/60 mt-1">
+                {topItems.length ? (
+                  topItems.map((item, index) => {
+                    const maxSold = topItems[0]?.sold || 1;
+                    const percentage = Math.round((item.sold / maxSold) * 100);
+                    return (
+                      <div key={item.name} className="py-2.5">
+                        <div className="flex items-center justify-between text-[12px]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[11px] font-mono text-gray-400">0{index + 1}</span>
+                            <span className="font-semibold text-gray-800 dark:text-gray-200 truncate">{item.name}</span>
+                          </div>
+                          <span className="font-mono font-semibold text-gray-950 dark:text-white shrink-0">{item.sold}</span>
+                        </div>
+                        <div className="mt-1.5 h-1 w-full rounded-full bg-gray-100 dark:bg-gray-800/60">
+                          <div 
+                            className="h-1 rounded-full bg-slate-600 dark:bg-slate-400" 
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center text-[12px] text-gray-400 dark:text-gray-500">{copy.noTopItems}</div>
+                )}
+              </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm shadow-gray-950/[0.03] dark:border-gray-800 dark:bg-gray-950">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+        {/* Floor Status & Table Layout */}
+        <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950">
+          {/* Section Header */}
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3.5 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-900/10">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.floorStatus}</p>
-              <h2 className="mt-1 text-[15px] font-semibold text-gray-950 dark:text-white">{copy.floorStatus}</h2>
+              <h2 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.floorStatus}</h2>
+              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                {tables.filter(t => t.status === 'occupied').length} โต๊ะกำลังใช้งาน · แขกรวม {guestCount} คน · ออเดอร์กลับบ้าน active {takeawayOrdersCount} รายการ
+              </p>
             </div>
             {floorError ? <p className="text-[12px] text-red-600 dark:text-red-300">{floorError}</p> : null}
           </div>
-          <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 md:grid-cols-3">
-            {(["occupied", "available", "inactive"] as FloorStatus[]).map((status) => (
-              <div key={status} className="bg-white px-4 py-3 dark:bg-gray-950">
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">{floorMeta[status].label}</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums text-gray-950 dark:text-white">{tables.filter((table) => table.status === status).length}</p>
+
+          {/* Grid divided status numbers */}
+          <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-4 border-b border-gray-100 dark:border-gray-800">
+            {[
+              { label: copy.occupied, value: tables.filter((table) => table.status === "occupied").length, dot: "bg-amber-500" },
+              { label: copy.available, value: tables.filter((table) => table.status === "available").length, dot: "bg-emerald-500" },
+              { label: copy.inactive, value: tables.filter((table) => table.status === "inactive").length, dot: "bg-gray-300 dark:bg-gray-700" },
+              { label: "กลับบ้าน (Active)", value: takeawayOrdersCount, dot: "bg-orange-500" }
+            ].map((item) => (
+              <div key={item.label} className="bg-white p-4 dark:bg-gray-950">
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
+                  <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">{item.label}</span>
+                </div>
+                <p className="mt-1 text-xl font-bold font-mono tracking-tight text-gray-900 dark:text-white">{item.value}</p>
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-2 px-4 py-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+
+          {/* Floor grid */}
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 bg-gray-50/10 dark:bg-gray-900/5">
             {loading && !hasLoadedRef.current ? (
-              <div className="col-span-full flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+              <div className="col-span-full flex items-center justify-center py-6 gap-2 text-[12px] text-gray-400 dark:text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {copy.loading}
               </div>
             ) : tables.length ? (
               tables.map((table) => (
-                <div key={table.id} className={`rounded-md border px-3 py-2 ${floorMeta[table.status].className}`}>
-                  <p className="text-[13px] font-semibold">{table.id}</p>
-                  <p className="mt-0.5 truncate text-[11px] opacity-80">
-                    {table.guests ? `${table.guests} ${copy.people}` : floorMeta[table.status].label}
+                <div 
+                  key={table.id} 
+                  className="relative rounded-md border border-gray-200 bg-white p-3 shadow-sm transition-all hover:border-gray-300 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-gray-700"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{table.id}</span>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      table.status === 'occupied' ? 'bg-amber-500' :
+                      table.status === 'available' ? 'bg-emerald-500' :
+                      table.status === 'reserved' ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-700'
+                    }`} />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {table.guests ? `${table.guests} ${copy.people}` : (table.status === 'available' ? copy.available : copy.inactive)}
                   </p>
-                  {table.mins ? <p className="text-[11px] opacity-80">{table.mins} {copy.minutes}</p> : null}
+                  {table.mins ? (
+                    <div className="mt-2 flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 font-mono">
+                      <Clock className="h-3 w-3 shrink-0" />
+                      <span>{table.mins} {copy.minutes}</span>
+                    </div>
+                  ) : null}
                 </div>
               ))
             ) : (
-              <div className="col-span-full text-[12px] text-gray-500 dark:text-gray-400">{copy.noItems}</div>
+              <div className="col-span-full py-6 text-center text-[12px] text-gray-400 dark:text-gray-500">{copy.noItems}</div>
             )}
           </div>
-        </section>
+        </div>
 
         <button
           type="button"
           onClick={() => router.push("/orders")}
-          className="inline-flex w-fit items-center gap-2 rounded-md text-[13px] font-semibold text-gray-600 transition-colors hover:text-orange-600 dark:text-gray-400 dark:hover:text-orange-300"
+          className="inline-flex w-fit items-center gap-2 text-[12px] font-semibold text-gray-500 transition-colors hover:text-orange-600 dark:text-gray-400 dark:hover:text-orange-400"
         >
           {copy.orders}
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

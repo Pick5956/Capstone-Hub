@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"Project-M/internal/entity"
@@ -78,6 +79,32 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
 }
 
+// resolveOrder accepts either a numeric database ID (backward compat) or an
+// order_number string such as "A001" and returns the matching order.
+func (ctrl *OrderController) resolveOrder(c *gin.Context, restaurantID uint) (*entity.Order, bool) {
+	raw := strings.TrimSpace(c.Param("id"))
+	if raw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing order id"})
+		return nil, false
+	}
+	// If the param is purely numeric treat it as a database ID (legacy / internal calls).
+	if n, err := strconv.ParseUint(raw, 10, 64); err == nil {
+		order, err := ctrl.orderSvc.GetOrder(restaurantID, uint(n))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+			return nil, false
+		}
+		return order, true
+	}
+	// Otherwise treat it as an order_number string.
+	order, err := ctrl.orderSvc.GetOrderByNumber(restaurantID, strings.ToUpper(raw))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+		return nil, false
+	}
+	return order, true
+}
+
 func (ctrl *OrderController) GetOrder(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
@@ -86,13 +113,8 @@ func (ctrl *OrderController) GetOrder(c *gin.Context) {
 	if !requireOrderAccess(c, "view_orders") {
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	order, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
-		return
-	}
-	order, err := ctrl.orderSvc.GetOrder(restaurantID, orderID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
 	}
 	c.JSON(http.StatusOK, order)
@@ -111,7 +133,7 @@ func (ctrl *OrderController) UpdateOrder(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
@@ -120,7 +142,7 @@ func (ctrl *OrderController) UpdateOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	order, err := ctrl.orderSvc.UpdateOrder(restaurantID, userID, orderID, &req)
+	order, err := ctrl.orderSvc.UpdateOrder(restaurantID, userID, resolved.ID, &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -141,18 +163,13 @@ func (ctrl *OrderController) CancelOrder(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
 	member, _ := contextMember(c)
 	if member != nil && member.Role != nil && member.Role.Name == "waiter" {
-		order, err := ctrl.orderSvc.GetOrder(restaurantID, orderID)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
-			return
-		}
-		if order.Status != entity.OrderStatusOpen {
+		if resolved.Status != entity.OrderStatusOpen {
 			c.JSON(http.StatusForbidden, gin.H{"error": "waiter can only cancel open orders before kitchen send"})
 			return
 		}
@@ -162,7 +179,7 @@ func (ctrl *OrderController) CancelOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	order, err := ctrl.orderSvc.CancelOrder(restaurantID, userID, orderID, req.Reason)
+	order, err := ctrl.orderSvc.CancelOrder(restaurantID, userID, resolved.ID, req.Reason)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -183,11 +200,11 @@ func (ctrl *OrderController) CloseOrder(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
-	order, err := ctrl.orderSvc.CloseOrder(restaurantID, userID, orderID)
+	order, err := ctrl.orderSvc.CloseOrder(restaurantID, userID, resolved.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -203,11 +220,11 @@ func (ctrl *OrderController) Bill(c *gin.Context) {
 	if !requireOrderAccess(c, "view_orders") {
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
-	bill, err := ctrl.orderSvc.Bill(restaurantID, orderID)
+	bill, err := ctrl.orderSvc.Bill(restaurantID, resolved.ID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 		return
@@ -228,7 +245,7 @@ func (ctrl *OrderController) PayOrder(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
@@ -237,7 +254,7 @@ func (ctrl *OrderController) PayOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	order, err := ctrl.orderSvc.PayOrder(restaurantID, userID, orderID, &req)
+	order, err := ctrl.orderSvc.PayOrder(restaurantID, userID, resolved.ID, &req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -315,11 +332,11 @@ func (ctrl *OrderController) SendToKitchen(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
-	order, err := ctrl.orderSvc.SendToKitchen(restaurantID, userID, orderID)
+	order, err := ctrl.orderSvc.SendToKitchen(restaurantID, userID, resolved.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -378,9 +395,9 @@ func (ctrl *OrderController) orderIDContext(c *gin.Context, permission string) (
 	if !requireOrderAccess(c, permission) {
 		return 0, 0, false
 	}
-	orderID, ok := parseUintParam(c, "id")
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return 0, 0, false
 	}
-	return restaurantID, orderID, true
+	return restaurantID, resolved.ID, true
 }

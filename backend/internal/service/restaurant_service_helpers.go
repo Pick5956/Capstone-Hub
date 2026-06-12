@@ -127,6 +127,7 @@ func sanitizeRestaurantFields(
 	vatRate float64,
 	promptPayName string,
 	promptPayQRImage string,
+	coverImage string,
 ) (*restaurantFields, error) {
 	normalizedName := strings.TrimSpace(name)
 	if normalizedName == "" {
@@ -198,6 +199,7 @@ func sanitizeRestaurantFields(
 		VATRate:              vatRate,
 		PromptPayName:        strings.TrimSpace(promptPayName),
 		PromptPayQRImage:     strings.TrimSpace(promptPayQRImage),
+		CoverImage:           strings.TrimSpace(coverImage),
 	}, nil
 }
 

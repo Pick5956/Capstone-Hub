@@ -326,14 +326,14 @@ export default function PosTablesPage() {
             customer_count: customerCount,
             note,
           });
-      router.push(`/pos/orders/${res.data.ID}`);
+      router.push(`/pos/orders/${res.data.order_number}`);
     } catch (error) {
       const message = apiErrorMessage(error);
       if (selectedTable && message.includes("table already has an open order")) {
         const orderRes = await listOrders();
         const activeOrder = orderRes.data.orders.find((order) => order.table_id === selectedTable.ID && activeOrderStatuses.includes(order.status));
         if (activeOrder) {
-          router.push(`/pos/orders/${activeOrder.ID}`);
+          router.push(`/pos/orders/${activeOrder.order_number}`);
           return;
         }
       }
@@ -348,7 +348,7 @@ export default function PosTablesPage() {
     setSheetError("");
     const activeOrder = activeOrderByTable.get(table.ID);
     if (activeOrder) {
-      router.push(`/pos/orders/${activeOrder.ID}`);
+      router.push(`/pos/orders/${activeOrder.order_number}`);
       return;
     }
     if (table.status === "reserved") {
@@ -563,7 +563,7 @@ export default function PosTablesPage() {
                 className="rounded-md border border-emerald-200 bg-white p-3 text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-gray-950 dark:text-emerald-100"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <button type="button" onClick={() => router.push(`/pos/orders/${item.order.ID}`)} className="min-w-0 text-left">
+                  <button type="button" onClick={() => router.push(`/pos/orders/${item.order.order_number}`)} className="min-w-0 text-left">
                     <span className="block truncate text-[14px] font-semibold">{item.tableLabel}</span>
                     <span className="mt-0.5 block truncate font-mono text-[11px] opacity-70">#{item.order.order_number}</span>
                   </button>

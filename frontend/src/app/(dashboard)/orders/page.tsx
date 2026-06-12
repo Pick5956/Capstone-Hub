@@ -538,7 +538,7 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:flex-row 2xl:flex-col">
-                  <Link href={`/pos/orders/${selectedOrder.ID}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                  <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
                     {copy.viewInPos}
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>

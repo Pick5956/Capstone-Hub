@@ -18,6 +18,7 @@ export interface Restaurant {
   vat_rate: number;
   promptpay_name: string;
   promptpay_qr_image: string;
+  cover_image: string;
   owner_id: number;
   owner?: User;
   CreatedAt?: string;

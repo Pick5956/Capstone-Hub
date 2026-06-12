@@ -238,6 +238,7 @@ type CreateRestaurantRequest struct {
 	VATRate              float64 `json:"vat_rate"`
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
+	CoverImage           string  `json:"cover_image"`
 }
 
 type UpdateRestaurantRequest struct {
@@ -256,6 +257,7 @@ type UpdateRestaurantRequest struct {
 	VATRate              float64 `json:"vat_rate"`
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
+	CoverImage           string  `json:"cover_image"`
 }
 
 type restaurantFields struct {
@@ -274,6 +276,7 @@ type restaurantFields struct {
 	VATRate              float64
 	PromptPayName        string
 	PromptPayQRImage     string
+	CoverImage           string
 }
 
 // CreateRestaurant creates a restaurant and adds the creator as the owner member.
@@ -294,6 +297,7 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		req.VATRate,
 		req.PromptPayName,
 		req.PromptPayQRImage,
+		req.CoverImage,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -323,6 +327,7 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 			VATRate:              fields.VATRate,
 			PromptPayName:        fields.PromptPayName,
 			PromptPayQRImage:     fields.PromptPayQRImage,
+			CoverImage:           fields.CoverImage,
 			OwnerID:              userID,
 		}
 		if err := tx.CreateRestaurant(restaurant); err != nil {
@@ -707,6 +712,7 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 		req.VATRate,
 		req.PromptPayName,
 		req.PromptPayQRImage,
+		req.CoverImage,
 	)
 	if err != nil {
 		return nil, err
@@ -727,6 +733,7 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 	restaurant.VATRate = fields.VATRate
 	restaurant.PromptPayName = fields.PromptPayName
 	restaurant.PromptPayQRImage = fields.PromptPayQRImage
+	restaurant.CoverImage = fields.CoverImage
 
 	if err := s.restaurantRepo.Update(restaurant); err != nil {
 		return nil, err
@@ -741,6 +748,19 @@ func (s *RestaurantService) UpdateRestaurantLogo(restaurantID uint, logo string)
 	}
 
 	restaurant.Logo = strings.TrimSpace(logo)
+	if err := s.restaurantRepo.Update(restaurant); err != nil {
+		return nil, err
+	}
+	return s.restaurantRepo.FindByID(restaurantID)
+}
+
+func (s *RestaurantService) UpdateRestaurantCover(restaurantID uint, coverImage string) (*entity.Restaurant, error) {
+	restaurant, err := s.restaurantRepo.FindByID(restaurantID)
+	if err != nil {
+		return nil, errors.New("restaurant not found")
+	}
+
+	restaurant.CoverImage = strings.TrimSpace(coverImage)
 	if err := s.restaurantRepo.Update(restaurant); err != nil {
 		return nil, err
 	}

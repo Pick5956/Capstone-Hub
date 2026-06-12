@@ -192,6 +192,11 @@ func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, erro
 	return s.repo.FindOrder(restaurantID, orderID)
 }
 
+// GetOrderByNumber looks up an order by its human-readable order_number (e.g. "A001").
+func (s *OrderService) GetOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
+	return s.repo.FindOrderByNumber(restaurantID, orderNumber)
+}
+
 func (s *OrderService) UpdateOrder(restaurantID, userID, orderID uint, req *UpdateOrderRequest) (*entity.Order, error) {
 	var updated *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {

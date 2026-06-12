@@ -19,6 +19,7 @@ type Restaurant struct {
 	VATRate              float64 `json:"vat_rate" gorm:"not null;default:7"`
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
+	CoverImage           string  `json:"cover_image"`
 	OwnerID              uint    `json:"owner_id" gorm:"not null"`
 	Owner                *User   `json:"owner,omitempty" gorm:"foreignKey:OwnerID"`
 }

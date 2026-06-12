@@ -10,7 +10,7 @@ type RestaurantMember struct {
 	gorm.Model
 	UserID              uint      `json:"user_id" gorm:"not null;uniqueIndex:idx_user_restaurant"`
 	RestaurantID        uint      `json:"restaurant_id" gorm:"not null;uniqueIndex:idx_user_restaurant"`
-	RoleID              uint      `json:"role_id" gorm:"not null"`
+	RoleID              uint      `json:"role_id" gorm:"not null;index"`
 	Status              string    `json:"status" gorm:"default:'active'"` // active|suspended|removed
 	PermissionsOverride *string   `json:"permissions_override,omitempty" gorm:"type:jsonb"`
 	JoinedAt            time.Time `json:"joined_at"`

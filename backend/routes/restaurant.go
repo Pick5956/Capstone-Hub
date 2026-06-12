@@ -22,6 +22,7 @@ func SetupRestaurantRoutes(api *gin.RouterGroup, v1 *gin.RouterGroup) {
 	v1.GET("/restaurants/:id", ctrl.Get)
 	v1.PATCH("/restaurants/:id", ctrl.Update)
 	v1.POST("/restaurants/:id/upload-logo", ctrl.UploadLogo)
+	v1.POST("/restaurants/:id/upload-cover", ctrl.UploadCover)
 	v1.GET("/restaurants/:id/members", ctrl.ListMembers)
 	v1.PATCH("/restaurants/:id/members/:memberId/status", ctrl.UpdateMemberStatus)
 	v1.PATCH("/restaurants/:id/members/:memberId/role", ctrl.UpdateMemberRole)

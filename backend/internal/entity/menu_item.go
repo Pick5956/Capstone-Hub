@@ -10,7 +10,7 @@ type MenuItem struct {
 	Price        float64 `json:"price" gorm:"not null"`
 	ImageURL     string  `json:"image_url"`
 	Description  string  `json:"description"`
-	IsAvailable  bool    `json:"is_available" gorm:"default:true"`
+	IsAvailable  bool    `json:"is_available" gorm:"default:true;index"`
 	DisplayOrder int     `json:"display_order" gorm:"default:0"`
 
 	Restaurant   *Restaurant          `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`

@@ -18,6 +18,7 @@ export interface CreateRestaurantInput {
   vat_rate?: number;
   promptpay_name?: string;
   promptpay_qr_image?: string;
+  cover_image?: string;
 }
 
 export type UpdateRestaurantInput = CreateRestaurantInput;
@@ -41,6 +42,16 @@ export const uploadRestaurantLogo = (id: number, file: File) => {
   const formData = new FormData();
   formData.append("image", file);
   return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-logo`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
+export const uploadRestaurantCover = (id: number, file: File) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-cover`, formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

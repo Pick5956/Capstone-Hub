@@ -115,15 +115,17 @@ export function BrandMark() {
 }
 
 export function WorkspaceShell({
-  title,
-  description,
+  title = "",
+  description = "",
   children,
   hideIntro = false,
+  maxWidthClass = "max-w-6xl",
 }: {
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   children: React.ReactNode;
   hideIntro?: boolean;
+  maxWidthClass?: string;
 }) {
   const { language } = useLanguage();
 
@@ -145,10 +147,12 @@ export function WorkspaceShell({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl px-4 pb-6 pt-[calc(4rem+1.5rem)] sm:px-6 lg:px-8 lg:pb-8 lg:pt-[calc(4rem+2rem)]">
+      <main className={`mx-auto w-full px-4 pb-6 pt-[calc(4rem+1.5rem)] sm:px-6 lg:px-8 lg:pb-8 lg:pt-[calc(4rem+2rem)] ${maxWidthClass}`}>
         {!hideIntro ? (
           <div>
-            <p className="text-[11px] font-semibold uppercase text-orange-600 dark:text-orange-400">Restaurant workspace</p>
+            <p className="text-xs font-semibold text-orange-600 dark:text-orange-400">
+              {language === "th" ? "พื้นที่จัดการร้าน" : "Restaurant workspace"}
+            </p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white sm:text-3xl">{title}</h1>
             <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">{description}</p>
           </div>

@@ -61,6 +61,26 @@ func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, 
 	return &order, nil
 }
 
+// FindOrderByNumber looks up an order by its human-readable order_number (e.g. "A001")
+// instead of the database primary key. This is used when the URL uses order_number.
+func (r *OrderRepository) FindOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
+	var order entity.Order
+	err := r.db.
+		Preload("Table").
+		Preload("Staff").
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
+		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
+		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") }).
+		Where("restaurant_id = ? AND order_number = ?", restaurantID, orderNumber).
+		First(&order).Error
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
+
 func (r *OrderRepository) FindOpenOrderByTable(restaurantID, tableID uint) (*entity.Order, error) {
 	var order entity.Order
 	err := r.db.

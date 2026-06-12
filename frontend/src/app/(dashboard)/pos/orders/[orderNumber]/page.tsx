@@ -69,14 +69,14 @@ function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
 }
 
 export default function PosOrderDetailPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ orderNumber: string }>();
   const router = useRouter();
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const { showToast } = useToast();
   const canTake = can(activeMembership, "take_order");
   const canPay = can(activeMembership, "take_payment");
-  const orderId = Number(params.id);
+  const orderNumber = params.orderNumber?.toUpperCase() ?? "";
   const [order, setOrder] = useState<Order | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -342,14 +342,14 @@ export default function PosOrderDetailPage() {
   };
 
   const load = async ({ background = false }: { background?: boolean } = {}) => {
-    if (!canTake || !orderId) return;
+    if (!canTake || !orderNumber) return;
     if (background && actionInFlightRef.current) return;
     if (!background) {
       setLoading(true);
       setError("");
     }
     try {
-      const [orderRes, categoryRes, menuRes] = await Promise.all([getOrder(orderId), listCategories(), listMenuItems()]);
+      const [orderRes, categoryRes, menuRes] = await Promise.all([getOrder(orderNumber), listCategories(), listMenuItems()]);
       if (background && actionInFlightRef.current) return;
       setOrder(orderRes.data);
       setCategories(categoryRes.data.categories.filter((category) => category.is_active));
@@ -367,7 +367,7 @@ export default function PosOrderDetailPage() {
     const timer = window.setInterval(() => void load({ background: true }), 5000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canTake, orderId, order?.status]);
+  }, [canTake, orderNumber, order?.status]);
 
   useEffect(() => {
     if (!order?.items) return;
