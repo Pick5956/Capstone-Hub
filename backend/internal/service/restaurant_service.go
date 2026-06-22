@@ -766,3 +766,11 @@ func (s *RestaurantService) UpdateRestaurantCover(restaurantID uint, coverImage 
 	}
 	return s.restaurantRepo.FindByID(restaurantID)
 }
+
+func (s *RestaurantService) DeleteRestaurant(restaurantID uint) error {
+	if err := s.memberRepo.DeleteByRestaurant(restaurantID); err != nil {
+		return err
+	}
+	return s.restaurantRepo.Delete(restaurantID)
+}
+

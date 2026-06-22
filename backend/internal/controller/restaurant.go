@@ -616,3 +616,35 @@ func (ctrl *RestaurantController) AcceptInvitation(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"membership": member})
 }
+
+// DELETE /api/v1/restaurants/:id
+func (ctrl *RestaurantController) Delete(c *gin.Context) {
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	restaurantID, err := parseIDParam(c, "id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+		return
+	}
+	if member.Role == nil || member.Role.Name != "owner" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only owner can delete the restaurant"})
+		return
+	}
+
+	if err := ctrl.restaurantSvc.DeleteRestaurant(restaurantID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+

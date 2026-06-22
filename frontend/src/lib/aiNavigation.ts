@@ -92,14 +92,9 @@ const navigationEntries: NavigationEntry[] = [
     aliases: ["reports", "report", "analytics", "revenue", "sales report", "รายงาน", "ยอดขาย", "รายได้", "วิเคราะห์"],
   },
   {
-    href: "/settings",
-    label: { th: "ตั้งค่า", en: "Settings" },
-    aliases: ["settings", "setting", "config", "preferences", "ตั้งค่า", "การตั้งค่า"],
-  },
-  {
     href: "/settings/account",
-    label: { th: "บัญชีของฉัน", en: "My account" },
-    aliases: ["account", "profile", "my account", "user profile", "บัญชี", "โปรไฟล์", "บัญชีของฉัน", "ข้อมูลส่วนตัว"],
+    label: { th: "ตั้งค่าบัญชี", en: "Account settings" },
+    aliases: ["settings", "setting", "config", "preferences", "ตั้งค่า", "การตั้งค่า", "account", "profile", "my account", "user profile", "บัญชี", "โปรไฟล์", "บัญชีของฉัน", "ข้อมูลส่วนตัว"],
   },
   {
     href: "/settings/display",

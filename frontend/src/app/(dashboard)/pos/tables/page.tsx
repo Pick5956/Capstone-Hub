@@ -307,7 +307,9 @@ export default function PosTablesPage() {
 
   const openOrder = async () => {
     if (!selectedTable && !takeawayOpen) return;
-    const tableID = selectedTable?.ID;
+    // Capture at call time to prevent race if sheet state changes mid-flight
+    const capturedTable = selectedTable;
+    const tableID = capturedTable?.ID;
     if (!takeawayOpen && !tableID) return;
     setSubmitting(true);
     setError("");
@@ -329,9 +331,12 @@ export default function PosTablesPage() {
       router.push(`/pos/orders/${res.data.order_number}`);
     } catch (error) {
       const message = apiErrorMessage(error);
-      if (selectedTable && message.includes("table already has an open order")) {
-        const orderRes = await listOrders();
-        const activeOrder = orderRes.data.orders.find((order) => order.table_id === selectedTable.ID && activeOrderStatuses.includes(order.status));
+      if (capturedTable && tableID && message.includes("table already has an open order")) {
+        // Fetch with table_id filter to get the precise active order for this table
+        const orderRes = await listOrders({ table_id: tableID });
+        const activeOrder = orderRes.data.orders.find(
+          (order) => order.table_id === tableID && activeOrderStatuses.includes(order.status)
+        );
         if (activeOrder) {
           router.push(`/pos/orders/${activeOrder.order_number}`);
           return;
@@ -505,7 +510,7 @@ export default function PosTablesPage() {
 
   return (
     <>
-      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0">
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
         <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
           <label className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
@@ -11,6 +11,12 @@ import { useBackdropClose } from '@/src/hooks/useBackdropClose';
 import { can } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
+type SubItem = {
+  label: string;
+  href: string;
+  permission?: Permission | Permission[];
+};
+
 type NavItem = {
   label: string;
   href: string;
@@ -18,6 +24,7 @@ type NavItem = {
   badge?: string;
   comingSoon?: boolean;
   permission?: Permission | Permission[];
+  subItems?: readonly SubItem[];
 };
 
 type NavGroup = {
@@ -92,7 +99,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
       ],
     },
     {
-      group: language === 'th' ? 'ต่อยอด' : 'Next modules',
+      group: language === 'th' ? 'รายงานและตั้งค่า' : 'Reports & Settings',
       items: [
         {
           label: language === 'th' ? 'รายได้และยอดขาย' : 'Revenue and sales',
@@ -100,15 +107,25 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           permission: 'view_reports',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
         },
-      ],
-    },
-    {
-      group: '',
-      items: [
         {
           label: language === 'th' ? 'ตั้งค่า' : 'Settings',
           href: '/settings',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+          subItems: [
+            {
+              label: language === 'th' ? 'ข้อมูลบัญชี' : 'My Account',
+              href: '/settings/account',
+            },
+            {
+              label: language === 'th' ? 'จัดการร้านและภาษี' : 'Restaurant & Taxes',
+              href: '/settings/restaurant',
+              permission: 'manage_staff',
+            },
+            {
+              label: language === 'th' ? 'ภาษาและการแสดงผล' : 'Display settings',
+              href: '/settings/display',
+            },
+          ] as const,
         },
       ],
     },
@@ -120,6 +137,15 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   const { language } = useLanguage();
   const { activeMembership } = useAuth();
   const nav = buildNav(language);
+
+  const [userExpanded, setUserExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (href: string) => {
+    const defaultVal = pathname.startsWith(href);
+    const currentVal = userExpanded[href] ?? defaultVal;
+    setUserExpanded(prev => ({ ...prev, [href]: !currentVal }));
+  };
+
   const isActive = (href: string) => {
     if (href === "/pos/tables") return pathname.startsWith("/pos/");
     return pathname === href || pathname.startsWith(href + '/');
@@ -134,54 +160,131 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
     <nav className="sidebar-nav-scroll flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2">
       {nav.map(({ group, items }, groupIndex) => (
         <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
-          {!collapsed && group && (
-            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-1 [@media(max-height:760px)]:text-[9px]">{group}</p>
+          {group && (
+            <p
+              className={`mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-1 [@media(max-height:760px)]:text-[9px] transition-all duration-300 ${
+                collapsed ? 'h-0 opacity-0 mb-0 overflow-hidden' : 'h-auto opacity-100'
+              }`}
+            >
+              {group}
+            </p>
           )}
           <div className="space-y-0.5">
-            {items.filter((item) => canSee(item.permission)).map(({ label, href, icon, badge, comingSoon }) => {
-              const active = !comingSoon && isActive(href);
-              const itemClassName = `relative flex items-center gap-2.5 rounded-md border px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow] [@media(max-height:760px)]:py-1.5 ${
+            {items.filter((item) => canSee(item.permission)).map((item) => {
+              const { label, href, icon, badge, comingSoon, subItems } = item;
+              const visibleSubItems = subItems ? subItems.filter(sub => canSee(sub.permission)) : [];
+              const visibleSubItemsCount = visibleSubItems.length;
+              const hasSubItems = visibleSubItemsCount > 0;
+              const isExpanded = userExpanded[href] ?? pathname.startsWith(href);
+
+              // Active if either this parent href matches or one of its child sub-items matches
+              const active = !comingSoon && (isActive(href) || (hasSubItems && visibleSubItems.some(sub => isActive(sub.href))));
+
+              const itemClassName = `relative flex w-full items-center rounded-md border px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow,gap] duration-300 [@media(max-height:760px)]:py-1.5 ${
                 active
                   ? 'border-[#dfe3e8] bg-white text-gray-950 shadow-sm dark:border-[#253142] dark:bg-gray-900 dark:text-white'
-                  : 'border-transparent text-gray-600 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-400 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
-              } ${collapsed ? 'justify-center' : ''} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
+                  : 'border-transparent text-gray-800 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
+              } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
+
               const content = (
                 <>
                   {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-orange-500" />}
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500'}`}>{icon}</span>
-                  {!collapsed && (
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="truncate">{label}</span>
-                      {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400'}`}>{icon}</span>
+                  <span
+                    className={`flex min-w-0 flex-1 items-center justify-between gap-2 transition-all duration-300 ${
+                      collapsed ? 'w-0 opacity-0 pointer-events-none overflow-hidden' : 'w-auto opacity-100'
+                    }`}
+                  >
+                    <span className="truncate">{label}</span>
+                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                    {hasSubItems && (
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                      >
+                        <polyline points="9 18 15 12 9 6"/>
+                      </svg>
+                    )}
+                  </span>
+                  {badge && (
+                    <span
+                      className={`flex h-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white transition-all duration-300 ${
+                        collapsed 
+                          ? 'absolute right-1 top-1 h-2 w-2 p-0 text-[0px] overflow-hidden' 
+                          : 'min-w-5 px-1.5 text-[10px] font-semibold'
+                      }`}
+                    >
+                      {collapsed ? '' : badge}
                     </span>
                   )}
-                  {!collapsed && badge && (
-                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 px-1.5 text-[10px] font-semibold text-white">
-                      {badge}
-                    </span>
-                  )}
-                  {collapsed && badge && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-orange-500" />}
                 </>
               );
 
-              if (comingSoon) {
-                return (
-                  <span key={href} title={collapsed ? `${label} (${language === 'th' ? 'เร็วๆ นี้' : 'Soon'})` : undefined} className={itemClassName}>
-                    {content}
-                  </span>
-                );
-              }
-
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={onNavigate}
-                  title={collapsed ? label : undefined}
-                  className={itemClassName}
-                >
-                  {content}
-                </Link>
+                <div key={href} className="w-full">
+                  {hasSubItems && !collapsed ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(href)}
+                      className={itemClassName}
+                    >
+                      {content}
+                    </button>
+                  ) : comingSoon ? (
+                    <span title={collapsed ? `${label} (${language === 'th' ? 'เร็วๆ นี้' : 'Soon'})` : undefined} className={itemClassName}>
+                      {content}
+                    </span>
+                  ) : (
+                    <Link
+                      href={href}
+                      onClick={onNavigate}
+                      title={collapsed ? label : undefined}
+                      className={itemClassName}
+                    >
+                      {content}
+                    </Link>
+                  )}
+
+                  {/* Collapsible Sub-items */}
+                  {hasSubItems && !collapsed && (
+                    <div
+                      style={{ 
+                        maxHeight: isExpanded ? `${visibleSubItemsCount * 36 + 8}px` : '0px',
+                        transitionProperty: 'max-height',
+                        transitionDuration: '300ms',
+                        transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)'
+                      }}
+                      className={`overflow-hidden will-change-[max-height] ${
+                        isExpanded ? '' : 'pointer-events-none'
+                      }`}
+                    >
+                      <div className="relative ml-5 border-l border-gray-200 pl-3 space-y-0.5 dark:border-gray-800 pt-1 pb-1">
+                        {visibleSubItems.map(sub => {
+                          const subActive = isActive(sub.href);
+                          return (
+                            <Link
+                              key={sub.href}
+                              href={sub.href}
+                              onClick={onNavigate}
+                              tabIndex={isExpanded ? 0 : -1}
+                              className={`flex items-center rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                                subActive
+                                  ? 'bg-orange-50/50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400'
+                                  : 'text-gray-700 hover:bg-gray-100/50 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-gray-900/50 dark:hover:text-white'
+                              }`}
+                            >
+                              {sub.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -197,33 +300,29 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
   const restaurantName = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
   const switchLabel = language === 'th' ? 'เปลี่ยน' : 'Switch';
 
-  if (collapsed) {
-    return (
-      <div className="dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center justify-center">
-        <Link
-          href="/restaurants"
-          onClick={onNavigate}
-          title={restaurantName}
-          className="transition-opacity hover:opacity-90"
-        >
-          <AppLogo size={36} />
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-w-0 flex-1 overflow-hidden">
+    <div className={`min-w-0 transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'flex-1'}`}>
       <Link
         href="/restaurants"
         onClick={onNavigate}
-        className="flex min-w-0 items-center gap-2.5 rounded-md border border-transparent px-1.5 py-1.5 transition-colors hover:border-[#dfe3e8] hover:bg-white dark:hover:border-[#253142] dark:hover:bg-gray-900"
+        title={collapsed ? restaurantName : undefined}
+        className={`flex min-w-0 items-center rounded-md border border-transparent transition-[background-color,border-color,gap,padding] duration-300 ${
+          collapsed 
+            ? 'justify-center gap-0 p-1 hover:bg-transparent' 
+            : 'gap-2.5 px-1.5 py-1.5 hover:border-[#dfe3e8] hover:bg-white dark:hover:border-[#253142] dark:hover:bg-gray-900'
+        }`}
       >
         <AppLogo size={32} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
-        </span>
-        <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
+        <div
+          className={`flex min-w-0 flex-1 items-center justify-between gap-2 transition-all duration-300 ${
+            collapsed ? 'w-0 opacity-0 pointer-events-none overflow-hidden' : 'w-auto opacity-100'
+          }`}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
+          </span>
+          <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
+        </div>
       </Link>
     </div>
   );
@@ -290,27 +389,29 @@ export default function Sidebar() {
       <aside
         className={`
           dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-slate-50 dark:bg-gray-950 lg:flex
+          transition-[width] duration-300 ease-in-out will-change-[width]
           ${collapsed ? 'w-[68px]' : 'w-[264px]'}
         `}
       >
-        <div className={`dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center px-3 ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
-          {!collapsed && <RestaurantHeader collapsed={false} />}
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="shrink-0 rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
-              title={collapseTitle}
-            >
-              {collapsed ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="9 18 15 12 9 6"/></svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="15 18 9 12 15 6"/></svg>
-              )}
-            </button>
+        <div className={`dashboard-shell-border-b flex flex-col justify-center shrink-0 transition-[height,padding] duration-300 ease-in-out ${collapsed ? 'h-[112px] px-3' : 'h-[62px] px-3'}`}>
+          <div className={`flex items-center transition-all duration-300 ${collapsed ? 'flex-col-reverse gap-3' : 'justify-between gap-2'}`}>
+            <RestaurantHeader collapsed={collapsed} />
+            <div className="flex items-center">
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="shrink-0 rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                title={collapseTitle}
+              >
+                {collapsed ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="9 18 15 12 9 6"/></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="15 18 9 12 15 6"/></svg>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
-        {collapsed && <RestaurantHeader collapsed={true} />}
         <NavLinks collapsed={collapsed} />
       </aside>
     </>

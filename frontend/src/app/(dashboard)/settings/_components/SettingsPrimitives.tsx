@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { InputHTMLAttributes, ReactNode } from "react";
 import ThemedTimeInput from "@/src/components/shared/ThemedTimeInput";
 
@@ -8,40 +7,37 @@ export function SettingsShell({
   eyebrow,
   title,
   subtitle,
-  backHref = "/settings",
-  backLabel,
   action,
   children,
+  hideHeader = false,
 }: {
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   backHref?: string;
   backLabel?: string;
   action?: ReactNode;
   children: ReactNode;
+  hideHeader?: boolean;
 }) {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
-        <div className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              {backLabel ? (
-                <Link href={backHref} className="ui-press shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-                  {backLabel}
-                </Link>
+      {!hideHeader && (
+        <div className="px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6 mb-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+              {subtitle ? (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{subtitle}</p>
               ) : null}
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
             </div>
-            <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
-            <p className="mt-0.5 line-clamp-2 max-w-2xl text-[12px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p>
+            {action ? <div className="shrink-0">{action}</div> : null}
           </div>
-          {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-      </div>
+      )}
 
-      <main className="w-full px-4 py-4 sm:px-6 lg:px-8">
+      <main className="w-full px-4 pb-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

@@ -29,3 +29,8 @@ func (r *RestaurantRepository) FindByID(id uint) (*entity.Restaurant, error) {
 func (r *RestaurantRepository) Update(restaurant *entity.Restaurant) error {
 	return r.db.Save(restaurant).Error
 }
+
+func (r *RestaurantRepository) Delete(id uint) error {
+	return r.db.Delete(&entity.Restaurant{}, id).Error
+}
+

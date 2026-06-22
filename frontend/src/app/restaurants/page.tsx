@@ -11,7 +11,7 @@ import type { Membership } from "@/src/types/restaurant";
 import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUser } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
-import { Plus, LogIn, Clock, Grid, Shield, ChevronRight, Phone, Calendar } from "lucide-react";
+import { Plus, LogIn, Clock, Grid, ChevronRight, Phone, Calendar } from "lucide-react";
 
 const ROLE_LABEL: Record<string, Record<Language, string>> = {
   owner: { th: "เจ้าของร้าน", en: "Owner" },
@@ -35,21 +35,6 @@ function roleNameOf(membership: Membership) {
 
 function roleLabelOf(membership: Membership, language: Language) {
   return ROLE_LABEL[roleNameOf(membership)]?.[language] ?? roleNameOf(membership);
-}
-
-function canManageInvites(membership: Membership) {
-  const roleName = roleNameOf(membership);
-  return roleName === "owner" || roleName === "manager";
-}
-
-function permissionLabelOf(membership: Membership, language: Language) {
-  if (membership.role?.permissions === `["*"]`) return language === "th" ? "สิทธิ์ผู้ดูแลระบบ" : "Administrator";
-  try {
-    const permissions = JSON.parse(membership.role?.permissions ?? "[]") as string[];
-    return permissions.length ? `${permissions.length} ${language === "th" ? "สิทธิ์การใช้งาน" : "permissions"}` : language === "th" ? "สิทธิ์พื้นฐาน" : "Basic access";
-  } catch {
-    return language === "th" ? "สิทธิ์พื้นฐาน" : "Basic access";
-  }
 }
 
 export function getRestaurantCoverPath(type: string | undefined) {
@@ -180,17 +165,6 @@ function RestaurantCard({
               <span className="truncate">
                 {language === "th" ? "เข้าร่วมเมื่อ " : "Joined "}
                 <span className="font-mono">{formatJoinedDate(membership.joined_at, language)}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Shield className="h-4 w-4 text-gray-400 shrink-0" />
-              <span className="truncate">
-                {permissionLabelOf(membership, language)}
-                {canManageInvites(membership) && (
-                  <span className="text-orange-600 dark:text-orange-400 font-medium ml-1.5">
-                    {language === "th" ? "· จัดการคำเชิญได้" : "· Manage invites"}
-                  </span>
-                )}
               </span>
             </div>
           </div>

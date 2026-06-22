@@ -81,3 +81,7 @@ export const listAuditLogs = (restaurantId: number, limit = 20, offset = 0) =>
   apiClient.get<{ logs: RestaurantAuditLog[]; has_more?: boolean; next_offset?: number }>(`/api/v1/restaurants/${restaurantId}/audit-logs`, {
     params: { limit, offset },
   });
+
+export const deleteRestaurant = (id: number) =>
+  apiClient.delete<{ status: string }>(`/api/v1/restaurants/${id}`);
+
