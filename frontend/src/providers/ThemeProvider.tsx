@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
-type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
+export type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
 
 interface ThemeCtx {
   theme: Theme;

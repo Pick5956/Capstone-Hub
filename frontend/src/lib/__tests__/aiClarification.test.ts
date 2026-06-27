@@ -24,7 +24,7 @@ describe("resolveClarificationRequest ambiguous input guardrails", () => {
   });
 
   it("limits menu choices to actions the member can access", () => {
-    const clarification = resolveClarificationRequest("menu", membershipWith("view_menu"), "en");
+    const clarification = resolveClarificationRequest("menu", membershipWith("manage_menu"), "en");
 
     expect(clarification?.actions.map((action) => action.id)).toEqual(["menu-page"]);
   });
@@ -46,7 +46,7 @@ describe("getUnclearRequestActions", () => {
   });
 
   it("does not offer privileged analysis actions without permission", () => {
-    expect(getUnclearRequestActions(membershipWith("view_menu"), "en").map((action) => action.id)).toEqual([
+    expect(getUnclearRequestActions(membershipWith("manage_menu"), "en").map((action) => action.id)).toEqual([
       "unclear-menu-page",
     ]);
   });

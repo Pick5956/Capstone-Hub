@@ -116,13 +116,13 @@ function MetricCard({
   value: string;
 }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3.5 transition-all dark:border-gray-800/40 dark:bg-gray-900/40">
+    <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
       <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/25 dark:text-orange-300">
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-gray-500">{label}</p>
+          <p className="truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{label}</p>
           <p className="mt-0.5 truncate text-base font-semibold text-gray-900 dark:text-white">{value}</p>
         </div>
       </div>
@@ -137,6 +137,23 @@ export default function AIOperationsFloatingChat() {
   const router = useRouter();
   const pathname = usePathname();
   const copy = useMemo(() => buildCopy(language), [language]);
+  const labels = useMemo(() => language === "th"
+    ? {
+        openAssistant: "เปิดผู้ช่วย AI",
+        closeAssistant: "ปิดผู้ช่วย AI",
+        toggleTips: "เปิดหรือปิดคำถามแนะนำ",
+        hideTips: "ซ่อนคำถามแนะนำ",
+        toggleStats: "เปิดหรือปิดสถิติร้าน",
+        closeStats: "ปิดสถิติร้าน",
+      }
+    : {
+        openAssistant: "Open AI assistant",
+        closeAssistant: "Close AI assistant",
+        toggleTips: "Toggle suggested questions",
+        hideTips: "Hide suggested questions",
+        toggleStats: "Toggle restaurant stats",
+        closeStats: "Close restaurant stats",
+      }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -149,6 +166,9 @@ export default function AIOperationsFloatingChat() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatDialogRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const chatReturnFocusRef = useRef<HTMLElement | null>(null);
   const snapshotRequestedRef = useRef(false);
 
   const canAskAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
@@ -198,9 +218,29 @@ export default function AIOperationsFloatingChat() {
   // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
     }
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    chatReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsOpen(false);
+    };
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", closeOnEscape);
+      chatReturnFocusRef.current?.focus();
+      chatReturnFocusRef.current = null;
+    };
+  }, [isOpen]);
 
   // Load snapshot in the background when the chat box is first opened
   useEffect(() => {
@@ -382,131 +422,59 @@ export default function AIOperationsFloatingChat() {
 
   return (
     <>
-      {/* Premium Keyframes and Animations style tag */}
+      {/* Local motion keeps the floating assistant responsive without page-level choreography. */}
       <style>{`
-        @keyframes botFloat {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-4px); }
-        }
-        @keyframes pulseGlow {
-          0%, 100% { transform: scale(1); opacity: 0.55; }
-          50% { transform: scale(1.08); opacity: 0.85; }
-        }
         @keyframes messageSlideUp {
-          0% { transform: translateY(16px) scale(0.97); opacity: 0; }
+          0% { transform: translateY(8px); opacity: 0; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
         }
-        @keyframes statsDrawerBounceIn {
-          0% { transform: translateX(28px) scale(0.9); opacity: 0; }
-          52% { transform: translateX(-7px) scale(1.035); opacity: 1; }
-          74% { transform: translateX(2px) scale(0.992); opacity: 1; }
-          100% { transform: translateX(0) scale(1); opacity: 1; }
-        }
-        @keyframes statsDrawerBounceOut {
-          0% { transform: translateX(0) scale(1); opacity: 1; }
-          24% { transform: translateX(-3px) scale(1.012); opacity: 1; }
-          100% { transform: translateX(28px) scale(0.9); opacity: 0; }
-        }
-        .animate-bot-float {
-          animation: botFloat 3s ease-in-out infinite;
-        }
-        .animate-pulse-glow {
-          animation: pulseGlow 2.5s ease-in-out infinite;
-        }
         .animate-message-slide {
-          animation: messageSlideUp 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-          will-change: transform, opacity;
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
-        }
-        .animate-stats-bounce-in {
-          animation: statsDrawerBounceIn 0.38s cubic-bezier(0.22, 0.9, 0.22, 1) both;
-        }
-        .animate-stats-bounce-out {
-          animation: statsDrawerBounceOut 0.34s cubic-bezier(0.4, 0, 0.7, 0.35) both;
-        }
-        @keyframes aiAnalysisAuraPulse {
-          0%, 100% {
-            opacity: 0.58;
-            transform: scale(0.995);
-            filter: blur(23px);
-          }
-          50% {
-            opacity: 0.96;
-            transform: scale(1.016);
-            filter: blur(32px);
-          }
-        }
-        .ai-analysis-aura::before {
-          content: "";
-          position: absolute;
-          inset: -11px;
-          z-index: -1;
-          pointer-events: none;
-          border-radius: inherit;
-          background: radial-gradient(
-            ellipse at 50% 52%,
-            rgba(251, 146, 60, 0.22) 48%,
-            rgba(249, 115, 22, 0.54) 69%,
-            rgba(245, 158, 11, 0.28) 84%,
-            rgba(249, 115, 22, 0) 100%
-          );
-          animation: aiAnalysisAuraPulse 1.7s ease-in-out infinite;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .ai-analysis-aura::before {
-            animation: none;
-            opacity: 0.66;
-            filter: blur(26px);
-          }
-        }
-
-        @keyframes inputGlow {
-          0%, 100% { 
-            box-shadow: 0 0 4px rgba(249, 115, 22, 0.25), 0 1px 2px rgba(0, 0, 0, 0.05); 
-            border-color: rgba(249, 115, 22, 0.5); 
-          }
-          50% { 
-            box-shadow: 0 0 12px rgba(249, 115, 22, 0.6), 0 2px 4px rgba(249, 115, 22, 0.1); 
-            border-color: rgba(234, 88, 12, 0.85); 
-          }
+          animation: messageSlideUp 180ms cubic-bezier(0.2, 0, 0, 1) both;
         }
         .focus-glow:focus {
-          animation: inputGlow 2s infinite ease-in-out;
+          border-color: rgb(249 115 22);
+          box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-message-slide {
+            animation: none !important;
+          }
         }
       `}</style>
 
       {/* Chat Window Panel */}
       <div 
-        className={`fixed top-4 bottom-4 right-4 sm:top-4 sm:bottom-6 sm:right-6 left-4 sm:left-auto z-[9998] flex items-stretch origin-bottom-right transition-all duration-500 ${
+        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transition-[opacity,transform] duration-200 ease-out ${
           isOpen
-            ? "opacity-100 scale-100 pointer-events-auto ease-[cubic-bezier(0.34,1.56,0.64,1)]"
-            : "opacity-0 scale-90 pointer-events-none ease-[cubic-bezier(0.25,1,0.5,1)]"
-        } sm:w-[380px] md:w-[400px]`}
+            ? "opacity-100 scale-100 pointer-events-auto"
+            : "opacity-0 scale-[0.98] pointer-events-none"
+        } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
         <div 
-          className={`absolute inset-y-0 right-[416px] hidden w-[360px] flex-col rounded-2xl border border-gray-200/60 bg-white/95 p-4 shadow-2xl backdrop-blur-md transform-gpu origin-right transition-[opacity,transform] duration-300 ease-out will-change-transform dark:border-gray-800/60 dark:bg-gray-950/95 md:flex ${
+          id="ai-operations-stats"
+          className={`absolute inset-y-0 right-full mr-3 hidden w-[340px] flex-col rounded-md border border-gray-200 bg-white p-3 shadow-xl shadow-gray-950/10 transform-gpu origin-right transition-[opacity,transform] duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30 lg:flex xl:w-[360px] ${
             showStats
-              ? "animate-stats-bounce-in pointer-events-auto"
+              ? "translate-x-0 opacity-100 pointer-events-auto"
               : hasOpenedStats
-                ? "animate-stats-bounce-out pointer-events-none"
-                : "pointer-events-none translate-x-5 scale-[0.94] opacity-0"
+                ? "pointer-events-none translate-x-2 opacity-0"
+                : "pointer-events-none translate-x-2 opacity-0"
           }`}
         >
           <div className="flex h-full w-full shrink-0 flex-col">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
               <div className="flex items-center gap-2">
-                <BarChart2 className="h-5 w-5 text-orange-500 animate-pulse" />
+                <BarChart2 className="h-5 w-5 text-orange-500" />
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{copy.snapshot}</h3>
               </div>
               <button
                 type="button"
+                aria-label={labels.closeStats}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowStats(false);
                 }}
-                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -537,8 +505,8 @@ export default function AIOperationsFloatingChat() {
                   />
                 </div>
 
-                <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 overflow-hidden shadow-sm">
-                  <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-3.5 py-2.5 bg-gray-50/50 dark:bg-gray-900/20">
+                <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+                  <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3.5 py-2.5 dark:border-gray-800 dark:bg-gray-900/40">
                     <PackageSearch className="h-4.5 w-4.5 text-orange-500" />
                     <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{copy.stockRisks}</span>
                   </div>
@@ -580,21 +548,25 @@ export default function AIOperationsFloatingChat() {
         </div>
 
         {/* Main Chat Overlay Box */}
-        <div className={`relative isolate flex h-full w-full sm:w-[380px] md:w-[400px] shrink-0 rounded-2xl ${
-          loading ? "ai-analysis-aura" : ""
-        }`}>
-          <div className="relative z-[1] flex h-full w-full flex-col rounded-2xl border border-gray-200/60 bg-white/95 shadow-[0_20px_50px_-12px_rgba(249,115,22,0.18)] dark:shadow-[0_20px_50px_-12px_rgba(249,115,22,0.08)] backdrop-blur-md dark:border-gray-800/60 dark:bg-gray-950/95 overflow-hidden transition-all duration-300">
+        <div className="relative isolate flex h-full w-full shrink-0 rounded-md">
+          <div
+            ref={chatDialogRef}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="ai-operations-chat-title"
+            className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30"
+          >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-orange-500/10 to-amber-500/5 px-4 py-3.5 dark:border-gray-800">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:px-4">
             <div className="flex items-center gap-2.5">
               <div className="relative">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md animate-bot-float">
+                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300">
                   <Bot className="h-5 w-5" />
                 </span>
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-green-500 dark:border-gray-950"></span>
+                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-gray-950"></span>
               </div>
               <div className="flex items-center">
-                <h2 className="text-sm font-semibold text-gray-900 dark:text-white leading-none">{copy.title}</h2>
+                <h2 id="ai-operations-chat-title" className="text-sm font-semibold leading-none text-gray-900 dark:text-white">{copy.title}</h2>
               </div>
             </div>
 
@@ -603,12 +575,14 @@ export default function AIOperationsFloatingChat() {
               {messages.length <= 1 && (
                 <button
                   type="button"
+                  aria-label={labels.toggleTips}
+                  aria-pressed={showTips}
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowTips(!showTips);
                   }}
                   title={language === "th" ? "เปิด/ปิดคำถามแนะนำ" : "Toggle Suggested Questions"}
-                  className={`rounded-lg p-2 transition-all duration-300 active:scale-110 ${
+                  className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 ${
                     showTips
                       ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
                       : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -621,6 +595,9 @@ export default function AIOperationsFloatingChat() {
               {canAskAI && (
                 <button
                   type="button"
+                  aria-label={labels.toggleStats}
+                  aria-expanded={showStats}
+                  aria-controls="ai-operations-stats"
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!showStats) {
@@ -629,7 +606,7 @@ export default function AIOperationsFloatingChat() {
                     setShowStats(!showStats);
                   }}
                   title={copy.toggleStatsTooltip}
-                  className={`hidden rounded-lg p-2 md:inline-flex transition-all duration-300 active:scale-110 ${
+                  className={`hidden h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 lg:inline-flex ${
                     showStats
                       ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
                       : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -641,11 +618,12 @@ export default function AIOperationsFloatingChat() {
               {/* Close Panel */}
               <button
                 type="button"
+                aria-label={labels.closeAssistant}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsOpen(false);
                 }}
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
               >
                 <X className="h-4.5 w-4.5" />
               </button>
@@ -667,11 +645,11 @@ export default function AIOperationsFloatingChat() {
                 return (
                   <div key={msg.id} className="flex items-end gap-2.5 justify-end max-w-[90%] ml-auto animate-message-slide">
                     {/* User Message Bubble (Rounded on all sides) */}
-                    <div className="rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
+                    <div className="max-w-full break-words rounded-md bg-gray-900 px-4 py-3 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-900 sm:text-[13px]">
                       {msg.content}
                     </div>
                     {/* User Avatar */}
-                    <div className="h-8 w-8 rounded-full shrink-0 overflow-hidden border border-orange-100 dark:border-gray-800/80 shadow-sm flex-none">
+                    <div className="h-8 w-8 flex-none shrink-0 overflow-hidden rounded-full border border-gray-200 dark:border-gray-800">
                       {user?.profile_image ? (
                         <Image src={user.profile_image} width={32} height={32} unoptimized className="h-full w-full object-cover" alt="" />
                       ) : (
@@ -688,11 +666,11 @@ export default function AIOperationsFloatingChat() {
               return (
                 <div key={msg.id} className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
                   {/* AI Avatar */}
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shrink-0 border border-orange-100 dark:border-gray-800/40 shadow-sm flex-none">
+                  <div className="flex h-8 w-8 flex-none shrink-0 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
                     <Bot className="h-4.5 w-4.5" />
                   </div>
                   {/* AI Message Bubble (Rounded on all sides) */}
-                  <div className="rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 text-xs sm:text-[13px] px-4 py-3 shadow-sm leading-relaxed max-w-full break-words">
+                  <div className="max-w-full break-words rounded-md bg-gray-100 px-4 py-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-800 dark:text-gray-100 sm:text-[13px]">
                     <AIResponseContent content={msg.content} compact />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -701,7 +679,7 @@ export default function AIOperationsFloatingChat() {
                             key={`${msg.id}-${action.id}`}
                             type="button"
                             onClick={() => handleAction(action)}
-                            className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition hover:bg-orange-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-orange-950/20"
+                            className="min-h-10 rounded-md border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition-colors hover:bg-gray-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-gray-900"
                           >
                             {action.label}
                           </button>
@@ -716,14 +694,14 @@ export default function AIOperationsFloatingChat() {
             {loading && (
               <div className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
                 {/* AI Avatar */}
-                <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shrink-0 border border-orange-100 dark:border-gray-800/40 shadow-sm flex-none">
+                <div className="flex h-8 w-8 flex-none shrink-0 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
                   <Bot className="h-4.5 w-4.5" />
                 </div>
                 {/* Loading Bubble */}
                 <div
                   role="status"
                   aria-label={copy.thinking}
-                  className="rounded-2xl bg-gray-100 px-3.5 py-3 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400 flex items-center shadow-sm leading-relaxed"
+                  className="flex items-center rounded-md bg-gray-100 px-3.5 py-3 text-xs leading-relaxed text-gray-500 dark:bg-gray-800 dark:text-gray-400"
                 >
                   <span className="sr-only">{copy.thinking}</span>
                   <span aria-hidden="true" className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
@@ -739,20 +717,21 @@ export default function AIOperationsFloatingChat() {
 
           {/* Quick Questions suggestion overlay with slide-up entrance */}
           {messages.length <= 1 && !loading && showTips && (
-            <div className="border-t border-gray-100 bg-gray-50/50 p-3.5 dark:border-gray-800/60 dark:bg-gray-900/10 animate-message-slide">
+            <div className="animate-message-slide border-t border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40 sm:p-3.5">
               <div className="flex flex-col gap-2">
                 {/* Tips Header with Close Button */}
                 <div className="flex items-center justify-between mb-1 px-0.5">
-                  <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
                     {language === "th" ? "💡 คำถามแนะนำ" : "💡 Suggested Questions"}
                   </span>
                   <button
                     type="button"
+                    aria-label={labels.hideTips}
                     onClick={(e) => {
                       e.stopPropagation();
                       setShowTips(false);
                     }}
-                    className="rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors cursor-pointer"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
                     title={language === "th" ? "ซ่อนคำแนะนำ" : "Hide Suggestions"}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -766,7 +745,7 @@ export default function AIOperationsFloatingChat() {
                       e.stopPropagation();
                       handleSend(q);
                     }}
-                    className="w-full text-left rounded-xl border border-gray-200 bg-white px-3 py-2 text-[11px] font-semibold text-gray-700 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700 transition-all dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-orange-950/20 dark:hover:text-orange-400 shadow-sm cursor-pointer"
+                    className="min-h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-[12px] font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-gray-900 dark:hover:text-orange-300"
                   >
                     {q}
                   </button>
@@ -782,21 +761,24 @@ export default function AIOperationsFloatingChat() {
               handleSend();
             }}
             onClick={(e) => e.stopPropagation()}
-            className="border-t border-gray-100 p-3.5 dark:border-gray-800 bg-white dark:bg-gray-950 rounded-b-2xl"
+            className="rounded-b-md border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 sm:p-3.5"
           >
             <div className="flex items-center gap-2.5">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={copy.askPlaceholder}
                 disabled={loading}
-                className="flex-1 rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium placeholder-gray-400 outline-none transition focus-glow dark:border-gray-800 dark:bg-gray-900 dark:placeholder-gray-400 shadow-sm !text-gray-950 dark:!text-gray-50 cursor-text"
+                aria-label={copy.askPlaceholder}
+                className="min-h-11 flex-1 rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium !text-gray-950 placeholder-gray-500 outline-none transition-[border-color,box-shadow] focus-glow dark:border-gray-800 dark:bg-gray-900 dark:!text-gray-50 dark:placeholder-gray-400"
               />
               <button
                 type="submit"
+                aria-label={copy.send}
                 disabled={loading || !input.trim()}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white hover:bg-gray-800 transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 shadow-md cursor-pointer"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -808,19 +790,17 @@ export default function AIOperationsFloatingChat() {
 
       {/* Floating Circular Trigger Button — fades out as the droplet expands over it */}
       <button
+        type="button"
+        aria-label={labels.openAssistant}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 group flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-tr from-orange-600 to-amber-500 text-white shadow-2xl hover:scale-105 active:scale-95 cursor-pointer z-[9999] hover:shadow-orange-500/20 dark:hover:shadow-orange-600/30 border border-orange-400/20 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center rounded-md border border-gray-800 bg-gray-950 text-white shadow-xl shadow-gray-950/15 transition-[opacity,transform,background-color] duration-200 ease-out hover:bg-gray-800 active:scale-[0.98] dark:border-white/10 dark:bg-white dark:text-gray-950 dark:shadow-black/30 dark:hover:bg-gray-200 sm:bottom-6 sm:right-6 ${
           isOpen 
-            ? "opacity-0 scale-75 pointer-events-none" 
+            ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 scale-100 pointer-events-auto"
         }`}
       >
-        {/* Breathing Glow Ring Effect */}
-        <span className="absolute -inset-0.5 rounded-full bg-gradient-to-tr from-orange-500 to-amber-400 opacity-60 blur-sm group-hover:opacity-80 transition duration-200 animate-pulse-glow"></span>
-        
-        {/* Icon container with hover animation */}
-        <span className="relative flex h-6 w-6 items-center justify-center">
-          <Bot className="h-6 w-6 text-white group-hover:rotate-12 transition-transform duration-300" />
+        <span className="flex h-6 w-6 items-center justify-center">
+          <Bot className="h-6 w-6" />
         </span>
       </button>
     </>

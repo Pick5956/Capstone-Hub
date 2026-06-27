@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { useRouter } from "next/navigation";
 import { User } from "../../types/auth";
 import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
+import { apiErrorCode } from "@/src/lib/apiErrors";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import AppLogo from "@/src/components/shared/AppLogo";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -65,6 +66,15 @@ const ClearIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
   </svg>
 );
+
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 type InputFieldLabels = {
   clear: string;
@@ -165,14 +175,7 @@ const InputField = ({
 function BrandLine() {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-orange-500 to-red-600 shadow-sm">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-          <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-          <path d="M7 2v20" />
-          <path d="M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3" />
-          <path d="M21 15v7" />
-        </svg>
-      </div>
+      <AppLogo size={28} />
       <div className="leading-none">
         <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Restaurant</p>
         <p className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">HUB</p>
@@ -216,6 +219,8 @@ export default function AuthModal({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const router = useRouter();
 
   const copy = language === "th"
@@ -312,6 +317,7 @@ export default function AuthModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setAuthMode(initialMode);
     setError("");
     setNotice("");
@@ -331,6 +337,15 @@ export default function AuthModal({
   });
   const [showRegisterPw, setShowRegisterPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const targetId = authMode === "forgot" ? "forgot-email" : authMode === "register" ? "firstName" : "login-email";
+    const timer = window.setTimeout(() => {
+      document.getElementById(targetId)?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [authMode, isOpen]);
 
   const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRegisterForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -468,7 +483,7 @@ export default function AuthModal({
         setError(copy.resetRequestFailed);
       }
     } catch (err) {
-      const code = axios.isAxiosError(err) ? err.response?.data?.code : undefined;
+      const code = apiErrorCode(err);
       setError(code === "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN" ? copy.resetGoogleAccount : copy.resetRequestFailed);
     } finally {
       setLoading(false);
@@ -533,6 +548,41 @@ export default function AuthModal({
     setShowConfirmPw(false);
   };
 
+  const closeAndRestoreFocus = useCallback(() => {
+    onClose();
+    const restoreTarget = restoreFocusRef.current;
+    window.setTimeout(() => {
+      restoreTarget?.focus();
+    }, 0);
+  }, [onClose]);
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAndRestoreFocus();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
+      .filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null);
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   const isLogin = authMode === "login";
   const isForgot = authMode === "forgot";
   const title = isForgot ? copy.forgotTitle : isLogin ? copy.loginTitle : copy.registerTitle;
@@ -547,9 +597,11 @@ export default function AuthModal({
       }`}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-title"
+        onKeyDown={handleDialogKeyDown}
         className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
         } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
@@ -566,7 +618,7 @@ export default function AuthModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeAndRestoreFocus}
             aria-label={copy.close}
             className="-mr-1.5 -mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >

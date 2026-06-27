@@ -18,6 +18,7 @@ export interface Restaurant {
   vat_rate: number;
   promptpay_name: string;
   promptpay_qr_image: string;
+  cover_image: string;
   owner_id: number;
   owner?: User;
   CreatedAt?: string;
@@ -31,6 +32,7 @@ export interface Membership {
   user_id: number;
   restaurant_id: number;
   role_id: number;
+  permissions_override?: string | null;
   status: MembershipStatus;
   joined_at: string;
   invited_by_user_id?: number | null;

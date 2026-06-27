@@ -21,12 +21,8 @@ func ProvideTableController(db *gorm.DB) *TableController {
 }
 
 func (ctrl *TableController) ListTables(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_tables") && !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing table permission"})
 		return
 	}
 	tables, err := ctrl.tableSvc.ListTables(restaurantID)
@@ -38,12 +34,8 @@ func (ctrl *TableController) ListTables(c *gin.Context) {
 }
 
 func (ctrl *TableController) CreateTable(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	var req service.TableRequest
@@ -60,12 +52,8 @@ func (ctrl *TableController) CreateTable(c *gin.Context) {
 }
 
 func (ctrl *TableController) BulkCreateTables(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	var req service.BulkCreateTablesRequest
@@ -82,12 +70,8 @@ func (ctrl *TableController) BulkCreateTables(c *gin.Context) {
 }
 
 func (ctrl *TableController) UpdateTable(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tableID, ok := parseUintParam(c, "id")
@@ -108,12 +92,8 @@ func (ctrl *TableController) UpdateTable(c *gin.Context) {
 }
 
 func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") && !memberCan(c, "take_order") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing table status permission"})
 		return
 	}
 	tableID, ok := parseUintParam(c, "id")
@@ -142,12 +122,8 @@ func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
 }
 
 func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tableID, ok := parseUintParam(c, "id")
@@ -163,12 +139,8 @@ func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
 }
 
 func (ctrl *TableController) MoveTableZone(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tableID, ok := parseUintParam(c, "id")
@@ -189,12 +161,8 @@ func (ctrl *TableController) MoveTableZone(c *gin.Context) {
 }
 
 func (ctrl *TableController) DeleteTable(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tableID, ok := parseUintParam(c, "id")
@@ -209,12 +177,8 @@ func (ctrl *TableController) DeleteTable(c *gin.Context) {
 }
 
 func (ctrl *TableController) ListZones(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_tables") && !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing table permission"})
 		return
 	}
 	zones, err := ctrl.tableSvc.ListZones(restaurantID)
@@ -226,12 +190,8 @@ func (ctrl *TableController) ListZones(c *gin.Context) {
 }
 
 func (ctrl *TableController) CreateZone(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	var req service.TableZoneRequest
@@ -248,12 +208,8 @@ func (ctrl *TableController) CreateZone(c *gin.Context) {
 }
 
 func (ctrl *TableController) UpdateZone(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	zoneID, ok := parseUintParam(c, "id")
@@ -274,12 +230,8 @@ func (ctrl *TableController) UpdateZone(c *gin.Context) {
 }
 
 func (ctrl *TableController) DeleteZone(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	zoneID, ok := parseUintParam(c, "id")
@@ -294,12 +246,8 @@ func (ctrl *TableController) DeleteZone(c *gin.Context) {
 }
 
 func (ctrl *TableController) ListTags(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_tables") && !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing table permission"})
 		return
 	}
 	tags, err := ctrl.tableSvc.ListTags(restaurantID)
@@ -311,12 +259,8 @@ func (ctrl *TableController) ListTags(c *gin.Context) {
 }
 
 func (ctrl *TableController) CreateTag(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	var req service.TableTagRequest
@@ -333,12 +277,8 @@ func (ctrl *TableController) CreateTag(c *gin.Context) {
 }
 
 func (ctrl *TableController) UpdateTag(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tagID, ok := parseUintParam(c, "id")
@@ -359,12 +299,8 @@ func (ctrl *TableController) UpdateTag(c *gin.Context) {
 }
 
 func (ctrl *TableController) DeleteTag(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_table") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_table permission"})
 		return
 	}
 	tagID, ok := parseUintParam(c, "id")

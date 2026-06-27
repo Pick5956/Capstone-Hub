@@ -40,21 +40,53 @@ export function SkeletonText({
 
 export function RestaurantCardSkeleton() {
   return (
-    <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <Skeleton className="h-4 w-44 max-w-full" />
-          <Skeleton className="mt-2 h-3 w-56 max-w-full" />
+    <div className="relative flex flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left dark:border-gray-800 dark:bg-gray-950 min-h-[260px]">
+      {/* Cover Image banner skeleton */}
+      <div className="relative h-28 w-full bg-gray-100 dark:bg-gray-900 animate-pulse" />
+
+      {/* Logo overlapping the cover */}
+      <div className="absolute left-4 top-22 z-10 flex h-12 w-12 items-center justify-center rounded-md border-2 border-white bg-white shadow-sm dark:border-gray-950 dark:bg-gray-950">
+        <Skeleton className="h-full w-full rounded-md" />
+      </div>
+
+      {/* Content area */}
+      <div className="w-full pt-8 px-4 pb-4 flex flex-col justify-between flex-1">
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4.5 w-14" />
+          </div>
+          <Skeleton className="mt-2 h-3.5 w-36" />
+
+          <div className="mt-3.5 space-y-2 border-t border-gray-100 dark:border-gray-800/60 pt-3">
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-22" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-3.5 w-3.5 rounded-full shrink-0" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
         </div>
-        <Skeleton className="h-6 w-20" />
+
+        <div className="mt-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-800/60 pt-3">
+          <Skeleton className="h-3.5 w-24" />
+          <Skeleton className="h-3.5 w-3.5" />
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Skeleton className="h-12" />
-        <Skeleton className="h-12" />
-        <Skeleton className="h-12" />
-      </div>
-      <Skeleton className="mt-3 h-3 w-full" />
-      <Skeleton className="mt-2 h-3 w-28" />
     </div>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
 import type { Order, OrderItem } from "@/src/types/order";
@@ -23,26 +24,6 @@ function urgencyClass(minutes: number) {
   return "border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/15";
 }
 
-function apiErrorMessage(error: unknown) {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-}
-
-function playBeep() {
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.frequency.value = 740;
-  oscillator.type = "square";
-  gain.gain.value = 0.04;
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.18);
-}
-
 function isOrderReady(order: Order) {
   const items = order.items ?? [];
   return items.length > 0 && items.every((item) => item.status === "ready");
@@ -50,6 +31,26 @@ function isOrderReady(order: Order) {
 
 function ticketKey(order: Order) {
   return order.kitchen_ticket_id ?? `${order.ID}:${order.kitchen_batch ?? 0}`;
+}
+
+function orderLocationLabel(order: Order, language: "th" | "en") {
+  if (order.order_type === "takeaway") {
+    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
+    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
+  }
+  const tableLabel = order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
+  return `${language === "th" ? "โต๊ะ" : "Table"} ${tableLabel}`;
+}
+
+function itemFulfillmentLabel(item: OrderItem, language: "th" | "en") {
+  if (item.fulfillment_type === "takeaway") return language === "th" ? "กลับบ้าน" : "Takeaway";
+  return language === "th" ? "ทานที่ร้าน" : "Dine-in";
+}
+
+function itemFulfillmentBadgeClass(item: OrderItem) {
+  return item.fulfillment_type === "takeaway"
+    ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200 dark:bg-orange-950/30 dark:text-orange-200 dark:ring-orange-900/60"
+    : "bg-white text-gray-500 ring-1 ring-gray-200 dark:bg-gray-950 dark:text-gray-300 dark:ring-gray-800";
 }
 
 export default function KitchenPage() {
@@ -128,7 +129,7 @@ export default function KitchenPage() {
       const nextIds = new Set(res.data.orders.map((order) => ticketKey(order)));
       const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
       setOrders(res.data.orders);
-      if (hasNewTicket) playBeep();
+      if (hasNewTicket) playBeep(740, "square", 0.04, 0.18);
       ticketIdsRef.current = nextIds;
       setLastUpdated(new Date());
       hasLoadedRef.current = true;
@@ -260,7 +261,7 @@ export default function KitchenPage() {
                 )}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{copy.table} {order.table?.table_number ?? order.table_id}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)}</p>
                     <h2 className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{order.order_number}</h2>
                   </div>
                   <div className="text-right">
@@ -279,7 +280,12 @@ export default function KitchenPage() {
                     <div key={item.ID} className="rounded-md border border-black/5 bg-white/70 p-3 dark:border-white/10 dark:bg-gray-950/45">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{item.quantity}x {item.menu_name}</p>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-semibold text-gray-900 dark:text-white">{item.quantity}x {item.menu_name}</p>
+                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${itemFulfillmentBadgeClass(item)}`}>
+                              {itemFulfillmentLabel(item, language)}
+                            </span>
+                          </div>
                           {item.selected_options?.length ? (
                             <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
                               {item.selected_options.map((option) => (

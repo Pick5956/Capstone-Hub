@@ -22,12 +22,8 @@ func ProvideIngredientController(db *gorm.DB) *IngredientController {
 }
 
 func (ctrl *IngredientController) List(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing inventory permission", "view_inventory", "manage_inventory")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_inventory") && !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing inventory permission"})
 		return
 	}
 	items, err := ctrl.svc.List(restaurantID)
@@ -39,12 +35,8 @@ func (ctrl *IngredientController) List(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) ListCategories(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing inventory permission", "view_inventory", "manage_inventory")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_inventory") && !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing inventory permission"})
 		return
 	}
 	items, err := ctrl.svc.ListCategories(restaurantID, memberCan(c, "manage_inventory"))
@@ -56,12 +48,8 @@ func (ctrl *IngredientController) ListCategories(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) CreateCategory(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
 		return
 	}
 	var req service.IngredientCategoryRequest
@@ -78,12 +66,8 @@ func (ctrl *IngredientController) CreateCategory(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) Create(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
 		return
 	}
 	var req service.IngredientRequest
@@ -100,12 +84,8 @@ func (ctrl *IngredientController) Create(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) Update(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
 		return
 	}
 	ingredientID, ok := parseUintParam(c, "id")
@@ -126,12 +106,8 @@ func (ctrl *IngredientController) Update(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) Delete(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
 		return
 	}
 	ingredientID, ok := parseUintParam(c, "id")
@@ -146,12 +122,8 @@ func (ctrl *IngredientController) Delete(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) AdjustStock(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_inventory permission"})
 		return
 	}
 	ingredientID, ok := parseUintParam(c, "id")
@@ -173,12 +145,8 @@ func (ctrl *IngredientController) AdjustStock(c *gin.Context) {
 }
 
 func (ctrl *IngredientController) ListTransactions(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing inventory permission", "view_inventory", "manage_inventory")
 	if !ok {
-		return
-	}
-	if !memberCan(c, "view_inventory") && !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing inventory permission"})
 		return
 	}
 	var ingredientID uint

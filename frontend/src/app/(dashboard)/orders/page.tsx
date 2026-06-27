@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import {
   Archive,
   ArrowUpRight,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
 import { cancelOrder, getOrder, listOrders } from "@/src/lib/order";
 import type { Order, OrderStatus } from "@/src/types/order";
@@ -24,45 +24,13 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { itemCount, itemFulfillmentLabel, itemFulfillmentType, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
 
 type StatusFilter = "all" | "active" | "closed" | OrderStatus;
 type PaymentFilter = "all" | "unpaid" | "paid";
 
 const terminalStatuses: OrderStatus[] = ["completed", "cancelled"];
 const activeStatuses: OrderStatus[] = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
-
-const statusClass: Record<OrderStatus, string> = {
-  open: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-900/20 dark:text-sky-300",
-  sent_to_kitchen: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300",
-  cooking: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300",
-  ready: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300",
-  served: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-900/20 dark:text-violet-300",
-  completed: "border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300",
-  cancelled: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300",
-};
-
-function apiErrorMessage(error: unknown) {
-  if (!axios.isAxiosError(error)) return "";
-  return String(error.response?.data?.error ?? "");
-}
-
-function tableName(order: Order) {
-  const table = order.table;
-  if (!table) return `#${order.table_id}`;
-  return table.display_label || table.table_number || `#${order.table_id}`;
-}
-
-function zoneName(order: Order) {
-  return order.table?.table_zone?.name || order.table?.zone || "";
-}
-
-function itemCount(order: Order) {
-  return order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-}
-
-function orderTime(order: Order) {
-  return order.closed_at || order.opened_at || order.CreatedAt;
-}
 
 export default function OrdersPage() {
   const { activeMembership } = useAuth();
@@ -240,8 +208,10 @@ export default function OrdersPage() {
         const paymentMatched = paymentFilter === "all" || order.payment_status === paymentFilter;
         const queryMatched = !normalizedQuery || [
           order.order_number,
-          tableName(order),
+          tableName(order, language),
           zoneName(order),
+          order.customer_name,
+          order.customer_phone,
           order.staff?.nickname,
           order.staff?.first_name,
           order.staff?.last_name,
@@ -249,7 +219,7 @@ export default function OrdersPage() {
         return statusMatched && paymentMatched && queryMatched;
       })
       .sort((a, b) => new Date(orderTime(b) || 0).getTime() - new Date(orderTime(a) || 0).getTime());
-  }, [orders, paymentFilter, query, statusFilter]);
+  }, [language, orders, paymentFilter, query, statusFilter]);
 
   const summary = useMemo(() => {
     const active = orders.filter((order) => activeStatuses.includes(order.status)).length;
@@ -425,7 +395,7 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-gray-500 dark:text-gray-400">
-                        <span className="font-semibold text-gray-700 dark:text-gray-200">{tableName(order)}</span>
+                        <span className="font-semibold text-gray-700 dark:text-gray-200">{tableName(order, language)}</span>
                         {zoneName(order) && <span>{zoneName(order)}</span>}
                         <span>{formatTime(orderTime(order))}</span>
                       </div>
@@ -457,7 +427,7 @@ export default function OrdersPage() {
               <div className="2xl:sticky 2xl:top-4">
                 <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder)}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder, language)}</p>
                     <h2 className="mt-1 truncate font-mono text-2xl font-semibold text-gray-900 dark:text-white">{selectedOrder.order_number}</h2>
                     <p className="mt-1 text-[12px] text-gray-500">{formatTime(selectedOrder.opened_at)}</p>
                   </div>
@@ -536,7 +506,16 @@ export default function OrdersPage() {
                             <div key={item.ID} className="p-3">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      itemFulfillmentType(item) === "takeaway"
+                                        ? "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-200"
+                                        : "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300"
+                                    }`}>
+                                      {itemFulfillmentLabel(item, language)}
+                                    </span>
+                                  </div>
                                   {item.selected_options?.length ? (
                                     <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
                                       {item.selected_options.map((option) => (
@@ -559,7 +538,7 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:flex-row 2xl:flex-col">
-                  <Link href={`/pos/orders/${selectedOrder.ID}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                  <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
                     {copy.viewInPos}
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>

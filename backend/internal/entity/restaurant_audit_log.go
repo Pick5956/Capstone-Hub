@@ -3,11 +3,12 @@ package entity
 import "gorm.io/gorm"
 
 const (
-	AuditActionInvitationCreated   = "invitation_created"
-	AuditActionInvitationRevoked   = "invitation_revoked"
-	AuditActionInvitationAccepted  = "invitation_accepted"
-	AuditActionMemberStatusChanged = "member_status_changed"
-	AuditActionMemberRoleChanged   = "member_role_changed"
+	AuditActionInvitationCreated        = "invitation_created"
+	AuditActionInvitationRevoked        = "invitation_revoked"
+	AuditActionInvitationAccepted       = "invitation_accepted"
+	AuditActionMemberStatusChanged      = "member_status_changed"
+	AuditActionMemberRoleChanged        = "member_role_changed"
+	AuditActionMemberPermissionsChanged = "member_permissions_changed"
 )
 
 type RestaurantAuditLog struct {

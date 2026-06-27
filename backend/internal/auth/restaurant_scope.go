@@ -51,7 +51,9 @@ func shouldSkipRestaurantScope(c *gin.Context) bool {
 
 	return path == "/api/v1/restaurants/me" ||
 		(path == "/api/v1/restaurants" && method == http.MethodPost) ||
-		path == "/api/v1/invitations/:token/accept"
+		path == "/api/v1/restaurants/:id" ||
+		path == "/api/v1/invitations/:token/accept" ||
+		strings.HasPrefix(path, "/api/v1/users/profile")
 }
 
 func getUserIDFromContext(c *gin.Context) (uint, bool) {

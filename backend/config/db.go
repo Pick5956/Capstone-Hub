@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var db *gorm.DB
@@ -37,16 +40,49 @@ func ConnectionDB() {
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Bangkok", host, user, password, dbname, port)
 
-	database, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// GORM config: PrepareStmt caches prepared statements for reuse,
+	// and production logger is quieter in release mode.
+	gormCfg := &gorm.Config{
+		PrepareStmt: true,
+	}
+	if os.Getenv("GIN_MODE") == ginReleaseMode {
+		gormCfg.Logger = logger.Default.LogMode(logger.Warn)
+	}
+
+	database, err := gorm.Open(postgres.Open(dsn), gormCfg)
 
 	if err != nil {
 		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
+
+	// Connection pool tuning — values configurable via env vars.
+	sqlDB, err := database.DB()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get underlying sql.DB: %v", err))
+	}
+	sqlDB.SetMaxOpenConns(envInt("DB_MAX_OPEN_CONNS", 100))
+	sqlDB.SetMaxIdleConns(envInt("DB_MAX_IDLE_CONNS", 25))
+	sqlDB.SetConnMaxLifetime(time.Duration(envInt("DB_CONN_MAX_LIFETIME_MIN", 30)) * time.Minute)
+	sqlDB.SetConnMaxIdleTime(time.Duration(envInt("DB_CONN_MAX_IDLE_TIME_MIN", 5)) * time.Minute)
+
 	fmt.Println("Connect database")
 	db = database
 }
 
 const ginReleaseMode = "release"
+
+// envInt reads an integer from an environment variable, returning fallback if unset or invalid.
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
 
 func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasColumn(&entity.User{}, "role_id") {
@@ -69,6 +105,7 @@ func SetupDatabase() *gorm.DB {
 
 	db.AutoMigrate(
 		&entity.Role{},
+		&entity.RestaurantRoleHidden{},
 		&entity.User{},
 		&entity.Restaurant{},
 		&entity.RestaurantMember{},
@@ -95,6 +132,8 @@ func SetupDatabase() *gorm.DB {
 	)
 	migrateLegacyTableLayout(db)
 	backfillCustomerTableTokens(db)
+	ensureOrderTakeawayColumns(db)
+	ensureOrderItemFulfillmentColumns(db)
 	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
@@ -211,4 +250,26 @@ func ensureOrderNumberIndex(db *gorm.DB) {
 		_ = db.Migrator().DropIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
 	}
 	_ = db.Migrator().CreateIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
+}
+
+func ensureOrderTakeawayColumns(db *gorm.DB) {
+	if db.Migrator().HasTable(&entity.Order{}) && db.Migrator().HasColumn(&entity.Order{}, "table_id") {
+		_ = db.Exec("ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL").Error
+	}
+	_ = db.Model(&entity.Order{}).
+		Where("order_type = '' OR order_type IS NULL").
+		Update("order_type", entity.OrderTypeDineIn).Error
+}
+
+func ensureOrderItemFulfillmentColumns(db *gorm.DB) {
+	if !db.Migrator().HasTable(&entity.OrderItem{}) || !db.Migrator().HasColumn(&entity.OrderItem{}, "fulfillment_type") {
+		return
+	}
+	_ = db.Exec(`
+		UPDATE order_items
+		SET fulfillment_type = COALESCE(NULLIF(orders.order_type, ''), ?)
+		FROM orders
+		WHERE order_items.order_id = orders.id
+			AND (order_items.fulfillment_type = '' OR order_items.fulfillment_type IS NULL)
+	`, entity.OrderItemFulfillmentDineIn).Error
 }

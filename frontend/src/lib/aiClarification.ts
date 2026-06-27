@@ -63,8 +63,7 @@ export function resolveClarificationRequest(
 
   if (["ตั้งค่า", "settings", "setting"].includes(text)) {
     const actions: AIGuidedAction[] = [
-      { id: "settings-page", href: "/settings", label: language === "th" ? "เปิดหน้าตั้งค่า" : "Open settings" },
-      { id: "settings-account", href: "/settings/account", label: language === "th" ? "บัญชีของฉัน" : "My account" },
+      { id: "settings-account", href: "/settings/account", label: language === "th" ? "ตั้งค่าบัญชี" : "Account settings" },
       { id: "settings-display", href: "/settings/display", label: language === "th" ? "ภาษาและการแสดงผล" : "Language and display" },
     ];
     if (can(membership, "manage_staff")) {

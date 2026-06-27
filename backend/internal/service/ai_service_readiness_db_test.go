@@ -143,9 +143,11 @@ func (s *readinessScenario) soldItem(t *testing.T, menu entity.MenuItem, status 
 	t.Helper()
 	s.orderSeq++
 	now := repository.BangkokNow().Add(-time.Duration(s.orderSeq) * time.Minute)
+	tableID := s.table.ID
 	order := entity.Order{
 		RestaurantID:  s.restaurant.ID,
-		TableID:       s.table.ID,
+		TableID:       &tableID,
+		OrderType:     entity.OrderTypeDineIn,
 		OrderNumber:   fmt.Sprintf("SC-%03d", s.orderSeq),
 		OrderDate:     now.Format("2006-01-02"),
 		StaffID:       s.user.ID,

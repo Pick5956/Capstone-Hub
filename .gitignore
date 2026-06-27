@@ -31,14 +31,19 @@ data/
 database/
 docs/
 
+
 # Personal AI/agent workspace files - local only
 docs/wiki/
 .claude/
 .codex/
+.codex-runtime/
 .agent/
 .agents/
+.impeccable/
 CLAUDE.md
 AGENTS.md
+DESIGN.md
+PRODUCT.md
 *.chat.md
 *.prompt.md
 *.session.md

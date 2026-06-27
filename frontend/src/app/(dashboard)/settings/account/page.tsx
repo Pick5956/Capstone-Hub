@@ -200,17 +200,23 @@ export default function AccountSettingsPage() {
             {[
               { label: copy.google, connected: isGoogleAccount, mark: "G" },
               { label: copy.local, connected: !isGoogleAccount, mark: "@" },
-            ].map((account) => (
+            ].map((account) => {
+              const connectedAccountClassName = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
+              const disconnectedMarkClassName = "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500";
+              const disconnectedBadgeClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+
+              return (
               <div key={account.label} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-semibold ${account.connected ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500"}`}>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-md text-[13px] font-semibold ${account.connected ? connectedAccountClassName : disconnectedMarkClassName}`}>
                   {account.mark}
                 </div>
                 <p className="min-w-0 truncate text-[13px] font-semibold text-gray-900 dark:text-white">{account.label}</p>
-                <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${account.connected ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300" : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400"}`}>
+                <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${account.connected ? connectedAccountClassName : disconnectedBadgeClassName}`}>
                   {account.connected ? copy.connected : copy.notConnected}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </SettingsPanel>
       </div>

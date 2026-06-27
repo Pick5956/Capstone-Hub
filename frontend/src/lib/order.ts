@@ -4,7 +4,7 @@ import type { AddOrderItemInput, Bill, OpenOrderInput, Order, OrderItemStatus, O
 export const listOrders = (params?: { status?: OrderStatus | ""; table_id?: number; date?: string }) =>
   apiClient.get<{ orders: Order[] }>("/api/v1/orders", { params });
 
-export const getOrder = (id: number) =>
+export const getOrder = (id: string | number) =>
   apiClient.get<Order>(`/api/v1/orders/${id}`);
 
 export const createOrder = (data: OpenOrderInput) =>

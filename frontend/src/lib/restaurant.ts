@@ -11,12 +11,14 @@ export interface CreateRestaurantInput {
   open_time?: string;
   close_time?: string;
   table_count?: number;
+  seed_mockup_data?: boolean;
   service_charge_enabled?: boolean;
   service_charge_rate?: number;
   vat_enabled?: boolean;
   vat_rate?: number;
   promptpay_name?: string;
   promptpay_qr_image?: string;
+  cover_image?: string;
 }
 
 export type UpdateRestaurantInput = CreateRestaurantInput;
@@ -46,6 +48,16 @@ export const uploadRestaurantLogo = (id: number, file: File) => {
   });
 };
 
+export const uploadRestaurantCover = (id: number, file: File) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-cover`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
 export const listMembers = (id: number) =>
   apiClient.get<{ members: Membership[] }>(`/api/v1/restaurants/${id}/members`);
 
@@ -59,7 +71,17 @@ export const updateMemberRole = (restaurantId: number, memberId: number, roleId:
     role_id: roleId,
   });
 
+export const updateMemberPermissions = (restaurantId: number, memberId: number, permissions: string[] | null) =>
+  apiClient.patch<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/permissions`, {
+    use_role_permissions: permissions === null,
+    permissions: permissions ?? [],
+  });
+
 export const listAuditLogs = (restaurantId: number, limit = 20, offset = 0) =>
   apiClient.get<{ logs: RestaurantAuditLog[]; has_more?: boolean; next_offset?: number }>(`/api/v1/restaurants/${restaurantId}/audit-logs`, {
     params: { limit, offset },
   });
+
+export const deleteRestaurant = (id: number) =>
+  apiClient.delete<{ status: string }>(`/api/v1/restaurants/${id}`);
+

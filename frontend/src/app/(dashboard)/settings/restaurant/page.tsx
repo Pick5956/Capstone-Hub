@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { can } from "@/src/lib/rbac";
-import { getRestaurant, updateRestaurant, uploadRestaurantLogo } from "@/src/lib/restaurant";
+import { getRestaurant, updateRestaurant, uploadRestaurantLogo, uploadRestaurantCover, deleteRestaurant } from "@/src/lib/restaurant";
 import type { Restaurant } from "@/src/types/restaurant";
 import { RESTAURANT_TYPES, getRestaurantTypeLabel } from "@/src/app/restaurants/restaurantWorkspaceUi";
 import { Field, SettingsPanel, SettingsShell, StatusMessage, TextAreaField } from "../_components/SettingsPrimitives";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { restaurantRepository } from "@/src/app/repositories/restaurantRepository";
 
 type FormState = {
   name: string;
@@ -24,6 +27,7 @@ type FormState = {
   close_time: string;
   table_count: string;
   logo: string;
+  cover_image: string;
   service_charge_enabled: boolean;
   service_charge_rate: string;
   vat_enabled: boolean;
@@ -53,6 +57,7 @@ function toForm(restaurant?: Partial<Restaurant> | null, language: "th" | "en" =
     close_time: restaurant?.close_time || "00:00",
     table_count: restaurant?.table_count ? String(restaurant.table_count) : "12",
     logo: restaurant?.logo ?? "",
+    cover_image: restaurant?.cover_image ?? "",
     service_charge_enabled: Boolean(restaurant?.service_charge_enabled),
     service_charge_rate: String(restaurant?.service_charge_rate ?? 10),
     vat_enabled: Boolean(restaurant?.vat_enabled),
@@ -66,6 +71,7 @@ export default function RestaurantSettingsPage() {
   const { activeMembership, refreshMemberships } = useAuth();
   const { language } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
   const saveOnceRef = useRef(createSingleFlight());
   const uploadOnceRef = useRef(createSingleFlight());
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -74,9 +80,54 @@ export default function RestaurantSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [message, setMessage] = useState("");
   const canManageRestaurant = can(activeMembership, "manage_staff");
   const restaurantId = activeMembership?.restaurant_id;
+  const { showToast } = useToast();
+  const isOwner = activeMembership?.role?.name === "owner";
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteModalClosing, setDeleteModalClosing] = useState(false);
+  const [confirmRestaurantName, setConfirmRestaurantName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const closeDeleteModal = () => {
+    if (deleting || deleteModalClosing) return;
+    setDeleteModalClosing(true);
+    window.setTimeout(() => {
+      setDeleteModalOpen(false);
+      setDeleteModalClosing(false);
+      setConfirmRestaurantName("");
+      setDeleteError("");
+    }, 180);
+  };
+  const deleteBackdrop = useBackdropClose(closeDeleteModal);
+
+  const handleDeleteRestaurant = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!restaurantId || !isOwner || deleting) return;
+    if (confirmRestaurantName !== restaurant?.name) {
+      setDeleteError(language === "th" ? "ชื่อร้านอาหารไม่ถูกต้อง" : "Incorrect restaurant name");
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteRestaurant(restaurantId);
+      restaurantRepository.clearActiveId();
+      showToast({ title: language === "th" ? "ลบร้านอาหารสำเร็จแล้ว" : "Restaurant successfully deleted" });
+      window.location.href = "/restaurants";
+    } catch (err: unknown) {
+      const errorResponse = err as { response?: { data?: { error?: string } } };
+      const errMsg = errorResponse.response?.data?.error || (language === "th" ? "เกิดข้อผิดพลาดในการลบร้านอาหาร" : "An error occurred while deleting the restaurant");
+      setDeleteError(errMsg);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const copy = language === "th"
     ? {
@@ -98,6 +149,10 @@ export default function RestaurantSettingsPage() {
         upload: "อัปโหลดโลโก้",
         uploading: "กำลังอัปโหลด...",
         noLogo: "ไม่มีโลโก้",
+        coverImage: "รูปภาพพื้นหลังร้าน",
+        uploadCover: "อัปโหลดรูปพื้นหลัง",
+        uploadingCover: "กำลังอัปโหลดรูปพื้นหลัง...",
+        noCover: "ไม่มีรูปพื้นหลัง (ใช้ภาพตั้งต้น)",
         name: "ชื่อร้าน",
         branch: "ชื่อสาขา",
         branchHelp: "ถ้ามีร้านเดียวใช้สาขาหลักได้",
@@ -118,12 +173,24 @@ export default function RestaurantSettingsPage() {
         saved: "บันทึกข้อมูลร้านแล้ว",
         saveError: "บันทึกข้อมูลร้านไม่สำเร็จ",
         uploadError: "อัปโหลดโลโก้ไม่สำเร็จ",
+        uploadCoverError: "อัปโหลดรูปพื้นหลังไม่สำเร็จ",
         validateName: "กรุณากรอกชื่อร้าน",
         validateBranch: "กรุณากรอกชื่อสาขา",
         validatePhone: "เบอร์โทรควรมีอย่างน้อย 9 หลัก",
         validateOpen: "เวลาเปิดต้องอยู่ในรูปแบบ HH:mm",
         validateClose: "เวลาปิดต้องอยู่ในรูปแบบ HH:mm",
         validateTables: "จำนวนโต๊ะต้องอยู่ระหว่าง 1 ถึง 500",
+        dangerZone: "พื้นที่อันตราย / ลบร้านอาหาร",
+        dangerZoneHint: "การดำเนินการที่เป็นอันตรายและไม่สามารถย้อนกลับได้",
+        deleteRestaurant: "ลบร้านอาหารนี้",
+        deleteWarning: "การลบร้านอาหารจะลบข้อมูลโต๊ะ เมนู สมาชิก ออเดอร์ทั้งหมด และไม่สามารถกู้คืนได้อีก",
+        onlyOwnerCanDelete: "เฉพาะเจ้าของร้านเท่านั้นที่สามารถลบร้านได้",
+        confirmDeleteTitle: "ยืนยันการลบร้านอาหาร",
+        confirmDeleteSubtitle: "กรุณาพิมพ์ชื่อร้านอาหารเพื่อยืนยันการลบ",
+        confirmDeleteInputPlaceholder: "พิมพ์ชื่อร้านอาหารเพื่อยืนยัน",
+        confirmDeleteBtn: "ยืนยันการลบร้านอาหาร",
+        cancel: "ยกเลิก",
+        deleting: "กำลังลบ...",
       }
     : {
         eyebrow: "Restaurant",
@@ -144,6 +211,10 @@ export default function RestaurantSettingsPage() {
         upload: "Upload logo",
         uploading: "Uploading...",
         noLogo: "No logo",
+        coverImage: "Restaurant cover image",
+        uploadCover: "Upload cover image",
+        uploadingCover: "Uploading cover...",
+        noCover: "No cover image (using default)",
         name: "Restaurant name",
         branch: "Branch name",
         branchHelp: "Use Main branch if this is your only location.",
@@ -164,12 +235,24 @@ export default function RestaurantSettingsPage() {
         saved: "Restaurant details saved.",
         saveError: "Could not save restaurant details.",
         uploadError: "Could not upload the logo.",
+        uploadCoverError: "Could not upload the cover image.",
         validateName: "Please enter the restaurant name.",
         validateBranch: "Please enter the branch name.",
         validatePhone: "The phone number should have at least 9 digits.",
         validateOpen: "Open time must use HH:mm.",
         validateClose: "Close time must use HH:mm.",
         validateTables: "Table count must be between 1 and 500.",
+        dangerZone: "Danger Zone / Delete Restaurant",
+        dangerZoneHint: "Irreversible and destructive actions",
+        deleteRestaurant: "Delete this restaurant",
+        deleteWarning: "Deleting this restaurant will permanently remove all tables, menus, members, and orders. This action cannot be undone.",
+        onlyOwnerCanDelete: "Only the restaurant owner can delete the restaurant.",
+        confirmDeleteTitle: "Confirm Restaurant Deletion",
+        confirmDeleteSubtitle: "Please type the restaurant name to confirm deletion",
+        confirmDeleteInputPlaceholder: "Type the restaurant name to confirm",
+        confirmDeleteBtn: "Confirm Delete",
+        cancel: "Cancel",
+        deleting: "Deleting...",
       };
 
   useEffect(() => {
@@ -251,6 +334,7 @@ export default function RestaurantSettingsPage() {
           vat_rate: Number.parseFloat(form.vat_rate),
           promptpay_name: form.promptpay_name.trim(),
           promptpay_qr_image: form.promptpay_qr_image.trim(),
+          cover_image: form.cover_image.trim(),
         });
         setRestaurant(res.data.restaurant);
         setForm(toForm(res.data.restaurant, language));
@@ -284,6 +368,26 @@ export default function RestaurantSettingsPage() {
     });
   };
 
+  const uploadCover = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !restaurantId) return;
+    await uploadOnceRef.current(async () => {
+      setUploadingCover(true);
+      try {
+        const res = await uploadRestaurantCover(restaurantId, file);
+        setForm((current) => ({ ...current, cover_image: res.data.restaurant.cover_image ?? "" }));
+        setRestaurant((current) => (current ? { ...current, cover_image: res.data.restaurant.cover_image } : current));
+        setMessage(copy.saved);
+        await refreshMemberships();
+      } catch {
+        setErrors({ submit: copy.uploadCoverError });
+      } finally {
+        setUploadingCover(false);
+      }
+    });
+  };
+
   if (!canManageRestaurant) {
     return <PermissionDenied title={copy.denied} />;
   }
@@ -310,20 +414,40 @@ export default function RestaurantSettingsPage() {
         ) : (
           <>
             <SettingsPanel title={copy.identity} hint={copy.identityHint}>
-              <div className="mb-4 flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
-                    {form.logo ? <Image src={form.logo} alt={form.name || copy.logo} width={64} height={64} unoptimized className="h-full w-full object-cover" /> : copy.noLogo}
+              <div className="grid gap-4 md:grid-cols-2 mb-4">
+                {/* Logo Uploader */}
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
+                      {form.logo ? <Image src={form.logo} alt={form.name || copy.logo} width={64} height={64} unoptimized className="h-full w-full object-cover" /> : copy.noLogo}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{copy.logo}</p>
+                      <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{restaurant?.name || form.name}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{copy.logo}</p>
-                    <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{restaurant?.name || form.name}</p>
-                  </div>
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadLogo} />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                    {uploading ? copy.uploading : copy.upload}
+                  </button>
                 </div>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadLogo} />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
-                  {uploading ? copy.uploading : copy.upload}
-                </button>
+
+                {/* Cover Image Uploader */}
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="relative flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
+                      {form.cover_image ? <Image src={form.cover_image} alt={form.name || copy.coverImage} width={96} height={64} unoptimized className="h-full w-full object-cover" /> : <span className="p-1 line-clamp-2 text-[10px] leading-tight">{copy.noCover}</span>}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{copy.coverImage}</p>
+                      <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{restaurant?.name || form.name}</p>
+                    </div>
+                  </div>
+                  <input ref={coverFileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadCover} />
+                  <button type="button" onClick={() => coverFileInputRef.current?.click()} disabled={uploadingCover} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                    {uploadingCover ? copy.uploadingCover : copy.uploadCover}
+                  </button>
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -371,6 +495,26 @@ export default function RestaurantSettingsPage() {
               </div>
             </SettingsPanel>
 
+            <SettingsPanel title={copy.dangerZone} hint={copy.dangerZoneHint}>
+              <div className="rounded-md border border-red-200/50 bg-red-50/30 p-4 dark:border-red-900/30 dark:bg-red-950/10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-[13px] font-semibold text-red-650 dark:text-red-400">{copy.deleteRestaurant}</p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-normal max-w-xl">{copy.deleteWarning}</p>
+                  {!isOwner && (
+                    <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400">{copy.onlyOwnerCanDelete}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={!isOwner}
+                  onClick={() => { setDeleteModalClosing(false); setDeleteModalOpen(true); }}
+                  className="ui-press shrink-0 h-10 px-4 rounded-md border border-red-200 bg-white hover:bg-red-50 text-[12px] font-semibold text-red-600 hover:text-red-750 disabled:opacity-40 disabled:cursor-not-allowed dark:border-red-900/40 dark:bg-gray-950 dark:text-red-400 dark:hover:bg-red-950/30"
+                >
+                  {copy.deleteRestaurant}
+                </button>
+              </div>
+            </SettingsPanel>
+
             <StatusMessage error={errors.submit} message={message} />
           </>
         )}
@@ -381,6 +525,56 @@ export default function RestaurantSettingsPage() {
           </button>
         </div>
       </form>
+
+      {deleteModalOpen && (
+        <div {...deleteBackdrop} className={`${deleteModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+          <div className={`${deleteModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-md flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <h2 className="text-[14px] font-semibold text-red-750 dark:text-red-400">{copy.confirmDeleteTitle}</h2>
+              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+            </div>
+            <form onSubmit={handleDeleteRestaurant} className="p-4 space-y-4">
+              <p className="text-[13px] text-gray-650 dark:text-gray-400 leading-relaxed">
+                {copy.deleteWarning}
+              </p>
+              <div className="rounded-md bg-red-50/60 p-3 dark:bg-red-950/20 border border-red-100/60 dark:border-red-900/30">
+                <p className="text-[12px] font-medium text-red-800 dark:text-red-300 leading-normal">
+                  {language === "th" ? `กรุณาพิมพ์ชื่อร้านอาหาร "${restaurant?.name}" เพื่อยืนยันการลบ` : `Please type the restaurant name "${restaurant?.name}" to confirm deletion`}
+                </p>
+              </div>
+              <input
+                value={confirmRestaurantName}
+                onChange={(e) => {
+                  setConfirmRestaurantName(e.target.value);
+                  setDeleteError("");
+                }}
+                placeholder={copy.confirmDeleteInputPlaceholder}
+                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white"
+              />
+              {deleteError && (
+                <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{deleteError}</p>
+              )}
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  disabled={deleting}
+                  className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                >
+                  {copy.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleting || confirmRestaurantName !== restaurant?.name}
+                  className="h-10 rounded-md bg-red-600 px-4 text-[12px] font-semibold text-white hover:bg-red-700 disabled:opacity-50 disabled:hover:bg-red-600 active:scale-[0.98] transition-transform"
+                >
+                  {deleting ? copy.deleting : copy.confirmDeleteBtn}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </SettingsShell>
   );
 }

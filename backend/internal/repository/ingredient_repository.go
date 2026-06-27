@@ -74,6 +74,15 @@ func (r *IngredientRepository) FindCategory(restaurantID, categoryID uint) (*ent
 	return &category, nil
 }
 
+func (r *IngredientRepository) FindCategoryByName(restaurantID uint, name string) (*entity.IngredientCategory, error) {
+	var category entity.IngredientCategory
+	err := r.db.Where("restaurant_id = ? AND name = ?", restaurantID, name).First(&category).Error
+	if err != nil {
+		return nil, err
+	}
+	return &category, nil
+}
+
 func (r *IngredientRepository) CreateCategory(category *entity.IngredientCategory) error {
 	return r.db.Create(category).Error
 }

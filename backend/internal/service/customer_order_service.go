@@ -177,16 +177,17 @@ func addCustomerItem(tx *repository.OrderRepository, restaurantID uint, order *e
 		return 0, err
 	}
 	item := &entity.OrderItem{
-		OrderID:      order.ID,
-		RestaurantID: restaurantID,
-		MenuID:       menu.ID,
-		MenuName:     menu.Name,
-		UnitPrice:    menu.Price,
-		OptionsTotal: optionsTotal,
-		Quantity:     qty,
-		Subtotal:     (menu.Price + optionsTotal) * float64(qty),
-		Note:         strings.TrimSpace(req.Note),
-		Status:       entity.OrderItemStatusPending,
+		OrderID:         order.ID,
+		RestaurantID:    restaurantID,
+		MenuID:          menu.ID,
+		MenuName:        menu.Name,
+		UnitPrice:       menu.Price,
+		OptionsTotal:    optionsTotal,
+		Quantity:        qty,
+		Subtotal:        (menu.Price + optionsTotal) * float64(qty),
+		FulfillmentType: entity.OrderItemFulfillmentDineIn,
+		Note:            strings.TrimSpace(req.Note),
+		Status:          entity.OrderItemStatusPending,
 	}
 	if err := tx.CreateItem(item); err != nil {
 		return 0, err

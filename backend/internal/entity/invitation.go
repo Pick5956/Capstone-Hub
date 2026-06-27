@@ -15,12 +15,12 @@ const (
 
 type Invitation struct {
 	gorm.Model
-	RestaurantID     uint       `json:"restaurant_id" gorm:"not null"`
-	RoleID           uint       `json:"role_id" gorm:"not null"`
+	RestaurantID     uint       `json:"restaurant_id" gorm:"not null;index"`
+	RoleID           uint       `json:"role_id" gorm:"not null;index"`
 	Email            string     `json:"email"`                                     // optional — if set, only this email may accept
 	Token            string     `json:"token" gorm:"unique;not null"`              // random 32 chars
 	ExpiresAt        *time.Time `json:"expires_at"`                                // optional
-	Status           string     `json:"status" gorm:"default:'pending'"`           // pending|accepted|revoked|expired
+	Status           string     `json:"status" gorm:"default:'pending';index"`     // pending|accepted|revoked|expired
 	InvitedByUserID  uint       `json:"invited_by_user_id" gorm:"not null"`
 	AcceptedAt       *time.Time `json:"accepted_at"`
 	AcceptedByUserID *uint      `json:"accepted_by_user_id"`
