@@ -20,10 +20,6 @@
   </p>
 </div>
 
-<p align="center">
-  <img src="frontend/public/restaurant_cover.png" alt="Restaurant Hub cover" width="900" />
-</p>
-
 ## Overview
 
 Restaurant Hub is a pre-capstone fullstack project built around real restaurant operations rather than generic dashboard screens. The system supports restaurant onboarding, staff access control, menu and table setup, order-taking, kitchen display flow, billing, payment snapshots, ingredient inventory, customer QR ordering, reports, and an optional AI operations assistant.
