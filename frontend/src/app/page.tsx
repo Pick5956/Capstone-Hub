@@ -8,11 +8,14 @@ import {
   BarChart3,
   CheckCircle2,
   ChefHat,
+  Download,
+  Settings,
   CreditCard,
   Moon,
   ReceiptText,
   ShoppingCart,
   Sun,
+  Store,
   Table2,
   UsersRound,
   type LucideIcon,
@@ -50,12 +53,12 @@ type RoleItem = {
 
 type HeroProof = {
   label: string;
-  value: string;
-  detail: string;
   icon: LucideIcon;
 };
 
 const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1750950388492-f803d12c4a8a?auto=format&fit=crop&w=2200&q=80";
+const PHONE_IMAGE_URL = "https://static.vecteezy.com/system/resources/thumbnails/019/859/715/small/realistic-models-smartphone-with-transparent-screens-smartphone-mockup-collection-device-front-view-3d-mobile-phone-with-shadow-transparent-background-illustration-png.png"
+const ANDROID_ICON_URL = "https://www.nicepng.com/png/full/163-1632345_download-the-domus-app-today-android-icon-white.png"
 
 function safeNextPathFromSearch(search: string) {
   const next = new URLSearchParams(search).get("next");
@@ -65,22 +68,16 @@ function safeNextPathFromSearch(search: string) {
 
 const HERO_PROOFS: HeroProof[] = [
   {
-    label: "หน้าร้าน",
-    value: "เปิดโต๊ะแล้วส่งเข้าครัว",
-    detail: "ลดการจดซ้ำตอนรับออเดอร์หลายโต๊ะ",
-    icon: Table2,
+    label: "ดาวน์โหลดแอป",
+    icon: Download,
   },
   {
-    label: "ครัว",
-    value: "เห็นคิวใหม่และพร้อมเสิร์ฟ",
-    detail: "อัปเดตสถานะให้หน้าร้านรู้พร้อมกัน",
-    icon: ChefHat,
+    label: "ตั้งค่าร้านและเมนู",
+    icon: Settings,
   },
   {
-    label: "แคชเชียร์",
-    value: "ตรวจบิลจากข้อมูลเดียวกับ POS",
-    detail: "รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ",
-    icon: CreditCard,
+    label: "เปิดร้านและปิดบิล",
+    icon: Store,
   },
 ];
 
@@ -359,10 +356,11 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
     <button
       type="button"
       onClick={onClick}
-      className="ui-press landing-lift inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gray-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+      className="ps-10 pe-10 ui-press landing-lift inline-flex h-25 max-w-6xl items-center justify-center gap-2 sm:gap-3 md:gap-4 lg:gap-6 rounded-[100px] bg-gray-900 px-5 text-2xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
     >
+      <AndroidIcon />
       {children}
-      <ArrowRight className="h-4 w-4" strokeWidth={2} />
+      <ArrowRight className="h-6 w-6" strokeWidth={3} />
     </button>
   );
 }
@@ -390,25 +388,55 @@ function HeroImage() {
   );
 }
 
+function AndroidIcon() {
+  return <img src={ANDROID_ICON_URL} alt="Android icon" className="size-2/3 object-contain" />;
+}
+function PhoneImage() {
+  return (
+    <div className="relative aspect-[9/16] w-48 sm:w-64 md:w-80 lg:w-96">
+      <Image
+        src={PHONE_IMAGE_URL}
+        alt="แอปบนมือถือ"
+        fill
+        priority
+        unoptimized
+        sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, (max-width: 1024px) 320px, 384px"
+        className="landing-hero-photo object-contain"
+      />
+    </div>
+  );
+}
+
+function ImageAndDownload({ btn }: { btn: () => void }) {
+  return (
+    <div className="mt-6 ms-12 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
+      <PhoneImage />
+      <div className="flex flex-col items-center gap-4 sm:items-center">
+        <PrimaryButton onClick={btn}>ดาวน์โหลดแอป</PrimaryButton>
+       <HeroProofStrip />
+      </div>
+    </div>
+  );
+}
 function HeroProofStrip() {
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
       {HERO_PROOFS.map((item, index) => {
         const Icon = item.icon;
         return (
           <div
             key={item.label}
             style={{ animationDelay: `${260 + index * 70}ms` }}
-            className="landing-proof-card rounded-md border border-white/18 bg-gray-950/78 p-2.5 text-white sm:p-3"
+            className="landing-proof-card rounded-md border border-white/18 bg-gray-950/78 p-3 text-white sm:p-3.5 lg:p-4"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-gray-950 sm:h-9 sm:w-9">
                 <Icon className="h-4 w-4" strokeWidth={1.8} />
               </span>
-              <div>
-                <p className="text-[12px] font-semibold text-orange-200">{item.label}</p>
-                <p className="mt-1 text-sm font-semibold leading-5">{item.value}</p>
-                <p className="mt-1 hidden text-[12px] leading-5 text-white/72 sm:block">{item.detail}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-orange-200 sm:text-[15px]">
+                  {item.label}
+                </p>
               </div>
             </div>
           </div>
@@ -701,40 +729,19 @@ export default function LandingPage() {
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-gray-950 to-transparent" />
 
           <div className="relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col justify-end px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
-            <HeroReveal>
-              <p className="inline-flex rounded-md bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-950">
-                ระบบจัดการร้านอาหารสำหรับกะที่กำลังเดินอยู่
-              </p>
-            </HeroReveal>
+            
 
             <HeroReveal delay={80}>
-              <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-6xl">
-                เห็นโต๊ะ ครัว และบิลทันก่อนร้านสะดุด
+              <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-[80px]">
+                จัดการร้านได้ผ่านมือถือ
               </h1>
             </HeroReveal>
 
             <HeroReveal delay={120}>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/82 sm:text-lg sm:leading-8">
-                Restaurant Hub รวมงานหน้าร้าน POS คิวครัว บิล และภาพรวมกะร้านไว้ในระบบเดียว
-                เพื่อให้ทีมรู้ว่าโต๊ะไหนต้องรับออเดอร์ อาหารไหนพร้อมเสิร์ฟ และบิลไหนต้องปิดก่อน
-              </p>
+              <ImageAndDownload btn={openLandingLoginModal} />  
             </HeroReveal>
 
-            <HeroReveal delay={160}>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <PrimaryButton onClick={openLandingLoginModal}>เริ่มตั้งค่าร้าน</PrimaryButton>
-                <a
-                  href="#proof"
-                  className="ui-press landing-lift inline-flex h-11 items-center justify-center rounded-md border border-white/24 bg-gray-950/72 px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400"
-                >
-                  ดูหน้าระบบที่มีแล้ว
-                </a>
-              </div>
-            </HeroReveal>
-
-            <HeroReveal delay={220} className="mt-6 max-w-5xl sm:mt-7">
-              <HeroProofStrip />
-            </HeroReveal>
+            
           </div>
         </section>
 
