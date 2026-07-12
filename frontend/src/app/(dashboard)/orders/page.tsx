@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock3,
   CreditCard,
+  Printer,
   ReceiptText,
   RefreshCw,
   Search,
@@ -18,13 +19,14 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
-import { cancelOrder, getOrder, listOrders } from "@/src/lib/order";
-import type { Order, OrderStatus } from "@/src/types/order";
+import { cancelOrder, getOrder, getOrderBill, listOrders } from "@/src/lib/order";
+import type { Bill, Order, OrderStatus } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
-import { itemCount, itemFulfillmentLabel, itemFulfillmentType, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
+import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
+import { canReprintReceipt, itemCount, itemFulfillmentLabel, itemFulfillmentType, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
 
 type StatusFilter = "all" | "active" | "closed" | OrderStatus;
 type PaymentFilter = "all" | "unpaid" | "paid";
@@ -44,12 +46,14 @@ export default function OrdersPage() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const detailLoading = false;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [receiptBill, setReceiptBill] = useState<Bill | null>(null);
+  const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
 
   const copy = language === "th"
     ? {
@@ -87,6 +91,7 @@ export default function OrdersPage() {
         selectOrder: "เลือกออเดอร์เพื่อดูรายละเอียด",
         selectOrderHint: "รายละเอียดจะแสดงรายการอาหาร ยอดเงิน และข้อมูลที่ผู้จัดการต้องตรวจสอบ",
         viewInPos: "เปิดหน้า POS",
+        reprintReceipt: "ดูใบเสร็จ / พิมพ์ซ้ำ",
         cancel: "ยกเลิกออเดอร์",
         cancelReason: "เหตุผลที่ยกเลิก",
         cancelTitle: "ยืนยันยกเลิกออเดอร์",
@@ -95,6 +100,7 @@ export default function OrdersPage() {
         confirmCancel: "ยืนยันยกเลิก",
         loadError: "โหลดออเดอร์ไม่สำเร็จ",
         saveError: "ทำรายการไม่สำเร็จ",
+        receiptLoadError: "โหลดใบเสร็จไม่สำเร็จ",
         revenue: "ยอดชำระแล้ว",
         activeOrders: "ออเดอร์ยังเปิด",
         closedOrders: "ออเดอร์ปิดแล้ว",
@@ -136,6 +142,7 @@ export default function OrdersPage() {
         selectOrder: "Select an order to review details.",
         selectOrderHint: "Details show item snapshots, totals, and manager review information.",
         viewInPos: "Open POS",
+        reprintReceipt: "View / reprint receipt",
         cancel: "Cancel order",
         cancelReason: "Cancel reason",
         cancelTitle: "Confirm order cancellation",
@@ -144,6 +151,7 @@ export default function OrdersPage() {
         confirmCancel: "Confirm cancel",
         loadError: "Could not load orders.",
         saveError: "Could not complete the action.",
+        receiptLoadError: "Could not load the receipt.",
         revenue: "Paid revenue",
         activeOrders: "Still open",
         closedOrders: "Closed orders",
@@ -152,6 +160,7 @@ export default function OrdersPage() {
       };
 
   const locale = language === "th" ? "th-TH" : "en-US";
+  const actionLabel = language === "th" ? "จัดการ" : "Action";
   const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
   const money = (amount: number) =>
     new Intl.NumberFormat(locale, {
@@ -240,17 +249,17 @@ export default function OrdersPage() {
     { value: "cancelled", label: copy.cancelled },
   ];
 
-  const selectOrder = async (orderId: number) => {
-    setSelectedOrderId(orderId);
-    setDetailLoading(true);
+  const openReceipt = async (order: Order) => {
+    if (!canReprintReceipt(order)) return;
+    setReceiptLoadingId(order.ID);
     setError("");
     try {
-      const detail = await getOrder(orderId);
-      setSelectedOrder(detail.data);
-    } catch {
-      setError(copy.loadError);
+      const response = await getOrderBill(order.ID);
+      setReceiptBill(response.data);
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.receiptLoadError);
     } finally {
-      setDetailLoading(false);
+      setReceiptLoadingId(null);
     }
   };
 
@@ -358,14 +367,15 @@ export default function OrdersPage() {
           ))}
         </div>
 
-        <div className="grid min-h-[520px] gap-0 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-h-[520px]">
           <div className="min-w-0">
-            <div className="hidden border-b border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:border-gray-800 lg:grid lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px]">
+            <div className="hidden border-b border-gray-200 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400 dark:border-gray-800 lg:grid lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px_190px] lg:items-center">
               <span>{copy.order}</span>
               <span>{copy.status}</span>
               <span>{copy.payment}</span>
               <span>{copy.items}</span>
               <span className="text-right">{copy.total}</span>
+              <span className="text-right">{actionLabel}</span>
             </div>
 
             {loading ? (
@@ -377,15 +387,9 @@ export default function OrdersPage() {
             ) : filteredOrders.length ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-900">
                 {filteredOrders.map((order) => (
-                  <button
+                  <div
                     key={order.ID}
-                    type="button"
-                    onClick={() => void selectOrder(order.ID)}
-                    className={`ui-press grid w-full gap-3 px-4 py-3 text-left transition-colors lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px] lg:items-center ${
-                      selectedOrderId === order.ID
-                        ? "bg-orange-50/70 dark:bg-orange-950/20"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-900/60"
-                    }`}
+                    className="grid w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/60 lg:grid-cols-[minmax(160px,1.25fr)_110px_110px_90px_120px_190px] lg:items-center"
                   >
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
@@ -408,7 +412,28 @@ export default function OrdersPage() {
                     <span className="font-mono text-[14px] font-semibold tabular-nums text-gray-950 dark:text-white lg:text-right">
                       {money(order.grand_total || order.total_amount)}
                     </span>
-                  </button>
+                    <div className="flex justify-end">
+                      {canReprintReceipt(order) ? (
+                        <button
+                          type="button"
+                          disabled={receiptLoadingId === order.ID}
+                          onClick={() => { void openReceipt(order); }}
+                          className="ui-press inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 lg:w-auto"
+                        >
+                          <Printer className="h-4 w-4" aria-hidden="true" />
+                          {copy.reprintReceipt}
+                        </button>
+                      ) : (
+                        <Link
+                          href={`/pos/orders/${order.order_number}`}
+                          className="ui-press inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 lg:w-auto"
+                        >
+                          {copy.viewInPos}
+                          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                        </Link>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -422,7 +447,7 @@ export default function OrdersPage() {
             )}
           </div>
 
-          <aside className="border-t border-gray-200 dark:border-gray-800 2xl:border-l 2xl:border-t-0">
+          <aside className="hidden" aria-hidden="true">
             {selectedOrder ? (
               <div className="2xl:sticky 2xl:top-4">
                 <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
@@ -538,10 +563,23 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:flex-row 2xl:flex-col">
-                  <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
-                    {copy.viewInPos}
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
+                  {canReprintReceipt(selectedOrder) ? (
+                    <>
+                      <button type="button" disabled={receiptLoadingId === selectedOrder.ID} onClick={() => { void openReceipt(selectedOrder); }} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                        <Printer className="h-4 w-4" />
+                        {copy.reprintReceipt}
+                      </button>
+                      <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
+                        {copy.viewInPos}
+                        <ArrowUpRight className="h-4 w-4" />
+                      </Link>
+                    </>
+                  ) : (
+                    <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                      {copy.viewInPos}
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  )}
                   {canTake && !terminalStatuses.includes(selectedOrder.status) && (
                     <button
                       type="button"
@@ -570,6 +608,16 @@ export default function OrdersPage() {
           </aside>
         </div>
       </section>
+
+      {receiptBill ? (
+        <PaidReceiptDialog
+          bill={receiptBill}
+          language={language}
+          locationLabel={tableName(receiptBill.order, language)}
+          restaurant={activeMembership?.restaurant}
+          onClose={() => setReceiptBill(null)}
+        />
+      ) : null}
 
       {cancelOpen && (
         <div {...cancelBackdrop} className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>

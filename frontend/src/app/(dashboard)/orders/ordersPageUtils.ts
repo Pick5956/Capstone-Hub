@@ -50,3 +50,7 @@ export function itemCount(order: Order) {
 export function orderTime(order: Order) {
   return order.closed_at || order.opened_at || order.CreatedAt;
 }
+
+export function canReprintReceipt(order: Pick<Order, "status" | "payment_status">) {
+  return order.status === "completed" && order.payment_status === "paid";
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { Check, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -53,6 +53,10 @@ function itemFulfillmentBadgeClass(item: OrderItem) {
     : "bg-white text-gray-500 ring-1 ring-gray-200 dark:bg-gray-950 dark:text-gray-300 dark:ring-gray-800";
 }
 
+function shouldShowItemFulfillment(order: Order, item: OrderItem) {
+  return (item.fulfillment_type ?? order.order_type) !== order.order_type;
+}
+
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -79,11 +83,12 @@ export default function KitchenPage() {
         emptyHint: "เมื่อพนักงานส่งออเดอร์เข้าครัว รายการจะแสดงที่นี่",
         table: "โต๊ะ",
         elapsed: "นาที",
-        markReady: "พร้อมเสิร์ฟ",
-        markAllReady: "พร้อมทั้งออเดอร์",
+        markReady: "พร้อม",
+        markAllReady: "พร้อมทั้งหมด",
         completedTicket: "พร้อมเสิร์ฟทั้งออเดอร์",
         ready: "พร้อมแล้ว",
         cooking: "กำลังทำ",
+        remaining: (count: number) => `เหลือ ${count} รายการ`,
         sent_to_kitchen: "ส่งเข้าครัว",
         loadError: "โหลดคิวครัวไม่สำเร็จ",
         saveError: "อัปเดตสถานะไม่สำเร็จ",
@@ -98,11 +103,12 @@ export default function KitchenPage() {
         emptyHint: "Orders will appear here after staff send them to the kitchen.",
         table: "Table",
         elapsed: "min",
-        markReady: "Mark Ready",
+        markReady: "Ready",
         markAllReady: "Mark all ready",
         completedTicket: "Order ready",
         ready: "Ready",
         cooking: "Cooking",
+        remaining: (count: number) => `${count} items left`,
         sent_to_kitchen: "Sent",
         loadError: "Could not load kitchen queue.",
         saveError: "Could not update item status.",
@@ -247,8 +253,9 @@ export default function KitchenPage() {
             }, order.kitchen_sent_at ?? null);
             const elapsed = minutesSince(oldestSent ?? order.kitchen_sent_at ?? order.opened_at);
             const completing = completingTicketIds.has(ticketKey(order));
+            const cookingItems = order.items?.filter((item) => item.status === "cooking") ?? [];
             return (
-              <article key={ticketKey(order)} className={`relative overflow-hidden rounded-md border p-4 ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
+              <article key={ticketKey(order)} className={`relative overflow-hidden rounded-md border ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
                 {completing && (
                   <div className="kitchen-ticket-success absolute inset-0 z-20 grid place-items-center bg-emerald-50/95 text-emerald-700 backdrop-blur-[1px] dark:bg-emerald-950/90 dark:text-emerald-200">
                     <div className="text-center">
@@ -259,7 +266,7 @@ export default function KitchenPage() {
                     </div>
                   </div>
                 )}
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3 p-4">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)}</p>
                     <h2 className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{order.order_number}</h2>
@@ -269,22 +276,32 @@ export default function KitchenPage() {
                     <p className="text-[11px] text-gray-500">{copy.elapsed}</p>
                   </div>
                 </div>
-                {canUpdate && order.items?.some((item) => item.status === "cooking") && (
-                  <button type="button" disabled={submittingId === order.ID} onClick={() => markAllReady(order)} className="mt-4 h-9 w-full rounded-md border border-emerald-200 bg-white/70 px-3 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950/45 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                    {copy.markAllReady}
-                  </button>
-                )}
+                <div className="flex min-h-14 items-center justify-between gap-3 border-y border-black/5 bg-white/55 px-3 py-2 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
+                  <p className="text-[12px] font-medium tabular-nums text-gray-600 dark:text-gray-300">{copy.remaining(cookingItems.length)}</p>
+                  {canUpdate && cookingItems.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={submittingId === order.ID}
+                      onClick={() => markAllReady(order)}
+                      className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                    >
+                      <Check className="h-4 w-4" aria-hidden="true" />
+                      {copy.markAllReady}
+                    </button>
+                  ) : null}
+                </div>
 
-                <div className="mt-4 space-y-2">
+                <div className="divide-y divide-black/5 bg-white/45 dark:divide-white/10 dark:bg-gray-950/25">
                   {order.items?.map((item) => (
-                    <div key={item.ID} className="rounded-md border border-black/5 bg-white/70 p-3 dark:border-white/10 dark:bg-gray-950/45">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
+                    <div key={item.ID} className={`flex min-h-[72px] items-center gap-3 px-3 py-3 sm:px-4 ${item.status === "ready" ? "bg-emerald-50/50 dark:bg-emerald-950/15" : ""}`}>
+                        <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <p className="font-semibold text-gray-900 dark:text-white">{item.quantity}x {item.menu_name}</p>
-                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${itemFulfillmentBadgeClass(item)}`}>
-                              {itemFulfillmentLabel(item, language)}
-                            </span>
+                            <p className={`font-semibold leading-5 ${item.status === "ready" ? "text-gray-600 dark:text-gray-300" : "text-gray-900 dark:text-white"}`}>{item.quantity}x {item.menu_name}</p>
+                            {shouldShowItemFulfillment(order, item) ? (
+                              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${itemFulfillmentBadgeClass(item)}`}>
+                                {itemFulfillmentLabel(item, language)}
+                              </span>
+                            ) : null}
                           </div>
                           {item.selected_options?.length ? (
                             <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
@@ -295,15 +312,25 @@ export default function KitchenPage() {
                           ) : null}
                           {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
                         </div>
-                        <span className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
-                          {item.status === "ready" ? copy.ready : copy.cooking}
-                        </span>
-                      </div>
-                      {canUpdate && item.status === "cooking" && (
-                        <button type="button" disabled={submittingId === item.ID} onClick={() => markReady(order, item.ID)} className="mt-3 h-9 w-full rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                          {copy.markReady}
-                        </button>
-                      )}
+                        {item.status === "ready" ? (
+                          <span className="inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                            {copy.ready}
+                          </span>
+                        ) : canUpdate ? (
+                          <button
+                            type="button"
+                            aria-label={`${copy.markReady}: ${item.menu_name}`}
+                            disabled={submittingId === item.ID}
+                            onClick={() => markReady(order, item.ID)}
+                            className="ui-press inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-[12px] font-semibold text-gray-800 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-200"
+                          >
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                            {copy.markReady}
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300">{copy.cooking}</span>
+                        )}
                     </div>
                   ))}
                 </div>
