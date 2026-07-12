@@ -20,10 +20,6 @@
   </p>
 </div>
 
-<p align="center">
-  <img src="frontend/public/restaurant_cover.png" alt="Restaurant Hub cover" width="900" />
-</p>
-
 ## Overview
 
 Restaurant Hub is a pre-capstone fullstack project built around real restaurant operations rather than generic dashboard screens. The system supports restaurant onboarding, staff access control, menu and table setup, order-taking, kitchen display flow, billing, payment snapshots, ingredient inventory, customer QR ordering, reports, and an optional AI operations assistant.
@@ -51,18 +47,30 @@ The product direction is simple: make active shift work faster, clearer, and les
 ## Product Workflow
 
 ```mermaid
-flowchart LR
+flowchart TB
   Owner["Owner / Manager"] --> Setup["Restaurant setup"]
-  Setup --> Staff["Invite staff and assign roles"]
-  Setup --> Catalog["Build menu and tables"]
-  Catalog --> POS["POS order-taking"]
-  POS --> Kitchen["Kitchen queue"]
-  Kitchen --> Serve["Serve ready food"]
-  Serve --> Bill["Bill and payment"]
-  Bill --> Reports["Reports and live operations"]
-  POS --> QR["Customer QR add-on orders"]
-  QR --> Kitchen
-  Reports --> AI["AI operations assistant"]
+
+  subgraph Foundation["Foundation"]
+    Setup --> Staff["Invite staff<br/>and assign roles"]
+    Setup --> Catalog["Build menu<br/>and tables"]
+  end
+
+  subgraph Service["Live service"]
+    Catalog --> POS["POS<br/>order-taking"]
+    POS --> Kitchen["Kitchen queue"]
+    Kitchen --> Serve["Serve ready food"]
+    Serve --> Bill["Bill and payment"]
+  end
+
+  subgraph Guest["Guest add-on flow"]
+    POS --> QR["Customer QR<br/>add-on orders"]
+    QR --> Kitchen
+  end
+
+  subgraph Management["Management view"]
+    Bill --> Reports["Reports and<br/>live operations"]
+    Reports --> AI["AI operations<br/>assistant"]
+  end
 ```
 
 ## Tech Stack
@@ -148,7 +156,7 @@ Create `backend/.env`:
 DB_HOST=localhost
 DB_PORT=5433
 DB_USER=postgres
-DB_PASSWORD=1111
+DB_PASSWORD=your-local-postgres-password
 DB_NAME=Project_M
 
 JWT_SECRET=change-this-to-a-secure-random-string-at-least-32-characters
