@@ -1,5 +1,5 @@
 "use client";
-
+import { Fragment } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -68,15 +68,15 @@ function safeNextPathFromSearch(search: string) {
 
 const HERO_PROOFS: HeroProof[] = [
   {
-    label: "ดาวน์โหลดแอป",
+    label: "ใช้ได้ทั้งมือถือ, แท็บเล็ต, PC",
     icon: Download,
   },
   {
-    label: "ตั้งค่าร้านและเมนู",
+    label: "รองรับร้านได้หลายสาขา",
     icon: Settings,
   },
   {
-    label: "เปิดร้านและปิดบิล",
+    label: "มี dashboard สำหรับเจ้าของร้าน",
     icon: Store,
   },
 ];
@@ -118,17 +118,17 @@ const FLOW_ITEMS: FlowItem[] = [
   },
   {
     title: "รับออเดอร์",
-    desc: "เพิ่มเมนู ตัวเลือก และจำนวนจาก POS แล้วส่งเข้าครัวทันที",
+    desc: "สั่งเมนูที่ต้องการ พร้อมจำนวนที่พอใจ แล้วส่งเข้าครัวทันที",
     icon: ShoppingCart,
   },
   {
-    title: "ครัวจัดคิว",
-    desc: "KDS แยกคิวใหม่ กำลังทำ และพร้อมเสิร์ฟให้ทีมเห็นตรงกัน",
+    title: "เข้าครัว",
+    desc: "พ่อครัวเห็นคิวอาหารที่ต้องทำ แยกเป็นคิวใหม่ กำลังทำ และพร้อมเสิร์ฟ ทันที",
     icon: ChefHat,
   },
   {
     title: "ปิดบิล",
-    desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะเข้าสู่รอบถัดไป",
+    desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ ",
     icon: ReceiptText,
   },
 ];
@@ -221,7 +221,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; 
   return (
     <div
       style={{ transitionDelay: `${delay}ms` }}
-      className={`transition-transform duration-300 ease-out motion-reduce:transition-none ${className}`}
+      className={`flex flex-col justify-center items-center transition-transform duration-300 ease-out motion-reduce:transition-none ${className}`}
     >
       {children}
     </div>
@@ -356,18 +356,29 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
     <button
       type="button"
       onClick={onClick}
-      className="ps-10 pe-10 ui-press landing-lift inline-flex h-25 max-w-6xl items-center justify-center gap-2 sm:gap-3 md:gap-4 lg:gap-6 rounded-[100px] bg-gray-900 px-5 text-2xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+      className="ui-press landing-lift inline-flex h-25 w-full max-w-6xl items-center rounded-[10px] bg-gray-900 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
     >
-      <AndroidIcon />
-      {children}
-      <ArrowRight className="h-6 w-6" strokeWidth={3} />
+      {/* อันแรก — เล็กสุด */}
+      <span className="flex flex-[1] items-center justify-start">
+        <AndroidIcon />
+      </span>
+
+      {/* กลาง */}
+      <span className="flex flex-[2] items-center justify-center">
+        {children}
+      </span>
+
+      {/* ขวา */}
+      <span className="flex flex-[1] items-center justify-end">
+        <ArrowRight className="h-6 w-6 shrink-0" strokeWidth={3} />
+      </span>
     </button>
   );
 }
 
 function SectionHeader({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl flex flex-col items-center">
       <h2 className="text-3xl font-semibold leading-tight text-gray-950 sm:text-4xl dark:text-white">{title}</h2>
       <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-400">{desc}</p>
     </div>
@@ -389,7 +400,7 @@ function HeroImage() {
 }
 
 function AndroidIcon() {
-  return <img src={ANDROID_ICON_URL} alt="Android icon" className="size-2/3 object-contain" />;
+  return <img src={ANDROID_ICON_URL} alt="Android icon" className="size-1/2 object-contain" />;
 }
 function PhoneImage() {
   return (
@@ -409,7 +420,7 @@ function PhoneImage() {
 
 function ImageAndDownload({ btn }: { btn: () => void }) {
   return (
-    <div className="mt-6 ms-12 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
+    <div className="m-6 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
       <PhoneImage />
       <div className="flex flex-col items-center gap-4 sm:items-center">
         <PrimaryButton onClick={btn}>ดาวน์โหลดแอป</PrimaryButton>
@@ -727,9 +738,7 @@ export default function LandingPage() {
           <HeroImage />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,7,18,0.92)_0%,rgba(3,7,18,0.72)_44%,rgba(3,7,18,0.22)_100%)]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-gray-950 to-transparent" />
-
-          <div className="relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col justify-end px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
-            
+          <div className="justify-center gap-10 relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
 
             <HeroReveal delay={80}>
               <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-[80px]">
@@ -740,7 +749,6 @@ export default function LandingPage() {
             <HeroReveal delay={120}>
               <ImageAndDownload btn={openLandingLoginModal} />  
             </HeroReveal>
-
             
           </div>
         </section>
@@ -749,17 +757,9 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.42fr_0.58fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="หลักฐานอยู่ที่หน้ากะ ไม่ใช่คำโฆษณา"
-                desc="เจ้าของร้านควรเห็นสถานะจริงได้ทันทีหลังเปิดระบบ: โต๊ะที่ใช้งาน คิวครัว อาหารพร้อมเสิร์ฟ และบิลที่รอชำระ"
-              />
-              <div className="mt-6 grid gap-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
-                {["ข้อมูลใน mockup ใช้สถานะที่ระบบมีอยู่ในโปรเจกต์", "สีเขียว เหลือง ฟ้า และส้มใช้กับสถานะงานจริงเท่านั้น", "CTA หลักมีหนึ่งทาง: เข้าระบบเพื่อเริ่มตั้งค่าร้าน"].map((item) => (
-                  <div key={item} className="flex gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" strokeWidth={1.8} />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
+                title="ยกระดับร้านของคุณด้วยข้อมูลที่แม่นยำ"
+                desc="ช่วยให้คุณบริหารร้านได้ในหน้าจอเดียว ตั้งแต่การรับออเดอร์ การทำอาหาร การชำระเงิน และภาพรวมของร้าน"
+              />          
             </Reveal>
 
             <Reveal delay={120}>
@@ -772,58 +772,47 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="กะหนึ่งกะไหลผ่านระบบแบบนี้"
-                desc="หน้า landing ควรเล่าให้เห็นลำดับงานที่เกิดขึ้นจริง ตั้งแต่เปิดโต๊ะ รับออเดอร์ ครัวจัดคิว ไปจนถึงปิดบิล"
+                title="การทำงานที่ลื่นไหล"
+                desc="กระบวนการที่ออกแบบมาเพื่อให้พนักงานทุกคนทำงานร่วมกันได้ง่ายขึ้น ลดข้อผิดพลาด ลูกค้าแฮปปี้"
               />
             </Reveal>
 
-            <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
               {FLOW_ITEMS.map((item, index) => {
                 const Icon = item.icon;
                 return (
-                  <Reveal key={item.title} delay={index * 80}>
-                    <div className="h-full rounded-md border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                          <Icon className="h-5 w-5" strokeWidth={1.7} />
-                        </span>
-                        <h3 className="text-lg font-semibold text-gray-950 dark:text-white">{item.title}</h3>
+                  <Fragment key={item.title}>
+                    <Reveal delay={index * 80}>
+                      <div className="flex flex-col justify-top items-center h-full p-7 rounded-[20px] border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+                        <div className="pb-5 flex items-center gap-3">
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                            <Icon className="h-5 w-5" strokeWidth={1.7} />
+                          </span>
+                        </div>
+                        <h3 className="text-lg m-1 font-semibold text-gray-950 dark:text-white">{item.title}</h3>
+                        <p className="m-1 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.desc}</p>
                       </div>
-                      <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.desc}</p>
-                    </div>
-                  </Reveal>
+                    </Reveal>
+
+                    {index < FLOW_ITEMS.length - 1 && (
+                      <div className="hidden xl:flex items-center justify-center text-gray-300 dark:text-gray-700">
+                        <ArrowRight className="h-5 w-5" strokeWidth={2} />
+                      </div>
+                    )}
+                  </Fragment>
                 );
               })}
             </div>
           </div>
         </section>
 
-        <section id="surfaces" className="border-b border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-gray-950">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-              <Reveal>
-                <SectionHeader
-                  title="แต่ละจอมีหน้าที่ชัด ไม่แย่งกันเป็น dashboard"
-                  desc="POS สำหรับหน้าร้าน KDS สำหรับครัว bill/payment สำหรับแคชเชียร์ และ overview สำหรับเจ้าของร้าน ทุกจออ่านสถานะจากกะเดียวกัน"
-                />
-              </Reveal>
+        
 
-              <div className="grid gap-3">
-                {SURFACES.map((surface, index) => (
-                  <Reveal key={surface.title} delay={index * 90}>
-                    <SurfaceCard surface={surface} />
-                  </Reveal>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="roles" className="border-b border-gray-100 bg-slate-50 py-20 dark:border-gray-800 dark:bg-gray-900/35">
+        <section id="roles" className="border-b border-gray-100 bg-white py-12 dark:border-gray-800 dark:bg-gray-950 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="คนละบทบาท คนละจังหวะ แต่ใช้ข้อมูลเดียวกัน"
+                title="สรุปหน้าที่ของคนในร้านอย่างชัดเจน"
                 desc="พนักงานไม่ควรต้องแปลข้อมูลข้ามกระดาษ แชต และหน้าจอหลายชุด ระบบจึงแยกหน้างานให้เหมาะกับบทบาท แต่ยังผูกสถานะกลับมาที่กะร้านเดียวกัน"
               />
             </Reveal>
@@ -854,12 +843,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-b border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-gray-950">
+        <section className="border-b border-gray-100 bg-slate-50 py-20 dark:border-gray-800 dark:bg-gray-900/35">
           <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="เล่าเฉพาะสิ่งที่ระบบมีให้ลองจริง"
-                desc="หน้า landing นี้ไม่พึ่งตัวเลขพิสูจน์ไม่ได้ ใช้ความสามารถที่มีในโปรเจกต์เป็น proof ว่าระบบพร้อมรองรับ workflow ร้านอาหารพื้นฐาน"
+                title="AI ผู้ช่วยที่รู้ทุกอย่างเกี่ยวกับร้านของคุณ"
+                desc="ไม่ต้องเสียเวลานั่งไล่เช็ค Exel หรือสมุดจด แค่ถาม AI Assistant ของเราคุณก็ได้คำตอบทันที"
               />
             </Reveal>
 
