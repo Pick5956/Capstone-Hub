@@ -8,6 +8,7 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
 import { createOrder, listOrders, updateOrderItemStatus } from "@/src/lib/order";
+import { orderPosHref } from "@/src/lib/orderNavigation";
 import { listTables, updateTableStatus } from "@/src/lib/table";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import type { Order, OrderItem } from "@/src/types/order";
@@ -16,6 +17,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 const tableRefreshIntervalMs = 3_000;
@@ -276,18 +278,12 @@ export default function PosTablesPage() {
 
   useEffect(() => {
     void load();
-    const refreshIfVisible = () => {
-      if (document.visibilityState === "visible") void load(false);
-    };
-    const interval = window.setInterval(refreshIfVisible, tableRefreshIntervalMs);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", refreshIfVisible);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
   }, [load]);
+  useVisiblePolling(() => load(false), {
+    enabled: canTake,
+    intervalMs: tableRefreshIntervalMs,
+    runImmediately: false,
+  });
 
   const openTakeawaySheet = () => {
     setNotice("");
@@ -328,7 +324,7 @@ export default function PosTablesPage() {
             customer_count: customerCount,
             note,
           });
-      router.push(`/pos/orders/${res.data.order_number}`);
+      router.push(orderPosHref(res.data));
     } catch (error) {
       const message = apiErrorMessage(error);
       if (capturedTable && tableID && message.includes("table already has an open order")) {
@@ -338,7 +334,7 @@ export default function PosTablesPage() {
           (order) => order.table_id === tableID && activeOrderStatuses.includes(order.status)
         );
         if (activeOrder) {
-          router.push(`/pos/orders/${activeOrder.order_number}`);
+          router.push(orderPosHref(activeOrder));
           return;
         }
       }
@@ -353,7 +349,7 @@ export default function PosTablesPage() {
     setSheetError("");
     const activeOrder = activeOrderByTable.get(table.ID);
     if (activeOrder) {
-      router.push(`/pos/orders/${activeOrder.order_number}`);
+      router.push(orderPosHref(activeOrder));
       return;
     }
     if (table.status === "reserved") {
@@ -568,7 +564,7 @@ export default function PosTablesPage() {
                 className="rounded-md border border-emerald-200 bg-white p-3 text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-gray-950 dark:text-emerald-100"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <button type="button" onClick={() => router.push(`/pos/orders/${item.order.order_number}`)} className="min-w-0 text-left">
+                  <button type="button" onClick={() => router.push(orderPosHref(item.order))} className="min-w-0 text-left">
                     <span className="block truncate text-[14px] font-semibold">{item.tableLabel}</span>
                     <span className="mt-0.5 block truncate font-mono text-[11px] opacity-70">#{item.order.order_number}</span>
                   </button>

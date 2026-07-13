@@ -30,8 +30,10 @@ import {
 } from "@/src/lib/homeDashboard";
 import { listIngredients } from "@/src/lib/ingredient";
 import { kitchenQueue, listOrders } from "@/src/lib/order";
+import { orderPosHref } from "@/src/lib/orderNavigation";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
 
 type LaneStatus = "delayed" | "cooking" | "ready";
@@ -317,10 +319,12 @@ export default function Home() {
 
   useEffect(() => {
     void loadOperations();
-    if (!isToday) return;
-    const timer = window.setInterval(() => void loadOperations(true), 10_000);
-    return () => window.clearInterval(timer);
-  }, [isToday, loadOperations]);
+  }, [loadOperations]);
+  useVisiblePolling(() => loadOperations(true), {
+    enabled: isToday && Boolean(activeMembership?.restaurant_id),
+    intervalMs: 10_000,
+    runImmediately: false,
+  });
 
   const selectDate = (nextDate: string) => {
     if (!nextDate || nextDate > today || nextDate === selectedDate) return;
@@ -524,7 +528,7 @@ export default function Home() {
                             </div>
                             <div className="divide-y divide-gray-100 dark:divide-gray-800">
                               {lane.items.length ? lane.items.slice(0, 5).map((ticket) => (
-                                <button key={`${lane.key}-${ticket.id}`} type="button" onClick={() => router.push(`/pos/orders/${ticket.orderNumber}`)} className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
+                                <button key={`${lane.key}-${ticket.id}`} type="button" onClick={() => router.push(orderPosHref({ ID: ticket.id, order_number: ticket.orderNumber }))} className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
                                   <div className="flex items-center justify-between gap-3">
                                     <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{ticket.table}</span>
                                     <span className="font-mono text-[11px] text-gray-400">#{ticket.orderNumber}</span>
@@ -586,7 +590,7 @@ export default function Home() {
                     <span>{copy.order}</span><span>{copy.location}</span><span>{copy.status}</span><span className="text-right">{copy.total}</span><span className="text-right">{copy.time}</span>
                   </div>
                   {orders.slice(0, 10).map((order) => (
-                    <button key={order.ID} type="button" onClick={() => router.push(`/pos/orders/${order.order_number}`)} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 sm:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] sm:items-center sm:gap-3">
+                    <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 sm:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] sm:items-center sm:gap-3">
                       <span className="font-mono text-[12px] font-semibold text-gray-950 dark:text-white">#{order.order_number}</span>
                       <span className="truncate text-[12px] text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</span>
                       <span><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-semibold ${orderStatusClass(order.status)}`}>{orderStatusLabel(order.status, copy)}</span></span>

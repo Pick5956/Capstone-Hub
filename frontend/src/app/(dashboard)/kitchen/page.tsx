@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -12,6 +12,7 @@ import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 function minutesSince(value?: string | null) {
   if (!value) return 0;
@@ -173,12 +174,7 @@ export default function KitchenPage() {
     completeTicketIfReady(nextOrder);
   };
 
-  useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(), 5000);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView]);
+  useVisiblePolling(load, { enabled: canView, intervalMs: 5_000 });
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);

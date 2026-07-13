@@ -134,19 +134,6 @@ func enforceRouterPolicy(result AIRouterResult) (AIRouterResult, error) {
 	}
 }
 
-func resolveLocalTask(question string) (AITaskRoute, bool) {
-	if requestsMarginConceptExplanation(question) {
-		return AITaskRoute{Task: AITaskExplainConcept}, true
-	}
-	if requestsAssistantScopeExplanation(question) {
-		return AITaskRoute{Task: AITaskScopeQuestion}, true
-	}
-	if requestsBusinessDecision(question) {
-		return AITaskRoute{Task: AITaskRecommendAction}, true
-	}
-	return AITaskRoute{}, false
-}
-
 func requestsMarginConceptExplanation(question string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(question))
 	hasMargin := strings.Contains(normalized, "margin") ||
@@ -174,34 +161,6 @@ func localConceptAnswer(route AITaskRoute) (string, bool) {
 		"- สูตร: `(รายได้ - ต้นทุน) / รายได้ x 100`\n" +
 		"- ตัวอย่าง: ขาย 100 บาท ต้นทุน 60 บาท Margin เท่ากับ 40%\n\n" +
 		"ในระบบนี้จะยืนยัน Margin เมื่อรายการขายมีต้นทุนวัตถุดิบครบครับ", true
-}
-
-func requestsAssistantScopeExplanation(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	hasQuestionIntent := strings.Contains(normalized, "ได้ไหม") ||
-		strings.Contains(normalized, "ได้มั้ย") ||
-		strings.Contains(normalized, "can i") ||
-		strings.Contains(normalized, "could i") ||
-		strings.Contains(normalized, "what can")
-	hasOffTopic := strings.Contains(normalized, "นอกเรื่อง") ||
-		strings.Contains(normalized, "เรื่องอื่น") ||
-		strings.Contains(normalized, "คุยทั่วไป") ||
-		strings.Contains(normalized, "คุยเล่น") ||
-		strings.Contains(normalized, "นอกระบบ") ||
-		strings.Contains(normalized, "off-topic") ||
-		strings.Contains(normalized, "off topic") ||
-		strings.Contains(normalized, "general question") ||
-		strings.Contains(normalized, "anything else")
-	return hasQuestionIntent && hasOffTopic
-}
-
-func localScopeAnswer(route AITaskRoute) (string, bool) {
-	if route.Task != AITaskScopeQuestion {
-		return "", false
-	}
-	return "ถามได้ครับ ผมคุยเรื่องทั่วไปหรือช่วยอธิบายแนวคิดนอกระบบร้านได้ในระดับหนึ่งครับ\n\n" +
-		"แต่ผมจะช่วยได้ดีที่สุดกับงานร้านอาหาร เช่น ยอดขาย กำไร วัตถุดิบ รายการอาหาร และการใช้งานระบบร้าน\n\n" +
-		"ถ้าเป็นเรื่องนอกระบบร้าน ผมจะตอบแบบข้อมูลทั่วไปเท่านั้น และจะไม่อ้างว่ารู้ข้อมูลจริงที่ระบบร้านไม่ได้ให้มาครับ", true
 }
 
 func requestedTopSellingLimit(question string) (int, bool) {

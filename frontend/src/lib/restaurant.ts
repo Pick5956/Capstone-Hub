@@ -11,7 +11,6 @@ export interface CreateRestaurantInput {
   open_time?: string;
   close_time?: string;
   table_count?: number;
-  seed_mockup_data?: boolean;
   service_charge_enabled?: boolean;
   service_charge_rate?: number;
   vat_enabled?: boolean;

@@ -11,7 +11,9 @@ export function membershipWith(...permissions: string[]): Membership {
     role: {
       ID: 1,
       name: "test-role",
+      display_name: "Test role",
       permissions: JSON.stringify(permissions),
+      is_system: false,
     },
   };
 }

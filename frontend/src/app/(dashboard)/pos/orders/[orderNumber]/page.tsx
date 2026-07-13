@@ -22,6 +22,7 @@ import { useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import ThermalReceipt from "@/src/components/orders/ThermalReceipt";
 
 const terminalStatuses = ["completed", "cancelled"];
@@ -417,11 +418,13 @@ export default function PosOrderDetailPage() {
 
   useEffect(() => {
     void load();
-    if (order && terminalStatuses.includes(order.status)) return;
-    const timer = window.setInterval(() => void load({ background: true }), 5000);
-    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canTake, orderNumber, order?.status]);
+  useVisiblePolling(() => load({ background: true }), {
+    enabled: canTake && Boolean(orderNumber) && !Boolean(order && terminalStatuses.includes(order.status)),
+    intervalMs: 5_000,
+    runImmediately: false,
+  });
 
   useEffect(() => {
     if (!order?.items) return;
