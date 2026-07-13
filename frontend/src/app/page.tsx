@@ -1,5 +1,5 @@
 "use client";
-
+import { Fragment } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -8,11 +8,14 @@ import {
   BarChart3,
   CheckCircle2,
   ChefHat,
+  Download,
+  Settings,
   CreditCard,
   Moon,
   ReceiptText,
   ShoppingCart,
   Sun,
+  Store,
   Table2,
   UsersRound,
   type LucideIcon,
@@ -50,12 +53,12 @@ type RoleItem = {
 
 type HeroProof = {
   label: string;
-  value: string;
-  detail: string;
   icon: LucideIcon;
 };
 
 const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1750950388492-f803d12c4a8a?auto=format&fit=crop&w=2200&q=80";
+const PHONE_IMAGE_URL = "https://static.vecteezy.com/system/resources/thumbnails/019/859/715/small/realistic-models-smartphone-with-transparent-screens-smartphone-mockup-collection-device-front-view-3d-mobile-phone-with-shadow-transparent-background-illustration-png.png"
+const ANDROID_ICON_URL = "https://www.nicepng.com/png/full/163-1632345_download-the-domus-app-today-android-icon-white.png"
 
 function safeNextPathFromSearch(search: string) {
   const next = new URLSearchParams(search).get("next");
@@ -65,22 +68,16 @@ function safeNextPathFromSearch(search: string) {
 
 const HERO_PROOFS: HeroProof[] = [
   {
-    label: "หน้าร้าน",
-    value: "เปิดโต๊ะแล้วส่งเข้าครัว",
-    detail: "ลดการจดซ้ำตอนรับออเดอร์หลายโต๊ะ",
-    icon: Table2,
+    label: "ใช้ได้ทั้งมือถือ, แท็บเล็ต, PC",
+    icon: Download,
   },
   {
-    label: "ครัว",
-    value: "เห็นคิวใหม่และพร้อมเสิร์ฟ",
-    detail: "อัปเดตสถานะให้หน้าร้านรู้พร้อมกัน",
-    icon: ChefHat,
+    label: "รองรับร้านได้หลายสาขา",
+    icon: Settings,
   },
   {
-    label: "แคชเชียร์",
-    value: "ตรวจบิลจากข้อมูลเดียวกับ POS",
-    detail: "รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ",
-    icon: CreditCard,
+    label: "มี dashboard สำหรับเจ้าของร้าน",
+    icon: Store,
   },
 ];
 
@@ -121,17 +118,17 @@ const FLOW_ITEMS: FlowItem[] = [
   },
   {
     title: "รับออเดอร์",
-    desc: "เพิ่มเมนู ตัวเลือก และจำนวนจาก POS แล้วส่งเข้าครัวทันที",
+    desc: "สั่งเมนูที่ต้องการ พร้อมจำนวนที่พอใจ แล้วส่งเข้าครัวทันที",
     icon: ShoppingCart,
   },
   {
-    title: "ครัวจัดคิว",
-    desc: "KDS แยกคิวใหม่ กำลังทำ และพร้อมเสิร์ฟให้ทีมเห็นตรงกัน",
+    title: "เข้าครัว",
+    desc: "พ่อครัวเห็นคิวอาหารที่ต้องทำ แยกเป็นคิวใหม่ กำลังทำ และพร้อมเสิร์ฟ ทันที",
     icon: ChefHat,
   },
   {
     title: "ปิดบิล",
-    desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะเข้าสู่รอบถัดไป",
+    desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ ",
     icon: ReceiptText,
   },
 ];
@@ -224,7 +221,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: ReactNode; 
   return (
     <div
       style={{ transitionDelay: `${delay}ms` }}
-      className={`transition-transform duration-300 ease-out motion-reduce:transition-none ${className}`}
+      className={`flex flex-col justify-center items-center transition-transform duration-300 ease-out motion-reduce:transition-none ${className}`}
     >
       {children}
     </div>
@@ -359,17 +356,29 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
     <button
       type="button"
       onClick={onClick}
-      className="ui-press landing-lift inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gray-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+      className="ui-press landing-lift inline-flex h-25 w-full max-w-6xl items-center rounded-[10px] bg-gray-900 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
     >
-      {children}
-      <ArrowRight className="h-4 w-4" strokeWidth={2} />
+      {/* อันแรก — เล็กสุด */}
+      <span className="flex flex-[1] items-center justify-start">
+        <AndroidIcon />
+      </span>
+
+      {/* กลาง */}
+      <span className="flex flex-[2] items-center justify-center">
+        {children}
+      </span>
+
+      {/* ขวา */}
+      <span className="flex flex-[1] items-center justify-end">
+        <ArrowRight className="h-6 w-6 shrink-0" strokeWidth={3} />
+      </span>
     </button>
   );
 }
 
 function SectionHeader({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-3xl flex flex-col items-center">
       <h2 className="text-3xl font-semibold leading-tight text-gray-950 sm:text-4xl dark:text-white">{title}</h2>
       <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-400">{desc}</p>
     </div>
@@ -390,25 +399,55 @@ function HeroImage() {
   );
 }
 
+function AndroidIcon() {
+  return <img src={ANDROID_ICON_URL} alt="Android icon" className="size-1/2 object-contain" />;
+}
+function PhoneImage() {
+  return (
+    <div className="relative aspect-[9/16] w-48 sm:w-64 md:w-80 lg:w-96">
+      <Image
+        src={PHONE_IMAGE_URL}
+        alt="แอปบนมือถือ"
+        fill
+        priority
+        unoptimized
+        sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, (max-width: 1024px) 320px, 384px"
+        className="landing-hero-photo object-contain"
+      />
+    </div>
+  );
+}
+
+function ImageAndDownload({ btn }: { btn: () => void }) {
+  return (
+    <div className="m-6 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
+      <PhoneImage />
+      <div className="flex flex-col items-center gap-4 sm:items-center">
+        <PrimaryButton onClick={btn}>ดาวน์โหลดแอป</PrimaryButton>
+       <HeroProofStrip />
+      </div>
+    </div>
+  );
+}
 function HeroProofStrip() {
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
       {HERO_PROOFS.map((item, index) => {
         const Icon = item.icon;
         return (
           <div
             key={item.label}
             style={{ animationDelay: `${260 + index * 70}ms` }}
-            className="landing-proof-card rounded-md border border-white/18 bg-gray-950/78 p-2.5 text-white sm:p-3"
+            className="landing-proof-card rounded-md border border-white/18 bg-gray-950/78 p-3 text-white sm:p-3.5 lg:p-4"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-gray-950 sm:h-9 sm:w-9">
                 <Icon className="h-4 w-4" strokeWidth={1.8} />
               </span>
-              <div>
-                <p className="text-[12px] font-semibold text-orange-200">{item.label}</p>
-                <p className="mt-1 text-sm font-semibold leading-5">{item.value}</p>
-                <p className="mt-1 hidden text-[12px] leading-5 text-white/72 sm:block">{item.detail}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-orange-200 sm:text-[15px]">
+                  {item.label}
+                </p>
               </div>
             </div>
           </div>
@@ -699,42 +738,18 @@ export default function LandingPage() {
           <HeroImage />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,7,18,0.92)_0%,rgba(3,7,18,0.72)_44%,rgba(3,7,18,0.22)_100%)]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-gray-950 to-transparent" />
-
-          <div className="relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col justify-end px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
-            <HeroReveal>
-              <p className="inline-flex rounded-md bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-950">
-                ระบบจัดการร้านอาหารสำหรับกะที่กำลังเดินอยู่
-              </p>
-            </HeroReveal>
+          <div className="justify-center gap-10 relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
 
             <HeroReveal delay={80}>
-              <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-6xl">
-                เห็นโต๊ะ ครัว และบิลทันก่อนร้านสะดุด
+              <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-[80px]">
+                จัดการร้านได้ผ่านมือถือ
               </h1>
             </HeroReveal>
 
             <HeroReveal delay={120}>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/82 sm:text-lg sm:leading-8">
-                Restaurant Hub รวมงานหน้าร้าน POS คิวครัว บิล และภาพรวมกะร้านไว้ในระบบเดียว
-                เพื่อให้ทีมรู้ว่าโต๊ะไหนต้องรับออเดอร์ อาหารไหนพร้อมเสิร์ฟ และบิลไหนต้องปิดก่อน
-              </p>
+              <ImageAndDownload btn={openLandingLoginModal} />  
             </HeroReveal>
-
-            <HeroReveal delay={160}>
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                <PrimaryButton onClick={openLandingLoginModal}>เริ่มตั้งค่าร้าน</PrimaryButton>
-                <a
-                  href="#proof"
-                  className="ui-press landing-lift inline-flex h-11 items-center justify-center rounded-md border border-white/24 bg-gray-950/72 px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400"
-                >
-                  ดูหน้าระบบที่มีแล้ว
-                </a>
-              </div>
-            </HeroReveal>
-
-            <HeroReveal delay={220} className="mt-6 max-w-5xl sm:mt-7">
-              <HeroProofStrip />
-            </HeroReveal>
+            
           </div>
         </section>
 
@@ -742,17 +757,9 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.42fr_0.58fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="หลักฐานอยู่ที่หน้ากะ ไม่ใช่คำโฆษณา"
-                desc="เจ้าของร้านควรเห็นสถานะจริงได้ทันทีหลังเปิดระบบ: โต๊ะที่ใช้งาน คิวครัว อาหารพร้อมเสิร์ฟ และบิลที่รอชำระ"
-              />
-              <div className="mt-6 grid gap-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
-                {["ข้อมูลใน mockup ใช้สถานะที่ระบบมีอยู่ในโปรเจกต์", "สีเขียว เหลือง ฟ้า และส้มใช้กับสถานะงานจริงเท่านั้น", "CTA หลักมีหนึ่งทาง: เข้าระบบเพื่อเริ่มตั้งค่าร้าน"].map((item) => (
-                  <div key={item} className="flex gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" strokeWidth={1.8} />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
+                title="ยกระดับร้านของคุณด้วยข้อมูลที่แม่นยำ"
+                desc="ช่วยให้คุณบริหารร้านได้ในหน้าจอเดียว ตั้งแต่การรับออเดอร์ การทำอาหาร การชำระเงิน และภาพรวมของร้าน"
+              />          
             </Reveal>
 
             <Reveal delay={120}>
@@ -765,58 +772,47 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="กะหนึ่งกะไหลผ่านระบบแบบนี้"
-                desc="หน้า landing ควรเล่าให้เห็นลำดับงานที่เกิดขึ้นจริง ตั้งแต่เปิดโต๊ะ รับออเดอร์ ครัวจัดคิว ไปจนถึงปิดบิล"
+                title="การทำงานที่ลื่นไหล"
+                desc="กระบวนการที่ออกแบบมาเพื่อให้พนักงานทุกคนทำงานร่วมกันได้ง่ายขึ้น ลดข้อผิดพลาด ลูกค้าแฮปปี้"
               />
             </Reveal>
 
-            <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
               {FLOW_ITEMS.map((item, index) => {
                 const Icon = item.icon;
                 return (
-                  <Reveal key={item.title} delay={index * 80}>
-                    <div className="h-full rounded-md border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                          <Icon className="h-5 w-5" strokeWidth={1.7} />
-                        </span>
-                        <h3 className="text-lg font-semibold text-gray-950 dark:text-white">{item.title}</h3>
+                  <Fragment key={item.title}>
+                    <Reveal delay={index * 80}>
+                      <div className="flex flex-col justify-top items-center h-full p-7 rounded-[20px] border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+                        <div className="pb-5 flex items-center gap-3">
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                            <Icon className="h-5 w-5" strokeWidth={1.7} />
+                          </span>
+                        </div>
+                        <h3 className="text-lg m-1 font-semibold text-gray-950 dark:text-white">{item.title}</h3>
+                        <p className="m-1 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.desc}</p>
                       </div>
-                      <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.desc}</p>
-                    </div>
-                  </Reveal>
+                    </Reveal>
+
+                    {index < FLOW_ITEMS.length - 1 && (
+                      <div className="hidden xl:flex items-center justify-center text-gray-300 dark:text-gray-700">
+                        <ArrowRight className="h-5 w-5" strokeWidth={2} />
+                      </div>
+                    )}
+                  </Fragment>
                 );
               })}
             </div>
           </div>
         </section>
 
-        <section id="surfaces" className="border-b border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-gray-950">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
-              <Reveal>
-                <SectionHeader
-                  title="แต่ละจอมีหน้าที่ชัด ไม่แย่งกันเป็น dashboard"
-                  desc="POS สำหรับหน้าร้าน KDS สำหรับครัว bill/payment สำหรับแคชเชียร์ และ overview สำหรับเจ้าของร้าน ทุกจออ่านสถานะจากกะเดียวกัน"
-                />
-              </Reveal>
+        
 
-              <div className="grid gap-3">
-                {SURFACES.map((surface, index) => (
-                  <Reveal key={surface.title} delay={index * 90}>
-                    <SurfaceCard surface={surface} />
-                  </Reveal>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="roles" className="border-b border-gray-100 bg-slate-50 py-20 dark:border-gray-800 dark:bg-gray-900/35">
+        <section id="roles" className="border-b border-gray-100 bg-white py-12 dark:border-gray-800 dark:bg-gray-950 sm:py-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="คนละบทบาท คนละจังหวะ แต่ใช้ข้อมูลเดียวกัน"
+                title="สรุปหน้าที่ของคนในร้านอย่างชัดเจน"
                 desc="พนักงานไม่ควรต้องแปลข้อมูลข้ามกระดาษ แชต และหน้าจอหลายชุด ระบบจึงแยกหน้างานให้เหมาะกับบทบาท แต่ยังผูกสถานะกลับมาที่กะร้านเดียวกัน"
               />
             </Reveal>
@@ -847,12 +843,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="border-b border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-gray-950">
+        <section className="border-b border-gray-100 bg-slate-50 py-20 dark:border-gray-800 dark:bg-gray-900/35">
           <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="เล่าเฉพาะสิ่งที่ระบบมีให้ลองจริง"
-                desc="หน้า landing นี้ไม่พึ่งตัวเลขพิสูจน์ไม่ได้ ใช้ความสามารถที่มีในโปรเจกต์เป็น proof ว่าระบบพร้อมรองรับ workflow ร้านอาหารพื้นฐาน"
+                title="AI ผู้ช่วยที่รู้ทุกอย่างเกี่ยวกับร้านของคุณ"
+                desc="ไม่ต้องเสียเวลานั่งไล่เช็ค Exel หรือสมุดจด แค่ถาม AI Assistant ของเราคุณก็ได้คำตอบทันที"
               />
             </Reveal>
 
