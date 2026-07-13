@@ -5,28 +5,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowUpRight,
-  Ban,
-  CheckCircle2,
-  Clock3,
-  CreditCard,
   Printer,
-  ReceiptText,
   RefreshCw,
   Search,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
-import { cancelOrder, getOrder, getOrderBill, listOrders } from "@/src/lib/order";
+import { getOrderBill, listOrders } from "@/src/lib/order";
 import type { Bill, Order, OrderStatus } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
-import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
-import { canReprintReceipt, itemCount, itemFulfillmentLabel, itemFulfillmentType, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
+import { orderPosHref } from "@/src/lib/orderNavigation";
+import { canReprintReceipt, itemCount, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 type StatusFilter = "all" | "active" | "closed" | OrderStatus;
 type PaymentFilter = "all" | "unpaid" | "paid";
@@ -38,20 +33,12 @@ export default function OrdersPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const canView = can(activeMembership, "view_orders") || can(activeMembership, "take_order");
-  const canTake = can(activeMembership, "take_order");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const detailLoading = false;
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelClosing, setCancelClosing] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
   const [receiptBill, setReceiptBill] = useState<Bill | null>(null);
   const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
 
@@ -74,32 +61,18 @@ export default function OrdersPage() {
         cancelled: "ยกเลิก",
         unpaid: "ยังไม่ชำระ",
         paid: "ชำระแล้ว",
-        search: "ค้นหาเลขออเดอร์ โต๊ะ โซน หรือพนักงาน",
+        search: "ค้นหาเลขออเดอร์ โต๊ะ โซน หรือลูกค้า",
         status: "สถานะ",
         payment: "ชำระเงิน",
         order: "ออเดอร์",
         table: "โต๊ะ",
         items: "รายการ",
         total: "ยอดรวม",
-        opened: "เปิดเมื่อ",
-        closedAt: "ปิดเมื่อ",
-        customers: "ลูกค้า",
-        note: "หมายเหตุ",
-        staff: "พนักงาน",
         noOrders: "ไม่พบออเดอร์ในเงื่อนไขนี้",
         noOrdersHint: "ลองเปลี่ยนคำค้นหา สถานะ หรือเงื่อนไขการชำระเงิน",
-        selectOrder: "เลือกออเดอร์เพื่อดูรายละเอียด",
-        selectOrderHint: "รายละเอียดจะแสดงรายการอาหาร ยอดเงิน และข้อมูลที่ผู้จัดการต้องตรวจสอบ",
         viewInPos: "เปิดหน้า POS",
         reprintReceipt: "ดูใบเสร็จ / พิมพ์ซ้ำ",
-        cancel: "ยกเลิกออเดอร์",
-        cancelReason: "เหตุผลที่ยกเลิก",
-        cancelTitle: "ยืนยันยกเลิกออเดอร์",
-        cancelBody: "ระบุเหตุผลเพื่อเก็บไว้ในประวัติออเดอร์",
-        keepOrder: "เก็บออเดอร์ไว้",
-        confirmCancel: "ยืนยันยกเลิก",
         loadError: "โหลดออเดอร์ไม่สำเร็จ",
-        saveError: "ทำรายการไม่สำเร็จ",
         receiptLoadError: "โหลดใบเสร็จไม่สำเร็จ",
         revenue: "ยอดชำระแล้ว",
         activeOrders: "ออเดอร์ยังเปิด",
@@ -125,32 +98,18 @@ export default function OrdersPage() {
         cancelled: "Cancelled",
         unpaid: "Unpaid",
         paid: "Paid",
-        search: "Search order, table, zone, or staff",
+        search: "Search order, table, zone, or customer",
         status: "Status",
         payment: "Payment",
         order: "Order",
         table: "Table",
         items: "Items",
         total: "Total",
-        opened: "Opened",
-        closedAt: "Closed",
-        customers: "Guests",
-        note: "Note",
-        staff: "Staff",
         noOrders: "No orders match this view",
         noOrdersHint: "Try another search, status, or payment filter.",
-        selectOrder: "Select an order to review details.",
-        selectOrderHint: "Details show item snapshots, totals, and manager review information.",
         viewInPos: "Open POS",
         reprintReceipt: "View / reprint receipt",
-        cancel: "Cancel order",
-        cancelReason: "Cancel reason",
-        cancelTitle: "Confirm order cancellation",
-        cancelBody: "Add a reason so the order history stays clear.",
-        keepOrder: "Keep order",
-        confirmCancel: "Confirm cancel",
         loadError: "Could not load orders.",
-        saveError: "Could not complete the action.",
         receiptLoadError: "Could not load the receipt.",
         revenue: "Paid revenue",
         activeOrders: "Still open",
@@ -182,25 +141,21 @@ export default function OrdersPage() {
       const res = await listOrders();
       const nextOrders = res.data.orders ?? [];
       setOrders(nextOrders);
-      if (selectedOrderId && nextOrders.some((order) => order.ID === selectedOrderId)) {
-        const detail = await getOrder(selectedOrderId);
-        setSelectedOrder(detail.data);
-      } else if (selectedOrderId) {
-        setSelectedOrderId(null);
-        setSelectedOrder(null);
-      }
     } catch {
       if (!quiet) setError(copy.loadError);
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [canView, copy.loadError, selectedOrderId]);
+  }, [canView, copy.loadError]);
 
   useEffect(() => {
     void loadOrders();
-    const timer = window.setInterval(() => void loadOrders(true), 30_000);
-    return () => window.clearInterval(timer);
   }, [loadOrders]);
+  useVisiblePolling(() => loadOrders(true), {
+    enabled: canView,
+    intervalMs: 30_000,
+    runImmediately: false,
+  });
 
   const filteredOrders = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -221,9 +176,6 @@ export default function OrdersPage() {
           zoneName(order),
           order.customer_name,
           order.customer_phone,
-          order.staff?.nickname,
-          order.staff?.first_name,
-          order.staff?.last_name,
         ].some((value) => String(value ?? "").toLowerCase().includes(normalizedQuery));
         return statusMatched && paymentMatched && queryMatched;
       })
@@ -260,33 +212,6 @@ export default function OrdersPage() {
       setError(apiErrorMessage(error) || copy.receiptLoadError);
     } finally {
       setReceiptLoadingId(null);
-    }
-  };
-
-  const closeCancelModal = () => {
-    if (cancelClosing) return;
-    setCancelClosing(true);
-    window.setTimeout(() => {
-      setCancelOpen(false);
-      setCancelReason("");
-      setCancelClosing(false);
-    }, 180);
-  };
-  const cancelBackdrop = useBackdropClose(closeCancelModal);
-
-  const cancelSelected = async () => {
-    if (!selectedOrder || !cancelReason.trim()) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      const res = await cancelOrder(selectedOrder.ID, cancelReason.trim());
-      setSelectedOrder(res.data);
-      closeCancelModal();
-      await loadOrders(true);
-    } catch (error) {
-      setError(apiErrorMessage(error) || copy.saveError);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -425,7 +350,7 @@ export default function OrdersPage() {
                         </button>
                       ) : (
                         <Link
-                          href={`/pos/orders/${order.order_number}`}
+                          href={orderPosHref(order)}
                           className="ui-press inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 lg:w-auto"
                         >
                           {copy.viewInPos}
@@ -447,165 +372,6 @@ export default function OrdersPage() {
             )}
           </div>
 
-          <aside className="hidden" aria-hidden="true">
-            {selectedOrder ? (
-              <div className="2xl:sticky 2xl:top-4">
-                <div className="flex items-start justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">{tableName(selectedOrder, language)}</p>
-                    <h2 className="mt-1 truncate font-mono text-2xl font-semibold text-gray-900 dark:text-white">{selectedOrder.order_number}</h2>
-                    <p className="mt-1 text-[12px] text-gray-500">{formatTime(selectedOrder.opened_at)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedOrderId(null);
-                      setSelectedOrder(null);
-                    }}
-                    className="ui-press grid h-9 w-9 place-items-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
-                    aria-label="Close order detail"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="space-y-4 p-4">
-                  {detailLoading ? (
-                    <>
-                      <Skeleton className="h-24" />
-                      <Skeleton className="h-40" />
-                    </>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
-                            <ReceiptText className="h-3.5 w-3.5" />
-                            {copy.status}
-                          </p>
-                          <span className={`mt-2 inline-flex rounded-md border px-2 py-1 text-[12px] font-semibold ${statusClass[selectedOrder.status]}`}>
-                            {statusLabel(selectedOrder.status)}
-                          </span>
-                        </div>
-                        <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
-                            <CreditCard className="h-3.5 w-3.5" />
-                            {copy.total}
-                          </p>
-                          <p className="mt-2 font-mono text-xl font-semibold tabular-nums text-gray-900 dark:text-white">
-                            {money(selectedOrder.grand_total || selectedOrder.total_amount)}
-                          </p>
-                        </div>
-                        <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                          <p className="text-[11px] font-semibold text-gray-500">{copy.customers}</p>
-                          <p className="mt-2 text-[14px] font-semibold text-gray-900 dark:text-white">{selectedOrder.customer_count}</p>
-                        </div>
-                        <div className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                          <p className="text-[11px] font-semibold text-gray-500">{copy.payment}</p>
-                          <p className="mt-2 text-[14px] font-semibold text-gray-900 dark:text-white">{statusLabel(selectedOrder.payment_status)}</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-2 text-[12px] text-gray-500 sm:grid-cols-2 2xl:grid-cols-1">
-                        <p className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                          <Clock3 className="h-3.5 w-3.5" />
-                          {copy.opened}: <span className="font-medium text-gray-800 dark:text-gray-200">{formatTime(selectedOrder.opened_at)}</span>
-                        </p>
-                        <p className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          {copy.closedAt}: <span className="font-medium text-gray-800 dark:text-gray-200">{formatTime(selectedOrder.closed_at)}</span>
-                        </p>
-                      </div>
-
-                      {selectedOrder.note && (
-                        <div className="rounded-md border border-gray-200 p-3 text-[13px] dark:border-gray-800">
-                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">{copy.note}</p>
-                          <p className="text-gray-700 dark:text-gray-200">{selectedOrder.note}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.items}</h3>
-                        <div className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
-                          {selectedOrder.items?.length ? selectedOrder.items.map((item) => (
-                            <div key={item.ID} className="p-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
-                                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                                      itemFulfillmentType(item) === "takeaway"
-                                        ? "bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-200"
-                                        : "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300"
-                                    }`}>
-                                      {itemFulfillmentLabel(item, language)}
-                                    </span>
-                                  </div>
-                                  {item.selected_options?.length ? (
-                                    <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
-                                      {item.selected_options.map((option) => (
-                                        <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +${money(option.price_delta)}` : ""}</p>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  <p className="mt-1 text-[12px] text-gray-500">x{item.quantity} · {money(item.unit_price)}{item.note ? ` · ${item.note}` : ""}</p>
-                                </div>
-                                <span className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-500 dark:border-gray-800">{statusLabel(item.status)}</span>
-                              </div>
-                            </div>
-                          )) : (
-                            <div className="p-3 text-[12px] text-gray-500">{copy.noOrders}</div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:flex-row 2xl:flex-col">
-                  {canReprintReceipt(selectedOrder) ? (
-                    <>
-                      <button type="button" disabled={receiptLoadingId === selectedOrder.ID} onClick={() => { void openReceipt(selectedOrder); }} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                        <Printer className="h-4 w-4" />
-                        {copy.reprintReceipt}
-                      </button>
-                      <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
-                        {copy.viewInPos}
-                        <ArrowUpRight className="h-4 w-4" />
-                      </Link>
-                    </>
-                  ) : (
-                    <Link href={`/pos/orders/${selectedOrder.order_number}`} className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
-                      {copy.viewInPos}
-                      <ArrowUpRight className="h-4 w-4" />
-                    </Link>
-                  )}
-                  {canTake && !terminalStatuses.includes(selectedOrder.status) && (
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => {
-                        setCancelClosing(false);
-                        setCancelOpen(true);
-                      }}
-                      className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md border border-red-200 px-4 text-[13px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20"
-                    >
-                      <Ban className="h-4 w-4" />
-                      {copy.cancel}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex min-h-[300px] items-center justify-center px-4 py-12 text-center">
-                <div>
-                  <Archive className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-700" />
-                  <p className="mt-3 text-[15px] font-semibold text-gray-900 dark:text-white">{copy.selectOrder}</p>
-                  <p className="mt-1 max-w-sm text-[12px] text-gray-500">{copy.selectOrderHint}</p>
-                </div>
-              </div>
-            )}
-          </aside>
         </div>
       </section>
 
@@ -619,45 +385,6 @@ export default function OrdersPage() {
         />
       ) : null}
 
-      {cancelOpen && (
-        <div {...cancelBackdrop} className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
-              <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>
-            </div>
-            <div className="p-4">
-              <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.cancelReason}</span>
-                <textarea
-                  value={cancelReason}
-                  onChange={(event) => setCancelReason(event.target.value)}
-                  className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={() => {
-                  closeCancelModal();
-                }}
-                className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-              >
-                {copy.keepOrder}
-              </button>
-              <button
-                type="button"
-                disabled={!cancelReason.trim() || submitting}
-                onClick={cancelSelected}
-                className="ui-press h-9 rounded-md bg-red-600 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
-              >
-                {copy.confirmCancel}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </OperationalPageShell>
   );
 }

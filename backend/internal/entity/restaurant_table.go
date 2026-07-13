@@ -11,11 +11,11 @@ const (
 
 type RestaurantTable struct {
 	gorm.Model
-	RestaurantID     uint   `json:"restaurant_id" gorm:"not null;index"`
-	ZoneID           *uint  `json:"zone_id" gorm:"index"`
+	RestaurantID     uint   `json:"restaurant_id" gorm:"not null;index;index:idx_restaurant_tables_layout,priority:1"`
+	ZoneID           *uint  `json:"zone_id" gorm:"index;index:idx_restaurant_tables_layout,priority:2"`
 	TableNumber      string `json:"table_number" gorm:"not null"`
 	DisplayLabel     string `json:"display_label"`
-	SequenceNumber   int    `json:"sequence_number" gorm:"not null;default:0;index"`
+	SequenceNumber   int    `json:"sequence_number" gorm:"not null;default:0;index;index:idx_restaurant_tables_layout,priority:3"`
 	Capacity         int    `json:"capacity" gorm:"default:2"`
 	Zone             string `json:"zone"`
 	Status           string `json:"status" gorm:"default:'free'"`

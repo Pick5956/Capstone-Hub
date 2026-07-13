@@ -101,9 +101,7 @@ func SetupDatabase() *gorm.DB {
 	if db.Migrator().HasIndex(&entity.User{}, "uni_users_email") {
 		_ = db.Migrator().DropIndex(&entity.User{}, "uni_users_email")
 	}
-	ensureTableZonePrefixIndex(db)
-
-	db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&entity.Role{},
 		&entity.RestaurantRoleHidden{},
 		&entity.User{},
@@ -129,12 +127,15 @@ func SetupDatabase() *gorm.DB {
 		&entity.IngredientCategory{},
 		&entity.Ingredient{},
 		&entity.IngredientTransaction{},
-	)
+	); err != nil {
+		log.Fatalf("failed to migrate database schema: %v", err)
+	}
+	dropLegacyTableZonePrefixIndex(db)
+	dropLegacyOrderNumberIndex(db)
 	migrateLegacyTableLayout(db)
 	backfillCustomerTableTokens(db)
 	ensureOrderTakeawayColumns(db)
 	ensureOrderItemFulfillmentColumns(db)
-	ensureOrderNumberIndex(db)
 
 	seed.SeedRoles(db)
 
@@ -215,9 +216,11 @@ func findOrCreateLegacyTableZone(db *gorm.DB, restaurantID uint, name string) *e
 	return zone
 }
 
-func ensureTableZonePrefixIndex(db *gorm.DB) {
-	if db.Migrator().HasIndex(&entity.TableZone{}, "idx_table_zones_restaurant_prefix") {
-		_ = db.Migrator().DropIndex(&entity.TableZone{}, "idx_table_zones_restaurant_prefix")
+func dropLegacyTableZonePrefixIndex(db *gorm.DB) {
+	const legacyIndex = "idx_table_zones_restaurant_prefix"
+	const currentIndex = "idx_table_zones_restaurant_prefix_v2"
+	if db.Migrator().HasIndex(&entity.TableZone{}, currentIndex) && db.Migrator().HasIndex(&entity.TableZone{}, legacyIndex) {
+		_ = db.Migrator().DropIndex(&entity.TableZone{}, legacyIndex)
 	}
 }
 
@@ -245,16 +248,28 @@ func tableZonePrefixExists(db *gorm.DB, restaurantID uint, prefix string) bool {
 	return count > 0
 }
 
-func ensureOrderNumberIndex(db *gorm.DB) {
-	if db.Migrator().HasIndex(&entity.Order{}, "idx_orders_restaurant_day_number") {
-		_ = db.Migrator().DropIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
+func dropLegacyOrderNumberIndex(db *gorm.DB) {
+	const legacyIndex = "idx_orders_restaurant_day_number"
+	const currentIndex = "idx_orders_restaurant_day_number_v2"
+	if db.Migrator().HasIndex(&entity.Order{}, currentIndex) && db.Migrator().HasIndex(&entity.Order{}, legacyIndex) {
+		_ = db.Migrator().DropIndex(&entity.Order{}, legacyIndex)
 	}
-	_ = db.Migrator().CreateIndex(&entity.Order{}, "idx_orders_restaurant_day_number")
 }
 
 func ensureOrderTakeawayColumns(db *gorm.DB) {
 	if db.Migrator().HasTable(&entity.Order{}) && db.Migrator().HasColumn(&entity.Order{}, "table_id") {
-		_ = db.Exec("ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL").Error
+		columnTypes, err := db.Migrator().ColumnTypes(&entity.Order{})
+		if err == nil {
+			for _, column := range columnTypes {
+				if column.Name() != "table_id" {
+					continue
+				}
+				if nullable, ok := column.Nullable(); ok && !nullable {
+					_ = db.Exec("ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL").Error
+				}
+				break
+			}
+		}
 	}
 	_ = db.Model(&entity.Order{}).
 		Where("order_type = '' OR order_type IS NULL").

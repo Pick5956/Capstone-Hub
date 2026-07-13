@@ -14,18 +14,6 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) FindByEmail(email string) (*entity.User, error) {
-	var user entity.User
-	result := r.db.Where("email = ?", email).Limit(1).Find(&user)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
-	return &user, nil
-}
-
 func (r *UserRepository) FindByEmailProvider(email string, authProvider string) (*entity.User, error) {
 	var user entity.User
 	result := r.db.Where("email = ? AND auth_provider = ?", email, authProvider).Limit(1).Find(&user)

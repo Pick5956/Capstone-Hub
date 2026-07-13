@@ -207,7 +207,6 @@ export default function NewRestaurantPage() {
   const [openTime, setOpenTime] = useState(defaults.openTime);
   const [closeTime, setCloseTime] = useState(defaults.closeTime);
   const [initialTables, setInitialTables] = useState(defaults.tables);
-  const [seedMockupData, setSeedMockupData] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [reviewSubmitReady, setReviewSubmitReady] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -257,10 +256,6 @@ export default function NewRestaurantPage() {
         nextReview: "ต่อไป: ตรวจสอบ",
         skipContact: "ข้ามข้อมูลเสริม",
         previous: "ย้อนกลับ",
-        mockupSectionTitle: "ข้อมูลตัวอย่าง",
-        mockupSectionDescription: "เลือกได้ว่าจะให้ระบบสร้างเมนูและวัตถุดิบตัวอย่างตามประเภทร้านหรือเริ่มจากหมวดหมู่ว่าง",
-        mockupLabel: "สร้างเมนูและวัตถุดิบตัวอย่าง",
-        mockupHelp: "ระบบจะเพิ่มรายการตัวอย่างตามประเภทร้านที่เลือก เพื่อให้ทดลองใช้งานได้ทันที",
         submitIdle: "สร้างร้านและเข้า dashboard",
         submitBusy: "กำลังสร้างร้าน...",
         reviewHeading: "ข้อมูลที่จะสร้าง",
@@ -324,10 +319,6 @@ export default function NewRestaurantPage() {
         nextReview: "Next: review",
         skipContact: "Skip optional details",
         previous: "Back",
-        mockupSectionTitle: "Sample data",
-        mockupSectionDescription: "Choose whether to create sample menu items and ingredients for this restaurant type or start with empty categories.",
-        mockupLabel: "Create sample menu items and ingredients",
-        mockupHelp: "The system will add starter sample records based on the selected restaurant type so you can try the workflow immediately.",
         submitIdle: "Create restaurant and open dashboard",
         submitBusy: "Creating restaurant...",
         reviewHeading: "Setup to create",
@@ -512,7 +503,6 @@ export default function NewRestaurantPage() {
           open_time: openTime,
           close_time: closeTime,
           table_count: tableCount,
-          seed_mockup_data: seedMockupData,
         };
 
         const res = await createRestaurant(payload);

@@ -190,65 +190,6 @@ func parseRouterJSON(raw string) (AIRouterResult, error) {
 	return enforceRouterPolicy(res)
 }
 
-func localIntent(question string) (AIIntent, bool) {
-	normalized := strings.ToLower(strings.Trim(strings.TrimSpace(question), "?!.,"))
-	switch normalized {
-	case "สวัสดี", "สวัสดีครับ", "สวัสดีค่ะ", "หวัดดี", "hello", "hi", "hey":
-		return AIIntentGreeting, true
-	case "ทำอะไรได้บ้าง", "ช่วยอะไรได้บ้าง", "คุณทำอะไรได้บ้าง", "what can you do", "help":
-		return AIIntentCapability, true
-	}
-	if looksLikeUnclearInput(normalized) {
-		return AIIntentUnclear, true
-	}
-	return "", false
-}
-
-func looksLikeUnclearInput(input string) bool {
-	if input == "" {
-		return false
-	}
-	knownSingleWords := map[string]bool{
-		"menu": true, "stock": true, "inventory": true, "sales": true,
-		"report": true, "reports": true, "settings": true, "profit": true,
-		"margin": true, "revenue": true, "orders": true, "kitchen": true,
-		"staff": true, "table": true, "tables": true, "price": true,
-	}
-	if knownSingleWords[input] {
-		return false
-	}
-	if strings.ContainsAny(input, " \t\n") || len([]rune(input)) > 24 {
-		return false
-	}
-	hasLetterOrDigit := false
-	for _, char := range input {
-		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
-			hasLetterOrDigit = true
-			continue
-		}
-		if strings.ContainsRune("_-+=/\\", char) {
-			continue
-		}
-		return false
-	}
-	return hasLetterOrDigit
-}
-
-func localIntentAnswer(intent AIIntent) (string, bool) {
-	switch intent {
-	case AIIntentGreeting:
-		return "สวัสดีครับ วันนี้อยากดูยอดขาย เช็กสต๊อก หรือให้ช่วยหาเมนูในระบบครับ?", true
-	case AIIntentCapability:
-		return "ผมช่วยสรุปยอดขายและกำไร ตรวจวัตถุดิบเสี่ยงหมด วิเคราะห์เมนู และพาไปหน้าจัดการที่ต้องการได้ครับ ลองถามว่า \"เมนูไหนกำไรต่ำ\" หรือ \"พาไปหน้าตั้งค่าร้าน\" ได้เลย", true
-	case AIIntentUnclear:
-		return "ผมยังไม่เข้าใจคำขอนี้ครับ เลือกสิ่งที่ต้องการด้านล่าง หรือพิมพ์คำขอใหม่ได้เลย", true
-	case AIIntentOutOfScope:
-		return "เรื่องนี้อยู่นอกข้อมูลร้านที่ผมเข้าถึงครับ ผมช่วยดูยอดขาย กำไร สต๊อก เมนู หรือพาไปหน้าจัดการในระบบได้", true
-	default:
-		return "", false
-	}
-}
-
 func mapTaskToIntent(task AITask) AIIntent {
 	switch task {
 	case AITaskGeneralChat:
@@ -1594,13 +1535,6 @@ func conversationPrompt(history []AIConversationMessage) string {
 	return strings.TrimSpace(builder.String())
 }
 
-func questionWithHistory(question string, history []AIConversationMessage) string {
-	if len(history) == 0 {
-		return question
-	}
-	return fmt.Sprintf("Recent conversation:\n%s\n\nCurrent question:\n%s", conversationPrompt(history), question)
-}
-
 func (s *AIService) getGeminiTools() []geminiTool {
 	return []geminiTool{
 		{
@@ -1678,51 +1612,6 @@ func (s *AIService) getGroqTools() []groqTool {
 			},
 		},
 	}
-}
-
-func secondRoundPrompt(question string, history []AIConversationMessage, toolName AIToolName, toolResult AIToolResult) string {
-	toolResultJSON, _ := json.MarshalIndent(toolResult, "", "  ")
-	return fmt.Sprintf(`You are an AI operations assistant for a Thai restaurant management system.
-You are in the second round of a double round-trip. The backend Go system has successfully executed the tool "%s" and retrieved the actual data.
-
-IMPORTANT: You MUST respond in a valid JSON format only. Do not wrap the JSON in triple backticks or markdown, or if you do, ensure it is a valid JSON block that can be parsed.
-Your response MUST EXACTLY match this structure:
-{
-  "answer": "Your natural Thai conversational explanation here...",
-  "verify": {
-    "lowest_margin_menu_name": "...", 
-    "quantity": 123,
-    "revenue": 123.45,
-    "cost": 123.45,
-    "profit": 123.45,
-    "margin": 12.34,
-    "low_stock_count": 123,
-    "out_of_stock_count": 123,
-    "top_menu_name": "...",
-    "top_menu_quantity": 123,
-    "total_items": 123,
-    "total_value": 123.45
-  }
-}
-
-Rules for the "answer" field:
-1. Answer in natural, polite Thai for a restaurant owner or manager. Use "ครับ" consistently.
-2. Incorporate the conversation history context naturally.
-3. You MUST present the EXACT numbers from the tool result. Do NOT perform any manual mathematical calculations, averages, or totals. Use only the provided numbers.
-4. Do NOT use markdown tables or horizontal rules. Use bullet points or short paragraphs suitable for a narrow chat panel.
-5. Do NOT make up any numbers.
-
-Rules for the "verify" field:
-Fill in the fields of the "verify" object with the EXACT numbers and names you wrote in your "answer" text. If a field is not relevant to the tool result or your answer, you can omit it or set it to 0 or empty string.
-
-Tool result JSON:
-%s
-
-Recent conversation context:
-%s
-
-User question:
-%s`, toolName, string(toolResultJSON), conversationPrompt(history), question)
 }
 
 func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {
