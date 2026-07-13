@@ -1,4 +1,11 @@
 "use client";
+
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
+import { FreeMode ,Pagination } from "swiper/modules";
+import "swiper/css/free-mode";
+import "swiper/css/pagination";
+
 import { Fragment } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -350,7 +357,42 @@ function LandingMotionStyles() {
     `}</style>
   );
 }
+function SwiperStyle() {
+  return(
+    <style>{`
+  .role-swiper .swiper-wrapper {
+    align-items: stretch;
+  }
 
+  .role-swiper .swiper-slide {
+    height: auto;
+    display: flex;
+  }
+
+  .role-swiper .swiper-slide > * {
+    width: 100%;
+  `}</style>
+  );
+}
+function SecondaryButton({onClick, children}: {onClick: () => void; children: ReactNode}) {
+  return(
+    <button
+      type="button"
+      onClick={onClick}
+      className="ui-press landing-lift inline-flex h-20 w-100 max-w-6xl items-center rounded-[10px] bg-gray-900 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+    >
+      {/* กลาง */}
+      <span className="flex flex-[6] items-center justify-center">
+        {children}
+      </span>
+
+      {/* ขวา */}
+      <span className="flex flex-[1] items-center justify-end">
+        <ArrowRight className="h-6 w-6 shrink-0" strokeWidth={3} />
+      </span>
+    </button>
+  );
+}
 function PrimaryButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <button
@@ -360,7 +402,7 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
     >
       {/* อันแรก — เล็กสุด */}
       <span className="flex flex-[1] items-center justify-start">
-        <AndroidIcon />
+         
       </span>
 
       {/* กลาง */}
@@ -423,7 +465,7 @@ function ImageAndDownload({ btn }: { btn: () => void }) {
     <div className="m-6 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
       <PhoneImage />
       <div className="flex flex-col items-center gap-4 sm:items-center">
-        <PrimaryButton onClick={btn}>ดาวน์โหลดแอป</PrimaryButton>
+        <PrimaryButton onClick={btn}>ลงทะเบียนเลย</PrimaryButton>
        <HeroProofStrip />
       </div>
     </div>
@@ -783,7 +825,7 @@ export default function LandingPage() {
                 return (
                   <Fragment key={item.title}>
                     <Reveal delay={index * 80}>
-                      <div className="flex flex-col justify-top items-center h-full p-7 rounded-[20px] border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+                      <div className="flex flex-col justify-top h-full items-center h-full p-7 rounded-[20px] border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
                         <div className="pb-5 flex items-center gap-3">
                           <span className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
                             <Icon className="h-5 w-5" strokeWidth={1.7} />
@@ -816,30 +858,58 @@ export default function LandingPage() {
                 desc="พนักงานไม่ควรต้องแปลข้อมูลข้ามกระดาษ แชต และหน้าจอหลายชุด ระบบจึงแยกหน้างานให้เหมาะกับบทบาท แต่ยังผูกสถานะกลับมาที่กะร้านเดียวกัน"
               />
             </Reveal>
-
-            <div className="mt-10 grid gap-3 md:grid-cols-2">
+            <SwiperStyle />
+            <Swiper
+              modules={[Pagination]}
+              loop
+              pagination={{ clickable: true }}
+              breakpoints={{
+                0: {
+                  slidesPerView: 1.1,
+                  spaceBetween: 12,
+                },
+                640: {
+                  slidesPerView: 1.2,
+                },
+                768: {
+                  slidesPerView: 2,
+                },
+              }}
+              className="mt-10 pb-12 role-swiper"
+              
+            >
               {ROLE_ITEMS.map((item, index) => {
                 const Icon = item.icon;
+
                 return (
-                  <Reveal key={item.role} delay={index * 80}>
-                    <div className="h-full rounded-md border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
-                      <div className="flex items-start gap-4">
-                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                          <Icon className="h-5 w-5" strokeWidth={1.7} />
-                        </span>
-                        <div>
-                          <p className="text-[13px] font-semibold text-orange-600 dark:text-orange-400">
-                            {item.role}
-                          </p>
-                          <h3 className="mt-2 text-lg font-semibold text-gray-950 dark:text-white">{item.title}</h3>
-                          <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-400">{item.desc}</p>
+                  <SwiperSlide className="w-full h-auto" key={item.role}>
+                    <Reveal delay={index * 80}>
+                      <div className="flex h-full flex-col rounded-md border max-w-125 mb-10 border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
+                        <div className=" flex items-start gap-4">
+                          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                            <Icon className="h-5 w-5" strokeWidth={1.7} />
+                          </span>
+
+                          <div>
+                            <p className="text-[13px] font-semibold text-orange-600 dark:text-orange-400">
+                              {item.role}
+                            </p>
+
+                            <h3 className="mt-2 text-lg font-semibold text-gray-950 dark:text-white">
+                              {item.title}
+                            </h3>
+
+                            <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-400">
+                              {item.desc}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Reveal>
+                    </Reveal>
+                  </SwiperSlide>
                 );
               })}
-            </div>
+            </Swiper>
           </div>
         </section>
 
@@ -880,7 +950,7 @@ export default function LandingPage() {
                     เข้าสู่ระบบเพื่อสร้างร้าน ตั้งค่าโต๊ะ เมนู และเชิญทีมให้ทดลอง flow หน้าร้าน-ครัว-ปิดบิล
                   </p>
                 </div>
-                <PrimaryButton onClick={openLandingLoginModal}>เข้าสู่ระบบ</PrimaryButton>
+                <SecondaryButton onClick={openLandingLoginModal}>เข้าสู่ระบบ</SecondaryButton>
               </div>
             </Reveal>
           </div>
