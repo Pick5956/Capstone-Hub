@@ -31,6 +31,66 @@ func TestCanTransitionItem(t *testing.T) {
 	}
 }
 
+func TestValidateEmptyTableClose(t *testing.T) {
+	tableID := uint(7)
+	tests := []struct {
+		name    string
+		order   *entity.Order
+		wantErr string
+	}{
+		{
+			name: "allows an open dine-in table without items",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeDineIn,
+				TableID:   &tableID,
+				Status:    entity.OrderStatusOpen,
+			},
+		},
+		{
+			name: "rejects takeaway orders",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeTakeaway,
+				Status:    entity.OrderStatusOpen,
+			},
+			wantErr: "only an empty dine-in table can be closed",
+		},
+		{
+			name: "rejects orders after kitchen send",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeDineIn,
+				TableID:   &tableID,
+				Status:    entity.OrderStatusCooking,
+			},
+			wantErr: "only an open table can be closed without an order",
+		},
+		{
+			name: "rejects orders with items",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeDineIn,
+				TableID:   &tableID,
+				Status:    entity.OrderStatusOpen,
+				Items:     []entity.OrderItem{{}},
+			},
+			wantErr: "table order already has items",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateEmptyTableClose(test.order)
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateEmptyTableClose() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != test.wantErr {
+				t.Fatalf("validateEmptyTableClose() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestRecipeComponentCostUsesYield(t *testing.T) {
 	if got := recipeComponentCost(2, 10, 100); got != 20 {
 		t.Fatalf("recipeComponentCost with full yield = %v, want 20", got)

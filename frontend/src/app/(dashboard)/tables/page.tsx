@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -52,6 +52,7 @@ export default function TablesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingQr, setDownloadingQr] = useState(false);
+  const [qrImageState, setQrImageState] = useState<{ source: string; status: "loaded" | "error" }>({ source: "", status: "loaded" });
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const saveOnceRef = useRef(createSingleFlight());
@@ -135,6 +136,8 @@ export default function TablesPage() {
         customerLinkCopied: "คัดลอกลิงก์สั่งอาหารแล้ว",
         qrDownloaded: "ดาวน์โหลด QR แล้ว",
         qrDownloadError: "ดาวน์โหลด QR ไม่สำเร็จ",
+        qrLoading: "กำลังโหลด QR",
+        qrImageError: "โหลด QR ไม่สำเร็จ",
         regenerateQr: "สร้าง QR ใหม่",
         regenerateQrTitle: "สร้าง QR โต๊ะนี้ใหม่?",
         regenerateQrBody: "ลิงก์และ QR เดิมจะใช้ไม่ได้ทันที ลูกค้าที่เปิดจาก QR เก่าจะต้องสแกน QR ใหม่",
@@ -217,6 +220,8 @@ export default function TablesPage() {
         customerLinkCopied: "Ordering link copied",
         qrDownloaded: "QR downloaded",
         qrDownloadError: "Could not download QR",
+        qrLoading: "Loading QR",
+        qrImageError: "Could not load QR",
         regenerateQr: "Regenerate QR",
         regenerateQrTitle: "Regenerate this table QR?",
         regenerateQrBody: "The old link and QR code will stop working immediately. Guests using the old QR must scan the new one.",
@@ -280,10 +285,13 @@ export default function TablesPage() {
     return `${window.location.origin}/customer/t/${editingTable.customer_token}`;
   }, [editingTable]);
   const customerOrderQr = customerOrderLink ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(customerOrderLink)}` : "";
+  const qrImageLoaded = qrImageState.source === customerOrderQr && qrImageState.status === "loaded";
+  const qrImageFailed = qrImageState.source === customerOrderQr && qrImageState.status === "error";
 
   const toggleTableTag = (id: number) => setTableForm((current) => ({ ...current, tag_ids: current.tag_ids?.includes(id) ? current.tag_ids.filter((item) => item !== id) : [...(current.tag_ids ?? []), id] }));
 
   const startEditTable = (table: RestaurantTable) => {
+    setQrImageState({ source: "", status: "loaded" });
     setEditingTable(table);
     setFormError("");
     setTableForm({ zone_id: table.zone_id ?? null, capacity: table.capacity, status: table.status, tag_ids: table.tags?.map((tag) => tag.ID) ?? [] });
@@ -795,8 +803,28 @@ export default function TablesPage() {
                       <RefreshCw className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <div className="grid grid-cols-[96px_1fr] gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={customerOrderQr} alt={copy.qrOrder} className="h-24 w-24 rounded-md border border-gray-200 bg-white p-1 dark:border-gray-700" />
+                      <div className="relative h-24 w-24 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          key={customerOrderQr}
+                          src={customerOrderQr}
+                          alt={copy.qrOrder}
+                          onLoad={() => setQrImageState({ source: customerOrderQr, status: "loaded" })}
+                          onError={() => setQrImageState({ source: customerOrderQr, status: "error" })}
+                          className={`h-full w-full p-1 transition-opacity duration-150 ${qrImageLoaded ? "opacity-100" : "opacity-0"}`}
+                        />
+                        {!qrImageLoaded && !qrImageFailed && (
+                          <div role="status" className="absolute inset-0 flex items-center justify-center bg-white text-gray-500">
+                            <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            <span className="sr-only">{copy.qrLoading}</span>
+                          </div>
+                        )}
+                        {qrImageFailed && (
+                          <div role="status" className="absolute inset-0 flex items-center justify-center bg-white p-2 text-center text-[10px] font-medium leading-4 text-red-600">
+                            {copy.qrImageError}
+                          </div>
+                        )}
+                      </div>
                       <div className="min-w-0 pr-9">
                         <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.qrOrder}</p>
                         <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.qrHint}</p>

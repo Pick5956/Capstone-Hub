@@ -174,8 +174,7 @@ GEMINI_MODEL=gemini-2.5-flash
 Then run the API:
 
 ```powershell
-cd backend
-go run main.go
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1
 ```
 
 The backend runs on `http://localhost:8080` and exposes `GET /health`.
@@ -198,6 +197,14 @@ npm.cmd run dev
 
 Open `http://localhost:3000`.
 
+After both environment files are configured, you can start the backend and frontend together from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+Managed runtime commands create new timestamped stdout and stderr files directly under `logs/<service>/current/`. They never move, rename, append to, or overwrite an older run. Move old files to `archive/` manually whenever you want to tidy them.
+
 ### 5. Run the mobile app
 
 Create a mobile environment value for the API URL:
@@ -219,9 +226,10 @@ For physical-device testing, use a LAN-accessible backend URL or the included ba
 
 | Command | Location | Purpose |
 | --- | --- | --- |
-| `go run main.go` | `backend/` | Start the Go API from source |
+| `powershell -File .\scripts\start-backend.ps1` | Repository root | Start the Go API from source with automatic runtime logs |
 | `go test ./...` | `backend/` | Run backend tests |
-| `npm.cmd run dev` | `frontend/` | Start the local Next.js app |
+| `powershell -File .\scripts\start-local.ps1` | Repository root | Start the local Go API and Next.js app together |
+| `npm.cmd run dev` | `frontend/` | Start the local Next.js app with automatic runtime logs |
 | `npm.cmd run lint` | `frontend/` | Run ESLint |
 | `npm.cmd run build` | `frontend/` | Build the production frontend |
 | `npm.cmd run test:agent` | `frontend/` | Run frontend Vitest checks |
@@ -233,8 +241,7 @@ For physical-device testing, use a LAN-accessible backend URL or the included ba
 The repo includes scripts for serving the local app through the configured Cloudflare public domain.
 
 ```powershell
-cd backend
-go run main.go
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1 -Mode public
 ```
 
 ```powershell

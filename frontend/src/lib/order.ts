@@ -16,6 +16,9 @@ export const updateOrder = (id: number, data: { customer_count: number; note?: s
 export const cancelOrder = (id: number, reason: string) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/cancel`, { reason });
 
+export const closeEmptyTableOrder = (id: number) =>
+  apiClient.post<Order>(`/api/v1/orders/${id}/close-empty-table`);
+
 export const closeOrder = (id: number) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/close`);
 

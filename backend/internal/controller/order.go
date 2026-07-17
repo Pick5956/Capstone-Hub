@@ -187,6 +187,31 @@ func (ctrl *OrderController) CancelOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
+func (ctrl *OrderController) CloseEmptyTable(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireOrderAccess(c, "take_order") {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
+	if !ok {
+		return
+	}
+	order, err := ctrl.orderSvc.CloseEmptyTable(restaurantID, userID, resolved.ID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, order)
+}
+
 func (ctrl *OrderController) CloseOrder(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

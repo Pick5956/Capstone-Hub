@@ -10,15 +10,16 @@ import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
+import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
 import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, cancelOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem } from "@/src/lib/order";
+import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
 import type { Bill, Order, OrderItem, OrderPayment } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
-import { useToast } from "@/src/components/shared/FeedbackProvider";
+import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
@@ -105,6 +106,7 @@ export default function PosOrderDetailPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const canTake = can(activeMembership, "take_order");
   const canPay = can(activeMembership, "take_payment");
   const orderNumber = params.orderNumber?.toUpperCase() ?? "";
@@ -118,9 +120,6 @@ export default function PosOrderDetailPage() {
 
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [selectedFulfillment, setSelectedFulfillment] = useState<"dine_in" | "takeaway">("dine_in");
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelClosing, setCancelClosing] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
   const [billViewOpen, setBillViewOpen] = useState(false);
   const [billViewClosing, setBillViewClosing] = useState(false);
   const [orderSummaryOpen, setOrderSummaryOpen] = useState(false);
@@ -175,12 +174,11 @@ export default function PosOrderDetailPage() {
       confirmPayment: "ยืนยันรับเงิน",
       paymentMethod: "วิธีรับเงิน",
       allItems: "รายการทั้งหมด",
-      cancelOrder: "ยกเลิกออเดอร์",
-      cancelReason: "เหตุผลที่ยกเลิก",
-      cancelTitle: "ยกเลิกออเดอร์นี้?",
-      cancelBody: "ใช้เมื่อเปิดออเดอร์ผิดหรือยังไม่ได้ส่งเข้าครัว",
-      keepOrder: "เก็บออเดอร์ไว้",
-      confirmCancel: "ยืนยันยกเลิก",
+      closeEmptyTable: "ปิดโต๊ะ",
+      closeEmptyTableTitle: "ปิดโต๊ะที่เปิดผิด?",
+      closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะยกเลิกออเดอร์ว่างและเปลี่ยนโต๊ะกลับเป็นว่าง",
+      keepTableOpen: "เปิดโต๊ะไว้",
+      tableClosed: "ปิดโต๊ะแล้ว",
       remove: "ลบ",
       total: "ยอดรวม",
       loadError: "โหลดออเดอร์ไม่สำเร็จ",
@@ -222,12 +220,11 @@ export default function PosOrderDetailPage() {
       confirmPayment: "Confirm payment",
       paymentMethod: "Payment method",
       allItems: "All items",
-      cancelOrder: "Cancel order",
-      cancelReason: "Cancel reason",
-      cancelTitle: "Cancel this order?",
-      cancelBody: "Use this when the order was opened by mistake before sending to kitchen.",
-      keepOrder: "Keep order",
-      confirmCancel: "Confirm cancel",
+      closeEmptyTable: "Close table",
+      closeEmptyTableTitle: "Close this table opened by mistake?",
+      closeEmptyTableBody: "This table has no items. The empty order will be cancelled and the table will become available again.",
+      keepTableOpen: "Keep table open",
+      tableClosed: "Table closed",
       remove: "Remove",
       total: "Total",
       loadError: "Could not load order.",
@@ -344,15 +341,6 @@ export default function PosOrderDetailPage() {
     }, 180);
   };
 
-  const closeCancelModal = () => {
-    if (cancelClosing) return;
-    setCancelClosing(true);
-    window.setTimeout(() => {
-      setCancelOpen(false);
-      setCancelReason("");
-      setCancelClosing(false);
-    }, 180);
-  };
   const openOrderSummary = () => {
     setOrderSummaryClosing(false);
     setOrderSummaryOpen(true);
@@ -378,9 +366,8 @@ export default function PosOrderDetailPage() {
     }, 180);
   };
   const paymentBackdrop = useBackdropClose(closeBillModal);
-  const cancelBackdrop = useBackdropClose(closeCancelModal);
   const orderSummaryBackdrop = useBackdropClose(closeOrderSummary);
-  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || cancelOpen || orderSummaryOpen);
+  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || orderSummaryOpen);
 
   const toggleOption = (groupOptionIds: number[], optionId: number, minSelect: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
@@ -498,10 +485,30 @@ export default function PosOrderDetailPage() {
     });
   };
 
-  const cancelSelectedOrder = async () => {
-    if (!order || !cancelReason.trim()) return;
-    await runAction(async () => (await cancelOrder(order.ID, cancelReason)).data);
-    closeCancelModal();
+  const requestCloseEmptyTable = async () => {
+    if (!order || !canCloseEmptyTableOrder(order)) return;
+    const confirmed = await confirm({
+      title: copy.closeEmptyTableTitle,
+      message: copy.closeEmptyTableBody,
+      confirmLabel: copy.closeEmptyTable,
+      cancelLabel: copy.keepTableOpen,
+      tone: "warning",
+    });
+    if (!confirmed) return;
+
+    setSubmitting(true);
+    actionInFlightRef.current = true;
+    setError("");
+    try {
+      await closeEmptyTableOrder(order.ID);
+      showToast({ title: copy.tableClosed });
+      router.replace("/pos/tables");
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      actionInFlightRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   const sendToKitchen = async () => {
@@ -627,6 +634,7 @@ export default function PosOrderDetailPage() {
   };
 
   const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const canCloseTable = order ? canCloseEmptyTableOrder(order) : false;
   const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
 
@@ -655,6 +663,11 @@ export default function PosOrderDetailPage() {
                 <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:flex-none">
                   {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
                 </button>
+                {canCloseTable ? (
+                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-900">
+                    {copy.closeEmptyTable}
+                  </button>
+                ) : null}
                 {pendingItemCount === 0 && order.status === "served" ? (
                   <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press h-10 shrink-0 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                     {copy.close}
@@ -1012,32 +1025,6 @@ export default function PosOrderDetailPage() {
           </div>
         );
       })()}
-
-
-      {cancelOpen && (
-        <div {...cancelBackdrop} className={`${cancelClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${cancelClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.cancelTitle}</h2>
-              <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.cancelBody}</p>
-            </div>
-            <div className="p-4">
-              <label className="block">
-                <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.cancelReason}</span>
-                <textarea value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={closeCancelModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
-                {copy.keepOrder}
-              </button>
-              <button type="button" disabled={!cancelReason.trim() || submitting} onClick={cancelSelectedOrder} className="ui-press h-9 rounded-md bg-red-600 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
-                {copy.confirmCancel}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
