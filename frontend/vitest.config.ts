@@ -14,6 +14,7 @@ export default defineConfig({
       "src/lib/__tests__/orderItemGroups.test.ts",
       "src/lib/__tests__/homeDashboard.test.ts",
       "src/lib/__tests__/documentTitle.test.ts",
+      "src/lib/__tests__/authModalMotion.test.ts",
       "src/lib/__tests__/orderNavigation.test.ts",
       "src/lib/__tests__/singleFlight.test.ts",
       "src/app/(dashboard)/orders/ordersPageUtils.test.ts",

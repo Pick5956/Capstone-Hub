@@ -23,8 +23,7 @@ backend/postgres-data/
 backend/data/
 backend/database/
 backend/uploads/
-.logs/
-*.log
+logs/
 db-dumps/
 backups/
 data/

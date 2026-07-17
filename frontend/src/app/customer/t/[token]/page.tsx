@@ -130,7 +130,8 @@ export default function CustomerTableOrderPage() {
   };
 
   useEffect(() => {
-    void load();
+    const loadTimer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, language]);
 

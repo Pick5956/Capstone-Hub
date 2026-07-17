@@ -243,7 +243,8 @@ export default function TablesPage() {
   };
 
   useEffect(() => {
-    void refresh();
+    const loadTimer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, language]);
 

@@ -277,7 +277,8 @@ export default function PosTablesPage() {
   }, [canTake, copy.loadError]);
 
   useEffect(() => {
-    void load();
+    const loadTimer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(loadTimer);
   }, [load]);
   useVisiblePolling(() => load(false), {
     enabled: canTake,

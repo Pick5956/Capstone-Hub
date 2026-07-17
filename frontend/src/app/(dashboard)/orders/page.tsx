@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowUpRight,
@@ -133,7 +133,8 @@ export default function OrdersPage() {
     return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" }).format(new Date(value));
   };
 
-  const loadOrders = useCallback(async (quiet = false) => {
+  const loadError = copy.loadError;
+  const loadOrders = async (quiet = false) => {
     if (!canView) return;
     if (!quiet) setLoading(true);
     setError("");
@@ -142,15 +143,17 @@ export default function OrdersPage() {
       const nextOrders = res.data.orders ?? [];
       setOrders(nextOrders);
     } catch {
-      if (!quiet) setError(copy.loadError);
+      if (!quiet) setError(loadError);
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [canView, copy.loadError]);
+  };
 
   useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
+    const loadTimer = window.setTimeout(() => void loadOrders(), 0);
+    return () => window.clearTimeout(loadTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView, loadError]);
   useVisiblePolling(() => loadOrders(true), {
     enabled: canView,
     intervalMs: 30_000,

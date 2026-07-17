@@ -7,8 +7,10 @@ import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
 import { apiErrorCode } from "@/src/lib/apiErrors";
+import { AUTH_MODAL_CLOSE_DELAY_MS, scheduleAuthModalFocus } from "@/src/lib/authModalMotion";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -221,6 +223,7 @@ export default function AuthModal({
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const router = useRouter();
 
   const copy = language === "th"
@@ -317,11 +320,16 @@ export default function AuthModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setAuthMode(initialMode);
-    setError("");
-    setNotice("");
-  }, [isOpen, initialMode]);
+  }, [isOpen]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -341,9 +349,10 @@ export default function AuthModal({
   useEffect(() => {
     if (!isOpen) return;
     const targetId = authMode === "forgot" ? "forgot-email" : authMode === "register" ? "firstName" : "login-email";
-    const timer = window.setTimeout(() => {
-      document.getElementById(targetId)?.focus();
-    }, 0);
+    const timer = scheduleAuthModalFocus(
+      () => document.getElementById(targetId),
+      (callback, delay) => window.setTimeout(callback, delay),
+    );
     return () => window.clearTimeout(timer);
   }, [authMode, isOpen]);
 
@@ -551,10 +560,17 @@ export default function AuthModal({
   const closeAndRestoreFocus = useCallback(() => {
     onClose();
     const restoreTarget = restoreFocusRef.current;
-    window.setTimeout(() => {
-      restoreTarget?.focus();
-    }, 0);
-  }, [onClose]);
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => {
+      setAuthMode(initialMode);
+      setError("");
+      setNotice("");
+      restoreTarget?.focus({ preventScroll: true });
+      closeTimerRef.current = null;
+    }, AUTH_MODAL_CLOSE_DELAY_MS);
+  }, [initialMode, onClose]);
+
+  const backdropCloseHandlers = useBackdropClose(closeAndRestoreFocus);
 
   const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -589,11 +605,13 @@ export default function AuthModal({
   const subtitle = isForgot ? copy.forgotSubtitle : isLogin ? copy.loginSubtitle : copy.registerSubtitle;
 
   return (
+    // Keep the full-screen blur stable; animate opacity and the dialog surface only.
     <div
       aria-hidden={!isOpen}
       inert={!isOpen}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-[background-color,opacity,backdrop-filter] duration-200 ${
-        isOpen ? "bg-black/40 opacity-100 backdrop-blur-sm" : "pointer-events-none bg-black/0 opacity-0 backdrop-blur-none"
+      {...backdropCloseHandlers}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm transition-opacity duration-200 ${
+        isOpen ? "motion-overlay" : "pointer-events-none opacity-0"
       }`}
     >
       <div
@@ -604,7 +622,7 @@ export default function AuthModal({
         onKeyDown={handleDialogKeyDown}
         className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
-        } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
+        } ${isOpen ? "motion-dialog" : "translate-y-2 scale-[0.985] opacity-0"}`}
       >
         <div className="flex items-start justify-between border-b border-gray-100 px-5 pb-3 pt-4 dark:border-gray-800">
           <div>

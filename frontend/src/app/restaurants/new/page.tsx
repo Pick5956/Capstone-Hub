@@ -213,12 +213,10 @@ export default function NewRestaurantPage() {
   const submitOnceRef = useRef(createSingleFlight());
 
   useEffect(() => {
-    if (activeStep !== "review") {
-      setReviewSubmitReady(false);
-      return;
-    }
-
-    const readyTimer = window.setTimeout(() => setReviewSubmitReady(true), 150);
+    const readyTimer = window.setTimeout(
+      () => setReviewSubmitReady(activeStep === "review"),
+      activeStep === "review" ? 150 : 0,
+    );
     return () => window.clearTimeout(readyTimer);
   }, [activeStep]);
 

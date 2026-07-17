@@ -256,29 +256,32 @@ export default function RestaurantSettingsPage() {
       };
 
   useEffect(() => {
-    if (!restaurantId || !canManageRestaurant) {
-      setLoading(false);
-      return;
-    }
-
     let active = true;
-    setLoading(true);
-    getRestaurant(restaurantId)
-      .then((res) => {
-        if (!active) return;
-        setRestaurant(res.data);
-        setForm(toForm(res.data, language));
-        setErrors({});
-      })
-      .catch(() => {
-        if (active) setErrors({ submit: copy.saveError });
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const loadTimer = window.setTimeout(() => {
+      if (!restaurantId || !canManageRestaurant) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      getRestaurant(restaurantId)
+        .then((res) => {
+          if (!active) return;
+          setRestaurant(res.data);
+          setForm(toForm(res.data, language));
+          setErrors({});
+        })
+        .catch(() => {
+          if (active) setErrors({ submit: copy.saveError });
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(loadTimer);
     };
   }, [canManageRestaurant, copy.saveError, language, restaurantId]);
 

@@ -318,7 +318,8 @@ export default function Home() {
   }, [activeMembership?.restaurant_id, copy.loadError, isToday, selectedDate]);
 
   useEffect(() => {
-    void loadOperations();
+    const loadTimer = window.setTimeout(() => void loadOperations(), 0);
+    return () => window.clearTimeout(loadTimer);
   }, [loadOperations]);
   useVisiblePolling(() => loadOperations(true), {
     enabled: isToday && Boolean(activeMembership?.restaurant_id),

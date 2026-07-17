@@ -2,8 +2,7 @@
 
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
-import { FreeMode ,Pagination } from "swiper/modules";
-import "swiper/css/free-mode";
+import { Pagination } from "swiper/modules";
 import "swiper/css/pagination";
 
 import { Fragment } from "react";
@@ -44,13 +43,6 @@ type FlowItem = {
   icon: LucideIcon;
 };
 
-type SurfaceItem = {
-  title: string;
-  desc: string;
-  points: string[];
-  icon: LucideIcon;
-};
-
 type RoleItem = {
   role: string;
   title: string;
@@ -65,7 +57,6 @@ type HeroProof = {
 
 const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1750950388492-f803d12c4a8a?auto=format&fit=crop&w=2200&q=80";
 const PHONE_IMAGE_URL = "https://static.vecteezy.com/system/resources/thumbnails/019/859/715/small/realistic-models-smartphone-with-transparent-screens-smartphone-mockup-collection-device-front-view-3d-mobile-phone-with-shadow-transparent-background-illustration-png.png"
-const ANDROID_ICON_URL = "https://www.nicepng.com/png/full/163-1632345_download-the-domus-app-today-android-icon-white.png"
 
 function safeNextPathFromSearch(search: string) {
   const next = new URLSearchParams(search).get("next");
@@ -137,27 +128,6 @@ const FLOW_ITEMS: FlowItem[] = [
     title: "ปิดบิล",
     desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ ",
     icon: ReceiptText,
-  },
-];
-
-const SURFACES: SurfaceItem[] = [
-  {
-    title: "หน้าร้านเห็นโต๊ะและรายการสั่งในจอเดียว",
-    desc: "เหมาะกับช่วงที่พนักงานต้องรับออเดอร์หลายโต๊ะพร้อมกันและไม่อยากหลุดรายการเสริม",
-    points: ["สถานะโต๊ะ", "เมนูพร้อมตัวเลือก", "รายการรอบนี้"],
-    icon: ShoppingCart,
-  },
-  {
-    title: "ครัวรู้ว่าควรทำอะไรก่อน",
-    desc: "คิวอาหารไม่หายไปกับกระดาษหรือแชต ทีมหน้าร้านเห็นอาหารพร้อมเสิร์ฟจากสถานะเดียวกัน",
-    points: ["คิวใหม่", "กำลังทำ", "พร้อมเสิร์ฟ"],
-    icon: ChefHat,
-  },
-  {
-    title: "ผู้จัดการปิดรอบและมองกะร้านได้ทันที",
-    desc: "บิล การชำระเงิน สถานะโต๊ะ และสัญญาณคิวครัวถูกดึงกลับมาเป็นภาพรวมร้าน",
-    points: ["เงินสด", "PromptPay", "ภาพรวมกะร้าน"],
-    icon: BarChart3,
   },
 ];
 
@@ -441,9 +411,6 @@ function HeroImage() {
   );
 }
 
-function AndroidIcon() {
-  return <img src={ANDROID_ICON_URL} alt="Android icon" className="size-1/2 object-contain" />;
-}
 function PhoneImage() {
   return (
     <div className="relative aspect-[9/16] w-48 sm:w-64 md:w-80 lg:w-96">
@@ -628,34 +595,6 @@ function CommandCenterMockup() {
             </aside>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function SurfaceCard({ surface }: { surface: SurfaceItem }) {
-  const Icon = surface.icon;
-
-  return (
-    <div className="rounded-md border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-semibold leading-snug text-gray-950 dark:text-white">{surface.title}</h3>
-        </div>
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-slate-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-          <Icon className="h-5 w-5" strokeWidth={1.7} />
-        </span>
-      </div>
-      <p className="mt-4 text-sm leading-6 text-gray-600 dark:text-gray-400">{surface.desc}</p>
-      <div className="mt-5 flex flex-wrap gap-2">
-        {surface.points.map((point) => (
-          <span
-            key={point}
-            className="rounded border border-gray-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
-          >
-            {point}
-          </span>
-        ))}
       </div>
     </div>
   );

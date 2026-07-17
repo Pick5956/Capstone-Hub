@@ -104,7 +104,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [refreshMemberships]);
 
   useEffect(() => {
-    fetchUser();
+    const loadTimer = window.setTimeout(() => void fetchUser(), 0);
+    return () => window.clearTimeout(loadTimer);
   }, [fetchUser]);
 
   const logout = async () => {
