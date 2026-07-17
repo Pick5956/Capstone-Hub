@@ -144,7 +144,9 @@ func (r *MenuRepository) ReplaceMenuOptions(item *entity.MenuItem, groups []enti
 				options[j].RestaurantID = item.RestaurantID
 				options[j].MenuItemID = item.ID
 				options[j].OptionGroupID = groups[i].ID
-				if err := tx.Create(&options[j]).Error; err != nil {
+			}
+			if len(options) > 0 {
+				if err := tx.Create(&options).Error; err != nil {
 					return err
 				}
 			}
@@ -161,7 +163,9 @@ func (r *MenuRepository) ReplaceMenuIngredients(item *entity.MenuItem, component
 		for i := range components {
 			components[i].RestaurantID = item.RestaurantID
 			components[i].MenuItemID = item.ID
-			if err := tx.Create(&components[i]).Error; err != nil {
+		}
+		if len(components) > 0 {
+			if err := tx.Create(&components).Error; err != nil {
 				return err
 			}
 		}
@@ -177,7 +181,9 @@ func (r *MenuRepository) ReplaceMenuCategories(item *entity.MenuItem, categories
 		for i := range categories {
 			categories[i].RestaurantID = item.RestaurantID
 			categories[i].MenuItemID = item.ID
-			if err := tx.Create(&categories[i]).Error; err != nil {
+		}
+		if len(categories) > 0 {
+			if err := tx.Create(&categories).Error; err != nil {
 				return err
 			}
 		}

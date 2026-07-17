@@ -9,6 +9,14 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/lib/__tests__/ai*.test.{ts,tsx}"],
+    include: [
+      "src/lib/__tests__/ai*.test.{ts,tsx}",
+      "src/lib/__tests__/orderItemGroups.test.ts",
+      "src/lib/__tests__/homeDashboard.test.ts",
+      "src/lib/__tests__/documentTitle.test.ts",
+      "src/lib/__tests__/orderNavigation.test.ts",
+      "src/lib/__tests__/singleFlight.test.ts",
+      "src/app/(dashboard)/orders/ordersPageUtils.test.ts",
+    ],
   },
 });

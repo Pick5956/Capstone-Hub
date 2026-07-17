@@ -51,11 +51,13 @@ func (r *TableRepository) FindTable(restaurantID, tableID uint) (*entity.Restaur
 }
 
 func (r *TableRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
-	var count int64
-	err := r.db.Model(&entity.Order{}).
+	var orderID uint
+	result := r.db.Model(&entity.Order{}).
+		Select("id").
 		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
-		Count(&count).Error
-	return count > 0, err
+		Limit(1).
+		Scan(&orderID)
+	return result.RowsAffected > 0, result.Error
 }
 
 func (r *TableRepository) UpdateTable(table *entity.RestaurantTable) error {

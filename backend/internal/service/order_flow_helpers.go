@@ -48,36 +48,21 @@ func sendPendingItemsToKitchen(tx *repository.OrderRepository, order *entity.Ord
 }
 
 func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entity.Order, userID uint, itemIDs []uint) error {
-	items, err := tx.ListItems(order.ID)
-	if err != nil {
-		return err
-	}
-	targetIDs := map[uint]bool{}
-	for _, id := range itemIDs {
-		if id != 0 {
-			targetIDs[id] = true
-		}
-	}
 	now := repository.BangkokNow()
 	maxBatch, err := tx.MaxKitchenBatch(order.ID)
 	if err != nil {
 		return err
 	}
 	nextBatch := maxBatch + 1
-	pendingCount := 0
-	for i := range items {
-		if len(targetIDs) > 0 && !targetIDs[items[i].ID] {
-			continue
+	validItemIDs := make([]uint, 0, len(itemIDs))
+	for _, id := range itemIDs {
+		if id != 0 {
+			validItemIDs = append(validItemIDs, id)
 		}
-		if items[i].Status == entity.OrderItemStatusPending {
-			pendingCount += 1
-			items[i].Status = entity.OrderItemStatusCooking
-			items[i].SentAt = &now
-			items[i].KitchenBatch = nextBatch
-			if err := tx.SaveItem(&items[i]); err != nil {
-				return err
-			}
-		}
+	}
+	pendingCount, err := tx.MarkPendingItemsSent(order.ID, validItemIDs, now, nextBatch)
+	if err != nil {
+		return err
 	}
 	if pendingCount == 0 {
 		return errors.New("no pending items to send")

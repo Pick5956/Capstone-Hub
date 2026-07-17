@@ -3,23 +3,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Bell, X } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, Clock3, Minus, Plus, Printer, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
+import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
+import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, cancelOrder, getOrder, getOrderBill, payOrder } from "@/src/lib/order";
+import { addOrderItem, cancelOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
-import type { Bill, Order, OrderItem } from "@/src/types/order";
+import type { Bill, Order, OrderItem, OrderPayment } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
+import ThermalReceipt from "@/src/components/orders/ThermalReceipt";
 
 const terminalStatuses = ["completed", "cancelled"];
 
@@ -38,6 +42,59 @@ function itemFulfillmentType(item: OrderItem) {
 function fulfillmentLabel(value: "dine_in" | "takeaway", language: "th" | "en") {
   if (value === "takeaway") return language === "th" ? "กลับบ้าน" : "Takeaway";
   return language === "th" ? "ทานที่ร้าน" : "Dine-in";
+}
+
+type FulfillmentSection = {
+  key: "dine_in" | "takeaway";
+  groups: OrderItemGroup[];
+  quantity: number;
+  subtotal: number;
+};
+
+type SentStatusSection = {
+  status: OrderItem["status"];
+  groups: OrderItemGroup[];
+  quantity: number;
+};
+
+type SentFulfillmentSection = {
+  key: "dine_in" | "takeaway";
+  statuses: SentStatusSection[];
+};
+
+function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
+  return (["dine_in", "takeaway"] as const)
+    .map((key) => {
+      const sectionGroups = groups.filter((group) => itemFulfillmentType(group.firstItem) === key);
+      return {
+        key,
+        groups: sectionGroups,
+        quantity: sectionGroups.reduce((sum, group) => sum + group.quantity, 0),
+        subtotal: sectionGroups.reduce((sum, group) => sum + group.subtotal, 0),
+      };
+    })
+    .filter((section) => section.groups.length > 0);
+}
+
+function sentFulfillmentStatusSections(items: OrderItem[]): SentFulfillmentSection[] {
+  const statusOrder = ["ready", "cooking", "served", "cancelled"] as OrderItem["status"][];
+
+  return (["dine_in", "takeaway"] as const)
+    .map((key) => {
+      const fulfillmentItems = items.filter((item) => itemFulfillmentType(item) === key);
+      const statuses = statusOrder
+        .map((status) => {
+          const statusItems = fulfillmentItems.filter((item) => item.status === status);
+          return {
+            status,
+            groups: groupOrderItems(statusItems),
+            quantity: statusItems.reduce((sum, item) => sum + item.quantity, 0),
+          };
+        })
+        .filter((section) => section.quantity > 0);
+      return { key, statuses };
+    })
+    .filter((section) => section.statuses.length > 0);
 }
 
 
@@ -65,9 +122,14 @@ export default function PosOrderDetailPage() {
   const [cancelClosing, setCancelClosing] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [billViewOpen, setBillViewOpen] = useState(false);
+  const [billViewClosing, setBillViewClosing] = useState(false);
+  const [orderSummaryOpen, setOrderSummaryOpen] = useState(false);
+  const [orderSummaryClosing, setOrderSummaryClosing] = useState(false);
 
   const [bill, setBill] = useState<Bill | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "promptpay_qr">("cash");
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  const [lastPayment, setLastPayment] = useState<OrderPayment | null>(null);
 
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
@@ -109,10 +171,10 @@ export default function PosOrderDetailPage() {
       grandTotal: "ยอดสุทธิ",
       cash: "เงินสด",
       qr: "QR PromptPay",
-      received: "รับเงินมา",
-      change: "เงินทอน",
       print: "พิมพ์บิล",
       confirmPayment: "ยืนยันรับเงิน",
+      paymentMethod: "วิธีรับเงิน",
+      allItems: "รายการทั้งหมด",
       cancelOrder: "ยกเลิกออเดอร์",
       cancelReason: "เหตุผลที่ยกเลิก",
       cancelTitle: "ยกเลิกออเดอร์นี้?",
@@ -156,10 +218,10 @@ export default function PosOrderDetailPage() {
       grandTotal: "Grand total",
       cash: "Cash",
       qr: "QR PromptPay",
-      received: "Received amount",
-      change: "Change",
       print: "Print bill",
       confirmPayment: "Confirm payment",
+      paymentMethod: "Payment method",
+      allItems: "All items",
       cancelOrder: "Cancel order",
       cancelReason: "Cancel reason",
       cancelTitle: "Cancel this order?",
@@ -174,6 +236,33 @@ export default function PosOrderDetailPage() {
     };
 
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
+  const receiptCopy = language === "th"
+    ? {
+      printReceipt: "พิมพ์ใบเสร็จให้ลูกค้า",
+      paymentComplete: "รับเงินเรียบร้อย",
+      paymentCompleteHint: "พิมพ์ใบเสร็จส่งมอบให้ลูกค้าได้เลย",
+    }
+    : {
+      printReceipt: "Print customer receipt",
+      paymentComplete: "Payment recorded",
+      paymentCompleteHint: "Print the receipt and hand it to the customer.",
+    };
+  const orderSummaryCopy = language === "th"
+    ? {
+      title: "ตรวจสอบรายการ",
+      pending: "รายการรอบนี้",
+      sent: "รายการที่ส่งแล้ว",
+      empty: "ไม่มีรายการรอส่งครัว",
+      close: "ปิด",
+    }
+    : {
+      title: "Review order",
+      pending: "Current round",
+      sent: "Sent items",
+      empty: "No items waiting for the kitchen.",
+      close: "Close",
+    };
+
   const fulfillmentTitle = language === "th" ? "รูปแบบรายการ" : "Item type";
   const dineInItemLabel = fulfillmentLabel("dine_in", language);
   const takeawayItemLabel = fulfillmentLabel("takeaway", language);
@@ -185,6 +274,16 @@ export default function PosOrderDetailPage() {
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
   const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
   const hasReadyItems = readyItems.length > 0;
+  const pendingItems = useMemo(() => (order?.items ?? []).filter((item) => item.status === "pending"), [order?.items]);
+  const pendingItemCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
+  const pendingGroupedOrderItems = useMemo(() => groupOrderItems(pendingItems), [pendingItems]);
+  const sentItems = useMemo(() => (order?.items ?? []).filter((item) => item.status !== "pending"), [order?.items]);
+  const pendingFulfillmentSections = useMemo(() => fulfillmentSections(pendingGroupedOrderItems), [pendingGroupedOrderItems]);
+  const sentStatusFulfillmentSections = useMemo(() => sentFulfillmentStatusSections(sentItems), [sentItems]);
+  const pendingFulfillmentSummary = useMemo(() => ({
+    quantity: pendingFulfillmentSections.reduce((sum, section) => sum + section.quantity, 0),
+    subtotal: pendingFulfillmentSections.reduce((sum, section) => sum + section.subtotal, 0),
+  }), [pendingFulfillmentSections]);
   const menuOrderQuantities = useMemo(() => {
     const quantities = new Map<number, number>();
     for (const item of order?.items ?? []) {
@@ -254,11 +353,34 @@ export default function PosOrderDetailPage() {
       setCancelClosing(false);
     }, 180);
   };
+  const openOrderSummary = () => {
+    setOrderSummaryClosing(false);
+    setOrderSummaryOpen(true);
+  };
+  const closeOrderSummary = () => {
+    if (orderSummaryClosing) return;
+    setOrderSummaryClosing(true);
+    window.setTimeout(() => {
+      setOrderSummaryOpen(false);
+      setOrderSummaryClosing(false);
+    }, 180);
+  };
   const menuPickerBackdrop = useBackdropClose(closeMenuPicker);
-  const closeBillModal = () => { setBillViewOpen(false); setBill(null); };
+  const closeBillModal = () => {
+    if (billViewClosing) return;
+    setBillViewClosing(true);
+    window.setTimeout(() => {
+      setBillViewOpen(false);
+      setBill(null);
+      setPaymentComplete(false);
+      setLastPayment(null);
+      setBillViewClosing(false);
+    }, 180);
+  };
   const paymentBackdrop = useBackdropClose(closeBillModal);
   const cancelBackdrop = useBackdropClose(closeCancelModal);
-  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || cancelOpen);
+  const orderSummaryBackdrop = useBackdropClose(closeOrderSummary);
+  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || cancelOpen || orderSummaryOpen);
 
   const toggleOption = (groupOptionIds: number[], optionId: number, minSelect: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
@@ -296,11 +418,13 @@ export default function PosOrderDetailPage() {
 
   useEffect(() => {
     void load();
-    if (order && terminalStatuses.includes(order.status)) return;
-    const timer = window.setInterval(() => void load({ background: true }), 5000);
-    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canTake, orderNumber, order?.status]);
+  useVisiblePolling(() => load({ background: true }), {
+    enabled: canTake && Boolean(orderNumber) && !Boolean(order && terminalStatuses.includes(order.status)),
+    intervalMs: 5_000,
+    runImmediately: false,
+  });
 
   useEffect(() => {
     if (!order?.items) return;
@@ -379,14 +503,104 @@ export default function PosOrderDetailPage() {
     closeCancelModal();
   };
 
+  const sendToKitchen = async () => {
+    if (!order || pendingItemCount === 0) return;
+    await runAction(async () => {
+      const res = await sendOrderToKitchen(order.ID);
+      showToast({ title: language === "th" ? "ส่งเข้าครัวแล้ว" : "Sent to kitchen" });
+      closeOrderSummary();
+      return res.data;
+    });
+  };
+
+  const adjustPendingGroup = async (group: OrderItemGroup, delta: -1 | 1) => {
+    if (!order || !group.pendingItems.length) return;
+    const item = group.pendingItems[0];
+    await runAction(async () => {
+      if (delta < 0 && item.quantity === 1) {
+        return (await deleteOrderItem(order.ID, item.ID)).data;
+      }
+      return (await updateOrderItem(order.ID, item.ID, {
+        quantity: item.quantity + delta,
+        note: item.note,
+      })).data;
+    });
+  };
+
+  const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
+  const statusHeaderClass = (status: OrderItem["status"]) => {
+    if (status === "cooking") return "bg-amber-50 text-amber-900 dark:bg-amber-950/35 dark:text-amber-200";
+    if (status === "ready") return "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200";
+    if (status === "served") return "bg-gray-50 text-gray-800 dark:bg-gray-900/70 dark:text-gray-200";
+    return "bg-red-50 text-red-900 dark:bg-red-950/35 dark:text-red-200";
+  };
+  const statusBorderClass = (status: OrderItem["status"]) => {
+    if (status === "cooking") return "border-amber-200 dark:border-amber-900/70";
+    if (status === "ready") return "border-emerald-200 dark:border-emerald-900/70";
+    if (status === "served") return "border-gray-200 dark:border-gray-800";
+    return "border-red-200 dark:border-red-900/70";
+  };
+  const statusHeaderIcon = (status: OrderItem["status"]) => {
+    const Icon = status === "cooking" ? Clock3 : status === "ready" ? Bell : status === "cancelled" ? X : CheckCircle2;
+    return <Icon className="h-4 w-4" aria-hidden="true" />;
+  };
+  const renderOrderItemGroup = (group: OrderItemGroup, variant: "card" | "row" = "card") => {
+    const item = group.firstItem;
+    const canAdjustQuantity = group.pendingItems.length === group.items.length;
+
+    return (
+      <div key={group.key} className={variant === "row" ? "bg-white px-3 py-3 dark:bg-gray-950" : "rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950"}>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0">
+            <p className="min-w-0 text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+            {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}
+            {item.note ? <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.note}</p> : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <p className="mr-auto font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white sm:mr-0">฿{group.subtotal.toLocaleString()}</p>
+            {canAdjustQuantity ? (
+              <div className="inline-grid grid-cols-[2.25rem_2.5rem_2.25rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, -1); }} aria-label={group.quantity === 1 ? (language === "th" ? "ลบรายการ" : "Remove item") : (language === "th" ? "ลดจำนวน" : "Decrease quantity")} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
+                <span className="inline-flex h-9 items-center justify-center font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{group.quantity}</span>
+                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, 1); }} aria-label={language === "th" ? "เพิ่มจำนวน" : "Increase quantity"} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Plus className="h-4 w-4" aria-hidden="true" /></button>
+              </div>
+            ) : <span className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">x{group.quantity}</span>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const renderSentStatusSection = (section: SentStatusSection) => (
+    <section key={section.status} className={`overflow-hidden rounded-md border ${statusBorderClass(section.status)}`}>
+      <div className={`flex min-h-12 items-center justify-between gap-3 px-3 py-2.5 ${statusHeaderClass(section.status)}`}>
+        <h4 className="inline-flex items-center gap-2 text-[15px] font-bold">
+          {statusHeaderIcon(section.status)}
+          {statusLabel(section.status)}
+        </h4>
+        <span className="font-mono text-[12px] font-bold tabular-nums">{section.quantity} {language === "th" ? "รายการ" : "items"}</span>
+      </div>
+      <div className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-950">{section.groups.map((group) => renderOrderItemGroup(group, "row"))}</div>
+    </section>
+  );
+  const renderFulfillmentSection = (section: FulfillmentSection, tone: "highlight" | "plain" = "plain", showLabel = true) => (
+    <section key={section.key} className="space-y-2">
+      {showLabel ? <div className={`px-1 text-[12px] font-semibold ${tone === "highlight" ? "text-sky-900 dark:text-sky-100" : "text-gray-700 dark:text-gray-200"}`}>{fulfillmentLabel(section.key, language)}</div> : null}
+      <div className="space-y-2">{section.groups.map((group) => renderOrderItemGroup(group))}</div>
+    </section>
+  );
+
   const loadBill = async () => {
     if (!order) return;
     setSubmitting(true);
     setError("");
     try {
       const res = await getOrderBill(order.ID);
+      const latestPayment = res.data.payments.at(-1) ?? null;
       setBill(res.data);
-       setPaymentMethod("cash");
+      setPaymentMethod(latestPayment?.method ?? "cash");
+      setPaymentComplete(res.data.payment_status === "paid");
+      setLastPayment(latestPayment);
+      setBillViewClosing(false);
       setBillViewOpen(true);
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
@@ -402,9 +616,11 @@ export default function PosOrderDetailPage() {
         method: paymentMethod,
         received_amount: bill.grand_total,
       });
+      const latestPayment = res.data.payments?.at(-1) ?? null;
       showToast({ title: paidToastTitle });
-      setBill(null);
-      setBillViewOpen(false);
+      setLastPayment(latestPayment);
+      setBill((current) => current ? { ...current, order: res.data, payment_status: "paid", payments: res.data.payments ?? current.payments } : current);
+      setPaymentComplete(true);
       return res.data;
     });
   };
@@ -435,14 +651,14 @@ export default function PosOrderDetailPage() {
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
-                <button
-                  type="button"
-                  onClick={() => { void loadBill(); }}
-                  aria-label={language === "th" ? "ดูบิลและชำระเงิน" : "View bill and pay"}
-                  className="ui-press h-10 min-w-0 flex-1 truncate rounded-md bg-gray-900 px-2.5 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 lg:flex-none"
-                >
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:flex-none">
                   {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
                 </button>
+                {pendingItemCount === 0 && order.status === "served" ? (
+                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press h-10 shrink-0 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                    {copy.close}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -617,92 +833,179 @@ export default function PosOrderDetailPage() {
           </div>
         </div>
       )}
-      {billViewOpen && bill && (() => {
-        const dineInItems = bill.items.filter((item) => itemFulfillmentType(item) === "dine_in");
-        const takeawayItems = bill.items.filter((item) => itemFulfillmentType(item) === "takeaway");
-
-        const renderBillItem = (item: OrderItem) => (
-          <div key={item.ID} className="grid grid-cols-[1fr_auto] gap-3 py-2 text-[14px] border-b border-gray-100 dark:border-gray-900/60">
-            <div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="font-medium text-gray-900 dark:text-white">{item.quantity}x {item.menu_name}</span>
-              </div>
-              {item.selected_options?.length ? (
-                <div className="mt-0.5 space-y-0.5 text-[12px] text-gray-500">
-                  {item.selected_options.map((option) => (
-                    <p key={option.ID}>{option.group_name}: {option.option_name}{option.price_delta ? ` +฿${option.price_delta.toLocaleString()}` : ""}</p>
-                  ))}
+      {orderSummaryOpen && order && (
+        <div {...orderSummaryBackdrop} className={`${orderSummaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
+          <div role="dialog" aria-modal="true" aria-labelledby="order-summary-title" className={`${orderSummaryClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
+            <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)} · {order.order_number}</p>
+                  <h2 id="order-summary-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{orderSummaryCopy.title}</h2>
                 </div>
-              ) : null}
+                <button type="button" onClick={closeOrderSummary} className="ui-press h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
+              </div>
             </div>
-            <span className="font-mono tabular-nums text-gray-900 dark:text-white font-medium">฿{item.subtotal.toLocaleString()}</span>
+            <div data-pos-modal-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
+              {pendingGroupedOrderItems.length ? (
+                <section className="rounded-md border border-sky-300 bg-sky-50/70 p-3 shadow-[0_1px_0_rgba(14,165,233,0.08)] ring-1 ring-sky-100 dark:border-sky-800 dark:bg-sky-950/25 dark:ring-sky-900/40">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[14px] font-bold text-sky-950 dark:text-sky-100">{orderSummaryCopy.pending}</h3>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-[13px] font-bold leading-5 text-sky-950 dark:text-sky-100">{pendingFulfillmentSummary.quantity} {language === "th" ? "รายการ" : "items"}</p>
+                      <p className="font-mono text-[15px] font-extrabold leading-5 tabular-nums text-sky-950 dark:text-sky-50">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">{pendingFulfillmentSections.map((section) => renderFulfillmentSection(section, "highlight", pendingFulfillmentSections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway"))}</div>
+                </section>
+              ) : null}
+              {sentItems.length ? (
+                <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                  <div className="mb-3">
+                    <h3 className="text-[14px] font-bold text-gray-950 dark:text-white">{orderSummaryCopy.sent}</h3>
+                  </div>
+                  <div className="space-y-5">
+                    {sentStatusFulfillmentSections.map((section) => (
+                      <section key={section.key} className="space-y-3.5">
+                        {sentStatusFulfillmentSections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway" ? <h4 className="px-1 text-[13px] font-bold text-gray-800 dark:text-gray-100">{fulfillmentLabel(section.key, language)}</h4> : null}
+                        <div className="space-y-3">{section.statuses.map(renderSentStatusSection)}</div>
+                      </section>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+              {!pendingGroupedOrderItems.length && !sentItems.length ? <p className="px-4 py-12 text-center text-[13px] text-gray-500">{orderSummaryCopy.empty}</p> : null}
+            </div>
+            <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="mr-auto min-w-0">
+                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
+                <p className="font-mono text-[16px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
+              </div>
+              {pendingItemCount > 0 && <button type="button" disabled={submitting || isTerminal} onClick={() => { void sendToKitchen(); }} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.sendKitchen}</button>}
+              </div>
+            </div>
           </div>
-        );
+        </div>
+      )}
+      {billViewOpen && bill && (() => {
+        const billGroups = groupOrderItems(bill.items);
+        const billSections = fulfillmentSections(billGroups);
+        const billItemCount = billGroups.reduce((sum, group) => sum + group.quantity, 0);
+
+        const renderBillGroup = (group: OrderItemGroup) => {
+          const item = group.firstItem;
+          return (
+            <div data-bill-item key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                <div className="min-w-0">
+                  <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                  {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}
+                  {item.note ? <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.note}</p> : null}
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{group.subtotal.toLocaleString()}</p>
+                  <p className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">x{group.quantity}</p>
+                </div>
+              </div>
+            </div>
+          );
+        };
 
         return (
-          <div {...paymentBackdrop} className="motion-overlay fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0">
+          <div data-print-overlay {...paymentBackdrop} className={`${billViewClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
             <style jsx global>{`
               @media print {
-                body * { visibility: hidden; }
-                #print-bill, #print-bill * { visibility: visible; }
-                #print-bill { position: absolute; left: 0; top: 0; width: 100%; color: #111827; background: white; display: block !important; height: auto !important; overflow: visible !important; }
+                #print-bill { position: static !important; width: 48mm !important; margin: 0 auto !important; padding: 3mm 0 !important; color: #111827; background: white; display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; transform: none !important; }
+                #print-bill [data-receipt-scroll] { overflow: visible !important; }
+                #print-bill [data-receipt-section] { display: block !important; }
+                #print-bill .dark\\:text-white, #print-bill .dark\\:text-gray-300, #print-bill .dark\\:text-gray-400 { color: #111827 !important; }
+                #print-bill .dark\\:bg-gray-950 { background: #fff !important; }
+                #print-bill .dark\\:border-gray-800 { border-color: #d1d5db !important; }
+                #print-bill [data-screen-only] { display: none !important; }
+                #print-bill [data-screen-receipt] { display: none !important; }
+                #print-bill [data-print-only] { display: block !important; }
+                #print-bill [data-bill-item] { border: 0 !important; border-bottom: 1px solid #e5e7eb !important; border-radius: 0 !important; padding: 2mm 0 !important; }
               }
             `}</style>
-            <div data-pos-modal-scroll className="motion-bottom-sheet flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950">
-              <div id="print-bill" className="flex flex-col flex-1 min-h-0">
-                <div className="shrink-0 border-b border-gray-200 px-4 py-3 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between">
-                  <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.bill} #{bill.order.order_number}</h2>
-                  <span className="text-[18px] font-extrabold text-orange-500 dark:text-orange-400">
-                    {orderLocationLabel(bill.order, language)}
-                  </span>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-4">
-                  {dineInItems.length > 0 && (
-                    <div>
-                      <div className="text-[12px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider pb-1 border-b border-blue-100 dark:border-blue-950/50">
-                        {language === "th" ? "ทานที่ร้าน" : "Dine-in"}
-                      </div>
-                      <div className="">
-                        {dineInItems.map(renderBillItem)}
-                      </div>
-                    </div>
-                  )}
-                  {takeawayItems.length > 0 && (
-                    <div>
-                      <div className="text-[12px] font-bold text-cyan-600 dark:text-cyan-400 uppercase tracking-wider pb-1 border-b border-cyan-100 dark:border-cyan-950/50">
-                        {language === "th" ? "กลับบ้าน" : "Takeaway"}
-                      </div>
-                      <div className="">
-                        {takeawayItems.map(renderBillItem)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="shrink-0 mt-auto border-t border-gray-200 px-4 py-3 text-[12px] dark:border-gray-800 bg-white dark:bg-gray-950">
-                  <div className="flex justify-between"><span>{copy.total}</span><span className="font-mono tabular-nums">฿{bill.total_amount.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums">฿{bill.service_charge_amount.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums">฿{bill.vat_amount.toLocaleString()}</span></div>
-                  <div className="flex justify-between pt-2 text-[15px] font-semibold"><span>{copy.grandTotal}</span><span className="font-mono tabular-nums">฿{bill.grand_total.toLocaleString()}</span></div>
-                </div>
-              </div>
-
-              <div className="shrink-0 border-t border-gray-200 bg-gray-50/50 p-4 dark:border-gray-800 dark:bg-gray-950/50 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setPaymentMethod("cash")} className={`h-10 rounded-md border text-[12px] font-semibold ${paymentMethod === "cash" ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-300"}`}>{copy.cash}</button>
-                  <button type="button" onClick={() => setPaymentMethod("promptpay_qr")} className={`h-10 rounded-md border text-[12px] font-semibold ${paymentMethod === "promptpay_qr" ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-600 dark:border-gray-800 dark:text-gray-300"}`}>{copy.qr}</button>
-                </div>
-                {paymentMethod === "promptpay_qr" && (
-                  <div className="rounded-md border border-gray-200 p-3 text-center dark:border-gray-800 bg-white dark:bg-gray-950">
-                    {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-900">No QR</div>}
-                    <p className="mt-2 text-[13px] font-semibold text-gray-900 dark:text-white">{bill.promptpay_name || copy.qr}</p>
+            <div data-print-dialog role="dialog" aria-modal="true" aria-labelledby="bill-view-title" className={`${billViewClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
+              <div id="print-bill" className="flex min-h-0 flex-1 flex-col">
+                <div data-screen-receipt className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                  <div data-screen-only className="min-w-0">
+                    <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{orderLocationLabel(bill.order, language)} · {bill.order.order_number}</p>
+                    <h2 id="bill-view-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{copy.close}</h2>
                   </div>
-                )}
+                  <div data-print-only className="hidden">
+                    <h2 className="text-[16px] font-semibold text-gray-900">{copy.bill} #{bill.order.order_number}</h2>
+                    <p className="mt-0.5 text-[12px] text-gray-600">{orderLocationLabel(bill.order, language)}</p>
+                  </div>
+                  <button data-screen-only type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
+                </div>
+                <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+                  <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.allItems}</h3>
+                      <p className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">{billItemCount} {language === "th" ? "รายการ" : "items"}</p>
+                    </div>
+                    <div className="space-y-3">
+                      {billSections.map((section) => (
+                        <div data-receipt-section key={section.key} className="space-y-2">
+                          {billSections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? <p className="px-1 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</p> : null}
+                          <div className="space-y-2">
+                            {section.groups.map(renderBillGroup)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+                <div data-screen-receipt className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 text-[12px] dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                  <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
+                    <div className="flex justify-between gap-4"><span>{copy.total}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.total_amount.toLocaleString()}</span></div>
+                    <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.service_charge_amount.toLocaleString()}</span></div>
+                    <div className="flex justify-between gap-4"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.vat_amount.toLocaleString()}</span></div>
+                    <div className="mt-2 flex items-end justify-between gap-4 border-t border-gray-200 pt-2.5 dark:border-gray-800">
+                      <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.grandTotal}</span>
+                      <span className="font-mono text-[20px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{bill.grand_total.toLocaleString()}</span>
+                    </div>
+                    {paymentComplete && lastPayment ? (
+                      <div className="mt-2 space-y-1.5 border-t border-dashed border-gray-300 pt-2.5 dark:border-gray-700">
+                        <div className="flex justify-between gap-4"><span>{copy.paymentMethod}</span><span className="font-semibold text-gray-900 dark:text-white">{lastPayment.method === "cash" ? copy.cash : copy.qr}</span></div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <ThermalReceipt bill={bill} language={language} locationLabel={orderLocationLabel(bill.order, language)} restaurant={activeMembership?.restaurant} />
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800 bg-white dark:bg-gray-950">
-                <button type="button" onClick={() => window.print()} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.print}</button>
-                <button type="button" onClick={closeBillModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{language === "th" ? "ยกเลิก" : "Cancel"}</button>
-                <button type="button" disabled={submitting || !canPay} onClick={confirmPayment} className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button>
+              {!paymentComplete ? (
+                <div className="shrink-0 space-y-3 border-t border-gray-200 bg-slate-50 p-3 dark:border-gray-800 dark:bg-gray-950 sm:px-4">
+                  <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.paymentMethod}</p>
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-950 sm:w-auto sm:min-w-[220px]">
+                      <button type="button" onClick={() => setPaymentMethod("cash")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "cash" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{copy.cash}</button>
+                      <button type="button" onClick={() => setPaymentMethod("promptpay_qr")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "promptpay_qr" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{copy.qr}</button>
+                    </div>
+                  </div>
+                  {paymentMethod === "promptpay_qr" ? (
+                    <div className="rounded-md border border-gray-200 bg-white p-3 text-center dark:border-gray-800 dark:bg-gray-950">
+                      {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-900">No QR</div>}
+                      <p className="mt-2 text-[13px] font-semibold text-gray-900 dark:text-white">{bill.promptpay_name || copy.qr}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
+                {paymentComplete ? (
+                  <div className="mr-auto flex min-w-0 items-center gap-2 text-[12px] text-emerald-700 dark:text-emerald-400">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                    <span><strong>{receiptCopy.paymentComplete}</strong><span className="hidden sm:inline"> · {receiptCopy.paymentCompleteHint}</span></span>
+                  </div>
+                ) : null}
+                <button type="button" onClick={() => printThermalReceipt("print-bill")} className={paymentComplete ? "ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200" : "h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}>{paymentComplete ? <><Printer className="h-4 w-4" aria-hidden="true" />{receiptCopy.printReceipt}</> : copy.print}</button>
+                {!paymentComplete ? <button type="button" disabled={submitting || !canPay} onClick={confirmPayment} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button> : null}
               </div>
             </div>
           </div>

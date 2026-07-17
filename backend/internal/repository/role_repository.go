@@ -54,23 +54,11 @@ func (r *RoleRepository) Delete(role *entity.Role) error {
 	return r.db.Delete(role).Error
 }
 
-func (r *RoleRepository) CountMembers(roleID uint) (int64, error) {
-	var count int64
-	err := r.db.Model(&entity.RestaurantMember{}).Where("role_id = ?", roleID).Count(&count).Error
-	return count, err
-}
-
 func (r *RoleRepository) CountMembersForRestaurant(roleID uint, restaurantID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&entity.RestaurantMember{}).
 		Where("role_id = ? AND restaurant_id = ?", roleID, restaurantID).
 		Count(&count).Error
-	return count, err
-}
-
-func (r *RoleRepository) CountPendingInvitations(roleID uint) (int64, error) {
-	var count int64
-	err := r.db.Model(&entity.Invitation{}).Where("role_id = ? AND status = ?", roleID, entity.InvitationStatusPending).Count(&count).Error
 	return count, err
 }
 

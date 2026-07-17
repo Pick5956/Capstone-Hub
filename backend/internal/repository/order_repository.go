@@ -19,6 +19,16 @@ func NewOrderRepository(db *gorm.DB) *OrderRepository {
 	return &OrderRepository{db: db}
 }
 
+func withOrderDetails(db *gorm.DB) *gorm.DB {
+	return db.
+		Preload("Table").
+		Preload("Staff").
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
+		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
+		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") })
+}
+
 func (r *OrderRepository) Transaction(fn func(tx *OrderRepository) error) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		return fn(NewOrderRepository(tx))
@@ -46,13 +56,7 @@ func (r *OrderRepository) SaveOrder(order *entity.Order) error {
 
 func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, error) {
 	var order entity.Order
-	err := r.db.
-		Preload("Table").
-		Preload("Staff").
-		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
-		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
-		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
-		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") }).
+	err := withOrderDetails(r.db).
 		Where("restaurant_id = ? AND id = ?", restaurantID, orderID).
 		First(&order).Error
 	if err != nil {
@@ -65,21 +69,15 @@ func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, 
 // instead of the database primary key. This is used when the URL uses order_number.
 func (r *OrderRepository) FindOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
 	var order entity.Order
-	err := r.db.
-		Preload("Table").
-		Preload("Staff").
-		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
-		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
-		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
-		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") }).
+	err := withOrderDetails(r.db).
 		Where("restaurant_id = ? AND order_number = ?", restaurantID, orderNumber).
+		Order("order_date desc, opened_at desc, id desc").
 		First(&order).Error
 	if err != nil {
 		return nil, err
 	}
 	return &order, nil
 }
-
 
 func (r *OrderRepository) FindOpenOrderByTable(restaurantID, tableID uint) (*entity.Order, error) {
 	var order entity.Order
@@ -110,7 +108,10 @@ func (r *OrderRepository) FindCustomerOpenOrderByTable(restaurantID, tableID uin
 
 func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
 	var orders []entity.Order
-	query := r.db.Preload("Table").Preload("Items").Preload("Items.SelectedOptions").Where("restaurant_id = ?", restaurantID)
+	query := r.db.
+		Preload("Table").
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Where("restaurant_id = ?", restaurantID)
 	if status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -205,6 +206,20 @@ func (r *OrderRepository) MaxKitchenBatch(orderID uint) (uint, error) {
 		Select("COALESCE(MAX(kitchen_batch), 0)").
 		Scan(&maxBatch).Error
 	return maxBatch, err
+}
+
+func (r *OrderRepository) MarkPendingItemsSent(orderID uint, itemIDs []uint, sentAt time.Time, kitchenBatch uint) (int64, error) {
+	query := r.db.Model(&entity.OrderItem{}).
+		Where("order_id = ? AND status = ?", orderID, entity.OrderItemStatusPending)
+	if len(itemIDs) > 0 {
+		query = query.Where("id IN ?", itemIDs)
+	}
+	result := query.Updates(map[string]any{
+		"status":        entity.OrderItemStatusCooking,
+		"sent_at":       sentAt,
+		"kitchen_batch": kitchenBatch,
+	})
+	return result.RowsAffected, result.Error
 }
 
 func (r *OrderRepository) CreateStatusLog(log *entity.OrderStatusLog) error {
@@ -357,11 +372,13 @@ func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error
 }
 
 func (r *OrderRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
-	var count int64
-	err := r.db.Model(&entity.Order{}).
+	var orderID uint
+	result := r.db.Model(&entity.Order{}).
+		Select("id").
 		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
-		Count(&count).Error
-	return count > 0, err
+		Limit(1).
+		Scan(&orderID)
+	return result.RowsAffected > 0, result.Error
 }
 
 func BangkokNow() time.Time {

@@ -50,9 +50,5 @@ export const groupOrderItems = (items: OrderItem[] = []) => {
     });
   }
 
-  return Array.from(groups.values()).sort((first, second) => {
-    const firstUpdated = first.items.at(-1)?.UpdatedAt ?? first.items.at(-1)?.CreatedAt ?? "";
-    const secondUpdated = second.items.at(-1)?.UpdatedAt ?? second.items.at(-1)?.CreatedAt ?? "";
-    return secondUpdated.localeCompare(firstUpdated);
-  });
+  return Array.from(groups.values());
 };

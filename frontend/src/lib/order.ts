@@ -1,7 +1,7 @@
 import { apiClient } from "./apiClient";
 import type { AddOrderItemInput, Bill, OpenOrderInput, Order, OrderItemStatus, OrderStatus } from "../types/order";
 
-export const listOrders = (params?: { status?: OrderStatus | ""; table_id?: number; date?: string }) =>
+export const listOrders = (params?: { status?: OrderStatus | ""; table_id?: number; date?: string; page?: number; limit?: number }) =>
   apiClient.get<{ orders: Order[] }>("/api/v1/orders", { params });
 
 export const getOrder = (id: string | number) =>
