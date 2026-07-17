@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -168,6 +169,10 @@ func (ctrl *MenuController) CreateCategory(c *gin.Context) {
 	}
 	category, err := ctrl.menuSvc.CreateCategory(restaurantID, &req)
 	if err != nil {
+		if errors.Is(err, service.ErrCategoryNameExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "CATEGORY_NAME_EXISTS"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -190,6 +195,10 @@ func (ctrl *MenuController) UpdateCategory(c *gin.Context) {
 	}
 	category, err := ctrl.menuSvc.UpdateCategory(restaurantID, categoryID, &req)
 	if err != nil {
+		if errors.Is(err, service.ErrCategoryNameExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "CATEGORY_NAME_EXISTS"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

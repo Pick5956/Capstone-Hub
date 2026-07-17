@@ -8,6 +8,8 @@ import (
 	"Project-M/internal/repository"
 )
 
+var ErrCategoryNameExists = errors.New("category name already exists")
+
 type MenuService struct {
 	repo *repository.MenuRepository
 }
@@ -73,6 +75,13 @@ func (s *MenuService) CreateCategory(restaurantID uint, req *CategoryRequest) (*
 	if name == "" {
 		return nil, errors.New("category name is required")
 	}
+	exists, err := s.repo.CategoryNameExists(restaurantID, name, 0)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrCategoryNameExists
+	}
 	category := &entity.Category{
 		RestaurantID: restaurantID,
 		Name:         name,
@@ -96,6 +105,13 @@ func (s *MenuService) UpdateCategory(restaurantID, categoryID uint, req *Categor
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, errors.New("category name is required")
+	}
+	exists, err := s.repo.CategoryNameExists(restaurantID, name, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrCategoryNameExists
 	}
 	category.Name = name
 	category.DisplayOrder = req.DisplayOrder
