@@ -90,7 +90,13 @@ func isReleaseMode() bool {
 }
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
+	// Honor GIN_MODE from the environment. Production (docker-compose) sets
+	// GIN_MODE=release, which keeps CORS locked to the configured origins. When
+	// it is unset (local dev) gin stays in debug mode so isAllowedDevOrigin lets
+	// http://localhost:3000 through and browser auth calls are not CORS-blocked.
+	if mode := strings.TrimSpace(os.Getenv("GIN_MODE")); mode != "" {
+		gin.SetMode(mode)
+	}
 	config.ConnectionDB()
 	if err := config.ValidateRuntimeEnvironment(); err != nil {
 		log.Fatal(err)

@@ -404,6 +404,16 @@ export default function AuthModal({
     [completeAuth, copy.googleCredentialMissing, copy.googleLoginFailed, copy.googleLoginRetry]
   );
 
+  // Keep the latest credential handler in a ref so the GIS setup effect does not
+  // depend on its identity (which changes whenever the parent re-renders).
+  const googleCredentialRef = useRef(handleGoogleCredential);
+  useEffect(() => {
+    googleCredentialRef.current = handleGoogleCredential;
+  }, [handleGoogleCredential]);
+
+  // Guard so google.accounts.id.initialize() runs at most once per mount.
+  const googleInitializedRef = useRef(false);
+
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!isOpen || authMode !== "login" || !clientId) return;
@@ -411,10 +421,13 @@ export default function AuthModal({
     let cancelled = false;
     const initializeGoogleButton = () => {
       if (cancelled || !window.google || !googleButtonRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredential,
-      });
+      if (!googleInitializedRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => googleCredentialRef.current(response),
+        });
+        googleInitializedRef.current = true;
+      }
       const buttonWidth = Math.min(320, googleButtonRef.current.clientWidth || 320);
       googleButtonRef.current.innerHTML = "";
       window.google.accounts.id.renderButton(googleButtonRef.current, {
@@ -447,7 +460,7 @@ export default function AuthModal({
     return () => {
       cancelled = true;
     };
-  }, [authMode, handleGoogleCredential, isOpen]);
+  }, [authMode, isOpen]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
