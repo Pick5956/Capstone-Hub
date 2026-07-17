@@ -352,6 +352,16 @@ html[data-font-size="extra-large"] {
   will-change: transform, opacity;
 }
 
+.motion-dialog-stationary {
+  animation: modal-fade-in 180ms ease-out both;
+  will-change: opacity;
+}
+
+.motion-dialog-stationary-exit {
+  animation: modal-fade-out 160ms ease-in both;
+  will-change: opacity;
+}
+
 .motion-bottom-sheet {
   animation: bottom-sheet-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: transform, opacity;
@@ -483,6 +493,8 @@ html[data-font-size="extra-large"] {
   .motion-overlay-exit,
   .motion-dialog,
   .motion-dialog-exit,
+  .motion-dialog-stationary,
+  .motion-dialog-stationary-exit,
   .motion-bottom-sheet,
   .motion-bottom-sheet-exit,
   .motion-reservation-panel,
