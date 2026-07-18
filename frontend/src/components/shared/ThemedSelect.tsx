@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
 export type ThemedSelectOption = {
@@ -31,6 +32,7 @@ export default function ThemedSelect({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 256 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const buttonId = useId();
   const listboxId = useId();
@@ -114,7 +116,9 @@ export default function ThemedSelect({
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) closeMenu();
+      const target = event.target as Node;
+      // The menu is portaled outside rootRef, so check it explicitly too.
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -207,8 +211,9 @@ export default function ThemedSelect({
         </svg>
       </button>
 
-      {renderMenu && !disabled && (
+      {renderMenu && !disabled && typeof document !== "undefined" && createPortal(
         <div
+          ref={menuRef}
           id={listboxId}
           role="listbox"
           aria-labelledby={buttonId}
@@ -259,7 +264,8 @@ export default function ThemedSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

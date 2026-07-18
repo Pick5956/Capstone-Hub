@@ -361,9 +361,8 @@ export default function CustomerTableOrderPage() {
                     {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{copy.noImage}</div>}
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
-                    <h2 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
-                    <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                    <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                    <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
+                    <p className="mt-auto pt-2 text-right font-mono text-[20px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                   </div>
                 </button>
               );
@@ -470,6 +469,9 @@ export default function CustomerTableOrderPage() {
                 </div>
               </div>
               <div className="space-y-3 p-4">
+                <p className="whitespace-pre-line text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
+                  {selectedMenu.description?.trim() ? selectedMenu.description : "..."}
+                </p>
                 {selectedMenu.option_groups?.filter((group) => group.is_active).map((group) => {
                   const options = (group.options ?? []).filter((option) => option.is_active);
                   const { minSelect, maxSelect } = menuOptionLimits(group);
