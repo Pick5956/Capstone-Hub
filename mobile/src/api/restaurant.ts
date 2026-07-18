@@ -51,6 +51,18 @@ export function updateMemberRole(restaurantId: number, memberId: number, roleId:
   });
 }
 
+export function deleteRestaurant(id: number) {
+  return apiRequest<{ status: string }>(`/api/v1/restaurants/${id}`, { method: 'DELETE', skipRestaurant: true });
+}
+
+export function updateMemberPermissions(restaurantId: number, memberId: number, permissions: string[] | null) {
+  return apiRequest<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/permissions`, {
+    method: 'PATCH',
+    skipRestaurant: true,
+    body: JSON.stringify({ use_role_permissions: permissions === null, permissions: permissions || [] }),
+  });
+}
+
 export function createInvitation(restaurantId: number, data: { role_id: number; email?: string; expires_in_days?: number }) {
   return apiRequest<Invitation>(`/api/v1/restaurants/${restaurantId}/invitations`, {
     method: 'POST',
