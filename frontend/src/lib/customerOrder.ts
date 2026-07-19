@@ -10,6 +10,8 @@ export interface CustomerRestaurant {
   logo: string;
   open_time: string;
   close_time: string;
+  /** Restaurant requires the device to be on-site before ordering. */
+  geofence_required?: boolean;
 }
 
 export interface CustomerTablePayload {
@@ -18,6 +20,8 @@ export interface CustomerTablePayload {
   categories: Category[];
   menu_items: MenuItem[];
   order?: Order;
+  /** Items were held for staff confirmation because location was unverified. */
+  awaiting_staff_confirm?: boolean;
 }
 
 export interface CustomerCartItemInput {
@@ -30,6 +34,39 @@ export interface CustomerCartItemInput {
 export interface SubmitCustomerOrderInput {
   note?: string;
   items: CustomerCartItemInput[];
+  /** Device location; omitted when the customer declines or it is unavailable. */
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+}
+
+/**
+ * Reads the device location for the geofence check. Never rejects: when the
+ * customer declines (or the browser cannot answer in time) it resolves to null
+ * and the order is held for staff confirmation instead of being blocked.
+ */
+export function readDeviceLocation(timeoutMs = 8000): Promise<GeolocationCoordinates | null> {
+  if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: GeolocationCoordinates | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        window.clearTimeout(timer);
+        finish(position.coords);
+      },
+      () => {
+        window.clearTimeout(timer);
+        finish(null);
+      },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 30000 },
+    );
+  });
 }
 
 export const getCustomerTableOrder = (token: string) =>

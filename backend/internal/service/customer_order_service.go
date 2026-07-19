@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	"Project-M/internal/entity"
@@ -25,6 +26,8 @@ type CustomerRestaurantResponse struct {
 	Logo       string `json:"logo"`
 	OpenTime   string `json:"open_time"`
 	CloseTime  string `json:"close_time"`
+	// Tells the customer page whether it should ask for device location.
+	GeofenceRequired bool `json:"geofence_required"`
 }
 
 type CustomerTableResponse struct {
@@ -33,6 +36,9 @@ type CustomerTableResponse struct {
 	Categories []entity.Category          `json:"categories"`
 	MenuItems  []entity.MenuItem          `json:"menu_items"`
 	Order      *entity.Order              `json:"order,omitempty"`
+	// True when the just-submitted items were held for staff confirmation
+	// because the device location could not be verified.
+	AwaitingStaffConfirm bool `json:"awaiting_staff_confirm,omitempty"`
 }
 
 type CustomerCartItemRequest struct {
@@ -45,7 +51,29 @@ type CustomerCartItemRequest struct {
 type SubmitCustomerOrderRequest struct {
 	Note  string                    `json:"note"`
 	Items []CustomerCartItemRequest `json:"items" binding:"required"`
+	// Device location captured at submit time. Nil when the customer declined
+	// or the browser could not provide it.
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
+	Accuracy  *float64 `json:"accuracy"`
 }
+
+// ErrOutsideRestaurant is returned when the device is clearly away from the
+// restaurant, which is the QR-photo-and-order-from-elsewhere case.
+var ErrOutsideRestaurant = errors.New("you must be at the restaurant to order")
+
+// Location readings looser than this are treated as unverifiable rather than
+// rejected, so a customer with weak indoor GPS is never wrongly blocked.
+const maxTrustedAccuracyMeters = 1000
+
+type geofenceOutcome int
+
+const (
+	geofenceDisabled   geofenceOutcome = iota // restaurant has not configured a location
+	geofenceInside                            // verified at the restaurant
+	geofenceUnverified                        // no/low-quality location -> needs staff confirmation
+	geofenceOutside                           // verified away from the restaurant
+)
 
 func (s *CustomerOrderService) GetTable(token string) (*CustomerTableResponse, error) {
 	table, err := s.tableByToken(token)
@@ -67,6 +95,7 @@ func (s *CustomerOrderService) SubmitOrder(token string, req *SubmitCustomerOrde
 		return nil, errors.New("order can include up to 50 items")
 	}
 
+	var fence geofenceOutcome
 	err = s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		restaurant, err := tx.FindRestaurant(table.RestaurantID)
 		if err != nil {
@@ -75,6 +104,12 @@ func (s *CustomerOrderService) SubmitOrder(token string, req *SubmitCustomerOrde
 		actorID := restaurant.OwnerID
 		if actorID == 0 {
 			return errors.New("restaurant owner is not configured")
+		}
+
+		// Block orders sent from clearly outside the restaurant (photographed QR).
+		fence = evaluateGeofence(restaurant, req)
+		if fence == geofenceOutside {
+			return ErrOutsideRestaurant
 		}
 
 		order, err := tx.FindOpenOrderByTable(table.RestaurantID, table.ID)
@@ -105,12 +140,22 @@ func (s *CustomerOrderService) SubmitOrder(token string, req *SubmitCustomerOrde
 		if err := recalcOrderTotals(tx, order); err != nil {
 			return err
 		}
+		if fence == geofenceUnverified {
+			// Location could not be verified: keep the items pending so staff can
+			// confirm the guests are really seated before the kitchen starts.
+			return nil
+		}
 		return sendPendingItemsToKitchenByIDs(tx, order, actorID, addedItemIDs)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.GetTable(token)
+	response, err := s.GetTable(token)
+	if err != nil {
+		return nil, err
+	}
+	response.AwaitingStaffConfirm = fence == geofenceUnverified
+	return response, nil
 }
 
 func (s *CustomerOrderService) tableByToken(token string) (*entity.RestaurantTable, error) {
@@ -146,12 +191,13 @@ func (s *CustomerOrderService) customerTableResponse(table *entity.RestaurantTab
 	}
 	return &CustomerTableResponse{
 		Restaurant: CustomerRestaurantResponse{
-			ID:         restaurant.ID,
-			Name:       restaurant.Name,
-			BranchName: restaurant.BranchName,
-			Logo:       restaurant.Logo,
-			OpenTime:   restaurant.OpenTime,
-			CloseTime:  restaurant.CloseTime,
+			ID:               restaurant.ID,
+			Name:             restaurant.Name,
+			BranchName:       restaurant.BranchName,
+			Logo:             restaurant.Logo,
+			OpenTime:         restaurant.OpenTime,
+			CloseTime:        restaurant.CloseTime,
+			GeofenceRequired: restaurant.OrderRadiusMeters > 0 && restaurant.Latitude != nil && restaurant.Longitude != nil,
 		},
 		Table:      table,
 		Categories: categories,
@@ -208,6 +254,41 @@ func addCustomerItem(tx *repository.OrderRepository, restaurantID uint, order *e
 		}
 	}
 	return item.ID, nil
+}
+
+// evaluateGeofence decides whether an order may go straight to the kitchen.
+func evaluateGeofence(restaurant *entity.Restaurant, req *SubmitCustomerOrderRequest) geofenceOutcome {
+	if restaurant.OrderRadiusMeters <= 0 || restaurant.Latitude == nil || restaurant.Longitude == nil {
+		return geofenceDisabled
+	}
+	if req.Latitude == nil || req.Longitude == nil {
+		return geofenceUnverified
+	}
+	accuracy := 0.0
+	if req.Accuracy != nil && *req.Accuracy > 0 {
+		accuracy = *req.Accuracy
+	}
+	if accuracy > maxTrustedAccuracyMeters {
+		return geofenceUnverified
+	}
+
+	distance := haversineMeters(*restaurant.Latitude, *restaurant.Longitude, *req.Latitude, *req.Longitude)
+	// Allow the reading's own margin of error so real customers are not blocked.
+	if distance <= float64(restaurant.OrderRadiusMeters)+accuracy {
+		return geofenceInside
+	}
+	return geofenceOutside
+}
+
+// haversineMeters returns the great-circle distance between two coordinates.
+func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusMeters = 6371000
+	toRad := func(deg float64) float64 { return deg * math.Pi / 180 }
+	dLat := toRad(lat2 - lat1)
+	dLon := toRad(lon2 - lon1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return earthRadiusMeters * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
 func customerNote(note string) string {

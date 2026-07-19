@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"Project-M/internal/repository"
@@ -37,6 +38,10 @@ func (ctrl *CustomerOrderController) SubmitOrder(c *gin.Context) {
 	}
 	payload, err := ctrl.customerSvc.SubmitOrder(c.Param("token"), &req)
 	if err != nil {
+		if errors.Is(err, service.ErrOutsideRestaurant) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "OUTSIDE_RESTAURANT"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

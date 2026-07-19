@@ -19,6 +19,10 @@ export interface Restaurant {
   promptpay_name: string;
   promptpay_qr_image: string;
   cover_image: string;
+  /** QR-ordering geofence. Radius 0 or null coordinates disables the check. */
+  latitude: number | null;
+  longitude: number | null;
+  order_radius_meters: number;
   owner_id: number;
   owner?: User;
   CreatedAt?: string;

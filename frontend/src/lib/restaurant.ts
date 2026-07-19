@@ -18,6 +18,10 @@ export interface CreateRestaurantInput {
   promptpay_name?: string;
   promptpay_qr_image?: string;
   cover_image?: string;
+  /** QR-ordering geofence. Send null coordinates or radius 0 to disable it. */
+  latitude?: number | null;
+  longitude?: number | null;
+  order_radius_meters?: number;
 }
 
 export type UpdateRestaurantInput = CreateRestaurantInput;

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { X } from "lucide-react";
-import { getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
-import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { getCustomerTableOrder, readDeviceLocation, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { apiErrorCode, apiErrorMessage } from "@/src/lib/apiErrors";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -37,6 +37,7 @@ export default function CustomerTableOrderPage() {
   const [summaryClosing, setSummaryClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -64,6 +65,9 @@ export default function CustomerTableOrderPage() {
         noActiveOrderBody: "กรุณาเรียกพนักงานให้เปิดโต๊ะในระบบก่อน ลูกค้าจึงจะสั่งอาหารผ่าน QR ได้",
         submitting: "กำลังส่ง",
         submitted: "ส่งออเดอร์เข้าครัวแล้ว",
+        checkingLocation: "กำลังตรวจสอบตำแหน่ง...",
+        outsideRestaurant: "สั่งอาหารได้เฉพาะเมื่ออยู่ที่ร้านเท่านั้น กรุณาสั่งที่โต๊ะของคุณ",
+        awaitingStaffConfirm: "ส่งรายการแล้ว รอพนักงานยืนยันก่อนเข้าครัว (ตรวจสอบตำแหน่งไม่ได้)",
         currentOrder: "รายการที่ส่งแล้ว",
         currentRound: "รายการรอบนี้",
         itemUnit: "รายการ",
@@ -98,6 +102,9 @@ export default function CustomerTableOrderPage() {
         noActiveOrderBody: "Ask staff to open this table in POS before guests can order from the QR code.",
         submitting: "Sending",
         submitted: "Order sent to kitchen",
+        checkingLocation: "Checking your location...",
+        outsideRestaurant: "Ordering is only available at the restaurant. Please order from your table.",
+        awaitingStaffConfirm: "Order received. Staff will confirm it before the kitchen starts (location could not be verified).",
         currentOrder: "Sent items",
         currentRound: "Current round",
         itemUnit: "items",
@@ -284,16 +291,32 @@ export default function CustomerTableOrderPage() {
     setError("");
     setSuccess("");
     try {
+      // Only ask for location when the restaurant actually enforces a geofence.
+      let coords: GeolocationCoordinates | null = null;
+      if (payload?.restaurant.geofence_required) {
+        setLocating(true);
+        coords = await readDeviceLocation();
+        setLocating(false);
+      }
+
       const res = await submitCustomerTableOrder(token, {
         items: cart.map(({ menu_id, quantity, note, selected_option_ids }) => ({ menu_id, quantity, note, selected_option_ids })),
+        ...(coords
+          ? { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }
+          : {}),
       });
       setPayload(res.data);
       setCart([]);
-      setSuccess(copy.submitted);
+      setSuccess(res.data.awaiting_staff_confirm ? copy.awaitingStaffConfirm : copy.submitted);
       closeSummary();
     } catch (err) {
-      setError(apiErrorMessage(err) || copy.loadError);
+      setError(
+        apiErrorCode(err) === "OUTSIDE_RESTAURANT"
+          ? copy.outsideRestaurant
+          : apiErrorMessage(err) || copy.loadError
+      );
     } finally {
+      setLocating(false);
       setSubmitting(false);
     }
   };
@@ -445,7 +468,7 @@ export default function CustomerTableOrderPage() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={closeSummary} className="h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold dark:border-gray-800">{copy.close}</button>
-                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{submitting ? copy.submitting : copy.submit}</button>
+                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{locating ? copy.checkingLocation : submitting ? copy.submitting : copy.submit}</button>
                 </div>
               </div>
             </div>

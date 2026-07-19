@@ -34,9 +34,13 @@ type FormState = {
   vat_rate: string;
   promptpay_name: string;
   promptpay_qr_image: string;
+  geofence_enabled: boolean;
+  latitude: string;
+  longitude: string;
+  order_radius_meters: string;
 };
 
-type FormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "service_charge_rate" | "vat_rate" | "submit", string>>;
+type FormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "service_charge_rate" | "vat_rate" | "latitude" | "order_radius_meters" | "submit", string>>;
 
 function normalizePhone(value: string) {
   return value.replace(/[^\d+\-\s]/g, "").slice(0, 24);
@@ -64,6 +68,10 @@ function toForm(restaurant?: Partial<Restaurant> | null, language: "th" | "en" =
     vat_rate: String(restaurant?.vat_rate ?? 7),
     promptpay_name: restaurant?.promptpay_name ?? "",
     promptpay_qr_image: restaurant?.promptpay_qr_image ?? "",
+    geofence_enabled: Boolean(restaurant?.order_radius_meters && restaurant.latitude != null && restaurant.longitude != null),
+    latitude: restaurant?.latitude != null ? String(restaurant.latitude) : "",
+    longitude: restaurant?.longitude != null ? String(restaurant.longitude) : "",
+    order_radius_meters: restaurant?.order_radius_meters ? String(restaurant.order_radius_meters) : "150",
   };
 }
 
@@ -81,6 +89,7 @@ export default function RestaurantSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState("");
   const canManageRestaurant = can(activeMembership, "manage_staff");
   const restaurantId = activeMembership?.restaurant_id;
@@ -180,6 +189,19 @@ export default function RestaurantSettingsPage() {
         validateOpen: "เวลาเปิดต้องอยู่ในรูปแบบ HH:mm",
         validateClose: "เวลาปิดต้องอยู่ในรูปแบบ HH:mm",
         validateTables: "จำนวนโต๊ะต้องอยู่ระหว่าง 1 ถึง 500",
+        geofenceTitle: "ตรวจตำแหน่งก่อนสั่งผ่าน QR",
+        geofenceHint: "กันคนถ่าย QR ไปสั่งจากนอกร้าน โดยตรวจว่าลูกค้าอยู่ในรัศมีร้านจริง ถ้าตรวจตำแหน่งไม่ได้ ออเดอร์จะไปรอพนักงานยืนยันแทน (ไม่บล็อกลูกค้า)",
+        geofenceEnable: "เปิดใช้งานการตรวจตำแหน่ง",
+        latitude: "ละติจูด",
+        longitude: "ลองจิจูด",
+        radius: "รัศมีที่อนุญาต (เมตร)",
+        radiusHelp: "แนะนำ 100-200 เมตร เผื่อความคลาดเคลื่อนของ GPS ในอาคาร",
+        useCurrentLocation: "ใช้ตำแหน่งปัจจุบัน",
+        locating: "กำลังอ่านตำแหน่ง...",
+        geoUnsupported: "อุปกรณ์นี้ไม่รองรับการอ่านตำแหน่ง",
+        geoDenied: "อ่านตำแหน่งไม่สำเร็จ กรุณาอนุญาตการเข้าถึงตำแหน่ง",
+        validateCoords: "กรุณากรอกพิกัดให้ถูกต้อง (หรือกดใช้ตำแหน่งปัจจุบัน)",
+        validateRadius: "รัศมีต้องอยู่ระหว่าง 20 ถึง 5000 เมตร",
         dangerZone: "พื้นที่อันตราย / ลบร้านอาหาร",
         dangerZoneHint: "การดำเนินการที่เป็นอันตรายและไม่สามารถย้อนกลับได้",
         deleteRestaurant: "ลบร้านอาหารนี้",
@@ -242,6 +264,19 @@ export default function RestaurantSettingsPage() {
         validateOpen: "Open time must use HH:mm.",
         validateClose: "Close time must use HH:mm.",
         validateTables: "Table count must be between 1 and 500.",
+        geofenceTitle: "Location check for QR ordering",
+        geofenceHint: "Stops someone who photographed the QR from ordering off-site by verifying the customer is within the restaurant's radius. If location cannot be verified, the order waits for staff confirmation instead of being blocked.",
+        geofenceEnable: "Enable location check",
+        latitude: "Latitude",
+        longitude: "Longitude",
+        radius: "Allowed radius (meters)",
+        radiusHelp: "100-200 m is recommended to allow for indoor GPS drift.",
+        useCurrentLocation: "Use current location",
+        locating: "Reading location...",
+        geoUnsupported: "This device does not support location.",
+        geoDenied: "Could not read location. Please allow location access.",
+        validateCoords: "Enter valid coordinates (or tap Use current location).",
+        validateRadius: "Radius must be between 20 and 5000 meters.",
         dangerZone: "Danger Zone / Delete Restaurant",
         dangerZoneHint: "Irreversible and destructive actions",
         deleteRestaurant: "Delete this restaurant",
@@ -291,9 +326,37 @@ export default function RestaurantSettingsPage() {
     setMessage("");
   };
 
-  const setBool = (field: "service_charge_enabled" | "vat_enabled", value: boolean) => {
+  const setBool = (field: "service_charge_enabled" | "vat_enabled" | "geofence_enabled", value: boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
+    setErrors((current) => ({ ...current, latitude: undefined, order_radius_meters: undefined, submit: undefined }));
     setMessage("");
+  };
+
+  // Fills the geofence coordinates from the device the owner is standing on,
+  // so they can just open this page at the restaurant and tap once.
+  const useCurrentLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setErrors((current) => ({ ...current, latitude: copy.geoUnsupported }));
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((current) => ({
+          ...current,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6),
+        }));
+        setErrors((current) => ({ ...current, latitude: undefined }));
+        setLocating(false);
+        setMessage("");
+      },
+      () => {
+        setErrors((current) => ({ ...current, latitude: copy.geoDenied }));
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
   };
 
   const validate = () => {
@@ -309,6 +372,15 @@ export default function RestaurantSettingsPage() {
     if (!Number.isFinite(tableCount) || tableCount < 1 || tableCount > 500) next.table_count = copy.validateTables;
     if (!Number.isFinite(serviceRate) || serviceRate < 0 || serviceRate > 30) next.service_charge_rate = language === "th" ? "ค่าบริการต้องอยู่ระหว่าง 0 ถึง 30%" : "Service charge must be between 0 and 30%.";
     if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 20) next.vat_rate = language === "th" ? "VAT ต้องอยู่ระหว่าง 0 ถึง 20%" : "VAT must be between 0 and 20%.";
+    if (form.geofence_enabled) {
+      const latitude = Number.parseFloat(form.latitude);
+      const longitude = Number.parseFloat(form.longitude);
+      const radius = Number.parseInt(form.order_radius_meters, 10);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        next.latitude = copy.validateCoords;
+      }
+      if (!Number.isFinite(radius) || radius < 20 || radius > 5000) next.order_radius_meters = copy.validateRadius;
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -338,6 +410,9 @@ export default function RestaurantSettingsPage() {
           promptpay_name: form.promptpay_name.trim(),
           promptpay_qr_image: form.promptpay_qr_image.trim(),
           cover_image: form.cover_image.trim(),
+          latitude: form.geofence_enabled ? Number.parseFloat(form.latitude) : null,
+          longitude: form.geofence_enabled ? Number.parseFloat(form.longitude) : null,
+          order_radius_meters: form.geofence_enabled ? Number.parseInt(form.order_radius_meters, 10) : 0,
         });
         setRestaurant(res.data.restaurant);
         setForm(toForm(res.data.restaurant, language));
@@ -495,6 +570,36 @@ export default function RestaurantSettingsPage() {
                 <Field label={`${copy.vat} %`} value={form.vat_rate} onChange={(value) => setField("vat_rate", value)} error={errors.vat_rate} inputMode="decimal" />
                 <Field label={copy.promptpayName} value={form.promptpay_name} onChange={(value) => setField("promptpay_name", value)} />
                 <Field label={copy.promptpayQr} value={form.promptpay_qr_image} onChange={(value) => setField("promptpay_qr_image", value)} placeholder="/uploads/..." />
+              </div>
+            </SettingsPanel>
+
+            <SettingsPanel title={copy.geofenceTitle} hint={copy.geofenceHint}>
+              <div className="space-y-3">
+                <label className="flex min-h-14 items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                  <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.geofenceEnable}</span>
+                  <input type="checkbox" checked={form.geofence_enabled} onChange={(event) => setBool("geofence_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
+                </label>
+
+                {form.geofence_enabled && (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Field label={copy.latitude} value={form.latitude} onChange={(value) => setField("latitude", value)} error={errors.latitude} inputMode="decimal" placeholder="13.736717" />
+                      <Field label={copy.longitude} value={form.longitude} onChange={(value) => setField("longitude", value)} inputMode="decimal" placeholder="100.523186" />
+                      <Field label={copy.radius} value={form.order_radius_meters} onChange={(value) => setField("order_radius_meters", value)} error={errors.order_radius_meters} inputMode="numeric" />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={useCurrentLocation}
+                        disabled={locating}
+                        className="ui-press h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+                      >
+                        {locating ? copy.locating : copy.useCurrentLocation}
+                      </button>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.radiusHelp}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </SettingsPanel>
 
