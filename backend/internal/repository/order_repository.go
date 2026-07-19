@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"Project-M/internal/entity"
@@ -13,6 +14,24 @@ import (
 
 type OrderRepository struct {
 	db *gorm.DB
+}
+
+type OrderListSummary struct {
+	Total    int64            `json:"total"`
+	Active   int64            `json:"active"`
+	Closed   int64            `json:"closed"`
+	Statuses map[string]int64 `json:"statuses"`
+}
+
+type OrderListResult struct {
+	Orders  []entity.Order
+	Total   int64
+	Summary OrderListSummary
+}
+
+type orderStatusCountRow struct {
+	Status string
+	Count  int64
 }
 
 func NewOrderRepository(db *gorm.DB) *OrderRepository {
@@ -106,24 +125,121 @@ func (r *OrderRepository) FindCustomerOpenOrderByTable(restaurantID, tableID uin
 	return &order, nil
 }
 
-func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
-	var orders []entity.Order
-	query := r.db.
-		Preload("Table").
-		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
-		Where("restaurant_id = ?", restaurantID)
-	if status != "" {
-		query = query.Where("status = ?", status)
-	}
+func orderListBaseQuery(db *gorm.DB, restaurantID uint, tableID uint, orderDate, paymentStatus, search string) *gorm.DB {
+	query := db.Model(&entity.Order{}).Where("orders.restaurant_id = ?", restaurantID)
 	if tableID != 0 {
-		query = query.Where("table_id = ?", tableID)
+		query = query.Where("orders.table_id = ?", tableID)
 	}
 	if orderDate != "" {
-		query = query.Where("order_date = ?", orderDate)
+		query = query.Where("orders.order_date = ?", orderDate)
 	}
+	if paymentStatus != "" {
+		query = query.Where("orders.payment_status = ?", paymentStatus)
+	}
+	if search != "" {
+		pattern := "%" + strings.ToLower(search) + "%"
+		query = query.
+			Joins("LEFT JOIN restaurant_tables AS archive_tables ON archive_tables.id = orders.table_id").
+			Joins("LEFT JOIN table_zones AS archive_zones ON archive_zones.id = archive_tables.zone_id").
+			Where(`LOWER(orders.order_number) LIKE ?
+				OR LOWER(COALESCE(orders.customer_name, '')) LIKE ?
+				OR LOWER(COALESCE(orders.customer_phone, '')) LIKE ?
+				OR LOWER(COALESCE(archive_tables.table_number, '')) LIKE ?
+				OR LOWER(COALESCE(archive_tables.display_label, '')) LIKE ?
+				OR LOWER(COALESCE(archive_tables.zone, '')) LIKE ?
+				OR LOWER(COALESCE(archive_zones.name, '')) LIKE ?`,
+				pattern, pattern, pattern, pattern, pattern, pattern, pattern)
+	}
+	return query
+}
+
+func applyOrderListStatus(query *gorm.DB, status string) *gorm.DB {
+	switch status {
+	case "active":
+		return query.Where("orders.status IN ?", []string{
+			entity.OrderStatusOpen,
+			entity.OrderStatusSentToKitchen,
+			entity.OrderStatusCooking,
+			entity.OrderStatusReady,
+			entity.OrderStatusServed,
+		})
+	case "closed":
+		return query.Where("orders.status IN ?", []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled})
+	case "":
+		return query
+	default:
+		return query.Where("orders.status = ?", status)
+	}
+}
+
+func summarizeOrderStatuses(rows []orderStatusCountRow) OrderListSummary {
+	statuses := map[string]int64{
+		entity.OrderStatusOpen:          0,
+		entity.OrderStatusSentToKitchen: 0,
+		entity.OrderStatusCooking:       0,
+		entity.OrderStatusReady:         0,
+		entity.OrderStatusServed:        0,
+		entity.OrderStatusCompleted:     0,
+		entity.OrderStatusCancelled:     0,
+	}
+	summary := OrderListSummary{Statuses: statuses}
+	for _, row := range rows {
+		statuses[row.Status] = row.Count
+		summary.Total += row.Count
+		switch row.Status {
+		case entity.OrderStatusCompleted, entity.OrderStatusCancelled:
+			summary.Closed += row.Count
+		default:
+			summary.Active += row.Count
+		}
+	}
+	return summary
+}
+
+func (r *OrderRepository) ListOrders(restaurantID uint, status string, tableID uint, orderDate, paymentStatus, search string, includeSummary bool, page, limit int) (*OrderListResult, error) {
+	summary := OrderListSummary{}
+	if includeSummary {
+		baseSummaryQuery := orderListBaseQuery(r.db, restaurantID, tableID, orderDate, paymentStatus, search)
+		var statusRows []orderStatusCountRow
+		if err := baseSummaryQuery.
+			Select("orders.status AS status, COUNT(orders.id) AS count").
+			Group("orders.status").
+			Scan(&statusRows).Error; err != nil {
+			return nil, err
+		}
+		summary = summarizeOrderStatuses(statusRows)
+	}
+
+	filteredCountQuery := applyOrderListStatus(
+		orderListBaseQuery(r.db, restaurantID, tableID, orderDate, paymentStatus, search),
+		status,
+	)
+	var total int64
+	if err := filteredCountQuery.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var orders []entity.Order
+	ordersQuery := orderListBaseQuery(r.db, restaurantID, tableID, orderDate, paymentStatus, search).
+		Preload("Table").
+		Preload("Table.TableZone").
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") })
+	ordersQuery = applyOrderListStatus(ordersQuery, status)
 	offset := (page - 1) * limit
-	err := query.Order("opened_at desc, id desc").Limit(limit).Offset(offset).Find(&orders).Error
-	return orders, err
+	if err := ordersQuery.
+		Select("orders.*").
+		Order("orders.opened_at desc, orders.id desc").
+		Limit(limit).
+		Offset(offset).
+		Find(&orders).Error; err != nil {
+		return nil, err
+	}
+
+	return &OrderListResult{
+		Orders:  orders,
+		Total:   total,
+		Summary: summary,
+	}, nil
 }
 
 func (r *OrderRepository) CreateItem(item *entity.OrderItem) error {

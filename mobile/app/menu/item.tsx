@@ -57,7 +57,7 @@ export default function MenuItemEditorScreen() {
   async function remove() { if (!confirmDelete) { setConfirmDelete(true); return; } setSaving(true); setError(null); try { await deleteMenuItem(itemId); router.back(); } catch (err) { setError(err instanceof Error ? err.message : 'ลบเมนูไม่สำเร็จ'); setSaving(false); } }
 
   return (
-    <AppScreen title={editing ? 'แก้ไขเมนู' : 'เพิ่มเมนู'} subtitle="ข้อมูลเดียวกันนี้ใช้ใน POS เมนูลูกค้า ต้นทุน และรายงาน" topLevel={false}>
+    <AppScreen title={editing ? 'แก้ไขเมนู' : 'เพิ่มเมนู'} subtitle="ข้อมูลเดียวกันนี้ใช้ในหน้ารับออเดอร์ เมนูลูกค้า ต้นทุน และรายงาน" topLevel={false}>
       {error ? <Feedback title="ทำรายการไม่ได้" detail={error} tone="danger" /> : null}
       <Surface>
         <SectionHeader title="ข้อมูลเมนู" />

@@ -141,7 +141,7 @@ export default function PosOrderDetailPage() {
   const copy = language === "th"
     ? {
       denied: "ไม่มีสิทธิ์รับออเดอร์",
-      back: "กลับไปหน้า POS",
+      back: "กลับไปเลือกโต๊ะ",
       search: "ค้นหาเมนู",
       all: "ทั้งหมด",
       add: "เพิ่ม",
@@ -187,7 +187,7 @@ export default function PosOrderDetailPage() {
     }
     : {
       denied: "You do not have permission to take orders.",
-      back: "Back to POS",
+      back: "Back to tables",
       search: "Search menu",
       all: "All",
       add: "Add",

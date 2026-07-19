@@ -19,7 +19,7 @@ export default function MenuCategoriesScreen() {
   async function save() { if (!name.trim()) return; setSaving(true); setError(null); try { const payload = { name: name.trim(), display_order: toInt(order, 0), is_active: active === 'yes' }; if (editing) await updateCategory(editing.ID, payload); else await createCategory(payload); choose(); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'บันทึกหมวดไม่สำเร็จ'); } finally { setSaving(false); } }
   async function remove() { if (!editing) return; if (!confirmDelete) { setConfirmDelete(true); return; } setSaving(true); setError(null); try { await deleteCategory(editing.ID); choose(); await load(); } catch (err) { setError(err instanceof Error ? err.message : 'ลบหมวดไม่สำเร็จ'); } finally { setSaving(false); } }
   return (
-    <AppScreen title="หมวดเมนู" subtitle="จัดลำดับหมวดที่ใช้ใน POS และเมนูลูกค้า" topLevel={false}>
+    <AppScreen title="หมวดเมนู" subtitle="จัดลำดับหมวดที่ใช้ในหน้ารับออเดอร์และเมนูลูกค้า" topLevel={false}>
       {error ? <Feedback title="ทำรายการไม่ได้" detail={error} tone="danger" /> : null}
       <Surface>
         <SectionHeader title={editing ? 'แก้ไขหมวด' : 'เพิ่มหมวด'} action={editing ? <Button compact variant="ghost" label="เพิ่มใหม่" onPress={() => choose()} /> : undefined} />

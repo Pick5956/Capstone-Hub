@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-local-dev.ps1",
     "dev:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-public-dev.ps1",
+    "build:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-public.ps1",
+    "start:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-public.ps1",
     "tunnel:public": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/start-dishy-tunnel.ps1",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",

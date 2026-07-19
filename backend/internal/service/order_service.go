@@ -175,7 +175,7 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 	return s.repo.FindOrder(restaurantID, created.ID)
 }
 
-func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
+func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate, paymentStatus, search string, includeSummary bool, page, limit int) (*repository.OrderListResult, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -185,7 +185,17 @@ func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint
 	if limit > 200 {
 		limit = 200
 	}
-	return s.repo.ListOrders(restaurantID, strings.TrimSpace(status), tableID, strings.TrimSpace(orderDate), page, limit)
+	return s.repo.ListOrders(
+		restaurantID,
+		strings.TrimSpace(status),
+		tableID,
+		strings.TrimSpace(orderDate),
+		strings.TrimSpace(paymentStatus),
+		strings.TrimSpace(search),
+		includeSummary,
+		page,
+		limit,
+	)
 }
 
 func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, error) {

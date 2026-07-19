@@ -71,12 +71,35 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	}
 	page := boundedQueryInt(c, "page", 1, 1, 100000)
 	limit := boundedQueryInt(c, "limit", 100, 1, 200)
-	orders, err := ctrl.orderSvc.ListOrders(restaurantID, c.Query("status"), tableID, c.Query("date"), page, limit)
+	includeSummary := c.Query("include_summary") == "true"
+	result, err := ctrl.orderSvc.ListOrders(
+		restaurantID,
+		c.Query("status"),
+		tableID,
+		c.Query("date"),
+		c.Query("payment_status"),
+		c.Query("search"),
+		includeSummary,
+		page,
+		limit,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"orders": orders})
+	payload := gin.H{
+		"orders": result.Orders,
+		"pagination": gin.H{
+			"page":     page,
+			"limit":    limit,
+			"total":    result.Total,
+			"has_more": int64(page*limit) < result.Total,
+		},
+	}
+	if includeSummary {
+		payload["summary"] = result.Summary
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // resolveOrder accepts either a numeric database ID (backward compat) or an

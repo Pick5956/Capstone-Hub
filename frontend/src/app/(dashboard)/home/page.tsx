@@ -117,7 +117,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "ดูออเดอร์ทั้งหมด",
         noOrders: "ไม่มีออเดอร์ในวันที่เลือก",
         floorStatus: "สถานะโต๊ะ",
-        openPOS: "เปิดหน้า POS",
+        openOrderTaking: "รับออเดอร์",
         occupied: "ใช้งาน",
         available: "ว่าง",
         reserved: "จอง",
@@ -175,7 +175,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "View all orders",
         noOrders: "No orders on the selected date",
         floorStatus: "Floor status",
-        openPOS: "Open POS",
+        openOrderTaking: "Take orders",
         occupied: "Occupied",
         available: "Available",
         reserved: "Reserved",
@@ -610,7 +610,7 @@ export default function Home() {
                     <h2 className="text-[14px] font-semibold text-gray-950 dark:text-white">{copy.floorStatus}</h2>
                     <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {tables.filter((table) => table.status === "available").length} · {copy.reserved} {tables.filter((table) => table.status === "reserved").length}</p>
                   </div>
-                  <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openPOS}<ArrowRight className="h-3.5 w-3.5" /></button>
+                  <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
                 </div>
                 <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {tables.map((table) => (

@@ -236,7 +236,7 @@ For physical-device testing, use a LAN-accessible backend URL or the included ba
 | `npm.cmd start` | `mobile/` | Start Expo |
 | `npm.cmd run typecheck` | `mobile/` | Type-check the mobile app |
 
-## Public Development Mode
+## Public Tunnel Mode
 
 The repo includes scripts for serving the local app through the configured Cloudflare public domain.
 
@@ -246,7 +246,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1 
 
 ```powershell
 cd frontend
-npm.cmd run dev:public
+npm.cmd run build:public
+npm.cmd run start:public
 ```
 
 ```powershell
@@ -258,6 +259,8 @@ Public routes:
 
 - Web app: `https://dishy.pro`
 - API: `https://api.dishy.pro`
+
+The persistent public frontend uses `next start` to keep Node memory low. It has no Hot Reload, so after every frontend source change run `build:public` and restart `start:public` before checking `dishy.pro`, even for a small visual edit. Local `npm.cmd run dev` still uses Hot Reload and only needs full builds at meaningful checkpoints. For a short public editing session that explicitly needs Hot Reload, use `npm.cmd run dev:public` instead.
 
 ## API Surface
 

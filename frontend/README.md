@@ -31,7 +31,8 @@ npm run tunnel:public
 Run the frontend in public mode:
 
 ```powershell
-npm run dev:public
+npm run build:public
+npm run start:public
 ```
 
 Public routes:
@@ -39,7 +40,7 @@ Public routes:
 - Web app: [https://dishy.pro](https://dishy.pro)
 - API: [https://api.dishy.pro](https://api.dishy.pro)
 
-`npm run dev` stays local and uses `http://localhost:8080` from `.env.local`. `npm run dev:public` loads `.env.public.local` and uses `https://api.dishy.pro`.
+`npm run dev` stays local, uses `http://localhost:8080` from `.env.local`, and keeps Hot Reload. `build:public` and `start:public` load `.env.public.local` and use the public API while keeping the persistent Node process small. Production public mode has no Hot Reload: rebuild and restart it after every frontend source change before checking the public URL. Use `npm run dev:public` only when a short public editing session explicitly needs Hot Reload; it intentionally runs the much heavier Next compiler.
 
 The managed backend, frontend, and tunnel scripts create new timestamped stdout/stderr files directly under `../logs/<service>/current/`. Existing files are left untouched; archive them manually when needed.
 

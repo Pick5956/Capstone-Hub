@@ -64,7 +64,7 @@ export default function KitchenScreen() {
                 </Surface>
               );
             })}
-            {!loading && !group.orders.length ? <EmptyState title={group.kind === 'active' ? 'ไม่มีอาหารค้างในครัว' : 'ยังไม่มีอาหารพร้อมเสิร์ฟ'} detail={group.kind === 'active' ? 'รายการใหม่จะเข้าคิวอัตโนมัติเมื่อ POS ส่งเข้าครัว' : 'อาหารที่ทำเสร็จจะแสดงตรงนี้ให้หน้าร้านเห็น'} /> : null}
+            {!loading && !group.orders.length ? <EmptyState title={group.kind === 'active' ? 'ไม่มีอาหารค้างในครัว' : 'ยังไม่มีอาหารพร้อมเสิร์ฟ'} detail={group.kind === 'active' ? 'รายการใหม่จะเข้าคิวอัตโนมัติเมื่อส่งออเดอร์เข้าครัว' : 'อาหารที่ทำเสร็จจะแสดงตรงนี้ให้หน้าร้านเห็น'} /> : null}
           </View>
         ))}
       </View>

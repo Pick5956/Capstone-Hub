@@ -102,7 +102,7 @@ export default function PosTablesPage() {
   const copy = language === "th"
     ? {
         denied: "ไม่มีสิทธิ์รับออเดอร์",
-        eyebrow: "POS",
+        eyebrow: "รับออเดอร์",
         title: "เลือกโต๊ะ",
         subtitle: "แตะโต๊ะว่างเพื่อเปิดออเดอร์ หรือแตะโต๊ะที่ใช้งานเพื่อทำรายการต่อ",
         search: "ค้นหาโต๊ะ",
@@ -156,7 +156,7 @@ export default function PosTablesPage() {
       }
     : {
         denied: "You do not have permission to take orders.",
-        eyebrow: "POS",
+        eyebrow: "Order taking",
         title: "Select table",
         subtitle: "Tap a free table to open an order, or continue an active table.",
         search: "Search tables",
@@ -204,7 +204,7 @@ export default function PosTablesPage() {
         elapsed: "min",
         loadError: "Could not load table layout.",
         saveError: "Could not open order.",
-        reservedNotice: "This table is reserved and cannot be opened from POS yet.",
+        reservedNotice: "This table is reserved and cannot start an order yet.",
         inactiveNotice: "This table is inactive and cannot open orders.",
         reservedSuccess: "Table reserved.",
       };

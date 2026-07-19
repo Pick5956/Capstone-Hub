@@ -18,7 +18,7 @@ type NavItem = {
 
 const primaryNavigation: NavItem[] = [
   { key: 'home', label: 'ภาพรวม', shortLabel: 'ภาพรวม', href: '/home', mark: 'ภ' },
-  { key: 'pos', label: 'รับออเดอร์', shortLabel: 'POS', href: '/tables', mark: 'P', permission: 'view_tables', fallbackPermission: 'take_order' },
+  { key: 'pos', label: 'รับออเดอร์', shortLabel: 'รับออเดอร์', href: '/tables', mark: 'ร', permission: 'view_tables', fallbackPermission: 'take_order' },
   { key: 'kitchen', label: 'ครัว', shortLabel: 'ครัว', href: '/kitchen', mark: 'ค', permission: 'view_kitchen', fallbackPermission: 'update_order_status' },
   { key: 'orders', label: 'ออเดอร์', shortLabel: 'ออเดอร์', href: '/orders', mark: 'อ', permission: 'view_orders' },
   { key: 'more', label: 'ระบบทั้งหมด', shortLabel: 'เพิ่มเติม', href: '/more', mark: '•••' },
