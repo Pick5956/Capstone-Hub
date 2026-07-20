@@ -11,4 +11,5 @@ func SetupReportRoutes(v1 *gin.RouterGroup) {
 	ctrl := controller.ProvideReportController(config.DB())
 
 	v1.GET("/reports/manager", ctrl.ManagerReport)
+	v1.GET("/reports/top-menu-items", ctrl.TopMenuItemsByMonth)
 }

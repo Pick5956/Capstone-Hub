@@ -71,6 +71,16 @@ type starterMenuItem struct {
 	Price        float64
 	Description  string
 	OptionGroups []starterOptionGroup
+	Recipe       []starterRecipeLine
+}
+
+// starterRecipeLine links a starter menu item to a starter ingredient (by name,
+// resolved to an ID after the ingredient catalog has been seeded) so inventory
+// deduction works out of the box for the default starter menu.
+type starterRecipeLine struct {
+	IngredientName string
+	Quantity       float64
+	Unit           string
 }
 
 type starterOptionGroup struct {

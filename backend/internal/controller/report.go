@@ -32,3 +32,20 @@ func (ctrl *ReportController) ManagerReport(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, report)
 }
+
+func (ctrl *ReportController) TopMenuItemsByMonth(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "view_reports", "missing view_reports permission")
+	if !ok {
+		return
+	}
+	now := repository.BangkokNow()
+	year := boundedQueryInt(c, "year", now.Year(), 2000, 2100)
+	month := boundedQueryInt(c, "month", int(now.Month()), 1, 12)
+
+	report, err := ctrl.reportSvc.TopMenuItemsByMonth(restaurantID, year, month)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}

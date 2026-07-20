@@ -20,6 +20,8 @@ type ReportSalesDay struct {
 	OrderDate string  `json:"order_date"`
 	Orders    int64   `json:"orders"`
 	Revenue   float64 `json:"revenue"`
+	Cost      float64 `json:"cost"`
+	Profit    float64 `json:"profit"`
 }
 
 type ReportMenuMargin struct {
@@ -40,7 +42,35 @@ func (r *ReportRepository) SalesByDay(restaurantID uint, since time.Time) ([]Rep
 		Group("order_date").
 		Order("order_date desc").
 		Scan(&rows).Error
-	return rows, err
+	if err != nil {
+		return nil, err
+	}
+
+	type dailyCost struct {
+		OrderDate string
+		Cost      float64
+	}
+	var costs []dailyCost
+	err = r.db.Table("order_inventory_deductions").
+		Select("orders.order_date AS order_date, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
+		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where("order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND orders.opened_at >= ? AND order_items.status = ?", restaurantID, since, entity.OrderItemStatusServed).
+		Group("orders.order_date").
+		Scan(&costs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	costByDate := make(map[string]float64, len(costs))
+	for _, c := range costs {
+		costByDate[c.OrderDate] = c.Cost
+	}
+	for i := range rows {
+		rows[i].Cost = costByDate[rows[i].OrderDate]
+		rows[i].Profit = rows[i].Revenue - rows[i].Cost
+	}
+	return rows, nil
 }
 
 func (r *ReportRepository) MenuMargins(restaurantID uint, since time.Time) ([]ReportMenuMargin, error) {
@@ -62,6 +92,27 @@ func (r *ReportRepository) MenuMargins(restaurantID uint, since time.Time) ([]Re
 		Group("order_items.menu_id, order_items.menu_name").
 		Order("profit desc, revenue desc").
 		Limit(12).
+		Scan(&rows).Error
+	return rows, err
+}
+
+type ReportTopMenuItem struct {
+	MenuID   uint   `json:"menu_id"`
+	MenuName string `json:"menu_name"`
+	Quantity int64  `json:"quantity"`
+}
+
+// TopMenuItemsByMonth returns quantity sold per menu item within [monthStart, monthEnd)
+// where monthEnd is exclusive (i.e. the first day of the following month).
+func (r *ReportRepository) TopMenuItemsByMonth(restaurantID uint, monthStart, monthEnd time.Time) ([]ReportTopMenuItem, error) {
+	var rows []ReportTopMenuItem
+	err := r.db.Table("order_items").
+		Select("order_items.menu_id, order_items.menu_name, COALESCE(SUM(order_items.quantity), 0) AS quantity").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where("order_items.restaurant_id = ? AND orders.order_date >= ? AND orders.order_date < ? AND orders.status <> ? AND order_items.status <> ? AND order_items.deleted_at IS NULL",
+			restaurantID, monthStart.Format("2006-01-02"), monthEnd.Format("2006-01-02"), entity.OrderStatusCancelled, entity.OrderItemStatusCancelled).
+		Group("order_items.menu_id, order_items.menu_name").
+		Order("quantity desc").
 		Scan(&rows).Error
 	return rows, err
 }
