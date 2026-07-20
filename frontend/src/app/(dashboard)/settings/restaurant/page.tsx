@@ -10,7 +10,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { can } from "@/src/lib/rbac";
-import { getRestaurant, updateRestaurant, uploadRestaurantLogo, uploadRestaurantCover, deleteRestaurant } from "@/src/lib/restaurant";
+import { getRestaurant, updateRestaurant, uploadRestaurantLogo, uploadRestaurantCover, uploadRestaurantPromptPayQR, deleteRestaurant } from "@/src/lib/restaurant";
 import type { Restaurant } from "@/src/types/restaurant";
 import { RESTAURANT_TYPES, getRestaurantTypeLabel } from "@/src/app/restaurants/restaurantWorkspaceUi";
 import { Field, SettingsPanel, SettingsShell, StatusMessage, TextAreaField } from "../_components/SettingsPrimitives";
@@ -80,6 +80,7 @@ export default function RestaurantSettingsPage() {
   const { language } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const qrFileInputRef = useRef<HTMLInputElement>(null);
   const saveOnceRef = useRef(createSingleFlight());
   const uploadOnceRef = useRef(createSingleFlight());
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
@@ -89,6 +90,7 @@ export default function RestaurantSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingQr, setUploadingQr] = useState(false);
   const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState("");
   const canManageRestaurant = can(activeMembership, "manage_staff");
@@ -176,13 +178,17 @@ export default function RestaurantSettingsPage() {
         vat: "VAT",
         vatHelp: "เช่น 7%",
         promptpayName: "ชื่อบัญชีรับเงิน",
-        promptpayQr: "อัปโหลด QR Code รับเงิน",
+        promptpayQr: "QR Code รับเงิน (PromptPay)",
+        uploadQr: "อัปโหลด QR",
+        uploadingQr: "กำลังอัปโหลด QR...",
+        noQr: "ยังไม่มี QR",
         save: "บันทึกข้อมูลร้าน",
         saving: "กำลังบันทึก...",
         saved: "บันทึกข้อมูลร้านแล้ว",
         saveError: "บันทึกข้อมูลร้านไม่สำเร็จ",
         uploadError: "อัปโหลดโลโก้ไม่สำเร็จ",
         uploadCoverError: "อัปโหลดรูปพื้นหลังไม่สำเร็จ",
+        uploadQrError: "อัปโหลด QR ไม่สำเร็จ",
         validateName: "กรุณากรอกชื่อร้าน",
         validateBranch: "กรุณากรอกชื่อสาขา",
         validatePhone: "เบอร์โทรควรมีอย่างน้อย 9 หลัก",
@@ -251,13 +257,17 @@ export default function RestaurantSettingsPage() {
         vat: "VAT",
         vatHelp: "Commonly 7%",
         promptpayName: "PromptPay account name",
-        promptpayQr: "PromptPay QR image URL",
+        promptpayQr: "PromptPay QR code",
+        uploadQr: "Upload QR",
+        uploadingQr: "Uploading QR...",
+        noQr: "No QR yet",
         save: "Save restaurant",
         saving: "Saving...",
         saved: "Restaurant details saved.",
         saveError: "Could not save restaurant details.",
         uploadError: "Could not upload the logo.",
         uploadCoverError: "Could not upload the cover image.",
+        uploadQrError: "Could not upload the QR code.",
         validateName: "Please enter the restaurant name.",
         validateBranch: "Please enter the branch name.",
         validatePhone: "The phone number should have at least 9 digits.",
@@ -466,6 +476,26 @@ export default function RestaurantSettingsPage() {
     });
   };
 
+  const uploadQr = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !restaurantId) return;
+    await uploadOnceRef.current(async () => {
+      setUploadingQr(true);
+      try {
+        const res = await uploadRestaurantPromptPayQR(restaurantId, file);
+        setForm((current) => ({ ...current, promptpay_qr_image: res.data.restaurant.promptpay_qr_image ?? "" }));
+        setRestaurant((current) => (current ? { ...current, promptpay_qr_image: res.data.restaurant.promptpay_qr_image } : current));
+        setMessage(copy.saved);
+        await refreshMemberships();
+      } catch {
+        setErrors({ submit: copy.uploadQrError });
+      } finally {
+        setUploadingQr(false);
+      }
+    });
+  };
+
   if (!canManageRestaurant) {
     return <PermissionDenied title={copy.denied} />;
   }
@@ -569,7 +599,22 @@ export default function RestaurantSettingsPage() {
                 </label>
                 <Field label={`${copy.vat} %`} value={form.vat_rate} onChange={(value) => setField("vat_rate", value)} error={errors.vat_rate} inputMode="decimal" />
                 <Field label={copy.promptpayName} value={form.promptpay_name} onChange={(value) => setField("promptpay_name", value)} />
-                <Field label={copy.promptpayQr} value={form.promptpay_qr_image} onChange={(value) => setField("promptpay_qr_image", value)} placeholder="/uploads/..." />
+                {/* PromptPay QR Uploader */}
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
+                      {form.promptpay_qr_image ? <Image src={form.promptpay_qr_image} alt={copy.promptpayQr} width={64} height={64} unoptimized className="h-full w-full object-contain" /> : <span className="p-1 line-clamp-2 text-[10px] leading-tight">{copy.noQr}</span>}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{copy.promptpayQr}</p>
+                      <p className="mt-0.5 truncate text-[12px] text-gray-500 dark:text-gray-400">{form.promptpay_name || restaurant?.name || form.name}</p>
+                    </div>
+                  </div>
+                  <input ref={qrFileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadQr} />
+                  <button type="button" onClick={() => qrFileInputRef.current?.click()} disabled={uploadingQr} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                    {uploadingQr ? copy.uploadingQr : copy.uploadQr}
+                  </button>
+                </div>
               </div>
             </SettingsPanel>
 

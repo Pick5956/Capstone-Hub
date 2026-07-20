@@ -797,6 +797,19 @@ func (s *RestaurantService) UpdateRestaurantCover(restaurantID uint, coverImage 
 	return s.restaurantRepo.FindByID(restaurantID)
 }
 
+func (s *RestaurantService) UpdateRestaurantPromptPayQR(restaurantID uint, qrImage string) (*entity.Restaurant, error) {
+	restaurant, err := s.restaurantRepo.FindByID(restaurantID)
+	if err != nil {
+		return nil, errors.New("restaurant not found")
+	}
+
+	restaurant.PromptPayQRImage = strings.TrimSpace(qrImage)
+	if err := s.restaurantRepo.Update(restaurant); err != nil {
+		return nil, err
+	}
+	return s.restaurantRepo.FindByID(restaurantID)
+}
+
 func (s *RestaurantService) DeleteRestaurant(restaurantID uint) error {
 	if err := s.memberRepo.DeleteByRestaurant(restaurantID); err != nil {
 		return err

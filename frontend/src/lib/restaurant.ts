@@ -61,6 +61,16 @@ export const uploadRestaurantCover = (id: number, file: File) => {
   });
 };
 
+export const uploadRestaurantPromptPayQR = (id: number, file: File) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-promptpay-qr`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
 export const listMembers = (id: number) =>
   apiClient.get<{ members: Membership[] }>(`/api/v1/restaurants/${id}/members`);
 
