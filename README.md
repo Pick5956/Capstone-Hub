@@ -142,6 +142,19 @@ npm install
 
 Using the included Compose file:
 
+Create an ignored root `.env` first. Compose refuses to start without a database password:
+
+```env
+DB_PASSWORD=<your-local-database-password>
+JWT_SECRET=<your-secure-random-jwt-secret>
+```
+
+The full PgBouncer stack also needs a local auth file. Copy the tracked placeholder, replace it locally with the matching PgBouncer MD5 credential, and never commit the resulting file:
+
+```powershell
+Copy-Item infra/userlist.example.txt infra/userlist.txt
+```
+
 ```powershell
 docker compose up -d postgres
 ```

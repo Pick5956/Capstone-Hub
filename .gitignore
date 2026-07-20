@@ -23,6 +23,7 @@ backend/postgres-data/
 backend/data/
 backend/database/
 backend/uploads/
+infra/userlist.txt
 logs/
 db-dumps/
 backups/
