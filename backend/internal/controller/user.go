@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -91,15 +92,11 @@ func (ctrl *UserController) ForgotPassword(c *gin.Context) {
 	}
 
 	if err := ctrl.authService.RequestPasswordReset(&req); err != nil {
-		if errors.Is(err, service.ErrPasswordResetGoogleAccount) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "This email uses Google sign-in. Please continue with Google.",
-				"code":  "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN",
-			})
-			return
+		failureKind := "delivery"
+		if errors.Is(err, service.ErrPasswordResetEmailNotConfigured) {
+			failureKind = "configuration"
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to request password reset"})
-		return
+		log.Printf("[password reset] request could not be completed (%s)", failureKind)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a password reset link has been sent."})

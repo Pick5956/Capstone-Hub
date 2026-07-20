@@ -169,7 +169,15 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
+
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_FROM=<sender-email>
+SMTP_USER=<smtp-username>
+SMTP_PASSWORD=<smtp-app-password>
 ```
+
+The SMTP values enable the forgot-password email flow. Keep the real credentials only in the ignored `backend/.env` file or the deployment platform's secret store. `FRONTEND_URL` is used to build the one-hour reset link, so it must point to the public web origin in production. The public endpoint always returns a generic response and never writes an email address, reset token, or reset link to logs.
 
 Then run the API:
 
@@ -296,7 +304,7 @@ The project intentionally keeps several larger features out of the current MVP:
 
 - No payment gateway or automatic PromptPay confirmation.
 - No split bills, refunds, or full tax invoice numbering.
-- No WebSocket/SSE realtime yet; polling is used for current live operations.
+- Web POS/KDS realtime uses SSE on the current single backend process; cross-instance fan-out and mobile SSE are not yet implemented.
 - Inventory is ingredient-focused; full recipe costing and automatic stock deduction are still in progress.
 - Mobile app does not yet cover every web-only workflow such as inventory, reports, AI assistant, and receipt printing.
 

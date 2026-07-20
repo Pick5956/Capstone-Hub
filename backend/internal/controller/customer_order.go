@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 
+	"Project-M/internal/realtime"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -12,11 +13,13 @@ import (
 
 type CustomerOrderController struct {
 	customerSvc *service.CustomerOrderService
+	orderEvents *realtime.OrderHub
 }
 
-func ProvideCustomerOrderController(db *gorm.DB) *CustomerOrderController {
+func ProvideCustomerOrderController(db *gorm.DB, orderEvents *realtime.OrderHub) *CustomerOrderController {
 	return &CustomerOrderController{
 		customerSvc: service.ProvideCustomerOrderService(repository.NewOrderRepository(db)),
+		orderEvents: orderEvents,
 	}
 }
 
@@ -41,4 +44,7 @@ func (ctrl *CustomerOrderController) SubmitOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, payload)
+	if payload.Order != nil {
+		ctrl.orderEvents.Publish(payload.Restaurant.ID, "customer_order.submitted", payload.Order.ID)
+	}
 }

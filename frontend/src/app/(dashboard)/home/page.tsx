@@ -33,6 +33,8 @@ import { kitchenQueue, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
 
@@ -321,9 +323,13 @@ export default function Home() {
     const loadTimer = window.setTimeout(() => void loadOperations(), 0);
     return () => window.clearTimeout(loadTimer);
   }, [loadOperations]);
+  const realtimeStatus = useOrderEvents(() => loadOperations(true), {
+    enabled: isToday && Boolean(activeMembership?.restaurant_id),
+    restaurantId: activeMembership?.restaurant_id,
+  });
   useVisiblePolling(() => loadOperations(true), {
     enabled: isToday && Boolean(activeMembership?.restaurant_id),
-    intervalMs: 10_000,
+    intervalMs: 60_000,
     runImmediately: false,
   });
 
@@ -455,6 +461,7 @@ export default function Home() {
 
       <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
+        <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
         {dateLoading ? (
           <div className="flex min-h-72 items-center justify-center rounded-md border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">

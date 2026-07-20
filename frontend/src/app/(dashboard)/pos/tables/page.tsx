@@ -18,10 +18,12 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
-const tableRefreshIntervalMs = 3_000;
+const tableRefreshIntervalMs = 60_000;
 const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-950 dark:text-white";
 type TableSheetMode = "open" | "reserved";
 
@@ -314,6 +316,10 @@ export default function PosTablesPage() {
     const loadTimer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(loadTimer);
   }, [load]);
+  const realtimeStatus = useOrderEvents(() => load(false), {
+    enabled: canTake,
+    restaurantId: activeMembership?.restaurant_id,
+  });
   useVisiblePolling(() => load(false), {
     enabled: canTake,
     intervalMs: tableRefreshIntervalMs,
@@ -593,6 +599,7 @@ export default function PosTablesPage() {
         showHeader={false}
       >
 
+      <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
       {!loading && !isNavigating && readyTables.length ? (

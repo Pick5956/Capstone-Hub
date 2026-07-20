@@ -3,12 +3,13 @@ package routes
 import (
 	"Project-M/config"
 	"Project-M/internal/controller"
+	"Project-M/internal/realtime"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupOrderRoutes(v1 *gin.RouterGroup) {
-	ctrl := controller.ProvideOrderController(config.DB())
+func SetupOrderRoutes(v1 *gin.RouterGroup, orderEvents *realtime.OrderHub) {
+	ctrl := controller.ProvideOrderController(config.DB(), orderEvents)
 
 	v1.POST("/orders", ctrl.CreateOrder)
 	v1.GET("/orders", ctrl.ListOrders)
@@ -27,4 +28,5 @@ func SetupOrderRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/orders/:id/send-to-kitchen", ctrl.SendToKitchen)
 
 	v1.GET("/kitchen/queue", ctrl.KitchenQueue)
+	v1.GET("/events/orders", ctrl.OrderEvents)
 }

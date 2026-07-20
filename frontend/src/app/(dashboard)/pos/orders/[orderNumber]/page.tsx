@@ -22,7 +22,9 @@ import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import ThermalReceipt from "@/src/components/orders/ThermalReceipt";
 
@@ -408,9 +410,14 @@ export default function PosOrderDetailPage() {
     return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canTake, orderNumber, order?.status]);
+  const realtimeStatus = useOrderEvents(() => load({ background: true }), {
+    enabled: canTake && Boolean(orderNumber) && !Boolean(order && terminalStatuses.includes(order.status)),
+    restaurantId: activeMembership?.restaurant_id,
+    eventFilter: { kind: "order", orderId: order?.ID },
+  });
   useVisiblePolling(() => load({ background: true }), {
     enabled: canTake && Boolean(orderNumber) && !Boolean(order && terminalStatuses.includes(order.status)),
-    intervalMs: 5_000,
+    intervalMs: 60_000,
     runImmediately: false,
   });
 
@@ -713,6 +720,12 @@ export default function PosOrderDetailPage() {
         )}
       </div>
       <div aria-hidden="true" className={posHeaderSpacerClass} />
+
+      {realtimeStatus === "reconnecting" ? (
+        <div className="px-3 pt-3 sm:px-4 lg:px-5">
+          <RealtimeConnectionNotice language={language} status={realtimeStatus} />
+        </div>
+      ) : null}
 
       {loading && !order ? (
         <div className="grid gap-4 px-3 py-4 sm:px-4 lg:px-5">

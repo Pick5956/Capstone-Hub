@@ -12,6 +12,8 @@ import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 function minutesSince(value?: string | null) {
@@ -174,7 +176,12 @@ export default function KitchenPage() {
     completeTicketIfReady(nextOrder);
   };
 
-  useVisiblePolling(load, { enabled: canView, intervalMs: 5_000 });
+  const realtimeStatus = useOrderEvents(load, {
+    enabled: canView,
+    restaurantId: activeMembership?.restaurant_id,
+    eventFilter: { kind: "kitchen" },
+  });
+  useVisiblePolling(load, { enabled: canView, intervalMs: 60_000 });
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);
@@ -230,6 +237,7 @@ export default function KitchenPage() {
         { label: language === "th" ? "เกินเวลา" : "Overdue", value: delayedCount, tone: "danger" },
       ]}
     >
+      <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
