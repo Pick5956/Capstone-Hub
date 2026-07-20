@@ -55,3 +55,15 @@ func (r *RestaurantSetupRepository) CreateTableZone(zone *entity.TableZone) erro
 func (r *RestaurantSetupRepository) CreateTable(table *entity.RestaurantTable) error {
 	return r.db.Create(table).Error
 }
+
+func (r *RestaurantSetupRepository) CreateIngredientCategory(category *entity.IngredientCategory) error {
+	return r.db.Create(category).Error
+}
+
+func (r *RestaurantSetupRepository) CreateIngredient(ingredient *entity.Ingredient) error {
+	return r.db.Create(ingredient).Error
+}
+
+func (r *RestaurantSetupRepository) CreateMenuItemIngredient(link *entity.MenuItemIngredient) error {
+	return r.db.Create(link).Error
+}
