@@ -37,6 +37,8 @@ import { getManagerReport, getTopMenuItemsByMonth } from "@/src/lib/report";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
 import type { ReportSalesDay, ReportTopMenuItem } from "@/src/types/report";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
 
@@ -133,7 +135,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "ดูออเดอร์ทั้งหมด",
         noOrders: "ไม่มีออเดอร์ในวันที่เลือก",
         floorStatus: "สถานะโต๊ะ",
-        openPOS: "เปิดหน้า POS",
+        openOrderTaking: "รับออเดอร์",
         occupied: "ใช้งาน",
         available: "ว่าง",
         reserved: "จอง",
@@ -206,7 +208,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "View all orders",
         noOrders: "No orders on the selected date",
         floorStatus: "Floor status",
-        openPOS: "Open POS",
+        openOrderTaking: "Take orders",
         occupied: "Occupied",
         available: "Available",
         reserved: "Reserved",
@@ -597,11 +599,16 @@ export default function Home() {
   }, [activeMembership?.restaurant_id, copy.loadError, isToday, selectedDate]);
 
   useEffect(() => {
-    void loadOperations();
+    const loadTimer = window.setTimeout(() => void loadOperations(), 0);
+    return () => window.clearTimeout(loadTimer);
   }, [loadOperations]);
+  const realtimeStatus = useOrderEvents(() => loadOperations(true), {
+    enabled: isToday && Boolean(activeMembership?.restaurant_id),
+    restaurantId: activeMembership?.restaurant_id,
+  });
   useVisiblePolling(() => loadOperations(true), {
     enabled: isToday && Boolean(activeMembership?.restaurant_id),
-    intervalMs: 10_000,
+    intervalMs: 60_000,
     runImmediately: false,
   });
 
@@ -819,6 +826,7 @@ export default function Home() {
 
       <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
+        <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
         {dateLoading ? (
           <div className="flex min-h-72 items-center justify-center rounded-md border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
@@ -1080,10 +1088,14 @@ export default function Home() {
                     </div>
                     <button type="button" onClick={() => router.push("/orders")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewAllOrders}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
-                  {orders.length ? (
-                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 sm:grid">
-                        <span>{copy.order}</span><span>{copy.location}</span><span>{copy.status}</span><span className="text-right">{copy.total}</span><span className="text-right">{copy.time}</span>
+                  <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
+                </div>
+                <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {tables.map((table) => (
+                    <button key={table.key} type="button" onClick={() => router.push("/pos/tables")} className="ui-press min-h-24 bg-white p-3 text-left hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold text-gray-950 dark:text-white">{table.label}</span>
+                        <span className={`text-[10px] font-semibold ${table.status === "occupied" ? "text-amber-600" : table.status === "available" ? "text-emerald-600" : table.status === "reserved" ? "text-sky-600" : "text-gray-400"}`}>{copy[table.status]}</span>
                       </div>
                       {orders.slice(0, 10).map((order) => (
                         <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 sm:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] sm:items-center sm:gap-3">

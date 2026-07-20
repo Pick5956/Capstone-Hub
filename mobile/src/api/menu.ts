@@ -49,3 +49,10 @@ export function deleteMenuItem(id: number) {
     method: 'DELETE',
   });
 }
+
+export function setMenuItemAvailability(id: number, isAvailable: boolean) {
+  return apiRequest<MenuItem>(`/api/v1/menu-items/${id}/availability`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_available: isAvailable }),
+  });
+}

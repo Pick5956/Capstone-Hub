@@ -7,8 +7,15 @@ import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
 import { apiErrorCode } from "@/src/lib/apiErrors";
+import {
+  authModalMotionClasses,
+  scheduleAuthModalClose,
+  scheduleAuthModalFocus,
+  type AuthModalMotionPhase,
+} from "@/src/lib/authModalMotion";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -216,12 +223,20 @@ export default function AuthModal({
   const { language } = useLanguage();
   const [authMode, setAuthMode] = useState<AuthMode>(initialMode);
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [lastIsOpen, setLastIsOpen] = useState(isOpen);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const router = useRouter();
+
+  if (lastIsOpen !== isOpen) {
+    setLastIsOpen(isOpen);
+    if (!isOpen) setClosing(false);
+  }
 
   const copy = language === "th"
     ? {
@@ -316,12 +331,32 @@ export default function AuthModal({
       };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      return;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setAuthMode(initialMode);
-    setError("");
-    setNotice("");
-  }, [isOpen, initialMode]);
+  }, [isOpen]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -339,13 +374,14 @@ export default function AuthModal({
   const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || closing) return;
     const targetId = authMode === "forgot" ? "forgot-email" : authMode === "register" ? "firstName" : "login-email";
-    const timer = window.setTimeout(() => {
-      document.getElementById(targetId)?.focus();
-    }, 0);
+    const timer = scheduleAuthModalFocus(
+      () => document.getElementById(targetId),
+      (callback, delay) => window.setTimeout(callback, delay),
+    );
     return () => window.clearTimeout(timer);
-  }, [authMode, isOpen]);
+  }, [authMode, closing, isOpen]);
 
   const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRegisterForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -549,12 +585,25 @@ export default function AuthModal({
   };
 
   const closeAndRestoreFocus = useCallback(() => {
-    onClose();
+    if (!isOpen || closeTimerRef.current !== null) return;
     const restoreTarget = restoreFocusRef.current;
-    window.setTimeout(() => {
-      restoreTarget?.focus();
-    }, 0);
-  }, [onClose]);
+    setClosing(true);
+    closeTimerRef.current = scheduleAuthModalClose(
+      () => {
+        setClosing(false);
+        setAuthMode(initialMode);
+        setError("");
+        setNotice("");
+        onClose();
+        restoreTarget?.focus({ preventScroll: true });
+        closeTimerRef.current = null;
+      },
+      (callback, delay) => window.setTimeout(callback, delay),
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+    );
+  }, [initialMode, isOpen, onClose]);
+
+  const backdropCloseHandlers = useBackdropClose(closeAndRestoreFocus);
 
   const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -587,14 +636,16 @@ export default function AuthModal({
   const isForgot = authMode === "forgot";
   const title = isForgot ? copy.forgotTitle : isLogin ? copy.loginTitle : copy.registerTitle;
   const subtitle = isForgot ? copy.forgotSubtitle : isLogin ? copy.loginSubtitle : copy.registerSubtitle;
+  const motionPhase: AuthModalMotionPhase = !isOpen ? "closed" : closing ? "closing" : "entering";
+  const motionClasses = authModalMotionClasses(motionPhase);
 
   return (
+    // Keep the full-screen blur stable; animate opacity and the dialog surface only.
     <div
       aria-hidden={!isOpen}
       inert={!isOpen}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-[background-color,opacity,backdrop-filter] duration-200 ${
-        isOpen ? "bg-black/40 opacity-100 backdrop-blur-sm" : "pointer-events-none bg-black/0 opacity-0 backdrop-blur-none"
-      }`}
+      {...backdropCloseHandlers}
+      className={`${motionClasses.overlay} fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}
     >
       <div
         ref={dialogRef}
@@ -602,9 +653,9 @@ export default function AuthModal({
         aria-modal="true"
         aria-labelledby="auth-modal-title"
         onKeyDown={handleDialogKeyDown}
-        className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
+        className={`${motionClasses.dialog} w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
-        } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
+        }`}
       >
         <div className="flex items-start justify-between border-b border-gray-100 px-5 pb-3 pt-4 dark:border-gray-800">
           <div>
@@ -628,7 +679,7 @@ export default function AuthModal({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+        <div className="max-h-[70vh] overflow-y-auto overscroll-contain px-5 py-4">
           {isLogin ? (
             <form onSubmit={handleLoginSubmit} className="space-y-3.5">
               <InputField

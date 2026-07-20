@@ -7,7 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"net"
+	"net/mail"
 	"net/smtp"
 	"net/url"
 	"os"
@@ -26,7 +27,7 @@ type AuthService struct {
 	memberRepo *repository.RestaurantMemberRepository
 }
 
-var ErrPasswordResetGoogleAccount = errors.New("use google login for this account")
+var ErrPasswordResetEmailNotConfigured = errors.New("password reset email is not configured")
 
 const defaultProfileImage = "/default-avatar.svg"
 
@@ -155,10 +156,6 @@ func (s *AuthService) RequestPasswordReset(req *ForgotPasswordRequest) error {
 	user, err := s.userRepo.FindByEmailProvider(email, "local")
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			googleUser, googleErr := s.userRepo.FindByEmailProvider(email, "google")
-			if googleErr == nil && googleUser != nil {
-				return ErrPasswordResetGoogleAccount
-			}
 			return nil
 		}
 		return err
@@ -300,30 +297,66 @@ func buildPasswordResetURL(token string) string {
 }
 
 func sendPasswordResetEmail(to string, resetURL string) error {
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
-	from := os.Getenv("SMTP_FROM")
-	username := os.Getenv("SMTP_USER")
-	password := os.Getenv("SMTP_PASSWORD")
-	if host == "" || port == "" || from == "" {
-		fmt.Printf("[password reset] SMTP is not configured. Reset link for %s: %s\n", to, resetURL)
-		return nil
+	return sendPasswordResetEmailWith(to, resetURL, os.Getenv, smtp.SendMail)
+}
+
+type smtpSendMailFunc func(string, smtp.Auth, string, []string, []byte) error
+
+func sendPasswordResetEmailWith(
+	to string,
+	resetURL string,
+	getenv func(string) string,
+	sendMail smtpSendMailFunc,
+) error {
+	host := strings.TrimSpace(getenv("SMTP_HOST"))
+	port := strings.TrimSpace(getenv("SMTP_PORT"))
+	from := strings.TrimSpace(getenv("SMTP_FROM"))
+	username := strings.TrimSpace(getenv("SMTP_USER"))
+	password := strings.TrimSpace(getenv("SMTP_PASSWORD"))
+	if host == "" || port == "" || from == "" || username == "" || password == "" {
+		return ErrPasswordResetEmailNotConfigured
+	}
+
+	sender, err := parsePlainEmailAddress(from)
+	if err != nil {
+		return errors.New("SMTP_FROM must be a valid email address")
+	}
+	recipient, err := parsePlainEmailAddress(to)
+	if err != nil {
+		return errors.New("password reset recipient is invalid")
+	}
+	parsedResetURL, err := url.ParseRequestURI(resetURL)
+	if err != nil || parsedResetURL.Host == "" || (parsedResetURL.Scheme != "http" && parsedResetURL.Scheme != "https") {
+		return errors.New("password reset URL is invalid")
 	}
 
 	var message bytes.Buffer
-	message.WriteString("From: " + from + "\r\n")
-	message.WriteString("To: " + to + "\r\n")
-	message.WriteString("Subject: Restaurant Hub password reset\r\n")
+	message.WriteString("From: Restaurant Hub <" + sender + ">\r\n")
+	message.WriteString("To: " + recipient + "\r\n")
+	message.WriteString("Subject: Reset your Restaurant Hub password\r\n")
 	message.WriteString("MIME-Version: 1.0\r\n")
-	message.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-	message.WriteString("Use this link to reset your Restaurant Hub password. The link expires in 1 hour.\r\n\r\n")
+	message.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	message.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	message.WriteString("เราได้รับคำขอให้ตั้งรหัสผ่าน Restaurant Hub ใหม่\r\n")
+	message.WriteString("ลิงก์นี้ใช้ได้ภายใน 1 ชั่วโมง หากคุณไม่ได้ส่งคำขอนี้ ไม่ต้องดำเนินการใด ๆ\r\n\r\n")
+	message.WriteString("---\r\n\r\n")
+	message.WriteString("We received a request to reset your Restaurant Hub password.\r\n")
+	message.WriteString("This link is valid for 1 hour. If you did not request this, you can ignore this email.\r\n\r\n")
 	message.WriteString(resetURL + "\r\n")
 
-	var auth smtp.Auth
-	if username != "" || password != "" {
-		auth = smtp.PlainAuth("", username, password, host)
+	auth := smtp.PlainAuth("", username, password, host)
+	return sendMail(net.JoinHostPort(host, port), auth, sender, []string{recipient}, message.Bytes())
+}
+
+func parsePlainEmailAddress(value string) (string, error) {
+	if strings.ContainsAny(value, "\r\n") {
+		return "", errors.New("email address contains a newline")
 	}
-	return smtp.SendMail(host+":"+port, auth, from, []string{to}, message.Bytes())
+	parsed, err := mail.ParseAddress(value)
+	if err != nil || parsed.Address != value {
+		return "", errors.New("email address must not include a display name")
+	}
+	return parsed.Address, nil
 }
 
 func hideUserPassword(user *entity.User) *entity.User {

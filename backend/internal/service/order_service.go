@@ -175,7 +175,7 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 	return s.repo.FindOrder(restaurantID, created.ID)
 }
 
-func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
+func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate, paymentStatus, search string, includeSummary bool, page, limit int) (*repository.OrderListResult, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -185,7 +185,17 @@ func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint
 	if limit > 200 {
 		limit = 200
 	}
-	return s.repo.ListOrders(restaurantID, strings.TrimSpace(status), tableID, strings.TrimSpace(orderDate), page, limit)
+	return s.repo.ListOrders(
+		restaurantID,
+		strings.TrimSpace(status),
+		tableID,
+		strings.TrimSpace(orderDate),
+		strings.TrimSpace(paymentStatus),
+		strings.TrimSpace(search),
+		includeSummary,
+		page,
+		limit,
+	)
 }
 
 func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, error) {
@@ -429,6 +439,49 @@ func (s *OrderService) CancelOrder(restaurantID, userID, orderID uint, reason st
 		now := repository.BangkokNow()
 		order.ClosedAt = &now
 		if err := setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, order.CancelledReason); err != nil {
+			return err
+		}
+		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
+			return err
+		}
+		changed = order.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindOrder(restaurantID, changed)
+}
+
+func validateEmptyTableClose(order *entity.Order) error {
+	if order == nil || order.OrderType != entity.OrderTypeDineIn || order.TableID == nil || *order.TableID == 0 {
+		return errors.New("only an empty dine-in table can be closed")
+	}
+	if order.Status != entity.OrderStatusOpen {
+		return errors.New("only an open table can be closed without an order")
+	}
+	if len(order.Items) > 0 {
+		return errors.New("table order already has items")
+	}
+	return nil
+}
+
+func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*entity.Order, error) {
+	var changed uint
+	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
+		order, err := tx.FindOrder(restaurantID, orderID)
+		if err != nil {
+			return err
+		}
+		if err := validateEmptyTableClose(order); err != nil {
+			return err
+		}
+
+		const reason = "empty table closed"
+		order.CancelledReason = reason
+		now := repository.BangkokNow()
+		order.ClosedAt = &now
+		if err := setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, reason); err != nil {
 			return err
 		}
 		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {

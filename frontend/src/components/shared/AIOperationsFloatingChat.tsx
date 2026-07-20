@@ -175,37 +175,41 @@ export default function AIOperationsFloatingChat() {
 
   // Load saved messages on mount
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("restaurant_ai_chat");
-      if (saved) {
-        try {
-          const parsed: unknown = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const rehydrated = parsed.map((m) => {
-              const stored = m as StoredMessage;
-              return {
-              ...m,
-              createdAt: stored.createdAt ? new Date(stored.createdAt) : new Date(),
-              };
-            });
-            setMessages(rehydrated);
-            return;
+    const hydrateTimer = window.setTimeout(() => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("restaurant_ai_chat");
+        if (saved) {
+          try {
+            const parsed: unknown = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const rehydrated = parsed.map((m) => {
+                const stored = m as StoredMessage;
+                return {
+                  ...m,
+                  createdAt: stored.createdAt ? new Date(stored.createdAt) : new Date(),
+                };
+              });
+              setMessages(rehydrated);
+              return;
+            }
+          } catch (e) {
+            console.error("Failed to parse saved chat messages:", e);
           }
-        } catch (e) {
-          console.error("Failed to parse saved chat messages:", e);
         }
+
+        // Default initial welcome message if no history
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            content: copy.welcome,
+            createdAt: new Date(),
+          },
+        ]);
       }
-      
-      // Default initial welcome message if no history
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: copy.welcome,
-          createdAt: new Date(),
-        },
-      ]);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(hydrateTimer);
   }, [copy.welcome]);
 
   // Save messages to localStorage when updated
@@ -279,7 +283,7 @@ export default function AIOperationsFloatingChat() {
     setMessages((previous) => [
       ...previous,
       {
-        id: `confirm-${Date.now()}`,
+        id: `confirm-${previous.length}`,
         role: "assistant",
         content: action.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing."),
         createdAt: new Date(),
@@ -301,29 +305,30 @@ export default function AIOperationsFloatingChat() {
     setInput("");
     
     // Add user message
-    const userMsgId = `user-${Date.now()}`;
-    const userMsg: Message = {
-      id: userMsgId,
-      role: "user",
-      content: trimmed,
-      createdAt: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: `user-${previous.length}`,
+        role: "user",
+        content: trimmed,
+        createdAt: new Date(),
+      },
+    ]);
 
     const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
     if (navigation) {
-      const assistantMsg: Message = {
-        id: `nav-${Date.now()}`,
-        role: "assistant",
-        content: navigation.message,
-        createdAt: new Date(),
-        actions: navigation.kind === "suggest"
-          ? navigation.options.map((option) => ({ id: option.href, ...option }))
-          : undefined,
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `nav-${previous.length}`,
+          role: "assistant",
+          content: navigation.message,
+          createdAt: new Date(),
+          actions: navigation.kind === "suggest"
+            ? navigation.options.map((option) => ({ id: option.href, ...option }))
+            : undefined,
+        },
+      ]);
       if (navigation.kind === "navigate" && !navigation.alreadyThere) {
         router.push(navigation.href);
       }
@@ -335,7 +340,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `clarify-${Date.now()}`,
+          id: `clarify-${previous.length}`,
           role: "assistant",
           content: clarification.message,
           createdAt: new Date(),
@@ -349,7 +354,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `permission-${Date.now()}`,
+          id: `permission-${previous.length}`,
           role: "assistant",
           content: language === "th"
             ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนการวิเคราะห์ยอดขายและคลังต้องใช้สิทธิ์ผู้จัดการหรือเจ้าของร้าน"
@@ -366,19 +371,20 @@ export default function AIOperationsFloatingChat() {
       const response = await askOperationsAI(trimmed, conversationHistory());
       const data: AIAskResponse = response.data;
       
-      const assistantMsg: Message = {
-        id: `ai-${Date.now()}`,
-        role: "assistant",
-        content: data.answer,
-        createdAt: new Date(),
-        actions: data.intent === "unclear"
-          ? getUnclearRequestActions(activeMembership, language)
-          : data.intent === "analysis"
-            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
-            : undefined,
-      };
-      
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `ai-${previous.length}`,
+          role: "assistant",
+          content: data.answer,
+          createdAt: new Date(),
+          actions: data.intent === "unclear"
+            ? getUnclearRequestActions(activeMembership, language)
+            : data.intent === "analysis"
+              ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+              : undefined,
+        },
+      ]);
       
       if (data.snapshot) {
         setLatestSnapshot(data.snapshot);
@@ -402,13 +408,15 @@ export default function AIOperationsFloatingChat() {
           : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
       }
           
-      const errorMsg: Message = {
-        id: `err-${Date.now()}`,
-        role: "system",
-        content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
-        createdAt: new Date(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `err-${previous.length}`,
+          role: "system",
+          content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
+          createdAt: new Date(),
+        },
+      ]);
     } finally {
       setLoading(false);
     }

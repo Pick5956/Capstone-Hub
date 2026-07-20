@@ -359,16 +359,27 @@ export default function InventoryPage() {
   );
 
   useEffect(() => {
-    if (!canView) {
-      setLoading(false);
-      return;
-    }
-    Promise.all([listIngredients(), listIngredientCategories()])
-      .then(([ingredientResponse, categoryResponse]) => {
-        setIngredients(ingredientResponse.data.ingredients ?? []);
-        setCategories(categoryResponse.data.categories ?? []);
-      })
-      .finally(() => setLoading(false));
+    let active = true;
+    const loadTimer = window.setTimeout(() => {
+      if (!canView) {
+        setLoading(false);
+        return;
+      }
+      Promise.all([listIngredients(), listIngredientCategories()])
+        .then(([ingredientResponse, categoryResponse]) => {
+          if (!active) return;
+          setIngredients(ingredientResponse.data.ingredients ?? []);
+          setCategories(categoryResponse.data.categories ?? []);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(loadTimer);
+    };
   }, [canView]);
 
   const totalItems = ingredients.length;

@@ -111,25 +111,29 @@ export default function InvitationAcceptPage() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError("");
-    getInvitationByToken(token)
-      .then((res) => {
-        if (!active) return;
-        setInvitation(res.data.invitation);
-        setUsable(res.data.usable);
-      })
-      .catch(() => {
-        if (!active) return;
-        setInvitation(null);
-        setUsable(false);
-        setError(copy.fetchError);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const loadTimer = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+      getInvitationByToken(token)
+        .then((res) => {
+          if (!active) return;
+          setInvitation(res.data.invitation);
+          setUsable(res.data.usable);
+        })
+        .catch(() => {
+          if (!active) return;
+          setInvitation(null);
+          setUsable(false);
+          setError(copy.fetchError);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
+
     return () => {
       active = false;
+      window.clearTimeout(loadTimer);
     };
   }, [copy.fetchError, token]);
 

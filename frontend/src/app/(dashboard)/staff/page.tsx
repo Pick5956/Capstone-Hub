@@ -312,7 +312,8 @@ export default function StaffPage() {
   };
 
   useEffect(() => {
-    refresh();
+    const loadTimer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId, allowed, language]);
 

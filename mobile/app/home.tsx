@@ -1,86 +1,118 @@
-import { Redirect, router } from 'expo-router';
-import type { Href } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, Text, useWindowDimensions, View } from 'react-native';
 
-import { MotionPressable, MotionView } from '@/src/components/motion';
+import { listOrders } from '@/src/api/order';
+import { listTables } from '@/src/api/table';
+import { AppScreen } from '@/src/components/app-shell';
+import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { money, orderStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { getWorkModeCopy } from '@/src/lib/work-mode';
 import { useAuth } from '@/src/providers/auth-provider';
-import { colors, layout, typeScale } from '@/src/theme';
+import { palette, radius, spacing, typeScale } from '@/src/theme';
+import type { Order } from '@/src/types/order';
+import type { RestaurantTable } from '@/src/types/table';
 
-const actions: Array<{
-  key: string;
-  label: string;
-  href: string;
-  permission: string;
-  fallback?: string;
-  detail: string;
-}> = [
-  { key: 'tables', label: 'รับออเดอร์', href: '/tables', permission: 'view_tables', fallback: 'take_order', detail: 'เปิดโต๊ะและส่งอาหารเข้าครัว' },
-  { key: 'orders', label: 'ออเดอร์', href: '/orders', permission: 'view_orders', detail: 'ดูออเดอร์และสถานะโต๊ะ' },
-  { key: 'kitchen', label: 'ครัว', href: '/kitchen', permission: 'view_kitchen', fallback: 'update_order_status', detail: 'จัดคิวอาหารและทำเสร็จ' },
-  { key: 'menu', label: 'เมนูอาหาร', href: '/menu', permission: 'view_menu', fallback: 'manage_menu', detail: 'ดู/สร้าง/แก้ไขเมนูและหมวด' },
-  { key: 'table-management', label: 'ผังโต๊ะ', href: '/table-management', permission: 'manage_table', detail: 'สร้าง/แก้ไขโต๊ะ โซน tag และ QR' },
-  { key: 'staff', label: 'พนักงาน', href: '/staff', permission: 'manage_staff', detail: 'เชิญพนักงานและจัดสิทธิ์' },
-  { key: 'settings', label: 'ตั้งค่าร้าน', href: '/settings', permission: 'manage_table', detail: 'ข้อมูลร้าน ภาษี และค่าบริการ' },
-];
+const activeStatuses = new Set(['open', 'sent_to_kitchen', 'cooking', 'ready', 'served']);
 
 export default function HomeScreen() {
-  const { activeMembership, signOut, user } = useAuth();
-
-  if (!user) {
-    return <Redirect href="/login" />;
-  }
-
-  if (!activeMembership) {
-    return <Redirect href="/restaurants" />;
-  }
-
-  const restaurant = activeMembership.restaurant;
-  const roleName = activeMembership.role?.name ?? 'staff';
+  const { activeMembership } = useAuth();
+  const { width } = useWindowDimensions();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [tables, setTables] = useState<RestaurantTable[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const workMode = getWorkModeCopy(activeMembership);
-  const availableActions = actions.filter((action) => {
-    return can(activeMembership, action.permission) || can(activeMembership, action.fallback || action.permission);
-  });
+  const restaurant = activeMembership?.restaurant;
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    setError(null);
+    try {
+      const [orderResponse, tableResponse] = await Promise.all([listOrders(), listTables()]);
+      setOrders(orderResponse.orders || []);
+      setTables(tableResponse.tables || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'โหลดภาพรวมร้านไม่สำเร็จ');
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    load();
+    const timer = setInterval(() => load(true), 15000);
+    return () => clearInterval(timer);
+  }, [load]));
+
+  const activeOrders = useMemo(() => orders.filter((order) => activeStatuses.has(order.status)), [orders]);
+  const readyCount = useMemo(() => activeOrders.reduce((sum, order) => sum + (order.items || []).filter((item) => item.status === 'ready').reduce((itemSum, item) => itemSum + item.quantity, 0), 0), [activeOrders]);
+  const kitchenCount = useMemo(() => activeOrders.reduce((sum, order) => sum + (order.items || []).filter((item) => item.status === 'pending' || item.status === 'cooking').length, 0), [activeOrders]);
+  const paidRevenue = useMemo(() => orders.filter((order) => order.payment_status === 'paid').reduce((sum, order) => sum + Number(order.grand_total || 0), 0), [orders]);
+  const compactStats = width < 390;
+
+  const priority = readyCount > 0
+    ? { title: `มีอาหารพร้อมเสิร์ฟ ${readyCount} รายการ`, detail: 'เปิดออเดอร์เพื่อส่งอาหารถึงโต๊ะ', label: 'ดูออเดอร์', href: '/orders' as const, tone: 'success' as const }
+    : kitchenCount > 0
+      ? { title: `ครัวกำลังทำ ${kitchenCount} รายการ`, detail: 'ติดตามคิวและอัปเดตอาหารที่ทำเสร็จ', label: 'เปิดคิวครัว', href: '/kitchen' as const, tone: 'warning' as const }
+      : { title: 'ร้านพร้อมรับออเดอร์', detail: 'เริ่มจากเลือกโต๊ะว่างหรือเปิดออเดอร์เดิม', label: 'เลือกโต๊ะ', href: '/tables' as const, tone: 'info' as const };
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={layout.scrollContainer}>
-      <View style={layout.headerRow}>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text selectable style={typeScale.kicker}>RESTAURANT HUB</Text>
-          <Text selectable style={typeScale.hero}>{restaurant?.name || 'ร้านของคุณ'}</Text>
-          <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-            {restaurant?.branch_name || 'ไม่มีชื่อสาขา'} · {roleName}
-          </Text>
+    <AppScreen
+      title={restaurant?.name || 'ภาพรวมร้าน'}
+      subtitle={`${restaurant?.branch_name || 'สาขาหลัก'} · ${workMode.title}`}
+      topLevel
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      action={<StatusBadge label={error ? 'ต้องตรวจสอบ' : 'อัปเดตอัตโนมัติ'} tone={error ? 'danger' : 'success'} />}
+    >
+      {error ? <Feedback title="อัปเดตข้อมูลไม่ได้" detail={error} tone="danger" /> : null}
+
+      <Surface style={{ backgroundColor: priority.tone === 'success' ? palette.successSoft : priority.tone === 'warning' ? palette.warningSoft : palette.infoSoft }}>
+        <SectionHeader title={priority.title} detail={priority.detail} action={<Button compact label={priority.label} onPress={() => router.push(priority.href)} />} />
+      </Surface>
+
+      <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+        <View style={{ flexDirection: compactStats ? 'column' : 'row' }}>
+          {[
+            { value: String(activeOrders.length), label: 'ออเดอร์ที่เปิด' },
+            { value: `${activeOrders.length}/${tables.length}`, label: 'โต๊ะใช้งาน' },
+            { value: String(readyCount), label: 'พร้อมเสิร์ฟ' },
+            { value: money(paidRevenue), label: 'ยอดรับเงิน' },
+          ].map((item, index) => (
+            <View key={item.label} style={{ minHeight: 82, flex: 1, justifyContent: 'center', gap: spacing.xs, borderLeftWidth: !compactStats && index ? 1 : 0, borderTopWidth: compactStats && index ? 1 : 0, borderColor: palette.border, paddingHorizontal: spacing.lg }}>
+              <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 19 }]}>{item.value}</Text>
+              <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
+            </View>
+          ))}
         </View>
-        <Pressable onPress={() => router.replace('/restaurants')} style={layout.secondaryButton}>
-          <Text style={layout.secondaryButtonText}>ร้าน</Text>
-        </Pressable>
-        <Pressable onPress={signOut} style={layout.secondaryButton}>
-          <Text style={layout.secondaryButtonText}>ออก</Text>
-        </Pressable>
-      </View>
+      </Surface>
 
-      <MotionView delay={60} style={layout.panel}>
-        <Text selectable style={typeScale.title}>{workMode.title}</Text>
-        <Text selectable style={[typeScale.body, { color: colors.muted }]}>
-          {workMode.hint}
-        </Text>
-      </MotionView>
+      <Surface>
+        <SectionHeader title="งานระหว่างกะ" detail={workMode.hint} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {(can(activeMembership, 'take_order') || can(activeMembership, 'view_tables')) ? <Button label="รับออเดอร์" onPress={() => router.push('/tables')} style={{ flexGrow: 1 }} /> : null}
+          {can(activeMembership, 'view_orders') ? <Button variant="secondary" label="ดูออเดอร์" onPress={() => router.push('/orders')} style={{ flexGrow: 1 }} /> : null}
+          {(can(activeMembership, 'view_kitchen') || can(activeMembership, 'update_order_status')) ? <Button variant="secondary" label="เปิดคิวครัว" onPress={() => router.push('/kitchen')} style={{ flexGrow: 1 }} /> : null}
+        </View>
+      </Surface>
 
-      <View style={layout.grid}>
-        {availableActions.map((action, index) => (
-          <MotionPressable
-            key={action.key}
-            delay={90 + index * 35}
-            onPress={() => router.push(action.href as Href)}
-            style={({ pressed }) => [layout.tile, pressed && { borderColor: colors.primary }]}
+      <View style={{ gap: spacing.md }}>
+        <SectionHeader title="ออเดอร์ล่าสุด" detail="รายการที่ต้องติดตามต่อในกะนี้" />
+        {activeOrders.length ? activeOrders.slice(0, 6).map((order) => (
+          <Pressable
+            key={order.ID}
+            onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: pressed ? 0.78 : 1 })}
           >
-            <Text selectable style={typeScale.cardTitle}>{action.label}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{action.detail}</Text>
-          </MotionPressable>
-        ))}
+            <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
+              <Text selectable numberOfLines={1} style={typeScale.cardTitle}>{order.table?.display_label || order.order_number}</Text>
+              <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{order.order_number} · {orderStatusLabel(order.status)}</Text>
+            </View>
+            <Text selectable style={typeScale.number}>{money(order.grand_total)}</Text>
+          </Pressable>
+        )) : !loading ? <EmptyState title="ยังไม่มีออเดอร์ระหว่างกะ" detail="เมื่อเปิดโต๊ะ รายการที่ต้องติดตามจะอยู่ตรงนี้" /> : null}
       </View>
-    </ScrollView>
+    </AppScreen>
   );
 }

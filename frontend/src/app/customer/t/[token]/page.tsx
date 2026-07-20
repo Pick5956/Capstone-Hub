@@ -95,7 +95,7 @@ export default function CustomerTableOrderPage() {
         summaryTitle: "Review items to add",
         summaryHint: "Check the items before sending. They will be sent as a new round for this table.",
         noActiveOrderTitle: "This table is not open yet",
-        noActiveOrderBody: "Ask staff to open this table in POS before guests can order from the QR code.",
+        noActiveOrderBody: "Ask staff to open this table before guests can order from the QR code.",
         submitting: "Sending",
         submitted: "Order sent to kitchen",
         currentOrder: "Sent items",
@@ -130,7 +130,8 @@ export default function CustomerTableOrderPage() {
   };
 
   useEffect(() => {
-    void load();
+    const loadTimer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, language]);
 

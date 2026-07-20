@@ -1,8 +1,36 @@
 import { apiClient } from "./apiClient";
 import type { AddOrderItemInput, Bill, OpenOrderInput, Order, OrderItemStatus, OrderStatus } from "../types/order";
 
-export const listOrders = (params?: { status?: OrderStatus | ""; table_id?: number; date?: string; page?: number; limit?: number }) =>
-  apiClient.get<{ orders: Order[] }>("/api/v1/orders", { params });
+export type OrderListStatus = OrderStatus | "active" | "closed" | "";
+
+export interface OrderListSummary {
+  total: number;
+  active: number;
+  closed: number;
+  statuses: Record<OrderStatus, number>;
+}
+
+export interface OrderListResponse {
+  orders: Order[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    has_more: boolean;
+  };
+  summary?: OrderListSummary;
+}
+
+export const listOrders = (params?: {
+  status?: OrderListStatus;
+  payment_status?: "paid" | "unpaid" | "";
+  search?: string;
+  include_summary?: boolean;
+  table_id?: number;
+  date?: string;
+  page?: number;
+  limit?: number;
+}) => apiClient.get<OrderListResponse>("/api/v1/orders", { params });
 
 export const getOrder = (id: string | number) =>
   apiClient.get<Order>(`/api/v1/orders/${id}`);
@@ -15,6 +43,9 @@ export const updateOrder = (id: number, data: { customer_count: number; note?: s
 
 export const cancelOrder = (id: number, reason: string) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/cancel`, { reason });
+
+export const closeEmptyTableOrder = (id: number) =>
+  apiClient.post<Order>(`/api/v1/orders/${id}/close-empty-table`);
 
 export const closeOrder = (id: number) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/close`);
