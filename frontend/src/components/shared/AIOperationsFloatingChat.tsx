@@ -219,7 +219,7 @@ export default function AIOperationsFloatingChat() {
   useEffect(() => {
     if (messagesEndRef.current) {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
+      messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "end" });
     }
   }, [messages, loading]);
 
@@ -631,7 +631,7 @@ export default function AIOperationsFloatingChat() {
           </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
