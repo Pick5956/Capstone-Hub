@@ -582,22 +582,32 @@ export default function RestaurantSettingsPage() {
 
             <SettingsPanel title={copy.billing} hint={copy.billingHint}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex min-h-14 items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                  <span>
-                    <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.service}</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.serviceHelp}</span>
-                  </span>
-                  <input type="checkbox" checked={form.service_charge_enabled} onChange={(event) => setBool("service_charge_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
-                </label>
-                <Field label={`${copy.service} %`} value={form.service_charge_rate} onChange={(value) => setField("service_charge_rate", value)} error={errors.service_charge_rate} inputMode="decimal" />
-                <label className="flex min-h-14 items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-                  <span>
-                    <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.vat}</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.vatHelp}</span>
-                  </span>
-                  <input type="checkbox" checked={form.vat_enabled} onChange={(event) => setBool("vat_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
-                </label>
-                <Field label={`${copy.vat} %`} value={form.vat_rate} onChange={(value) => setField("vat_rate", value)} error={errors.vat_rate} inputMode="decimal" />
+                {/* Service charge: toggle + rate combined */}
+                <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
+                    <span>
+                      <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.service}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.serviceHelp}</span>
+                    </span>
+                    <input type="checkbox" checked={form.service_charge_enabled} onChange={(event) => setBool("service_charge_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
+                  </label>
+                  <div className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                    <Field label={`${copy.service} %`} value={form.service_charge_rate} onChange={(value) => setField("service_charge_rate", value)} error={errors.service_charge_rate} inputMode="decimal" />
+                  </div>
+                </div>
+                {/* VAT: toggle + rate combined */}
+                <div className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
+                    <span>
+                      <span className="block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.vat}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.vatHelp}</span>
+                    </span>
+                    <input type="checkbox" checked={form.vat_enabled} onChange={(event) => setBool("vat_enabled", event.target.checked)} className="h-4 w-4 accent-orange-600" />
+                  </label>
+                  <div className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-800">
+                    <Field label={`${copy.vat} %`} value={form.vat_rate} onChange={(value) => setField("vat_rate", value)} error={errors.vat_rate} inputMode="decimal" />
+                  </div>
+                </div>
                 <Field label={copy.promptpayName} value={form.promptpay_name} onChange={(value) => setField("promptpay_name", value)} />
                 {/* PromptPay QR Uploader */}
                 <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
