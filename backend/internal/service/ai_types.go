@@ -38,6 +38,7 @@ type AISnapshot struct {
 	TopMenuItems      []repository.AIMenuSummary       `json:"top_menu_items"`
 	MenuMargins       []repository.AIMenuMarginSummary `json:"menu_margins"`
 	LowMarginMenus    []repository.AIMenuMarginSummary `json:"low_margin_menus"`
+	HighMarginMenus   []repository.AIMenuMarginSummary `json:"high_margin_menus"`
 	AnalysisReadiness AIAnalysisReadiness              `json:"analysis_readiness"`
 	InventorySummary  AIInventorySummary               `json:"inventory_summary"`
 	StockRisks        []AIStockRisk                    `json:"stock_risks"`

@@ -35,6 +35,7 @@ type AIToolName string
 
 const (
 	AIToolGetLowestMarginMenu    AIToolName = "get_lowest_margin_menu"
+	AIToolGetHighestMarginMenu   AIToolName = "get_highest_margin_menu"
 	AIToolGetLowStockIngredients AIToolName = "get_low_stock_ingredients"
 	AIToolGetTopSellingMenus     AIToolName = "get_top_selling_menus"
 	AIToolGetInventoryValuation  AIToolName = "get_inventory_valuation"
@@ -58,6 +59,7 @@ type AIRouterResult struct {
 type AIToolResult struct {
 	Tool                AIToolName
 	LowestMarginMenu    *repository.AIMenuMarginSummary
+	HighestMarginMenu   *repository.AIMenuMarginSummary
 	LowStockIngredients []AIStockRisk
 	TopSellingMenus     []repository.AIMenuSummary
 	InventoryValuation  *AIInventorySummary
@@ -72,7 +74,7 @@ type AISalesSummary struct {
 
 func isSupportedReadOnlyTool(tool AIToolName) bool {
 	switch tool {
-	case AIToolGetLowestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary:
+	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary:
 		return true
 	default:
 		return false
@@ -193,6 +195,15 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 		}
 		menu := snapshot.LowMarginMenus[0]
 		return AIToolResult{Tool: tool, LowestMarginMenu: &menu}, nil
+	case AIToolGetHighestMarginMenu:
+		if !snapshot.AnalysisReadiness.CanAnalyzeMargin {
+			return AIToolResult{Tool: tool}, nil
+		}
+		if len(snapshot.HighMarginMenus) == 0 {
+			return AIToolResult{Tool: tool}, nil
+		}
+		menu := snapshot.HighMarginMenus[0]
+		return AIToolResult{Tool: tool, HighestMarginMenu: &menu}, nil
 	case AIToolGetLowStockIngredients:
 		return AIToolResult{Tool: tool, LowStockIngredients: snapshot.StockRisks}, nil
 	case AIToolGetTopSellingMenus:
@@ -231,6 +242,24 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
 			"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+			menu.MenuName,
+			menu.Quantity,
+			menu.Revenue,
+			menu.Cost,
+			menu.Profit,
+			menu.Margin,
+			menu.Cost/quantity,
+			menu.Profit/quantity,
+		), true
+
+	case AIToolGetHighestMarginMenu:
+		menu := result.HighestMarginMenu
+		if menu == nil || menu.Quantity <= 0 {
+			return "ตอนนี้ยังไม่มีข้อมูล Margin ของเมนูที่ยืนยันได้จากรายการขายและต้นทุนที่บันทึกครบครับ", true
+		}
+		quantity := float64(menu.Quantity)
+		return fmt.Sprintf(
+			"เมนูที่ทำกำไรได้ดีที่สุด (Margin สูงสุด) คือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นตัวทำกำไรหลักของร้าน เหมาะกับการผลักดันให้ขายมากขึ้น หากต้องการวิเคราะห์แนวทางโปรโมทหรือจัดเซ็ต ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
 			menu.MenuName,
 			menu.Quantity,
 			menu.Revenue,

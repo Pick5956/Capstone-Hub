@@ -87,6 +87,10 @@ func (r *AIRepository) LowMarginMenus(restaurantID uint, since time.Time) ([]AIM
 	return r.menuMargins(restaurantID, since, "margin asc, revenue desc", 8)
 }
 
+func (r *AIRepository) HighMarginMenus(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
+	return r.menuMargins(restaurantID, since, "margin desc, revenue desc", 8)
+}
+
 func (r *AIRepository) AnalysisCoverage(restaurantID uint, since time.Time) (AIAnalysisCoverage, error) {
 	var coverage AIAnalysisCoverage
 	err := r.db.Table("order_items").

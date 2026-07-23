@@ -162,11 +162,12 @@ func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
 func TestGetGeminiToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 5 {
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 6 {
 		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
 		"get_lowest_margin_menu":    true,
+		"get_highest_margin_menu":   true,
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -185,11 +186,12 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 func TestGetGroqToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGroqTools()
-	if len(tools) != 5 {
+	if len(tools) != 6 {
 		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
 		"get_lowest_margin_menu":    true,
+		"get_highest_margin_menu":   true,
 		"get_low_stock_ingredients": true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -239,6 +241,58 @@ func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T)
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
 		}
+	}
+}
+
+func TestHighestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems:           20,
+			MarginItems:          20,
+			CostedMarginItems:    20,
+			SoldMenus:            1,
+			SoldMenusWithRecipes: 1,
+		}),
+		HighMarginMenus: []repository.AIMenuMarginSummary{{
+			MenuName: "ต้มยำกุ้ง",
+			Quantity: 20,
+			Revenue:  3000,
+			Cost:     900,
+			Profit:   2100,
+			Margin:   70.00,
+		}},
+	}
+
+	result, err := executeReadOnlyTool(AIToolGetHighestMarginMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("highest-margin tool should produce an answer when validated data is available")
+	}
+	for _, expected := range []string{"ต้มยำกุ้ง", "Margin 70.00%", "ต้นทุนรวม 900.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 45.00 บาท", "กำไรเฉลี่ยต่อจาน 105.00 บาท"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("highest margin answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestHighestMarginToolBlockedWhenMarginNotReady(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems:        20,
+			MarginItems:       20,
+			CostedMarginItems: 10, // partial cost coverage -> CanAnalyzeMargin false
+		}),
+		HighMarginMenus: []repository.AIMenuMarginSummary{{MenuName: "ต้มยำกุ้ง", Quantity: 20, Revenue: 3000, Cost: 900, Profit: 2100, Margin: 70}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetHighestMarginMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	if result.HighestMarginMenu != nil {
+		t.Fatal("highest-margin tool must not return a menu when margin analysis is not ready")
 	}
 }
 

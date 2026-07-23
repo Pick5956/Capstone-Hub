@@ -18,5 +18,15 @@
     "name": "ordinary conversation",
     "question": "ขอบคุณครับ ช่วยได้มากเลย",
     "expected_intent": "conversation"
+  },
+  {
+    "name": "casual slang greeting",
+    "question": "โย่ว",
+    "expected_intent": "conversation"
+  },
+  {
+    "name": "casual greeting variant",
+    "question": "ว่าไงเพื่อน",
+    "expected_intent": "conversation"
   }
 ]
