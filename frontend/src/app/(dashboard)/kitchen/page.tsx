@@ -81,7 +81,6 @@ export default function KitchenPage() {
         eyebrow: "Kitchen",
         title: "จอครัว",
         subtitle: "ดูออเดอร์ที่ส่งเข้าครัวและอัปเดตเมนูที่พร้อมเสิร์ฟ",
-        refresh: "รีเฟรช",
         emptyTitle: "ยังไม่มีงานในครัว",
         emptyHint: "เมื่อพนักงานส่งออเดอร์เข้าครัว รายการจะแสดงที่นี่",
         table: "โต๊ะ",
@@ -101,7 +100,6 @@ export default function KitchenPage() {
         eyebrow: "Kitchen",
         title: "Kitchen Display",
         subtitle: "Track sent orders and mark items ready for service.",
-        refresh: "Refresh",
         emptyTitle: "No kitchen tickets",
         emptyHint: "Orders will appear here after staff send them to the kitchen.",
         table: "Table",
@@ -226,11 +224,6 @@ export default function KitchenPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       lastUpdated={lastUpdatedText}
-      actions={(
-        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
-          {copy.refresh}
-        </button>
-      )}
       stats={[
         { label: copy.cooking, value: cookingCount, tone: "warning" },
         { label: copy.ready, value: readyCount, tone: "good" },

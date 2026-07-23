@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Bell, CheckCircle2, Clock3, Minus, Plus, Printer, X } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, Clock3, MapPin, Minus, Plus, Printer, ReceiptText, Search, UtensilsCrossed, WalletCards, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -146,6 +146,9 @@ export default function PosOrderDetailPage() {
       back: "กลับไปเลือกโต๊ะ",
       search: "ค้นหาเมนู",
       all: "ทั้งหมด",
+      tableLabel: "โต๊ะ",
+      orderLabel: "ออเดอร์",
+      itemsLabel: "รายการ",
       add: "เพิ่ม",
       options: "ตัวเลือก",
       requiredOption: "ต้องเลือก",
@@ -192,6 +195,9 @@ export default function PosOrderDetailPage() {
       back: "Back to tables",
       search: "Search menu",
       all: "All",
+      tableLabel: "Table",
+      orderLabel: "Order",
+      itemsLabel: "Items",
       add: "Add",
       options: "Options",
       requiredOption: "Required",
@@ -667,8 +673,24 @@ export default function PosOrderDetailPage() {
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} className="ui-press h-10 min-w-0 flex-1 truncate rounded-md border border-[#dfe3e8] bg-white px-2.5 text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:flex-none">
-                  {`${orderLocationLabel(order, language)} · ${order.order_number} · ${language === "th" ? "รายการ" : "Items"} ${orderItemCount}`}
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} className="ui-press flex h-10 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-[#dfe3e8] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:flex-none">
+                  <span className="flex min-w-0 items-center gap-1.5 px-2">
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
+                    <span className="hidden xl:inline">{copy.tableLabel}</span>
+                    <span className="truncate">{orderLocationLabel(order, language)}</span>
+                  </span>
+                  <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
+                  <span className="flex min-w-0 items-center gap-1.5 px-2">
+                    <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                    <span className="hidden xl:inline">{copy.orderLabel}</span>
+                    <span className="truncate">{order.order_number}</span>
+                  </span>
+                  <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
+                  <span className="flex shrink-0 items-center gap-1.5 px-2">
+                    <UtensilsCrossed className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+                    <span className="hidden xl:inline">{copy.itemsLabel}</span>
+                    <span className="font-mono tabular-nums">{orderItemCount}</span>
+                  </span>
                 </button>
                 {canCloseTable ? (
                   <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[12px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-900">
@@ -676,7 +698,8 @@ export default function PosOrderDetailPage() {
                   </button>
                 ) : null}
                 {pendingItemCount === 0 && order.status === "served" ? (
-                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press h-10 shrink-0 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                    <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
                   </button>
                 ) : null}
@@ -691,7 +714,10 @@ export default function PosOrderDetailPage() {
                 onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
                 options={categoryOptions}
               />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="h-10 min-w-0 rounded-md border border-[#dfe3e8] bg-white px-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900 lg:order-3" />
+              <div className="relative min-w-0 lg:order-3">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[#dfe3e8] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900" />
+              </div>
             </div>
           )}
           <div aria-hidden="true" className="hidden lg:order-5 lg:block" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Download, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, KeyRound, Loader2 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -66,7 +66,6 @@ export default function TablesPage() {
         title: "ผังโต๊ะ",
         subtitleManage: "จัดโซน เลขโต๊ะ และคุณสมบัติโต๊ะสำหรับร้านทุกขนาด",
         subtitleView: "ดูสถานะโต๊ะและโซนแบบ read-only",
-        refresh: "รีเฟรช",
         total: "โต๊ะทั้งหมด",
         occupied: "ใช้งาน",
         reserved: "จอง",
@@ -150,7 +149,6 @@ export default function TablesPage() {
         title: "Table layout",
         subtitleManage: "Manage zones, automatic table numbering, and table attributes.",
         subtitleView: "View table status and zones in read-only mode.",
-        refresh: "Refresh",
         total: "Total tables",
         occupied: "Occupied",
         reserved: "Reserved",
@@ -650,7 +648,6 @@ export default function TablesPage() {
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.subtitleManage : copy.subtitleView}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.refresh}</button>
           {canManage && <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.zoneManager}</button>}
           {canManage && <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.tagManager}</button>}
           {canManage && <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">+ {copy.createTable}</button>}
@@ -800,7 +797,7 @@ export default function TablesPage() {
                       title={copy.regenerateQr}
                       className="ui-press absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-red-600 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-200"
                     >
-                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                      <KeyRound className="h-4 w-4" aria-hidden="true" />
                     </button>
                     <div className="grid grid-cols-[96px_1fr] gap-3">
                       <div className="relative h-24 w-24 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700">

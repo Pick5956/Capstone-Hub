@@ -331,7 +331,7 @@ func sendPasswordResetEmailWith(
 	}
 
 	var message bytes.Buffer
-	message.WriteString("From: Restaurant Hub <" + sender + ">\r\n")
+	message.WriteString("From: dishy.pro <" + sender + ">\r\n")
 	message.WriteString("To: " + recipient + "\r\n")
 	message.WriteString("Subject: Reset your Restaurant Hub password\r\n")
 	message.WriteString("MIME-Version: 1.0\r\n")

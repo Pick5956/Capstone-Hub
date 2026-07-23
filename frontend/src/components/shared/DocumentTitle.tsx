@@ -13,7 +13,7 @@ export default function DocumentTitle() {
   useEffect(() => {
     const restaurantName = activeMembership?.restaurant?.name?.trim();
     const orderReference = new URLSearchParams(window.location.search).get("ref") || undefined;
-    const title = pageTitle(pathname, language, restaurantName || "Restaurant Hub", orderReference);
+    const title = pageTitle(pathname, language, restaurantName || "Dishy", orderReference);
     const syncTitle = () => {
       if (document.title !== title) document.title = title;
     };

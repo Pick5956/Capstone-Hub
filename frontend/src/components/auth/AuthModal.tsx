@@ -184,8 +184,8 @@ function BrandLine() {
     <div className="flex items-center gap-2">
       <AppLogo size={28} />
       <div className="leading-none">
-        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Restaurant</p>
-        <p className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">HUB</p>
+        <p className="text-[13px] font-bold tracking-[-0.02em] text-gray-900 dark:text-white">Dishy</p>
+        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-400 dark:text-gray-500">Restaurant operations</p>
       </div>
     </div>
   );
@@ -742,7 +742,9 @@ export default function AuthModal({
                     <span className="text-[11px] text-gray-400 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
-                  <div className="flex min-h-10 justify-center" ref={googleButtonRef} />
+                  {/* Google briefly resizes its iframe while initializing. Keep that
+                      third-party reflow from moving the centered modal on slower loads. */}
+                  <div className="flex h-11 overflow-hidden justify-center" ref={googleButtonRef} />
                 </>
               )}
             </form>

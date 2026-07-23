@@ -16,7 +16,6 @@ import {
   Loader2,
   PackageOpen,
   ReceiptText,
-  RefreshCw,
   Table2,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
@@ -89,7 +88,7 @@ function buildCopy(language: "th" | "en") {
         previousDay: "วันก่อน",
         nextDay: "วันถัดไป",
         chooseDate: "เลือกวันที่",
-        refresh: "รีเฟรช",
+        loading: "กำลังโหลด",
         updated: "อัปเดต",
         ordersTotal: "ออเดอร์ทั้งหมด",
         paidRevenue: "ยอดรับชำระ",
@@ -162,7 +161,7 @@ function buildCopy(language: "th" | "en") {
         previousDay: "Previous day",
         nextDay: "Next day",
         chooseDate: "Choose date",
-        refresh: "Refresh",
+        loading: "Loading",
         updated: "Updated",
         ordersTotal: "Total orders",
         paidRevenue: "Paid revenue",
@@ -314,35 +313,33 @@ function CollapsibleCard({
   // Closing (or switching straight to a different card) snaps shut instantly.
   // Opening only fades in when `animateOpen` is set — i.e. opening from a
   // fully-closed state, not switching from one open card to another.
-  const [mounted, setMounted] = useState(expanded);
-  const [visible, setVisible] = useState(expanded);
+  const [animatedVisible, setAnimatedVisible] = useState(false);
 
   useEffect(() => {
     if (expanded) {
       if (animateOpen) {
-        setMounted(true);
         // Two rAFs: the first lets the browser paint the just-mounted "invisible"
         // state; only then do we flip to visible, so the transition has a real
         // starting point to animate from (a single rAF can land in the same
         // paint as the mount and skip the animation entirely).
         let innerRaf = 0;
         const outerRaf = requestAnimationFrame(() => {
-          innerRaf = requestAnimationFrame(() => setVisible(true));
+          innerRaf = requestAnimationFrame(() => setAnimatedVisible(true));
         });
         return () => {
           cancelAnimationFrame(outerRaf);
           cancelAnimationFrame(innerRaf);
         };
       }
-      setMounted(true);
-      setVisible(true);
       return;
     }
-    setMounted(false);
-    setVisible(false);
+    const resetRaf = requestAnimationFrame(() => setAnimatedVisible(false));
+    return () => cancelAnimationFrame(resetRaf);
   }, [expanded, animateOpen]);
 
-  if (!mounted) {
+  const visible = expanded && (!animateOpen || animatedVisible);
+
+  if (!expanded) {
     // A sibling card is expanded and this one isn't — shrink way down, but
     // keep showing the summary numbers (just in a much more compact row).
     if (dimmed) {
@@ -403,7 +400,7 @@ function CollapsibleCard({
         onToggle();
       }}
       style={{ order: orderRank }}
-      className={`col-span-full origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 ${
+      className={`col-span-full cursor-pointer origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 ${
         visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
       }`}
     >
@@ -494,7 +491,9 @@ export default function Home() {
   useEffect(() => {
     if (!activeMembership?.restaurant_id) return;
     let cancelled = false;
-    setTopItemsLoading(true);
+    const loadingFrame = requestAnimationFrame(() => {
+      if (!cancelled) setTopItemsLoading(true);
+    });
     getTopMenuItemsByMonth(topItemsMonthDate.getFullYear(), topItemsMonthDate.getMonth() + 1)
       .then((res) => {
         if (!cancelled) setTopItemsData(res.data.items ?? []);
@@ -507,6 +506,7 @@ export default function Home() {
       });
     return () => {
       cancelled = true;
+      cancelAnimationFrame(loadingFrame);
     };
   }, [topItemsMonthDate, activeMembership?.restaurant_id]);
 
@@ -797,7 +797,7 @@ export default function Home() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-[22px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label={copy.refresh} /> : null}
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label={copy.loading} /> : null}
             </div>
             <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{isToday ? copy.todayMode : copy.historyMode} · {selectedDateLabel}</p>
           </div>
@@ -817,9 +817,6 @@ export default function Home() {
               </button>
             </div>
             {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
-            <button type="button" disabled={loading || refreshing} onClick={() => { void loadOperations(true); }} aria-label={copy.refresh} title={copy.refresh} className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            </button>
           </div>
         </div>
       </header>
@@ -831,7 +828,7 @@ export default function Home() {
         {dateLoading ? (
           <div className="flex min-h-72 items-center justify-center rounded-md border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {copy.refresh}
+            {copy.loading}
           </div>
         ) : (
           <>
@@ -888,7 +885,7 @@ export default function Home() {
                   {activeChartLoading ? (
                     <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {copy.refresh}
+                      {copy.loading}
                     </div>
                   ) : activeChartHasData ? (
                     <ChartBox data={activeChartData} title={activeChartTitle} language={language} lossColoring={chartMetric === "profit"} />
@@ -1088,14 +1085,10 @@ export default function Home() {
                     </div>
                     <button type="button" onClick={() => router.push("/orders")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewAllOrders}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
-                  <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
-                </div>
-                <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {tables.map((table) => (
-                    <button key={table.key} type="button" onClick={() => router.push("/pos/tables")} className="ui-press min-h-24 bg-white p-3 text-left hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-semibold text-gray-950 dark:text-white">{table.label}</span>
-                        <span className={`text-[10px] font-semibold ${table.status === "occupied" ? "text-amber-600" : table.status === "available" ? "text-emerald-600" : table.status === "reserved" ? "text-sky-600" : "text-gray-400"}`}>{copy[table.status]}</span>
+                  {orders.length ? (
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 sm:grid">
+                        <span>{copy.order}</span><span>{copy.location}</span><span>{copy.status}</span><span className="text-right">{copy.total}</span><span className="text-right">{copy.time}</span>
                       </div>
                       {orders.slice(0, 10).map((order) => (
                         <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 sm:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] sm:items-center sm:gap-3">
@@ -1123,7 +1116,7 @@ export default function Home() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {availableTables} · {copy.reserved} {reservedTables}</p>
-                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openPOS}<ArrowRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {tables.map((table) => (

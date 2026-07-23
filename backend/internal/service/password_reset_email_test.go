@@ -54,7 +54,7 @@ func TestSendPasswordResetEmailWithSendsConfiguredMessage(t *testing.T) {
 		t.Fatalf("recipients = %#v, want owner@example.test", gotRecipients)
 	}
 	for _, expected := range []string{
-		"From: Restaurant Hub <no-reply@example.test>",
+		"From: dishy.pro <no-reply@example.test>",
 		"To: owner@example.test",
 		"Subject: Reset your Restaurant Hub password",
 		resetURL,

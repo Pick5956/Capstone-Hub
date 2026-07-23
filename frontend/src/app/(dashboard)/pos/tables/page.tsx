@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Search, ShoppingBag } from "lucide-react";
+import { Bell, MapPin, ReceiptText, Search, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -108,6 +108,7 @@ export default function PosTablesPage() {
         title: "เลือกโต๊ะ",
         subtitle: "แตะโต๊ะว่างเพื่อเปิดออเดอร์ หรือแตะโต๊ะที่ใช้งานเพื่อทำรายการต่อ",
         search: "ค้นหาโต๊ะ",
+        table: "โต๊ะ",
         takeaway: "สั่งกลับบ้าน",
         openTakeaway: "เปิดออเดอร์กลับบ้าน",
         takeawayHelp: "ใช้สำหรับลูกค้าที่ไม่ได้นั่งโต๊ะ",
@@ -162,6 +163,7 @@ export default function PosTablesPage() {
         title: "Select table",
         subtitle: "Tap a free table to open an order, or continue an active table.",
         search: "Search tables",
+        table: "Table",
         takeaway: "Takeaway",
         openTakeaway: "Open takeaway order",
         takeawayHelp: "Use this for customers who are not seated at a table.",
@@ -688,15 +690,32 @@ export default function PosTablesPage() {
                       <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="truncate text-[22px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</p>
-                            <p className="mt-2 truncate text-[12px] font-medium text-gray-500 dark:text-gray-400">{table.table_zone?.name || table.zone || copy.noZone} · {table.capacity} {copy.seats}</p>
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/35 dark:text-orange-300">
+                                <UtensilsCrossed className="h-4 w-4" aria-hidden="true" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{copy.table}</p>
+                                <p className="truncate text-[19px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</p>
+                              </div>
+                            </div>
+                            <p className="mt-2 flex min-w-0 items-center gap-1.5 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                              <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              <span className="truncate">{table.table_zone?.name || table.zone || copy.noZone}</span>
+                              <span aria-hidden="true">·</span>
+                              <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              <span className="shrink-0">{table.capacity} {copy.seats}</span>
+                            </p>
                           </div>
                           <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold leading-none ${tableStatusPillClass(status, readyCount)}`}>{statusLabel}</span>
                         </div>
                         <div className="mt-auto">
                           {order ? (
                             <div className="flex min-h-[22px] items-end justify-between gap-2">
-                              <p className="truncate font-mono text-[13px] font-semibold tabular-nums text-gray-950 dark:text-white">{order.order_number}</p>
+                              <p className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white">
+                                <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                                <span className="truncate">{order.order_number}</span>
+                              </p>
                               <p className="shrink-0 text-[12px] font-semibold text-gray-600 dark:text-gray-300">฿{order.total_amount.toLocaleString()}</p>
                             </div>
                           ) : status === "reserved" && table.reservation_phone ? (

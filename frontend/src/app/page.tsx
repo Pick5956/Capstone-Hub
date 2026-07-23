@@ -189,7 +189,7 @@ const LANDING_COPY: Record<Language, {
     register: "เริ่มใช้งาน",
     heroTitle: "จัดการร้านได้ผ่านมือถือ",
     heroImageAlt: "ทีมครัวกำลังทำอาหารระหว่างกะเย็นในร้านอาหาร",
-    phoneImageAlt: "ตัวอย่าง Restaurant Hub บนมือถือ",
+    phoneImageAlt: "ตัวอย่าง Dishy บนมือถือ",
     proofTitle: "ยกระดับร้านด้วยข้อมูลที่ทีมเห็นตรงกัน",
     proofDesc: "บริหารออเดอร์ งานครัว การชำระเงิน และภาพรวมร้านจากพื้นที่ทำงานเดียว",
     workflowTitle: "ขั้นตอนการทำงานที่ต่อเนื่อง",
@@ -213,7 +213,7 @@ const LANDING_COPY: Record<Language, {
     register: "Get started",
     heroTitle: "Run your restaurant from your phone",
     heroImageAlt: "A kitchen team preparing dishes during an evening restaurant shift",
-    phoneImageAlt: "Restaurant Hub shown on a mobile phone",
+    phoneImageAlt: "Dishy shown on a mobile phone",
     proofTitle: "Keep the whole team aligned with shared restaurant data",
     proofDesc: "Manage orders, kitchen progress, payments, and the live state of your restaurant from one workspace.",
     workflowTitle: "One continuous restaurant workflow",
@@ -749,12 +749,12 @@ export default function LandingPage() {
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <AppLogo size={34} priority />
-            <div className="hidden sm:block">
-              <p className={`text-[10px] font-semibold tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
-                Restaurant
+            <div className="hidden leading-none sm:block">
+              <p className={`text-[16px] font-bold tracking-[-0.025em] ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
+                Dishy
               </p>
-              <p className={`text-sm font-semibold leading-none ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
-                HUB
+              <p className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
+                Restaurant operations
               </p>
             </div>
           </div>
@@ -975,7 +975,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-sm text-gray-500 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <AppLogo size={28} />
-            <span className="font-semibold text-gray-900 dark:text-white">Restaurant Hub</span>
+            <span className="font-semibold text-gray-900 dark:text-white">Dishy</span>
           </div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
             <span>{copy.footerProject}</span>

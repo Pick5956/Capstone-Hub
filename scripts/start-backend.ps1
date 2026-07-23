@@ -16,6 +16,10 @@ $backendDir = Join-Path (Split-Path -Parent $PSScriptRoot) "backend"
 $logs = New-RuntimeLogStream -Producer "backend" -RunName $Mode
 $go = (Get-Command go -ErrorAction Stop).Source
 
+if ($Mode -eq "public") {
+  $env:PUBLIC_BACKEND_URL = "https://api.dishy.pro"
+}
+
 Write-Host "Starting backend from source at http://localhost:8080"
 Write-Host "Logs: $($logs.Stdout) and $($logs.Stderr)"
 

@@ -6,7 +6,6 @@ import {
   Archive,
   ArrowUpRight,
   Printer,
-  RefreshCw,
   Search,
 } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -70,7 +69,6 @@ export default function OrdersPage() {
         eyebrow: "Order archive",
         title: "คลังออเดอร์",
         subtitle: "สำหรับผู้จัดการตรวจสอบออเดอร์ย้อนหลัง ดูสถานะ ยอดเงิน รายการอาหาร และประวัติการปิดงาน",
-        refresh: "รีเฟรช",
         all: "ทั้งหมด",
         active: "กำลังเปิดอยู่",
         closed: "ปิดงานแล้ว",
@@ -103,7 +101,6 @@ export default function OrdersPage() {
         eyebrow: "Order archive",
         title: "Order archive",
         subtitle: "A manager view for reviewing past and current orders, payment status, item snapshots, and closing history.",
-        refresh: "Refresh",
         all: "All",
         active: "Open work",
         closed: "Closed work",
@@ -297,18 +294,6 @@ export default function OrdersPage() {
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => {
-                listViewportRef.current?.scrollTo({ top: 0 });
-                void fetchOrdersPage(1, false);
-              }}
-              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-              {copy.refresh}
-            </button>
           </div>
         </div>
 
