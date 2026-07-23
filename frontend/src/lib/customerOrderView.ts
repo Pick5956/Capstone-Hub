@@ -1,5 +1,5 @@
 import type { Language } from "@/src/providers/LanguageProvider";
-import type { OrderItem, OrderItemStatus } from "@/src/types/order";
+import type { OrderItemStatus } from "@/src/types/order";
 
 export function customerTableOrdersHref(token: string) {
   return `/customer/t/${encodeURIComponent(token)}/orders`;
@@ -9,7 +9,9 @@ export function customerTableMenuHref(token: string) {
   return `/customer/t/${encodeURIComponent(token)}`;
 }
 
-export function summarizeCustomerOrderItems(items: OrderItem[]) {
+export function summarizeCustomerOrderItems(
+  items: Array<{ quantity: number; subtotal: number }>,
+) {
   return items.reduce(
     (summary, item) => ({
       itemCount: summary.itemCount + item.quantity,

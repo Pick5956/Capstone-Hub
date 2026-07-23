@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"time"
+
 	"Project-M/config"
 	"Project-M/internal/controller"
 	"Project-M/internal/realtime"
@@ -12,6 +14,6 @@ func SetupCustomerOrderRoutes(api *gin.RouterGroup, orderEvents *realtime.OrderH
 	ctrl := controller.ProvideCustomerOrderController(config.DB(), orderEvents)
 	public := api.Group("/public/table-orders")
 
-	public.GET("/:token", ctrl.GetTable)
-	public.POST("/:token/submit", ctrl.SubmitOrder)
+	public.GET("/:token", rateLimitRequests(120, time.Minute), ctrl.GetTable)
+	public.POST("/:token/submit", rateLimitRequests(20, time.Minute), ctrl.SubmitOrder)
 }

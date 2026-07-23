@@ -113,7 +113,7 @@ Backend data is scoped by restaurant with `X-Restaurant-ID`. The backend owns pe
 |-- docs/                # Local project documentation and wiki
 |-- PRODUCT.md           # Product direction and audience
 |-- DESIGN.md            # Visual system and UX principles
-`-- docker-compose.yml   # PostgreSQL, PgBouncer, scalable backend, Nginx stack
+`-- docker-compose.yml   # PostgreSQL, PgBouncer, single backend, Nginx stack
 ```
 
 ## Getting Started
@@ -123,7 +123,7 @@ Backend data is scoped by restaurant with `X-Restaurant-ID`. The backend owns pe
 - Go 1.24+
 - Node.js 20+
 - npm
-- PostgreSQL 16, or Docker Desktop for the included PostgreSQL service
+- PostgreSQL 16 installed locally, or Docker Desktop for a localhost-only database container
 
 ### 1. Install dependencies
 
@@ -140,26 +140,29 @@ npm install
 
 ### 2. Start PostgreSQL
 
-Using the included Compose file:
-
-Create an ignored root `.env` first. Compose refuses to start without a database password:
-
-```env
-DB_PASSWORD=<your-local-database-password>
-JWT_SECRET=<your-secure-random-jwt-secret>
-```
-
-The full PgBouncer stack also needs a local auth file. Copy the tracked placeholder, replace it locally with the matching PgBouncer MD5 credential, and never commit the resulting file:
+The Go backend needs PostgreSQL to be reachable at the host and port configured
+in `backend/.env`. You can use an existing local PostgreSQL 16 installation, or
+create a localhost-only Docker container:
 
 ```powershell
-Copy-Item infra/userlist.example.txt infra/userlist.txt
+$env:POSTGRES_PASSWORD = Read-Host "Choose a local PostgreSQL password"
+docker run --name dishy-postgres-local `
+  --env POSTGRES_PASSWORD `
+  --env POSTGRES_DB=Project_M `
+  --publish 127.0.0.1:5433:5432 `
+  --detach postgres:16-alpine
+Remove-Item Env:POSTGRES_PASSWORD
 ```
 
-```powershell
-docker compose up -d postgres
-```
+After the container has been created once, start it again with
+`docker start dishy-postgres-local`.
 
-This exposes PostgreSQL on host port `5433` to avoid clashing with a local PostgreSQL installation.
+The root `docker-compose.yml` is the isolated production-style stack.
+PostgreSQL and PgBouncer are intentionally not published to the host, so
+`docker compose up -d postgres` is not the localhost database startup command.
+Running the complete Compose stack requires an ignored root `.env` containing
+`DB_PASSWORD` and `JWT_SECRET`, plus a local `infra/userlist.txt` created from
+the tracked placeholder. Never commit either file.
 
 ### 3. Configure the backend
 
@@ -247,6 +250,7 @@ For physical-device testing, use a LAN-accessible backend URL or the included ba
 
 | Command | Location | Purpose |
 | --- | --- | --- |
+| `go run ./cmd/migrate` | `backend/` | Apply pending versioned database migrations |
 | `powershell -File .\scripts\start-backend.ps1` | Repository root | Start the Go API from source with automatic runtime logs |
 | `go test ./...` | `backend/` | Run backend tests |
 | `powershell -File .\scripts\start-local.ps1` | Repository root | Start the local Go API and Next.js app together |

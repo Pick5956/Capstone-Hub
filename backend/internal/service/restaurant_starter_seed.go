@@ -32,7 +32,7 @@ type starterIngredientCategory struct {
 	Items []starterIngredient
 }
 
-func seedRestaurantStarterSetup(repo *repository.RestaurantSetupRepository, restaurantID uint, restaurantType string, tableCount int) error {
+func seedRestaurantStarterSetup(repo repository.RestaurantSetupWriter, restaurantID uint, restaurantType string, tableCount int) error {
 	profile := starterProfileFor(restaurantType)
 	ingredientIDs, err := seedStarterIngredientCatalog(repo, restaurantID, profile.IngredientCategories)
 	if err != nil {
@@ -62,7 +62,7 @@ func starterProfileFor(restaurantType string) starterProfile {
 // seedStarterIngredientCatalog creates the ingredient categories + ingredients for a
 // starter profile and returns a map of ingredient name -> created ingredient ID, so
 // seedStarterMenu can resolve each menu item's recipe lines to real ingredient IDs.
-func seedStarterIngredientCatalog(repo *repository.RestaurantSetupRepository, restaurantID uint, categories []starterIngredientCategory) (map[string]uint, error) {
+func seedStarterIngredientCatalog(repo repository.RestaurantSetupWriter, restaurantID uint, categories []starterIngredientCategory) (map[string]uint, error) {
 	ingredientIDs := make(map[string]uint)
 	for categoryIndex, categorySeed := range categories {
 		category := &entity.IngredientCategory{
@@ -100,7 +100,7 @@ func seedStarterIngredientCatalog(repo *repository.RestaurantSetupRepository, re
 	return ingredientIDs, nil
 }
 
-func seedStarterMenu(repo *repository.RestaurantSetupRepository, restaurantID uint, categories []starterMenuCategory, ingredientIDs map[string]uint) error {
+func seedStarterMenu(repo repository.RestaurantSetupWriter, restaurantID uint, categories []starterMenuCategory, ingredientIDs map[string]uint) error {
 	for categoryIndex, categorySeed := range categories {
 		category := &entity.Category{
 			RestaurantID: restaurantID,
@@ -146,7 +146,7 @@ func seedStarterMenu(repo *repository.RestaurantSetupRepository, restaurantID ui
 // deducted automatically once orders are served. Recipe lines that reference an
 // ingredient name not present in the seeded catalog are skipped rather than failing
 // the whole setup, since option-level variants aren't modeled at the recipe level.
-func seedStarterMenuRecipe(repo *repository.RestaurantSetupRepository, restaurantID, menuItemID uint, lines []starterRecipeLine, ingredientIDs map[string]uint) error {
+func seedStarterMenuRecipe(repo repository.RestaurantSetupWriter, restaurantID, menuItemID uint, lines []starterRecipeLine, ingredientIDs map[string]uint) error {
 	for _, line := range lines {
 		ingredientID, ok := ingredientIDs[line.IngredientName]
 		if !ok {
@@ -165,7 +165,7 @@ func seedStarterMenuRecipe(repo *repository.RestaurantSetupRepository, restauran
 	return nil
 }
 
-func seedStarterMenuOptions(repo *repository.RestaurantSetupRepository, restaurantID, menuItemID uint, groups []starterOptionGroup) error {
+func seedStarterMenuOptions(repo repository.RestaurantSetupWriter, restaurantID, menuItemID uint, groups []starterOptionGroup) error {
 	for groupIndex, groupSeed := range groups {
 		group := &entity.MenuOptionGroup{
 			RestaurantID: restaurantID,
@@ -199,7 +199,7 @@ func seedStarterMenuOptions(repo *repository.RestaurantSetupRepository, restaura
 	return nil
 }
 
-func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID uint, tableCount int, zones []starterTableZone) error {
+func seedStarterTables(repo repository.RestaurantSetupWriter, restaurantID uint, tableCount int, zones []starterTableZone) error {
 	counts := starterZoneCounts(tableCount, len(zones))
 	for zoneIndex, zoneSeed := range zones {
 		zoneTableCount := counts[zoneIndex]
@@ -218,6 +218,10 @@ func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID 
 		}
 		for sequence := 1; sequence <= zoneTableCount; sequence++ {
 			label := fmt.Sprintf("%s%02d", zoneSeed.Prefix, sequence)
+			customerToken, err := GenerateCustomerTableToken()
+			if err != nil {
+				return err
+			}
 			table := &entity.RestaurantTable{
 				RestaurantID:   restaurantID,
 				ZoneID:         &zone.ID,
@@ -227,7 +231,7 @@ func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID 
 				Capacity:       zoneSeed.Capacity,
 				Zone:           zoneSeed.Name,
 				Status:         entity.TableStatusFree,
-				CustomerToken:  GenerateCustomerTableToken(),
+				CustomerToken:  customerToken,
 			}
 			if err := repo.CreateTable(table); err != nil {
 				return err

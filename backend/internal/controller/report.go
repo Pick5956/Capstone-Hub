@@ -27,7 +27,7 @@ func (ctrl *ReportController) ManagerReport(c *gin.Context) {
 	}
 	report, err := ctrl.reportSvc.ManagerReport(restaurantID, boundedQueryInt(c, "days", 14, 1, 90))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, report)
@@ -44,7 +44,7 @@ func (ctrl *ReportController) TopMenuItemsByMonth(c *gin.Context) {
 
 	report, err := ctrl.reportSvc.TopMenuItemsByMonth(restaurantID, year, month)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, report)

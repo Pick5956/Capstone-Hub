@@ -29,11 +29,9 @@ func ProvideRestaurantController(db *gorm.DB) *RestaurantController {
 	userRepo := repository.NewUserRepository(db)
 	auditRepo := repository.NewRestaurantAuditLogRepository(db)
 	setupRepo := repository.NewRestaurantSetupRepository(db)
-	menuRepo := repository.NewMenuRepository(db)
-	ingredientRepo := repository.NewIngredientRepository(db)
 
 	return &RestaurantController{
-		restaurantSvc: service.ProvideRestaurantService(restaurantRepo, memberRepo, roleRepo, auditRepo, setupRepo, menuRepo, ingredientRepo),
+		restaurantSvc: service.ProvideRestaurantService(restaurantRepo, memberRepo, roleRepo, auditRepo, setupRepo),
 		invitationSvc: service.ProvideInvitationService(invRepo, memberRepo, roleRepo, userRepo, auditRepo),
 	}
 }
@@ -87,6 +85,23 @@ func parseIDParam(c *gin.Context, key string) (uint, error) {
 	return uint(v), nil
 }
 
+func requireScopedRestaurantParam(c *gin.Context, key string) (uint, bool) {
+	scopedRestaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return 0, false
+	}
+	pathRestaurantID, err := parseIDParam(c, key)
+	if err != nil || pathRestaurantID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid restaurant id"})
+		return 0, false
+	}
+	if pathRestaurantID != scopedRestaurantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "restaurant path does not match restaurant context"})
+		return 0, false
+	}
+	return scopedRestaurantID, true
+}
+
 // POST /api/v1/restaurants
 func (ctrl *RestaurantController) Create(c *gin.Context) {
 	userID, ok := contextUserID(c)
@@ -97,19 +112,19 @@ func (ctrl *RestaurantController) Create(c *gin.Context) {
 
 	var req service.CreateRestaurantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	restaurant, member, err := ctrl.restaurantSvc.CreateRestaurant(userID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
 		"restaurant": restaurant,
-		"membership": member,
+		"membership": service.NewMembershipResponse(member),
 	})
 }
 
@@ -123,10 +138,10 @@ func (ctrl *RestaurantController) ListMyMemberships(c *gin.Context) {
 
 	memberships, err := ctrl.restaurantSvc.ListMyMemberships(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"memberships": memberships})
+	c.JSON(http.StatusOK, gin.H{"memberships": service.NewMembershipResponses(memberships)})
 }
 
 // GET /api/v1/restaurants/:id
@@ -138,7 +153,7 @@ func (ctrl *RestaurantController) Get(c *gin.Context) {
 	}
 	restaurantID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -164,7 +179,7 @@ func (ctrl *RestaurantController) Update(c *gin.Context) {
 	}
 	restaurantID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -180,13 +195,13 @@ func (ctrl *RestaurantController) Update(c *gin.Context) {
 
 	var req service.UpdateRestaurantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	restaurant, err := ctrl.restaurantSvc.UpdateRestaurant(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -202,7 +217,7 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 	}
 	restaurantID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -215,6 +230,11 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
 		return
 	}
+	existingRestaurant, err := ctrl.restaurantSvc.GetRestaurant(restaurantID)
+	if err != nil {
+		respondAPIError(c, http.StatusNotFound, err)
+		return
+	}
 
 	file, err := c.FormFile("image")
 	if err != nil {
@@ -223,7 +243,7 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 	}
 	ext, err := validateImageUpload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -234,6 +254,10 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 	}
 	fileName := hex.EncodeToString(random) + ext
 	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
+	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
+		respondAPIError(c, http.StatusInsufficientStorage, err)
+		return
+	}
 	if err := os.MkdirAll(relativeDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
 		return
@@ -247,9 +271,15 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
 	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantLogo(restaurantID, publicPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		removeSavedUpload(destination)
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
+	removeReplacedUpload(
+		existingRestaurant.Logo,
+		"/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/",
+		destination,
+	)
 
 	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
 }
@@ -263,7 +293,7 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 	}
 	restaurantID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -276,6 +306,11 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
 		return
 	}
+	existingRestaurant, err := ctrl.restaurantSvc.GetRestaurant(restaurantID)
+	if err != nil {
+		respondAPIError(c, http.StatusNotFound, err)
+		return
+	}
 
 	file, err := c.FormFile("image")
 	if err != nil {
@@ -284,7 +319,7 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 	}
 	ext, err := validateImageUpload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -295,6 +330,10 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 	}
 	fileName := hex.EncodeToString(random) + ext
 	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
+	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
+		respondAPIError(c, http.StatusInsufficientStorage, err)
+		return
+	}
 	if err := os.MkdirAll(relativeDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
 		return
@@ -308,9 +347,15 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
 	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantCover(restaurantID, publicPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		removeSavedUpload(destination)
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
+	removeReplacedUpload(
+		existingRestaurant.CoverImage,
+		"/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/",
+		destination,
+	)
 
 	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
 }
@@ -322,24 +367,16 @@ func (ctrl *RestaurantController) ListMembers(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
-	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	members, err := ctrl.restaurantSvc.ListMembersForActor(userID, restaurantID)
 	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-
-	includeInactive := canManageStaff(c)
-	members, err := ctrl.restaurantSvc.ListMembersWithStatus(restaurantID, includeInactive)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"members": members})
+	c.JSON(http.StatusOK, gin.H{"members": service.NewMembershipResponses(members)})
 }
 
 // PATCH /api/v1/restaurants/:id/members/:memberId/status
@@ -349,29 +386,28 @@ func (ctrl *RestaurantController) UpdateMemberStatus(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	memberID, err := parseIDParam(c, "memberId")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var req updateMemberStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	member, err := ctrl.restaurantSvc.UpdateMemberStatus(userID, restaurantID, memberID, req.Status)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"member": member})
+	c.JSON(http.StatusOK, gin.H{"member": service.NewMembershipResponse(member)})
 }
 
 // PATCH /api/v1/restaurants/:id/members/:memberId/role
@@ -381,29 +417,28 @@ func (ctrl *RestaurantController) UpdateMemberRole(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	memberID, err := parseIDParam(c, "memberId")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var req updateMemberRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	member, err := ctrl.restaurantSvc.UpdateMemberRole(userID, restaurantID, memberID, req.RoleID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"member": member})
+	c.JSON(http.StatusOK, gin.H{"member": service.NewMembershipResponse(member)})
 }
 
 // PATCH /api/v1/restaurants/:id/members/:memberId/permissions
@@ -413,20 +448,19 @@ func (ctrl *RestaurantController) UpdateMemberPermissions(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	memberID, err := parseIDParam(c, "memberId")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
 	var req updateMemberPermissionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
@@ -436,10 +470,10 @@ func (ctrl *RestaurantController) UpdateMemberPermissions(c *gin.Context) {
 	}
 	member, err := ctrl.restaurantSvc.UpdateMemberPermissions(userID, restaurantID, memberID, permissionsOverride)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"member": member})
+	c.JSON(http.StatusOK, gin.H{"member": service.NewMembershipResponse(member)})
 }
 
 // GET /api/v1/restaurants/:id/audit-logs
@@ -449,9 +483,8 @@ func (ctrl *RestaurantController) ListAuditLogs(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 
@@ -470,7 +503,7 @@ func (ctrl *RestaurantController) ListAuditLogs(c *gin.Context) {
 
 	logs, err := ctrl.restaurantSvc.ListAuditLogs(userID, restaurantID, limit+1, offset)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	hasMore := len(logs) > limit
@@ -491,15 +524,8 @@ func (ctrl *RestaurantController) CreateInvitation(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	if !canManageStaff(c) {
@@ -509,16 +535,16 @@ func (ctrl *RestaurantController) CreateInvitation(c *gin.Context) {
 
 	var req service.CreateInvitationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	inv, err := ctrl.invitationSvc.CreateInvitation(restaurantID, userID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusCreated, inv)
+	c.JSON(http.StatusCreated, service.NewAdminInvitationResponse(inv))
 }
 
 // GET /api/v1/restaurants/:id/invitations
@@ -528,15 +554,8 @@ func (ctrl *RestaurantController) ListPendingInvitations(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	if !canManageStaff(c) {
@@ -544,12 +563,12 @@ func (ctrl *RestaurantController) ListPendingInvitations(c *gin.Context) {
 		return
 	}
 
-	invs, err := ctrl.invitationSvc.ListPending(restaurantID)
+	invs, err := ctrl.invitationSvc.ListPending(userID, restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"invitations": invs})
+	c.JSON(http.StatusOK, gin.H{"invitations": service.NewAdminInvitationResponses(invs)})
 }
 
 // DELETE /api/v1/restaurants/:id/invitations/:invitationId
@@ -559,29 +578,22 @@ func (ctrl *RestaurantController) RevokeInvitation(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	restaurantID, err := parseIDParam(c, "id")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	invitationID, err := parseIDParam(c, "invitationId")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	_, err = ctrl.restaurantSvc.GetMembership(userID, restaurantID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+	restaurantID, ok := requireScopedRestaurantParam(c, "id")
+	if !ok {
 		return
 	}
 	if !canManageStaff(c) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can revoke"})
 		return
 	}
+	invitationID, err := parseIDParam(c, "invitationId")
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
 
 	if err := ctrl.invitationSvc.RevokeInvitation(userID, restaurantID, invitationID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "revoked"})
@@ -596,7 +608,7 @@ func (ctrl *RestaurantController) GetInvitationByToken(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"invitation": inv,
+		"invitation": service.NewPublicInvitationResponse(inv),
 		"usable":     inv.IsUsable(),
 	})
 }
@@ -611,10 +623,10 @@ func (ctrl *RestaurantController) AcceptInvitation(c *gin.Context) {
 	token := c.Param("token")
 	member, err := ctrl.invitationSvc.AcceptInvitation(userID, token)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"membership": member})
+	c.JSON(http.StatusOK, gin.H{"membership": service.NewMembershipResponse(member)})
 }
 
 // DELETE /api/v1/restaurants/:id
@@ -626,7 +638,7 @@ func (ctrl *RestaurantController) Delete(c *gin.Context) {
 	}
 	restaurantID, err := parseIDParam(c, "id")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -641,10 +653,9 @@ func (ctrl *RestaurantController) Delete(c *gin.Context) {
 	}
 
 	if err := ctrl.restaurantSvc.DeleteRestaurant(restaurantID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
-

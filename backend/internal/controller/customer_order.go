@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"Project-M/internal/realtime"
@@ -16,6 +17,8 @@ type CustomerOrderController struct {
 	orderEvents *realtime.OrderHub
 }
 
+const maxCustomerOrderRequestBytes = 256 << 10
+
 func ProvideCustomerOrderController(db *gorm.DB, orderEvents *realtime.OrderHub) *CustomerOrderController {
 	return &CustomerOrderController{
 		customerSvc: service.ProvideCustomerOrderService(repository.NewOrderRepository(db)),
@@ -26,25 +29,35 @@ func ProvideCustomerOrderController(db *gorm.DB, orderEvents *realtime.OrderHub)
 func (ctrl *CustomerOrderController) GetTable(c *gin.Context) {
 	payload, err := ctrl.customerSvc.GetTable(c.Param("token"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusNotFound, err)
 		return
 	}
 	c.JSON(http.StatusOK, payload)
 }
 
 func (ctrl *CustomerOrderController) SubmitOrder(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCustomerOrderRequestBytes)
 	var req service.SubmitCustomerOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
-	payload, err := ctrl.customerSvc.SubmitOrder(c.Param("token"), &req)
+	result, err := ctrl.customerSvc.SubmitOrder(c.Param("token"), c.GetHeader("Idempotency-Key"), &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if errors.Is(err, service.ErrCustomerOrderIdempotencyConflict) {
+			respondAPIError(c, http.StatusConflict, err)
+			return
+		}
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusCreated, payload)
-	if payload.Order != nil {
-		ctrl.orderEvents.Publish(payload.Restaurant.ID, "customer_order.submitted", payload.Order.ID)
+	status := http.StatusCreated
+	if result.Replayed {
+		status = http.StatusOK
+		c.Header("Idempotency-Replayed", "true")
+	}
+	c.JSON(status, result.Payload)
+	if !result.Replayed && result.OrderID != 0 {
+		ctrl.orderEvents.Publish(result.RestaurantID, "customer_order.submitted", result.OrderID)
 	}
 }

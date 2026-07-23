@@ -26,6 +26,7 @@ backend/uploads/
 infra/userlist.txt
 logs/
 db-dumps/
+# Operational pg_dump archives created by scripts/backup-database.ps1.
 backups/
 data/
 database/

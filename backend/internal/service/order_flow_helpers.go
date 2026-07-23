@@ -19,6 +19,21 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 	if err != nil {
 		return err
 	}
+	next := orderStatusFromItems(order.Status, items)
+	if next == order.Status {
+		return nil
+	}
+	note := "items in kitchen"
+	switch next {
+	case entity.OrderStatusServed:
+		note = "all items served"
+	case entity.OrderStatusReady:
+		note = "all remaining items ready"
+	}
+	return setOrderStatus(tx, order, next, userID, note)
+}
+
+func orderStatusFromItems(current string, items []entity.OrderItem) string {
 	active := make([]entity.OrderItem, 0, len(items))
 	for _, item := range items {
 		if item.Status != entity.OrderItemStatusCancelled {
@@ -26,21 +41,27 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		}
 	}
 	if len(active) == 0 {
-		return nil
+		return current
 	}
 	if allItems(active, entity.OrderItemStatusServed) {
-		return setOrderStatus(tx, order, entity.OrderStatusServed, userID, "all items served")
+		return entity.OrderStatusServed
 	}
-	if allItems(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusReady, userID, "all items ready")
+	remaining := make([]entity.OrderItem, 0, len(active))
+	for _, item := range active {
+		if item.Status != entity.OrderItemStatusServed {
+			remaining = append(remaining, item)
+		}
 	}
-	if order.Status == entity.OrderStatusSentToKitchen && anyItem(active, entity.OrderItemStatusCooking) {
-		return nil
+	if len(remaining) > 0 && allItems(remaining, entity.OrderItemStatusReady) {
+		return entity.OrderStatusReady
 	}
-	if anyItem(active, entity.OrderItemStatusCooking) || anyItem(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusCooking, userID, "items in kitchen")
+	if current == entity.OrderStatusSentToKitchen && anyItem(remaining, entity.OrderItemStatusCooking) {
+		return current
 	}
-	return nil
+	if anyItem(remaining, entity.OrderItemStatusCooking) || anyItem(remaining, entity.OrderItemStatusReady) {
+		return entity.OrderStatusCooking
+	}
+	return current
 }
 
 func sendPendingItemsToKitchen(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
@@ -71,37 +92,37 @@ func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entit
 }
 
 func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
-	components, err := tx.ListRecipeComponents(restaurantID, item.MenuID)
+	snapshots, err := tx.ListItemRecipeSnapshots(restaurantID, item.ID)
 	if err != nil {
 		return err
 	}
-	if len(components) == 0 {
+	if len(snapshots) == 0 {
 		return nil
 	}
-	for _, component := range components {
-		required := component.Quantity * float64(item.Quantity)
+	for _, snapshot := range snapshots {
+		required := snapshot.QuantityPerItem * float64(item.Quantity)
 		if required <= 0 {
 			continue
 		}
-		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, component.IngredientID)
+		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, snapshot.IngredientID)
 		if err != nil {
 			return err
 		}
 		if alreadyDeducted {
 			continue
 		}
-		ingredient, err := tx.FindIngredientForUpdate(restaurantID, component.IngredientID)
+		ingredient, err := tx.FindIngredientForUpdate(restaurantID, snapshot.IngredientID)
 		if err != nil {
 			return err
 		}
 		if ingredient.Stock < required {
-			return fmt.Errorf("%s stock is not enough for %s", ingredient.Name, item.MenuName)
+			return fmt.Errorf("%s stock is not enough for %s", snapshot.IngredientName, item.MenuName)
 		}
 		ingredient.Stock -= required
 		if err := tx.SaveIngredient(ingredient); err != nil {
 			return err
 		}
-		cost := recipeComponentCost(required, ingredient.CostPerUnit, ingredient.YieldPercent)
+		cost := recipeComponentCost(required, snapshot.CostPerUnit, snapshot.YieldPercent)
 		deduction := &entity.OrderInventoryDeduction{
 			RestaurantID: restaurantID,
 			OrderID:      order.ID,

@@ -47,9 +47,6 @@ export const cancelOrder = (id: number, reason: string) =>
 export const closeEmptyTableOrder = (id: number) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/close-empty-table`);
 
-export const closeOrder = (id: number) =>
-  apiClient.post<Order>(`/api/v1/orders/${id}/close`);
-
 export const getOrderBill = (id: number) =>
   apiClient.get<Bill>(`/api/v1/orders/${id}/bill`);
 

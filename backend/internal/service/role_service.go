@@ -33,6 +33,13 @@ type RoleRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
+type rolePermissionMutationKind int
+
+const (
+	rolePermissionDirect rolePermissionMutationKind = iota
+	rolePermissionRestaurantOverride
+)
+
 var editablePermissionKeys = map[string]bool{
 	"view_dashboard":      true,
 	"manage_menu":         true,
@@ -58,10 +65,11 @@ func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, acto
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if role.RestaurantID != nil && *role.RestaurantID != restaurantID {
-		return nil, errors.New("role does not belong to this restaurant")
+	target, err := rolePermissionMutationTargetForRole(role, restaurantID)
+	if err != nil {
+		return nil, err
 	}
-	if role.RestaurantID == nil {
+	if target == rolePermissionRestaurantOverride {
 		hidden, err := s.roleRepo.IsRoleHiddenForRestaurant(restaurantID, role.ID)
 		if err != nil {
 			return nil, err
@@ -82,10 +90,35 @@ func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, acto
 		return nil, err
 	}
 	role.Permissions = string(raw)
-	if err := s.roleRepo.Update(role); err != nil {
-		return nil, err
+	if target == rolePermissionRestaurantOverride {
+		if err := s.roleRepo.UpsertRestaurantPermissionOverride(restaurantID, role.ID, role.Permissions); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := s.roleRepo.Update(role); err != nil {
+			return nil, err
+		}
 	}
 	return role, nil
+}
+
+func rolePermissionMutationTargetForRole(role *entity.Role, restaurantID uint) (rolePermissionMutationKind, error) {
+	if role == nil {
+		return rolePermissionDirect, errors.New("role not found")
+	}
+	if role.RestaurantID == nil {
+		return rolePermissionRestaurantOverride, nil
+	}
+	if *role.RestaurantID != restaurantID {
+		return rolePermissionDirect, errors.New("role does not belong to this restaurant")
+	}
+	return rolePermissionDirect, nil
+}
+
+// Kept as a small pure seam so tenant-isolation behavior is regression tested
+// independently of persistence.
+func rolePermissionMutationTarget(role *entity.Role, restaurantID uint) (rolePermissionMutationKind, error) {
+	return rolePermissionMutationTargetForRole(role, restaurantID)
 }
 
 func (s *RoleService) CreateCustomRole(restaurantID uint, actorRoleName string, req *RoleRequest) (*entity.Role, error) {

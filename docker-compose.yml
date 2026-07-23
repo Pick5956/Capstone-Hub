@@ -1,10 +1,35 @@
 # Restaurant Hub production stack
-# Architecture: Nginx -> Go backend (x3) -> PgBouncer -> PostgreSQL
+# Architecture: Nginx -> one Go backend -> PgBouncer -> PostgreSQL.
+# Keep one backend replica until realtime events use shared cross-instance fan-out.
 #
 # Required local-only configuration:
 #   - Set DB_PASSWORD and JWT_SECRET in the shell or ignored root .env.
 #   - Create ignored infra/userlist.txt from infra/userlist.example.txt.
 # Never commit real credentials to this file or the PgBouncer userlist.
+
+x-backend-environment: &backend-environment
+  GIN_MODE: release
+  DB_HOST: pgbouncer
+  DB_PORT: "6432"
+  DB_USER: ${DB_USER:-postgres}
+  DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the environment or root .env}
+  DB_NAME: ${DB_NAME:-Project_M}
+  DB_SSLMODE: ${DB_SSLMODE:-disable}
+  DB_MAX_OPEN_CONNS: "100"
+  DB_MAX_IDLE_CONNS: "25"
+  DB_CONN_MAX_LIFETIME_MIN: "30"
+  DB_CONN_MAX_IDLE_TIME_MIN: "5"
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the environment or root .env}
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+  FRONTEND_URL: ${FRONTEND_URL:-https://dishy.pro}
+  PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL:-https://api.dishy.pro}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://dishy.pro}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 
 services:
   postgres:
@@ -18,10 +43,8 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
-    ports:
-      - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-Project_M}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -35,13 +58,22 @@ services:
     volumes:
       - ./infra/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
       - ./infra/userlist.txt:/etc/pgbouncer/userlist.txt:ro
-    ports:
-      - "6432:6432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432"]
       interval: 5s
       timeout: 3s
       retries: 5
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    environment: *backend-environment
+    command: ["./migrate"]
 
   backend-1:
     build:
@@ -49,47 +81,18 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      pgbouncer:
-        condition: service_healthy
-    environment:
-      GIN_MODE: release
-      DB_HOST: pgbouncer
-      DB_PORT: "6432"
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the environment or root .env}
-      DB_NAME: ${DB_NAME:-Project_M}
-      DB_MAX_OPEN_CONNS: "100"
-      DB_MAX_IDLE_CONNS: "25"
-      DB_CONN_MAX_LIFETIME_MIN: "30"
-      DB_CONN_MAX_IDLE_TIME_MIN: "5"
-      JWT_SECRET: ${JWT_SECRET}
-      SERVER_HOST: "0.0.0.0"
-      SERVER_PORT: "8080"
-      FRONTEND_URL: ${FRONTEND_URL:-https://dishy.pro}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://dishy.pro}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      migrate:
+        condition: service_completed_successfully
+    environment: *backend-environment
     volumes:
       - uploads:/app/uploads
-
-  backend-2:
-    extends:
-      service: backend-1
-
-  backend-3:
-    extends:
-      service: backend-1
 
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
     depends_on:
-      - backend-1
-      - backend-2
-      - backend-3
+      backend-1:
+        condition: service_healthy
     ports:
       - "80:80"
     volumes:

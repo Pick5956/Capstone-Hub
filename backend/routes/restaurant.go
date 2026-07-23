@@ -3,6 +3,7 @@ package routes
 import (
 	"Project-M/config"
 	"Project-M/internal/controller"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +15,7 @@ func SetupRestaurantRoutes(api *gin.RouterGroup, v1 *gin.RouterGroup) {
 	ctrl := controller.ProvideRestaurantController(config.DB())
 
 	// public preview — invitee can see invitation details before logging in
-	api.GET("/invitations/:token", ctrl.GetInvitationByToken)
+	api.GET("/invitations/:token", rateLimitRequests(60, time.Minute), ctrl.GetInvitationByToken)
 
 	// private (require auth)
 	v1.POST("/restaurants", ctrl.Create)
@@ -34,5 +35,5 @@ func SetupRestaurantRoutes(api *gin.RouterGroup, v1 *gin.RouterGroup) {
 	v1.GET("/restaurants/:id/invitations", ctrl.ListPendingInvitations)
 	v1.DELETE("/restaurants/:id/invitations/:invitationId", ctrl.RevokeInvitation)
 
-	v1.POST("/invitations/:token/accept", ctrl.AcceptInvitation)
+	v1.POST("/invitations/:token/accept", rateLimitRequests(20, time.Minute), ctrl.AcceptInvitation)
 }

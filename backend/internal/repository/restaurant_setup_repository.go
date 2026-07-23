@@ -10,11 +10,30 @@ type RestaurantSetupRepository struct {
 	db *gorm.DB
 }
 
+type RestaurantSetupWriter interface {
+	CreateRestaurant(*entity.Restaurant) error
+	CreateMember(*entity.RestaurantMember) error
+	CreateCategory(*entity.Category) error
+	CreateMenuItem(*entity.MenuItem) error
+	CreateMenuItemCategory(*entity.MenuItemCategory) error
+	CreateMenuOptionGroup(*entity.MenuOptionGroup) error
+	CreateMenuOption(*entity.MenuOption) error
+	CreateTableZone(*entity.TableZone) error
+	CreateTable(*entity.RestaurantTable) error
+	CreateIngredientCategory(*entity.IngredientCategory) error
+	CreateIngredient(*entity.Ingredient) error
+	CreateMenuItemIngredient(*entity.MenuItemIngredient) error
+}
+
+type RestaurantSetupTransactor interface {
+	Transaction(func(RestaurantSetupWriter) error) error
+}
+
 func NewRestaurantSetupRepository(db *gorm.DB) *RestaurantSetupRepository {
 	return &RestaurantSetupRepository{db: db}
 }
 
-func (r *RestaurantSetupRepository) Transaction(fn func(tx *RestaurantSetupRepository) error) error {
+func (r *RestaurantSetupRepository) Transaction(fn func(tx RestaurantSetupWriter) error) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		return fn(NewRestaurantSetupRepository(tx))
 	})

@@ -36,7 +36,7 @@ func ProvideRoleController(db *gorm.DB) *RoleController {
 func (ctrl *RoleController) GetRoles(c *gin.Context) {
 	roles, err := ctrl.roleService.GetAllRoles()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch roles", "details": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -62,13 +62,13 @@ func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 
 	var req updateRolePermissionsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	role, err := ctrl.roleService.UpdateRolePermissions(uint(roleID), restaurantID, member.Role.Name, req.Permissions)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (ctrl *RoleController) GetScopedRoles(c *gin.Context) {
 	}
 	roles, err := ctrl.roleService.GetAssignableRoles(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch roles", "details": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": roles})
@@ -99,7 +99,7 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 	}
 	var req roleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	role, err := ctrl.roleService.CreateCustomRole(restaurantID, member.Role.Name, &service.RoleRequest{
@@ -107,7 +107,7 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 		Permissions: req.Permissions,
 	})
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"role": role})
@@ -124,19 +124,19 @@ func (ctrl *RoleController) UpdateCustomRole(c *gin.Context) {
 	}
 	roleID, err := parseRoleID(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	var req roleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	role, err := ctrl.roleService.UpdateCustomRole(roleID, restaurantID, member.Role.Name, &service.RoleRequest{
 		DisplayName: req.DisplayName,
 	})
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"role": role})
@@ -153,11 +153,11 @@ func (ctrl *RoleController) DeleteCustomRole(c *gin.Context) {
 	}
 	roleID, err := parseRoleID(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	if err := ctrl.roleService.DeleteCustomRole(roleID, restaurantID, member.Role.Name); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

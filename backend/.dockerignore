@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+.git
+.gocache
+coverage*
+uploads
+*.exe
+*.log

@@ -372,8 +372,8 @@ export default function TablesPage() {
         if (editingZone) {
           setTables((current) => current.map((table) => {
             if (table.zone_id !== res.data.ID) return table;
-            const nextLabel = payload.prefix
-              ? `${payload.prefix}${String(table.sequence_number).padStart(2, "0")}`
+            const nextLabel = res.data.prefix
+              ? `${res.data.prefix}${String(table.sequence_number).padStart(2, "0")}`
               : `Z${String(table.sequence_number).padStart(2, "0")}`;
             return {
               ...table,

@@ -5,6 +5,7 @@ import {
   shouldShowCustomerCartAction,
   summarizeCustomerOrderItems,
 } from "../customerOrderView";
+import { createCustomerOrderRequestKey } from "../customerOrder";
 import type { OrderItem } from "../../types/order";
 
 const orderItem = (overrides: Partial<OrderItem>): OrderItem => ({
@@ -47,5 +48,15 @@ describe("customer order view helpers", () => {
     expect(shouldShowCustomerCartAction(true, 0)).toBe(false);
     expect(shouldShowCustomerCartAction(true, 1)).toBe(true);
     expect(shouldShowCustomerCartAction(false, 3)).toBe(false);
+  });
+
+  it("creates request keys accepted by the public order API", () => {
+    const first = createCustomerOrderRequestKey();
+    const second = createCustomerOrderRequestKey();
+
+    expect(first.length).toBeGreaterThanOrEqual(16);
+    expect(first.length).toBeLessThanOrEqual(128);
+    expect(first).not.toMatch(/\s/);
+    expect(second).not.toBe(first);
   });
 });

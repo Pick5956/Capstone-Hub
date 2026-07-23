@@ -13,14 +13,13 @@ func SetupRoutes(r *gin.Engine) {
 	orderEvents := realtime.NewOrderHub()
 	api := r.Group("/api")
 	SetupAuthRoutes(api)
-	SetupRoleRoutes(api)
 	SetupCustomerOrderRoutes(api, orderEvents)
 
 	userCtrl := controller.ProvideUserController(config.DB())
 	roleCtrl := controller.ProvideRoleController(config.DB())
 
 	v1 := api.Group("v1")
-	v1.Use(auth.Authorizes())
+	v1.Use(auth.Authorizes(config.DB()))
 	v1.Use(auth.RestaurantScope(config.DB()))
 	{
 		v1.GET("/users/profile", userCtrl.GetProfile)

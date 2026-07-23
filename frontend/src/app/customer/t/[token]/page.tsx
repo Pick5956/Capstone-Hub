@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ListFilter, ReceiptText, Search, ShoppingBasket, X } from "lucide-react";
-import { getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { createCustomerOrderRequestKey, getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerMenuItem, type CustomerTablePayload } from "@/src/lib/customerOrder";
 import { customerTableOrdersHref, shouldShowCustomerCartAction, summarizeCustomerOrderItems } from "@/src/lib/customerOrderView";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
@@ -12,7 +12,6 @@ import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
-import type { MenuItem } from "@/src/types/menu";
 
 type CartItem = CustomerCartItemInput & {
   key: string;
@@ -29,7 +28,7 @@ export default function CustomerTableOrderPage() {
   const [payload, setPayload] = useState<CustomerTablePayload | null>(null);
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
-  const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const [selectedMenu, setSelectedMenu] = useState<CustomerMenuItem | null>(null);
   const [selectedMenuClosing, setSelectedMenuClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [quantity, setQuantity] = useState(1);
@@ -41,6 +40,7 @@ export default function CustomerTableOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const submissionKeyRef = useRef<string | null>(null);
 
   const copy = language === "th"
     ? {
@@ -180,7 +180,7 @@ export default function CustomerTableOrderPage() {
   const canOrder = Boolean(payload?.order);
   const showCartAction = shouldShowCustomerCartAction(canOrder, cartItemCount);
 
-  const openMenu = (item: MenuItem) => {
+  const openMenu = (item: CustomerMenuItem) => {
     if (!canOrder) {
       setError(copy.noActiveOrderBody);
       return;
@@ -236,10 +236,12 @@ export default function CustomerTableOrderPage() {
   };
 
   const increaseCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.map((item) => item.key === key ? { ...item, quantity: item.quantity + 1 } : item));
   };
 
   const decreaseCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.flatMap((item) => {
       if (item.key !== key) return [item];
       if (item.quantity <= 1) return [];
@@ -248,6 +250,7 @@ export default function CustomerTableOrderPage() {
   };
 
   const removeCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.filter((item) => item.key !== key));
   };
 
@@ -264,6 +267,7 @@ export default function CustomerTableOrderPage() {
 
   const addToCart = () => {
     if (!canOrder || !selectedMenu || requiredOptionsMissing) return;
+    submissionKeyRef.current = null;
     const item: CartItem = {
       key: `${selectedMenu.ID}-${Date.now()}-${Math.random()}`,
       menu_id: selectedMenu.ID,
@@ -285,10 +289,13 @@ export default function CustomerTableOrderPage() {
     setError("");
     setSuccess("");
     try {
+      const requestKey = submissionKeyRef.current ?? createCustomerOrderRequestKey();
+      submissionKeyRef.current = requestKey;
       const res = await submitCustomerTableOrder(token, {
         items: cart.map(({ menu_id, quantity, note, selected_option_ids }) => ({ menu_id, quantity, note, selected_option_ids })),
-      });
+      }, requestKey);
       setPayload(res.data);
+      submissionKeyRef.current = null;
       setCart([]);
       setSuccess(copy.submitted);
       closeSummary();

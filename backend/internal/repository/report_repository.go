@@ -37,9 +37,15 @@ type ReportMenuMargin struct {
 func (r *ReportRepository) SalesByDay(restaurantID uint, since time.Time) ([]ReportSalesDay, error) {
 	var rows []ReportSalesDay
 	err := r.db.Model(&entity.Order{}).
-		Select("order_date, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
-		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
-		Group("order_date").
+		Select("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS order_date, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where(
+			"restaurant_id = ? AND completed_at >= ? AND status = ? AND payment_status = ?",
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
 		Order("order_date desc").
 		Scan(&rows).Error
 	if err != nil {
@@ -52,11 +58,18 @@ func (r *ReportRepository) SalesByDay(restaurantID uint, since time.Time) ([]Rep
 	}
 	var costs []dailyCost
 	err = r.db.Table("order_inventory_deductions").
-		Select("orders.order_date AS order_date, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
+		Select("TO_CHAR(orders.completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS order_date, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
 		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
 		Joins("JOIN orders ON orders.id = order_items.order_id").
-		Where("order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND orders.opened_at >= ? AND order_items.status = ?", restaurantID, since, entity.OrderItemStatusServed).
-		Group("orders.order_date").
+		Where(
+			"order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ? AND order_items.status = ?",
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+			entity.OrderItemStatusServed,
+		).
+		Group("TO_CHAR(orders.completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
 		Scan(&costs).Error
 	if err != nil {
 		return nil, err
@@ -87,8 +100,20 @@ func (r *ReportRepository) MenuMargins(restaurantID uint, since time.Time) ([]Re
 				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
 				ELSE 0
 			END AS margin`).
-		Joins("LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id").
-		Where("order_items.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status = ? AND order_items.deleted_at IS NULL", restaurantID, since, entity.OrderItemStatusServed).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins(
+			"LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id",
+			restaurantID,
+		).
+		Where(
+			"order_items.restaurant_id = ? AND order_items.status = ? AND order_items.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
 		Group("order_items.menu_id, order_items.menu_name").
 		Order("profit desc, revenue desc").
 		Limit(12).
@@ -109,22 +134,21 @@ func (r *ReportRepository) TopMenuItemsByMonth(restaurantID uint, monthStart, mo
 	err := r.db.Table("order_items").
 		Select("order_items.menu_id, order_items.menu_name, COALESCE(SUM(order_items.quantity), 0) AS quantity").
 		Joins("JOIN orders ON orders.id = order_items.order_id").
-		Where("order_items.restaurant_id = ? AND orders.order_date >= ? AND orders.order_date < ? AND orders.status <> ? AND order_items.status <> ? AND order_items.deleted_at IS NULL",
-			restaurantID, monthStart.Format("2006-01-02"), monthEnd.Format("2006-01-02"), entity.OrderStatusCancelled, entity.OrderItemStatusCancelled).
+		Where(
+			"order_items.restaurant_id = ? AND orders.restaurant_id = ? AND orders.completed_at >= ? AND orders.completed_at < ? AND orders.status = ? AND orders.payment_status = ? AND orders.deleted_at IS NULL AND order_items.status = ? AND order_items.deleted_at IS NULL",
+			restaurantID,
+			restaurantID,
+			monthStart,
+			monthEnd,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+			entity.OrderItemStatusServed,
+		).
 		Group("order_items.menu_id, order_items.menu_name").
 		Order("quantity desc").
+		Limit(100).
 		Scan(&rows).Error
 	return rows, err
-}
-
-func (r *ReportRepository) TotalFoodCost(restaurantID uint, since time.Time) (float64, error) {
-	var total float64
-	err := r.db.Table("order_inventory_deductions").
-		Select("COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0)").
-		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
-		Where("order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND order_items.created_at >= ? AND order_items.status = ?", restaurantID, since, entity.OrderItemStatusServed).
-		Scan(&total).Error
-	return total, err
 }
 
 func (r *ReportRepository) StockRisks(restaurantID uint) ([]entity.Ingredient, error) {

@@ -18,7 +18,6 @@ func SetupOrderRoutes(v1 *gin.RouterGroup, orderEvents *realtime.OrderHub) {
 	v1.PATCH("/orders/:id", ctrl.UpdateOrder)
 	v1.POST("/orders/:id/cancel", ctrl.CancelOrder)
 	v1.POST("/orders/:id/close-empty-table", ctrl.CloseEmptyTable)
-	v1.POST("/orders/:id/close", ctrl.CloseOrder)
 	v1.POST("/orders/:id/pay", ctrl.PayOrder)
 
 	v1.POST("/orders/:id/items", ctrl.AddItem)

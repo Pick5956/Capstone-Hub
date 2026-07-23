@@ -15,6 +15,7 @@ export default defineConfig({
       "src/lib/__tests__/homeDashboard.test.ts",
       "src/lib/__tests__/documentTitle.test.ts",
       "src/lib/__tests__/customerOrderView.test.ts",
+      "src/lib/__tests__/invitation.test.ts",
       "src/lib/__tests__/noManualRefreshControls.test.ts",
       "src/lib/__tests__/mediaUrl.test.ts",
       "src/lib/__tests__/authModalMotion.test.ts",
