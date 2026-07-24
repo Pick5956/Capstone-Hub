@@ -162,7 +162,7 @@ func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
 func TestGetGeminiToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 17 {
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 19 {
 		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -179,6 +179,8 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 		"get_ingredient_reorder_forecast": true,
 		"get_dead_stock":                  true,
 		"get_top_cost_ingredients":        true,
+		"get_store_summary":               true,
+		"get_sales_for_period":            true,
 		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -197,7 +199,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 func TestGetGroqToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGroqTools()
-	if len(tools) != 17 {
+	if len(tools) != 19 {
 		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -214,6 +216,8 @@ func TestGetGroqToolsSchema(t *testing.T) {
 		"get_ingredient_reorder_forecast": true,
 		"get_dead_stock":                  true,
 		"get_top_cost_ingredients":        true,
+		"get_store_summary":               true,
+		"get_sales_for_period":            true,
 		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -585,6 +589,70 @@ func TestTopCostIngredientsToolRanksBySpend(t *testing.T) {
 	answer, ok := localToolAnswer(result)
 	if !ok || !strings.Contains(answer, "2000.00 บาท") {
 		t.Fatalf("top cost answer missing value: %q", answer)
+	}
+}
+
+func TestStoreSummaryToolComposesDeterministicOverview(t *testing.T) {
+	snapshot := AISnapshot{
+		GeneratedAt: "2026-07-23T20:00:00+07:00",
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems: 40, MarginItems: 40, CostedMarginItems: 40, SoldMenus: 3, SoldMenusWithRecipes: 3,
+		}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 5, Revenue: 1500},
+			{OrderDate: "2026-07-14", Orders: 4, Revenue: 1000},
+		},
+		TopMenuItems:    []repository.AIMenuSummary{{MenuName: "ผัดไทย", Quantity: 30, Revenue: 3000}, {MenuName: "ต้มยำ", Quantity: 20, Revenue: 4000}},
+		HighMarginMenus: []repository.AIMenuMarginSummary{{MenuName: "ปอเปี๊ยะทอด", Quantity: 10, Margin: 89.75}},
+		StockRisks:      []AIStockRisk{{Name: "กุ้ง", Status: "low"}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetStoreSummary, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("store summary should produce an answer")
+	}
+	for _, expected := range []string{"ภาพรวมร้าน", "2500.00 บาท", "9 ออเดอร์", "ผัดไทย", "ปอเปี๊ยะทอด", "วัตถุดิบใกล้หมด**: 1"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("store summary missing %q: %s", expected, answer)
+		}
+	}
+	// Must not mislabel the 14-day window as "today"
+	if strings.Contains(answer, "วันนี้") {
+		t.Fatalf("store summary must not claim 'วันนี้': %s", answer)
+	}
+}
+
+func TestSalesForPeriodResolvesTodayAndYesterday(t *testing.T) {
+	snapshot := AISnapshot{
+		GeneratedAt:       "2026-07-23T20:00:00+07:00", // reference "today" = 2026-07-23
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 5, Revenue: 1500}, // today
+			{OrderDate: "2026-07-22", Orders: 3, Revenue: 900},  // yesterday
+			{OrderDate: "2026-07-10", Orders: 2, Revenue: 400},  // outside week
+		},
+	}
+	// today
+	todayRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "วันนี้ขายได้เท่าไหร่")
+	if todayRes.SalesForPeriod == nil || todayRes.SalesForPeriod.Revenue != 1500 || todayRes.SalesForPeriod.Label != "วันนี้" {
+		t.Fatalf("today period wrong: %+v", todayRes.SalesForPeriod)
+	}
+	// yesterday
+	yRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "เมื่อวานขายดีไหม")
+	if yRes.SalesForPeriod == nil || yRes.SalesForPeriod.Revenue != 900 || yRes.SalesForPeriod.Label != "เมื่อวาน" {
+		t.Fatalf("yesterday period wrong: %+v", yRes.SalesForPeriod)
+	}
+	// this week (last 7 days: 07-17..07-23) -> only 23 and 22
+	wRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "ยอดสัปดาห์นี้")
+	if wRes.SalesForPeriod == nil || wRes.SalesForPeriod.Revenue != 2400 {
+		t.Fatalf("this-week period wrong (want 2400): %+v", wRes.SalesForPeriod)
+	}
+	answer, ok := localToolAnswer(yRes)
+	if !ok || !strings.Contains(answer, "เมื่อวาน") {
+		t.Fatalf("period answer should mention เมื่อวาน: %q", answer)
 	}
 }
 

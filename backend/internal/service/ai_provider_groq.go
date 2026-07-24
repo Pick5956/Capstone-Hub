@@ -365,6 +365,22 @@ func (s *AIService) getGroqTools() []groqTool {
 				Parameters:  groqParameters{Type: "object"},
 			},
 		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_store_summary",
+				Description: "Backend-composed overall store overview (sales, trend, top menus, best margin, low stock) for broad summary requests.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_sales_for_period",
+				Description: "Sales for a specific period named by the user: today, yesterday, last 7 days, or the previous week.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
 	}
 }
 

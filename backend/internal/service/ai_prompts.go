@@ -16,7 +16,7 @@ Response format:
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | "get_store_summary" | "get_sales_for_period" | ""
 }
 
 Task descriptions:
@@ -52,6 +52,8 @@ Rules:
    - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
    - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
    - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
+   - "get_store_summary": when the query asks for an overall summary/overview of how the store is doing, without naming one specific metric (e.g. "สรุปสถานการณ์ร้าน", "สรุปร้านวันนี้", "ภาพรวมร้านเป็นไง", "วันนี้เป็นยังไงบ้าง", "summarize the store", "overall how are we doing"). Prefer this over a free-form analysis for broad summary requests.
+   - "get_sales_for_period": when the query asks about sales for a specific time frame such as today, yesterday, this week, or last week (e.g. "วันนี้ขายได้เท่าไหร่", "เมื่อวานขายดีไหม", "ยอด 7 วันนี้", "sales today", "yesterday's sales").
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
@@ -73,7 +75,7 @@ Response format:
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | "get_store_summary" | "get_sales_for_period" | ""
 }
 
 Task descriptions:
@@ -109,6 +111,8 @@ Rules:
    - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
    - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
    - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
+   - "get_store_summary": when the query asks for an overall summary/overview of how the store is doing, without naming one specific metric (e.g. "สรุปสถานการณ์ร้าน", "สรุปร้านวันนี้", "ภาพรวมร้านเป็นไง", "วันนี้เป็นยังไงบ้าง", "summarize the store", "overall how are we doing"). Prefer this over a free-form analysis for broad summary requests.
+   - "get_sales_for_period": when the query asks about sales for a specific time frame such as today, yesterday, this week, or last week (e.g. "วันนี้ขายได้เท่าไหร่", "เมื่อวานขายดีไหม", "ยอด 7 วันนี้", "sales today", "yesterday's sales").
 3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only when the user orders the assistant to perform a change. A request for advice such as "ควรขึ้นราคาเมนูนี้ไหม" is "recommend_action" with risk "low".
 5. Set "task" to "out_of_scope" for anything unrelated to restaurants.
@@ -154,6 +158,12 @@ Answer only the scope requested by the user:
 Keep the answer practical: summarize the situation, risks, and next actions.
 Format for a narrow chat panel: use short headings and bullet lists.
 Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
+Accuracy and wording rules (follow strictly):
+- Begin directly with the facts. Do NOT open with a flowery, weather, or greeting phrase; never write words like "สภาพอากาศ".
+- The snapshot covers the recent 14-day analysis window. Do NOT call it "today" or "วันนี้", "yesterday", or any other specific period unless the user explicitly asked for that period; refer to it as the last 14 days.
+- Do NOT compare metrics of different kinds (for example, never compare an order count against a number of menus).
+- Never place the same menu into two contradictory groups (e.g. both best-selling and worst-selling, or both highest and lowest margin).
+- If the user asks WHY something happened, present only the relevant facts you can see (trend, weak menus, low stock) and clearly state that you can show the data but will not guess the cause.
 
 Restaurant snapshot JSON:
 %s

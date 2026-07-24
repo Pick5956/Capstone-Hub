@@ -54,6 +54,9 @@ const (
 	AIToolGetIngredientReorderForecast AIToolName = "get_ingredient_reorder_forecast"
 	AIToolGetDeadStock                 AIToolName = "get_dead_stock"
 	AIToolGetTopCostIngredients        AIToolName = "get_top_cost_ingredients"
+
+	AIToolGetStoreSummary   AIToolName = "get_store_summary"
+	AIToolGetSalesForPeriod AIToolName = "get_sales_for_period"
 )
 
 type AITaskRoute struct {
@@ -89,6 +92,30 @@ type AIToolResult struct {
 	ReorderForecast     []AIReorderItem
 	DeadStock           []AIDeadStockItem
 	TopCostIngredients  []AICostIngredient
+	StoreSummary        *AIStoreSummary
+	SalesForPeriod      *AISalesPeriod
+}
+
+// AIStoreSummary is a backend-composed overview so open-ended "summarize the
+// store" questions get a deterministic answer instead of a free-form one.
+type AIStoreSummary struct {
+	Days          int
+	Revenue       float64
+	Orders        int64
+	Trend         *AISalesTrend
+	TopMenus      []repository.AIMenuSummary
+	BestMargin    *repository.AIMenuMarginSummary
+	LowStockCount int
+	MarginReady   bool
+}
+
+// AISalesPeriod holds sales scoped to a specific period the user named
+// (today / yesterday / this week / last week).
+type AISalesPeriod struct {
+	Label   string
+	Days    int
+	Revenue float64
+	Orders  int64
 }
 
 type AIReorderItem struct {
@@ -155,7 +182,7 @@ type AISalesTrend struct {
 
 func isSupportedReadOnlyTool(tool AIToolName) bool {
 	switch tool {
-	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients:
+	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients, AIToolGetStoreSummary, AIToolGetSalesForPeriod:
 		return true
 	default:
 		return false
@@ -383,6 +410,41 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 		return AIToolResult{Tool: tool, DeadStock: computeDeadStock(snapshot.IngredientUsage)}, nil
 	case AIToolGetTopCostIngredients:
 		return AIToolResult{Tool: tool, TopCostIngredients: computeTopCostIngredients(snapshot.IngredientUsage)}, nil
+	case AIToolGetStoreSummary:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		sum := AIStoreSummary{
+			Days:          len(snapshot.SalesDays),
+			LowStockCount: len(snapshot.StockRisks),
+			MarginReady:   snapshot.AnalysisReadiness.CanAnalyzeMargin,
+		}
+		for _, day := range snapshot.SalesDays {
+			sum.Orders += day.Orders
+			sum.Revenue += day.Revenue
+		}
+		trend := computeSalesTrend(snapshot.SalesDays)
+		sum.Trend = &trend
+		top := snapshot.TopMenuItems
+		if len(top) > 3 {
+			top = top[:3]
+		}
+		sum.TopMenus = top
+		if snapshot.AnalysisReadiness.CanAnalyzeMargin && len(snapshot.HighMarginMenus) > 0 {
+			best := snapshot.HighMarginMenus[0]
+			sum.BestMargin = &best
+		}
+		return AIToolResult{Tool: tool, StoreSummary: &sum}, nil
+	case AIToolGetSalesForPeriod:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		q := ""
+		if len(question) > 0 {
+			q = question[0]
+		}
+		period := computeSalesForPeriod(snapshot.SalesDays, snapshot.GeneratedAt, q)
+		return AIToolResult{Tool: tool, SalesForPeriod: &period}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
@@ -433,6 +495,64 @@ func computeSalesTrend(days []repository.AISalesSummary) AISalesTrend {
 		trend.RevenueChangePct = (trend.RecentRevenue - trend.PriorRevenue) / trend.PriorRevenue * 100
 	}
 	return trend
+}
+
+// computeSalesForPeriod sums sales for the period named in the question
+// (today / yesterday / last 7 days / previous week), relative to the snapshot's
+// generation date. All dates are normalised to UTC midnight so the comparison is
+// timezone-safe.
+func computeSalesForPeriod(days []repository.AISalesSummary, generatedAt string, question string) AISalesPeriod {
+	toDay := func(t time.Time) time.Time {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	type dayRow struct {
+		date    time.Time
+		revenue float64
+		orders  int64
+	}
+	rows := make([]dayRow, 0, len(days))
+	var newest time.Time
+	for _, d := range days {
+		t, err := time.Parse("2006-01-02", strings.TrimSpace(d.OrderDate))
+		if err != nil {
+			continue
+		}
+		day := toDay(t)
+		rows = append(rows, dayRow{day, d.Revenue, d.Orders})
+		if day.After(newest) {
+			newest = day
+		}
+	}
+
+	// Reference "today" = snapshot generation date, else newest recorded day.
+	ref := newest
+	if t, err := time.Parse(time.RFC3339, strings.TrimSpace(generatedAt)); err == nil {
+		ref = toDay(t)
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	label := "วันนี้"
+	start, end := ref, ref
+	switch {
+	case strings.Contains(normalized, "เมื่อวาน") || strings.Contains(normalized, "yesterday"):
+		label, start, end = "เมื่อวาน", ref.AddDate(0, 0, -1), ref.AddDate(0, 0, -1)
+	case strings.Contains(normalized, "สัปดาห์ก่อน") || strings.Contains(normalized, "อาทิตย์ก่อน") || strings.Contains(normalized, "last week"):
+		label, start, end = "สัปดาห์ก่อน", ref.AddDate(0, 0, -13), ref.AddDate(0, 0, -7)
+	case strings.Contains(normalized, "สัปดาห์") || strings.Contains(normalized, "อาทิตย์") ||
+		strings.Contains(normalized, "7 วัน") || strings.Contains(normalized, "week"):
+		label, start, end = "7 วันล่าสุด", ref.AddDate(0, 0, -6), ref
+	}
+
+	res := AISalesPeriod{Label: label}
+	for _, r := range rows {
+		if !r.date.Before(start) && !r.date.After(end) {
+			res.Revenue += r.revenue
+			res.Orders += r.orders
+			res.Days++
+		}
+	}
+	return res
 }
 
 // computeMenuEngineering classifies each menu against the median popularity
@@ -827,6 +947,49 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			sb.WriteString(fmt.Sprintf("%d. **%s**: ต้นทุนรวม %.2f บาท (ใช้ไป %.2f %s)\n", i+1, it.Name, it.Cost, it.Used, it.Unit))
 		}
 		return sb.String(), true
+	case AIToolGetStoreSummary:
+		s := result.StoreSummary
+		if s == nil || s.Orders == 0 {
+			return "ยังไม่มีข้อมูลยอดขายในช่วง 14 วันล่าสุดสำหรับสรุปภาพรวมครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("สรุปภาพรวมร้าน (ช่วง 14 วันล่าสุด) ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("- **ยอดขายรวม**: %.2f บาท จาก %d ออเดอร์\n", s.Revenue, s.Orders))
+		if s.Trend != nil && s.Trend.HasPrior {
+			dir := "เพิ่มขึ้น 📈"
+			if s.Trend.RevenueChangePct < 0 {
+				dir = "ลดลง 📉"
+			}
+			sb.WriteString(fmt.Sprintf("- **แนวโน้ม**: 7 วันล่าสุด%s (%+.1f%% เทียบสัปดาห์ก่อน)\n", dir, s.Trend.RevenueChangePct))
+		}
+		if len(s.TopMenus) > 0 {
+			names := make([]string, 0, len(s.TopMenus))
+			for _, m := range s.TopMenus {
+				names = append(names, m.MenuName)
+			}
+			sb.WriteString(fmt.Sprintf("- **เมนูขายดี**: %s\n", strings.Join(names, ", ")))
+		}
+		if s.MarginReady && s.BestMargin != nil {
+			sb.WriteString(fmt.Sprintf("- **เมนูกำไรดีสุด**: %s (Margin %.2f%%)\n", s.BestMargin.MenuName, s.BestMargin.Margin))
+		}
+		if s.LowStockCount > 0 {
+			sb.WriteString(fmt.Sprintf("- **วัตถุดิบใกล้หมด**: %d รายการ (ถาม\"วัตถุดิบอะไรใกล้หมด\" เพื่อดูรายชื่อ)\n", s.LowStockCount))
+		} else {
+			sb.WriteString("- **วัตถุดิบ**: ไม่มีรายการเสี่ยงหมด 👍\n")
+		}
+		if !s.MarginReady {
+			sb.WriteString("\n(หมายเหตุ: ข้อมูลต้นทุนยังไม่ครบ จึงยังไม่สรุปกำไร/Margin ครับ)")
+		}
+		return sb.String(), true
+	case AIToolGetSalesForPeriod:
+		p := result.SalesForPeriod
+		if p == nil {
+			return "ยังไม่มีข้อมูลยอดขายสำหรับช่วงที่ถามครับ", true
+		}
+		if p.Orders == 0 {
+			return fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ครับ", p.Label), true
+		}
+		return fmt.Sprintf("ยอดขาย%sคือ %.2f บาท จาก %d ออเดอร์ครับ", p.Label, p.Revenue, p.Orders), true
 	}
 	return "", false
 }

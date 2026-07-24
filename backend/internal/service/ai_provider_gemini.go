@@ -327,6 +327,16 @@ func (s *AIService) getGeminiTools() []geminiTool {
 					Description: "Rank ingredients by total cost consumed in the analysis window.",
 					Parameters:  geminiParameters{Type: "OBJECT"},
 				},
+				{
+					Name:        "get_store_summary",
+					Description: "Backend-composed overall store overview (sales, trend, top menus, best margin, low stock) for broad summary requests.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_sales_for_period",
+					Description: "Sales for a specific period named by the user: today, yesterday, last 7 days, or the previous week.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
 			},
 		},
 	}
