@@ -11,9 +11,10 @@ import {
   Send, 
   TrendingUp, 
   Wallet, 
-  X, 
+  X,
   BarChart2,
-  Lightbulb
+  Lightbulb,
+  RotateCcw
 } from "lucide-react";
 import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
@@ -37,6 +38,14 @@ type Message = {
 type StoredMessage = Omit<Message, "createdAt"> & {
   createdAt?: string;
 };
+
+// Chat history is session-scoped, not a permanent record: it is keyed per
+// (restaurant, user) so a shared device never leaks one person's chat to the
+// next, and it expires after one work shift. Nothing is stored server-side.
+const CHAT_KEY_PREFIX = "restaurant_ai_chat";
+const CHAT_HISTORY_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+type StoredChat = { savedAt?: number; messages?: StoredMessage[] };
 
 function formatCurrency(value: number, language: "th" | "en") {
   return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
@@ -145,6 +154,7 @@ export default function AIOperationsFloatingChat() {
         hideTips: "ซ่อนคำถามแนะนำ",
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
+        clearChat: "เริ่มแชทใหม่",
       }
     : {
         openAssistant: "Open AI assistant",
@@ -153,6 +163,7 @@ export default function AIOperationsFloatingChat() {
         hideTips: "Hide suggested questions",
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
+        clearChat: "New chat",
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -173,47 +184,70 @@ export default function AIOperationsFloatingChat() {
 
   const canAskAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
 
-  // Load saved messages on mount
+  // Per-(restaurant, user) storage key; null until both are known.
+  const chatStorageKey = useMemo(
+    () => (user && activeMembership ? `${CHAT_KEY_PREFIX}:${activeMembership.restaurant_id}:${user.ID}` : null),
+    [user, activeMembership],
+  );
+
+  // Load saved messages for the current (restaurant, user), applying the TTL and
+  // cleaning up the legacy unscoped key plus any other expired chats on the device.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("restaurant_ai_chat");
-      if (saved) {
+    if (typeof window === "undefined") return;
+
+    const welcome: Message[] = [
+      { id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() },
+    ];
+
+    try {
+      localStorage.removeItem(CHAT_KEY_PREFIX); // remove the old permanent, unscoped key
+      for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(`${CHAT_KEY_PREFIX}:`) || k === chatStorageKey) continue;
         try {
-          const parsed: unknown = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const rehydrated = parsed.map((m) => {
-              const stored = m as StoredMessage;
-              return {
-              ...m,
-              createdAt: stored.createdAt ? new Date(stored.createdAt) : new Date(),
-              };
-            });
-            setMessages(rehydrated);
-            return;
+          const other = JSON.parse(localStorage.getItem(k) || "null") as StoredChat | null;
+          if (!other?.savedAt || Date.now() - other.savedAt > CHAT_HISTORY_TTL_MS) {
+            localStorage.removeItem(k); // purge stale chats from previous users/sessions
           }
-        } catch (e) {
-          console.error("Failed to parse saved chat messages:", e);
+        } catch {
+          localStorage.removeItem(k);
         }
       }
-      
-      // Default initial welcome message if no history
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: copy.welcome,
-          createdAt: new Date(),
-        },
-      ]);
+    } catch {
+      // localStorage may be unavailable (private mode); fall through to welcome
     }
-  }, [copy.welcome]);
 
-  // Save messages to localStorage when updated
-  useEffect(() => {
-    if (typeof window !== "undefined" && messages.length > 0) {
-      localStorage.setItem("restaurant_ai_chat", JSON.stringify(messages));
+    if (!chatStorageKey) {
+      setMessages(welcome);
+      return;
     }
-  }, [messages]);
+
+    const saved = localStorage.getItem(chatStorageKey);
+    if (saved) {
+      try {
+        const entry = JSON.parse(saved) as StoredChat;
+        const fresh = entry.savedAt && Date.now() - entry.savedAt <= CHAT_HISTORY_TTL_MS;
+        if (fresh && Array.isArray(entry.messages) && entry.messages.length > 0) {
+          setMessages(
+            entry.messages.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })),
+          );
+          return;
+        }
+        localStorage.removeItem(chatStorageKey); // expired or malformed
+      } catch (e) {
+        console.error("Failed to parse saved chat messages:", e);
+      }
+    }
+
+    setMessages(welcome);
+  }, [chatStorageKey, copy.welcome]);
+
+  // Persist to the scoped key with a timestamp; never persist a lone welcome.
+  useEffect(() => {
+    if (typeof window === "undefined" || !chatStorageKey || messages.length === 0) return;
+    if (messages.length === 1 && messages[0].id === "welcome") return;
+    localStorage.setItem(chatStorageKey, JSON.stringify({ savedAt: Date.now(), messages }));
+  }, [messages, chatStorageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -265,6 +299,15 @@ export default function AIOperationsFloatingChat() {
       .filter((message): message is Message & { role: "user" | "assistant" } => message.role !== "system")
       .slice(-6)
       .map((message) => ({ role: message.role, content: message.content }));
+
+  // Start a fresh chat: drop the stored history and reset to the welcome message.
+  const handleClearChat = () => {
+    if (typeof window !== "undefined" && chatStorageKey) {
+      localStorage.removeItem(chatStorageKey);
+    }
+    setShowTips(true);
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  };
 
   const handleAction = (action: AIGuidedAction) => {
     if (action.prompt) {
@@ -613,6 +656,21 @@ export default function AIOperationsFloatingChat() {
                   }`}
                 >
                   <BarChart2 className="h-4.5 w-4.5" />
+                </button>
+              )}
+              {/* New Chat / Clear History */}
+              {messages.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={labels.clearChat}
+                  title={labels.clearChat}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClearChat();
+                  }}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
+                >
+                  <RotateCcw className="h-4.5 w-4.5" />
                 </button>
               )}
               {/* Close Panel */}
