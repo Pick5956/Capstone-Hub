@@ -457,7 +457,9 @@ export default function AIOperationsFloatingChat() {
     }
   };
 
-  if (!activeMembership || !showAIAssistant) return null;
+  // Hide the floating widget on the dedicated AI assistant page to avoid two
+  // chat surfaces at once (they share the same history).
+  if (!activeMembership || !showAIAssistant || pathname === "/ai-assistant") return null;
 
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];
