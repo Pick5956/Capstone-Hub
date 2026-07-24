@@ -22,6 +22,9 @@ export default function LanguageToggle({
             key={option.value}
             type="button"
             onClick={() => setLanguage(option.value)}
+            aria-label={option.value === "th" ? "แสดงภาษาไทย" : "Display in English"}
+            aria-pressed={active}
+            lang={option.value}
             className={`h-8 rounded-md px-2.5 text-[11px] font-semibold transition-colors ${
               active
                 ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"

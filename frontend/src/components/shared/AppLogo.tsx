@@ -16,7 +16,7 @@ export default function AppLogo({ size = 36, priority = false, className = "" }:
     >
       <Image
         src={APP_LOGO_SRC}
-        alt="Restaurant Hub"
+        alt="Dishy"
         fill
         priority={priority}
         sizes={`${size}px`}

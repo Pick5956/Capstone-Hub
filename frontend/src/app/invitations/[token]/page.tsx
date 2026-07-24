@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark, ThemeButton, useWorkspaceUser, formatUserName } from "../../restaurants/restaurantWorkspaceUi";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import { acceptInvitation, getInvitationByToken } from "@/src/lib/invitation";
+import { acceptInvitation, getInvitationByToken, invitationEmailMismatch } from "@/src/lib/invitation";
 import { restaurantRepository } from "../../repositories/restaurantRepository";
 import type { Invitation } from "@/src/types/restaurant";
 import { Skeleton, SkeletonText } from "@/src/components/shared/Skeleton";
@@ -107,7 +107,7 @@ export default function InvitationAcceptPage() {
 
   const token = params.token;
   const statusLabel = useMemo(() => invitationStateLabel(invitation, usable, language), [invitation, usable, language]);
-  const emailMismatch = Boolean(invitation?.email && user?.email && invitation.email.toLowerCase() !== user.email.toLowerCase());
+  const emailMismatch = invitationEmailMismatch(invitation?.email, user?.email);
 
   useEffect(() => {
     let active = true;

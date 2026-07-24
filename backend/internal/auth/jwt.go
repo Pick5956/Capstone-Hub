@@ -16,8 +16,9 @@ type JwtWrapper struct {
 }
 
 type JwtClaims struct {
-	UserID uint
-	Role   string
+	UserID       uint   `json:"user_id"`
+	Role         string `json:"role"`
+	TokenVersion uint   `json:"token_version"`
 	jwt.RegisteredClaims
 }
 
@@ -56,14 +57,18 @@ func (j *JwtWrapper) ValidateToken(tokenString string) (*JwtClaims, error) {
 	return claims, nil
 }
 
-func (j *JwtWrapper) GenerateToken(userID uint, role string) (string, error) {
+func (j *JwtWrapper) GenerateToken(userID uint, role string, tokenVersion uint) (string, error) {
 	if strings.TrimSpace(j.SecretKey) == "" {
 		return "", errors.New("jwt secret is not configured")
 	}
+	if tokenVersion == 0 {
+		return "", errors.New("invalid token version")
+	}
 	now := time.Now()
 	claims := &JwtClaims{
-		UserID: userID,
-		Role:   role,
+		UserID:       userID,
+		Role:         role,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),

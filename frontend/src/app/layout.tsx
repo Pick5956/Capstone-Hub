@@ -18,8 +18,8 @@ const fontKanit = Kanit({
 
 export const metadata: Metadata = {
   title: {
-    default: "Restaurant Hub · ระบบจัดการร้านอาหาร",
-    template: "%s · Restaurant Hub",
+    default: "Dishy · ระบบจัดการร้านอาหาร",
+    template: "%s · Dishy",
   },
   description: "ระบบจัดการร้านอาหาร ออเดอร์ ครัว โต๊ะ และการชำระเงิน",
   icons: {

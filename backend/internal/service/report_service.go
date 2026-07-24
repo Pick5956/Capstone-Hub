@@ -63,10 +63,6 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 	if err != nil {
 		return nil, err
 	}
-	totalFoodCost, err := s.repo.TotalFoodCost(restaurantID, since)
-	if err != nil {
-		return nil, err
-	}
 	if sales == nil {
 		sales = []repository.ReportSalesDay{}
 	}
@@ -74,12 +70,18 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 		margins = []repository.ReportMenuMargin{}
 	}
 
+	for i := range sales {
+		sales[i].Cost = roundMoney(sales[i].Cost)
+		sales[i].Profit = roundMoney(sales[i].Profit)
+	}
+
 	summary := ManagerReportSummary{}
 	for _, day := range sales {
 		summary.Orders += day.Orders
 		summary.Revenue += day.Revenue
+		summary.Cost += day.Cost
 	}
-	summary.Cost = roundMoney(totalFoodCost)
+	summary.Cost = roundMoney(summary.Cost)
 	summary.Profit = roundMoney(summary.Revenue - summary.Cost)
 	if summary.Revenue > 0 {
 		summary.Margin = roundMoney(summary.Profit / summary.Revenue * 100)
@@ -97,6 +99,32 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 		MenuMargins: margins,
 		StockRisks:  risks,
 		Summary:     summary,
+	}, nil
+}
+
+type TopMenuItemsResponse struct {
+	Year  int                            `json:"year"`
+	Month int                            `json:"month"`
+	Items []repository.ReportTopMenuItem `json:"items"`
+}
+
+func (s *ReportService) TopMenuItemsByMonth(restaurantID uint, year, month int) (*TopMenuItemsResponse, error) {
+	loc := repository.BangkokNow().Location()
+	monthStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+
+	items, err := s.repo.TopMenuItemsByMonth(restaurantID, monthStart, monthEnd)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []repository.ReportTopMenuItem{}
+	}
+
+	return &TopMenuItemsResponse{
+		Year:  year,
+		Month: month,
+		Items: items,
 	}, nil
 }
 

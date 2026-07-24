@@ -7,7 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"net"
+	"net/mail"
 	"net/smtp"
 	"net/url"
 	"os"
@@ -26,7 +27,7 @@ type AuthService struct {
 	memberRepo *repository.RestaurantMemberRepository
 }
 
-var ErrPasswordResetGoogleAccount = errors.New("use google login for this account")
+var ErrPasswordResetEmailNotConfigured = errors.New("password reset email is not configured")
 
 const defaultProfileImage = "/default-avatar.svg"
 
@@ -38,46 +39,68 @@ func ProvideAuthService(userRepo *repository.UserRepository, memberRepo *reposit
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required,email,max=254"`
 	Password string `json:"password" binding:"required"`
 }
 
+type RegisterRequest struct {
+	Email     string `json:"email" binding:"required,email,max=254"`
+	Password  string `json:"password" binding:"required"`
+	FirstName string `json:"first_name" binding:"required,max=100"`
+	LastName  string `json:"last_name" binding:"required,max=100"`
+	Nickname  string `json:"nickname" binding:"max=100"`
+	Phone     string `json:"phone" binding:"max=40"`
+	Address   string `json:"address" binding:"max=500"`
+	BirthDay  string `json:"birthday" binding:"max=32"`
+}
+
 type GoogleLoginRequest struct {
-	IDToken string `json:"id_token" binding:"required"`
+	IDToken string `json:"id_token" binding:"required,max=16384"`
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Email string `json:"email" binding:"required,email,max=254"`
 }
 
 type ResetPasswordRequest struct {
-	Token    string `json:"token" binding:"required"`
+	Token    string `json:"token" binding:"required,max=128"`
 	Password string `json:"password" binding:"required"`
 }
 
 type UpdateProfileRequest struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Nickname  string `json:"nickname"`
-	Phone     string `json:"phone"`
+	FirstName string `json:"first_name" binding:"max=100"`
+	LastName  string `json:"last_name" binding:"max=100"`
+	Nickname  string `json:"nickname" binding:"max=100"`
+	Phone     string `json:"phone" binding:"max=40"`
 }
 
 type LoginResponse struct {
-	Token       string                    `json:"token"`
-	User        *entity.User              `json:"user"`
-	Memberships []entity.RestaurantMember `json:"memberships"`
+	Token       string               `json:"token"`
+	User        *entity.User         `json:"user"`
+	Memberships []MembershipResponse `json:"memberships"`
 }
 
-func (s *AuthService) Register(user *entity.User) (*entity.User, error) {
-	user.Email = strings.TrimSpace(strings.ToLower(user.Email))
-	user.AuthProvider = "local"
-	user.GoogleID = nil
-	user.ProfileImage = defaultProfileImage
-	if err := user.Validation(); err != nil {
+func (s *AuthService) Register(req *RegisterRequest) (*entity.User, error) {
+	if err := validateLocalPassword(req.Password); err != nil {
 		return nil, err
 	}
-	if user.Password == "" {
-		return nil, errors.New("Password is required")
+
+	user := &entity.User{
+		Email:        strings.TrimSpace(strings.ToLower(req.Email)),
+		Password:     req.Password,
+		AuthProvider: "local",
+		FirstName:    strings.TrimSpace(req.FirstName),
+		LastName:     strings.TrimSpace(req.LastName),
+		Nickname:     strings.TrimSpace(req.Nickname),
+		Phone:        strings.TrimSpace(req.Phone),
+		Address:      strings.TrimSpace(req.Address),
+		BirthDay:     strings.TrimSpace(req.BirthDay),
+		ProfileImage: defaultProfileImage,
+		Status:       "active",
+		TokenVersion: 1,
+	}
+	if err := user.Validation(); err != nil {
+		return nil, err
 	}
 
 	hashed, err := auth.HashPassword(user.Password)
@@ -155,10 +178,6 @@ func (s *AuthService) RequestPasswordReset(req *ForgotPasswordRequest) error {
 	user, err := s.userRepo.FindByEmailProvider(email, "local")
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			googleUser, googleErr := s.userRepo.FindByEmailProvider(email, "google")
-			if googleErr == nil && googleUser != nil {
-				return ErrPasswordResetGoogleAccount
-			}
 			return nil
 		}
 		return err
@@ -180,13 +199,13 @@ func (s *AuthService) RequestPasswordReset(req *ForgotPasswordRequest) error {
 }
 
 func (s *AuthService) ResetPassword(req *ResetPasswordRequest) error {
-	token := strings.TrimSpace(req.Token)
-	password := strings.TrimSpace(req.Password)
-	if token == "" {
-		return errors.New("reset token is required")
+	token, err := normalizeResetToken(req.Token)
+	if err != nil {
+		return err
 	}
-	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+	password := req.Password
+	if err := validateLocalPassword(password); err != nil {
+		return err
 	}
 
 	user, err := s.userRepo.FindByPasswordResetTokenHash(hashResetToken(token))
@@ -209,12 +228,16 @@ func (s *AuthService) ResetPassword(req *ResetPasswordRequest) error {
 }
 
 func (s *AuthService) buildLoginResponse(user *entity.User) (*LoginResponse, error) {
+	if user == nil || user.Status != "active" || user.TokenVersion == 0 {
+		return nil, errors.New("user account is not active")
+	}
+
 	jwtWrapper := &auth.JwtWrapper{
 		SecretKey: os.Getenv("JWT_SECRET"),
 		Issuer:    auth.Issuer,
 	}
 
-	token, err := jwtWrapper.GenerateToken(user.ID, "user")
+	token, err := jwtWrapper.GenerateToken(user.ID, "user", user.TokenVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +250,7 @@ func (s *AuthService) buildLoginResponse(user *entity.User) (*LoginResponse, err
 	return &LoginResponse{
 		Token:       token,
 		User:        hideUserPassword(user),
-		Memberships: memberships,
+		Memberships: NewMembershipResponses(memberships),
 	}, nil
 }
 
@@ -262,6 +285,8 @@ func (s *AuthService) createGoogleUser(claims *auth.GoogleIDTokenClaims) (*entit
 		Email:        strings.TrimSpace(strings.ToLower(claims.Email)),
 		Password:     hashed,
 		ProfileImage: profileImageFromGoogle(claims.Picture),
+		Status:       "active",
+		TokenVersion: 1,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -291,6 +316,19 @@ func hashResetToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func normalizeResetToken(token string) (string, error) {
+	token = strings.TrimSpace(token)
+	const resetTokenBytes = 32
+	if len(token) != base64.RawURLEncoding.EncodedLen(resetTokenBytes) {
+		return "", errors.New("reset link is invalid or expired")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(decoded) != resetTokenBytes {
+		return "", errors.New("reset link is invalid or expired")
+	}
+	return token, nil
+}
+
 func buildPasswordResetURL(token string) string {
 	baseURL := strings.TrimRight(os.Getenv("FRONTEND_URL"), "/")
 	if baseURL == "" {
@@ -300,35 +338,82 @@ func buildPasswordResetURL(token string) string {
 }
 
 func sendPasswordResetEmail(to string, resetURL string) error {
-	host := os.Getenv("SMTP_HOST")
-	port := os.Getenv("SMTP_PORT")
-	from := os.Getenv("SMTP_FROM")
-	username := os.Getenv("SMTP_USER")
-	password := os.Getenv("SMTP_PASSWORD")
-	if host == "" || port == "" || from == "" {
-		fmt.Printf("[password reset] SMTP is not configured. Reset link for %s: %s\n", to, resetURL)
-		return nil
+	return sendPasswordResetEmailWith(to, resetURL, os.Getenv, smtp.SendMail)
+}
+
+type smtpSendMailFunc func(string, smtp.Auth, string, []string, []byte) error
+
+func sendPasswordResetEmailWith(
+	to string,
+	resetURL string,
+	getenv func(string) string,
+	sendMail smtpSendMailFunc,
+) error {
+	host := strings.TrimSpace(getenv("SMTP_HOST"))
+	port := strings.TrimSpace(getenv("SMTP_PORT"))
+	from := strings.TrimSpace(getenv("SMTP_FROM"))
+	username := strings.TrimSpace(getenv("SMTP_USER"))
+	password := strings.TrimSpace(getenv("SMTP_PASSWORD"))
+	if host == "" || port == "" || from == "" || username == "" || password == "" {
+		return ErrPasswordResetEmailNotConfigured
+	}
+
+	sender, err := parsePlainEmailAddress(from)
+	if err != nil {
+		return errors.New("SMTP_FROM must be a valid email address")
+	}
+	recipient, err := parsePlainEmailAddress(to)
+	if err != nil {
+		return errors.New("password reset recipient is invalid")
+	}
+	parsedResetURL, err := url.ParseRequestURI(resetURL)
+	if err != nil || parsedResetURL.Host == "" || (parsedResetURL.Scheme != "http" && parsedResetURL.Scheme != "https") {
+		return errors.New("password reset URL is invalid")
 	}
 
 	var message bytes.Buffer
-	message.WriteString("From: " + from + "\r\n")
-	message.WriteString("To: " + to + "\r\n")
-	message.WriteString("Subject: Restaurant Hub password reset\r\n")
+	message.WriteString("From: dishy.pro <" + sender + ">\r\n")
+	message.WriteString("To: " + recipient + "\r\n")
+	message.WriteString("Subject: Reset your Restaurant Hub password\r\n")
 	message.WriteString("MIME-Version: 1.0\r\n")
-	message.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-	message.WriteString("Use this link to reset your Restaurant Hub password. The link expires in 1 hour.\r\n\r\n")
+	message.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	message.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	message.WriteString("เราได้รับคำขอให้ตั้งรหัสผ่าน Restaurant Hub ใหม่\r\n")
+	message.WriteString("ลิงก์นี้ใช้ได้ภายใน 1 ชั่วโมง หากคุณไม่ได้ส่งคำขอนี้ ไม่ต้องดำเนินการใด ๆ\r\n\r\n")
+	message.WriteString("---\r\n\r\n")
+	message.WriteString("We received a request to reset your Restaurant Hub password.\r\n")
+	message.WriteString("This link is valid for 1 hour. If you did not request this, you can ignore this email.\r\n\r\n")
 	message.WriteString(resetURL + "\r\n")
 
-	var auth smtp.Auth
-	if username != "" || password != "" {
-		auth = smtp.PlainAuth("", username, password, host)
+	auth := smtp.PlainAuth("", username, password, host)
+	return sendMail(net.JoinHostPort(host, port), auth, sender, []string{recipient}, message.Bytes())
+}
+
+func parsePlainEmailAddress(value string) (string, error) {
+	if strings.ContainsAny(value, "\r\n") {
+		return "", errors.New("email address contains a newline")
 	}
-	return smtp.SendMail(host+":"+port, auth, from, []string{to}, message.Bytes())
+	parsed, err := mail.ParseAddress(value)
+	if err != nil || parsed.Address != value {
+		return "", errors.New("email address must not include a display name")
+	}
+	return parsed.Address, nil
 }
 
 func hideUserPassword(user *entity.User) *entity.User {
 	user.Password = ""
 	return user
+}
+
+func validateLocalPassword(password string) error {
+	length := len([]byte(password))
+	if length < 8 {
+		return errors.New("password must be at least 8 bytes")
+	}
+	if length > 72 {
+		return errors.New("password must be at most 72 bytes")
+	}
+	return nil
 }
 
 func (s *AuthService) GetUserById(id uint) (*entity.User, error) {

@@ -21,10 +21,11 @@ const routeTitles: Array<{ match: (pathname: string) => boolean; th: string; en:
   { match: (path) => path === "/restaurants/join", th: "เข้าร่วมร้าน", en: "Join restaurant" },
   { match: (path) => path.startsWith("/invitations/"), th: "คำเชิญเข้าร่วมร้าน", en: "Restaurant invitation" },
   { match: (path) => path === "/reset-password", th: "ตั้งรหัสผ่านใหม่", en: "Reset password" },
+  { match: (path) => /^\/customer\/t\/[^/]+\/orders\/?$/.test(path), th: "รายการที่สั่ง", en: "Table orders" },
   { match: (path) => path.startsWith("/customer/t/"), th: "สั่งอาหาร", en: "Order food" },
 ];
 
-export function pageTitle(pathname: string, language: Language, brand = "Restaurant Hub", orderReference?: string) {
+export function pageTitle(pathname: string, language: Language, brand = "Dishy", orderReference?: string) {
   const orderMatch = pathname.match(/^\/pos\/orders\/([^/]+)$/);
   if (orderMatch) {
     const orderNumber = orderReference?.trim() || decodeURIComponent(orderMatch[1]);

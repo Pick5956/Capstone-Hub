@@ -4,12 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 
-	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -34,7 +34,7 @@ func (ctrl *UserController) Login(c *gin.Context) {
 	var req service.LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
@@ -51,7 +51,7 @@ func (ctrl *UserController) GoogleLogin(c *gin.Context) {
 	var req service.GoogleLoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
@@ -65,20 +65,19 @@ func (ctrl *UserController) GoogleLogin(c *gin.Context) {
 }
 
 func (ctrl *UserController) Register(c *gin.Context) {
-	var user entity.User
+	var req service.RegisterRequest
 
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
 		return
 	}
 
-	created, err := ctrl.authService.Register(&user)
+	created, err := ctrl.authService.Register(&req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
-	created.Password = ""
 	c.JSON(http.StatusCreated, created)
 }
 
@@ -86,20 +85,16 @@ func (ctrl *UserController) ForgotPassword(c *gin.Context) {
 	var req service.ForgotPasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	if err := ctrl.authService.RequestPasswordReset(&req); err != nil {
-		if errors.Is(err, service.ErrPasswordResetGoogleAccount) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "This email uses Google sign-in. Please continue with Google.",
-				"code":  "GOOGLE_ACCOUNT_USE_GOOGLE_LOGIN",
-			})
-			return
+		failureKind := "delivery"
+		if errors.Is(err, service.ErrPasswordResetEmailNotConfigured) {
+			failureKind = "configuration"
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to request password reset"})
-		return
+		log.Printf("[password reset] request could not be completed (%s)", failureKind)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, a password reset link has been sent."})
@@ -109,12 +104,12 @@ func (ctrl *UserController) ResetPassword(c *gin.Context) {
 	var req service.ResetPasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	if err := ctrl.authService.ResetPassword(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -145,13 +140,13 @@ func (ctrl *UserController) UpdateProfile(c *gin.Context) {
 
 	var req service.UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 
 	user, err := ctrl.authService.UpdateProfile(id, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -163,6 +158,11 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 	if !ok {
 		return
 	}
+	existingUser, err := ctrl.authService.GetUserById(id)
+	if err != nil {
+		respondAPIError(c, http.StatusNotFound, err)
+		return
+	}
 
 	file, err := c.FormFile("image")
 	if err != nil {
@@ -171,7 +171,7 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 	}
 	ext, err := validateImageUpload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -184,6 +184,10 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 	fileName := hex.EncodeToString(random) + ext
 	userIDText := strconv.FormatUint(uint64(id), 10)
 	relativeDir := filepath.Join("uploads", "users", userIDText)
+	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
+		respondAPIError(c, http.StatusInsufficientStorage, err)
+		return
+	}
 	if err := os.MkdirAll(relativeDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
 		return
@@ -198,9 +202,15 @@ func (ctrl *UserController) UploadProfileImage(c *gin.Context) {
 	publicPath := publicURL(c, "/uploads/users/"+userIDText+"/"+fileName)
 	user, err := ctrl.authService.UpdateProfileImage(id, publicPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		removeSavedUpload(destination)
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
+	removeReplacedUpload(
+		existingUser.ProfileImage,
+		"/uploads/users/"+userIDText+"/",
+		destination,
+	)
 
 	c.JSON(http.StatusCreated, user)
 }

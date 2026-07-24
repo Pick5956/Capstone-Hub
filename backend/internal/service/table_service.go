@@ -76,27 +76,42 @@ func (s *TableService) CreateTable(restaurantID uint, req *TableRequest) (*entit
 }
 
 func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest) (*entity.RestaurantTable, error) {
-	table, err := s.repo.FindTable(restaurantID, tableID)
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		next, tags, err := tableFromRequest(tx, restaurantID, req)
+		if err != nil {
+			return err
+		}
+		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if hasOpenOrder && next.Status != entity.TableStatusOccupied {
+			return errors.New("table has an open order")
+		}
+		table.Capacity = next.Capacity
+		table.Status = next.Status
+		if table.Status != entity.TableStatusReserved {
+			table.ReservationName = ""
+			table.ReservationPhone = ""
+		}
+		if err := tx.UpdateTable(table); err != nil {
+			return err
+		}
+		if err := tx.ReplaceTableTags(table, tags); err != nil {
+			return err
+		}
+		updatedID = table.ID
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	next, tags, err := tableFromRequest(s.repo, restaurantID, req)
-	if err != nil {
-		return nil, err
-	}
-	table.Capacity = next.Capacity
-	table.Status = next.Status
-	if table.Status != entity.TableStatusReserved {
-		table.ReservationName = ""
-		table.ReservationPhone = ""
-	}
-	if err := s.repo.UpdateTable(table); err != nil {
-		return nil, err
-	}
-	if err := s.repo.ReplaceTableTags(table, tags); err != nil {
-		return nil, err
-	}
-	return s.repo.FindTable(restaurantID, table.ID)
+	return s.repo.FindTable(restaurantID, updatedID)
 }
 
 func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status string, reservationPhone string, reservationName string) (*entity.RestaurantTable, error) {
@@ -111,7 +126,7 @@ func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status stri
 	}
 	var updatedID uint
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
-		table, err := tx.FindTable(restaurantID, tableID)
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
 		if err != nil {
 			return err
 		}
@@ -143,23 +158,44 @@ func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status stri
 }
 
 func (s *TableService) RegenerateCustomerToken(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
-	table, err := s.repo.FindTable(restaurantID, tableID)
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		customerToken, err := GenerateCustomerTableToken()
+		if err != nil {
+			return err
+		}
+		table.CustomerToken = customerToken
+		if err := tx.UpdateTable(table); err != nil {
+			return err
+		}
+		updatedID = table.ID
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	table.CustomerToken = GenerateCustomerTableToken()
-	if err := s.repo.UpdateTable(table); err != nil {
-		return nil, err
-	}
-	return s.repo.FindTable(restaurantID, table.ID)
+	return s.repo.FindTable(restaurantID, updatedID)
 }
 
 func (s *TableService) DeleteTable(restaurantID, tableID uint) error {
-	table, err := s.repo.FindTable(restaurantID, tableID)
-	if err != nil {
-		return err
-	}
-	return s.repo.DeleteTable(table)
+	return s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		referenced, err := tx.HasAnyOrderForTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return errors.New("table has order history; mark it inactive instead")
+		}
+		return tx.DeleteTable(table)
+	})
 }
 
 func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTablesRequest) ([]entity.RestaurantTable, error) {
@@ -198,6 +234,10 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 		for i := 0; i < count; i++ {
 			sequence := next + i
 			label := tableLabel(zone, sequence)
+			customerToken, err := GenerateCustomerTableToken()
+			if err != nil {
+				return err
+			}
 			table := &entity.RestaurantTable{
 				RestaurantID:   restaurantID,
 				ZoneID:         zoneID,
@@ -207,7 +247,7 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 				Capacity:       capacity,
 				Zone:           zoneName(zone),
 				Status:         status,
-				CustomerToken:  GenerateCustomerTableToken(),
+				CustomerToken:  customerToken,
 			}
 			if err := tx.CreateTable(table); err != nil {
 				return err
@@ -228,7 +268,7 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 func (s *TableService) MoveTableZone(restaurantID, tableID uint, req *MoveTableZoneRequest) (*entity.RestaurantTable, error) {
 	var moved *entity.RestaurantTable
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
-		table, err := tx.FindTable(restaurantID, tableID)
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
 		if err != nil {
 			return err
 		}

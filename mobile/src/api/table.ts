@@ -41,6 +41,13 @@ export function deleteTable(id: number) {
   });
 }
 
+export function updateTableStatus(id: number, status: RestaurantTable['status'], reservationPhone?: string, reservationName?: string) {
+  return apiRequest<RestaurantTable>(`/api/v1/tables/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, reservation_phone: reservationPhone || '', reservation_name: reservationName || '' }),
+  });
+}
+
 export function regenerateTableCustomerToken(id: number) {
   return apiRequest<RestaurantTable>(`/api/v1/tables/${id}/regenerate-customer-token`, {
     method: 'POST',

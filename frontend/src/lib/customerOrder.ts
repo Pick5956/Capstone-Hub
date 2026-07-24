@@ -1,10 +1,11 @@
 import { publicApiClient } from "./apiClient";
-import type { Category, MenuItem } from "../types/menu";
-import type { Order } from "../types/order";
-import type { RestaurantTable } from "../types/table";
+import type {
+  OrderItemFulfillmentType,
+  OrderItemStatus,
+  OrderStatus,
+} from "../types/order";
 
 export interface CustomerRestaurant {
-  id: number;
   name: string;
   branch_name: string;
   logo: string;
@@ -14,12 +15,84 @@ export interface CustomerRestaurant {
   geofence_required?: boolean;
 }
 
+export interface CustomerTable {
+  table_number: string;
+  display_label: string;
+  capacity: number;
+  zone?: string;
+}
+
+export interface CustomerCategory {
+  ID: number;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface CustomerMenuOption {
+  ID: number;
+  name: string;
+  price_delta: number;
+  is_default: boolean;
+  display_order: number;
+  is_active: boolean;
+}
+
+export interface CustomerMenuOptionGroup {
+  ID: number;
+  name: string;
+  required: boolean;
+  min_select: number;
+  max_select: number;
+  display_order: number;
+  is_active: boolean;
+  options: CustomerMenuOption[];
+}
+
+export interface CustomerMenuItem {
+  ID: number;
+  category_id: number;
+  category?: CustomerCategory;
+  name: string;
+  price: number;
+  image_url: string;
+  description: string;
+  is_available: boolean;
+  display_order: number;
+  categories: Array<{ category_id: number }>;
+  option_groups: CustomerMenuOptionGroup[];
+}
+
+export interface CustomerOrderItem {
+  ID: number;
+  menu_name: string;
+  unit_price: number;
+  options_total: number;
+  quantity: number;
+  subtotal: number;
+  fulfillment_type: OrderItemFulfillmentType;
+  note: string;
+  status: OrderItemStatus;
+  selected_options: Array<{
+    ID: number;
+    group_name: string;
+    option_name: string;
+    price_delta: number;
+  }>;
+}
+
+export interface CustomerOrder {
+  order_number: string;
+  status: OrderStatus;
+  items: CustomerOrderItem[];
+}
+
 export interface CustomerTablePayload {
   restaurant: CustomerRestaurant;
-  table: RestaurantTable;
-  categories: Category[];
-  menu_items: MenuItem[];
-  order?: Order;
+  table: CustomerTable;
+  categories: CustomerCategory[];
+  menu_items: CustomerMenuItem[];
+  order?: CustomerOrder;
   /** Items were held for staff confirmation because location was unverified. */
   awaiting_staff_confirm?: boolean;
 }
@@ -72,5 +145,20 @@ export function readDeviceLocation(timeoutMs = 8000): Promise<GeolocationCoordin
 export const getCustomerTableOrder = (token: string) =>
   publicApiClient.get<CustomerTablePayload>(`/api/public/table-orders/${token}`);
 
-export const submitCustomerTableOrder = (token: string, data: SubmitCustomerOrderInput) =>
-  publicApiClient.post<CustomerTablePayload>(`/api/public/table-orders/${token}/submit`, data);
+export const createCustomerOrderRequestKey = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `customer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+};
+
+export const submitCustomerTableOrder = (
+  token: string,
+  data: SubmitCustomerOrderInput,
+  requestKey: string,
+) =>
+  publicApiClient.post<CustomerTablePayload>(
+    `/api/public/table-orders/${token}/submit`,
+    data,
+    { headers: { "Idempotency-Key": requestKey } },
+  );

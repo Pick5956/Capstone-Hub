@@ -1,156 +1,213 @@
 import { StyleSheet } from 'react-native';
 
-export const colors = {
-  canvas: '#F6FAFD',
+export const palette = {
+  canvas: '#F8FAFC',
   surface: '#FFFFFF',
-  border: '#DDE5ED',
-  text: '#0F172A',
-  muted: '#64748B',
-  placeholder: '#94A3B8',
-  primary: '#0F172A',
+  surfaceSubtle: '#F1F5F9',
+  surfaceStrong: '#E2E8F0',
+  border: '#DCE3EA',
+  borderStrong: '#CBD5E1',
+  text: '#111827',
+  textStrong: '#030712',
+  muted: '#5B6678',
+  placeholder: '#6B7280',
+  primary: '#111827',
+  primaryText: '#FFFFFF',
   accent: '#EA580C',
-  danger: '#DC2626',
-};
+  accentSoft: '#FFF7ED',
+  success: '#047857',
+  successSoft: '#ECFDF5',
+  warning: '#B45309',
+  warningSoft: '#FFFBEB',
+  danger: '#B91C1C',
+  dangerSoft: '#FEF2F2',
+  info: '#0369A1',
+  infoSoft: '#F0F9FF',
+  neutral: '#475569',
+  neutralSoft: '#F1F5F9',
+} as const;
+
+// Compatibility alias for existing screens while they move onto the new shared shell.
+export const colors = palette;
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
+} as const;
+
+export const radius = {
+  sm: 4,
+  md: 6,
+  full: 999,
+} as const;
 
 export const typeScale = StyleSheet.create({
   kicker: {
-    color: colors.accent,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    color: palette.accent,
+    fontSize: 12,
+    fontWeight: '700',
   },
   hero: {
-    color: colors.text,
-    fontSize: 30,
-    fontWeight: '900',
-    lineHeight: 36,
+    color: palette.textStrong,
+    fontSize: 26,
+    fontWeight: '700',
+    lineHeight: 34,
   },
   title: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
+    color: palette.textStrong,
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 25,
   },
   cardTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '900',
+    color: palette.text,
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   body: {
-    color: colors.text,
+    color: palette.text,
     fontSize: 15,
     lineHeight: 22,
   },
   caption: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 20,
+    color: palette.text,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  number: {
+    color: palette.textStrong,
+    fontSize: 18,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
 });
 
 export const layout = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
-    gap: 20,
-    padding: 20,
-    paddingTop: 58,
-    backgroundColor: colors.canvas,
+    gap: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: 112,
+    backgroundColor: palette.canvas,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
-    padding: 24,
-    backgroundColor: colors.canvas,
+    gap: spacing.md,
+    padding: spacing.xxl,
+    backgroundColor: palette.canvas,
   },
   panel: {
-    gap: 16,
-    padding: 18,
+    gap: spacing.lg,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
   },
   card: {
-    minHeight: 92,
+    minHeight: 88,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    padding: 16,
+    gap: spacing.md,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-    boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing.md,
   },
   tile: {
     width: '48%',
     minHeight: 112,
-    gap: 8,
-    padding: 16,
+    flexGrow: 1,
+    flexBasis: 150,
+    gap: spacing.sm,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    borderColor: palette.border,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
   },
   primaryButton: {
-    minHeight: 54,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
+    borderRadius: radius.md,
+    backgroundColor: palette.primary,
+    paddingHorizontal: spacing.lg,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
+    color: palette.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
   },
   secondaryButton: {
-    minHeight: 52,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 14,
+    borderColor: palette.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    paddingHorizontal: spacing.md,
   },
   secondaryButtonText: {
-    color: colors.text,
+    color: palette.text,
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: '700',
   },
 });
 
 export const inputStyles = StyleSheet.create({
   fieldGroup: {
-    gap: 8,
+    gap: spacing.sm,
   },
   label: {
-    color: colors.text,
+    color: palette.text,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   input: {
-    minHeight: 54,
+    minHeight: 50,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    color: colors.text,
+    borderColor: palette.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    color: palette.textStrong,
     fontSize: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
 });
+
+export function statusTone(tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral') {
+  switch (tone) {
+    case 'success':
+      return { color: palette.success, backgroundColor: palette.successSoft, borderColor: '#A7F3D0' };
+    case 'warning':
+      return { color: palette.warning, backgroundColor: palette.warningSoft, borderColor: '#FDE68A' };
+    case 'danger':
+      return { color: palette.danger, backgroundColor: palette.dangerSoft, borderColor: '#FECACA' };
+    case 'info':
+      return { color: palette.info, backgroundColor: palette.infoSoft, borderColor: '#BAE6FD' };
+    default:
+      return { color: palette.neutral, backgroundColor: palette.neutralSoft, borderColor: palette.border };
+  }
+}

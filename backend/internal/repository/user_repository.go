@@ -110,6 +110,7 @@ func (r *UserRepository) UpdatePassword(user *entity.User) error {
 		"password":                  user.Password,
 		"password_reset_token_hash": "",
 		"password_reset_expires_at": nil,
+		"token_version":             gorm.Expr("token_version + 1"),
 	}).Error
 }
 

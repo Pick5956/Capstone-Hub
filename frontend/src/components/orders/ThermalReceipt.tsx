@@ -75,7 +75,7 @@ export default function ThermalReceipt({
   return (
     <article data-print-only data-thermal-receipt className="hidden text-black">
       <header className="text-center">
-        <h1 className="text-[16px] font-bold leading-tight">{restaurant?.name?.trim() || "Restaurant Hub"}</h1>
+        <h1 className="text-[16px] font-bold leading-tight">{restaurant?.name?.trim() || "Dishy"}</h1>
         {restaurant?.branch_name?.trim() ? <p className="mt-0.5 text-[10px] leading-tight">{restaurant.branch_name}</p> : null}
         {restaurant?.address?.trim() ? <p className="mt-1 text-[9px] leading-[1.35]">{restaurant.address}</p> : null}
         {restaurant?.phone?.trim() ? <p className="mt-0.5 text-[9px] leading-tight">Tel. {restaurant.phone}</p> : null}

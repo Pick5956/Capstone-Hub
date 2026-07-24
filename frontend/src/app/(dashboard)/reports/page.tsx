@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, RefreshCw, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, BarChart3, TrendingUp, Wallet } from "lucide-react";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { formatCurrency, formatNumber } from "@/src/lib/format";
@@ -26,7 +26,6 @@ export default function ReportsPage() {
         eyebrow: "Reports",
         title: "รายงานผู้จัดการ",
         subtitle: "ยอดขาย ต้นทุนเมนู และวัตถุดิบเสี่ยงจากข้อมูลขายจริง",
-        refresh: "รีเฟรช",
         loadError: "โหลดรายงานไม่สำเร็จ",
         revenue: "ยอดขาย",
         orders: "ออเดอร์",
@@ -47,7 +46,6 @@ export default function ReportsPage() {
         eyebrow: "Reports",
         title: "Manager report",
         subtitle: "Sales, menu food cost, and stock risks from real order data.",
-        refresh: "Refresh",
         loadError: "Could not load report.",
         revenue: "Revenue",
         orders: "Orders",
@@ -97,10 +95,6 @@ export default function ReportsPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
         </div>
-        <button type="button" onClick={() => void load()} className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-900">
-          <RefreshCw className="h-4 w-4" />
-          {copy.refresh}
-        </button>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{error}</div>}

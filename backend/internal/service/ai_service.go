@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -18,6 +19,10 @@ import (
 )
 
 var errRateLimit = errors.New("rate limit exceeded")
+
+func logAIProviderFailure(stage, provider string, err error) {
+	log.Printf("ai_provider_failure stage=%s provider=%s error_type=%T", stage, provider, err)
+}
 
 type AIService struct {
 	repo           *repository.AIRepository
@@ -121,9 +126,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 				if parseErr == nil {
 					return res, nil
 				}
-				fmt.Printf("[AI Classifier] Groq Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+				logAIProviderFailure("classify_parse", "groq", parseErr)
 			} else {
-				fmt.Printf("[AI Classifier] Groq Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+				logAIProviderFailure("classify", "groq", err)
 			}
 		}
 	}
@@ -143,9 +148,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 				if parseErr == nil {
 					return res, nil
 				}
-				fmt.Printf("[AI Classifier] Gemini Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+				logAIProviderFailure("classify_parse", "gemini", parseErr)
 			} else {
-				fmt.Printf("[AI Classifier] Gemini Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+				logAIProviderFailure("classify", "gemini", err)
 			}
 		}
 	}
@@ -157,9 +162,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 			if parseErr == nil {
 				return res, nil
 			}
-			fmt.Printf("[AI Classifier] Ollama succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+			logAIProviderFailure("classify_parse", "ollama", parseErr)
 		} else {
-			fmt.Printf("[AI Classifier] Ollama failed: %v\n", err)
+			logAIProviderFailure("classify", "ollama", err)
 		}
 	}
 
@@ -231,7 +236,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	// Step 2: Structured JSON AI Router followed by backend policy enforcement.
 	routerResult, routerErr := s.classifyIntent(question)
 	if routerErr != nil {
-		fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", routerErr)
+		logAIProviderFailure("route", "configured", routerErr)
 	}
 
 	// Step 3: Check Confidence Level and Unclear Input
@@ -282,7 +287,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 				Snapshot: AISnapshot{},
 			}, nil
 		}
-		fmt.Printf("[AI Router] Dynamic Out-of-Scope failed: %v. Falling back to static message.\n", err)
+		logAIProviderFailure("out_of_scope", "configured", err)
 		return &AIAskResponse{
 			Answer:   "เรื่องนี้อยู่นอกขอบเขตที่ผมดูแลในฐานะผู้ช่วยร้านอาหารครับ ผมช่วยได้ในเรื่องยอดขาย วัตถุดิบ กำไรเมนู หรือแคปชั่นโปรโมทร้านครับ",
 			Intent:   AIIntentOutOfScope,
@@ -306,7 +311,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			if e == nil {
 				return a, m, true
 			}
-			fmt.Printf("[AI Service] Conversational %s failed: %v\n", name, e)
+			logAIProviderFailure("conversation", strings.ToLower(name), e)
 			return "", "", false
 		}
 
@@ -388,7 +393,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	executeAnalytical := func(callFn analyticalFn, providerName string) (*AIAskResponse, error) {
 		answer, model, err := callFn()
 		if err != nil {
-			fmt.Printf("[AI Service] Analytical %s failed: %v\n", providerName, err)
+			logAIProviderFailure("analysis", strings.ToLower(providerName), err)
 			return nil, err
 		}
 		if strings.HasPrefix(answer, "CALL_TOOL:") {
@@ -522,7 +527,7 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 			fmt.Printf("[AI Service] Groq Key %d/%d rate limited (429), rotating key...\n", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Groq Key %d/%d failed with error: %v, rotating key...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		logAIProviderFailure("request", "groq", err)
 	}
 
 	return "", "", lastErr
@@ -559,7 +564,7 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 			fmt.Printf("[AI Service] Gemini Key %d/%d rate limited (429), rotating key...\n", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Gemini Key %d/%d failed with error: %v, rotating key...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		logAIProviderFailure("request", "gemini", err)
 	}
 
 	return "", "", lastErr
@@ -584,7 +589,7 @@ func (s *AIService) askOllamaWithRotation(question string, history []AIConversat
 func (s *AIService) executeClassifierOllama(question string) (string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Classifier] Calling Ollama %s at %s\n", model, baseURL)
+	fmt.Printf("[AI Classifier] Calling Ollama model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
 You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
@@ -646,19 +651,19 @@ User question:
 
 	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", errors.New("ollama classifier request configuration is invalid")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer ollama")
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("ollama classifier: %w", err)
+		return "", errors.New("ollama classifier transport failed")
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("ollama classifier failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return "", fmt.Errorf("ollama classifier failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -675,7 +680,7 @@ User question:
 func (s *AIService) executeOllama(question string, history []AIConversationMessage, snapshot AISnapshot) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Request] Calling Ollama (Analytical) %s at %s\n", model, baseURL)
+	fmt.Printf("[AI Request] Calling Ollama mode=analytical model=%s\n", model)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -700,19 +705,19 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 
 	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", "", err
+		return "", "", errors.New("ollama analytical request configuration is invalid")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer ollama")
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return "", "", fmt.Errorf("ollama analytical: %w", err)
+		return "", "", errors.New("ollama analytical transport failed")
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("ollama analytical failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("ollama analytical failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -736,7 +741,7 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 func (s *AIService) executeOllamaConversation(question string, history []AIConversationMessage) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Request] Calling Ollama (Conversation) %s at %s\n", model, baseURL)
+	fmt.Printf("[AI Request] Calling Ollama mode=conversation model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
@@ -766,19 +771,19 @@ Recent conversation context:
 
 	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", "", err
+		return "", "", errors.New("ollama conversation request configuration is invalid")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer ollama")
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return "", "", fmt.Errorf("ollama conversation: %w", err)
+		return "", "", errors.New("ollama conversation transport failed")
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("ollama conversation failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("ollama conversation failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -798,7 +803,7 @@ Recent conversation context:
 func (s *AIService) executeSecondRoundOllama(prompt string) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Second Round] Calling Ollama %s at %s\n", model, baseURL)
+	fmt.Printf("[AI Second Round] Calling Ollama model=%s\n", model)
 
 	payload := ollamaRequest{
 		Model: model,
@@ -815,19 +820,19 @@ func (s *AIService) executeSecondRoundOllama(prompt string) (string, string, err
 
 	httpReq, err := http.NewRequest(http.MethodPost, baseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", "", err
+		return "", "", errors.New("ollama second round request configuration is invalid")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer ollama")
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		return "", "", fmt.Errorf("ollama second round: %w", err)
+		return "", "", errors.New("ollama second round transport failed")
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", fmt.Errorf("ollama second round failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("ollama second round failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -1032,19 +1037,12 @@ func localLowestMarginFactAnswer(question string, snapshot AISnapshot) (string, 
 	return localToolAnswer(result)
 }
 
-func maskAPIKey(key string) string {
-	if len(key) <= 10 {
-		return "***"
-	}
-	return fmt.Sprintf("%s...%s", key[:6], key[len(key)-4:])
-}
-
 func (s *AIService) executeClassifierGroq(question string, apiKey string) (string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Classifier] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Classifier] Calling Groq model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
 You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
@@ -1119,7 +1117,7 @@ User question:
 		if resp.StatusCode == 429 {
 			return "", errRateLimit
 		}
-		return "", fmt.Errorf("groq classifier failed: %s", strings.TrimSpace(string(respBody)))
+		return "", fmt.Errorf("groq classifier failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -1137,7 +1135,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Classifier] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Classifier] Calling Gemini model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are the AI Task Router for a Thai restaurant management assistant.
 You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
@@ -1212,7 +1210,7 @@ User question:
 		if resp.StatusCode == 429 {
 			return "", errRateLimit
 		}
-		return "", fmt.Errorf("gemini classifier failed: %s", strings.TrimSpace(string(respBody)))
+		return "", fmt.Errorf("gemini classifier failed with status %d", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -1234,7 +1232,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Request] Calling Gemini (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Request] Calling Gemini mode=analytical model=%s\n", model)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -1270,7 +1268,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("gemini request failed with status %d", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -1295,7 +1293,7 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Request] Calling Gemini (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Request] Calling Gemini mode=conversation model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
@@ -1338,7 +1336,7 @@ Recent conversation context:
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("gemini request failed with status %d", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -1360,7 +1358,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Request] Calling Groq (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Request] Calling Groq mode=analytical model=%s\n", model)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -1396,7 +1394,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("groq request failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -1449,7 +1447,7 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Request] Calling Groq (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Request] Calling Groq mode=conversation model=%s\n", model)
 
 	prompt := fmt.Sprintf(`You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
@@ -1492,7 +1490,7 @@ Recent conversation context:
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("groq request failed with status %d", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -1633,7 +1631,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Second Round] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Second Round] Calling Gemini model=%s\n", model)
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -1661,7 +1659,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini second round failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("gemini second round failed with status %d", resp.StatusCode)
 	}
 	var parsed geminiGenerateResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
@@ -1682,7 +1680,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Second Round] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
+	fmt.Printf("[AI Second Round] Calling Groq model=%s\n", model)
 	payload := groqRequest{
 		Model: model,
 		Messages: []groqMessage{
@@ -1710,7 +1708,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq second round failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", fmt.Errorf("groq second round failed with status %d", resp.StatusCode)
 	}
 	var parsed groqResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
@@ -1741,7 +1739,7 @@ func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, strin
 			fmt.Printf("[AI Service] Groq Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Groq Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		logAIProviderFailure("second_round", "groq", err)
 	}
 	return "", "", lastErr
 }
@@ -1765,7 +1763,7 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 			fmt.Printf("[AI Service] Gemini Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Gemini Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		logAIProviderFailure("second_round", "gemini", err)
 	}
 	return "", "", lastErr
 }
@@ -1786,14 +1784,14 @@ func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, e
 			if err == nil {
 				return answer, model, nil
 			}
-			fmt.Printf("[AI Service] Second round Groq failed, trying Gemini fallback: %v\n", err)
+			logAIProviderFailure("second_round_fallback", "groq", err)
 		}
 		if len(geminiKeys) > 0 {
 			answer, model, err := s.askSecondRoundGeminiWithRotation(prompt)
 			if err == nil {
 				return answer, model, nil
 			}
-			fmt.Printf("[AI Service] Second round Gemini failed, trying Ollama fallback: %v\n", err)
+			logAIProviderFailure("second_round_fallback", "gemini", err)
 		}
 		return s.executeSecondRoundOllama(prompt)
 	}

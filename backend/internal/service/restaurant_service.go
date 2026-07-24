@@ -22,9 +22,7 @@ type RestaurantService struct {
 	memberRepo     *repository.RestaurantMemberRepository
 	roleRepo       *repository.RoleRepository
 	auditRepo      *repository.RestaurantAuditLogRepository
-	setupRepo      *repository.RestaurantSetupRepository
-	menuRepo       *repository.MenuRepository
-	ingredientRepo *repository.IngredientRepository
+	setupRepo      repository.RestaurantSetupTransactor
 }
 
 func ProvideRestaurantService(
@@ -32,9 +30,7 @@ func ProvideRestaurantService(
 	memberRepo *repository.RestaurantMemberRepository,
 	roleRepo *repository.RoleRepository,
 	auditRepo *repository.RestaurantAuditLogRepository,
-	setupRepo *repository.RestaurantSetupRepository,
-	menuRepo *repository.MenuRepository,
-	ingredientRepo *repository.IngredientRepository,
+	setupRepo repository.RestaurantSetupTransactor,
 ) *RestaurantService {
 	return &RestaurantService{
 		restaurantRepo: restaurantRepo,
@@ -42,8 +38,6 @@ func ProvideRestaurantService(
 		roleRepo:       roleRepo,
 		auditRepo:      auditRepo,
 		setupRepo:      setupRepo,
-		menuRepo:       menuRepo,
-		ingredientRepo: ingredientRepo,
 	}
 }
 
@@ -71,6 +65,16 @@ type starterMenuItem struct {
 	Price        float64
 	Description  string
 	OptionGroups []starterOptionGroup
+	Recipe       []starterRecipeLine
+}
+
+// starterRecipeLine links a starter menu item to a starter ingredient (by name,
+// resolved to an ID after the ingredient catalog has been seeded) so inventory
+// deduction works out of the box for the default starter menu.
+type starterRecipeLine struct {
+	IngredientName string
+	Quantity       float64
+	Unit           string
 }
 
 type starterOptionGroup struct {
@@ -231,7 +235,6 @@ type CreateRestaurantRequest struct {
 	OpenTime             string  `json:"open_time"`
 	CloseTime            string  `json:"close_time"`
 	TableCount           int     `json:"table_count"`
-	SeedMockupData       bool    `json:"seed_mockup_data"`
 	ServiceChargeEnabled bool    `json:"service_charge_enabled"`
 	ServiceChargeRate    float64 `json:"service_charge_rate"`
 	VATEnabled           bool    `json:"vat_enabled"`
@@ -312,9 +315,28 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		return nil, nil, errors.New("owner role is not configured")
 	}
 
+	restaurant, member, err := createRestaurantWithStarterData(s.setupRepo, userID, ownerRole.ID, *fields)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// reload with relationships for response
+	loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, restaurant.ID)
+	if err == nil {
+		member = loaded
+	}
+
+	return restaurant, member, nil
+}
+
+func createRestaurantWithStarterData(
+	setupRepo repository.RestaurantSetupTransactor,
+	userID, ownerRoleID uint,
+	fields restaurantFields,
+) (*entity.Restaurant, *entity.RestaurantMember, error) {
 	var restaurant *entity.Restaurant
 	var member *entity.RestaurantMember
-	if err := s.setupRepo.Transaction(func(tx *repository.RestaurantSetupRepository) error {
+	err := setupRepo.Transaction(func(tx repository.RestaurantSetupWriter) error {
 		restaurant = &entity.Restaurant{
 			Name:                 fields.Name,
 			BranchName:           fields.BranchName,
@@ -341,134 +363,19 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		member = &entity.RestaurantMember{
 			UserID:       userID,
 			RestaurantID: restaurant.ID,
-			RoleID:       ownerRole.ID,
+			RoleID:       ownerRoleID,
 			Status:       "active",
 			JoinedAt:     time.Now(),
 		}
 		if err := tx.CreateMember(member); err != nil {
 			return err
 		}
-
 		return seedRestaurantStarterSetup(tx, restaurant.ID, fields.RestaurantType, fields.TableCount)
-	}); err != nil {
-		return nil, nil, err
-	}
-	if err := s.createStarterCategories(restaurant.ID, fields.RestaurantType); err != nil {
-		return nil, nil, err
-	}
-	if req.SeedMockupData {
-		if err := s.createStarterMockupData(restaurant.ID, fields.RestaurantType); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	// reload with relationships for response
-	loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, restaurant.ID)
-	if err == nil {
-		member = loaded
-	}
-
-	return restaurant, member, nil
-}
-
-func (s *RestaurantService) createStarterCategories(restaurantID uint, restaurantType string) error {
-	starter, ok := restaurantTypeStarterCategories[restaurantType]
-	if !ok {
-		starter = restaurantTypeStarterCategories["ร้านอาหาร"]
-	}
-	for i, name := range starter.Menu {
-		if err := s.menuRepo.CreateCategory(&entity.Category{
-			RestaurantID: restaurantID,
-			Name:         name,
-			DisplayOrder: i + 1,
-			IsActive:     true,
-		}); err != nil {
-			return err
-		}
-	}
-	for i, name := range starter.Ingredient {
-		if err := s.ingredientRepo.CreateCategory(&entity.IngredientCategory{
-			RestaurantID: restaurantID,
-			Name:         name,
-			DisplayOrder: i + 1,
-			IsActive:     true,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *RestaurantService) createStarterMockupData(restaurantID uint, restaurantType string) error {
-	mockup, ok := restaurantTypeStarterMockups[restaurantType]
-	if !ok {
-		mockup = restaurantTypeStarterMockups["ร้านอาหาร"]
-	}
-	ingredientCategoryIDs, err := s.seedStarterIngredients(restaurantID, mockup.Ingredients)
+	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	return s.seedStarterMenuItems(restaurantID, mockup.MenuItems, ingredientCategoryIDs)
-}
-
-func (s *RestaurantService) seedStarterIngredients(restaurantID uint, seeds map[string][]starterIngredient) (map[string]uint, error) {
-	categoryIDs := map[string]uint{}
-	for categoryName, ingredients := range seeds {
-		category, err := s.ingredientRepo.FindCategoryByName(restaurantID, categoryName)
-		if err != nil {
-			return nil, err
-		}
-		categoryIDs[categoryName] = category.ID
-		for _, seed := range ingredients {
-			categoryID := category.ID
-			if err := s.ingredientRepo.Create(&entity.Ingredient{
-				RestaurantID:            restaurantID,
-				Name:                    strings.TrimSpace(seed.Name),
-				SKU:                     strings.TrimSpace(seed.SKU),
-				CategoryID:              &categoryID,
-				Unit:                    strings.TrimSpace(seed.Unit),
-				BaseUnit:                strings.TrimSpace(seed.BaseUnit),
-				PurchaseUnitDefault:     strings.TrimSpace(seed.PurchaseUnitDefault),
-				ConversionFactorDefault: seed.ConversionFactorDefault,
-				Stock:                   seed.Stock,
-				MinStock:                seed.MinStock,
-				CostPerUnit:             seed.CostPerUnit,
-				YieldPercent:            seed.YieldPercent,
-				StorageType:             strings.TrimSpace(seed.StorageType),
-			}); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return categoryIDs, nil
-}
-
-func (s *RestaurantService) seedStarterMenuItems(restaurantID uint, seeds map[string][]starterMenuItem, ingredientCategoryIDs map[string]uint) error {
-	for categoryName, items := range seeds {
-		category, err := s.menuRepo.FindCategoryByName(restaurantID, categoryName)
-		if err != nil {
-			return err
-		}
-		for i, seed := range items {
-			item := &entity.MenuItem{
-				RestaurantID: restaurantID,
-				CategoryID:   category.ID,
-				Name:         strings.TrimSpace(seed.Name),
-				Price:        seed.Price,
-				Description:  strings.TrimSpace(seed.Description),
-				IsAvailable:  true,
-				DisplayOrder: i + 1,
-			}
-			if err := s.menuRepo.CreateMenuItem(item); err != nil {
-				return err
-			}
-			if err := s.menuRepo.ReplaceMenuCategories(item, categoryLinks(restaurantID, item.ID, []uint{category.ID})); err != nil {
-				return err
-			}
-		}
-	}
-	_ = ingredientCategoryIDs
-	return nil
+	return restaurant, member, nil
 }
 
 func (s *RestaurantService) ListMyMemberships(userID uint) ([]entity.RestaurantMember, error) {
@@ -492,6 +399,14 @@ func (s *RestaurantService) GetMembership(userID, restaurantID uint) (*entity.Re
 
 func (s *RestaurantService) ListMembers(restaurantID uint) ([]entity.RestaurantMember, error) {
 	return s.ListMembersWithStatus(restaurantID, false)
+}
+
+func (s *RestaurantService) ListMembersForActor(actorUserID, restaurantID uint) ([]entity.RestaurantMember, error) {
+	actor, err := s.GetMembership(actorUserID, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	return s.ListMembersWithStatus(restaurantID, canManageTeam(actor))
 }
 
 func (s *RestaurantService) ListMembersWithStatus(restaurantID uint, includeInactive bool) ([]entity.RestaurantMember, error) {
@@ -816,4 +731,3 @@ func (s *RestaurantService) DeleteRestaurant(restaurantID uint) error {
 	}
 	return s.restaurantRepo.Delete(restaurantID)
 }
-

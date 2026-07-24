@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CaseSensitive, Check, ChevronLeft, ChevronRight, Languages, LogOut, Moon, Sparkles, Sun } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -70,9 +71,23 @@ export default function DashboardAccountMenu() {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("main");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
   const isDark = mounted && theme === "dark";
   const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === "-" ? "" : user.last_name}`.trim()) : language === "th" ? "ผู้ใช้งาน" : "User";
   const fontLabel = fontSizeOptions.find((option) => option.value === fontSize);
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 8,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, []);
 
   const copy = language === "th"
     ? {
@@ -112,7 +127,8 @@ export default function DashboardAccountMenu() {
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
         setPanel("main");
       }
@@ -120,6 +136,18 @@ export default function DashboardAccountMenu() {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [open, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,8 +184,10 @@ export default function DashboardAccountMenu() {
   return (
     <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
+          if (!open) updateMenuPosition();
           setOpen((current) => !current);
           setPanel("main");
         }}
@@ -169,8 +199,13 @@ export default function DashboardAccountMenu() {
         <UserAvatar src={user?.profile_image} name={displayName} size={30} className="h-8 w-8 text-[11px] text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
       </button>
 
-      {open && (
-        <div role="menu" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-72 overflow-hidden rounded-md border border-[#dfe3e8] bg-white py-2 shadow-xl shadow-gray-950/10 dark:border-[#253142] dark:bg-gray-950 dark:shadow-black/40">
+      {open && typeof document !== "undefined" ? createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[#dfe3e8] bg-white py-2 shadow-xl shadow-gray-950/10 dark:border-[#253142] dark:bg-gray-950 dark:shadow-black/40"
+          style={{ top: menuPosition.top, right: menuPosition.right }}
+        >
           {panel === "main" ? (
             <>
               <div className="flex gap-3 px-3 pb-3">
@@ -237,8 +272,9 @@ export default function DashboardAccountMenu() {
               <OptionButton label={copy.aiAssistantOff} active={!showAIAssistant} onClick={() => selectAssistantVisibility(false)} />
             </>
           ) : null}
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

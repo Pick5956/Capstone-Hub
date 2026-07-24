@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { X } from "lucide-react";
-import { getCustomerTableOrder, readDeviceLocation, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { ListFilter, ReceiptText, Search, ShoppingBasket, X } from "lucide-react";
+import { createCustomerOrderRequestKey, getCustomerTableOrder, readDeviceLocation, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerMenuItem, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { customerTableOrdersHref, shouldShowCustomerCartAction, summarizeCustomerOrderItems } from "@/src/lib/customerOrderView";
 import { apiErrorCode, apiErrorMessage } from "@/src/lib/apiErrors";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
-import type { MenuItem } from "@/src/types/menu";
 
 type CartItem = CustomerCartItemInput & {
   key: string;
@@ -27,7 +28,7 @@ export default function CustomerTableOrderPage() {
   const [payload, setPayload] = useState<CustomerTablePayload | null>(null);
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
-  const [selectedMenu, setSelectedMenu] = useState<MenuItem | null>(null);
+  const [selectedMenu, setSelectedMenu] = useState<CustomerMenuItem | null>(null);
   const [selectedMenuClosing, setSelectedMenuClosing] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [quantity, setQuantity] = useState(1);
@@ -40,6 +41,7 @@ export default function CustomerTableOrderPage() {
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const submissionKeyRef = useRef<string | null>(null);
 
   const copy = language === "th"
     ? {
@@ -68,8 +70,7 @@ export default function CustomerTableOrderPage() {
         checkingLocation: "กำลังตรวจสอบตำแหน่ง...",
         outsideRestaurant: "สั่งอาหารได้เฉพาะเมื่ออยู่ที่ร้านเท่านั้น กรุณาสั่งที่โต๊ะของคุณ",
         awaitingStaffConfirm: "ส่งรายการแล้ว รอพนักงานยืนยันก่อนเข้าครัว (ตรวจสอบตำแหน่งไม่ได้)",
-        currentOrder: "รายการที่ส่งแล้ว",
-        currentRound: "รายการรอบนี้",
+        tableOrders: "ที่สั่งแล้ว",
         itemUnit: "รายการ",
         added: "เพิ่มแล้ว",
         noImage: "ไม่มีรูป",
@@ -99,14 +100,13 @@ export default function CustomerTableOrderPage() {
         summaryTitle: "Review items to add",
         summaryHint: "Check the items before sending. They will be sent as a new round for this table.",
         noActiveOrderTitle: "This table is not open yet",
-        noActiveOrderBody: "Ask staff to open this table in POS before guests can order from the QR code.",
+        noActiveOrderBody: "Ask staff to open this table before guests can order from the QR code.",
         submitting: "Sending",
         submitted: "Order sent to kitchen",
         checkingLocation: "Checking your location...",
         outsideRestaurant: "Ordering is only available at the restaurant. Please order from your table.",
         awaitingStaffConfirm: "Order received. Staff will confirm it before the kitchen starts (location could not be verified).",
-        currentOrder: "Sent items",
-        currentRound: "Current round",
+        tableOrders: "Ordered",
         itemUnit: "items",
         added: "Added",
         noImage: "No image",
@@ -183,10 +183,11 @@ export default function CustomerTableOrderPage() {
     }
     return quantities;
   }, [cart]);
-  const sentItems = payload?.order?.items ?? [];
+  const sentItemCount = summarizeCustomerOrderItems(payload?.order?.items ?? []).itemCount;
   const canOrder = Boolean(payload?.order);
+  const showCartAction = shouldShowCustomerCartAction(canOrder, cartItemCount);
 
-  const openMenu = (item: MenuItem) => {
+  const openMenu = (item: CustomerMenuItem) => {
     if (!canOrder) {
       setError(copy.noActiveOrderBody);
       return;
@@ -242,10 +243,12 @@ export default function CustomerTableOrderPage() {
   };
 
   const increaseCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.map((item) => item.key === key ? { ...item, quantity: item.quantity + 1 } : item));
   };
 
   const decreaseCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.flatMap((item) => {
       if (item.key !== key) return [item];
       if (item.quantity <= 1) return [];
@@ -254,6 +257,7 @@ export default function CustomerTableOrderPage() {
   };
 
   const removeCartItem = (key: string) => {
+    submissionKeyRef.current = null;
     setCart((current) => current.filter((item) => item.key !== key));
   };
 
@@ -270,6 +274,7 @@ export default function CustomerTableOrderPage() {
 
   const addToCart = () => {
     if (!canOrder || !selectedMenu || requiredOptionsMissing) return;
+    submissionKeyRef.current = null;
     const item: CartItem = {
       key: `${selectedMenu.ID}-${Date.now()}-${Math.random()}`,
       menu_id: selectedMenu.ID,
@@ -299,13 +304,16 @@ export default function CustomerTableOrderPage() {
         setLocating(false);
       }
 
+      const requestKey = submissionKeyRef.current ?? createCustomerOrderRequestKey();
+      submissionKeyRef.current = requestKey;
       const res = await submitCustomerTableOrder(token, {
         items: cart.map(({ menu_id, quantity, note, selected_option_ids }) => ({ menu_id, quantity, note, selected_option_ids })),
         ...(coords
           ? { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }
           : {}),
-      });
+      }, requestKey);
       setPayload(res.data);
+      submissionKeyRef.current = null;
       setCart([]);
       setSuccess(res.data.awaiting_staff_confirm ? copy.awaitingStaffConfirm : copy.submitted);
       closeSummary();
@@ -330,7 +338,7 @@ export default function CustomerTableOrderPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50 pb-32 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className={`min-h-screen overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCartAction ? "pb-24" : "pb-6"}`}>
       <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
           <div className="min-w-0">
@@ -339,6 +347,16 @@ export default function CustomerTableOrderPage() {
             <p className="truncate text-[11px] text-gray-500">{copy.openTime} {payload?.restaurant.open_time}-{payload?.restaurant.close_time}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            <Link
+              href={customerTableOrdersHref(token)}
+              aria-label={copy.tableOrders}
+              title={copy.tableOrders}
+              className="ui-press inline-flex h-10 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+            >
+              <ReceiptText className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden min-[410px]:inline">{copy.tableOrders}</span>
+              {sentItemCount > 0 ? <span className="rounded-md bg-orange-50 px-1.5 py-0.5 font-mono text-[10px] text-orange-700 dark:bg-orange-950/40 dark:text-orange-300">{sentItemCount}</span> : null}
+            </Link>
             <LanguageToggle />
           </div>
         </div>
@@ -356,7 +374,10 @@ export default function CustomerTableOrderPage() {
 
         <div className="mb-3 rounded-md border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-gray-950">
           <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.category}</span>
+            <span className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+              <ListFilter className="h-3.5 w-3.5" aria-hidden="true" />
+              {copy.category}
+            </span>
             <ThemedSelect
               value={categoryId === "all" ? "all" : String(categoryId)}
               onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}
@@ -366,7 +387,10 @@ export default function CustomerTableOrderPage() {
           </label>
         </div>
 
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} className="mb-4 h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[16px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-950" />
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-11 w-full rounded-md border border-gray-200 bg-white pl-10 pr-3 text-[16px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-950" />
+        </div>
 
         {filteredMenu.length ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -395,45 +419,25 @@ export default function CustomerTableOrderPage() {
           <div className="rounded-md border border-gray-200 bg-white px-4 py-12 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950">{copy.noMenu}</div>
         )}
 
-        {sentItems.length ? (
-          <section className="mt-5 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-[14px] font-semibold">{copy.currentOrder}</h2>
-            </div>
-            <div className="divide-y divide-gray-200 dark:divide-gray-800">
-              {sentItems.map((item) => (
-                <div key={item.ID} className="grid grid-cols-[1fr_auto] gap-3 px-4 py-3 text-[13px]">
-                  <div>
-                    <p className="font-semibold">{item.quantity}x {item.menu_name}</p>
-                    {item.selected_options?.map((option) => <p key={option.ID} className="mt-0.5 text-[11px] text-gray-500">{option.group_name}: {option.option_name}</p>)}
-                  </div>
-                  <p className="font-mono font-semibold tabular-nums">฿{item.subtotal.toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
       </main>
 
-      <div className="fixed inset-x-3 bottom-3 z-30 rounded-md border border-gray-200 bg-white/95 p-3 shadow-[0_16px_48px_rgba(15,23,42,0.2)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 dark:shadow-black/40">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-2 grid grid-cols-[1fr_auto] items-stretch gap-2">
-            <div className="min-w-0 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
-              <span className="block text-[10px] font-medium text-gray-500 dark:text-gray-400">{copy.currentRound}</span>
-              <span className="mt-0.5 block truncate font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">
-                ฿{cartTotal.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex min-w-[76px] flex-col justify-center rounded-md border border-gray-200 px-3 text-center dark:border-gray-800">
-              <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{copy.cart}</span>
-              <span className="font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">{cartItemCount}</span>
-            </div>
-          </div>
-          <button type="button" onClick={openSummary} disabled={!canOrder || !cartItemCount || submitting} className="h-12 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">
-            {submitting ? copy.submitting : copy.reviewOrder}
+      {showCartAction ? (
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-30">
+          <button
+            type="button"
+            onClick={openSummary}
+            disabled={submitting}
+            aria-label={copy.reviewOrder}
+            className="ui-press mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-4 rounded-md bg-gray-900 px-4 text-white shadow-md transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+          >
+            <span className="flex min-w-0 items-center gap-2 text-[14px] font-semibold">
+              <ShoppingBasket className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{copy.cart} · <span className="font-mono tabular-nums">{cartItemCount}</span> {copy.itemUnit}</span>
+            </span>
+            <span className="shrink-0 font-mono text-[17px] font-semibold tabular-nums">฿{cartTotal.toLocaleString()}</span>
           </button>
         </div>
-      </div>
+      ) : null}
 
       {summaryOpen && (
         <div {...summaryBackdrop} className={`${summaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>

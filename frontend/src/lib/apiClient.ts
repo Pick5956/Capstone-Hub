@@ -1,6 +1,7 @@
 import axios from "axios";
 import { authRepository } from "../app/repositories/authRepository";
 import { restaurantRepository } from "../app/repositories/restaurantRepository";
+import { normalizeApiMediaUrls } from "./mediaUrl";
 
 const localhostHosts = new Set(["localhost", "127.0.0.1"]);
 const publicFrontendHosts = new Set(["dishy.pro", "www.dishy.pro"]);
@@ -51,6 +52,13 @@ export const publicApiClient = axios.create({
   },
 });
 
+function normalizeResponseMedia<T extends { data: unknown }>(response: T) {
+  response.data = normalizeApiMediaUrls(response.data, apiUrl);
+  return response;
+}
+
+publicApiClient.interceptors.response.use(normalizeResponseMedia);
+
 // Inject Authorization + X-Restaurant-ID on every request.
 // X-Restaurant-ID identifies which restaurant the current user is acting in
 // (a user can be a member of many restaurants).
@@ -70,7 +78,7 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  normalizeResponseMedia,
   (error) => {
     const status = error?.response?.status;
     const message = String(error?.response?.data?.error ?? "").toLowerCase();

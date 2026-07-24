@@ -49,9 +49,9 @@ export default function NotFoundUI() {
         <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <Link href="/" className="flex items-center gap-2.5">
             <AppLogo size={36} />
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400 leading-none">Restaurant</p>
-              <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-white leading-snug">HUB</p>
+            <div className="leading-none">
+              <p className="text-[16px] font-bold tracking-[-0.025em] text-gray-950 dark:text-white">Dishy</p>
+              <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-400">Restaurant operations</p>
             </div>
           </Link>
           <div className="flex items-center gap-2">

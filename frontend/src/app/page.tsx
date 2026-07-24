@@ -7,7 +7,9 @@ import "swiper/css/pagination";
 
 import { Fragment } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
+import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import {
   ArrowRight,
@@ -64,110 +66,172 @@ function safeNextPathFromSearch(search: string) {
   return next;
 }
 
-const HERO_PROOFS: HeroProof[] = [
-  {
-    label: "ใช้ได้ทั้งมือถือ, แท็บเล็ต, PC",
-    icon: Download,
-  },
-  {
-    label: "รองรับร้านได้หลายสาขา",
-    icon: Settings,
-  },
-  {
-    label: "มี dashboard สำหรับเจ้าของร้าน",
-    icon: Store,
-  },
+const HERO_PROOFS: Record<Language, HeroProof[]> = {
+  th: [
+    { label: "ใช้ได้ทั้งมือถือ แท็บเล็ต และ PC", icon: Download },
+    { label: "รองรับร้านได้หลายสาขา", icon: Settings },
+    { label: "มีแดชบอร์ดสำหรับเจ้าของร้าน", icon: Store },
+  ],
+  en: [
+    { label: "Works on mobile, tablet, and PC", icon: Download },
+    { label: "Manage multiple branches", icon: Settings },
+    { label: "Owner dashboard included", icon: Store },
+  ],
+};
+
+const SHIFT_METRICS: Record<Language, ShiftMetric[]> = {
+  th: [
+    { label: "โต๊ะใช้งาน", value: "6", note: "จาก 12 โต๊ะ", tone: "amber" },
+    { label: "คิวครัว", value: "4", note: "2 รายการใกล้พร้อม", tone: "orange" },
+    { label: "พร้อมเสิร์ฟ", value: "2", note: "แจ้งหน้าร้านแล้ว", tone: "emerald" },
+    { label: "รอชำระ", value: "1", note: "โต๊ะ B2", tone: "sky" },
+  ],
+  en: [
+    { label: "Active tables", value: "6", note: "of 12 tables", tone: "amber" },
+    { label: "Kitchen queue", value: "4", note: "2 nearly ready", tone: "orange" },
+    { label: "Ready to serve", value: "2", note: "Team notified", tone: "emerald" },
+    { label: "Awaiting payment", value: "1", note: "Table B2", tone: "sky" },
+  ],
+};
+
+const TABLE_TONES = [
+  "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300",
+  "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300",
+  "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300",
+  "border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300",
+  "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/25 dark:text-orange-300",
+  "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300",
 ];
 
-const SHIFT_METRICS: ShiftMetric[] = [
-  { label: "โต๊ะใช้งาน", value: "6", note: "จาก 12 โต๊ะ", tone: "amber" },
-  { label: "คิวครัว", value: "4", note: "2 รายการใกล้พร้อม", tone: "orange" },
-  { label: "พร้อมเสิร์ฟ", value: "2", note: "แจ้งหน้าร้านแล้ว", tone: "emerald" },
-  { label: "รอชำระ", value: "1", note: "โต๊ะ B2", tone: "sky" },
-];
+const TABLES: Record<Language, Array<{ id: string; status: string; tone: string }>> = {
+  th: ["ว่าง", "กำลังทาน", "รอเสิร์ฟ", "เปิดบิล", "รอชำระ", "ครัวกำลังทำ"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
+  en: ["Free", "Dining", "Ready to serve", "Bill opened", "Awaiting payment", "Kitchen cooking"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
+};
 
-const TABLES = [
-  { id: "A1", status: "ว่าง", tone: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" },
-  { id: "A2", status: "กำลังทาน", tone: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" },
-  { id: "A3", status: "รอเสิร์ฟ", tone: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300" },
-  { id: "B1", status: "เปิดบิล", tone: "border-gray-200 bg-white text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300" },
-  { id: "B2", status: "รอชำระ", tone: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/25 dark:text-orange-300" },
-  { id: "C1", status: "ครัวกำลังทำ", tone: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300" },
-];
+const KITCHEN_TICKETS: Record<Language, Array<{ table: string; item: string; state: string; dot: string }>> = {
+  th: [
+    { table: "A2", item: "กะเพราหมูสับ + ไข่ดาว", state: "กำลังทำ", dot: "bg-amber-500" },
+    { table: "A3", item: "ต้มยำกุ้ง, ข้าวเปล่า", state: "พร้อมเสิร์ฟ", dot: "bg-emerald-500" },
+    { table: "C1", item: "ผัดไทย, ชาไทยเย็น", state: "คิวใหม่", dot: "bg-sky-500" },
+  ],
+  en: [
+    { table: "A2", item: "Minced pork basil + fried egg", state: "Cooking", dot: "bg-amber-500" },
+    { table: "A3", item: "Tom yum goong, steamed rice", state: "Ready to serve", dot: "bg-emerald-500" },
+    { table: "C1", item: "Pad Thai, Thai iced tea", state: "New ticket", dot: "bg-sky-500" },
+  ],
+};
 
-const KITCHEN_TICKETS = [
-  { table: "A2", item: "กะเพราหมูสับ + ไข่ดาว", state: "กำลังทำ", dot: "bg-amber-500" },
-  { table: "A3", item: "ต้มยำกุ้ง, ข้าวเปล่า", state: "พร้อมเสิร์ฟ", dot: "bg-emerald-500" },
-  { table: "C1", item: "ผัดไทย, ชาไทยเย็น", state: "คิวใหม่", dot: "bg-sky-500" },
-];
+const ACTIVITY: Record<Language, string[]> = {
+  th: ["โต๊ะ A3 พร้อมเสิร์ฟ 2 รายการ", "โต๊ะ B2 ขอปิดบิล", "เพิ่มเมนูให้โต๊ะ A2 แล้ว", "ครัวรับออเดอร์ C1 แล้ว"],
+  en: ["Table A3 has 2 items ready", "Table B2 requested the bill", "Items added to table A2", "Kitchen accepted order C1"],
+};
 
-const ACTIVITY = [
-  "โต๊ะ A3 พร้อมเสิร์ฟ 2 รายการ",
-  "โต๊ะ B2 ขอปิดบิล",
-  "เพิ่มเมนูให้โต๊ะ A2 แล้ว",
-  "ครัวรับออเดอร์ C1 แล้ว",
-];
+const FLOW_ITEMS: Record<Language, FlowItem[]> = {
+  th: [
+    { title: "เปิดโต๊ะ", desc: "เลือกโซนและโต๊ะจากหน้าร้าน แล้วเริ่มออเดอร์โดยไม่ต้องจดแยก", icon: Table2 },
+    { title: "รับออเดอร์", desc: "เลือกเมนูและจำนวน ตรวจรายการ แล้วส่งเข้าครัวทันที", icon: ShoppingCart },
+    { title: "เข้าครัว", desc: "ครัวเห็นคิวใหม่ กำลังทำ และพร้อมเสิร์ฟจากจอเดียว", icon: ChefHat },
+    { title: "ปิดบิล", desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนสถานะโต๊ะ", icon: ReceiptText },
+  ],
+  en: [
+    { title: "Open a table", desc: "Choose a zone and table, then start an order without separate notes.", icon: Table2 },
+    { title: "Take orders", desc: "Choose dishes and quantities, review the order, and send it to the kitchen.", icon: ShoppingCart },
+    { title: "Send to kitchen", desc: "Chefs see new, cooking, and ready tickets from one queue.", icon: ChefHat },
+    { title: "Close the bill", desc: "Review the order, take cash or PromptPay, and release the table.", icon: ReceiptText },
+  ],
+};
 
-const FLOW_ITEMS: FlowItem[] = [
-  {
-    title: "เปิดโต๊ะ",
-    desc: "เลือกโซนและโต๊ะจากหน้าร้าน เริ่มออเดอร์โดยไม่ต้องจดแยก",
-    icon: Table2,
-  },
-  {
-    title: "รับออเดอร์",
-    desc: "สั่งเมนูที่ต้องการ พร้อมจำนวนที่พอใจ แล้วส่งเข้าครัวทันที",
-    icon: ShoppingCart,
-  },
-  {
-    title: "เข้าครัว",
-    desc: "พ่อครัวเห็นคิวอาหารที่ต้องทำ แยกเป็นคิวใหม่ กำลังทำ และพร้อมเสิร์ฟ ทันที",
-    icon: ChefHat,
-  },
-  {
-    title: "ปิดบิล",
-    desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนโต๊ะ ",
-    icon: ReceiptText,
-  },
-];
+const ROLE_ITEMS: Record<Language, RoleItem[]> = {
+  th: [
+    { role: "เจ้าของร้าน", title: "เห็นภาพร้านโดยไม่ต้องถามทุกแผนก", desc: "ดูโต๊ะที่ติดคิว อาหารพร้อมเสิร์ฟ และบิลรอชำระจากภาพรวมเดียว", icon: BarChart3 },
+    { role: "พนักงานหน้าร้าน", title: "รับออเดอร์แล้วรู้ทันทีว่าครัวถึงไหน", desc: "ลดการเดินถามครัวซ้ำ และช่วยให้เสิร์ฟอาหารได้ตรงจังหวะ", icon: UsersRound },
+    { role: "ครัว", title: "จัดลำดับคิวจากรายการที่อ่านง่าย", desc: "แยกคิวใหม่ กำลังทำ และพร้อมเสิร์ฟโดยไม่ต้องไล่กระดาษย้อนหลัง", icon: ChefHat },
+    { role: "แคชเชียร์", title: "ตรวจบิลและรับชำระจากข้อมูลเดียวกัน", desc: "ลดการคีย์ซ้ำตอนปิดบิล และคืนโต๊ะให้รอบถัดไปได้เร็วขึ้น", icon: CreditCard },
+  ],
+  en: [
+    { role: "Owner", title: "See the whole restaurant without checking every station", desc: "Review delayed tables, ready food, and bills awaiting payment from one overview.", icon: BarChart3 },
+    { role: "Front-of-house staff", title: "Take orders and see kitchen progress immediately", desc: "Spend less time checking with the kitchen and serve each dish at the right moment.", icon: UsersRound },
+    { role: "Kitchen", title: "Prioritize tickets at a glance", desc: "Separate new, cooking, and ready tickets without searching through paper slips.", icon: ChefHat },
+    { role: "Cashier", title: "Review bills and take payment from the same order", desc: "Avoid re-entering details at checkout and release tables sooner.", icon: CreditCard },
+  ],
+};
 
-const ROLE_ITEMS: RoleItem[] = [
-  {
-    role: "เจ้าของร้าน",
-    title: "เห็นภาพร้านโดยไม่ต้องถามทุกแผนก",
-    desc: "ดูโต๊ะที่ติดคิว อาหารที่พร้อมเสิร์ฟ และบิลที่รอชำระจากภาพรวมเดียว",
-    icon: BarChart3,
-  },
-  {
-    role: "พนักงานหน้าร้าน",
-    title: "รับออเดอร์แล้วรู้ทันทีว่าครัวถึงไหน",
-    desc: "ลดการเดินถามครัวซ้ำ และช่วยให้เสิร์ฟอาหารได้ตรงจังหวะมากขึ้น",
-    icon: UsersRound,
-  },
-  {
-    role: "ครัว",
-    title: "จัดลำดับคิวจาก ticket ที่อ่านง่าย",
-    desc: "แยกคิวใหม่ กำลังทำ และพร้อมเสิร์ฟโดยไม่ต้องไล่กระดาษย้อนหลัง",
-    icon: ChefHat,
-  },
-  {
-    role: "แคชเชียร์",
-    title: "ตรวจบิลและรับชำระจากข้อมูลเดียวกับ POS",
-    desc: "ลดการคีย์ซ้ำตอนปิดบิล และคืนสถานะโต๊ะให้รอบถัดไปได้เร็วขึ้น",
-    icon: CreditCard,
-  },
-];
+const READY_FEATURES: Record<Language, string[]> = {
+  th: ["สร้างร้านและเลือกร้านที่ใช้งาน", "เชิญพนักงานเข้าทีม", "จัดการเมนู รูปภาพ และตัวเลือก", "จัดโซนและโต๊ะ", "รับออเดอร์ผ่าน POS", "คิวครัวสำหรับ KDS", "บิล เงินสด และ PromptPay MVP", "ภาพรวมกะร้านอัปเดตแบบเรียลไทม์"],
+  en: ["Create and choose a restaurant workspace", "Invite staff to the team", "Manage menus, images, and options", "Organize zones and tables", "Take orders through POS", "Run the kitchen queue on KDS", "Handle bills, cash, and PromptPay", "Follow the live shift overview"],
+};
 
-const READY_FEATURES = [
-  "สร้างร้านและเลือกร้านที่ใช้งาน",
-  "เชิญพนักงานเข้าทีม",
-  "จัดการเมนู รูปภาพ และตัวเลือก",
-  "จัดโซนและโต๊ะ",
-  "รับออเดอร์ผ่าน POS",
-  "คิวครัวสำหรับ KDS",
-  "บิล เงินสด และ PromptPay MVP",
-  "ภาพรวมกะร้านแบบ polling",
-];
+const LANDING_COPY: Record<Language, {
+  nav: [string, string, string];
+  login: string;
+  register: string;
+  heroTitle: string;
+  heroImageAlt: string;
+  phoneImageAlt: string;
+  proofTitle: string;
+  proofDesc: string;
+  workflowTitle: string;
+  workflowDesc: string;
+  rolesTitle: string;
+  rolesDesc: string;
+  aiTitle: string;
+  aiDesc: string;
+  ctaLabel: string;
+  ctaTitle: string;
+  ctaDesc: string;
+  footerProject: string;
+  footerWorkflow: string;
+  mockup: Record<string, string>;
+}> = {
+  th: {
+    nav: ["ภาพรวม", "กะร้าน", "ทีม"],
+    login: "เข้าสู่ระบบ",
+    register: "เริ่มใช้งาน",
+    heroTitle: "จัดการร้านได้ผ่านมือถือ",
+    heroImageAlt: "ทีมครัวกำลังทำอาหารระหว่างกะเย็นในร้านอาหาร",
+    phoneImageAlt: "ตัวอย่าง Dishy บนมือถือ",
+    proofTitle: "ยกระดับร้านด้วยข้อมูลที่ทีมเห็นตรงกัน",
+    proofDesc: "บริหารออเดอร์ งานครัว การชำระเงิน และภาพรวมร้านจากพื้นที่ทำงานเดียว",
+    workflowTitle: "ขั้นตอนการทำงานที่ต่อเนื่อง",
+    workflowDesc: "หน้าร้าน ครัว และแคชเชียร์อัปเดตสถานะจากออเดอร์ชุดเดียวกัน ลดการจดซ้ำและการเดินถาม",
+    rolesTitle: "แต่ละบทบาทเห็นสิ่งที่ต้องจัดการ",
+    rolesDesc: "ระบบแยกหน้างานให้เหมาะกับเจ้าของร้าน พนักงานหน้าร้าน ครัว และแคชเชียร์ โดยใช้สถานะจากกะเดียวกัน",
+    aiTitle: "AI ผู้ช่วยสำหรับข้อมูลในร้านของคุณ",
+    aiDesc: "ถามยอดขาย เมนู และวัตถุดิบจากข้อมูลที่ระบบมี เพื่อช่วยตรวจสถานการณ์ก่อนตัดสินใจ",
+    ctaLabel: "พร้อมเริ่มกะถัดไป",
+    ctaTitle: "เปิดร้านด้วยระบบที่เห็นจังหวะงานจริง",
+    ctaDesc: "เข้าสู่ระบบเพื่อสร้างร้าน ตั้งค่าโต๊ะ เมนู และเชิญทีมให้ทดลองขั้นตอนหน้าร้าน ครัว และปิดบิล",
+    footerProject: "ระบบจัดการงานร้านอาหารสำหรับโปรเจกต์ Pre-capstone",
+    footerWorkflow: "ออกแบบสำหรับขั้นตอนการทำงานของร้านอาหารไทย",
+    mockup: {
+      overview: "ภาพรวมกะร้าน", shift: "กะเย็นวันนี้", open: "เปิดให้บริการ", focusLabel: "สิ่งที่ต้องเห็นในกะนี้", focusTitle: "โต๊ะ คิวครัว และบิลอยู่ในภาพเดียว", focusDesc: "ใช้สำหรับช่วงที่ร้านต้องตัดสินใจเร็ว ไม่ใช่แค่ดูรายงานหลังปิดร้าน", front: "หน้าร้านรับออเดอร์", kitchen: "ครัวอัปเดตสถานะ", cashier: "แคชเชียร์ปิดบิล", floorMap: "ผังโต๊ะ", zones: "โซน A-C", activity: "ความเคลื่อนไหว", live: "สด", kitchenQueue: "คิวครัว", updatedFromPos: "อัปเดตจาก POS", table: "โต๊ะ", paymentTitle: "โต๊ะ B2 รอชำระ", paymentDesc: "ตรวจรายการ รับชำระ และคืนสถานะโต๊ะจากขั้นตอนเดียว",
+    },
+  },
+  en: {
+    nav: ["Overview", "Workflow", "Team"],
+    login: "Sign in",
+    register: "Get started",
+    heroTitle: "Run your restaurant from your phone",
+    heroImageAlt: "A kitchen team preparing dishes during an evening restaurant shift",
+    phoneImageAlt: "Dishy shown on a mobile phone",
+    proofTitle: "Keep the whole team aligned with shared restaurant data",
+    proofDesc: "Manage orders, kitchen progress, payments, and the live state of your restaurant from one workspace.",
+    workflowTitle: "One continuous restaurant workflow",
+    workflowDesc: "Front of house, kitchen, and cashier update the same order, reducing duplicate entry and status checks.",
+    rolesTitle: "Give every role the right operational view",
+    rolesDesc: "Owners, front-of-house staff, kitchen teams, and cashiers each see the work they need while sharing one shift status.",
+    aiTitle: "An AI assistant for your restaurant data",
+    aiDesc: "Ask about sales, menu performance, and inventory using the data already recorded in the system.",
+    ctaLabel: "Ready for the next shift",
+    ctaTitle: "Run the next shift around real restaurant work",
+    ctaDesc: "Sign in to create a restaurant, configure tables and menus, and invite your team to try the front-of-house, kitchen, and billing flow.",
+    footerProject: "Pre-capstone restaurant operations system",
+    footerWorkflow: "Built for Thai restaurant workflows",
+    mockup: {
+      overview: "Live shift overview", shift: "Tonight's shift", open: "Open", focusLabel: "What matters this shift", focusTitle: "Tables, kitchen queue, and bills in one view", focusDesc: "Built for moments when the team needs to act quickly, not only review reports after closing.", front: "Front of house takes orders", kitchen: "Kitchen updates status", cashier: "Cashier closes bills", floorMap: "Floor map", zones: "Zones A-C", activity: "Activity", live: "live", kitchenQueue: "Kitchen queue", updatedFromPos: "Updated from POS", table: "Table", paymentTitle: "Table B2 awaiting payment", paymentDesc: "Review the order, take payment, and release the table from one flow.",
+    },
+  },
+};
 
 const metricToneClass: Record<ShiftMetric["tone"], string> = {
   neutral: "text-gray-950 dark:text-white",
@@ -179,14 +243,18 @@ const metricToneClass: Record<ShiftMetric["tone"], string> = {
 
 function ThemeToggle() {
   const { theme, toggle } = useTheme();
+  const { language } = useLanguage();
   const Icon = theme === "dark" ? Sun : Moon;
+  const title = theme === "dark"
+    ? language === "th" ? "สลับเป็นโหมดสว่าง" : "Switch to light mode"
+    : language === "th" ? "สลับเป็นโหมดมืด" : "Switch to dark mode";
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={theme === "dark" ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
-      title={theme === "dark" ? "สลับเป็น Light mode" : "สลับเป็น Dark mode"}
+      aria-label={title}
+      title={title}
       className="landing-lift inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
     >
       <Icon className="h-4 w-4" strokeWidth={1.8} />
@@ -397,11 +465,11 @@ function SectionHeader({ title, desc }: { title: string; desc: string }) {
   );
 }
 
-function HeroImage() {
+function HeroImage({ alt }: { alt: string }) {
   return (
     <Image
       src={HERO_IMAGE_URL}
-      alt="ทีมครัวกำลังทำอาหารระหว่างกะเย็นในร้านอาหาร"
+      alt={alt}
       fill
       priority
       unoptimized
@@ -411,12 +479,12 @@ function HeroImage() {
   );
 }
 
-function PhoneImage() {
+function PhoneImage({ alt }: { alt: string }) {
   return (
     <div className="relative aspect-[9/16] w-48 sm:w-64 md:w-80 lg:w-96">
       <Image
         src={PHONE_IMAGE_URL}
-        alt="แอปบนมือถือ"
+        alt={alt}
         fill
         priority
         unoptimized
@@ -427,21 +495,23 @@ function PhoneImage() {
   );
 }
 
-function ImageAndDownload({ btn }: { btn: () => void }) {
+function ImageAndDownload({ btn, language }: { btn: () => void; language: Language }) {
+  const copy = LANDING_COPY[language];
+
   return (
     <div className="m-6 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
-      <PhoneImage />
+      <PhoneImage alt={copy.phoneImageAlt} />
       <div className="flex flex-col items-center gap-4 sm:items-center">
-        <PrimaryButton onClick={btn}>ลงทะเบียนเลย</PrimaryButton>
-       <HeroProofStrip />
+        <PrimaryButton onClick={btn}>{copy.register}</PrimaryButton>
+       <HeroProofStrip language={language} />
       </div>
     </div>
   );
 }
-function HeroProofStrip() {
+function HeroProofStrip({ language }: { language: Language }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
-      {HERO_PROOFS.map((item, index) => {
+      {HERO_PROOFS[language].map((item, index) => {
         const Icon = item.icon;
         return (
           <div
@@ -466,7 +536,9 @@ function HeroProofStrip() {
   );
 }
 
-function CommandCenterMockup() {
+function CommandCenterMockup({ language }: { language: Language }) {
+  const copy = LANDING_COPY[language].mockup;
+
   return (
     <div className="relative">
       <div className="relative overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
@@ -474,14 +546,14 @@ function CommandCenterMockup() {
           <div className="flex items-center gap-2.5">
             <AppLogo size={28} />
             <div>
-              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400">ภาพรวมกะร้าน</p>
-              <p className="text-sm font-semibold text-gray-950 dark:text-white">กะเย็นวันนี้</p>
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.overview}</p>
+              <p className="text-sm font-semibold text-gray-950 dark:text-white">{copy.shift}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
             <span className="font-mono">18:42</span>
             <span className="landing-live-chip rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-              เปิดให้บริการ
+              {copy.open}
             </span>
           </div>
         </div>
@@ -490,17 +562,17 @@ function CommandCenterMockup() {
           <aside className="border-b border-gray-100 p-4 dark:border-gray-800">
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div>
-                <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400">สิ่งที่ต้องเห็นในกะนี้</p>
+                <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.focusLabel}</p>
                 <h3 className="mt-2 text-xl font-semibold leading-tight text-gray-950 dark:text-white">
-                  โต๊ะ คิวครัว และบิลอยู่ในภาพเดียว
+                  {copy.focusTitle}
                 </h3>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-                  ใช้สำหรับช่วงที่ร้านต้องตัดสินใจเร็ว ไม่ใช่แค่ดูรายงานหลังปิดร้าน
+                  {copy.focusDesc}
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {["หน้าร้านรับออเดอร์", "ครัวอัปเดตสถานะ", "แคชเชียร์ปิดบิล"].map((item) => (
+                {[copy.front, copy.kitchen, copy.cashier].map((item) => (
                   <div
                     key={item}
                     className="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300"
@@ -516,7 +588,7 @@ function CommandCenterMockup() {
           <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
             <div className="min-w-0">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {SHIFT_METRICS.map((metric) => (
+                {SHIFT_METRICS[language].map((metric) => (
                   <div key={metric.label} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                     <p className="truncate text-[12px] font-medium text-gray-500 dark:text-gray-400">{metric.label}</p>
                     <p className={`mt-2 text-2xl font-semibold leading-none tabular-nums ${metricToneClass[metric.tone]}`}>
@@ -529,11 +601,11 @@ function CommandCenterMockup() {
 
               <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-950 dark:text-white">Floor map</p>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">โซน A-C</span>
+                  <p className="text-sm font-semibold text-gray-950 dark:text-white">{copy.floorMap}</p>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.zones}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {TABLES.map((table) => (
+                  {TABLES[language].map((table) => (
                     <div key={table.id} className={`rounded-md border p-3 ${table.tone}`}>
                       <p className="text-base font-semibold">{table.id}</p>
                       <p className="mt-1 text-[11px] font-medium">{table.status}</p>
@@ -544,11 +616,11 @@ function CommandCenterMockup() {
 
               <div className="mt-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-950 dark:text-white">Activity</p>
-                  <span className="landing-live-chip rounded px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">live</span>
+                  <p className="text-sm font-semibold text-gray-950 dark:text-white">{copy.activity}</p>
+                  <span className="landing-live-chip rounded px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400">{copy.live}</span>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {ACTIVITY.map((item, index) => (
+                  {ACTIVITY[language].map((item, index) => (
                     <div
                       key={item}
                       className="flex min-w-0 gap-3 rounded-md border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900"
@@ -563,17 +635,17 @@ function CommandCenterMockup() {
 
             <aside>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-950 dark:text-white">Kitchen queue</p>
-              <span className="text-[11px] text-gray-500 dark:text-gray-400">อัปเดตจาก POS</span>
+              <p className="text-sm font-semibold text-gray-950 dark:text-white">{copy.kitchenQueue}</p>
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">{copy.updatedFromPos}</span>
             </div>
             <div className="mt-3 space-y-2">
-              {KITCHEN_TICKETS.map((ticket) => (
+              {KITCHEN_TICKETS[language].map((ticket) => (
                 <div key={`${ticket.table}-${ticket.item}`} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex items-start gap-3">
                     <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${ticket.dot}`} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <p className="text-xs font-semibold text-gray-950 dark:text-white">โต๊ะ {ticket.table}</p>
+                        <p className="text-xs font-semibold text-gray-950 dark:text-white">{copy.table} {ticket.table}</p>
                         <span className="text-[10px] font-medium text-gray-500 dark:text-gray-400">{ticket.state}</span>
                       </div>
                       <p className="mt-1 truncate text-[12px] text-gray-500 dark:text-gray-400">{ticket.item}</p>
@@ -586,10 +658,10 @@ function CommandCenterMockup() {
             <div className="mt-4 rounded-md border border-orange-200 bg-orange-50 p-3 dark:border-orange-900/60 dark:bg-orange-950/20">
               <div className="flex items-center gap-2">
                 <ReceiptText className="h-4 w-4 text-orange-600 dark:text-orange-400" strokeWidth={1.8} />
-                <p className="text-xs font-semibold text-gray-950 dark:text-white">โต๊ะ B2 รอชำระ</p>
+                <p className="text-xs font-semibold text-gray-950 dark:text-white">{copy.paymentTitle}</p>
               </div>
               <p className="mt-2 text-[12px] leading-5 text-gray-600 dark:text-gray-400">
-                ตรวจรายการ รับชำระ และคืนสถานะโต๊ะจาก flow เดียว
+                {copy.paymentDesc}
               </p>
             </div>
             </aside>
@@ -603,6 +675,7 @@ function CommandCenterMockup() {
 export default function LandingPage() {
   const router = useRouter();
   const { closeLoginModal, openLoginModal, user, loading } = useAuth();
+  const { language } = useLanguage();
   const didRequestAuthOnLanding = useRef(false);
   const authRedirectToRef = useRef<string | undefined>(undefined);
   const [scrolled, setScrolled] = useState(false);
@@ -652,6 +725,7 @@ export default function LandingPage() {
   }
 
   const headerOnImage = !scrolled;
+  const copy = LANDING_COPY[language];
   const openLandingLoginModal = () => {
     didRequestAuthOnLanding.current = true;
     openLoginModal(readAuthRedirectTo());
@@ -675,30 +749,31 @@ export default function LandingPage() {
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <AppLogo size={34} priority />
-            <div>
-              <p className={`text-[10px] font-semibold tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
-                Restaurant
+            <div className="hidden leading-none sm:block">
+              <p className={`text-[16px] font-bold tracking-[-0.025em] ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
+                Dishy
               </p>
-              <p className={`text-sm font-semibold leading-none ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
-                HUB
+              <p className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
+                Restaurant operations
               </p>
             </div>
           </div>
 
           <nav className={`hidden items-center gap-6 text-sm font-medium md:flex ${headerOnImage ? "text-white/78" : "text-gray-600 dark:text-gray-400"}`}>
             <a href="#proof" className={`transition-colors ${headerOnImage ? "hover:text-white" : "hover:text-gray-950 dark:hover:text-white"}`}>
-              ภาพรวม
+              {copy.nav[0]}
             </a>
             <a href="#workflow" className={`transition-colors ${headerOnImage ? "hover:text-white" : "hover:text-gray-950 dark:hover:text-white"}`}>
-              กะร้าน
+              {copy.nav[1]}
             </a>
             <a href="#roles" className={`transition-colors ${headerOnImage ? "hover:text-white" : "hover:text-gray-950 dark:hover:text-white"}`}>
-              ทีม
+              {copy.nav[2]}
             </a>
           </nav>
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <LanguageToggle className="shrink-0" />
             <button
               type="button"
               onClick={openLandingLoginModal}
@@ -708,7 +783,7 @@ export default function LandingPage() {
                   : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
               }`}
             >
-              เข้าสู่ระบบ
+              {copy.login}
             </button>
           </div>
         </div>
@@ -716,19 +791,19 @@ export default function LandingPage() {
 
       <main>
         <section className="relative min-h-[calc(100dvh-112px)] overflow-hidden bg-gray-950 text-white">
-          <HeroImage />
+          <HeroImage alt={copy.heroImageAlt} />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(3,7,18,0.92)_0%,rgba(3,7,18,0.72)_44%,rgba(3,7,18,0.22)_100%)]" />
           <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-gray-950 to-transparent" />
           <div className="justify-center gap-10 relative mx-auto flex min-h-[calc(100dvh-112px)] max-w-7xl flex-col px-4 pb-6 pt-20 sm:min-h-[calc(100dvh-88px)] sm:px-6 sm:pb-7 sm:pt-28 lg:px-8">
 
             <HeroReveal delay={80}>
               <h1 className="mt-5 max-w-4xl text-[34px] font-semibold leading-[1.08] text-white [text-wrap:balance] sm:text-5xl lg:text-[80px]">
-                จัดการร้านได้ผ่านมือถือ
+                {copy.heroTitle}
               </h1>
             </HeroReveal>
 
             <HeroReveal delay={120}>
-              <ImageAndDownload btn={openLandingLoginModal} />  
+              <ImageAndDownload btn={openLandingLoginModal} language={language} />
             </HeroReveal>
             
           </div>
@@ -738,13 +813,13 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[0.42fr_0.58fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="ยกระดับร้านของคุณด้วยข้อมูลที่แม่นยำ"
-                desc="ช่วยให้คุณบริหารร้านได้ในหน้าจอเดียว ตั้งแต่การรับออเดอร์ การทำอาหาร การชำระเงิน และภาพรวมของร้าน"
+                title={copy.proofTitle}
+                desc={copy.proofDesc}
               />          
             </Reveal>
 
             <Reveal delay={120}>
-              <CommandCenterMockup />
+              <CommandCenterMockup language={language} />
             </Reveal>
           </div>
         </section>
@@ -753,13 +828,13 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="การทำงานที่ลื่นไหล"
-                desc="กระบวนการที่ออกแบบมาเพื่อให้พนักงานทุกคนทำงานร่วมกันได้ง่ายขึ้น ลดข้อผิดพลาด ลูกค้าแฮปปี้"
+                title={copy.workflowTitle}
+                desc={copy.workflowDesc}
               />
             </Reveal>
 
             <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-              {FLOW_ITEMS.map((item, index) => {
+              {FLOW_ITEMS[language].map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <Fragment key={item.title}>
@@ -775,7 +850,7 @@ export default function LandingPage() {
                       </div>
                     </Reveal>
 
-                    {index < FLOW_ITEMS.length - 1 && (
+                    {index < FLOW_ITEMS[language].length - 1 && (
                       <div className="hidden xl:flex items-center justify-center text-gray-300 dark:text-gray-700">
                         <ArrowRight className="h-5 w-5" strokeWidth={2} />
                       </div>
@@ -793,8 +868,8 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <Reveal>
               <SectionHeader
-                title="สรุปหน้าที่ของคนในร้านอย่างชัดเจน"
-                desc="พนักงานไม่ควรต้องแปลข้อมูลข้ามกระดาษ แชต และหน้าจอหลายชุด ระบบจึงแยกหน้างานให้เหมาะกับบทบาท แต่ยังผูกสถานะกลับมาที่กะร้านเดียวกัน"
+                title={copy.rolesTitle}
+                desc={copy.rolesDesc}
               />
             </Reveal>
             <SwiperStyle />
@@ -817,7 +892,7 @@ export default function LandingPage() {
               className="mt-10 pb-12 role-swiper"
               
             >
-              {ROLE_ITEMS.map((item, index) => {
+              {ROLE_ITEMS[language].map((item, index) => {
                 const Icon = item.icon;
 
                 return (
@@ -856,13 +931,13 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:px-8">
             <Reveal>
               <SectionHeader
-                title="AI ผู้ช่วยที่รู้ทุกอย่างเกี่ยวกับร้านของคุณ"
-                desc="ไม่ต้องเสียเวลานั่งไล่เช็ค Exel หรือสมุดจด แค่ถาม AI Assistant ของเราคุณก็ได้คำตอบทันที"
+                title={copy.aiTitle}
+                desc={copy.aiDesc}
               />
             </Reveal>
 
             <div className="grid gap-2 sm:grid-cols-2">
-              {READY_FEATURES.map((feature, index) => (
+              {READY_FEATURES[language].map((feature, index) => (
                 <Reveal key={feature} delay={index * 40}>
                   <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
                     <div className="flex gap-2">
@@ -881,15 +956,15 @@ export default function LandingPage() {
             <Reveal>
               <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
                 <div>
-                  <p className="text-sm font-semibold text-orange-300">พร้อมเริ่มกะถัดไป</p>
+                  <p className="text-sm font-semibold text-orange-300">{copy.ctaLabel}</p>
                   <h2 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">
-                    เปิดร้านด้วยระบบที่เห็นจังหวะงานจริง
+                    {copy.ctaTitle}
                   </h2>
                   <p className="mt-4 max-w-2xl text-base leading-7 text-gray-300">
-                    เข้าสู่ระบบเพื่อสร้างร้าน ตั้งค่าโต๊ะ เมนู และเชิญทีมให้ทดลอง flow หน้าร้าน-ครัว-ปิดบิล
+                    {copy.ctaDesc}
                   </p>
                 </div>
-                <SecondaryButton onClick={openLandingLoginModal}>เข้าสู่ระบบ</SecondaryButton>
+                <SecondaryButton onClick={openLandingLoginModal}>{copy.login}</SecondaryButton>
               </div>
             </Reveal>
           </div>
@@ -900,12 +975,12 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-sm text-gray-500 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <AppLogo size={28} />
-            <span className="font-semibold text-gray-900 dark:text-white">Restaurant Hub</span>
+            <span className="font-semibold text-gray-900 dark:text-white">Dishy</span>
           </div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-            <span>Pre-capstone restaurant operations system</span>
+            <span>{copy.footerProject}</span>
             <span className="hidden text-gray-300 dark:text-gray-700 sm:inline">/</span>
-            <span>Built for Thai restaurant workflows</span>
+            <span>{copy.footerWorkflow}</span>
           </div>
         </div>
       </footer>

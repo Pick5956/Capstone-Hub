@@ -1,6 +1,19 @@
-import type { MenuItem, MenuOptionGroup } from "@/src/types/menu";
+type MenuCategoryShape = {
+  category_id: number;
+};
 
-export function menuCategoryIds(item: MenuItem) {
+type MenuCategorySource = {
+  category_id: number;
+  categories?: MenuCategoryShape[];
+};
+
+type MenuOptionGroupShape = {
+  required: boolean;
+  min_select: number;
+  max_select: number;
+};
+
+export function menuCategoryIds(item: MenuCategorySource) {
   const ids = new Set<number>();
   if (item.category_id) ids.add(item.category_id);
   for (const link of item.categories ?? []) {
@@ -9,7 +22,7 @@ export function menuCategoryIds(item: MenuItem) {
   return Array.from(ids);
 }
 
-export function menuOptionLimits(group: MenuOptionGroup) {
+export function menuOptionLimits(group: MenuOptionGroupShape) {
   const minSelect = group.required ? Math.max(1, group.min_select || 0) : Math.max(0, group.min_select || 0);
   const maxSelect = Math.max(minSelect || 1, group.max_select || 1);
   return { minSelect, maxSelect };

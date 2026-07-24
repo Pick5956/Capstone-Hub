@@ -1,11 +1,15 @@
 package controller
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
+	"Project-M/internal/realtime"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -14,13 +18,31 @@ import (
 )
 
 type OrderController struct {
-	orderSvc *service.OrderService
+	orderSvc               *service.OrderService
+	orderEvents            *realtime.OrderHub
+	eventHeartbeatInterval time.Duration
+	eventSessionLifetime   time.Duration
 }
 
-func ProvideOrderController(db *gorm.DB) *OrderController {
+const (
+	defaultOrderEventHeartbeatInterval = 15 * time.Second
+	defaultOrderEventSessionLifetime   = 5 * time.Minute
+)
+
+func ProvideOrderController(db *gorm.DB, orderEvents *realtime.OrderHub) *OrderController {
 	return &OrderController{
-		orderSvc: service.ProvideOrderService(repository.NewOrderRepository(db)),
+		orderSvc:               service.ProvideOrderService(repository.NewOrderRepository(db)),
+		orderEvents:            orderEvents,
+		eventHeartbeatInterval: defaultOrderEventHeartbeatInterval,
+		eventSessionLifetime:   defaultOrderEventSessionLifetime,
 	}
+}
+
+func (ctrl *OrderController) publishOrderChange(restaurantID uint, action string, order *entity.Order) {
+	if ctrl.orderEvents == nil || order == nil {
+		return
+	}
+	ctrl.orderEvents.Publish(restaurantID, action, order.ID)
 }
 
 func requireOrderAccess(c *gin.Context, permission string) bool {
@@ -46,15 +68,16 @@ func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 	}
 	var req service.OpenOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.OpenOrder(restaurantID, userID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, order)
+	ctrl.publishOrderChange(restaurantID, "order.created", order)
 }
 
 func (ctrl *OrderController) ListOrders(c *gin.Context) {
@@ -69,14 +92,46 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	if !ok {
 		return
 	}
-	page := boundedQueryInt(c, "page", 1, 1, 100000)
+	page := boundedQueryInt(c, "page", 1, 1, 1000)
 	limit := boundedQueryInt(c, "limit", 100, 1, 200)
-	orders, err := ctrl.orderSvc.ListOrders(restaurantID, c.Query("status"), tableID, c.Query("date"), page, limit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	includeSummary := c.Query("include_summary") == "true"
+	if err := service.ValidateOrderListFilters(
+		strings.TrimSpace(c.Query("status")),
+		strings.TrimSpace(c.Query("date")),
+		strings.TrimSpace(c.Query("payment_status")),
+		strings.TrimSpace(c.Query("search")),
+	); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"orders": orders})
+	result, err := ctrl.orderSvc.ListOrders(
+		restaurantID,
+		c.Query("status"),
+		tableID,
+		c.Query("date"),
+		c.Query("payment_status"),
+		c.Query("search"),
+		includeSummary,
+		page,
+		limit,
+	)
+	if err != nil {
+		respondAPIError(c, http.StatusInternalServerError, err)
+		return
+	}
+	payload := gin.H{
+		"orders": result.Orders,
+		"pagination": gin.H{
+			"page":     page,
+			"limit":    limit,
+			"total":    result.Total,
+			"has_more": int64(page*limit) < result.Total,
+		},
+	}
+	if includeSummary {
+		payload["summary"] = result.Summary
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // resolveOrder accepts either a numeric database ID (backward compat) or an
@@ -139,15 +194,16 @@ func (ctrl *OrderController) UpdateOrder(c *gin.Context) {
 	}
 	var req service.UpdateOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.UpdateOrder(restaurantID, userID, resolved.ID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "order.updated", order)
 }
 
 func (ctrl *OrderController) CancelOrder(c *gin.Context) {
@@ -176,18 +232,19 @@ func (ctrl *OrderController) CancelOrder(c *gin.Context) {
 	}
 	var req service.CancelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.CancelOrder(restaurantID, userID, resolved.ID, req.Reason)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "order.cancelled", order)
 }
 
-func (ctrl *OrderController) CloseOrder(c *gin.Context) {
+func (ctrl *OrderController) CloseEmptyTable(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
 		return
@@ -204,12 +261,13 @@ func (ctrl *OrderController) CloseOrder(c *gin.Context) {
 	if !ok {
 		return
 	}
-	order, err := ctrl.orderSvc.CloseOrder(restaurantID, userID, resolved.ID)
+	order, err := ctrl.orderSvc.CloseEmptyTable(restaurantID, userID, resolved.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "order.closed", order)
 }
 
 func (ctrl *OrderController) Bill(c *gin.Context) {
@@ -251,15 +309,16 @@ func (ctrl *OrderController) PayOrder(c *gin.Context) {
 	}
 	var req service.PayOrderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.PayOrder(restaurantID, userID, resolved.ID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "order.paid", order)
 }
 
 func (ctrl *OrderController) AddItem(c *gin.Context) {
@@ -267,17 +326,23 @@ func (ctrl *OrderController) AddItem(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req service.AddOrderItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
-	order, err := ctrl.orderSvc.AddItem(restaurantID, orderID, &req)
+	var req service.AddOrderItemRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	order, err := ctrl.orderSvc.AddItem(restaurantID, userID, orderID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, order)
+	ctrl.publishOrderChange(restaurantID, "item.added", order)
 }
 
 func (ctrl *OrderController) UpdateItem(c *gin.Context) {
@@ -291,15 +356,16 @@ func (ctrl *OrderController) UpdateItem(c *gin.Context) {
 	}
 	var req service.UpdateOrderItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.UpdateItem(restaurantID, orderID, itemID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "item.updated", order)
 }
 
 func (ctrl *OrderController) DeleteItem(c *gin.Context) {
@@ -313,10 +379,11 @@ func (ctrl *OrderController) DeleteItem(c *gin.Context) {
 	}
 	order, err := ctrl.orderSvc.DeleteItem(restaurantID, orderID, itemID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "item.deleted", order)
 }
 
 func (ctrl *OrderController) SendToKitchen(c *gin.Context) {
@@ -338,10 +405,11 @@ func (ctrl *OrderController) SendToKitchen(c *gin.Context) {
 	}
 	order, err := ctrl.orderSvc.SendToKitchen(restaurantID, userID, resolved.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "order.sent_to_kitchen", order)
 }
 
 func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
@@ -360,15 +428,16 @@ func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
 	}
 	var req service.StatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, orderID, itemID, strings.TrimSpace(req.Status), req.Reason)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "item.status_updated", order)
 }
 
 func (ctrl *OrderController) KitchenQueue(c *gin.Context) {
@@ -381,10 +450,84 @@ func (ctrl *OrderController) KitchenQueue(c *gin.Context) {
 	}
 	orders, err := ctrl.orderSvc.KitchenQueue(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
+}
+
+func (ctrl *OrderController) OrderEvents(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(
+		c,
+		"missing order realtime permission",
+		"view_orders",
+		"take_order",
+		"view_kitchen",
+		"update_order_status",
+	)
+	if !ok {
+		return
+	}
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming is not supported"})
+		return
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache, no-transform")
+	c.Header("X-Accel-Buffering", "no")
+	c.Status(http.StatusOK)
+
+	events, unsubscribe := ctrl.orderEvents.Subscribe(restaurantID)
+	defer unsubscribe()
+	heartbeatInterval := ctrl.eventHeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = defaultOrderEventHeartbeatInterval
+	}
+	sessionLifetime := ctrl.eventSessionLifetime
+	if sessionLifetime <= 0 {
+		sessionLifetime = defaultOrderEventSessionLifetime
+	}
+	heartbeat := time.NewTicker(heartbeatInterval)
+	defer heartbeat.Stop()
+	session := time.NewTimer(sessionLifetime)
+	defer session.Stop()
+
+	if _, err := fmt.Fprint(c.Writer, "retry: 3000\nevent: connected\ndata: {}\n\n"); err != nil {
+		return
+	}
+	flusher.Flush()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-session.C:
+			if _, err := fmt.Fprint(c.Writer, "event: reconnect\ndata: {\"reason\":\"revalidate\"}\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+			return
+		case event, open := <-events:
+			if !open {
+				return
+			}
+			payload, err := json.Marshal(event)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event.Type, payload); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(c.Writer, ": keepalive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 func (ctrl *OrderController) orderIDContext(c *gin.Context, permission string) (uint, uint, bool) {

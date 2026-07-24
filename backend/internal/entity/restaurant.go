@@ -12,11 +12,11 @@ type Restaurant struct {
 	Logo                 string  `json:"logo"`
 	OpenTime             string  `json:"open_time" gorm:"size:5;default:'17:00'"`
 	CloseTime            string  `json:"close_time" gorm:"size:5;default:'00:00'"`
-	TableCount           int     `json:"table_count" gorm:"default:12"`
+	TableCount           int     `json:"table_count" gorm:"not null;default:12;check:restaurant_table_count_nonnegative,table_count >= 0"`
 	ServiceChargeEnabled bool    `json:"service_charge_enabled" gorm:"not null;default:false"`
-	ServiceChargeRate    float64 `json:"service_charge_rate" gorm:"not null;default:10"`
+	ServiceChargeRate    float64 `json:"service_charge_rate" gorm:"type:numeric(7,4);not null;default:10;check:restaurant_service_charge_rate_range,service_charge_rate >= 0 AND service_charge_rate <= 100"`
 	VATEnabled           bool    `json:"vat_enabled" gorm:"not null;default:false"`
-	VATRate              float64 `json:"vat_rate" gorm:"not null;default:7"`
+	VATRate              float64 `json:"vat_rate" gorm:"type:numeric(7,4);not null;default:7;check:restaurant_vat_rate_range,vat_rate >= 0 AND vat_rate <= 100"`
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`

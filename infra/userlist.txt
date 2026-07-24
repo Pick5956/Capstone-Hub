@@ -1,5 +1,0 @@
-; PgBouncer auth file
-; Format: "username" "password"
-; Replace with your actual password before deploying.
-; In production, prefer scram-sha-256 hashed passwords.
-"postgres" "<your-db-password>"

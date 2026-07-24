@@ -2,6 +2,8 @@ export type ReportSalesDay = {
   order_date: string;
   orders: number;
   revenue: number;
+  cost: number;
+  profit: number;
 };
 
 export type ReportMenuMargin = {
@@ -23,6 +25,18 @@ export type ReportStockRisk = {
   unit: string;
   restock_estimate: number;
   status: "low" | "out" | string;
+};
+
+export type ReportTopMenuItem = {
+  menu_id: number;
+  menu_name: string;
+  quantity: number;
+};
+
+export type TopMenuItemsReport = {
+  year: number;
+  month: number;
+  items: ReportTopMenuItem[];
 };
 
 export type ManagerReport = {

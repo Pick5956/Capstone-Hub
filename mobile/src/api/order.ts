@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import type { Order, OrderItemStatus, OrderStatus } from '@/src/types/order';
+import type { Bill, Order, OrderItemStatus, OrderStatus, OrderType } from '@/src/types/order';
 
 export function listOrders(params?: { status?: OrderStatus | ''; table_id?: number; date?: string }) {
   const query = new URLSearchParams();
@@ -18,14 +18,26 @@ export function getOrder(id: number) {
   return apiRequest<Order>(`/api/v1/orders/${id}`);
 }
 
-export function createOrder(data: { table_id: number; customer_count: number; note?: string }) {
+export function createOrder(data: { table_id?: number | null; order_type?: OrderType; customer_count: number; customer_name?: string; customer_phone?: string; note?: string }) {
   return apiRequest<Order>('/api/v1/orders', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function addOrderItem(orderId: number, data: { menu_id: number; quantity: number; note?: string; selected_option_ids?: number[] }) {
+export function getBill(id: number) {
+  return apiRequest<Bill>(`/api/v1/orders/${id}/bill`);
+}
+
+export function cancelOrder(id: number, reason: string) {
+  return apiRequest<Order>(`/api/v1/orders/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export function closeEmptyTable(id: number) {
+  return apiRequest<Order>(`/api/v1/orders/${id}/close-empty-table`, { method: 'POST' });
+}
+
+export function addOrderItem(orderId: number, data: { menu_id: number; quantity: number; note?: string; fulfillment_type?: 'dine_in' | 'takeaway'; selected_option_ids?: number[] }) {
   return apiRequest<Order>(`/api/v1/orders/${orderId}/items`, {
     method: 'POST',
     body: JSON.stringify(data),

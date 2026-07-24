@@ -78,7 +78,6 @@ export default function MenuPage() {
         title: "เมนูอาหาร",
         manageSubtitle: "จัดการหมวดหมู่และเมนูของร้าน",
         viewSubtitle: "ดูเมนูทั้งหมดแบบ read-only",
-        refresh: "รีเฟรช",
         loadError: "โหลดข้อมูลเมนูไม่สำเร็จ",
         categoryRequired: "กรุณากรอกชื่อหมวดหมู่",
         categorySaveError: "บันทึกหมวดหมู่ไม่สำเร็จ",
@@ -195,7 +194,6 @@ export default function MenuPage() {
         title: "Food menu",
         manageSubtitle: "Manage the restaurant's categories and menu items.",
         viewSubtitle: "View the full menu in read-only mode.",
-        refresh: "Refresh",
         loadError: "Could not load menu data.",
         categoryRequired: "Please enter a category name.",
         categorySaveError: "Could not save category.",
@@ -754,11 +752,8 @@ export default function MenuPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            {copy.refresh}
-          </button>
-          {canManage && (
+        {canManage && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <>
               <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
                 {copy.categoryManager}
@@ -767,8 +762,8 @@ export default function MenuPage() {
                 + {copy.createItem}
               </button>
             </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
