@@ -632,18 +632,23 @@ export default function PosOrderDetailPage() {
 
   const confirmPayment = async () => {
     if (!order || !bill) return;
-    await runAction(async () => {
-      const res = await payOrder(order.ID, {
+    setSubmitting(true);
+    actionInFlightRef.current = true;
+    setError("");
+    try {
+      await payOrder(order.ID, {
         method: paymentMethod,
         received_amount: bill.grand_total,
       });
-      const latestPayment = res.data.payments?.at(-1) ?? null;
       showToast({ title: paidToastTitle });
-      setLastPayment(latestPayment);
-      setBill((current) => current ? { ...current, order: res.data, payment_status: "paid", payments: res.data.payments ?? current.payments } : current);
-      setPaymentComplete(true);
-      return res.data;
-    });
+      // Payment is done: drop this order page from history and return to the
+      // floor. The receipt can still be reprinted from the order archive.
+      router.replace("/pos/tables");
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+      actionInFlightRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
