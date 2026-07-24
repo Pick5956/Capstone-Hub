@@ -16,7 +16,7 @@ Response format:
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | ""
 }
 
 Task descriptions:
@@ -41,6 +41,17 @@ Rules:
    - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
    - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
    - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
+   - "get_lowest_cost_menu": when the query asks about the cheapest menu to make, the lowest cost per dish, or menus with the smallest ingredient cost (e.g. "เมนูต้นทุนต่ำสุด", "เมนูไหนต้นทุนถูกสุด", "ต้นทุนต่อจานต่ำสุด", "lowest cost menu", "cheapest to make").
+   - "get_sales_trend": when the query asks whether sales are going up or down, comparing this week to last week, or the sales trend/direction (e.g. "ยอดขายดีขึ้นไหม", "ร้านโตหรือหด", "เทียบยอดสัปดาห์นี้กับสัปดาห์ก่อน", "sales trend", "week over week").
+   - "get_average_order_value": when the query asks about the average spend per bill/order or average check size (e.g. "ลูกค้าจ่ายเฉลี่ยต่อบิลเท่าไหร่", "ยอดเฉลี่ยต่อออเดอร์", "average order value", "average check").
+   - "get_order_type_breakdown": when the query asks about the split between dine-in, takeaway, and delivery (e.g. "กินที่ร้านกับซื้อกลับสัดส่วนเท่าไหร่", "ยอดเดลิเวอรีเทียบหน้าร้าน", "dine-in vs takeaway", "order type breakdown").
+   - "get_menu_revenue_ranking": when the query asks which menus make the most revenue/money (not just quantity sold) (e.g. "เมนูไหนทำรายได้เยอะสุด", "เมนูทำเงินมากสุด", "menu by revenue", "top revenue menus").
+   - "get_peak_periods": when the query asks about the busiest day of the week or busiest time/hour of day (e.g. "วันไหนขายดีสุด", "ช่วงเวลาไหนคนเยอะ", "ร้านพีคตอนไหน", "busiest day", "peak hours").
+   - "get_slow_moving_menus": when the query asks which menus rarely sell, are not selling, or should be removed (e.g. "เมนูไหนขายไม่ออก", "เมนูไหนไม่มีคนสั่ง", "เมนูควรถอด", "slow moving menu", "menus not selling").
+   - "get_menu_engineering": when the query asks for a menu analysis by popularity and profit, or which menus are stars/dogs, or which to promote vs remove (e.g. "วิเคราะห์เมนู", "เมนูไหนดาวเด่นเมนูไหนตัวถ่วง", "เมนูไหนควรดันควรถอด", "menu engineering", "star or dog menus").
+   - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
+   - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
+   - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only if the user tells the assistant to perform a change. Advice questions such as "ควรขึ้นราคาเมนูนี้ไหม" MUST use "recommend_action" with risk "low".
 5. If the request is out of scope (completely unrelated to restaurants, food, cooking, business advice, restaurant marketing, or software usage), you MUST set "task" to "out_of_scope".
@@ -62,7 +73,7 @@ Response format:
   "needs_restaurant_data": true | false,
   "needs_tool": true | false,
   "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | ""
+  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | ""
 }
 
 Task descriptions:
@@ -87,6 +98,17 @@ Rules:
    - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
    - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
    - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
+   - "get_lowest_cost_menu": when the query asks about the cheapest menu to make, the lowest cost per dish, or menus with the smallest ingredient cost (e.g. "เมนูต้นทุนต่ำสุด", "เมนูไหนต้นทุนถูกสุด", "ต้นทุนต่อจานต่ำสุด", "lowest cost menu", "cheapest to make").
+   - "get_sales_trend": when the query asks whether sales are going up or down, comparing this week to last week, or the sales trend/direction (e.g. "ยอดขายดีขึ้นไหม", "ร้านโตหรือหด", "เทียบยอดสัปดาห์นี้กับสัปดาห์ก่อน", "sales trend", "week over week").
+   - "get_average_order_value": when the query asks about the average spend per bill/order or average check size (e.g. "ลูกค้าจ่ายเฉลี่ยต่อบิลเท่าไหร่", "ยอดเฉลี่ยต่อออเดอร์", "average order value", "average check").
+   - "get_order_type_breakdown": when the query asks about the split between dine-in, takeaway, and delivery (e.g. "กินที่ร้านกับซื้อกลับสัดส่วนเท่าไหร่", "ยอดเดลิเวอรีเทียบหน้าร้าน", "dine-in vs takeaway", "order type breakdown").
+   - "get_menu_revenue_ranking": when the query asks which menus make the most revenue/money (not just quantity sold) (e.g. "เมนูไหนทำรายได้เยอะสุด", "เมนูทำเงินมากสุด", "menu by revenue", "top revenue menus").
+   - "get_peak_periods": when the query asks about the busiest day of the week or busiest time/hour of day (e.g. "วันไหนขายดีสุด", "ช่วงเวลาไหนคนเยอะ", "ร้านพีคตอนไหน", "busiest day", "peak hours").
+   - "get_slow_moving_menus": when the query asks which menus rarely sell, are not selling, or should be removed (e.g. "เมนูไหนขายไม่ออก", "เมนูไหนไม่มีคนสั่ง", "เมนูควรถอด", "slow moving menu", "menus not selling").
+   - "get_menu_engineering": when the query asks for a menu analysis by popularity and profit, or which menus are stars/dogs, or which to promote vs remove (e.g. "วิเคราะห์เมนู", "เมนูไหนดาวเด่นเมนูไหนตัวถ่วง", "เมนูไหนควรดันควรถอด", "menu engineering", "star or dog menus").
+   - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
+   - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
+   - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
 3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
 4. Set risk to "high" or "medium" only when the user orders the assistant to perform a change. A request for advice such as "ควรขึ้นราคาเมนูนี้ไหม" is "recommend_action" with risk "low".
 5. Set "task" to "out_of_scope" for anything unrelated to restaurants.

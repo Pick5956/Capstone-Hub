@@ -272,6 +272,61 @@ func (s *AIService) getGeminiTools() []geminiTool {
 					Description: "Get the verified total revenue and order count in the recent 14-day analysis period.",
 					Parameters:  geminiParameters{Type: "OBJECT"},
 				},
+				{
+					Name:        "get_lowest_cost_menu",
+					Description: "Get the menu item with the lowest ingredient cost per dish.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_sales_trend",
+					Description: "Compare the last 7 days of sales against the previous 7 days to show the revenue trend.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_average_order_value",
+					Description: "Get the average revenue per order (average check size) over the recent analysis period.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_order_type_breakdown",
+					Description: "Get the revenue and order split by order type (dine-in, takeaway, delivery).",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_menu_revenue_ranking",
+					Description: "Get the menus ranked by total revenue generated (not by quantity sold).",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_peak_periods",
+					Description: "Get the busiest day of the week and busiest hour of the day by order count.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_slow_moving_menus",
+					Description: "Get the menus with the fewest sales (including none) that may be candidates for removal.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_menu_engineering",
+					Description: "Classify menus by popularity and margin into Star / Plowhorse / Puzzle / Dog quadrants.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_ingredient_reorder_forecast",
+					Description: "Estimate which ingredients will run out soon based on their usage rate over the analysis window.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_dead_stock",
+					Description: "List ingredients that hold stock but were not used at all in the window (tied-up cash / spoilage risk).",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
+				{
+					Name:        "get_top_cost_ingredients",
+					Description: "Rank ingredients by total cost consumed in the analysis window.",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
 			},
 		},
 	}

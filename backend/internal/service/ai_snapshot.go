@@ -25,6 +25,14 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if err != nil {
 		return AISnapshot{}, err
 	}
+	topMenusByRevenue, err := s.repo.MenusByRevenue(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	orderTypeBreakdown, err := s.repo.OrderTypeBreakdown(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
 	menuMargins, err := s.repo.MenuMargins(restaurantID, since)
 	if err != nil {
 		return AISnapshot{}, err
@@ -34,6 +42,30 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 		return AISnapshot{}, err
 	}
 	highMarginMenus, err := s.repo.HighMarginMenus(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	lowestCostMenus, err := s.repo.LowestCostMenus(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	allMenuMargins, err := s.repo.AllMenuMargins(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	slowMovingMenus, err := s.repo.SlowMovingMenus(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	peakWeekdays, err := s.repo.PeakSalesByWeekday(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	peakHours, err := s.repo.PeakSalesByHour(restaurantID, since)
+	if err != nil {
+		return AISnapshot{}, err
+	}
+	ingredientUsage, err := s.repo.IngredientUsage(restaurantID, since)
 	if err != nil {
 		return AISnapshot{}, err
 	}
@@ -47,6 +79,12 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if topMenus == nil {
 		topMenus = []repository.AIMenuSummary{}
 	}
+	if topMenusByRevenue == nil {
+		topMenusByRevenue = []repository.AIMenuSummary{}
+	}
+	if orderTypeBreakdown == nil {
+		orderTypeBreakdown = []repository.AIOrderTypeSummary{}
+	}
 	if menuMargins == nil {
 		menuMargins = []repository.AIMenuMarginSummary{}
 	}
@@ -55,6 +93,24 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	}
 	if highMarginMenus == nil {
 		highMarginMenus = []repository.AIMenuMarginSummary{}
+	}
+	if lowestCostMenus == nil {
+		lowestCostMenus = []repository.AIMenuMarginSummary{}
+	}
+	if allMenuMargins == nil {
+		allMenuMargins = []repository.AIMenuMarginSummary{}
+	}
+	if slowMovingMenus == nil {
+		slowMovingMenus = []repository.AIMenuSummary{}
+	}
+	if peakWeekdays == nil {
+		peakWeekdays = []repository.AIPeriodSummary{}
+	}
+	if peakHours == nil {
+		peakHours = []repository.AIPeriodSummary{}
+	}
+	if ingredientUsage == nil {
+		ingredientUsage = []repository.AIIngredientUsage{}
 	}
 
 	summary := AIInventorySummary{TotalItems: len(ingredients)}
@@ -104,11 +160,19 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 
 	return AISnapshot{
 		GeneratedAt:       repository.BangkokNow().Format(time.RFC3339),
-		SalesDays:         sales,
-		TopMenuItems:      topMenus,
-		MenuMargins:       menuMargins,
+		SalesDays:          sales,
+		TopMenuItems:       topMenus,
+		TopMenusByRevenue:  topMenusByRevenue,
+		OrderTypeBreakdown: orderTypeBreakdown,
+		MenuMargins:        menuMargins,
 		LowMarginMenus:    lowMarginMenus,
 		HighMarginMenus:   highMarginMenus,
+		LowestCostMenus:   lowestCostMenus,
+		AllMenuMargins:    allMenuMargins,
+		SlowMovingMenus:   slowMovingMenus,
+		PeakWeekdays:      peakWeekdays,
+		PeakHours:         peakHours,
+		IngredientUsage:   ingredientUsage,
 		AnalysisReadiness: analysisReadinessFromCoverage(coverage),
 		InventorySummary:  summary,
 		StockRisks:        risks,

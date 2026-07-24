@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"Project-M/internal/repository"
 )
@@ -40,6 +42,18 @@ const (
 	AIToolGetTopSellingMenus     AIToolName = "get_top_selling_menus"
 	AIToolGetInventoryValuation  AIToolName = "get_inventory_valuation"
 	AIToolGetSalesSummary        AIToolName = "get_sales_summary"
+	AIToolGetLowestCostMenu      AIToolName = "get_lowest_cost_menu"
+	AIToolGetSalesTrend          AIToolName = "get_sales_trend"
+	AIToolGetAverageOrderValue   AIToolName = "get_average_order_value"
+	AIToolGetOrderTypeBreakdown  AIToolName = "get_order_type_breakdown"
+	AIToolGetMenuRevenueRanking  AIToolName = "get_menu_revenue_ranking"
+	AIToolGetPeakPeriods         AIToolName = "get_peak_periods"
+	AIToolGetSlowMovingMenus     AIToolName = "get_slow_moving_menus"
+	AIToolGetMenuEngineering     AIToolName = "get_menu_engineering"
+
+	AIToolGetIngredientReorderForecast AIToolName = "get_ingredient_reorder_forecast"
+	AIToolGetDeadStock                 AIToolName = "get_dead_stock"
+	AIToolGetTopCostIngredients        AIToolName = "get_top_cost_ingredients"
 )
 
 type AITaskRoute struct {
@@ -64,6 +78,63 @@ type AIToolResult struct {
 	TopSellingMenus     []repository.AIMenuSummary
 	InventoryValuation  *AIInventorySummary
 	SalesSummary        *AISalesSummary
+	LowestCostMenu      *repository.AIMenuMarginSummary
+	SalesTrend          *AISalesTrend
+	AverageOrderValue   *AIAverageOrderValue
+	OrderTypeBreakdown  []repository.AIOrderTypeSummary
+	MenuRevenueRanking  []repository.AIMenuSummary
+	PeakPeriods         *AIPeakPeriods
+	SlowMovingMenus     []repository.AIMenuSummary
+	MenuEngineering     *AIMenuEngineering
+	ReorderForecast     []AIReorderItem
+	DeadStock           []AIDeadStockItem
+	TopCostIngredients  []AICostIngredient
+}
+
+type AIReorderItem struct {
+	Name     string
+	Unit     string
+	Stock    float64
+	DailyUse float64
+	DaysLeft float64
+}
+
+type AIDeadStockItem struct {
+	Name  string
+	Unit  string
+	Stock float64
+	Value float64
+}
+
+type AICostIngredient struct {
+	Name string
+	Unit string
+	Cost float64
+	Used float64
+}
+
+type AIPeakPeriods struct {
+	TopWeekday       int   // 0..6 (Sun..Sat)
+	TopWeekdayOrders int64
+	TopHour          int // 0..23
+	TopHourOrders    int64
+	HasData          bool
+}
+
+// AIMenuEngineering classifies menus by popularity (quantity) and margin into
+// the classic four quadrants.
+type AIMenuEngineering struct {
+	Stars      []string // high popularity, high margin
+	Plowhorses []string // high popularity, low margin
+	Puzzles    []string // low popularity, high margin
+	Dogs       []string // low popularity, low margin
+}
+
+type AIAverageOrderValue struct {
+	Orders  int64
+	Revenue float64
+	AOV     float64
+	Days    int
 }
 
 type AISalesSummary struct {
@@ -72,9 +143,19 @@ type AISalesSummary struct {
 	Revenue float64
 }
 
+type AISalesTrend struct {
+	RecentDays       int
+	RecentRevenue    float64
+	RecentOrders     int64
+	PriorRevenue     float64
+	PriorOrders      int64
+	RevenueChangePct float64 // percentage change vs the prior 7-day period
+	HasPrior         bool    // false when there is no prior-period data to compare against
+}
+
 func isSupportedReadOnlyTool(tool AIToolName) bool {
 	switch tool {
-	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary:
+	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients:
 		return true
 	default:
 		return false
@@ -227,9 +308,240 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 			summary.Revenue += day.Revenue
 		}
 		return AIToolResult{Tool: tool, SalesSummary: &summary}, nil
+	case AIToolGetLowestCostMenu:
+		if !snapshot.AnalysisReadiness.CanAnalyzeMargin {
+			return AIToolResult{Tool: tool}, nil
+		}
+		if len(snapshot.LowestCostMenus) == 0 {
+			return AIToolResult{Tool: tool}, nil
+		}
+		menu := snapshot.LowestCostMenus[0]
+		return AIToolResult{Tool: tool, LowestCostMenu: &menu}, nil
+	case AIToolGetSalesTrend:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		trend := computeSalesTrend(snapshot.SalesDays)
+		return AIToolResult{Tool: tool, SalesTrend: &trend}, nil
+	case AIToolGetAverageOrderValue:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		aov := AIAverageOrderValue{Days: len(snapshot.SalesDays)}
+		for _, day := range snapshot.SalesDays {
+			aov.Orders += day.Orders
+			aov.Revenue += day.Revenue
+		}
+		if aov.Orders > 0 {
+			aov.AOV = aov.Revenue / float64(aov.Orders)
+		}
+		return AIToolResult{Tool: tool, AverageOrderValue: &aov}, nil
+	case AIToolGetOrderTypeBreakdown:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		return AIToolResult{Tool: tool, OrderTypeBreakdown: snapshot.OrderTypeBreakdown}, nil
+	case AIToolGetMenuRevenueRanking:
+		menus := snapshot.TopMenusByRevenue
+		limit := 5
+		if len(question) > 0 {
+			if requested, ok := requestedTopSellingLimit(question[0]); ok {
+				limit = requested
+			}
+		}
+		if limit < len(menus) {
+			menus = menus[:limit]
+		}
+		return AIToolResult{Tool: tool, MenuRevenueRanking: menus}, nil
+	case AIToolGetPeakPeriods:
+		if !snapshot.AnalysisReadiness.CanAnalyzeRevenue {
+			return AIToolResult{Tool: tool}, nil
+		}
+		peak := AIPeakPeriods{}
+		if len(snapshot.PeakWeekdays) > 0 {
+			peak.TopWeekday = snapshot.PeakWeekdays[0].Period
+			peak.TopWeekdayOrders = snapshot.PeakWeekdays[0].Orders
+			peak.HasData = true
+		}
+		if len(snapshot.PeakHours) > 0 {
+			peak.TopHour = snapshot.PeakHours[0].Period
+			peak.TopHourOrders = snapshot.PeakHours[0].Orders
+			peak.HasData = true
+		}
+		return AIToolResult{Tool: tool, PeakPeriods: &peak}, nil
+	case AIToolGetSlowMovingMenus:
+		return AIToolResult{Tool: tool, SlowMovingMenus: snapshot.SlowMovingMenus}, nil
+	case AIToolGetMenuEngineering:
+		if !snapshot.AnalysisReadiness.CanAnalyzeMargin {
+			return AIToolResult{Tool: tool}, nil
+		}
+		eng := computeMenuEngineering(snapshot.AllMenuMargins)
+		return AIToolResult{Tool: tool, MenuEngineering: &eng}, nil
+	case AIToolGetIngredientReorderForecast:
+		return AIToolResult{Tool: tool, ReorderForecast: computeReorderForecast(snapshot.IngredientUsage)}, nil
+	case AIToolGetDeadStock:
+		return AIToolResult{Tool: tool, DeadStock: computeDeadStock(snapshot.IngredientUsage)}, nil
+	case AIToolGetTopCostIngredients:
+		return AIToolResult{Tool: tool, TopCostIngredients: computeTopCostIngredients(snapshot.IngredientUsage)}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
+}
+
+// computeSalesTrend splits the recent sales days into the last 7 days and the
+// prior 7 days (relative to the newest recorded day) and compares revenue.
+func computeSalesTrend(days []repository.AISalesSummary) AISalesTrend {
+	var trend AISalesTrend
+	if len(days) == 0 {
+		return trend
+	}
+	// Find the newest order_date as the reference "today" (data-relative).
+	var ref time.Time
+	parsed := make([]struct {
+		date    time.Time
+		revenue float64
+		orders  int64
+	}, 0, len(days))
+	for _, d := range days {
+		t, err := time.Parse("2006-01-02", strings.TrimSpace(d.OrderDate))
+		if err != nil {
+			continue
+		}
+		parsed = append(parsed, struct {
+			date    time.Time
+			revenue float64
+			orders  int64
+		}{t, d.Revenue, d.Orders})
+		if t.After(ref) {
+			ref = t
+		}
+	}
+	recentStart := ref.AddDate(0, 0, -6) // last 7 days inclusive of ref
+	priorStart := ref.AddDate(0, 0, -13) // the 7 days before that
+	for _, p := range parsed {
+		if !p.date.Before(recentStart) {
+			trend.RecentRevenue += p.revenue
+			trend.RecentOrders += p.orders
+			trend.RecentDays++
+		} else if !p.date.Before(priorStart) {
+			trend.PriorRevenue += p.revenue
+			trend.PriorOrders += p.orders
+		}
+	}
+	if trend.PriorRevenue > 0 {
+		trend.HasPrior = true
+		trend.RevenueChangePct = (trend.RecentRevenue - trend.PriorRevenue) / trend.PriorRevenue * 100
+	}
+	return trend
+}
+
+// computeMenuEngineering classifies each menu against the median popularity
+// (quantity) and median margin into Star / Plowhorse / Puzzle / Dog quadrants.
+func computeMenuEngineering(menus []repository.AIMenuMarginSummary) AIMenuEngineering {
+	var eng AIMenuEngineering
+	if len(menus) == 0 {
+		return eng
+	}
+	quantities := make([]float64, len(menus))
+	margins := make([]float64, len(menus))
+	for i, m := range menus {
+		quantities[i] = float64(m.Quantity)
+		margins[i] = m.Margin
+	}
+	medQty := median(quantities)
+	medMargin := median(margins)
+	for _, m := range menus {
+		highPop := float64(m.Quantity) >= medQty
+		highMargin := m.Margin >= medMargin
+		switch {
+		case highPop && highMargin:
+			eng.Stars = append(eng.Stars, m.MenuName)
+		case highPop && !highMargin:
+			eng.Plowhorses = append(eng.Plowhorses, m.MenuName)
+		case !highPop && highMargin:
+			eng.Puzzles = append(eng.Puzzles, m.MenuName)
+		default:
+			eng.Dogs = append(eng.Dogs, m.MenuName)
+		}
+	}
+	return eng
+}
+
+func median(values []float64) float64 {
+	n := len(values)
+	if n == 0 {
+		return 0
+	}
+	sorted := make([]float64, n)
+	copy(sorted, values)
+	sort.Float64s(sorted)
+	if n%2 == 1 {
+		return sorted[n/2]
+	}
+	return (sorted[n/2-1] + sorted[n/2]) / 2
+}
+
+const analysisWindowDays = 14.0
+
+// computeReorderForecast estimates days-until-out from each ingredient's usage
+// over the window; ingredients with no usage are excluded (cannot forecast).
+func computeReorderForecast(usage []repository.AIIngredientUsage) []AIReorderItem {
+	items := make([]AIReorderItem, 0)
+	for _, u := range usage {
+		if u.Used <= 0 {
+			continue
+		}
+		dailyUse := u.Used / analysisWindowDays
+		daysLeft := 0.0
+		if dailyUse > 0 {
+			daysLeft = u.Stock / dailyUse
+		}
+		items = append(items, AIReorderItem{Name: u.Name, Unit: u.Unit, Stock: u.Stock, DailyUse: dailyUse, DaysLeft: daysLeft})
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].DaysLeft < items[j].DaysLeft })
+	if len(items) > 8 {
+		items = items[:8]
+	}
+	return items
+}
+
+// computeDeadStock finds ingredients that hold stock but were not used at all in
+// the window (cash tied up / spoilage risk), ranked by tied-up value.
+func computeDeadStock(usage []repository.AIIngredientUsage) []AIDeadStockItem {
+	items := make([]AIDeadStockItem, 0)
+	for _, u := range usage {
+		if u.Stock > 0 && u.Used == 0 {
+			items = append(items, AIDeadStockItem{Name: u.Name, Unit: u.Unit, Stock: u.Stock, Value: u.Stock * u.CostPerUnit})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Value > items[j].Value })
+	if len(items) > 8 {
+		items = items[:8]
+	}
+	return items
+}
+
+// computeTopCostIngredients ranks ingredients by total cost consumed in the window.
+func computeTopCostIngredients(usage []repository.AIIngredientUsage) []AICostIngredient {
+	items := make([]AICostIngredient, 0)
+	for _, u := range usage {
+		if u.Cost > 0 {
+			items = append(items, AICostIngredient{Name: u.Name, Unit: u.Unit, Cost: u.Cost, Used: u.Used})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].Cost > items[j].Cost })
+	if len(items) > 8 {
+		items = items[:8]
+	}
+	return items
+}
+
+func thaiWeekdayName(dow int) string {
+	names := map[int]string{0: "อาทิตย์", 1: "จันทร์", 2: "อังคาร", 3: "พุธ", 4: "พฤหัสบดี", 5: "ศุกร์", 6: "เสาร์"}
+	if n, ok := names[dow]; ok {
+		return "วัน" + n
+	}
+	return fmt.Sprintf("วัน (%d)", dow)
 }
 
 func localToolAnswer(result AIToolResult) (string, bool) {
@@ -338,6 +650,183 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			summary.Orders,
 			summary.Days,
 		), true
+	case AIToolGetLowestCostMenu:
+		menu := result.LowestCostMenu
+		if menu == nil || menu.Quantity <= 0 {
+			return "ตอนนี้ยังไม่มีข้อมูลต้นทุนของเมนูที่ยืนยันได้จากรายการขายและต้นทุนที่บันทึกครบครับ", true
+		}
+		quantity := float64(menu.Quantity)
+		return fmt.Sprintf(
+			"เมนูที่มีต้นทุนต่อจานต่ำที่สุดคือ %s ครับ\n\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- ขายได้ %d จาน\n- ต้นทุนรวม %.2f บาท\n- ราคาขายเฉลี่ยต่อจาน %.2f บาท\n\nต้นทุนต่ำต่อจานทำให้เมนูนี้ยืดหยุ่นในการตั้งราคาหรือจัดโปรได้ครับ",
+			menu.MenuName,
+			menu.Cost/quantity,
+			menu.Quantity,
+			menu.Cost,
+			menu.Revenue/quantity,
+		), true
+	case AIToolGetSalesTrend:
+		trend := result.SalesTrend
+		if trend == nil || (trend.RecentRevenue == 0 && trend.PriorRevenue == 0) {
+			return "ยังไม่มีข้อมูลยอดขายเพียงพอสำหรับเทียบแนวโน้มครับ", true
+		}
+		if !trend.HasPrior {
+			return fmt.Sprintf(
+				"ยอดขาย 7 วันล่าสุดคือ %.2f บาท (%d ออเดอร์) ครับ\n\nยังไม่มีข้อมูลสัปดาห์ก่อนหน้าให้เทียบแนวโน้ม จึงยังบอกว่าโตหรือหดไม่ได้ครับ",
+				trend.RecentRevenue, trend.RecentOrders,
+			), true
+		}
+		direction := "เพิ่มขึ้น 📈"
+		if trend.RevenueChangePct < 0 {
+			direction = "ลดลง 📉"
+		}
+		return fmt.Sprintf(
+			"แนวโน้มยอดขายเทียบสัปดาห์ก่อน %s ครับ\n\n- 7 วันล่าสุด: %.2f บาท (%d ออเดอร์)\n- 7 วันก่อนหน้า: %.2f บาท (%d ออเดอร์)\n- เปลี่ยนแปลง: %+.1f%%",
+			direction,
+			trend.RecentRevenue, trend.RecentOrders,
+			trend.PriorRevenue, trend.PriorOrders,
+			trend.RevenueChangePct,
+		), true
+	case AIToolGetAverageOrderValue:
+		aov := result.AverageOrderValue
+		if aov == nil || aov.Orders <= 0 {
+			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับคำนวณยอดเฉลี่ยต่อบิลครับ", true
+		}
+		return fmt.Sprintf(
+			"ยอดขายเฉลี่ยต่อบิลช่วง 14 วันล่าสุดคือ %.2f บาทครับ\n\n- รายได้รวม %.2f บาท\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			aov.AOV, aov.Revenue, aov.Orders, aov.Days,
+		), true
+	case AIToolGetOrderTypeBreakdown:
+		types := result.OrderTypeBreakdown
+		if len(types) == 0 {
+			return "ยังไม่มีข้อมูลออเดอร์ในช่วง 14 วันล่าสุดสำหรับแยกตามประเภทการสั่งครับ", true
+		}
+		var total float64
+		for _, t := range types {
+			total += t.Revenue
+		}
+		labels := map[string]string{"dine_in": "ทานที่ร้าน", "takeaway": "ซื้อกลับ", "take_away": "ซื้อกลับ", "delivery": "เดลิเวอรี"}
+		var sb strings.Builder
+		sb.WriteString("สัดส่วนยอดขายตามประเภทการสั่งช่วง 14 วันล่าสุดครับ:\n\n")
+		for _, t := range types {
+			name := labels[t.OrderType]
+			if name == "" {
+				name = t.OrderType
+			}
+			pct := 0.0
+			if total > 0 {
+				pct = t.Revenue / total * 100
+			}
+			sb.WriteString(fmt.Sprintf("- **%s**: %.2f บาท (%d ออเดอร์, %.1f%%)\n", name, t.Revenue, t.Orders, pct))
+		}
+		return sb.String(), true
+	case AIToolGetMenuRevenueRanking:
+		menus := result.MenuRevenueRanking
+		if len(menus) == 0 {
+			return "ในช่วง 14 วันที่ผ่านมาร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("เมนูที่ทำรายได้สูงที่สุดในช่วงวิเคราะห์มีดังนี้ครับ:\n\n")
+		limit := len(menus)
+		if limit > 5 {
+			limit = 5
+		}
+		for i := 0; i < limit; i++ {
+			menu := menus[i]
+			avgPrice := 0.0
+			if menu.Quantity > 0 {
+				avgPrice = menu.Revenue / float64(menu.Quantity)
+			}
+			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • รายได้รวม: %.2f บาท\n  • ขายได้ %d จาน (ราคาเฉลี่ย %.2f บาท/จาน)\n",
+				i+1, menu.MenuName, menu.Revenue, menu.Quantity, avgPrice))
+		}
+		return sb.String(), true
+	case AIToolGetPeakPeriods:
+		peak := result.PeakPeriods
+		if peak == nil || !peak.HasData {
+			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับดูช่วงเวลาขายดีครับ", true
+		}
+		return fmt.Sprintf(
+			"ช่วงที่ร้านขายดีที่สุดในรอบ 14 วันครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
+			thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders,
+			peak.TopHour, peak.TopHour, peak.TopHourOrders,
+		), true
+	case AIToolGetSlowMovingMenus:
+		menus := result.SlowMovingMenus
+		if len(menus) == 0 {
+			return "ยังไม่มีข้อมูลเมนูสำหรับประเมินเมนูขายช้าครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("เมนูที่ขายได้น้อยที่สุดในรอบ 14 วัน (ควรพิจารณาปรับปรุงหรือถอด) ครับ:\n\n")
+		limit := len(menus)
+		if limit > 5 {
+			limit = 5
+		}
+		for i := 0; i < limit; i++ {
+			menu := menus[i]
+			if menu.Quantity == 0 {
+				sb.WriteString(fmt.Sprintf("- **%s**: ไม่มีคนสั่งเลย\n", menu.MenuName))
+			} else {
+				sb.WriteString(fmt.Sprintf("- **%s**: ขายได้ %d จาน (รายได้ %.2f บาท)\n", menu.MenuName, menu.Quantity, menu.Revenue))
+			}
+		}
+		return sb.String(), true
+	case AIToolGetMenuEngineering:
+		eng := result.MenuEngineering
+		if eng == nil || (len(eng.Stars)+len(eng.Plowhorses)+len(eng.Puzzles)+len(eng.Dogs)) == 0 {
+			return "ยังไม่มีข้อมูล Margin ของเมนูที่ยืนยันได้เพียงพอสำหรับวิเคราะห์เมนูครับ", true
+		}
+		join := func(items []string) string {
+			if len(items) == 0 {
+				return "-"
+			}
+			if len(items) > 5 {
+				items = items[:5]
+			}
+			return strings.Join(items, ", ")
+		}
+		return fmt.Sprintf(
+			"วิเคราะห์เมนู (ความนิยม × กำไร) ครับ:\n\n"+
+				"- ⭐ **ดาวเด่น** (ขายดี + กำไรดี ควรดันต่อ): %s\n"+
+				"- 🐴 **ตัวชูโรง** (ขายดี + กำไรน้อย ควรหาทางลดต้นทุน): %s\n"+
+				"- ❓ **ซ่อนเร้น** (กำไรดี + ขายน้อย ควรโปรโมท): %s\n"+
+				"- 🐶 **ตัวถ่วง** (ขายน้อย + กำไรน้อย ควรพิจารณาถอด): %s",
+			join(eng.Stars), join(eng.Plowhorses), join(eng.Puzzles), join(eng.Dogs),
+		), true
+	case AIToolGetIngredientReorderForecast:
+		items := result.ReorderForecast
+		if len(items) == 0 {
+			return "ยังไม่มีข้อมูลการใช้วัตถุดิบเพียงพอสำหรับคาดการณ์การสั่งซื้อครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("วัตถุดิบที่ควรจับตาสั่งเพิ่ม (เรียงจากใกล้หมดก่อน) ครับ:\n\n")
+		for _, it := range items {
+			sb.WriteString(fmt.Sprintf("- **%s**: เหลือ %.2f %s ใช้เฉลี่ย %.2f %s/วัน → พออีกประมาณ **%.0f วัน**\n",
+				it.Name, it.Stock, it.Unit, it.DailyUse, it.Unit, it.DaysLeft))
+		}
+		sb.WriteString("\nแนะนำให้เตรียมสั่งวัตถุดิบที่ตัวเลขวันเหลือน้อยก่อนครับ")
+		return sb.String(), true
+	case AIToolGetDeadStock:
+		items := result.DeadStock
+		if len(items) == 0 {
+			return "ไม่พบวัตถุดิบที่มีสต๊อกค้างแต่ไม่ถูกใช้เลยในช่วง 14 วันครับ การหมุนเวียนวัตถุดิบทำได้ดีครับ 👍", true
+		}
+		var sb strings.Builder
+		sb.WriteString("วัตถุดิบที่มีสต๊อกค้างแต่ไม่ได้ถูกใช้เลยในรอบ 14 วัน (เงินจม/เสี่ยงหมดอายุ) ครับ:\n\n")
+		for _, it := range items {
+			sb.WriteString(fmt.Sprintf("- **%s**: คงเหลือ %.2f %s (มูลค่าประมาณ %.2f บาท)\n", it.Name, it.Stock, it.Unit, it.Value))
+		}
+		return sb.String(), true
+	case AIToolGetTopCostIngredients:
+		items := result.TopCostIngredients
+		if len(items) == 0 {
+			return "ยังไม่มีข้อมูลต้นทุนการใช้วัตถุดิบในช่วง 14 วันครับ", true
+		}
+		var sb strings.Builder
+		sb.WriteString("วัตถุดิบที่ใช้ต้นทุนสูงที่สุดในรอบ 14 วัน (ควรจับตา/ต่อรองซัพพลายเออร์) ครับ:\n\n")
+		for i, it := range items {
+			sb.WriteString(fmt.Sprintf("%d. **%s**: ต้นทุนรวม %.2f บาท (ใช้ไป %.2f %s)\n", i+1, it.Name, it.Cost, it.Used, it.Unit))
+		}
+		return sb.String(), true
 	}
 	return "", false
 }

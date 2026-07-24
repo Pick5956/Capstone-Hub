@@ -277,6 +277,94 @@ func (s *AIService) getGroqTools() []groqTool {
 				Parameters:  groqParameters{Type: "object"},
 			},
 		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_lowest_cost_menu",
+				Description: "Get the menu item with the lowest ingredient cost per dish.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_sales_trend",
+				Description: "Compare the last 7 days of sales against the previous 7 days to show the revenue trend.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_average_order_value",
+				Description: "Get the average revenue per order (average check size) over the recent analysis period.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_order_type_breakdown",
+				Description: "Get the revenue and order split by order type (dine-in, takeaway, delivery).",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_menu_revenue_ranking",
+				Description: "Get the menus ranked by total revenue generated (not by quantity sold).",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_peak_periods",
+				Description: "Get the busiest day of the week and busiest hour of the day by order count.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_slow_moving_menus",
+				Description: "Get the menus with the fewest sales (including none) that may be candidates for removal.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_menu_engineering",
+				Description: "Classify menus by popularity and margin into Star / Plowhorse / Puzzle / Dog quadrants.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_ingredient_reorder_forecast",
+				Description: "Estimate which ingredients will run out soon based on their usage rate over the analysis window.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_dead_stock",
+				Description: "List ingredients that hold stock but were not used at all in the window (tied-up cash / spoilage risk).",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_top_cost_ingredients",
+				Description: "Rank ingredients by total cost consumed in the analysis window.",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
 	}
 }
 
