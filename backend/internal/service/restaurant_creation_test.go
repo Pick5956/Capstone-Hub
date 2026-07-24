@@ -23,6 +23,7 @@ type recordingRestaurantSetup struct {
 	ingredients               int
 	tableZones                int
 	tables                    int
+	createdTables             []entity.RestaurantTable
 	failAfterRestaurantCreate bool
 }
 
@@ -101,6 +102,7 @@ func (f *recordingRestaurantSetup) CreateTableZone(value *entity.TableZone) erro
 func (f *recordingRestaurantSetup) CreateTable(value *entity.RestaurantTable) error {
 	f.tables++
 	f.assignID(&value.ID)
+	f.createdTables = append(f.createdTables, *value)
 	return nil
 }
 
@@ -136,7 +138,7 @@ func TestCreateRestaurantWithStarterDataUsesOneAtomicSeedPath(t *testing.T) {
 		TableCount:     6,
 	}
 
-	restaurant, member, err := createRestaurantWithStarterData(setup, 11, 22, fields)
+	restaurant, member, err := createRestaurantWithStarterData(setup, 11, 22, fields, true)
 	if err != nil {
 		t.Fatalf("createRestaurantWithStarterData() error = %v", err)
 	}
@@ -171,11 +173,59 @@ func TestCreateRestaurantWithStarterDataReturnsNoPartialAggregateOnFailure(t *te
 		11,
 		22,
 		restaurantFields{Name: "Test", BranchName: "Main", RestaurantType: "restaurant", TableCount: 1},
+		true,
 	)
 	if err == nil {
 		t.Fatal("createRestaurantWithStarterData() error = nil, want failure")
 	}
 	if restaurant != nil || member != nil {
 		t.Fatalf("partial aggregate returned after failure: restaurant=%#v member=%#v", restaurant, member)
+	}
+}
+
+func TestSeedRestaurantStarterSetupFlatTablesSkipZones(t *testing.T) {
+	setup := newRecordingRestaurantSetup()
+
+	if err := seedRestaurantStarterSetup(setup, 1, "restaurant", 5, false); err != nil {
+		t.Fatalf("seedRestaurantStarterSetup() error = %v", err)
+	}
+
+	if setup.tableZones != 0 {
+		t.Fatalf("table zones = %d, want 0 when not splitting", setup.tableZones)
+	}
+	if setup.tables != 5 {
+		t.Fatalf("tables = %d, want 5", setup.tables)
+	}
+	wantLabels := []string{"T1", "T2", "T3", "T4", "T5"}
+	for i, table := range setup.createdTables {
+		if table.ZoneID != nil {
+			t.Fatalf("table %d has zone %v, want nil", i, *table.ZoneID)
+		}
+		if table.TableNumber != wantLabels[i] || table.DisplayLabel != wantLabels[i] {
+			t.Fatalf("table %d label = %q/%q, want %q", i, table.TableNumber, table.DisplayLabel, wantLabels[i])
+		}
+		if table.SequenceNumber != i+1 {
+			t.Fatalf("table %d sequence = %d, want %d", i, table.SequenceNumber, i+1)
+		}
+		if table.CustomerToken == "" {
+			t.Fatalf("table %d has no customer token", i)
+		}
+	}
+}
+
+func TestSeedRestaurantStarterSetupZonedTablesCreateZones(t *testing.T) {
+	setup := newRecordingRestaurantSetup()
+
+	if err := seedRestaurantStarterSetup(setup, 1, "restaurant", 6, true); err != nil {
+		t.Fatalf("seedRestaurantStarterSetup() error = %v", err)
+	}
+
+	if setup.tableZones == 0 {
+		t.Fatal("table zones = 0, want the profile's zones when splitting")
+	}
+	for i, table := range setup.createdTables {
+		if table.ZoneID == nil {
+			t.Fatalf("table %d has no zone, want one when splitting", i)
+		}
 	}
 }

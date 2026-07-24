@@ -242,6 +242,10 @@ type CreateRestaurantRequest struct {
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`
+	// SplitZones controls the starter table layout. When nil (older clients) or
+	// true, tables are divided into the profile's zones; when false, they are
+	// created as one flat, sequentially numbered run.
+	SplitZones *bool `json:"split_zones"`
 }
 
 type UpdateRestaurantRequest struct {
@@ -315,7 +319,10 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		return nil, nil, errors.New("owner role is not configured")
 	}
 
-	restaurant, member, err := createRestaurantWithStarterData(s.setupRepo, userID, ownerRole.ID, *fields)
+	// Default to the zoned layout so existing clients that omit the flag keep
+	// their current behavior.
+	splitZones := req.SplitZones == nil || *req.SplitZones
+	restaurant, member, err := createRestaurantWithStarterData(s.setupRepo, userID, ownerRole.ID, *fields, splitZones)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -333,6 +340,7 @@ func createRestaurantWithStarterData(
 	setupRepo repository.RestaurantSetupTransactor,
 	userID, ownerRoleID uint,
 	fields restaurantFields,
+	splitZones bool,
 ) (*entity.Restaurant, *entity.RestaurantMember, error) {
 	var restaurant *entity.Restaurant
 	var member *entity.RestaurantMember
@@ -370,7 +378,7 @@ func createRestaurantWithStarterData(
 		if err := tx.CreateMember(member); err != nil {
 			return err
 		}
-		return seedRestaurantStarterSetup(tx, restaurant.ID, fields.RestaurantType, fields.TableCount)
+		return seedRestaurantStarterSetup(tx, restaurant.ID, fields.RestaurantType, fields.TableCount, splitZones)
 	})
 	if err != nil {
 		return nil, nil, err

@@ -21,7 +21,10 @@ func ProvideTableController(db *gorm.DB) *TableController {
 }
 
 func (ctrl *TableController) ListTables(c *gin.Context) {
-	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table")
+	// take_order is included so the order-taking floor can load the table list
+	// without granting view_tables (which also gates the Tables management page).
+	// Consistent with UpdateTableStatus, which already accepts take_order.
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table", "take_order")
 	if !ok {
 		return
 	}

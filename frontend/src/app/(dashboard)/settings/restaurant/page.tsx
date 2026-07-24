@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
@@ -13,7 +13,7 @@ import { can } from "@/src/lib/rbac";
 import { getRestaurant, updateRestaurant, uploadRestaurantLogo, uploadRestaurantCover, uploadRestaurantPromptPayQR, deleteRestaurant } from "@/src/lib/restaurant";
 import type { Restaurant } from "@/src/types/restaurant";
 import { RESTAURANT_TYPES, getRestaurantTypeLabel } from "@/src/app/restaurants/restaurantWorkspaceUi";
-import { Field, SettingsPanel, SettingsShell, StatusMessage, TextAreaField } from "../_components/SettingsPrimitives";
+import { Field, SettingsPanel, SettingsShell, TextAreaField } from "../_components/SettingsPrimitives";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { restaurantRepository } from "@/src/app/repositories/restaurantRepository";
 
@@ -40,10 +40,17 @@ type FormState = {
   order_radius_meters: string;
 };
 
-type FormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "service_charge_rate" | "vat_rate" | "latitude" | "order_radius_meters" | "submit", string>>;
+type FormErrors = Partial<Record<"name" | "branch_name" | "phone" | "open_time" | "close_time" | "table_count" | "service_charge_rate" | "vat_rate" | "latitude" | "order_radius_meters", string>>;
+
+/** Restaurant image fields that are uploaded one file at a time. */
+type ImageField = "logo" | "cover_image" | "promptpay_qr_image";
+
+// Thai numbers are 9 digits (landline) or 10 (mobile), so keep digits only and
+// stop the input at 10 instead of letting it grow past a real phone number.
+const PHONE_MAX_DIGITS = 10;
 
 function normalizePhone(value: string) {
-  return value.replace(/[^\d+\-\s]/g, "").slice(0, 24);
+  return value.replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
 }
 
 function validateTime(value: string) {
@@ -55,7 +62,7 @@ function toForm(restaurant?: Partial<Restaurant> | null, language: "th" | "en" =
     name: restaurant?.name ?? "",
     branch_name: restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch"),
     restaurant_type: restaurant?.restaurant_type?.trim() || RESTAURANT_TYPES[0],
-    phone: restaurant?.phone ?? "",
+    phone: normalizePhone(restaurant?.phone ?? ""),
     address: restaurant?.address ?? "",
     open_time: restaurant?.open_time || "17:00",
     close_time: restaurant?.close_time || "00:00",
@@ -92,7 +99,6 @@ export default function RestaurantSettingsPage() {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [message, setMessage] = useState("");
   const canManageRestaurant = can(activeMembership, "manage_staff");
   const restaurantId = activeMembership?.restaurant_id;
   const { showToast } = useToast();
@@ -191,7 +197,7 @@ export default function RestaurantSettingsPage() {
         uploadQrError: "อัปโหลด QR ไม่สำเร็จ",
         validateName: "กรุณากรอกชื่อร้าน",
         validateBranch: "กรุณากรอกชื่อสาขา",
-        validatePhone: "เบอร์โทรควรมีอย่างน้อย 9 หลัก",
+        validatePhone: "เบอร์โทรต้องมี 9-10 หลัก",
         validateOpen: "เวลาเปิดต้องอยู่ในรูปแบบ HH:mm",
         validateClose: "เวลาปิดต้องอยู่ในรูปแบบ HH:mm",
         validateTables: "จำนวนโต๊ะต้องอยู่ระหว่าง 1 ถึง 500",
@@ -270,7 +276,7 @@ export default function RestaurantSettingsPage() {
         uploadQrError: "Could not upload the QR code.",
         validateName: "Please enter the restaurant name.",
         validateBranch: "Please enter the branch name.",
-        validatePhone: "The phone number should have at least 9 digits.",
+        validatePhone: "The phone number must be 9-10 digits.",
         validateOpen: "Open time must use HH:mm.",
         validateClose: "Close time must use HH:mm.",
         validateTables: "Table count must be between 1 and 500.",
@@ -300,6 +306,11 @@ export default function RestaurantSettingsPage() {
         deleting: "Deleting...",
       };
 
+  // Saving and uploading both report through the global toast, so the outcome
+  // shows up where the user is looking instead of at the bottom of the page.
+  const notifySaved = useCallback(() => showToast({ title: copy.saved }), [copy.saved, showToast]);
+  const notifyError = useCallback((title: string) => showToast({ title, tone: "error" }), [showToast]);
+
   useEffect(() => {
     let active = true;
     const loadTimer = window.setTimeout(() => {
@@ -317,7 +328,7 @@ export default function RestaurantSettingsPage() {
           setErrors({});
         })
         .catch(() => {
-          if (active) setErrors({ submit: copy.saveError });
+          if (active) notifyError(copy.saveError);
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -328,18 +339,16 @@ export default function RestaurantSettingsPage() {
       active = false;
       window.clearTimeout(loadTimer);
     };
-  }, [canManageRestaurant, copy.saveError, language, restaurantId]);
+  }, [canManageRestaurant, copy.saveError, language, notifyError, restaurantId]);
 
   const setField = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, [field]: undefined, submit: undefined }));
-    setMessage("");
+    setErrors((current) => ({ ...current, [field]: undefined }));
   };
 
   const setBool = (field: "service_charge_enabled" | "vat_enabled" | "geofence_enabled", value: boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
-    setErrors((current) => ({ ...current, latitude: undefined, order_radius_meters: undefined, submit: undefined }));
-    setMessage("");
+    setErrors((current) => ({ ...current, latitude: undefined, order_radius_meters: undefined }));
   };
 
   // Fills the geofence coordinates from the device the owner is standing on,
@@ -359,7 +368,6 @@ export default function RestaurantSettingsPage() {
         }));
         setErrors((current) => ({ ...current, latitude: undefined }));
         setLocating(false);
-        setMessage("");
       },
       () => {
         setErrors((current) => ({ ...current, latitude: copy.geoDenied }));
@@ -397,7 +405,6 @@ export default function RestaurantSettingsPage() {
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    setMessage("");
     setErrors({});
     if (!restaurantId || !validate()) return;
 
@@ -426,75 +433,47 @@ export default function RestaurantSettingsPage() {
         });
         setRestaurant(res.data.restaurant);
         setForm(toForm(res.data.restaurant, language));
-        setMessage(copy.saved);
+        notifySaved();
         await refreshMemberships();
       } catch {
-        setErrors({ submit: copy.saveError });
+        notifyError(copy.saveError);
       } finally {
         setSaving(false);
       }
     });
   };
 
-  const uploadLogo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Logo, cover and PromptPay QR uploads only differ by endpoint, the field they
+  // write back, and which busy flag they toggle.
+  const createImageUpload = (
+    field: ImageField,
+    upload: (id: number, file: File) => Promise<{ data: { restaurant: Restaurant } }>,
+    setBusy: (busy: boolean) => void,
+    errorText: string,
+  ) => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !restaurantId) return;
     await uploadOnceRef.current(async () => {
-      setUploading(true);
+      setBusy(true);
       try {
-        const res = await uploadRestaurantLogo(restaurantId, file);
-        setForm((current) => ({ ...current, logo: res.data.restaurant.logo ?? "" }));
-        setRestaurant((current) => (current ? { ...current, logo: res.data.restaurant.logo } : current));
-        setMessage(copy.saved);
+        const res = await upload(restaurantId, file);
+        const value = res.data.restaurant[field] ?? "";
+        setForm((current) => ({ ...current, [field]: value }));
+        setRestaurant((current) => (current ? { ...current, [field]: value } : current));
+        notifySaved();
         await refreshMemberships();
       } catch {
-        setErrors({ submit: copy.uploadError });
+        notifyError(errorText);
       } finally {
-        setUploading(false);
+        setBusy(false);
       }
     });
   };
 
-  const uploadCover = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !restaurantId) return;
-    await uploadOnceRef.current(async () => {
-      setUploadingCover(true);
-      try {
-        const res = await uploadRestaurantCover(restaurantId, file);
-        setForm((current) => ({ ...current, cover_image: res.data.restaurant.cover_image ?? "" }));
-        setRestaurant((current) => (current ? { ...current, cover_image: res.data.restaurant.cover_image } : current));
-        setMessage(copy.saved);
-        await refreshMemberships();
-      } catch {
-        setErrors({ submit: copy.uploadCoverError });
-      } finally {
-        setUploadingCover(false);
-      }
-    });
-  };
-
-  const uploadQr = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !restaurantId) return;
-    await uploadOnceRef.current(async () => {
-      setUploadingQr(true);
-      try {
-        const res = await uploadRestaurantPromptPayQR(restaurantId, file);
-        setForm((current) => ({ ...current, promptpay_qr_image: res.data.restaurant.promptpay_qr_image ?? "" }));
-        setRestaurant((current) => (current ? { ...current, promptpay_qr_image: res.data.restaurant.promptpay_qr_image } : current));
-        setMessage(copy.saved);
-        await refreshMemberships();
-      } catch {
-        setErrors({ submit: copy.uploadQrError });
-      } finally {
-        setUploadingQr(false);
-      }
-    });
-  };
+  const uploadLogo = createImageUpload("logo", uploadRestaurantLogo, setUploading, copy.uploadError);
+  const uploadCover = createImageUpload("cover_image", uploadRestaurantCover, setUploadingCover, copy.uploadCoverError);
+  const uploadQr = createImageUpload("promptpay_qr_image", uploadRestaurantPromptPayQR, setUploadingQr, copy.uploadQrError);
 
   if (!canManageRestaurant) {
     return <PermissionDenied title={copy.denied} />;
@@ -514,7 +493,6 @@ export default function RestaurantSettingsPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       backLabel={copy.back}
-      action={<button type="submit" form="restaurant-settings-form" disabled={saving || loading} className="ui-press hidden h-10 items-center justify-center rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:inline-flex">{saving ? copy.saving : copy.save}</button>}
     >
       <form id="restaurant-settings-form" onSubmit={save} className="space-y-4 pb-20 sm:pb-0">
         {loading ? (
@@ -658,6 +636,18 @@ export default function RestaurantSettingsPage() {
               </div>
             </SettingsPanel>
 
+            {/* The form reads top to bottom, so saving lives at the end of it.
+                Mobile keeps the sticky bar below instead. */}
+            <div className="hidden justify-end sm:flex">
+              <button
+                type="submit"
+                disabled={saving || loading}
+                className="ui-press inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-5 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900"
+              >
+                {saving ? copy.saving : copy.save}
+              </button>
+            </div>
+
             <SettingsPanel title={copy.dangerZone} hint={copy.dangerZoneHint}>
               <div className="rounded-md border border-red-200/50 bg-red-50/30 p-4 dark:border-red-900/30 dark:bg-red-950/10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
@@ -678,7 +668,6 @@ export default function RestaurantSettingsPage() {
               </div>
             </SettingsPanel>
 
-            <StatusMessage error={errors.submit} message={message} />
           </>
         )}
 

@@ -207,6 +207,7 @@ export default function NewRestaurantPage() {
   const [openTime, setOpenTime] = useState(defaults.openTime);
   const [closeTime, setCloseTime] = useState(defaults.closeTime);
   const [initialTables, setInitialTables] = useState(defaults.tables);
+  const [splitZones, setSplitZones] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reviewSubmitReady, setReviewSubmitReady] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -243,6 +244,11 @@ export default function NewRestaurantPage() {
         openTime: "เวลาเปิด",
         closeTime: "เวลาปิด",
         initialTables: "จำนวนโต๊ะเริ่มต้น",
+        splitZonesLabel: "แบ่งโซนอัตโนมัติ",
+        splitZonesHelp: "ระบบจะแบ่งโต๊ะออกเป็นโซนตามประเภทร้าน (เช่น โซนหน้าร้าน โซนครอบครัว)",
+        noSplitZonesHelp: "สร้างโต๊ะเรียงลำดับ T1–T{count} โดยไม่แบ่งโซน",
+        zonedSummary: "แบ่งโซนอัตโนมัติ",
+        flatSummary: "ไม่แบ่งโซน (เรียงลำดับ)",
         optional: "ไม่บังคับ",
         phonePlaceholder: "เช่น 081-234-5678",
         addressPlaceholder: "ที่อยู่สำหรับแสดงบนบิลหรือข้อมูลร้าน",
@@ -306,6 +312,11 @@ export default function NewRestaurantPage() {
         openTime: "Opening time",
         closeTime: "Closing time",
         initialTables: "Initial tables",
+        splitZonesLabel: "Split into zones automatically",
+        splitZonesHelp: "Tables are divided into zones based on the restaurant type (e.g. front, family).",
+        noSplitZonesHelp: "Create tables numbered T1–T{count} in sequence, without zones.",
+        zonedSummary: "Auto-split into zones",
+        flatSummary: "No zones (sequential)",
         optional: "Optional",
         phonePlaceholder: "e.g. 081-234-5678",
         addressPlaceholder: "Address shown on bills or restaurant profile",
@@ -501,6 +512,7 @@ export default function NewRestaurantPage() {
           open_time: openTime,
           close_time: closeTime,
           table_count: tableCount,
+          split_zones: splitZones,
         };
 
         const res = await createRestaurant(payload);
@@ -616,6 +628,23 @@ export default function NewRestaurantPage() {
                   help={copy.tableHelp}
                   required
                 />
+
+                <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-gray-300 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-800 dark:text-gray-200">{copy.splitZonesLabel}</span>
+                    <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                      {splitZones
+                        ? copy.splitZonesHelp
+                        : copy.noSplitZonesHelp.replace("{count}", Number.isInteger(tableCount) && tableCount > 0 ? String(tableCount) : "N")}
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={splitZones}
+                    onChange={(event) => setSplitZones(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-orange-600"
+                  />
+                </label>
               </div>
             ) : null}
 
@@ -657,6 +686,10 @@ export default function NewRestaurantPage() {
                   <SummaryRow
                     label={copy.initialTables}
                     value={`${Number.isFinite(tableCount) ? initialTables : "-"} ${copy.tableWord}`}
+                  />
+                  <SummaryRow
+                    label={copy.splitZonesLabel}
+                    value={splitZones ? copy.zonedSummary : copy.flatSummary}
                   />
                   <SummaryRow label={copy.phone} value={trimmedPhone || copy.emptyPhone} />
                   <SummaryRow label={copy.address} value={trimmedAddress || copy.emptyAddress} />

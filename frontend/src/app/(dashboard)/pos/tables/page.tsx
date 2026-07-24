@@ -296,6 +296,10 @@ export default function PosTablesPage() {
     return Array.from(groups.values());
   }, [copy.noZone, search, tables]);
 
+  // When the restaurant has no zones at all, drop the zone chrome entirely so the
+  // floor reads as a plain, sequential list instead of a single "No zone" bucket.
+  const hasAnyZone = useMemo(() => tables.some((table) => table.zone_id), [tables]);
+
   const load = useCallback(async (showLoading = true) => {
     if (!canTake) return;
     if (refreshInFlight.current) return;
@@ -655,10 +659,12 @@ export default function PosTablesPage() {
         <div className="space-y-5">
           {groupedTables.length ? groupedTables.map((group) => (
             <section key={group.label}>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="h-5 w-1 rounded-full bg-orange-500" aria-hidden="true" />
-                <h2 className="text-[20px] font-semibold leading-none text-gray-950 dark:text-white">{group.label}</h2>
-              </div>
+              {hasAnyZone && (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="h-5 w-1 rounded-full bg-orange-500" aria-hidden="true" />
+                  <h2 className="text-[20px] font-semibold leading-none text-gray-950 dark:text-white">{group.label}</h2>
+                </div>
+              )}
               <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
@@ -700,9 +706,13 @@ export default function PosTablesPage() {
                               </div>
                             </div>
                             <p className="mt-2 flex min-w-0 items-center gap-1.5 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                              <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                              <span className="truncate">{table.table_zone?.name || table.zone || copy.noZone}</span>
-                              <span aria-hidden="true">·</span>
+                              {hasAnyZone && (
+                                <>
+                                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                  <span className="truncate">{table.table_zone?.name || table.zone || copy.noZone}</span>
+                                  <span aria-hidden="true">·</span>
+                                </>
+                              )}
                               <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                               <span className="shrink-0">{table.capacity} {copy.seats}</span>
                             </p>

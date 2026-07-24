@@ -18,6 +18,8 @@ export interface CreateRestaurantInput {
   promptpay_name?: string;
   promptpay_qr_image?: string;
   cover_image?: string;
+  /** Whether to split the starter tables into zones. Omit for the zoned default. */
+  split_zones?: boolean;
   /** QR-ordering geofence. Send null coordinates or radius 0 to disable it. */
   latitude?: number | null;
   longitude?: number | null;
