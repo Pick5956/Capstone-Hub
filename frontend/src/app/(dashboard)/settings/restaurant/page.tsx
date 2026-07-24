@@ -192,6 +192,9 @@ export default function RestaurantSettingsPage() {
         saving: "กำลังบันทึก...",
         saved: "บันทึกข้อมูลร้านแล้ว",
         saveError: "บันทึกข้อมูลร้านไม่สำเร็จ",
+        logoUploaded: "อัปโหลดโลโก้แล้ว",
+        coverUploaded: "อัปโหลดรูปพื้นหลังแล้ว",
+        qrUploaded: "อัปโหลด QR รับเงินแล้ว",
         uploadError: "อัปโหลดโลโก้ไม่สำเร็จ",
         uploadCoverError: "อัปโหลดรูปพื้นหลังไม่สำเร็จ",
         uploadQrError: "อัปโหลด QR ไม่สำเร็จ",
@@ -271,6 +274,9 @@ export default function RestaurantSettingsPage() {
         saving: "Saving...",
         saved: "Restaurant details saved.",
         saveError: "Could not save restaurant details.",
+        logoUploaded: "Logo uploaded.",
+        coverUploaded: "Cover image uploaded.",
+        qrUploaded: "PromptPay QR uploaded.",
         uploadError: "Could not upload the logo.",
         uploadCoverError: "Could not upload the cover image.",
         uploadQrError: "Could not upload the QR code.",
@@ -449,6 +455,7 @@ export default function RestaurantSettingsPage() {
     field: ImageField,
     upload: (id: number, file: File) => Promise<{ data: { restaurant: Restaurant } }>,
     setBusy: (busy: boolean) => void,
+    successText: string,
     errorText: string,
   ) => async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -461,7 +468,7 @@ export default function RestaurantSettingsPage() {
         const value = res.data.restaurant[field] ?? "";
         setForm((current) => ({ ...current, [field]: value }));
         setRestaurant((current) => (current ? { ...current, [field]: value } : current));
-        notifySaved();
+        showToast({ title: successText });
         await refreshMemberships();
       } catch {
         notifyError(errorText);
@@ -471,9 +478,9 @@ export default function RestaurantSettingsPage() {
     });
   };
 
-  const uploadLogo = createImageUpload("logo", uploadRestaurantLogo, setUploading, copy.uploadError);
-  const uploadCover = createImageUpload("cover_image", uploadRestaurantCover, setUploadingCover, copy.uploadCoverError);
-  const uploadQr = createImageUpload("promptpay_qr_image", uploadRestaurantPromptPayQR, setUploadingQr, copy.uploadQrError);
+  const uploadLogo = createImageUpload("logo", uploadRestaurantLogo, setUploading, copy.logoUploaded, copy.uploadError);
+  const uploadCover = createImageUpload("cover_image", uploadRestaurantCover, setUploadingCover, copy.coverUploaded, copy.uploadCoverError);
+  const uploadQr = createImageUpload("promptpay_qr_image", uploadRestaurantPromptPayQR, setUploadingQr, copy.qrUploaded, copy.uploadQrError);
 
   if (!canManageRestaurant) {
     return <PermissionDenied title={copy.denied} />;

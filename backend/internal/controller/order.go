@@ -413,7 +413,7 @@ func (ctrl *OrderController) SendToKitchen(c *gin.Context) {
 }
 
 func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
-	restaurantID, orderID, ok := ctrl.orderIDContext(c, "update_order_status")
+	restaurantID, ok := requireRestaurant(c)
 	if !ok {
 		return
 	}
@@ -431,7 +431,22 @@ func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, orderID, itemID, strings.TrimSpace(req.Status), req.Reason)
+	// Marking an item "served" is a front-of-house step (the waiter serving what
+	// the kitchen flagged ready), so take_order is allowed for it as well. Every
+	// other transition is a kitchen change and still requires update_order_status.
+	status := strings.TrimSpace(req.Status)
+	if status == entity.OrderItemStatusServed {
+		if !requireAnyPermission(c, "missing update_order_status or take_order permission", "update_order_status", "take_order") {
+			return
+		}
+	} else if !requireOrderAccess(c, "update_order_status") {
+		return
+	}
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
+	if !ok {
+		return
+	}
+	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, resolved.ID, itemID, status, req.Reason)
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return

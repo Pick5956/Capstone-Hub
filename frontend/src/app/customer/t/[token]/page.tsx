@@ -9,6 +9,7 @@ import { customerTableOrdersHref, shouldShowCustomerCartAction, summarizeCustome
 import { apiErrorCode, apiErrorMessage } from "@/src/lib/apiErrors";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -25,6 +26,7 @@ export default function CustomerTableOrderPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
   const { language } = useLanguage();
+  const { showToast } = useToast();
   const [payload, setPayload] = useState<CustomerTablePayload | null>(null);
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
@@ -39,8 +41,9 @@ export default function CustomerTableOrderPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [locating, setLocating] = useState(false);
+  // `error` drives the full-page load-failure fallback only; transient action
+  // feedback (submit result, table-not-open) goes through the global toast.
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const submissionKeyRef = useRef<string | null>(null);
 
   const copy = language === "th"
@@ -189,7 +192,7 @@ export default function CustomerTableOrderPage() {
 
   const openMenu = (item: CustomerMenuItem) => {
     if (!canOrder) {
-      setError(copy.noActiveOrderBody);
+      showToast({ title: copy.noActiveOrderBody, tone: "warning" });
       return;
     }
     const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => {
@@ -204,8 +207,6 @@ export default function CustomerTableOrderPage() {
     setSelectedOptionIds(defaultOptionIds);
     setQuantity(1);
     setNote("");
-    setSuccess("");
-    setError("");
   };
 
   const closeMenu = () => {
@@ -234,7 +235,7 @@ export default function CustomerTableOrderPage() {
 
   const openSummary = () => {
     if (!canOrder) {
-      setError(copy.noActiveOrderBody);
+      showToast({ title: copy.noActiveOrderBody, tone: "warning" });
       return;
     }
     if (!cart.length) return;
@@ -293,8 +294,6 @@ export default function CustomerTableOrderPage() {
   const submitOrder = async () => {
     if (!canOrder || !cart.length) return;
     setSubmitting(true);
-    setError("");
-    setSuccess("");
     try {
       // Only ask for location when the restaurant actually enforces a geofence.
       let coords: GeolocationCoordinates | null = null;
@@ -315,14 +314,18 @@ export default function CustomerTableOrderPage() {
       setPayload(res.data);
       submissionKeyRef.current = null;
       setCart([]);
-      setSuccess(res.data.awaiting_staff_confirm ? copy.awaitingStaffConfirm : copy.submitted);
+      showToast({
+        title: res.data.awaiting_staff_confirm ? copy.awaitingStaffConfirm : copy.submitted,
+        tone: res.data.awaiting_staff_confirm ? "warning" : "success",
+      });
       closeSummary();
     } catch (err) {
-      setError(
-        apiErrorCode(err) === "OUTSIDE_RESTAURANT"
+      showToast({
+        title: apiErrorCode(err) === "OUTSIDE_RESTAURANT"
           ? copy.outsideRestaurant
-          : apiErrorMessage(err) || copy.loadError
-      );
+          : apiErrorMessage(err) || copy.loadError,
+        tone: "error",
+      });
     } finally {
       setLocating(false);
       setSubmitting(false);
@@ -363,8 +366,6 @@ export default function CustomerTableOrderPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-4">
-        {error && <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-        {success && <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">{success}</div>}
         {!canOrder && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-[12px] leading-5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
             <p className="font-semibold text-amber-900 dark:text-amber-100">{copy.noActiveOrderTitle}</p>
