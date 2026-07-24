@@ -189,6 +189,7 @@ export default function PosOrderDetailPage() {
       loadError: "โหลดออเดอร์ไม่สำเร็จ",
       saveError: "ทำรายการไม่สำเร็จ",
       noMenu: "ยังไม่มีเมนู",
+      soldOut: "หมด",
     }
     : {
       denied: "You do not have permission to take orders.",
@@ -238,6 +239,7 @@ export default function PosOrderDetailPage() {
       loadError: "Could not load order.",
       saveError: "Could not complete the action.",
       noMenu: "No menu items.",
+      soldOut: "Sold out",
     };
 
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
@@ -303,7 +305,8 @@ export default function PosOrderDetailPage() {
     return menuItems.filter((item) => {
       if (categoryId !== "all" && !menuCategoryIds(item).includes(categoryId)) return false;
       if (keyword && !item.name.toLowerCase().includes(keyword)) return false;
-      return item.is_available;
+      // Sold-out items stay in the grid (shown as "sold out"); they are not filtered out.
+      return true;
     });
   }, [categoryId, menuItems, search]);
   const categoryOptions = useMemo(() => [
@@ -403,7 +406,7 @@ export default function PosOrderDetailPage() {
       if (background && actionInFlightRef.current) return;
       setOrder(orderRes.data);
       setCategories(categoryRes.data.categories.filter((category) => category.is_active));
-      setMenuItems(menuRes.data.menu_items.filter((item) => item.is_available));
+      setMenuItems(menuRes.data.menu_items);
     } catch {
       setError(copy.loadError);
     } finally {
@@ -771,7 +774,12 @@ export default function PosOrderDetailPage() {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                    {!item.is_available && (
+                      <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
+                        {copy.soldOut}
+                      </span>
+                    )}
                     {orderedQuantity > 0 && (
                       <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
                         {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}

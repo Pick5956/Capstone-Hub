@@ -104,7 +104,7 @@ func (r *MenuRepository) CategoryInUse(restaurantID, categoryID uint) (bool, err
 	return count > 0, err
 }
 
-func (r *MenuRepository) ListMenuItems(restaurantID uint, includeUnavailable bool, categoryID uint) ([]entity.MenuItem, error) {
+func (r *MenuRepository) ListMenuItems(restaurantID uint, includeInactive bool, categoryID uint) ([]entity.MenuItem, error) {
 	var items []entity.MenuItem
 	query := r.db.
 		Preload("Category").
@@ -115,14 +115,16 @@ func (r *MenuRepository) ListMenuItems(restaurantID uint, includeUnavailable boo
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
 		Where("restaurant_id = ?", restaurantID)
-	if !includeUnavailable {
+	if !includeInactive {
 		activeCategoryIDs := r.db.Model(&entity.Category{}).Select("id").Where("restaurant_id = ? AND is_active = ?", restaurantID, true)
 		activeLinkedMenuIDs := r.db.Table("menu_item_categories").
 			Select("menu_item_categories.menu_item_id").
 			Joins("JOIN categories ON categories.id = menu_item_categories.category_id").
 			Where("menu_item_categories.restaurant_id = ? AND categories.is_active = ?", restaurantID, true)
-		query = query.Where("is_available = ?", true).
-			Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs)
+		// Storefront view: hide items that live only in inactive categories, but
+		// keep sold-out (is_available = false) items so the ordering UIs can show a
+		// "sold out" label and block ordering instead of hiding them.
+		query = query.Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs)
 	}
 	if categoryID != 0 {
 		linkedMenuIDs := r.db.Model(&entity.MenuItemCategory{}).Select("menu_item_id").Where("restaurant_id = ? AND category_id = ?", restaurantID, categoryID)

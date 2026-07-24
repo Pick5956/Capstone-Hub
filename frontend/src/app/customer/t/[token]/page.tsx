@@ -77,6 +77,7 @@ export default function CustomerTableOrderPage() {
         itemUnit: "รายการ",
         added: "เพิ่มแล้ว",
         noImage: "ไม่มีรูป",
+        soldOut: "สินค้าหมด",
         total: "รวม",
         close: "ปิด",
         remove: "ลบ",
@@ -113,6 +114,7 @@ export default function CustomerTableOrderPage() {
         itemUnit: "items",
         added: "Added",
         noImage: "No image",
+        soldOut: "Sold out",
         total: "Total",
         close: "Close",
         remove: "Remove",
@@ -156,7 +158,8 @@ export default function CustomerTableOrderPage() {
     return menuItems.filter((item) => {
       if (categoryId !== "all" && !menuCategoryIds(item).includes(categoryId)) return false;
       if (keyword && !item.name.toLowerCase().includes(keyword)) return false;
-      return item.is_available;
+      // Sold-out items stay in the list (shown as "sold out"); not filtered out.
+      return true;
     });
   }, [categoryId, menuItems, search]);
 
@@ -399,7 +402,12 @@ export default function CustomerTableOrderPage() {
               const orderedQuantity = cartMenuQuantities.get(item.ID) ?? 0;
 
               return (
-                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left shadow-sm transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left shadow-sm transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                  {!item.is_available && (
+                    <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
+                      {copy.soldOut}
+                    </span>
+                  )}
                   {orderedQuantity > 0 && (
                     <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
                       {copy.added} x{orderedQuantity}

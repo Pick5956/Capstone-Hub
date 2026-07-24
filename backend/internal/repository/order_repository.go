@@ -475,7 +475,10 @@ func (r *OrderRepository) ListPublicMenuItems(restaurantID uint) ([]entity.MenuI
 		Preload("Categories.Category").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
-		Where("restaurant_id = ? AND is_available = ?", restaurantID, true).
+		// Sold-out (is_available = false) items stay in the list so the customer
+		// page can show a "sold out" label and block ordering, rather than hiding
+		// them. Items whose only category is inactive are still excluded.
+		Where("restaurant_id = ?", restaurantID).
 		Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs).
 		Order("display_order asc, id asc").
 		Find(&items).Error
