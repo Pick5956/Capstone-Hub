@@ -44,6 +44,12 @@ func (ctrl *CustomerOrderController) SubmitOrder(c *gin.Context) {
 	}
 	result, err := ctrl.customerSvc.SubmitOrder(c.Param("token"), c.GetHeader("Idempotency-Key"), &req)
 	if err != nil {
+		// Keep the explicit payload: the customer page matches on this exact code
+		// to show the "order from inside the restaurant" message.
+		if errors.Is(err, service.ErrOutsideRestaurant) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "OUTSIDE_RESTAURANT"})
+			return
+		}
 		if errors.Is(err, service.ErrCustomerOrderIdempotencyConflict) {
 			respondAPIError(c, http.StatusConflict, err)
 			return

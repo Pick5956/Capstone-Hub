@@ -8,6 +8,10 @@ import (
 	"Project-M/internal/repository"
 )
 
+// starterFlatTableCapacity is the default seat count for tables seeded without a
+// zone, matching the tables page default for manually added tables.
+const starterFlatTableCapacity = 2
+
 type starterProfile struct {
 	TableZones           []starterTableZone
 	Categories           []starterMenuCategory
@@ -32,7 +36,7 @@ type starterIngredientCategory struct {
 	Items []starterIngredient
 }
 
-func seedRestaurantStarterSetup(repo repository.RestaurantSetupWriter, restaurantID uint, restaurantType string, tableCount int) error {
+func seedRestaurantStarterSetup(repo repository.RestaurantSetupWriter, restaurantID uint, restaurantType string, tableCount int, splitZones bool) error {
 	profile := starterProfileFor(restaurantType)
 	ingredientIDs, err := seedStarterIngredientCatalog(repo, restaurantID, profile.IngredientCategories)
 	if err != nil {
@@ -40,6 +44,9 @@ func seedRestaurantStarterSetup(repo repository.RestaurantSetupWriter, restauran
 	}
 	if err := seedStarterMenu(repo, restaurantID, profile.Categories, ingredientIDs); err != nil {
 		return err
+	}
+	if !splitZones {
+		return seedStarterTablesFlat(repo, restaurantID, tableCount)
 	}
 	return seedStarterTables(repo, restaurantID, tableCount, profile.TableZones)
 }
@@ -236,6 +243,37 @@ func seedStarterTables(repo repository.RestaurantSetupWriter, restaurantID uint,
 			if err := repo.CreateTable(table); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// seedStarterTablesFlat creates a single, un-zoned run of tables numbered in the
+// order the owner asked for (T1..Tn). It mirrors the label convention the tables
+// page uses when adding tables without a zone, so manual additions continue the
+// same sequence.
+func seedStarterTablesFlat(repo repository.RestaurantSetupWriter, restaurantID uint, tableCount int) error {
+	if tableCount < 1 {
+		tableCount = 1
+	}
+	for sequence := 1; sequence <= tableCount; sequence++ {
+		label := fmt.Sprintf("T%d", sequence)
+		customerToken, err := GenerateCustomerTableToken()
+		if err != nil {
+			return err
+		}
+		table := &entity.RestaurantTable{
+			RestaurantID:   restaurantID,
+			ZoneID:         nil,
+			TableNumber:    label,
+			DisplayLabel:   label,
+			SequenceNumber: sequence,
+			Capacity:       starterFlatTableCapacity,
+			Status:         entity.TableStatusFree,
+			CustomerToken:  customerToken,
+		}
+		if err := repo.CreateTable(table); err != nil {
+			return err
 		}
 	}
 	return nil

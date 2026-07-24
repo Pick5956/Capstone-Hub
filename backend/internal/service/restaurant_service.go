@@ -242,6 +242,10 @@ type CreateRestaurantRequest struct {
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`
+	// SplitZones controls the starter table layout. When nil (older clients) or
+	// true, tables are divided into the profile's zones; when false, they are
+	// created as one flat, sequentially numbered run.
+	SplitZones *bool `json:"split_zones"`
 }
 
 type UpdateRestaurantRequest struct {
@@ -261,6 +265,10 @@ type UpdateRestaurantRequest struct {
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`
+	// QR ordering geofence. Radius 0 (or missing coordinates) turns it off.
+	Latitude          *float64 `json:"latitude"`
+	Longitude         *float64 `json:"longitude"`
+	OrderRadiusMeters int      `json:"order_radius_meters"`
 }
 
 type restaurantFields struct {
@@ -311,7 +319,10 @@ func (s *RestaurantService) CreateRestaurant(userID uint, req *CreateRestaurantR
 		return nil, nil, errors.New("owner role is not configured")
 	}
 
-	restaurant, member, err := createRestaurantWithStarterData(s.setupRepo, userID, ownerRole.ID, *fields)
+	// Default to the zoned layout so existing clients that omit the flag keep
+	// their current behavior.
+	splitZones := req.SplitZones == nil || *req.SplitZones
+	restaurant, member, err := createRestaurantWithStarterData(s.setupRepo, userID, ownerRole.ID, *fields, splitZones)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -329,6 +340,7 @@ func createRestaurantWithStarterData(
 	setupRepo repository.RestaurantSetupTransactor,
 	userID, ownerRoleID uint,
 	fields restaurantFields,
+	splitZones bool,
 ) (*entity.Restaurant, *entity.RestaurantMember, error) {
 	var restaurant *entity.Restaurant
 	var member *entity.RestaurantMember
@@ -366,7 +378,7 @@ func createRestaurantWithStarterData(
 		if err := tx.CreateMember(member); err != nil {
 			return err
 		}
-		return seedRestaurantStarterSetup(tx, restaurant.ID, fields.RestaurantType, fields.TableCount)
+		return seedRestaurantStarterSetup(tx, restaurant.ID, fields.RestaurantType, fields.TableCount, splitZones)
 	})
 	if err != nil {
 		return nil, nil, err
@@ -650,10 +662,36 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 	restaurant.PromptPayQRImage = fields.PromptPayQRImage
 	restaurant.CoverImage = fields.CoverImage
 
+	latitude, longitude, radius, err := sanitizeGeofence(req.Latitude, req.Longitude, req.OrderRadiusMeters)
+	if err != nil {
+		return nil, err
+	}
+	restaurant.Latitude = latitude
+	restaurant.Longitude = longitude
+	restaurant.OrderRadiusMeters = radius
+
 	if err := s.restaurantRepo.Update(restaurant); err != nil {
 		return nil, err
 	}
 	return s.restaurantRepo.FindByID(restaurantID)
+}
+
+// sanitizeGeofence validates the QR-ordering geofence settings. Any incomplete
+// configuration disables the feature instead of half-applying it.
+func sanitizeGeofence(latitude, longitude *float64, radiusMeters int) (*float64, *float64, int, error) {
+	if latitude == nil || longitude == nil || radiusMeters <= 0 {
+		return nil, nil, 0, nil
+	}
+	if *latitude < -90 || *latitude > 90 {
+		return nil, nil, 0, errors.New("latitude must be between -90 and 90")
+	}
+	if *longitude < -180 || *longitude > 180 {
+		return nil, nil, 0, errors.New("longitude must be between -180 and 180")
+	}
+	if radiusMeters < 20 || radiusMeters > 5000 {
+		return nil, nil, 0, errors.New("order radius must be between 20 and 5000 meters")
+	}
+	return latitude, longitude, radiusMeters, nil
 }
 
 func (s *RestaurantService) UpdateRestaurantLogo(restaurantID uint, logo string) (*entity.Restaurant, error) {
@@ -676,6 +714,19 @@ func (s *RestaurantService) UpdateRestaurantCover(restaurantID uint, coverImage 
 	}
 
 	restaurant.CoverImage = strings.TrimSpace(coverImage)
+	if err := s.restaurantRepo.Update(restaurant); err != nil {
+		return nil, err
+	}
+	return s.restaurantRepo.FindByID(restaurantID)
+}
+
+func (s *RestaurantService) UpdateRestaurantPromptPayQR(restaurantID uint, qrImage string) (*entity.Restaurant, error) {
+	restaurant, err := s.restaurantRepo.FindByID(restaurantID)
+	if err != nil {
+		return nil, errors.New("restaurant not found")
+	}
+
+	restaurant.PromptPayQRImage = strings.TrimSpace(qrImage)
 	if err := s.restaurantRepo.Update(restaurant); err != nil {
 		return nil, err
 	}

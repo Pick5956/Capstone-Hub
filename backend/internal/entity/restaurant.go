@@ -20,6 +20,14 @@ type Restaurant struct {
 	PromptPayName        string  `json:"promptpay_name"`
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`
-	OwnerID              uint    `json:"owner_id" gorm:"not null"`
-	Owner                *User   `json:"owner,omitempty" gorm:"foreignKey:OwnerID"`
+
+	// Geofence for QR table ordering. A customer must be physically near the
+	// restaurant to send an order straight to the kitchen. OrderRadiusMeters = 0
+	// (or missing coordinates) disables the check entirely.
+	Latitude          *float64 `json:"latitude" gorm:"type:double precision"`
+	Longitude         *float64 `json:"longitude" gorm:"type:double precision"`
+	OrderRadiusMeters int      `json:"order_radius_meters" gorm:"not null;default:0"`
+
+	OwnerID uint  `json:"owner_id" gorm:"not null"`
+	Owner   *User `json:"owner,omitempty" gorm:"foreignKey:OwnerID"`
 }

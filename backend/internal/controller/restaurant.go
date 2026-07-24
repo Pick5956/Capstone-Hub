@@ -360,6 +360,67 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
 }
 
+// POST /api/v1/restaurants/:id/upload-promptpay-qr
+func (ctrl *RestaurantController) UploadPromptPayQR(c *gin.Context) {
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	restaurantID, err := parseIDParam(c, "id")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	member, err := ctrl.restaurantSvc.GetMembership(userID, restaurantID)
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
+		return
+	}
+	if member.Role == nil || !canManageRestaurantProfile(member.Role.Name) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
+		return
+	}
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+	ext, err := validateImageUpload(file)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	random := make([]byte, 12)
+	if _, err := rand.Read(random); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
+		return
+	}
+	fileName := hex.EncodeToString(random) + ext
+	relativeDir := filepath.Join("uploads", "restaurants", strconv.FormatUint(uint64(restaurantID), 10))
+	if err := os.MkdirAll(relativeDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
+		return
+	}
+	destination := filepath.Join(relativeDir, fileName)
+	if err := c.SaveUploadedFile(file, destination); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
+		return
+	}
+
+	publicPath := publicURL(c, "/uploads/restaurants/"+strconv.FormatUint(uint64(restaurantID), 10)+"/"+fileName)
+	restaurant, err := ctrl.restaurantSvc.UpdateRestaurantPromptPayQR(restaurantID, publicPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"restaurant": restaurant})
+}
+
 // GET /api/v1/restaurants/:id/members
 func (ctrl *RestaurantController) ListMembers(c *gin.Context) {
 	userID, ok := contextUserID(c)

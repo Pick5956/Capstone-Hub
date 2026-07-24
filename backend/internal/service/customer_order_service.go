@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"sort"
 	"strings"
 	"unicode"
@@ -43,6 +44,8 @@ type CustomerRestaurantResponse struct {
 	Logo       string `json:"logo"`
 	OpenTime   string `json:"open_time"`
 	CloseTime  string `json:"close_time"`
+	// Tells the customer page whether it should ask for device location.
+	GeofenceRequired bool `json:"geofence_required"`
 }
 
 type CustomerTableDTO struct {
@@ -129,6 +132,9 @@ type CustomerTableResponse struct {
 	Categories []CustomerCategoryDTO      `json:"categories"`
 	MenuItems  []CustomerMenuItemDTO      `json:"menu_items"`
 	Order      *CustomerOrderDTO          `json:"order,omitempty"`
+	// True when the just-submitted items were held for staff confirmation
+	// because the device location could not be verified.
+	AwaitingStaffConfirm bool `json:"awaiting_staff_confirm,omitempty"`
 }
 
 type CustomerOrderSubmitResult struct {
@@ -148,7 +154,29 @@ type CustomerCartItemRequest struct {
 type SubmitCustomerOrderRequest struct {
 	Note  string                    `json:"note"`
 	Items []CustomerCartItemRequest `json:"items" binding:"required"`
+	// Device location captured at submit time. Nil when the customer declined
+	// or the browser could not provide it.
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
+	Accuracy  *float64 `json:"accuracy"`
 }
+
+// ErrOutsideRestaurant is returned when the device is clearly away from the
+// restaurant, which is the QR-photo-and-order-from-elsewhere case.
+var ErrOutsideRestaurant = errors.New("you must be at the restaurant to order")
+
+// Location readings looser than this are treated as unverifiable rather than
+// rejected, so a customer with weak indoor GPS is never wrongly blocked.
+const maxTrustedAccuracyMeters = 1000
+
+type geofenceOutcome int
+
+const (
+	geofenceDisabled   geofenceOutcome = iota // restaurant has not configured a location
+	geofenceInside                            // verified at the restaurant
+	geofenceUnverified                        // no/low-quality location -> needs staff confirmation
+	geofenceOutside                           // verified away from the restaurant
+)
 
 func (s *CustomerOrderService) GetTable(token string) (*CustomerTableResponse, error) {
 	table, err := s.tableByToken(token)
@@ -174,6 +202,7 @@ func (s *CustomerOrderService) SubmitOrder(
 	}
 	requestHash := customerSubmissionHash(req)
 
+	var fence geofenceOutcome
 	var result *CustomerOrderSubmitResult
 	err = s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		order, findErr := tx.FindOpenOrderByTableForUpdate(table.RestaurantID, table.ID)
@@ -221,6 +250,13 @@ func (s *CustomerOrderService) SubmitOrder(
 			return errors.New("restaurant owner is not configured")
 		}
 
+		// Block orders sent from clearly outside the restaurant (photographed QR).
+		fence = evaluateGeofence(restaurant, req)
+		if fence == geofenceOutside {
+			return ErrOutsideRestaurant
+		}
+
+
 		if strings.TrimSpace(req.Note) != "" && strings.TrimSpace(order.Note) == "" {
 			order.Note = customerNote(req.Note)
 			if saveErr := tx.SaveOrder(order); saveErr != nil {
@@ -239,8 +275,12 @@ func (s *CustomerOrderService) SubmitOrder(
 		if recalcErr := recalcOrderTotals(tx, order); recalcErr != nil {
 			return recalcErr
 		}
-		if sendErr := sendPendingItemsToKitchenByIDs(tx, order, actorID, addedItemIDs); sendErr != nil {
-			return sendErr
+		// When the location could not be verified the items stay pending so staff
+		// can confirm the guests are really seated before the kitchen starts.
+		if fence != geofenceUnverified {
+			if sendErr := sendPendingItemsToKitchenByIDs(tx, order, actorID, addedItemIDs); sendErr != nil {
+				return sendErr
+			}
 		}
 		submission := &entity.CustomerOrderSubmission{
 			RestaurantID: lockedTable.RestaurantID,
@@ -265,6 +305,11 @@ func (s *CustomerOrderService) SubmitOrder(
 	})
 	if err != nil {
 		return nil, err
+	}
+	// A replay returns the stored payload as-is; only a fresh submission reports
+	// that its items are waiting for staff confirmation.
+	if result != nil && !result.Replayed {
+		result.Payload.AwaitingStaffConfirm = fence == geofenceUnverified
 	}
 	return result, nil
 }
@@ -366,6 +411,41 @@ func addCustomerItem(
 	return item.ID, nil
 }
 
+// evaluateGeofence decides whether an order may go straight to the kitchen.
+func evaluateGeofence(restaurant *entity.Restaurant, req *SubmitCustomerOrderRequest) geofenceOutcome {
+	if restaurant.OrderRadiusMeters <= 0 || restaurant.Latitude == nil || restaurant.Longitude == nil {
+		return geofenceDisabled
+	}
+	if req.Latitude == nil || req.Longitude == nil {
+		return geofenceUnverified
+	}
+	accuracy := 0.0
+	if req.Accuracy != nil && *req.Accuracy > 0 {
+		accuracy = *req.Accuracy
+	}
+	if accuracy > maxTrustedAccuracyMeters {
+		return geofenceUnverified
+	}
+
+	distance := haversineMeters(*restaurant.Latitude, *restaurant.Longitude, *req.Latitude, *req.Longitude)
+	// Allow the reading's own margin of error so real customers are not blocked.
+	if distance <= float64(restaurant.OrderRadiusMeters)+accuracy {
+		return geofenceInside
+	}
+	return geofenceOutside
+}
+
+// haversineMeters returns the great-circle distance between two coordinates.
+func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusMeters = 6371000
+	toRad := func(deg float64) float64 { return deg * math.Pi / 180 }
+	dLat := toRad(lat2 - lat1)
+	dLon := toRad(lon2 - lon1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return earthRadiusMeters * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
+
 func validateCustomerSubmitRequest(requestKey string, req *SubmitCustomerOrderRequest) error {
 	if len(requestKey) < customerOrderMinRequestKeyLen || len(requestKey) > customerOrderMaxRequestKeyLen {
 		return errors.New("Idempotency-Key must be between 16 and 128 characters")
@@ -461,6 +541,8 @@ func customerRestaurantDTO(restaurant *entity.Restaurant) CustomerRestaurantResp
 		Logo:       restaurant.Logo,
 		OpenTime:   restaurant.OpenTime,
 		CloseTime:  restaurant.CloseTime,
+		// Tells the customer page to ask for device location before ordering.
+		GeofenceRequired: restaurant.OrderRadiusMeters > 0 && restaurant.Latitude != nil && restaurant.Longitude != nil,
 	}
 }
 

@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ListFilter, ReceiptText, Search, ShoppingBasket, X } from "lucide-react";
-import { createCustomerOrderRequestKey, getCustomerTableOrder, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerMenuItem, type CustomerTablePayload } from "@/src/lib/customerOrder";
+import { createCustomerOrderRequestKey, getCustomerTableOrder, readDeviceLocation, submitCustomerTableOrder, type CustomerCartItemInput, type CustomerMenuItem, type CustomerTablePayload } from "@/src/lib/customerOrder";
 import { customerTableOrdersHref, shouldShowCustomerCartAction, summarizeCustomerOrderItems } from "@/src/lib/customerOrderView";
-import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { apiErrorCode, apiErrorMessage } from "@/src/lib/apiErrors";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
@@ -25,6 +26,7 @@ export default function CustomerTableOrderPage() {
   const params = useParams<{ token: string }>();
   const token = params.token;
   const { language } = useLanguage();
+  const { showToast } = useToast();
   const [payload, setPayload] = useState<CustomerTablePayload | null>(null);
   const [categoryId, setCategoryId] = useState<number | "all">("all");
   const [search, setSearch] = useState("");
@@ -38,8 +40,10 @@ export default function CustomerTableOrderPage() {
   const [summaryClosing, setSummaryClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [locating, setLocating] = useState(false);
+  // `error` drives the full-page load-failure fallback only; transient action
+  // feedback (submit result, table-not-open) goes through the global toast.
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const submissionKeyRef = useRef<string | null>(null);
 
   const copy = language === "th"
@@ -66,6 +70,9 @@ export default function CustomerTableOrderPage() {
         noActiveOrderBody: "กรุณาเรียกพนักงานให้เปิดโต๊ะในระบบก่อน ลูกค้าจึงจะสั่งอาหารผ่าน QR ได้",
         submitting: "กำลังส่ง",
         submitted: "ส่งออเดอร์เข้าครัวแล้ว",
+        checkingLocation: "กำลังตรวจสอบตำแหน่ง...",
+        outsideRestaurant: "สั่งอาหารได้เฉพาะเมื่ออยู่ที่ร้านเท่านั้น กรุณาสั่งที่โต๊ะของคุณ",
+        awaitingStaffConfirm: "ส่งรายการแล้ว รอพนักงานยืนยันก่อนเข้าครัว (ตรวจสอบตำแหน่งไม่ได้)",
         tableOrders: "ที่สั่งแล้ว",
         itemUnit: "รายการ",
         added: "เพิ่มแล้ว",
@@ -98,6 +105,9 @@ export default function CustomerTableOrderPage() {
         noActiveOrderBody: "Ask staff to open this table before guests can order from the QR code.",
         submitting: "Sending",
         submitted: "Order sent to kitchen",
+        checkingLocation: "Checking your location...",
+        outsideRestaurant: "Ordering is only available at the restaurant. Please order from your table.",
+        awaitingStaffConfirm: "Order received. Staff will confirm it before the kitchen starts (location could not be verified).",
         tableOrders: "Ordered",
         itemUnit: "items",
         added: "Added",
@@ -180,7 +190,7 @@ export default function CustomerTableOrderPage() {
 
   const openMenu = (item: CustomerMenuItem) => {
     if (!canOrder) {
-      setError(copy.noActiveOrderBody);
+      showToast({ title: copy.noActiveOrderBody, tone: "warning" });
       return;
     }
     const defaultOptionIds = (item.option_groups ?? []).flatMap((group) => {
@@ -195,8 +205,6 @@ export default function CustomerTableOrderPage() {
     setSelectedOptionIds(defaultOptionIds);
     setQuantity(1);
     setNote("");
-    setSuccess("");
-    setError("");
   };
 
   const closeMenu = () => {
@@ -225,7 +233,7 @@ export default function CustomerTableOrderPage() {
 
   const openSummary = () => {
     if (!canOrder) {
-      setError(copy.noActiveOrderBody);
+      showToast({ title: copy.noActiveOrderBody, tone: "warning" });
       return;
     }
     if (!cart.length) return;
@@ -284,22 +292,40 @@ export default function CustomerTableOrderPage() {
   const submitOrder = async () => {
     if (!canOrder || !cart.length) return;
     setSubmitting(true);
-    setError("");
-    setSuccess("");
     try {
+      // Only ask for location when the restaurant actually enforces a geofence.
+      let coords: GeolocationCoordinates | null = null;
+      if (payload?.restaurant.geofence_required) {
+        setLocating(true);
+        coords = await readDeviceLocation();
+        setLocating(false);
+      }
+
       const requestKey = submissionKeyRef.current ?? createCustomerOrderRequestKey();
       submissionKeyRef.current = requestKey;
       const res = await submitCustomerTableOrder(token, {
         items: cart.map(({ menu_id, quantity, note, selected_option_ids }) => ({ menu_id, quantity, note, selected_option_ids })),
+        ...(coords
+          ? { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy }
+          : {}),
       }, requestKey);
       setPayload(res.data);
       submissionKeyRef.current = null;
       setCart([]);
-      setSuccess(copy.submitted);
+      showToast({
+        title: res.data.awaiting_staff_confirm ? copy.awaitingStaffConfirm : copy.submitted,
+        tone: res.data.awaiting_staff_confirm ? "warning" : "success",
+      });
       closeSummary();
     } catch (err) {
-      setError(apiErrorMessage(err) || copy.loadError);
+      showToast({
+        title: apiErrorCode(err) === "OUTSIDE_RESTAURANT"
+          ? copy.outsideRestaurant
+          : apiErrorMessage(err) || copy.loadError,
+        tone: "error",
+      });
     } finally {
+      setLocating(false);
       setSubmitting(false);
     }
   };
@@ -338,8 +364,6 @@ export default function CustomerTableOrderPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-4">
-        {error && <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-        {success && <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">{success}</div>}
         {!canOrder && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-[12px] leading-5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
             <p className="font-semibold text-amber-900 dark:text-amber-100">{copy.noActiveOrderTitle}</p>
@@ -381,9 +405,8 @@ export default function CustomerTableOrderPage() {
                   )}
                   <div className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }} aria-label={item.image_url ? `${item.name}` : undefined} />
                   <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
-                    <h2 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
-                    <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                    <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                    <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
+                    <p className="mt-auto pt-2 text-right font-mono text-[20px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                   </div>
                 </button>
               );
@@ -446,7 +469,7 @@ export default function CustomerTableOrderPage() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={closeSummary} className="h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold dark:border-gray-800">{copy.close}</button>
-                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{submitting ? copy.submitting : copy.submit}</button>
+                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{locating ? copy.checkingLocation : submitting ? copy.submitting : copy.submit}</button>
                 </div>
               </div>
             </div>
@@ -470,6 +493,9 @@ export default function CustomerTableOrderPage() {
                 </div>
               </div>
               <div className="space-y-3 p-4">
+                <p className="whitespace-pre-line text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
+                  {selectedMenu.description?.trim() ? selectedMenu.description : "..."}
+                </p>
                 {selectedMenu.option_groups?.filter((group) => group.is_active).map((group) => {
                   const options = (group.options ?? []).filter((option) => option.is_active);
                   const { minSelect, maxSelect } = menuOptionLimits(group);

@@ -9,6 +9,7 @@ import { formatCurrency } from "@/src/lib/format";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
 import { listIngredients } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
+import { apiErrorCode } from "@/src/lib/apiErrors";
 import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
 import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
@@ -80,6 +81,7 @@ export default function MenuPage() {
         loadError: "โหลดข้อมูลเมนูไม่สำเร็จ",
         categoryRequired: "กรุณากรอกชื่อหมวดหมู่",
         categorySaveError: "บันทึกหมวดหมู่ไม่สำเร็จ",
+        categoryDuplicate: "มีหมวดหมู่ชื่อนี้อยู่แล้ว",
         itemRequired: "กรุณาเลือกหมวดหมู่และกรอกชื่อเมนู",
         itemCategoryRequired: "เลือกหมวดหมู่ก่อนเพิ่มเมนู",
         itemNameRequired: "กรอกชื่อเมนูที่ลูกค้าและพนักงานจำได้",
@@ -194,6 +196,7 @@ export default function MenuPage() {
         loadError: "Could not load menu data.",
         categoryRequired: "Please enter a category name.",
         categorySaveError: "Could not save category.",
+        categoryDuplicate: "A category with this name already exists.",
         itemRequired: "Please choose a category and enter a menu item name.",
         itemCategoryRequired: "Choose a category before adding a menu item.",
         itemNameRequired: "Enter a menu item name your team can recognize.",
@@ -437,8 +440,8 @@ export default function MenuPage() {
       setSelectedCategoryIds([...selectedCategoryIds, res.data.ID]);
       setInlineCategoryName("");
       showToast({ title: copy.categoryCreated });
-    } catch {
-      setInlineCategoryError(copy.categorySaveError);
+    } catch (err) {
+      setInlineCategoryError(apiErrorCode(err) === "CATEGORY_NAME_EXISTS" ? copy.categoryDuplicate : copy.categorySaveError);
     } finally {
       setInlineCategorySaving(false);
     }
@@ -473,8 +476,8 @@ export default function MenuPage() {
         }
         setCategoryName("");
         setEditingCategory(null);
-      } catch {
-        setCategoryError(copy.categorySaveError);
+      } catch (err) {
+        setCategoryError(apiErrorCode(err) === "CATEGORY_NAME_EXISTS" ? copy.categoryDuplicate : copy.categorySaveError);
       } finally {
         setSubmitting(false);
       }

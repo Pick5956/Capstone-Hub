@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 3
+	CurrentSchemaVersion int64 = 4
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -95,6 +95,18 @@ func schemaMigrationPlan() []SchemaMigration {
 				}
 				if err := createOrderSearchIndexes(ctx.DB); err != nil {
 					return err
+				}
+				return nil
+			},
+		},
+		{
+			Version: 4,
+			Name:    "add_restaurant_order_geofence",
+			Up: func(ctx *MigrationContext) error {
+				// Adds latitude/longitude/order_radius_meters used to keep QR
+				// table orders from being sent outside the restaurant.
+				if err := ctx.DB.AutoMigrate(&entity.Restaurant{}); err != nil {
+					return fmt.Errorf("migrate restaurant order geofence: %w", err)
 				}
 				return nil
 			},

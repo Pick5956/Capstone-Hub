@@ -261,6 +261,9 @@ export default function TablesPage() {
   );
   const activeZones = sortedZones;
   const activeTags = sortedTags;
+  // Restaurants created without zones show no zone chrome at all; the "No zone"
+  // label only makes sense once at least one zone exists to contrast against.
+  const hasAnyZone = zones.length > 0;
   const filteredTables = useMemo(() => {
     return tables.filter((table) => {
       const zoneMatch = zoneFilter === "all" || (zoneFilter === "none" ? !table.zone_id : table.zone_id === Number(zoneFilter));
@@ -667,8 +670,10 @@ export default function TablesPage() {
 
       <div className="grid gap-4">
         <section className="space-y-4">
-          <div className="grid gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 sm:grid-cols-2">
-            <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
+          <div className={`grid gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 ${hasAnyZone ? "sm:grid-cols-2" : ""}`}>
+            {hasAnyZone && (
+              <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
+            )}
             <ThemedSelect value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
           </div>
 
@@ -695,7 +700,7 @@ export default function TablesPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h2 className="truncate text-[22px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</h2>
-                          <p className="mt-2 truncate text-[12px] font-medium text-gray-500 dark:text-gray-400">{table.table_zone?.name || table.zone || copy.noZone} · {table.capacity} {copy.seats}</p>
+                          <p className="mt-2 truncate text-[12px] font-medium text-gray-500 dark:text-gray-400">{hasAnyZone ? `${table.table_zone?.name || table.zone || copy.noZone} · ` : ""}{table.capacity} {copy.seats}</p>
                         </div>
                         <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold leading-none ${tableStatusPillClass(table.status)}`}>{STATUS[table.status].label}</span>
                       </div>
