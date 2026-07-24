@@ -114,7 +114,6 @@ export default function MenuPage() {
         editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
         categoryHint: "จัดกลุ่มเมนูให้พนักงานหาเจอเร็ว",
         searchPlaceholder: "ค้นหาเมนู",
-        noImage: "ไม่มีรูป",
         uncategorized: "ไม่ระบุหมวด",
         noDescription: "ไม่มีรายละเอียด",
         available: "พร้อมขาย",
@@ -229,7 +228,6 @@ export default function MenuPage() {
         editorHint: "Add a new item or edit the selected menu item.",
         categoryHint: "Group items so staff can find them quickly.",
         searchPlaceholder: "Search menu",
-        noImage: "No image",
         uncategorized: "Uncategorized",
         noDescription: "No description",
         available: "Available",
@@ -846,11 +844,9 @@ export default function MenuPage() {
                     >
                       <div
                         className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                        style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                        style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
-                      >
-                        {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{copy.noImage}</div>}
-                      </div>
+                      />
                       <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
@@ -1116,9 +1112,7 @@ export default function MenuPage() {
                     <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
                   </div>
                   <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr]">
-                    <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={itemForm.image_url ? { backgroundImage: `url(${itemForm.image_url})` } : undefined}>
-                      {!itemForm.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
-                    </div>
+                    <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${itemForm.image_url || "/menu-placeholder-v2.webp"})` }} />
                     <div className="min-w-0 space-y-2">
                       <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploadingImage} onChange={(event) => uploadImage(event.target.files?.[0])} className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900" />
                       <input value={itemForm.image_url} onChange={(event) => { setItemForm({ ...itemForm, image_url: event.target.value }); setItemErrors((current) => ({ ...current, image: undefined })); }} placeholder={copy.imageUrlPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />

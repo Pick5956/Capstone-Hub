@@ -688,8 +688,8 @@ export default function PosOrderDetailPage() {
                   <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
                   <span className="flex shrink-0 items-center gap-1.5 px-2">
                     <UtensilsCrossed className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
-                    <span className="hidden xl:inline">{copy.itemsLabel}</span>
                     <span className="font-mono tabular-nums">{orderItemCount}</span>
+                    <span>{copy.itemsLabel}</span>
                   </span>
                 </button>
                 {canCloseTable ? (
@@ -774,11 +774,9 @@ export default function PosOrderDetailPage() {
                     )}
                     <div
                       className="aspect-[4/3] shrink-0 bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                      style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                      style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                       aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
-                    >
-                      {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
-                    </div>
+                    />
                     <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
@@ -800,11 +798,10 @@ export default function PosOrderDetailPage() {
       {selectedMenu && (
         <div {...menuPickerBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
           <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
-            <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
+            <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
               <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
-              {!selectedMenu.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{language === "th" ? "ไม่มีรูป" : "No image"}</div>}
             </div>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
