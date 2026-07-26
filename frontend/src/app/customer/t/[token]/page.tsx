@@ -413,9 +413,7 @@ export default function CustomerTableOrderPage() {
                       {copy.added} x{orderedQuantity}
                     </span>
                   )}
-                  <div className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined} aria-label={item.image_url ? `${item.name}` : undefined}>
-                    {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{copy.noImage}</div>}
-                  </div>
+                  <div className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }} aria-label={item.image_url ? `${item.name}` : undefined} />
                   <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
                     <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
                     <p className="mt-auto pt-2 text-right font-mono text-[20px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
@@ -493,7 +491,7 @@ export default function CustomerTableOrderPage() {
         <div {...menuBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>
           <div className="fixed left-1/2 top-1/2 w-[calc(100dvw-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2">
             <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-              <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={selectedMenu.image_url ? { backgroundImage: `url(${selectedMenu.image_url})` } : undefined}>
+              <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
                 <button type="button" aria-label={copy.close} onClick={closeMenu} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
