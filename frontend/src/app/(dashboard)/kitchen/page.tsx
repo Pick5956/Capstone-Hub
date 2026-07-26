@@ -223,6 +223,7 @@ export default function KitchenPage() {
       eyebrow={copy.eyebrow}
       title={copy.title}
       subtitle={copy.subtitle}
+      showHeader={false}
       lastUpdated={lastUpdatedText}
       stats={[
         { label: copy.cooking, value: cookingCount, tone: "warning" },
