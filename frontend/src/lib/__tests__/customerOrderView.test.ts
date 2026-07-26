@@ -40,7 +40,7 @@ describe("customer order view helpers", () => {
 
   it("provides guest-friendly bilingual kitchen statuses", () => {
     expect(customerOrderItemStatusLabel("cooking", "th")).toBe("กำลังเตรียม");
-    expect(customerOrderItemStatusLabel("ready", "en")).toBe("Ready");
+    expect(customerOrderItemStatusLabel("ready", "en")).toBe("Done");
     expect(customerOrderItemStatusLabel("cancelled", "th")).toBe("ยกเลิก");
   });
 

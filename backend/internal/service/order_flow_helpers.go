@@ -91,7 +91,7 @@ func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entit
 	return setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch))
 }
 
-func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
+func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
 	snapshots, err := tx.ListItemRecipeSnapshots(restaurantID, item.ID)
 	if err != nil {
 		return err
@@ -146,6 +146,25 @@ func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, 
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateIngredientTransaction(stockTx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func finalizeReadyItemsForPayment(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order) error {
+	now := repository.BangkokNow()
+	for index := range order.Items {
+		item := &order.Items[index]
+		if item.Status != entity.OrderItemStatusReady {
+			continue
+		}
+		if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+			return err
+		}
+		item.Status = entity.OrderItemStatusServed
+		item.ServedAt = &now
+		if err := tx.SaveItem(item); err != nil {
 			return err
 		}
 	}

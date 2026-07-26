@@ -2,17 +2,17 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, MapPin, ReceiptText, Search, ShoppingBag, Users, UtensilsCrossed } from "lucide-react";
+import { Bell, MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
-import { createOrder, listOrders, updateOrderItemStatus } from "@/src/lib/order";
+import { createOrder, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import { createPosTableNavigationGuard } from "@/src/lib/posTableNavigation";
 import { listTables, updateTableStatus } from "@/src/lib/table";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
-import type { Order, OrderItem } from "@/src/types/order";
+import type { Order } from "@/src/types/order";
 import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -27,43 +27,16 @@ const tableRefreshIntervalMs = 60_000;
 const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-950 dark:text-white";
 type TableSheetMode = "open" | "reserved";
 
-type ReadyTableSummary = {
-  order: Order;
-  tableLabel: string;
-  readyCount: number;
-  oldestReadyAt: string;
-  items: OrderItem[];
-  itemSummary: string;
-};
-
 const hasValidPhone = (value: string) => value.replace(/\D/g, "").length >= 9;
 
-function orderLocationLabel(order: Order, tables: RestaurantTable[], language: "th" | "en") {
-  if (order.order_type === "takeaway") {
-    const base = language === "th" ? "กลับบ้าน" : "Takeaway";
-    return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
-  }
-  const table = tables.find((item) => item.ID === order.table_id);
-  return order.table?.display_label || order.table?.table_number || table?.display_label || table?.table_number || (order.table_id ? String(order.table_id) : "-");
-}
-
-function itemSummaryLabel(item: OrderItem, language: "th" | "en") {
-  const prefix = item.fulfillment_type === "takeaway"
-    ? language === "th" ? "[กลับบ้าน] " : "[Takeaway] "
-    : "";
-  return `${prefix}${item.quantity}x ${item.menu_name}`;
-}
-
-function tableAccentClass(status: TableStatus, readyCount: number) {
-  if (readyCount > 0) return "bg-emerald-500";
+function tableAccentClass(status: TableStatus) {
   if (status === "inactive") return "bg-gray-400";
   if (status === "occupied") return "bg-amber-500";
   if (status === "reserved") return "bg-sky-500";
   return "bg-emerald-500";
 }
 
-function tableStatusPillClass(status: TableStatus, readyCount: number) {
-  if (readyCount > 0) return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:ring-emerald-900/70";
+function tableStatusPillClass(status: TableStatus) {
   if (status === "inactive") return "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700";
   if (status === "occupied") return "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:ring-amber-900/70";
   if (status === "reserved") return "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:ring-sky-900/70";
@@ -90,7 +63,6 @@ export default function PosTablesPage() {
   const [reservationDraftOpen, setReservationDraftOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [servingOrderId, setServingOrderId] = useState<number | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigationPending, startNavigationTransition] = useTransition();
   const [search, setSearch] = useState("");
@@ -139,12 +111,6 @@ export default function PosTablesPage() {
         occupied: "ใช้งาน",
         reserved: "จอง",
         inactive: "ปิดใช้งาน",
-        ready: "พร้อมเสิร์ฟ",
-        readyBannerTitle: "อาหารพร้อมเสิร์ฟ",
-        readyBannerHelp: "ดูรายการที่ครัวทำเสร็จและกดเสิร์ฟได้จากตรงนี้",
-        readyItems: "รายการ",
-        serveAll: "เสิร์ฟทั้งหมด",
-        serving: "กำลังเสิร์ฟ...",
         openingTable: "กำลังเปิดโต๊ะ",
         openingTakeaway: "กำลังเปิดออเดอร์กลับบ้าน",
         noZone: "ไม่มีโซน",
@@ -194,12 +160,6 @@ export default function PosTablesPage() {
         occupied: "Active order",
         reserved: "Reserved",
         inactive: "Inactive",
-        ready: "Ready to serve",
-        readyBannerTitle: "Ready to serve",
-        readyBannerHelp: "Review finished kitchen items and serve them from here.",
-        readyItems: "items",
-        serveAll: "Serve all",
-        serving: "Serving...",
         openingTable: "Opening table",
         openingTakeaway: "Opening takeaway order",
         noZone: "No zone",
@@ -247,34 +207,6 @@ export default function PosTablesPage() {
       .forEach((order) => map.set(order.table_id as number, order));
     return map;
   }, [orders]);
-
-  const readyTables = useMemo<ReadyTableSummary[]>(() => {
-    return orders
-      .filter((order) => activeOrderStatuses.includes(order.status))
-      .map((order) => {
-        const readyItems = order.items?.filter((item) => item.status === "ready") ?? [];
-        const oldestReadyAt = readyItems.reduce<string>((oldest, item) => {
-          const value = item.ready_at || item.UpdatedAt || item.CreatedAt || order.opened_at;
-          return !oldest || new Date(value) < new Date(oldest) ? value : oldest;
-        }, "");
-        return {
-          order,
-          tableLabel: orderLocationLabel(order, tables, language),
-          readyCount: readyItems.reduce((sum, item) => sum + item.quantity, 0),
-          oldestReadyAt,
-          items: readyItems,
-          itemSummary: readyItems.map((item) => itemSummaryLabel(item, language)).join(" · "),
-        };
-      })
-      .filter((item) => item.readyCount > 0)
-      .sort((a, b) => new Date(a.oldestReadyAt || a.order.opened_at).getTime() - new Date(b.oldestReadyAt || b.order.opened_at).getTime());
-  }, [language, orders, tables]);
-
-  const readyCountByOrderId = useMemo(() => {
-    const map = new Map<number, number>();
-    readyTables.forEach((item) => map.set(item.order.ID, item.readyCount));
-    return map;
-  }, [readyTables]);
 
   const groupedTables = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -535,25 +467,6 @@ export default function PosTablesPage() {
     }
   };
 
-  const serveReadyItems = async (summary: ReadyTableSummary) => {
-    if (!summary.items.length || servingOrderId || isNavigating) return;
-    setServingOrderId(summary.order.ID);
-    setError("");
-    try {
-      let nextOrder = summary.order;
-      for (const item of summary.items) {
-        const res = await updateOrderItemStatus(summary.order.ID, item.ID, "served");
-        nextOrder = res.data;
-      }
-      setOrders((current) => current.map((order) => order.ID === nextOrder.ID ? nextOrder : order));
-      void load(false);
-    } catch (error) {
-      setError(apiErrorMessage(error) || copy.saveError);
-    } finally {
-      setServingOrderId(null);
-    }
-  };
-
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
@@ -608,44 +521,6 @@ export default function PosTablesPage() {
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
-      {!loading && !isNavigating && readyTables.length ? (
-        <section className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-100">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-[14px] font-semibold">{copy.readyBannerTitle} · {readyTables.length} {language === "th" ? "ออเดอร์" : "orders"}</h2>
-              <p className="mt-0.5 text-[12px] opacity-80">{copy.readyBannerHelp}</p>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {readyTables.map((item) => (
-              <div
-                key={item.order.ID}
-                className="rounded-md border border-emerald-200 bg-white p-3 text-emerald-900 shadow-sm dark:border-emerald-800 dark:bg-gray-950 dark:text-emerald-100"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <button type="button" disabled={isNavigating} onClick={() => navigateToOrder(item.order)} className="min-w-0 text-left disabled:cursor-wait disabled:opacity-60">
-                    <span className="block truncate text-[14px] font-semibold">{item.tableLabel}</span>
-                    <span className="mt-0.5 block truncate font-mono text-[11px] opacity-70">#{item.order.order_number}</span>
-                  </button>
-                  <span className="shrink-0 rounded-md bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-100">
-                    {item.readyCount} {copy.readyItems}
-                  </span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-[12px] leading-5 opacity-85">{item.itemSummary}</p>
-                <button
-                  type="button"
-                  disabled={isNavigating || servingOrderId === item.order.ID}
-                  onClick={() => void serveReadyItems(item)}
-                  className="ui-press mt-3 h-9 w-full rounded-md bg-emerald-700 px-3 text-[12px] font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400"
-                >
-                  {servingOrderId === item.order.ID ? copy.serving : copy.serveAll}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {loading || isNavigating ? (
         <div
           role="status"
@@ -670,19 +545,16 @@ export default function PosTablesPage() {
                   const order = activeOrderByTable.get(table.ID);
                   const busy = Boolean(order);
                   const status = busy ? "occupied" : table.status;
-                  const readyCount = order ? readyCountByOrderId.get(order.ID) ?? 0 : 0;
                   const shownTags = table.tags?.slice(0, 2) ?? [];
                   const extraTags = Math.max((table.tags?.length ?? 0) - shownTags.length, 0);
                   const disabled = status === "reserved" || status === "inactive";
-                  const statusLabel = readyCount
-                    ? `${copy.ready} ${readyCount}`
-                    : status === "occupied"
-                      ? copy.occupied
-                      : status === "reserved"
-                        ? copy.reserved
-                        : status === "inactive"
-                          ? copy.inactive
-                          : copy.free;
+                  const statusLabel = status === "occupied"
+                    ? copy.occupied
+                    : status === "reserved"
+                      ? copy.reserved
+                      : status === "inactive"
+                        ? copy.inactive
+                        : copy.free;
                   return (
                     <button
                       key={table.ID}
@@ -692,32 +564,30 @@ export default function PosTablesPage() {
                       onClick={handleTableClick}
                       className={`ui-press group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-950 ${disabled ? "cursor-default opacity-70" : "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700"}`}
                     >
-                      <span className={`w-1.5 shrink-0 ${tableAccentClass(status, readyCount)}`} />
+                      <span className={`w-1.5 shrink-0 ${tableAccentClass(status)}`} />
                       <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
-                              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/35 dark:text-orange-300">
-                                <UtensilsCrossed className="h-4 w-4" aria-hidden="true" />
-                              </span>
                               <div className="min-w-0">
                                 <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{copy.table}</p>
                                 <p className="truncate text-[19px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</p>
                               </div>
                             </div>
-                            <p className="mt-2 flex min-w-0 items-center gap-1.5 truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                            <div className="mt-2 space-y-1 text-[11px] font-medium text-gray-500 dark:text-gray-400">
                               {hasAnyZone && (
-                                <>
-                                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                  <span className="truncate">{table.table_zone?.name || table.zone || copy.noZone}</span>
-                                  <span aria-hidden="true">·</span>
-                                </>
+                                <p className="flex min-w-0 items-start gap-1.5">
+                                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                  <span className="min-w-0 break-words leading-4">{table.table_zone?.name || table.zone || copy.noZone}</span>
+                                </p>
                               )}
-                              <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                              <span className="shrink-0">{table.capacity} {copy.seats}</span>
-                            </p>
+                              <p className="flex items-center gap-1.5">
+                                <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span>{table.capacity} {copy.seats}</span>
+                              </p>
+                            </div>
                           </div>
-                          <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold leading-none ${tableStatusPillClass(status, readyCount)}`}>{statusLabel}</span>
+                          <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold leading-none ${tableStatusPillClass(status)}`}>{statusLabel}</span>
                         </div>
                         <div className="mt-auto">
                           {order ? (

@@ -89,7 +89,7 @@ export default function RestaurantSettingsPage() {
   const coverFileInputRef = useRef<HTMLInputElement>(null);
   const qrFileInputRef = useRef<HTMLInputElement>(null);
   const saveOnceRef = useRef(createSingleFlight());
-  const uploadOnceRef = useRef(createSingleFlight());
+  const [runUploadOnce] = useState(() => createSingleFlight());
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [form, setForm] = useState<FormState>(() => toForm(null, language));
   const [errors, setErrors] = useState<FormErrors>({});
@@ -461,7 +461,7 @@ export default function RestaurantSettingsPage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !restaurantId) return;
-    await uploadOnceRef.current(async () => {
+    await runUploadOnce(async () => {
       setBusy(true);
       try {
         const res = await upload(restaurantId, file);

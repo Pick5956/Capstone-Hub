@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -15,6 +15,7 @@ import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
@@ -177,7 +178,7 @@ export default function MenuPage() {
         removeOption: "ลบ",
         optionError: "กรอกชื่อชุดตัวเลือกและอย่างน้อย 1 ตัวเลือก หรือปล่อยว่างทั้งชุด",
         recipeTitle: "สูตรวัตถุดิบ",
-        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกตอนเสิร์ฟ",
+        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกเมื่อครัวทำเสร็จ",
         addRecipeComponent: "เพิ่มวัตถุดิบ",
         ingredient: "วัตถุดิบ",
         quantity: "จำนวน",
@@ -292,7 +293,7 @@ export default function MenuPage() {
         removeOption: "Remove",
         optionError: "Enter an option group name and at least 1 option, or leave the group empty.",
         recipeTitle: "Recipe ingredients",
-        recipeHint: "Connect this item to stock so serving it deducts inventory and calculates food cost.",
+        recipeHint: "Connect this item to stock so kitchen completion deducts inventory and calculates food cost.",
         addRecipeComponent: "Add ingredient",
         ingredient: "Ingredient",
         quantity: "Quantity",
@@ -357,7 +358,6 @@ export default function MenuPage() {
     { value: "0", label: copy.allCategories },
     ...sortedCategories.map((category) => ({ value: String(category.ID), label: category.name })),
   ], [copy.allCategories, sortedCategories]);
-  const activeCategory = categories.find((category) => category.ID === filterCategory);
   const availableCount = items.filter((item) => item.is_available).length;
   const unavailableCount = items.length - availableCount;
 
@@ -742,54 +742,55 @@ export default function MenuPage() {
     }
   };
 
+  const renderMenuToolbar = (placement: "desktop" | "mobile") => (
+    <div className={placement === "desktop" ? "flex w-full min-w-0 items-center gap-2 pr-2" : "mb-4 flex flex-col gap-2 lg:hidden"}>
+      <label className={placement === "desktop" ? "relative block w-full max-w-md min-w-0" : "relative block w-full"}>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={copy.searchPlaceholder}
+          aria-label={copy.searchPlaceholder}
+          className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+        />
+      </label>
+      {canManage && (
+        <div className={placement === "desktop" ? "flex shrink-0 items-center gap-2" : "flex justify-end gap-2"}>
+          <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+            {copy.categoryManager}
+          </button>
+          <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+            + {copy.createItem}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
-        </div>
-        {canManage && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <>
-              <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-                {copy.categoryManager}
-              </button>
-              <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
-                + {copy.createItem}
-              </button>
-            </>
-          </div>
-        )}
-      </div>
+      <DashboardTopBarPortal>
+        {renderMenuToolbar("desktop")}
+      </DashboardTopBarPortal>
+      <h1 className="sr-only">{copy.title}</h1>
+      {renderMenuToolbar("mobile")}
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      <div className="space-y-4">
-        <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-          <div className="grid gap-3 lg:grid-cols-[minmax(14rem,20rem)_minmax(16rem,1fr)] lg:items-end">
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.itemCategory}</span>
-              <ThemedSelect
-                value={String(filterCategory)}
-                onChange={(next) => setFilterCategory(Number(next))}
-                options={categoryFilterOptions}
-              />
-            </div>
-            <div>
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-          </div>
-        </div>
-
+      <div>
         <section className="space-y-4">
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
+                <div className="w-full max-w-xs">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.catalogTitle}</p>
-                  <h2 className="mt-0.5 text-[16px] font-semibold text-gray-900 dark:text-white">{activeCategory?.name ?? copy.allCategories}</h2>
+                  <div className="mt-1.5">
+                    <ThemedSelect
+                      value={String(filterCategory)}
+                      onChange={(next) => setFilterCategory(Number(next))}
+                      options={categoryFilterOptions}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[11px] sm:min-w-[330px]">
                   {([

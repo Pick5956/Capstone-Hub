@@ -7,7 +7,6 @@ import { ArrowLeft, Bell, CheckCircle2, Clock3, MapPin, Minus, Plus, Printer, Re
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
-import { playBeep } from "@/src/lib/browserAudio";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
@@ -80,14 +79,18 @@ function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
 }
 
 function sentFulfillmentStatusSections(items: OrderItem[]): SentFulfillmentSection[] {
-  const statusOrder = ["ready", "cooking", "served", "cancelled"] as OrderItem["status"][];
+  const statusOrder = ["ready", "cooking", "cancelled"] as OrderItem["status"][];
 
   return (["dine_in", "takeaway"] as const)
     .map((key) => {
       const fulfillmentItems = items.filter((item) => itemFulfillmentType(item) === key);
       const statuses = statusOrder
         .map((status) => {
-          const statusItems = fulfillmentItems.filter((item) => item.status === status);
+          const statusItems = fulfillmentItems.filter((item) =>
+            status === "ready"
+              ? item.status === "ready" || item.status === "served"
+              : item.status === status,
+          );
           return {
             status,
             groups: groupOrderItems(statusItems),
@@ -138,7 +141,6 @@ export default function PosOrderDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const actionInFlightRef = useRef(false);
-  const readyItemIdsRef = useRef<Set<number>>(new Set());
 
   const copy = language === "th"
     ? {
@@ -157,8 +159,8 @@ export default function PosOrderDetailPage() {
       note: "หมายเหตุ",
       pending: "รอส่งครัว",
       cooking: "ครัวกำลังทำ",
-      ready: "พร้อมเสิร์ฟ",
-      served: "เสิร์ฟแล้ว",
+      ready: "เสร็จแล้ว",
+      served: "เสร็จแล้ว",
       sent_to_kitchen: "ส่งเข้าครัว",
       open: "เปิดอยู่",
       completed: "ปิดแล้ว",
@@ -166,9 +168,7 @@ export default function PosOrderDetailPage() {
       cart: "รายการในออเดอร์",
       emptyCart: "ยังไม่มีรายการ",
       sendKitchen: "ส่งเข้าครัว",
-      markServed: "เสิร์ฟแล้ว",
       close: "ออกบิล / รับเงิน",
-      readyAlert: "มีอาหารพร้อมเสิร์ฟ",
       bill: "บิล",
       service: "Service charge",
       vat: "VAT",
@@ -206,8 +206,8 @@ export default function PosOrderDetailPage() {
       note: "Note",
       pending: "Pending",
       cooking: "Cooking",
-      ready: "Ready",
-      served: "Served",
+      ready: "Done",
+      served: "Done",
       sent_to_kitchen: "Sent",
       open: "Open",
       completed: "Completed",
@@ -215,9 +215,7 @@ export default function PosOrderDetailPage() {
       cart: "Order items",
       emptyCart: "No items yet",
       sendKitchen: "Send to Kitchen",
-      markServed: "Served",
       close: "Bill / Pay",
-      readyAlert: "Food ready to serve",
       bill: "Bill",
       service: "Service charge",
       vat: "VAT",
@@ -277,8 +275,6 @@ export default function PosOrderDetailPage() {
     return language === "th" ? `เลือก ${selected}/${range}` : `${selected}/${range} selected`;
   };
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
-  const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
-  const hasReadyItems = readyItems.length > 0;
   const pendingItems = useMemo(() => (order?.items ?? []).filter((item) => item.status === "pending"), [order?.items]);
   const pendingItemCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
   const pendingGroupedOrderItems = useMemo(() => groupOrderItems(pendingItems), [pendingItems]);
@@ -428,15 +424,6 @@ export default function PosOrderDetailPage() {
   });
 
   useEffect(() => {
-    if (!order?.items) return;
-    const readyIds = new Set(order.items.filter((item) => item.status === "ready").map((item) => item.ID));
-    const hasNewReady = [...readyIds].some((id) => !readyItemIdsRef.current.has(id));
-    if (readyItemIdsRef.current.size && hasNewReady) playBeep(1046);
-    readyItemIdsRef.current = readyIds;
-  }, [order?.items]);
-
-
-  useEffect(() => {
     if (!modalScrollLocked) return;
 
     const scrollX = window.scrollX;
@@ -551,18 +538,16 @@ export default function PosOrderDetailPage() {
   const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
   const statusHeaderClass = (status: OrderItem["status"]) => {
     if (status === "cooking") return "bg-amber-50 text-amber-900 dark:bg-amber-950/35 dark:text-amber-200";
-    if (status === "ready") return "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200";
-    if (status === "served") return "bg-gray-50 text-gray-800 dark:bg-gray-900/70 dark:text-gray-200";
+    if (status === "ready" || status === "served") return "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200";
     return "bg-red-50 text-red-900 dark:bg-red-950/35 dark:text-red-200";
   };
   const statusBorderClass = (status: OrderItem["status"]) => {
     if (status === "cooking") return "border-amber-200 dark:border-amber-900/70";
-    if (status === "ready") return "border-emerald-200 dark:border-emerald-900/70";
-    if (status === "served") return "border-gray-200 dark:border-gray-800";
+    if (status === "ready" || status === "served") return "border-emerald-200 dark:border-emerald-900/70";
     return "border-red-200 dark:border-red-900/70";
   };
   const statusHeaderIcon = (status: OrderItem["status"]) => {
-    const Icon = status === "cooking" ? Clock3 : status === "ready" ? Bell : status === "cancelled" ? X : CheckCircle2;
+    const Icon = status === "cooking" ? Clock3 : status === "cancelled" ? X : CheckCircle2;
     return <Icon className="h-4 w-4" aria-hidden="true" />;
   };
   const renderOrderItemGroup = (group: OrderItemGroup, variant: "card" | "row" = "card") => {
@@ -654,12 +639,7 @@ export default function PosOrderDetailPage() {
 
 
 
-  const headerNoticeCount = (error ? 1 : 0) + (hasReadyItems ? 1 : 0);
-  const posHeaderSpacerClass = headerNoticeCount === 0
-    ? "h-[102px] lg:h-[62px]"
-    : headerNoticeCount === 1
-      ? "h-[152px] lg:h-[112px]"
-      : "h-[202px] lg:h-[162px]";
+  const posHeaderSpacerClass = error ? "h-[152px] lg:h-[112px]" : "h-[102px] lg:h-[62px]";
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
@@ -697,7 +677,7 @@ export default function PosOrderDetailPage() {
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
-                {pendingItemCount === 0 && order.status === "served" ? (
+                {pendingItemCount === 0 && (order.status === "ready" || order.status === "served") ? (
                   <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                     <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
@@ -734,16 +714,11 @@ export default function PosOrderDetailPage() {
             </div>
           )}
         </div>
-        {(error || hasReadyItems) && (
-          <div className="space-y-2 px-3 py-2 sm:px-4 lg:px-5">
-            {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-            {hasReadyItems && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-                {copy.readyAlert}: {readyItems.length}
-              </div>
-            )}
+        {error ? (
+          <div className="px-3 py-2 sm:px-4 lg:px-5">
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>
           </div>
-        )}
+        ) : null}
       </div>
       <div aria-hidden="true" className={posHeaderSpacerClass} />
 

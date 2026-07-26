@@ -3,7 +3,7 @@ import { pageTitle } from "../documentTitle";
 
 describe("pageTitle", () => {
   it("labels operational routes in the selected language", () => {
-    expect(pageTitle("/kitchen", "th")).toBe("คิวครัว · Dishy");
+    expect(pageTitle("/kitchen", "th")).toBe("จอครัวโซนเสิร์ฟ · Dishy");
     expect(pageTitle("/orders", "en")).toBe("Order archive · Dishy");
   });
 

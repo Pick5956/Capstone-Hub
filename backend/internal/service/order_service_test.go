@@ -159,11 +159,11 @@ func TestRecipeComponentCostUsesYield(t *testing.T) {
 	}
 }
 
-func TestValidateOrderReadyForPaymentRequiresEveryActiveItemServed(t *testing.T) {
+func TestValidateOrderReadyForPaymentAcceptsKitchenCompletedItems(t *testing.T) {
 	order := &entity.Order{
-		Status: entity.OrderStatusServed,
+		Status: entity.OrderStatusReady,
 		Items: []entity.OrderItem{
-			{Status: entity.OrderItemStatusServed},
+			{Status: entity.OrderItemStatusReady},
 			{Status: entity.OrderItemStatusPending},
 		},
 	}
@@ -176,11 +176,19 @@ func TestValidateOrderReadyForPaymentRequiresEveryActiveItemServed(t *testing.T)
 	if err := validateOrderReadyForPayment(order); err != nil {
 		t.Fatalf("expected cancelled items to be ignored, got %v", err)
 	}
+
+	order.Status = entity.OrderStatusServed
+	order.Items[0].Status = entity.OrderItemStatusServed
+	if err := validateOrderReadyForPayment(order); err != nil {
+		t.Fatalf("expected legacy served items to remain payable, got %v", err)
+	}
 }
 
-func TestPendingItemReopensServedOrder(t *testing.T) {
-	if got := orderStatusAfterPendingItemAdded(entity.OrderStatusServed); got != entity.OrderStatusOpen {
-		t.Fatalf("served order status after adding pending item = %q, want %q", got, entity.OrderStatusOpen)
+func TestPendingItemReopensKitchenCompletedOrder(t *testing.T) {
+	for _, status := range []string{entity.OrderStatusReady, entity.OrderStatusServed} {
+		if got := orderStatusAfterPendingItemAdded(status); got != entity.OrderStatusOpen {
+			t.Fatalf("%s order status after adding pending item = %q, want %q", status, got, entity.OrderStatusOpen)
+		}
 	}
 	if got := orderStatusAfterPendingItemAdded(entity.OrderStatusCooking); got != entity.OrderStatusCooking {
 		t.Fatalf("cooking order status after adding pending item = %q, want unchanged", got)

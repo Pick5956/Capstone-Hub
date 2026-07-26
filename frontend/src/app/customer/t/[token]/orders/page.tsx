@@ -20,7 +20,7 @@ const statusClass: Record<OrderItemStatus, string> = {
   pending: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
   cooking: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   ready: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  served: "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300",
+  served: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   cancelled: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300",
 };
 

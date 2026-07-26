@@ -22,6 +22,7 @@ const kitchenEventActions = new Set([
   "customer_order.submitted",
   "item.status_updated",
   "order.cancelled",
+  "order.paid",
   "order.sent_to_kitchen",
   "order.updated",
 ]);

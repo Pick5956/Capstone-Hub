@@ -150,7 +150,7 @@ func seedStarterMenu(repo repository.RestaurantSetupWriter, restaurantID uint, c
 }
 
 // seedStarterMenuRecipe links a menu item to its starter ingredients so stock gets
-// deducted automatically once orders are served. Recipe lines that reference an
+// deducted automatically once the kitchen marks an order item completed. Recipe lines that reference an
 // ingredient name not present in the seeded catalog are skipped rather than failing
 // the whole setup, since option-level variants aren't modeled at the recipe level.
 func seedStarterMenuRecipe(repo repository.RestaurantSetupWriter, restaurantID, menuItemID uint, lines []starterRecipeLine, ingredientIDs map[string]uint) error {

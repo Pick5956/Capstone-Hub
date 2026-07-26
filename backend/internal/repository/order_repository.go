@@ -532,13 +532,22 @@ func (r *OrderRepository) SaveTable(table *entity.RestaurantTable) error {
 	return r.db.Omit(clause.Associations).Save(table).Error
 }
 
+func hasKitchenQueueItems(items []entity.OrderItem) bool {
+	for _, item := range items {
+		if item.Status == entity.OrderItemStatusCooking || item.Status == entity.OrderItemStatusReady {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error) {
 	var orders []entity.Order
 	err := r.db.
 		Preload("Table", operationalTableColumns).
 		Preload("Items", "status IN ?", []string{entity.OrderItemStatusCooking, entity.OrderItemStatusReady}).
 		Preload("Items.SelectedOptions").
-		Where("restaurant_id = ? AND status IN ?", restaurantID, []string{entity.OrderStatusSentToKitchen, entity.OrderStatusCooking, entity.OrderStatusReady}).
+		Where("restaurant_id = ? AND status NOT IN ?", restaurantID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
 		Order("opened_at asc, id asc").
 		Find(&orders).Error
 	if err != nil {
@@ -555,18 +564,14 @@ func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error
 			batches[batch] = append(batches[batch], item)
 		}
 		for batch, items := range batches {
-			hasCooking := false
 			var sentAt *time.Time
 			for index := range items {
-				if items[index].Status == entity.OrderItemStatusCooking {
-					hasCooking = true
-				}
 				if items[index].SentAt != nil && (sentAt == nil || items[index].SentAt.Before(*sentAt)) {
 					value := *items[index].SentAt
 					sentAt = &value
 				}
 			}
-			if !hasCooking {
+			if !hasKitchenQueueItems(items) {
 				continue
 			}
 			ticket := order

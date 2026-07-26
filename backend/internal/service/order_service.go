@@ -467,10 +467,13 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 		now := repository.BangkokNow()
 		item.Status = next
 		if next == entity.OrderItemStatusReady {
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+				return err
+			}
 			item.ReadyAt = &now
 		}
 		if next == entity.OrderItemStatusServed {
-			if err := deductInventoryForServedItem(tx, restaurantID, userID, order, item); err != nil {
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
 				return err
 			}
 			item.ServedAt = &now
@@ -594,6 +597,9 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 		if err := validateOrderReadyForPayment(order); err != nil {
 			return err
 		}
+		if err := finalizeReadyItemsForPayment(tx, restaurantID, userID, order); err != nil {
+			return err
+		}
 		method := strings.TrimSpace(req.Method)
 		if method != "cash" && method != "promptpay_qr" {
 			return errors.New("invalid payment method")
@@ -678,8 +684,8 @@ func normalizeReceivedAmount(method string, received, grandTotal float64) (float
 }
 
 func validateOrderReadyForPayment(order *entity.Order) error {
-	if order == nil || order.Status != entity.OrderStatusServed {
-		return errors.New("order must be served before payment")
+	if order == nil || (order.Status != entity.OrderStatusReady && order.Status != entity.OrderStatusServed) {
+		return errors.New("order must be completed by the kitchen before payment")
 	}
 	activeItems := 0
 	for _, item := range order.Items {
@@ -687,18 +693,18 @@ func validateOrderReadyForPayment(order *entity.Order) error {
 			continue
 		}
 		activeItems++
-		if item.Status != entity.OrderItemStatusServed {
-			return errors.New("all active order items must be served before payment")
+		if item.Status != entity.OrderItemStatusReady && item.Status != entity.OrderItemStatusServed {
+			return errors.New("all active order items must be completed by the kitchen before payment")
 		}
 	}
 	if activeItems == 0 {
-		return errors.New("order must include a served item before payment")
+		return errors.New("order must include a completed kitchen item before payment")
 	}
 	return nil
 }
 
 func orderStatusAfterPendingItemAdded(status string) string {
-	if status == entity.OrderStatusServed {
+	if status == entity.OrderStatusReady || status == entity.OrderStatusServed {
 		return entity.OrderStatusOpen
 	}
 	return status

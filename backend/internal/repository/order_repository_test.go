@@ -28,3 +28,35 @@ func TestSummarizeOrderStatuses(t *testing.T) {
 		t.Fatalf("expected missing statuses to be initialized to zero")
 	}
 }
+
+func TestHasKitchenQueueItemsKeepsCompletedKitchenTicketsVisible(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []entity.OrderItem
+		want  bool
+	}{
+		{
+			name:  "cooking item",
+			items: []entity.OrderItem{{Status: entity.OrderItemStatusCooking}},
+			want:  true,
+		},
+		{
+			name:  "completed kitchen item stays visible until order closes",
+			items: []entity.OrderItem{{Status: entity.OrderItemStatusReady}},
+			want:  true,
+		},
+		{
+			name:  "served item leaves kitchen queue",
+			items: []entity.OrderItem{{Status: entity.OrderItemStatusServed}},
+			want:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := hasKitchenQueueItems(test.items); got != test.want {
+				t.Fatalf("hasKitchenQueueItems() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
