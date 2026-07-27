@@ -50,8 +50,8 @@ export const PERMISSION_SECTIONS = [
       },
       {
         id: "kitchen-view",
-        th: "ดูจอครัวโซนเสิร์ฟ",
-        en: "View kitchen & service",
+        th: "ดูจอครัว",
+        en: "View kitchen",
         descriptionTh: "อนุญาตให้เข้าดูรายการอาหารในครัวได้",
         descriptionEn: "Allow viewing kitchen food tickets.",
         permissions: ["view_kitchen"],

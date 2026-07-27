@@ -45,9 +45,9 @@ const navigationEntries: NavigationEntry[] = [
   },
   {
     href: "/kitchen",
-    label: { th: "จอครัวโซนเสิร์ฟ", en: "Kitchen & service" },
+    label: { th: "จอครัว", en: "Kitchen" },
     permission: "view_kitchen",
-    aliases: ["kitchen", "kds", "kitchen screen", "kitchen service", "ครัว", "จอครัว", "จอครัวโซนเสิร์ฟ", "หน้าครัว"],
+    aliases: ["kitchen", "kds", "kitchen screen", "ครัว", "จอครัว", "หน้าครัว"],
   },
   {
     href: "/menu",

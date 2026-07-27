@@ -230,44 +230,46 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
         {confirmState && (
           <div
             {...confirmBackdrop}
-            className={`${confirmClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}
+            className={`${confirmClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-[var(--z-modal)] h-dvh w-dvw max-w-full bg-gray-950/55`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="global-confirm-title"
             aria-describedby={confirmState.message ? "global-confirm-message" : undefined}
           >
-            <div
-              ref={confirmDialogRef}
-              tabIndex={-1}
-              className={`${confirmClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-md rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950`}
-            >
-              <div className="flex items-start gap-3">
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${confirmTone === "danger" ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300" : confirmTone === "warning" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" : "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300"}`}>
-                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            <div className="absolute inset-3 m-auto h-fit w-[calc(100dvw-1.5rem)] max-w-md">
+              <div
+                ref={confirmDialogRef}
+                tabIndex={-1}
+                className={`${confirmClosing ? "motion-dialog-exit" : "motion-dialog"} w-full rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${confirmTone === "danger" ? "bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300" : confirmTone === "warning" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300" : "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300"}`}>
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="global-confirm-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">
+                      {confirmState.title}
+                    </h2>
+                    {confirmState.message && <p id="global-confirm-message" className="mt-1 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{confirmState.message}</p>}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h2 id="global-confirm-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">
-                    {confirmState.title}
-                  </h2>
-                  {confirmState.message && <p id="global-confirm-message" className="mt-1 text-[13px] leading-6 text-gray-600 dark:text-gray-400">{confirmState.message}</p>}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => closeConfirm(false)}
+                    data-confirm-autofocus
+                    className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                  >
+                    {confirmState.cancelLabel ?? (language === "th" ? "ยกเลิก" : "Cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeConfirm(true)}
+                    className={`h-10 rounded-md px-3 text-[13px] font-semibold transition-colors ${confirmButtonClass}`}
+                  >
+                    {confirmState.confirmLabel ?? (language === "th" ? "ยืนยัน" : "Confirm")}
+                  </button>
                 </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => closeConfirm(false)}
-                  data-confirm-autofocus
-                  className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
-                >
-                  {confirmState.cancelLabel ?? (language === "th" ? "ยกเลิก" : "Cancel")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => closeConfirm(true)}
-                  className={`h-10 rounded-md px-3 text-[13px] font-semibold transition-colors ${confirmButtonClass}`}
-                >
-                  {confirmState.confirmLabel ?? (language === "th" ? "ยืนยัน" : "Confirm")}
-                </button>
               </div>
             </div>
           </div>

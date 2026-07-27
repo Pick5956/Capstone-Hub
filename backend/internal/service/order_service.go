@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -52,6 +53,20 @@ type StatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=pending cooking ready served cancelled"`
 	Reason string `json:"reason" binding:"max=500"`
 	Note   string `json:"note" binding:"max=500"`
+}
+
+func normalizeItemCancellationReason(status, reason string) (string, error) {
+	if status != entity.OrderItemStatusCancelled {
+		return "", nil
+	}
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return "", errors.New("cancellation reason is required")
+	}
+	if utf8.RuneCountInString(normalized) > 500 {
+		return "", errors.New("cancellation reason must not exceed 500 characters")
+	}
+	return normalized, nil
 }
 
 type CancelRequest struct {
@@ -211,7 +226,12 @@ func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint
 }
 
 func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, error) {
-	return s.repo.FindOrder(restaurantID, orderID)
+	order, err := s.repo.FindOrder(restaurantID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	applyEffectiveOrderStatus(order)
+	return order, nil
 }
 
 // GetOrderByNumber looks up an order by its human-readable order_number (e.g. "A001").
@@ -219,7 +239,12 @@ func (s *OrderService) GetOrderByNumber(restaurantID uint, orderNumber string) (
 	if !validOrderNumber(orderNumber) {
 		return nil, errors.New("invalid order number")
 	}
-	return s.repo.FindOrderByNumber(restaurantID, orderNumber)
+	order, err := s.repo.FindOrderByNumber(restaurantID, orderNumber)
+	if err != nil {
+		return nil, err
+	}
+	applyEffectiveOrderStatus(order)
+	return order, nil
 }
 
 func ValidateOrderListFilters(status, orderDate, paymentStatus, search string) error {
@@ -464,25 +489,41 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 		if !canTransitionItem(item.Status, next) {
 			return fmt.Errorf("invalid item status transition from %s to %s", item.Status, next)
 		}
+		cancelReason, err := normalizeItemCancellationReason(next, reason)
+		if err != nil {
+			return err
+		}
 		now := repository.BangkokNow()
 		item.Status = next
+		if next == entity.OrderItemStatusCooking {
+			item.ReadyAt = nil
+			item.ServedAt = nil
+			item.CancelledReason = ""
+		}
 		if next == entity.OrderItemStatusReady {
 			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
 				return err
 			}
 			item.ReadyAt = &now
+			item.CancelledReason = ""
 		}
 		if next == entity.OrderItemStatusServed {
 			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
 				return err
 			}
 			item.ServedAt = &now
+			item.CancelledReason = ""
 		}
 		if next == entity.OrderItemStatusCancelled {
-			item.CancelledReason = strings.TrimSpace(reason)
+			item.CancelledReason = cancelReason
 		}
 		if err := tx.SaveItem(item); err != nil {
 			return err
+		}
+		if next == entity.OrderItemStatusCancelled {
+			if err := recalcOrderTotals(tx, order); err != nil {
+				return err
+			}
 		}
 		if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
 			return err
@@ -576,6 +617,7 @@ func (s *OrderService) Bill(restaurantID, orderID uint) (*BillResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyEffectiveOrderStatus(order)
 	restaurant, err := s.repo.FindRestaurant(restaurantID)
 	if err != nil {
 		return nil, err
@@ -585,6 +627,7 @@ func (s *OrderService) Bill(restaurantID, orderID uint) (*BillResponse, error) {
 
 func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrderRequest) (*entity.Order, error) {
 	var changed uint
+	var reconciledFrom, reconciledTo string
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
@@ -593,6 +636,14 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 		if order.PaymentStatus == entity.PaymentStatusPaid {
 			changed = order.ID
 			return nil
+		}
+		statusBeforeReconcile := order.Status
+		if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
+			return err
+		}
+		if order.Status != statusBeforeReconcile {
+			reconciledFrom = statusBeforeReconcile
+			reconciledTo = order.Status
 		}
 		if err := validateOrderReadyForPayment(order); err != nil {
 			return err
@@ -652,6 +703,15 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 	if err != nil {
 		return nil, err
 	}
+	if reconciledFrom != "" {
+		log.Printf(
+			"order_status_aggregate_reconciled restaurant_id=%d order_id=%d from=%s to=%s",
+			restaurantID,
+			orderID,
+			reconciledFrom,
+			reconciledTo,
+		)
+	}
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
@@ -684,7 +744,8 @@ func normalizeReceivedAmount(method string, received, grandTotal float64) (float
 }
 
 func validateOrderReadyForPayment(order *entity.Order) error {
-	if order == nil || (order.Status != entity.OrderStatusReady && order.Status != entity.OrderStatusServed) {
+	status := effectiveOrderStatus(order)
+	if status != entity.OrderStatusReady && status != entity.OrderStatusServed {
 		return errors.New("order must be completed by the kitchen before payment")
 	}
 	activeItems := 0
@@ -837,12 +898,7 @@ func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) erro
 	if err != nil {
 		return err
 	}
-	subtotal := 0.0
-	for _, item := range items {
-		if item.Status != entity.OrderItemStatusCancelled {
-			subtotal += item.Subtotal
-		}
-	}
+	subtotal := orderSubtotalFromItems(items)
 	order.Subtotal = subtotal
 	if order.DiscountAmount < 0 {
 		order.DiscountAmount = 0
@@ -856,6 +912,16 @@ func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) erro
 	}
 	order.GrandTotal = order.TotalAmount + order.ServiceChargeAmount + order.VATAmount
 	return tx.SaveOrder(order)
+}
+
+func orderSubtotalFromItems(items []entity.OrderItem) float64 {
+	subtotal := 0.0
+	for _, item := range items {
+		if item.Status != entity.OrderItemStatusCancelled {
+			subtotal += item.Subtotal
+		}
+	}
+	return subtotal
 }
 
 func billFromOrder(order *entity.Order, restaurant *entity.Restaurant) *BillResponse {

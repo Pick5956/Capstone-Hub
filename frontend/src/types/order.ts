@@ -25,7 +25,7 @@ export interface OrderItem {
   ready_at?: string | null;
   served_at?: string | null;
   cancelled_reason?: string;
-  menu?: MenuItem;
+  menu?: Pick<MenuItem, "ID" | "image_url">;
   selected_options?: OrderItemOption[];
   CreatedAt?: string;
   UpdatedAt?: string;

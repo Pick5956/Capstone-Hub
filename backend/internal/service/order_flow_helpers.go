@@ -15,6 +15,9 @@ func roundMoney(value float64) float64 {
 }
 
 func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
+	if order == nil || isTerminalOrder(order.Status) {
+		return nil
+	}
 	items, err := tx.ListItems(order.ID)
 	if err != nil {
 		return err
@@ -31,6 +34,22 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		note = "all remaining items ready"
 	}
 	return setOrderStatus(tx, order, next, userID, note)
+}
+
+func effectiveOrderStatus(order *entity.Order) string {
+	if order == nil {
+		return ""
+	}
+	if isTerminalOrder(order.Status) {
+		return order.Status
+	}
+	return orderStatusFromItems(order.Status, order.Items)
+}
+
+func applyEffectiveOrderStatus(order *entity.Order) {
+	if order != nil {
+		order.Status = effectiveOrderStatus(order)
+	}
 }
 
 func orderStatusFromItems(current string, items []entity.OrderItem) string {
@@ -264,7 +283,7 @@ func canTransitionItem(from, to string) bool {
 	case entity.OrderItemStatusCooking:
 		return to == entity.OrderItemStatusReady || to == entity.OrderItemStatusCancelled
 	case entity.OrderItemStatusReady:
-		return to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
+		return to == entity.OrderItemStatusCooking || to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
 	case entity.OrderItemStatusServed, entity.OrderItemStatusCancelled:
 		return false
 	default:

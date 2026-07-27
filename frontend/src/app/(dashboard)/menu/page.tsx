@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -16,6 +16,7 @@ import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
+import MenuImageCropper from "@/src/components/menu/MenuImageCropper";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
@@ -57,6 +58,7 @@ export default function MenuPage() {
   const [submitting, setSubmitting] = useState(false);
   const [availabilitySubmittingId, setAvailabilitySubmittingId] = useState<number | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageEditing, setImageEditing] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string; options?: string }>({});
@@ -153,7 +155,19 @@ export default function MenuPage() {
         itemOrder: "ลำดับแสดงผลของเมนู",
         itemOrderHelp: "เลขน้อยจะแสดงก่อนในหมวดหมู่นั้น ถ้าไม่แน่ใจเว้นว่างได้",
         image: "รูปเมนู",
-        imageUrlPlaceholder: "หรือวาง URL รูปภาพเอง",
+        chooseImage: "เลือกรูป",
+        adjustImage: "ปรับตำแหน่งรูป",
+        cropTitle: "จัดวางรูปเมนู",
+        cropHint: "กรอบนี้ตรงกับรูปบนการ์ดเมนู ลากเพื่อจัดตำแหน่ง และปรับ Zoom ได้ตั้งแต่ -100% ถึง +100%",
+        cropAria: "พื้นที่จัดวางรูป ใช้เมาส์ลากหรือปุ่มลูกศรเพื่อเลื่อนรูป",
+        zoom: "Zoom",
+        zoomOut: "ย่อรูป",
+        zoomIn: "ขยายรูป",
+        resetImage: "คืนค่าตำแหน่ง",
+        useImage: "ใช้รูปนี้",
+        preparingImage: "กำลังเตรียมรูป...",
+        imageLoadError: "เปิดรูปเพื่อจัดวางไม่สำเร็จ กรุณาเลือกรูปใหม่",
+        imageCropError: "จัดวางรูปไม่สำเร็จ กรุณาเลือกรูปใหม่",
         uploading: "กำลังอัปโหลดรูป...",
         imageHelp: "รองรับ jpg, png, webp ไม่เกิน 5MB",
         description: "รายละเอียดเมนู",
@@ -268,7 +282,19 @@ export default function MenuPage() {
         itemOrder: "Menu item display order",
         itemOrderHelp: "Lower numbers appear first inside this category. Leave blank if you are not sure.",
         image: "Menu image",
-        imageUrlPlaceholder: "Or paste an image URL",
+        chooseImage: "Choose image",
+        adjustImage: "Adjust image",
+        cropTitle: "Position menu image",
+        cropHint: "This frame matches the menu card. Drag to reposition and adjust Zoom from -100% to +100%.",
+        cropAria: "Image positioning area. Drag or use the arrow keys to move the image.",
+        zoom: "Zoom",
+        zoomOut: "Zoom out",
+        zoomIn: "Zoom in",
+        resetImage: "Reset position",
+        useImage: "Use this image",
+        preparingImage: "Preparing image...",
+        imageLoadError: "Could not open this image for positioning. Choose a new image.",
+        imageCropError: "Could not position this image. Choose a new image.",
         uploading: "Uploading image...",
         imageHelp: "Supports jpg, png, webp up to 5MB",
         description: "Menu description",
@@ -303,6 +329,10 @@ export default function MenuPage() {
         recipeCost: "Cost/portion",
         noIngredients: "Add ingredients in Inventory first.",
       };
+
+  const handleImageEditorError = useCallback((message: string) => {
+    setItemErrors((current) => ({ ...current, image: message || undefined }));
+  }, []);
 
   const refresh = async () => {
     if (!canView) return;
@@ -587,6 +617,7 @@ export default function MenuPage() {
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
     setItemErrors({});
+    setImageEditing(false);
     setItemForm(menuItemToInput(item));
     setItemEditorTab("basic");
     setDrawerOpen(true);
@@ -622,6 +653,7 @@ export default function MenuPage() {
   const startCreateItem = () => {
     setEditingItem(null);
     setItemErrors({});
+    setImageEditing(false);
     const firstID = filterCategory || sortedCategories[0]?.ID || 0;
     setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
     setInlineCategoryName("");
@@ -639,6 +671,7 @@ export default function MenuPage() {
       setDrawerClosing(false);
       setEditingItem(null);
       setItemErrors({});
+      setImageEditing(false);
     }, 180);
   };
 
@@ -724,10 +757,10 @@ export default function MenuPage() {
   };
 
   const uploadImage = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file) return false;
     if (!file.type.startsWith("image/")) {
       setItemErrors((current) => ({ ...current, image: copy.imageTypeError }));
-      return;
+      return false;
     }
     setUploadingImage(true);
     setError("");
@@ -735,8 +768,10 @@ export default function MenuPage() {
     try {
       const res = await uploadMenuImage(file);
       setItemForm((current) => ({ ...current, image_url: res.data.image_url }));
+      return true;
     } catch {
       setItemErrors((current) => ({ ...current, image: copy.imageUploadError }));
+      return false;
     } finally {
       setUploadingImage(false);
     }
@@ -844,14 +879,14 @@ export default function MenuPage() {
                         event.preventDefault();
                         editItem(item);
                       } : undefined}
-                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,background-color,box-shadow,transform] hover:border-orange-200 hover:bg-orange-50/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
+                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:bg-transparent ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
                     >
                       <div
-                        className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
+                        className="aspect-[4/3] bg-transparent bg-cover bg-center"
                         style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
                       />
-                      <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                      <div className="flex min-w-0 flex-1 flex-col p-3">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                         <div className="mt-2 flex flex-wrap gap-1">
@@ -1115,13 +1150,32 @@ export default function MenuPage() {
                   <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
                   </div>
-                  <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr]">
-                    <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${itemForm.image_url || "/menu-placeholder-v2.webp"})` }} />
-                    <div className="min-w-0 space-y-2">
-                      <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploadingImage} onChange={(event) => uploadImage(event.target.files?.[0])} className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900" />
-                      <input value={itemForm.image_url} onChange={(event) => { setItemForm({ ...itemForm, image_url: event.target.value }); setItemErrors((current) => ({ ...current, image: undefined })); }} placeholder={copy.imageUrlPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-                      <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
-                    </div>
+                  <div className="space-y-2 p-3">
+                    <MenuImageCropper
+                      currentImageUrl={itemForm.image_url ?? ""}
+                      disabled={uploadingImage || submitting}
+                      copy={{
+                        chooseImage: copy.chooseImage,
+                        adjustImage: copy.adjustImage,
+                        cropTitle: copy.cropTitle,
+                        cropHint: copy.cropHint,
+                        cropAria: copy.cropAria,
+                        zoom: copy.zoom,
+                        zoomOut: copy.zoomOut,
+                        zoomIn: copy.zoomIn,
+                        reset: copy.resetImage,
+                        cancel: copy.cancel,
+                        apply: copy.useImage,
+                        applying: copy.preparingImage,
+                        invalidFile: copy.imageUploadError,
+                        loadError: copy.imageLoadError,
+                        cropError: copy.imageCropError,
+                      }}
+                      onUpload={uploadImage}
+                      onError={handleImageEditorError}
+                      onEditingChange={setImageEditing}
+                    />
+                    <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
                   </div>
                 </div>
                 <label className="block">
@@ -1260,7 +1314,7 @@ export default function MenuPage() {
               )}
             </div>
             <div className="grid gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-[1fr_auto]">
-              <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+              <button disabled={submitting || uploadingImage || imageEditing || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {editingItem ? copy.saveItem : copy.createItem}
               </button>
               {editingItem ? (
