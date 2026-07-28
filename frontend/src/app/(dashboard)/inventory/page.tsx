@@ -653,7 +653,12 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={() => setFiltersOpen((value) => !value)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              aria-expanded={filtersOpen}
+              className={`inline-flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
+                filtersOpen
+                  ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              }`}
             >
               <Filter className="h-4 w-4" />
               {copy.filter}
@@ -696,7 +701,7 @@ export default function InventoryPage() {
           </div>
         )}
 
-        <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
+        <div className={`${filtersOpen ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
             {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
               <button
                 key={status}
