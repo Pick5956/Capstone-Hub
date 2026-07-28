@@ -20,7 +20,7 @@ const statusClass: Record<OrderItemStatus, string> = {
   pending: "bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300",
   cooking: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
   ready: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  served: "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300",
+  served: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
   cancelled: "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300",
 };
 
@@ -157,24 +157,30 @@ export default function CustomerTableOrdersPage() {
             {items.length ? (
               <div className="divide-y divide-gray-200 dark:divide-gray-800">
                 {items.map((item) => (
-                  <div key={item.ID} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-3">
+                  <div key={item.ID} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
+                    <div
+                      role="img"
+                      aria-label={`${item.menu_name}`}
+                      className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                      style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
+                    />
                     <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md bg-gray-100 px-1.5 font-mono text-[12px] font-semibold tabular-nums dark:bg-gray-900">x{item.quantity}</span>
-                        <p className="min-w-0 truncate text-[13px] font-semibold">{item.menu_name}</p>
-                      </div>
+                      <p className="min-w-0 truncate text-[13px] font-semibold">{item.menu_name}</p>
                       {item.selected_options?.map((option) => (
-                        <p key={option.ID} className="ml-9 mt-1 text-[11px] text-gray-500 dark:text-gray-400">{option.group_name}: {option.option_name}</p>
+                        <p key={option.ID} className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{option.group_name}: {option.option_name}</p>
                       ))}
-                      {item.note ? <p className="ml-9 mt-1 text-[11px] text-gray-500 dark:text-gray-400">{copy.note}: {item.note}</p> : null}
-                      <div className="ml-9 mt-2 flex items-center gap-1.5">
+                      {item.note ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{copy.note}: {item.note}</p> : null}
+                      <div className="mt-2 flex items-center gap-1.5">
                         <Clock3 className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
                         <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusClass[item.status]}`}>
                           {customerOrderItemStatusLabel(item.status, language)}
                         </span>
                       </div>
                     </div>
-                    <p className="pt-1 font-mono text-[13px] font-semibold tabular-nums">฿{item.subtotal.toLocaleString()}</p>
+                    <div className="text-right">
+                      <p className="font-mono text-[13px] font-semibold tabular-nums">฿{item.subtotal.toLocaleString()}</p>
+                      <p className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">x{item.quantity}</p>
+                    </div>
                   </div>
                 ))}
               </div>

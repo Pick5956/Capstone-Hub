@@ -43,6 +43,7 @@ func withOrderDetails(db *gorm.DB) *gorm.DB {
 		Preload("Table", operationalTableColumns).
 		Preload("Staff", orderStaffColumns).
 		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.Menu", orderItemMenuColumns).
 		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
 		Preload("Payments", func(db *gorm.DB) *gorm.DB { return db.Order("paid_at asc, id asc") }).
 		Preload("StatusLogs", func(db *gorm.DB) *gorm.DB { return db.Order("changed_at asc, id asc") })
@@ -64,6 +65,10 @@ func operationalTableColumns(db *gorm.DB) *gorm.DB {
 
 func orderStaffColumns(db *gorm.DB) *gorm.DB {
 	return db.Select("id", "first_name", "last_name", "nickname", "profile_image")
+}
+
+func orderItemMenuColumns(db *gorm.DB) *gorm.DB {
+	return db.Select("id", "image_url")
 }
 
 func (r *OrderRepository) Transaction(fn func(tx *OrderRepository) error) error {
@@ -157,6 +162,7 @@ func (r *OrderRepository) FindCustomerOpenOrderByTable(restaurantID, tableID uin
 	err := r.db.
 		Preload("Table", operationalTableColumns).
 		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("created_at asc, id asc") }).
+		Preload("Items.Menu", orderItemMenuColumns).
 		Preload("Items.SelectedOptions", func(db *gorm.DB) *gorm.DB { return db.Order("group_name asc, id asc") }).
 		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
 		Order("opened_at desc").
@@ -535,13 +541,23 @@ func (r *OrderRepository) SaveTable(table *entity.RestaurantTable) error {
 	return r.db.Omit(clause.Associations).Save(table).Error
 }
 
+func hasKitchenQueueItems(items []entity.OrderItem) bool {
+	for _, item := range items {
+		if item.Status == entity.OrderItemStatusCooking || item.Status == entity.OrderItemStatusReady {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error) {
 	var orders []entity.Order
 	err := r.db.
 		Preload("Table", operationalTableColumns).
 		Preload("Items", "status IN ?", []string{entity.OrderItemStatusCooking, entity.OrderItemStatusReady}).
+		Preload("Items.Menu", orderItemMenuColumns).
 		Preload("Items.SelectedOptions").
-		Where("restaurant_id = ? AND status IN ?", restaurantID, []string{entity.OrderStatusSentToKitchen, entity.OrderStatusCooking, entity.OrderStatusReady}).
+		Where("restaurant_id = ? AND status NOT IN ?", restaurantID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
 		Order("opened_at asc, id asc").
 		Find(&orders).Error
 	if err != nil {
@@ -558,18 +574,14 @@ func (r *OrderRepository) KitchenQueue(restaurantID uint) ([]entity.Order, error
 			batches[batch] = append(batches[batch], item)
 		}
 		for batch, items := range batches {
-			hasCooking := false
 			var sentAt *time.Time
 			for index := range items {
-				if items[index].Status == entity.OrderItemStatusCooking {
-					hasCooking = true
-				}
 				if items[index].SentAt != nil && (sentAt == nil || items[index].SentAt.Before(*sentAt)) {
 					value := *items[index].SentAt
 					sentAt = &value
 				}
 			}
-			if !hasCooking {
+			if !hasKitchenQueueItems(items) {
 				continue
 			}
 			ticket := order

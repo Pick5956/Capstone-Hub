@@ -755,9 +755,19 @@ export default function AuthModal({
                     <span className="text-[11px] text-gray-400 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
-                  {/* Google briefly resizes its iframe while initializing. Keep that
-                      third-party reflow from moving the centered modal on slower loads. */}
-                  <div className="flex h-11 overflow-hidden justify-center" ref={googleButtonRef} />
+                  {/* Google briefly resizes and restyles its iframe while initializing or
+                      returning from the account picker. Keep sizing and the visible border
+                      on our wrapper so the button does not jump or lose its outline. */}
+                  <div className="group relative mx-auto h-11 w-full max-w-80 rounded-md">
+                    <div
+                      className="flex h-11 overflow-hidden rounded-md"
+                      ref={googleButtonRef}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-md border border-gray-300 transition-[border-color,box-shadow] group-focus-within:border-orange-500 group-focus-within:ring-2 group-focus-within:ring-orange-500/15 dark:border-gray-700"
+                    />
+                  </div>
                 </>
               )}
             </form>

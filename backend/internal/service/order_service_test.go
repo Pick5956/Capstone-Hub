@@ -68,6 +68,48 @@ func TestOrderStatusFromItemsTreatsAlreadyServedItemsAsComplete(t *testing.T) {
 	}
 }
 
+func TestEffectiveOrderStatusRepairsStaleKitchenAggregate(t *testing.T) {
+	order := &entity.Order{
+		Status: entity.OrderStatusCooking,
+		Items: []entity.OrderItem{
+			{Status: entity.OrderItemStatusReady},
+			{Status: entity.OrderItemStatusReady},
+			{Status: entity.OrderItemStatusCancelled},
+		},
+	}
+
+	if got := effectiveOrderStatus(order); got != entity.OrderStatusReady {
+		t.Fatalf("effective status = %q, want %q", got, entity.OrderStatusReady)
+	}
+	if err := validateOrderReadyForPayment(order); err != nil {
+		t.Fatalf("stale parent status should not block payment when all active items are ready: %v", err)
+	}
+}
+
+func TestEffectiveOrderStatusDoesNotMaskIncompleteOrTerminalOrders(t *testing.T) {
+	incomplete := &entity.Order{
+		Status: entity.OrderStatusCooking,
+		Items: []entity.OrderItem{
+			{Status: entity.OrderItemStatusReady},
+			{Status: entity.OrderItemStatusCooking},
+		},
+	}
+	if got := effectiveOrderStatus(incomplete); got != entity.OrderStatusCooking {
+		t.Fatalf("incomplete effective status = %q, want %q", got, entity.OrderStatusCooking)
+	}
+	if err := validateOrderReadyForPayment(incomplete); err == nil {
+		t.Fatal("incomplete kitchen order should remain blocked from payment")
+	}
+
+	completed := &entity.Order{
+		Status: entity.OrderStatusCompleted,
+		Items:  []entity.OrderItem{{Status: entity.OrderItemStatusServed}},
+	}
+	if got := effectiveOrderStatus(completed); got != entity.OrderStatusCompleted {
+		t.Fatalf("terminal effective status = %q, want %q", got, entity.OrderStatusCompleted)
+	}
+}
+
 func TestNormalizeReceivedAmountRejectsNegativeCash(t *testing.T) {
 	if _, err := normalizeReceivedAmount("cash", -1, 100); err == nil {
 		t.Fatal("negative cash amount should be rejected")
@@ -84,11 +126,52 @@ func TestCanTransitionItem(t *testing.T) {
 	if !canTransitionItem(entity.OrderItemStatusPending, entity.OrderItemStatusCooking) {
 		t.Fatal("pending should transition to cooking")
 	}
+	if !canTransitionItem(entity.OrderItemStatusReady, entity.OrderItemStatusCooking) {
+		t.Fatal("ready should transition back to cooking")
+	}
 	if canTransitionItem(entity.OrderItemStatusReady, entity.OrderItemStatusPending) {
 		t.Fatal("ready should not transition back to pending")
 	}
 	if canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCancelled) {
 		t.Fatal("served should be terminal for item status")
+	}
+}
+
+func TestNormalizeItemCancellationReason(t *testing.T) {
+	got, err := normalizeItemCancellationReason(entity.OrderItemStatusCancelled, "  ของหมด  ")
+	if err != nil {
+		t.Fatalf("valid cancellation reason rejected: %v", err)
+	}
+	if got != "ของหมด" {
+		t.Fatalf("normalized cancellation reason = %q, want %q", got, "ของหมด")
+	}
+
+	for _, reason := range []string{"", "   "} {
+		if _, err := normalizeItemCancellationReason(entity.OrderItemStatusCancelled, reason); err == nil {
+			t.Fatalf("blank cancellation reason %q should be rejected", reason)
+		}
+	}
+
+	if _, err := normalizeItemCancellationReason(
+		entity.OrderItemStatusCancelled,
+		strings.Repeat("ก", 501),
+	); err == nil {
+		t.Fatal("cancellation reason longer than 500 characters should be rejected")
+	}
+
+	if got, err := normalizeItemCancellationReason(entity.OrderItemStatusCooking, "ignored"); err != nil || got != "" {
+		t.Fatalf("non-cancellation transition reason = %q, %v; want empty reason", got, err)
+	}
+}
+
+func TestOrderSubtotalFromItemsExcludesCancelledItems(t *testing.T) {
+	items := []entity.OrderItem{
+		{Subtotal: 120, Status: entity.OrderItemStatusReady},
+		{Subtotal: 80, Status: entity.OrderItemStatusCancelled},
+		{Subtotal: 50, Status: entity.OrderItemStatusCooking},
+	}
+	if got := orderSubtotalFromItems(items); got != 170 {
+		t.Fatalf("order subtotal = %v, want 170", got)
 	}
 }
 
@@ -164,11 +247,11 @@ func TestRecipeComponentCostUsesYield(t *testing.T) {
 	}
 }
 
-func TestValidateOrderReadyForPaymentRequiresEveryActiveItemServed(t *testing.T) {
+func TestValidateOrderReadyForPaymentAcceptsKitchenCompletedItems(t *testing.T) {
 	order := &entity.Order{
-		Status: entity.OrderStatusServed,
+		Status: entity.OrderStatusReady,
 		Items: []entity.OrderItem{
-			{Status: entity.OrderItemStatusServed},
+			{Status: entity.OrderItemStatusReady},
 			{Status: entity.OrderItemStatusPending},
 		},
 	}
@@ -181,11 +264,19 @@ func TestValidateOrderReadyForPaymentRequiresEveryActiveItemServed(t *testing.T)
 	if err := validateOrderReadyForPayment(order); err != nil {
 		t.Fatalf("expected cancelled items to be ignored, got %v", err)
 	}
+
+	order.Status = entity.OrderStatusServed
+	order.Items[0].Status = entity.OrderItemStatusServed
+	if err := validateOrderReadyForPayment(order); err != nil {
+		t.Fatalf("expected legacy served items to remain payable, got %v", err)
+	}
 }
 
-func TestPendingItemReopensServedOrder(t *testing.T) {
-	if got := orderStatusAfterPendingItemAdded(entity.OrderStatusServed); got != entity.OrderStatusOpen {
-		t.Fatalf("served order status after adding pending item = %q, want %q", got, entity.OrderStatusOpen)
+func TestPendingItemReopensKitchenCompletedOrder(t *testing.T) {
+	for _, status := range []string{entity.OrderStatusReady, entity.OrderStatusServed} {
+		if got := orderStatusAfterPendingItemAdded(status); got != entity.OrderStatusOpen {
+			t.Fatalf("%s order status after adding pending item = %q, want %q", status, got, entity.OrderStatusOpen)
+		}
 	}
 	if got := orderStatusAfterPendingItemAdded(entity.OrderStatusCooking); got != entity.OrderStatusCooking {
 		t.Fatalf("cooking order status after adding pending item = %q, want unchanged", got)
@@ -341,6 +432,7 @@ func TestPublicCustomerDTOsOmitSensitiveFields(t *testing.T) {
 	}
 	order.ID = 8
 	order.Items[0].ID = 13
+	order.Items[0].Menu = &entity.MenuItem{ImageURL: "/uploads/menu/rice.webp"}
 	category := &entity.Category{
 		RestaurantID: 9,
 		Name:         "Rice dishes",
@@ -389,5 +481,8 @@ func TestPublicCustomerDTOsOmitSensitiveFields(t *testing.T) {
 	}
 	if !strings.Contains(serialized, `"category":{"ID":21,"name":"Rice dishes"`) {
 		t.Fatalf("public menu DTO omitted its safe primary category: %s", serialized)
+	}
+	if !strings.Contains(serialized, `"image_url":"/uploads/menu/rice.webp"`) {
+		t.Fatalf("public order item DTO omitted its menu image: %s", serialized)
 	}
 }

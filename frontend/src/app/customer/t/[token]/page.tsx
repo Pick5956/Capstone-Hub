@@ -17,6 +17,7 @@ import ThemedSelect from "@/src/components/shared/ThemedSelect";
 type CartItem = CustomerCartItemInput & {
   key: string;
   name: string;
+  image_url: string;
   unit_price: number;
   options_total: number;
   selected_options: { id: number; group: string; name: string; price_delta: number }[];
@@ -283,6 +284,7 @@ export default function CustomerTableOrderPage() {
       key: `${selectedMenu.ID}-${Date.now()}-${Math.random()}`,
       menu_id: selectedMenu.ID,
       name: selectedMenu.name,
+      image_url: selectedMenu.image_url,
       unit_price: selectedMenu.price,
       options_total: selectedOptionsTotal,
       quantity,
@@ -402,7 +404,7 @@ export default function CustomerTableOrderPage() {
               const orderedQuantity = cartMenuQuantities.get(item.ID) ?? 0;
 
               return (
-                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left shadow-sm transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-55 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:hover:-translate-y-0.5">
                   {!item.is_available && (
                     <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                       {copy.soldOut}
@@ -413,8 +415,8 @@ export default function CustomerTableOrderPage() {
                       {copy.added} x{orderedQuantity}
                     </span>
                   )}
-                  <div className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }} aria-label={item.image_url ? `${item.name}` : undefined} />
-                  <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                  <div className="aspect-[4/3] bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }} aria-label={item.image_url ? `${item.name}` : undefined} />
+                  <div className="flex min-w-0 flex-1 flex-col p-3">
                     <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
                     <p className="mt-auto pt-2 text-right font-mono text-[20px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                   </div>
@@ -447,8 +449,8 @@ export default function CustomerTableOrderPage() {
       ) : null}
 
       {summaryOpen && (
-        <div {...summaryBackdrop} className={`${summaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>
-          <div className="fixed left-1/2 top-1/2 w-[calc(100dvw-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2">
+        <div {...summaryBackdrop} className={`${summaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/55`}>
+          <div className="fixed inset-3 m-auto h-fit w-[calc(100dvw-1.5rem)] max-w-lg">
             <div className={`${summaryClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] min-h-0 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
               <div className="shrink-0 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-[16px] font-semibold text-gray-900 dark:text-white">{copy.summaryTitle}</h2>
@@ -456,7 +458,13 @@ export default function CustomerTableOrderPage() {
               </div>
               <div className="min-h-0 flex-1 divide-y divide-gray-200 overflow-y-auto overscroll-contain dark:divide-gray-800">
                 {cart.map((item) => (
-                  <div key={item.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 py-3 text-[13px]">
+                  <div key={item.key} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-[13px] sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
+                    <div
+                      role="img"
+                      aria-label={`${item.name}`}
+                      className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                      style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
+                    />
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       {item.selected_options.map((option) => <p key={option.id} className="mt-0.5 text-[11px] text-gray-500">{option.group}: {option.name}</p>)}
@@ -488,10 +496,10 @@ export default function CustomerTableOrderPage() {
       )}
 
       {selectedMenu && (
-        <div {...menuBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/45 p-3 backdrop-blur-sm`}>
-          <div className="fixed left-1/2 top-1/2 w-[calc(100dvw-1.5rem)] max-w-md -translate-x-1/2 -translate-y-1/2">
+        <div {...menuBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-40 h-dvh w-dvw max-w-full bg-gray-950/55`}>
+          <div className="fixed inset-3 m-auto h-fit w-[calc(100dvw-1.5rem)] max-w-md">
             <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} max-h-[calc(100dvh-1.5rem)] overflow-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-              <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
+              <div className="relative aspect-[4/3] rounded-t-md bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
                 <button type="button" aria-label={copy.close} onClick={closeMenu} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>

@@ -66,6 +66,7 @@ export interface CustomerMenuItem {
 export interface CustomerOrderItem {
   ID: number;
   menu_name: string;
+  image_url: string;
   unit_price: number;
   options_total: number;
   quantity: number;

@@ -37,7 +37,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-kanit), Arial, Helvetica, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: var(--font-kanit), Arial, Helvetica, sans-serif;
 }
 
 body {
@@ -47,7 +47,8 @@ body {
   overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-kanit), Arial, Helvetica, sans-serif;
+  font-kerning: normal;
   margin: 0;
   padding: 0;
 }
@@ -283,23 +284,6 @@ html[data-font-size="extra-large"] {
   }
 }
 
-@keyframes kitchen-ticket-complete {
-  0% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-
-  62% {
-    transform: translateY(0) scale(1.01);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(-12px) scale(0.98);
-    opacity: 0;
-  }
-}
-
 @keyframes kitchen-ticket-success {
   from {
     opacity: 0;
@@ -311,19 +295,50 @@ html[data-font-size="extra-large"] {
 }
 
 @keyframes kitchen-success-icon {
-  0% {
-    transform: translateY(10px) scale(0.72) rotate(-8deg);
+  from {
+    transform: scale(0.88);
     opacity: 0;
   }
 
-  58% {
-    transform: translateY(-3px) scale(1.08) rotate(0deg);
+  to {
+    transform: scale(1);
     opacity: 1;
+  }
+}
+
+@keyframes kitchen-item-complete {
+  from {
+    background-color: transparent;
+  }
+
+  to {
+    background-color: rgb(16 185 129 / 0.16);
+  }
+}
+
+@keyframes kitchen-item-ready-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kitchen-zone-water-ripple {
+  0% {
+    opacity: 0;
+    transform: scale(0.02);
+  }
+
+  18% {
+    opacity: 0.38;
   }
 
   100% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    opacity: 1;
+    opacity: 0;
+    transform: scale(1);
   }
 }
 
@@ -390,7 +405,7 @@ html[data-font-size="extra-large"] {
 }
 
 .motion-overlay {
-  animation: modal-fade-in 180ms ease-out both;
+  animation: modal-fade-in 180ms ease-out;
 }
 
 .motion-overlay-exit {
@@ -398,23 +413,19 @@ html[data-font-size="extra-large"] {
 }
 
 .motion-dialog {
-  animation: dialog-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  will-change: transform, opacity;
+  animation: dialog-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .motion-dialog-exit {
   animation: dialog-exit 160ms cubic-bezier(0.4, 0, 1, 1) both;
-  will-change: transform, opacity;
 }
 
 .motion-dialog-stationary {
-  animation: modal-fade-in 180ms ease-out both;
-  will-change: opacity;
+  animation: modal-fade-in 180ms ease-out;
 }
 
 .motion-dialog-stationary-exit {
   animation: modal-fade-out 160ms ease-in both;
-  will-change: opacity;
 }
 
 .motion-bottom-sheet {
@@ -443,9 +454,31 @@ html[data-font-size="extra-large"] {
   will-change: transform, opacity;
 }
 
-.kitchen-ticket-complete {
-  animation: kitchen-ticket-complete 980ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  will-change: transform, opacity;
+.kitchen-ticket-shell,
+.kitchen-item-shell {
+  grid-template-rows: 1fr;
+}
+
+.kitchen-ticket-shell {
+  transition:
+    grid-template-rows 260ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 180ms ease-in;
+}
+
+.kitchen-ticket-collapse {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.kitchen-item-shell {
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 150ms ease-in;
+}
+
+.kitchen-item-collapse {
+  grid-template-rows: 0fr;
+  opacity: 0;
 }
 
 .kitchen-ticket-success {
@@ -453,7 +486,79 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-success-icon {
-  animation: kitchen-success-icon 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: kitchen-success-icon 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kitchen-item-complete {
+  pointer-events: none;
+  animation: kitchen-item-complete 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.kitchen-item-ready-enter {
+  animation: kitchen-item-ready-enter 160ms ease-out both;
+  will-change: opacity;
+}
+
+.kitchen-zone-ripple {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.kitchen-zone-ripple::before,
+.kitchen-zone-ripple::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.02);
+  animation: kitchen-zone-water-ripple 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.kitchen-zone-ripple::before {
+  background: rgb(255 255 255 / 0.025);
+  box-shadow: 0 0 8px rgb(255 255 255 / 0.08);
+}
+
+.kitchen-zone-ripple::after {
+  border-color: rgb(255 255 255 / 0.16);
+  animation-delay: 45ms;
+  animation-duration: 500ms;
+}
+
+.kitchen-zone-collapse {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 120ms linear,
+    visibility 0s linear 220ms;
+}
+
+.kitchen-zone-collapse-open {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  opacity: 1;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease-out,
+    visibility 0s linear;
+}
+
+.kitchen-zone-collapse-content {
+  transform: translateY(-6px);
+  transition: transform 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.kitchen-zone-collapse-open .kitchen-zone-collapse-content {
+  transform: translateY(0);
+  transition-duration: 240ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ui-press {
@@ -555,15 +660,27 @@ html[data-font-size="extra-large"] {
   .motion-reservation-panel,
   .motion-drawer,
   .motion-drawer-exit,
-  .kitchen-ticket-complete,
   .kitchen-ticket-success,
   .kitchen-success-icon,
+  .kitchen-item-complete,
+  .kitchen-item-ready-enter,
   .themed-select-menu,
   .themed-select-menu-exit,
   .themed-select-option,
   .animate-fade-in,
   .animate-slide-down {
     animation: none !important;
+  }
+
+  .kitchen-zone-ripple {
+    display: none;
+  }
+
+  .kitchen-zone-collapse,
+  .kitchen-zone-collapse-content,
+  .kitchen-ticket-shell,
+  .kitchen-item-shell {
+    transition: none !important;
   }
 
   .ui-press,

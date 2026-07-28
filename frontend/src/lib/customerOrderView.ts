@@ -29,8 +29,8 @@ export function customerOrderItemStatusLabel(status: OrderItemStatus, language: 
   const labels: Record<OrderItemStatus, { th: string; en: string }> = {
     pending: { th: "รับรายการแล้ว", en: "Received" },
     cooking: { th: "กำลังเตรียม", en: "Preparing" },
-    ready: { th: "พร้อมเสิร์ฟ", en: "Ready" },
-    served: { th: "เสิร์ฟแล้ว", en: "Served" },
+    ready: { th: "เสร็จแล้ว", en: "Done" },
+    served: { th: "เสร็จแล้ว", en: "Done" },
     cancelled: { th: "ยกเลิก", en: "Cancelled" },
   };
 

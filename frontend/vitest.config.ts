@@ -18,6 +18,7 @@ export default defineConfig({
       "src/lib/__tests__/invitation.test.ts",
       "src/lib/__tests__/noManualRefreshControls.test.ts",
       "src/lib/__tests__/mediaUrl.test.ts",
+      "src/lib/__tests__/menuImageCrop.test.ts",
       "src/lib/__tests__/authModalMotion.test.ts",
       "src/lib/__tests__/orderNavigation.test.ts",
       "src/lib/__tests__/orderEvents.test.ts",

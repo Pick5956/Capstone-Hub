@@ -125,7 +125,13 @@ export default function PaidReceiptDialog({
                         const item = group.firstItem;
                         return (
                           <div data-receipt-item key={group.key} className="py-3">
-                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                            <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
+                              <div
+                                role="img"
+                                aria-label={`${item.menu_name}`}
+                                className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                                style={{ backgroundImage: `url(${item.menu?.image_url || "/menu-placeholder-v2.webp"})` }}
+                              />
                               <div className="min-w-0">
                                 <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
                                 {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}

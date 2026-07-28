@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Bell, CheckCircle2, Clock3, MapPin, Minus, Plus, Printer, ReceiptText, Search, UtensilsCrossed, WalletCards, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, MapPin, Minus, Plus, Printer, ReceiptText, Search, ShoppingBasket, UtensilsCrossed, WalletCards, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
-import { playBeep } from "@/src/lib/browserAudio";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
@@ -54,17 +53,6 @@ type FulfillmentSection = {
   subtotal: number;
 };
 
-type SentStatusSection = {
-  status: OrderItem["status"];
-  groups: OrderItemGroup[];
-  quantity: number;
-};
-
-type SentFulfillmentSection = {
-  key: "dine_in" | "takeaway";
-  statuses: SentStatusSection[];
-};
-
 function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
   return (["dine_in", "takeaway"] as const)
     .map((key) => {
@@ -77,27 +65,6 @@ function fulfillmentSections(groups: OrderItemGroup[]): FulfillmentSection[] {
       };
     })
     .filter((section) => section.groups.length > 0);
-}
-
-function sentFulfillmentStatusSections(items: OrderItem[]): SentFulfillmentSection[] {
-  const statusOrder = ["ready", "cooking", "served", "cancelled"] as OrderItem["status"][];
-
-  return (["dine_in", "takeaway"] as const)
-    .map((key) => {
-      const fulfillmentItems = items.filter((item) => itemFulfillmentType(item) === key);
-      const statuses = statusOrder
-        .map((status) => {
-          const statusItems = fulfillmentItems.filter((item) => item.status === status);
-          return {
-            status,
-            groups: groupOrderItems(statusItems),
-            quantity: statusItems.reduce((sum, item) => sum + item.quantity, 0),
-          };
-        })
-        .filter((section) => section.quantity > 0);
-      return { key, statuses };
-    })
-    .filter((section) => section.statuses.length > 0);
 }
 
 
@@ -126,6 +93,8 @@ export default function PosOrderDetailPage() {
   const [billViewClosing, setBillViewClosing] = useState(false);
   const [orderSummaryOpen, setOrderSummaryOpen] = useState(false);
   const [orderSummaryClosing, setOrderSummaryClosing] = useState(false);
+  const [currentRoundOpen, setCurrentRoundOpen] = useState(false);
+  const [currentRoundClosing, setCurrentRoundClosing] = useState(false);
 
   const [bill, setBill] = useState<Bill | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "promptpay_qr">("cash");
@@ -138,7 +107,6 @@ export default function PosOrderDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const actionInFlightRef = useRef(false);
-  const readyItemIdsRef = useRef<Set<number>>(new Set());
 
   const copy = language === "th"
     ? {
@@ -157,8 +125,8 @@ export default function PosOrderDetailPage() {
       note: "หมายเหตุ",
       pending: "รอส่งครัว",
       cooking: "ครัวกำลังทำ",
-      ready: "พร้อมเสิร์ฟ",
-      served: "เสิร์ฟแล้ว",
+      ready: "เสร็จแล้ว",
+      served: "เสร็จแล้ว",
       sent_to_kitchen: "ส่งเข้าครัว",
       open: "เปิดอยู่",
       completed: "ปิดแล้ว",
@@ -166,9 +134,7 @@ export default function PosOrderDetailPage() {
       cart: "รายการในออเดอร์",
       emptyCart: "ยังไม่มีรายการ",
       sendKitchen: "ส่งเข้าครัว",
-      markServed: "เสิร์ฟแล้ว",
       close: "ออกบิล / รับเงิน",
-      readyAlert: "มีอาหารพร้อมเสิร์ฟ",
       bill: "บิล",
       service: "Service charge",
       vat: "VAT",
@@ -207,8 +173,8 @@ export default function PosOrderDetailPage() {
       note: "Note",
       pending: "Pending",
       cooking: "Cooking",
-      ready: "Ready",
-      served: "Served",
+      ready: "Done",
+      served: "Done",
       sent_to_kitchen: "Sent",
       open: "Open",
       completed: "Completed",
@@ -216,9 +182,7 @@ export default function PosOrderDetailPage() {
       cart: "Order items",
       emptyCart: "No items yet",
       sendKitchen: "Send to Kitchen",
-      markServed: "Served",
       close: "Bill / Pay",
-      readyAlert: "Food ready to serve",
       bill: "Bill",
       service: "Service charge",
       vat: "VAT",
@@ -256,17 +220,28 @@ export default function PosOrderDetailPage() {
     };
   const orderSummaryCopy = language === "th"
     ? {
-      title: "ตรวจสอบรายการ",
-      pending: "รายการรอบนี้",
-      sent: "รายการที่ส่งแล้ว",
-      empty: "ไม่มีรายการรอส่งครัว",
+      title: "สรุปคำสั่งซื้อ",
+      empty: "ยังไม่มีรายการในคำสั่งซื้อนี้",
       close: "ปิด",
     }
     : {
-      title: "Review order",
-      pending: "Current round",
-      sent: "Sent items",
-      empty: "No items waiting for the kitchen.",
+      title: "Order summary",
+      empty: "There are no items in this order.",
+      close: "Close",
+    };
+  const currentRoundCopy = language === "th"
+    ? {
+      title: "รายการรอบนี้",
+      basket: "ตะกร้า",
+      open: "ดูรายการรอบนี้",
+      empty: "ยังไม่มีรายการรอส่งเข้าครัว",
+      close: "ปิด",
+    }
+    : {
+      title: "Current round",
+      basket: "Cart",
+      open: "Review current round",
+      empty: "No items are waiting to be sent to the kitchen.",
       close: "Close",
     };
 
@@ -279,18 +254,18 @@ export default function PosOrderDetailPage() {
     return language === "th" ? `เลือก ${selected}/${range}` : `${selected}/${range} selected`;
   };
   const isTerminal = order ? terminalStatuses.includes(order.status) : true;
-  const readyItems = order?.items?.filter((item) => item.status === "ready") ?? [];
-  const hasReadyItems = readyItems.length > 0;
   const pendingItems = useMemo(() => (order?.items ?? []).filter((item) => item.status === "pending"), [order?.items]);
   const pendingItemCount = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
   const pendingGroupedOrderItems = useMemo(() => groupOrderItems(pendingItems), [pendingItems]);
-  const sentItems = useMemo(() => (order?.items ?? []).filter((item) => item.status !== "pending"), [order?.items]);
   const pendingFulfillmentSections = useMemo(() => fulfillmentSections(pendingGroupedOrderItems), [pendingGroupedOrderItems]);
-  const sentStatusFulfillmentSections = useMemo(() => sentFulfillmentStatusSections(sentItems), [sentItems]);
+  const activeOrderItems = useMemo(() => (order?.items ?? []).filter((item) => item.status !== "cancelled"), [order?.items]);
+  const orderSummaryGroups = useMemo(() => groupOrderItems(activeOrderItems), [activeOrderItems]);
+  const orderSummarySections = useMemo(() => fulfillmentSections(orderSummaryGroups), [orderSummaryGroups]);
   const pendingFulfillmentSummary = useMemo(() => ({
     quantity: pendingFulfillmentSections.reduce((sum, section) => sum + section.quantity, 0),
     subtotal: pendingFulfillmentSections.reduce((sum, section) => sum + section.subtotal, 0),
   }), [pendingFulfillmentSections]);
+  const showCurrentRoundAction = pendingItemCount > 0 && !isTerminal;
   const menuOrderQuantities = useMemo(() => {
     const quantities = new Map<number, number>();
     for (const item of order?.items ?? []) {
@@ -299,6 +274,8 @@ export default function PosOrderDetailPage() {
     }
     return quantities;
   }, [order?.items]);
+  const menuImageById = useMemo(() => new Map(menuItems.map((item) => [item.ID, item.image_url])), [menuItems]);
+  const orderItemImageUrl = (item: OrderItem) => item.menu?.image_url || menuImageById.get(item.menu_id) || "/menu-placeholder-v2.webp";
 
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -364,6 +341,18 @@ export default function PosOrderDetailPage() {
       setOrderSummaryClosing(false);
     }, 180);
   };
+  const openCurrentRound = () => {
+    setCurrentRoundClosing(false);
+    setCurrentRoundOpen(true);
+  };
+  const closeCurrentRound = () => {
+    if (currentRoundClosing) return;
+    setCurrentRoundClosing(true);
+    window.setTimeout(() => {
+      setCurrentRoundOpen(false);
+      setCurrentRoundClosing(false);
+    }, 180);
+  };
   const menuPickerBackdrop = useBackdropClose(closeMenuPicker);
   const closeBillModal = () => {
     if (billViewClosing) return;
@@ -378,7 +367,8 @@ export default function PosOrderDetailPage() {
   };
   const paymentBackdrop = useBackdropClose(closeBillModal);
   const orderSummaryBackdrop = useBackdropClose(closeOrderSummary);
-  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || orderSummaryOpen);
+  const currentRoundBackdrop = useBackdropClose(closeCurrentRound);
+  const modalScrollLocked = Boolean(selectedMenu || billViewOpen || orderSummaryOpen || currentRoundOpen);
 
   const toggleOption = (groupOptionIds: number[], optionId: number, minSelect: number, maxSelect: number) => {
     setSelectedOptionIds((current) => {
@@ -429,15 +419,6 @@ export default function PosOrderDetailPage() {
     intervalMs: 60_000,
     runImmediately: false,
   });
-
-  useEffect(() => {
-    if (!order?.items) return;
-    const readyIds = new Set(order.items.filter((item) => item.status === "ready").map((item) => item.ID));
-    const hasNewReady = [...readyIds].some((id) => !readyItemIdsRef.current.has(id));
-    if (readyItemIdsRef.current.size && hasNewReady) playBeep(1046);
-    readyItemIdsRef.current = readyIds;
-  }, [order?.items]);
-
 
   useEffect(() => {
     if (!modalScrollLocked) return;
@@ -532,7 +513,7 @@ export default function PosOrderDetailPage() {
     await runAction(async () => {
       const res = await sendOrderToKitchen(order.ID);
       showToast({ title: language === "th" ? "ส่งเข้าครัวแล้ว" : "Sent to kitchen" });
-      closeOrderSummary();
+      closeCurrentRound();
       return res.data;
     });
   };
@@ -551,37 +532,28 @@ export default function PosOrderDetailPage() {
     });
   };
 
-  const statusLabel = (status: string) => (copy as Record<string, string>)[status] ?? status;
-  const statusHeaderClass = (status: OrderItem["status"]) => {
-    if (status === "cooking") return "bg-amber-50 text-amber-900 dark:bg-amber-950/35 dark:text-amber-200";
-    if (status === "ready") return "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-200";
-    if (status === "served") return "bg-gray-50 text-gray-800 dark:bg-gray-900/70 dark:text-gray-200";
-    return "bg-red-50 text-red-900 dark:bg-red-950/35 dark:text-red-200";
-  };
-  const statusBorderClass = (status: OrderItem["status"]) => {
-    if (status === "cooking") return "border-amber-200 dark:border-amber-900/70";
-    if (status === "ready") return "border-emerald-200 dark:border-emerald-900/70";
-    if (status === "served") return "border-gray-200 dark:border-gray-800";
-    return "border-red-200 dark:border-red-900/70";
-  };
-  const statusHeaderIcon = (status: OrderItem["status"]) => {
-    const Icon = status === "cooking" ? Clock3 : status === "ready" ? Bell : status === "cancelled" ? X : CheckCircle2;
-    return <Icon className="h-4 w-4" aria-hidden="true" />;
-  };
-  const renderOrderItemGroup = (group: OrderItemGroup, variant: "card" | "row" = "card") => {
+  const renderOrderItemGroup = (group: OrderItemGroup, variant: "card" | "row" = "card", allowQuantityAdjustment = true) => {
     const item = group.firstItem;
-    const canAdjustQuantity = group.pendingItems.length === group.items.length;
+    const canAdjustQuantity = allowQuantityAdjustment && group.pendingItems.length === group.items.length;
 
     return (
-      <div key={group.key} className={variant === "row" ? "bg-white px-3 py-3 dark:bg-gray-950" : "rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950"}>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div key={group.key} className={variant === "row" ? "bg-white px-3 py-3.5 dark:bg-gray-950 sm:px-4" : "rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950"}>
+        <div className={variant === "row" ? "grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]" : "grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"}>
+          {variant === "row" ? (
+            <div
+              role="img"
+              aria-label={`${language === "th" ? "รูปเมนู" : "Menu image"} ${item.menu_name}`}
+              className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+              style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
+            />
+          ) : null}
           <div className="min-w-0">
             <p className="min-w-0 text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
-            {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}
+            {item.selected_options?.length ? <p className="mt-1 text-[12px] leading-5 text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}
             {item.note ? <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.note}</p> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <p className="mr-auto font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white sm:mr-0">฿{group.subtotal.toLocaleString()}</p>
+          <div className={variant === "row" ? `flex shrink-0 justify-end text-right ${canAdjustQuantity ? "flex-col items-end gap-2" : "items-baseline gap-2"}` : "flex flex-wrap items-center gap-2 sm:justify-end"}>
+            <p data-order-price className={`${variant === "row" ? "" : "mr-auto sm:mr-0"} font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white`}>฿{group.subtotal.toLocaleString()}</p>
             {canAdjustQuantity ? (
               <div className="inline-grid grid-cols-[2.25rem_2.5rem_2.25rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
                 <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, -1); }} aria-label={group.quantity === 1 ? (language === "th" ? "ลบรายการ" : "Remove item") : (language === "th" ? "ลดจำนวน" : "Decrease quantity")} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
@@ -594,22 +566,12 @@ export default function PosOrderDetailPage() {
       </div>
     );
   };
-  const renderSentStatusSection = (section: SentStatusSection) => (
-    <section key={section.status} className={`overflow-hidden rounded-md border ${statusBorderClass(section.status)}`}>
-      <div className={`flex min-h-12 items-center justify-between gap-3 px-3 py-2.5 ${statusHeaderClass(section.status)}`}>
-        <h4 className="inline-flex items-center gap-2 text-[15px] font-bold">
-          {statusHeaderIcon(section.status)}
-          {statusLabel(section.status)}
-        </h4>
-        <span className="font-mono text-[12px] font-bold tabular-nums">{section.quantity} {language === "th" ? "รายการ" : "items"}</span>
+  const renderFlatFulfillmentSection = (section: FulfillmentSection, showLabel: boolean, allowQuantityAdjustment: boolean) => (
+    <section key={section.key}>
+      {showLabel ? <div className="border-y border-gray-100 bg-gray-50 px-4 py-2 text-[12px] font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</div> : null}
+      <div className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-950">
+        {section.groups.map((group) => renderOrderItemGroup(group, "row", allowQuantityAdjustment))}
       </div>
-      <div className="divide-y divide-gray-200 bg-white dark:divide-gray-800 dark:bg-gray-950">{section.groups.map((group) => renderOrderItemGroup(group, "row"))}</div>
-    </section>
-  );
-  const renderFulfillmentSection = (section: FulfillmentSection, tone: "highlight" | "plain" = "plain", showLabel = true) => (
-    <section key={section.key} className="space-y-2">
-      {showLabel ? <div className={`px-1 text-[12px] font-semibold ${tone === "highlight" ? "text-sky-900 dark:text-sky-100" : "text-gray-700 dark:text-gray-200"}`}>{fulfillmentLabel(section.key, language)}</div> : null}
-      <div className="space-y-2">{section.groups.map((group) => renderOrderItemGroup(group))}</div>
     </section>
   );
 
@@ -662,17 +624,12 @@ export default function PosOrderDetailPage() {
 
 
 
-  const headerNoticeCount = (error ? 1 : 0) + (hasReadyItems ? 1 : 0);
-  const posHeaderSpacerClass = headerNoticeCount === 0
-    ? "h-[102px] lg:h-[62px]"
-    : headerNoticeCount === 1
-      ? "h-[152px] lg:h-[112px]"
-      : "h-[202px] lg:h-[162px]";
+  const posHeaderSpacerClass = error ? "h-[152px] lg:h-[112px]" : "h-[102px] lg:h-[62px]";
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 pb-6 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className={`min-h-screen w-full bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
       <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
         <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
@@ -680,8 +637,8 @@ export default function PosOrderDetailPage() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
-              <div className="flex min-w-0 items-center justify-end gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} className="ui-press flex h-10 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-[#dfe3e8] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:flex-none">
+              <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[#dfe3e8] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.tableLabel}</span>
@@ -705,7 +662,7 @@ export default function PosOrderDetailPage() {
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
-                {pendingItemCount === 0 && order.status === "served" ? (
+                {pendingItemCount === 0 && (order.status === "ready" || order.status === "served") ? (
                   <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                     <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
@@ -742,16 +699,11 @@ export default function PosOrderDetailPage() {
             </div>
           )}
         </div>
-        {(error || hasReadyItems) && (
-          <div className="space-y-2 px-3 py-2 sm:px-4 lg:px-5">
-            {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-            {hasReadyItems && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-                {copy.readyAlert}: {readyItems.length}
-              </div>
-            )}
+        {error ? (
+          <div className="px-3 py-2 sm:px-4 lg:px-5">
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>
           </div>
-        )}
+        ) : null}
       </div>
       <div aria-hidden="true" className={posHeaderSpacerClass} />
 
@@ -774,7 +726,7 @@ export default function PosOrderDetailPage() {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className={`ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md border bg-white text-left transition-[border-color,background-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-950 sm:hover:-translate-y-0.5 ${orderedQuantity > 0 ? "border-orange-300 shadow-[0_0_0_1px_rgba(249,115,22,0.18)] hover:bg-orange-50/30 dark:border-orange-700/70 dark:shadow-[0_0_0_1px_rgba(251,146,60,0.18)] dark:hover:bg-orange-900/10" : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10"}`}>
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:hover:-translate-y-0.5">
                     {!item.is_available && (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
@@ -786,11 +738,11 @@ export default function PosOrderDetailPage() {
                       </span>
                     )}
                     <div
-                      className="aspect-[4/3] shrink-0 bg-gray-100 bg-cover bg-center dark:bg-gray-900"
+                      className="aspect-[4/3] shrink-0 bg-transparent bg-cover bg-center"
                       style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                       aria-label={item.image_url ? `${language === "th" ? "รูปเมนู" : "Menu image"} ${item.name}` : undefined}
                     />
-                    <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                    <div className="flex min-w-0 flex-1 flex-col p-3">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                       <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
@@ -808,10 +760,29 @@ export default function PosOrderDetailPage() {
 
 
 
+      {showCurrentRoundAction ? (
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] z-30 lg:left-[calc(var(--sidebar-w)+0.75rem)]">
+          <button
+            type="button"
+            onClick={openCurrentRound}
+            disabled={submitting}
+            aria-label={currentRoundCopy.open}
+            aria-haspopup="dialog"
+              className="ui-press mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-4 rounded-lg border border-orange-800 bg-orange-700 px-4 text-white shadow-md transition-[border-color,background-color,color,opacity] hover:bg-orange-800 disabled:opacity-50 dark:border-orange-600 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-600"
+          >
+            <span className="flex min-w-0 items-center gap-2 text-[14px] font-semibold">
+              <ShoppingBasket className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{currentRoundCopy.basket} · <span className="font-mono tabular-nums">{pendingItemCount}</span> {copy.itemsLabel}</span>
+            </span>
+            <span className="shrink-0 font-mono text-[17px] font-semibold tabular-nums">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</span>
+          </button>
+        </div>
+      ) : null}
+
       {selectedMenu && (
         <div {...menuPickerBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
           <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
-            <div className="relative aspect-[4/3] rounded-t-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
+            <div className="relative aspect-[4/3] rounded-t-md bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
               <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -897,58 +868,74 @@ export default function PosOrderDetailPage() {
         </div>
       )}
       {orderSummaryOpen && order && (
-        <div {...orderSummaryBackdrop} className={`${orderSummaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
-          <div role="dialog" aria-modal="true" aria-labelledby="order-summary-title" className={`${orderSummaryClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
-            <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)} · {order.order_number}</p>
-                  <h2 id="order-summary-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{orderSummaryCopy.title}</h2>
+        <div {...orderSummaryBackdrop} className={`${orderSummaryClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-50 h-dvh w-dvw max-w-full bg-gray-950/55`}>
+            <div role="dialog" aria-modal="true" aria-labelledby="order-summary-title" className={`${orderSummaryClosing ? "motion-dialog-exit" : "motion-dialog"} absolute inset-3 m-auto flex h-fit max-h-[calc(100dvh-1.5rem)] w-[calc(100dvw-1.5rem)] max-w-3xl flex-col overflow-hidden rounded-md bg-transparent shadow-lg shadow-black/20 sm:max-h-[calc(100dvh-2rem)]`}>
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-sky-800 bg-sky-700 pl-4 pr-2.5 dark:border-sky-600 dark:bg-sky-700 sm:pl-5">
+                <h2 id="order-summary-title" className="truncate text-[16px] font-semibold text-white">{orderSummaryCopy.title}</h2>
+                <button
+                  type="button"
+                  onClick={closeOrderSummary}
+                  aria-label={orderSummaryCopy.close}
+                  title={orderSummaryCopy.close}
+                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 dark:text-white"
+                >
+                  <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
+                </button>
+              </div>
+              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-950">
+                {orderSummaryGroups.length
+                  ? orderSummarySections.map((section) => renderFlatFulfillmentSection(
+                    section,
+                    orderSummarySections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway",
+                    false,
+                  ))
+                  : <p className="px-4 py-12 text-center text-[13px] text-gray-500">{orderSummaryCopy.empty}</p>}
+              </div>
+              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                <div className="flex min-w-0 items-baseline justify-end gap-2 text-right">
+                  <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
+                  <p className="font-mono text-[20px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
                 </div>
-                <button type="button" onClick={closeOrderSummary} className="ui-press h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
               </div>
-            </div>
-            <div data-pos-modal-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-4">
-              {pendingGroupedOrderItems.length ? (
-                <section className="rounded-md border border-sky-300 bg-sky-50/70 p-3 shadow-[0_1px_0_rgba(14,165,233,0.08)] ring-1 ring-sky-100 dark:border-sky-800 dark:bg-sky-950/25 dark:ring-sky-900/40">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-[14px] font-bold text-sky-950 dark:text-sky-100">{orderSummaryCopy.pending}</h3>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[13px] font-bold leading-5 text-sky-950 dark:text-sky-100">{pendingFulfillmentSummary.quantity} {language === "th" ? "รายการ" : "items"}</p>
-                      <p className="font-mono text-[15px] font-extrabold leading-5 tabular-nums text-sky-950 dark:text-sky-50">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">{pendingFulfillmentSections.map((section) => renderFulfillmentSection(section, "highlight", pendingFulfillmentSections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway"))}</div>
-                </section>
-              ) : null}
-              {sentItems.length ? (
-                <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-                  <div className="mb-3">
-                    <h3 className="text-[14px] font-bold text-gray-950 dark:text-white">{orderSummaryCopy.sent}</h3>
-                  </div>
-                  <div className="space-y-5">
-                    {sentStatusFulfillmentSections.map((section) => (
-                      <section key={section.key} className="space-y-3.5">
-                        {sentStatusFulfillmentSections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway" ? <h4 className="px-1 text-[13px] font-bold text-gray-800 dark:text-gray-100">{fulfillmentLabel(section.key, language)}</h4> : null}
-                        <div className="space-y-3">{section.statuses.map(renderSentStatusSection)}</div>
-                      </section>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-              {!pendingGroupedOrderItems.length && !sentItems.length ? <p className="px-4 py-12 text-center text-[13px] text-gray-500">{orderSummaryCopy.empty}</p> : null}
-            </div>
-            <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-              <div className="mr-auto min-w-0">
-                <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
-                <p className="font-mono text-[16px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+      {currentRoundOpen && order && (
+        <div {...currentRoundBackdrop} className={`${currentRoundClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-50 h-dvh w-dvw max-w-full bg-gray-950/55`}>
+            <div role="dialog" aria-modal="true" aria-labelledby="current-round-title" className={`${currentRoundClosing ? "motion-dialog-exit" : "motion-dialog"} absolute inset-3 m-auto flex h-fit max-h-[calc(100dvh-1.5rem)] w-[calc(100dvw-1.5rem)] max-w-3xl flex-col overflow-hidden rounded-md bg-transparent shadow-lg shadow-black/20 sm:max-h-[calc(100dvh-2rem)]`}>
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-orange-800 bg-orange-700 pl-4 pr-2.5 dark:border-orange-600 dark:bg-orange-700 sm:pl-5">
+                <h2 id="current-round-title" className="truncate text-[16px] font-semibold text-white">{currentRoundCopy.title}</h2>
+                <button
+                  type="button"
+                  onClick={closeCurrentRound}
+                  aria-label={currentRoundCopy.close}
+                  title={currentRoundCopy.close}
+                  className="ui-press inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 dark:text-white"
+                >
+                  <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
+                </button>
               </div>
-              {pendingItemCount > 0 && <button type="button" disabled={submitting || isTerminal} onClick={() => { void sendToKitchen(); }} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.sendKitchen}</button>}
+              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-950">
+                {pendingGroupedOrderItems.length
+                  ? pendingFulfillmentSections.map((section) => renderFlatFulfillmentSection(
+                    section,
+                    pendingFulfillmentSections.length > 1 || section.key === "takeaway" || order.order_type === "takeaway",
+                    true,
+                  ))
+                  : <p className="px-4 py-12 text-center text-[13px] text-gray-500">{currentRoundCopy.empty}</p>}
               </div>
-            </div>
+              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
+                    <p className="font-mono text-[18px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{pendingFulfillmentSummary.subtotal.toLocaleString()}</p>
+                  </div>
+                  <button type="button" disabled={submitting || isTerminal || pendingItemCount === 0} onClick={() => { void sendToKitchen(); }} className="ui-press inline-flex h-10 items-center gap-2 rounded-lg border border-orange-800 bg-orange-700 px-4 text-[13px] font-semibold text-white transition-[border-color,background-color,opacity] hover:bg-orange-800 disabled:opacity-50 dark:border-orange-600 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-600">
+                    <span>{copy.sendKitchen}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
           </div>
         </div>
       )}
@@ -961,7 +948,13 @@ export default function PosOrderDetailPage() {
           const item = group.firstItem;
           return (
             <div data-bill-item key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+              <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
+                <div
+                  role="img"
+                  aria-label={`${language === "th" ? "รูปเมนู" : "Menu image"} ${item.menu_name}`}
+                  className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                  style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
+                />
                 <div className="min-w-0">
                   <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
                   {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}

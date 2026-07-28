@@ -83,13 +83,13 @@ const SHIFT_METRICS: Record<Language, ShiftMetric[]> = {
   th: [
     { label: "โต๊ะใช้งาน", value: "6", note: "จาก 12 โต๊ะ", tone: "amber" },
     { label: "คิวครัว", value: "4", note: "2 รายการใกล้พร้อม", tone: "orange" },
-    { label: "พร้อมเสิร์ฟ", value: "2", note: "แจ้งหน้าร้านแล้ว", tone: "emerald" },
+    { label: "ครัวทำเสร็จ", value: "2", note: "รอปิดโต๊ะ", tone: "emerald" },
     { label: "รอชำระ", value: "1", note: "โต๊ะ B2", tone: "sky" },
   ],
   en: [
     { label: "Active tables", value: "6", note: "of 12 tables", tone: "amber" },
     { label: "Kitchen queue", value: "4", note: "2 nearly ready", tone: "orange" },
-    { label: "Ready to serve", value: "2", note: "Team notified", tone: "emerald" },
+    { label: "Kitchen completed", value: "2", note: "Awaiting checkout", tone: "emerald" },
     { label: "Awaiting payment", value: "1", note: "Table B2", tone: "sky" },
   ],
 };
@@ -104,54 +104,54 @@ const TABLE_TONES = [
 ];
 
 const TABLES: Record<Language, Array<{ id: string; status: string; tone: string }>> = {
-  th: ["ว่าง", "กำลังทาน", "รอเสิร์ฟ", "เปิดบิล", "รอชำระ", "ครัวกำลังทำ"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
-  en: ["Free", "Dining", "Ready to serve", "Bill opened", "Awaiting payment", "Kitchen cooking"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
+  th: ["ว่าง", "กำลังทาน", "ครัวทำเสร็จ", "เปิดบิล", "รอชำระ", "ครัวกำลังทำ"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
+  en: ["Free", "Dining", "Kitchen completed", "Bill opened", "Awaiting payment", "Kitchen cooking"].map((status, index) => ({ id: ["A1", "A2", "A3", "B1", "B2", "C1"][index], status, tone: TABLE_TONES[index] })),
 };
 
 const KITCHEN_TICKETS: Record<Language, Array<{ table: string; item: string; state: string; dot: string }>> = {
   th: [
     { table: "A2", item: "กะเพราหมูสับ + ไข่ดาว", state: "กำลังทำ", dot: "bg-amber-500" },
-    { table: "A3", item: "ต้มยำกุ้ง, ข้าวเปล่า", state: "พร้อมเสิร์ฟ", dot: "bg-emerald-500" },
+    { table: "A3", item: "ต้มยำกุ้ง, ข้าวเปล่า", state: "เสร็จแล้ว", dot: "bg-emerald-500" },
     { table: "C1", item: "ผัดไทย, ชาไทยเย็น", state: "คิวใหม่", dot: "bg-sky-500" },
   ],
   en: [
     { table: "A2", item: "Minced pork basil + fried egg", state: "Cooking", dot: "bg-amber-500" },
-    { table: "A3", item: "Tom yum goong, steamed rice", state: "Ready to serve", dot: "bg-emerald-500" },
+    { table: "A3", item: "Tom yum goong, steamed rice", state: "Done", dot: "bg-emerald-500" },
     { table: "C1", item: "Pad Thai, Thai iced tea", state: "New ticket", dot: "bg-sky-500" },
   ],
 };
 
 const ACTIVITY: Record<Language, string[]> = {
-  th: ["โต๊ะ A3 พร้อมเสิร์ฟ 2 รายการ", "โต๊ะ B2 ขอปิดบิล", "เพิ่มเมนูให้โต๊ะ A2 แล้ว", "ครัวรับออเดอร์ C1 แล้ว"],
-  en: ["Table A3 has 2 items ready", "Table B2 requested the bill", "Items added to table A2", "Kitchen accepted order C1"],
+  th: ["ครัวทำรายการโต๊ะ A3 เสร็จแล้ว 2 รายการ", "โต๊ะ B2 ขอปิดบิล", "เพิ่มเมนูให้โต๊ะ A2 แล้ว", "ครัวรับออเดอร์ C1 แล้ว"],
+  en: ["Kitchen completed 2 items for table A3", "Table B2 requested the bill", "Items added to table A2", "Kitchen accepted order C1"],
 };
 
 const FLOW_ITEMS: Record<Language, FlowItem[]> = {
   th: [
     { title: "เปิดโต๊ะ", desc: "เลือกโซนและโต๊ะจากหน้าร้าน แล้วเริ่มออเดอร์โดยไม่ต้องจดแยก", icon: Table2 },
     { title: "รับออเดอร์", desc: "เลือกเมนูและจำนวน ตรวจรายการ แล้วส่งเข้าครัวทันที", icon: ShoppingCart },
-    { title: "เข้าครัว", desc: "ครัวเห็นคิวใหม่ กำลังทำ และพร้อมเสิร์ฟจากจอเดียว", icon: ChefHat },
+    { title: "เข้าครัว", desc: "ครัวเห็นคิวใหม่ กำลังทำ และรายการที่เสร็จแล้วจากจอเดียว", icon: ChefHat },
     { title: "ปิดบิล", desc: "ตรวจรายการ รับเงินสดหรือ PromptPay แล้วคืนสถานะโต๊ะ", icon: ReceiptText },
   ],
   en: [
     { title: "Open a table", desc: "Choose a zone and table, then start an order without separate notes.", icon: Table2 },
     { title: "Take orders", desc: "Choose dishes and quantities, review the order, and send it to the kitchen.", icon: ShoppingCart },
-    { title: "Send to kitchen", desc: "Chefs see new, cooking, and ready tickets from one queue.", icon: ChefHat },
+    { title: "Send to kitchen", desc: "Chefs see new, cooking, and completed tickets from one queue.", icon: ChefHat },
     { title: "Close the bill", desc: "Review the order, take cash or PromptPay, and release the table.", icon: ReceiptText },
   ],
 };
 
 const ROLE_ITEMS: Record<Language, RoleItem[]> = {
   th: [
-    { role: "เจ้าของร้าน", title: "เห็นภาพร้านโดยไม่ต้องถามทุกแผนก", desc: "ดูโต๊ะที่ติดคิว อาหารพร้อมเสิร์ฟ และบิลรอชำระจากภาพรวมเดียว", icon: BarChart3 },
+    { role: "เจ้าของร้าน", title: "เห็นภาพร้านโดยไม่ต้องถามทุกแผนก", desc: "ดูโต๊ะที่ติดคิว อาหารที่ครัวทำเสร็จ และบิลรอชำระจากภาพรวมเดียว", icon: BarChart3 },
     { role: "พนักงานหน้าร้าน", title: "รับออเดอร์แล้วรู้ทันทีว่าครัวถึงไหน", desc: "ลดการเดินถามครัวซ้ำ และช่วยให้เสิร์ฟอาหารได้ตรงจังหวะ", icon: UsersRound },
-    { role: "ครัว", title: "จัดลำดับคิวจากรายการที่อ่านง่าย", desc: "แยกคิวใหม่ กำลังทำ และพร้อมเสิร์ฟโดยไม่ต้องไล่กระดาษย้อนหลัง", icon: ChefHat },
+    { role: "ครัว", title: "จัดลำดับคิวจากรายการที่อ่านง่าย", desc: "แยกคิวใหม่ กำลังทำ และเสร็จแล้วโดยไม่ต้องไล่กระดาษย้อนหลัง", icon: ChefHat },
     { role: "แคชเชียร์", title: "ตรวจบิลและรับชำระจากข้อมูลเดียวกัน", desc: "ลดการคีย์ซ้ำตอนปิดบิล และคืนโต๊ะให้รอบถัดไปได้เร็วขึ้น", icon: CreditCard },
   ],
   en: [
-    { role: "Owner", title: "See the whole restaurant without checking every station", desc: "Review delayed tables, ready food, and bills awaiting payment from one overview.", icon: BarChart3 },
+    { role: "Owner", title: "See the whole restaurant without checking every station", desc: "Review delayed tables, completed kitchen items, and bills awaiting payment from one overview.", icon: BarChart3 },
     { role: "Front-of-house staff", title: "Take orders and see kitchen progress immediately", desc: "Spend less time checking with the kitchen and serve each dish at the right moment.", icon: UsersRound },
-    { role: "Kitchen", title: "Prioritize tickets at a glance", desc: "Separate new, cooking, and ready tickets without searching through paper slips.", icon: ChefHat },
+    { role: "Kitchen", title: "Prioritize tickets at a glance", desc: "Separate new, cooking, and completed tickets without searching through paper slips.", icon: ChefHat },
     { role: "Cashier", title: "Review bills and take payment from the same order", desc: "Avoid re-entering details at checkout and release tables sooner.", icon: CreditCard },
   ],
 };

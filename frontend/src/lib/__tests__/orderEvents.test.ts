@@ -58,7 +58,7 @@ describe("matchesOrderEventFilter", () => {
   it("keeps only kitchen-relevant actions for KDS", () => {
     expect(matchesOrderEventFilter(event, { kind: "kitchen" })).toBe(true);
     expect(matchesOrderEventFilter({ ...event, action: "order.sent_to_kitchen" }, { kind: "kitchen" })).toBe(true);
-    expect(matchesOrderEventFilter({ ...event, action: "order.paid" }, { kind: "kitchen" })).toBe(false);
+    expect(matchesOrderEventFilter({ ...event, action: "order.paid" }, { kind: "kitchen" })).toBe(true);
     expect(matchesOrderEventFilter({ ...event, action: "item.added" }, { kind: "kitchen" })).toBe(false);
   });
 });

@@ -110,6 +110,7 @@ type CustomerOrderItemOptionDTO struct {
 type CustomerOrderItemDTO struct {
 	ID              uint                         `json:"ID"`
 	MenuName        string                       `json:"menu_name"`
+	ImageURL        string                       `json:"image_url"`
 	UnitPrice       float64                      `json:"unit_price"`
 	OptionsTotal    float64                      `json:"options_total"`
 	Quantity        int                          `json:"quantity"`
@@ -255,7 +256,6 @@ func (s *CustomerOrderService) SubmitOrder(
 		if fence == geofenceOutside {
 			return ErrOutsideRestaurant
 		}
-
 
 		if strings.TrimSpace(req.Note) != "" && strings.TrimSpace(order.Note) == "" {
 			order.Note = customerNote(req.Note)
@@ -633,6 +633,10 @@ func customerOrderDTO(order *entity.Order) *CustomerOrderDTO {
 	items := make([]CustomerOrderItemDTO, 0, len(order.Items))
 	for _, item := range order.Items {
 		options := make([]CustomerOrderItemOptionDTO, 0, len(item.SelectedOptions))
+		imageURL := ""
+		if item.Menu != nil {
+			imageURL = item.Menu.ImageURL
+		}
 		for _, option := range item.SelectedOptions {
 			options = append(options, CustomerOrderItemOptionDTO{
 				ID:         option.ID,
@@ -644,6 +648,7 @@ func customerOrderDTO(order *entity.Order) *CustomerOrderDTO {
 		items = append(items, CustomerOrderItemDTO{
 			ID:              item.ID,
 			MenuName:        item.MenuName,
+			ImageURL:        imageURL,
 			UnitPrice:       item.UnitPrice,
 			OptionsTotal:    item.OptionsTotal,
 			Quantity:        item.Quantity,

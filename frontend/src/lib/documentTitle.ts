@@ -3,7 +3,7 @@ import type { Language } from "@/src/providers/LanguageProvider";
 const routeTitles: Array<{ match: (pathname: string) => boolean; th: string; en: string }> = [
   { match: (path) => path === "/home", th: "ภาพรวมร้าน", en: "Restaurant overview" },
   { match: (path) => path === "/pos/tables", th: "รับออเดอร์", en: "Take orders" },
-  { match: (path) => path === "/kitchen", th: "คิวครัว", en: "Kitchen queue" },
+  { match: (path) => path === "/kitchen", th: "จอครัว", en: "Kitchen" },
   { match: (path) => path === "/orders", th: "คลังออเดอร์", en: "Order archive" },
   { match: (path) => path === "/menu", th: "จัดการเมนู", en: "Menu management" },
   { match: (path) => path === "/tables", th: "จัดการโต๊ะ", en: "Table management" },
