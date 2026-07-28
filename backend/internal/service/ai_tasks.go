@@ -55,8 +55,9 @@ const (
 	AIToolGetDeadStock                 AIToolName = "get_dead_stock"
 	AIToolGetTopCostIngredients        AIToolName = "get_top_cost_ingredients"
 
-	AIToolGetStoreSummary   AIToolName = "get_store_summary"
-	AIToolGetSalesForPeriod AIToolName = "get_sales_for_period"
+	AIToolGetStoreSummary     AIToolName = "get_store_summary"
+	AIToolGetSalesForPeriod   AIToolName = "get_sales_for_period"
+	AIToolGetMostExpensiveMenu AIToolName = "get_most_expensive_menu"
 )
 
 type AITaskRoute struct {
@@ -94,6 +95,7 @@ type AIToolResult struct {
 	TopCostIngredients  []AICostIngredient
 	StoreSummary        *AIStoreSummary
 	SalesForPeriod      *AISalesPeriod
+	MostExpensiveMenus  []repository.AIMenuPrice
 }
 
 // AIStoreSummary is a backend-composed overview so open-ended "summarize the
@@ -182,7 +184,7 @@ type AISalesTrend struct {
 
 func isSupportedReadOnlyTool(tool AIToolName) bool {
 	switch tool {
-	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients, AIToolGetStoreSummary, AIToolGetSalesForPeriod:
+	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients, AIToolGetStoreSummary, AIToolGetSalesForPeriod, AIToolGetMostExpensiveMenu:
 		return true
 	default:
 		return false
@@ -445,6 +447,8 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 		}
 		period := computeSalesForPeriod(snapshot.SalesDays, snapshot.GeneratedAt, q)
 		return AIToolResult{Tool: tool, SalesForPeriod: &period}, nil
+	case AIToolGetMostExpensiveMenu:
+		return AIToolResult{Tool: tool, MostExpensiveMenus: snapshot.MostExpensiveMenus}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
@@ -990,6 +994,25 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ครับ", p.Label), true
 		}
 		return fmt.Sprintf("ยอดขาย%sคือ %.2f บาท จาก %d ออเดอร์ครับ", p.Label, p.Revenue, p.Orders), true
+	case AIToolGetMostExpensiveMenu:
+		menus := result.MostExpensiveMenus
+		if len(menus) == 0 {
+			return "ยังไม่มีข้อมูลเมนูสำหรับดูราคาครับ", true
+		}
+		top := menus[0]
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("เมนูที่ตั้งราคาสูงที่สุดคือ **%s** ราคา %.2f บาทต่อจานครับ", top.Name, top.Price))
+		if len(menus) > 1 {
+			sb.WriteString("\n\nอันดับถัดไป:")
+			limit := len(menus)
+			if limit > 5 {
+				limit = 5
+			}
+			for i := 1; i < limit; i++ {
+				sb.WriteString(fmt.Sprintf("\n- %s: %.2f บาท", menus[i].Name, menus[i].Price))
+			}
+		}
+		return sb.String(), true
 	}
 	return "", false
 }

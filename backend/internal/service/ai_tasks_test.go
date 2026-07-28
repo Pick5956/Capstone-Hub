@@ -162,7 +162,7 @@ func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
 func TestGetGeminiToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 19 {
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 20 {
 		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -181,6 +181,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 		"get_top_cost_ingredients":        true,
 		"get_store_summary":               true,
 		"get_sales_for_period":            true,
+		"get_most_expensive_menu":         true,
 		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -199,7 +200,7 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 func TestGetGroqToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGroqTools()
-	if len(tools) != 19 {
+	if len(tools) != 20 {
 		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
@@ -218,6 +219,7 @@ func TestGetGroqToolsSchema(t *testing.T) {
 		"get_top_cost_ingredients":        true,
 		"get_store_summary":               true,
 		"get_sales_for_period":            true,
+		"get_most_expensive_menu":         true,
 		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
@@ -653,6 +655,29 @@ func TestSalesForPeriodResolvesTodayAndYesterday(t *testing.T) {
 	answer, ok := localToolAnswer(yRes)
 	if !ok || !strings.Contains(answer, "เมื่อวาน") {
 		t.Fatalf("period answer should mention เมื่อวาน: %q", answer)
+	}
+}
+
+func TestMostExpensiveMenuReportsPriceNotRevenue(t *testing.T) {
+	snapshot := AISnapshot{
+		MostExpensiveMenus: []repository.AIMenuPrice{
+			{Name: "ยำทะเลรวม", Price: 249},
+			{Name: "ต้มยำกุ้ง", Price: 199},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetMostExpensiveMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("most expensive menu should produce an answer")
+	}
+	// Must report the actual per-dish price, not a total revenue figure.
+	for _, expected := range []string{"ยำทะเลรวม", "249.00 บาทต่อจาน"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("most expensive answer missing %q: %s", expected, answer)
+		}
 	}
 }
 

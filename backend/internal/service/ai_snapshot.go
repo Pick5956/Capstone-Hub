@@ -33,6 +33,10 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if err != nil {
 		return AISnapshot{}, err
 	}
+	mostExpensiveMenus, err := s.repo.MostExpensiveMenus(restaurantID)
+	if err != nil {
+		return AISnapshot{}, err
+	}
 	menuMargins, err := s.repo.MenuMargins(restaurantID, since)
 	if err != nil {
 		return AISnapshot{}, err
@@ -84,6 +88,9 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	}
 	if orderTypeBreakdown == nil {
 		orderTypeBreakdown = []repository.AIOrderTypeSummary{}
+	}
+	if mostExpensiveMenus == nil {
+		mostExpensiveMenus = []repository.AIMenuPrice{}
 	}
 	if menuMargins == nil {
 		menuMargins = []repository.AIMenuMarginSummary{}
@@ -163,6 +170,7 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 		SalesDays:          sales,
 		TopMenuItems:       topMenus,
 		TopMenusByRevenue:  topMenusByRevenue,
+		MostExpensiveMenus: mostExpensiveMenus,
 		OrderTypeBreakdown: orderTypeBreakdown,
 		MenuMargins:        menuMargins,
 		LowMarginMenus:    lowMarginMenus,

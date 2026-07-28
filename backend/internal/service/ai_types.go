@@ -37,6 +37,7 @@ type AISnapshot struct {
 	SalesDays          []repository.AISalesSummary       `json:"sales_days"`
 	TopMenuItems       []repository.AIMenuSummary        `json:"top_menu_items"`
 	TopMenusByRevenue  []repository.AIMenuSummary        `json:"top_menus_by_revenue"`
+	MostExpensiveMenus []repository.AIMenuPrice          `json:"most_expensive_menus"`
 	OrderTypeBreakdown []repository.AIOrderTypeSummary   `json:"order_type_breakdown"`
 	MenuMargins       []repository.AIMenuMarginSummary `json:"menu_margins"`
 	LowMarginMenus    []repository.AIMenuMarginSummary `json:"low_margin_menus"`

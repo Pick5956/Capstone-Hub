@@ -40,6 +40,11 @@ type AIPeriodSummary struct {
 	Revenue float64 `json:"revenue"`
 }
 
+type AIMenuPrice struct {
+	Name  string  `json:"name"`
+	Price float64 `json:"price"`
+}
+
 // AIIngredientUsage combines each ingredient's current stock with how much of it
 // was consumed (and its cost) over the analysis window. One query serves the
 // reorder-forecast, dead-stock, and top-cost-ingredient tools.
@@ -99,6 +104,19 @@ func (r *AIRepository) TopMenuItems(restaurantID uint, since time.Time) ([]AIMen
 		Group("menu_name").
 		Order("quantity desc, revenue desc").
 		Limit(10).
+		Scan(&rows).Error
+	return rows, err
+}
+
+// MostExpensiveMenus lists menus by their listed price (highest first). Menu
+// price is not time-windowed, so this reflects the current menu.
+func (r *AIRepository) MostExpensiveMenus(restaurantID uint) ([]AIMenuPrice, error) {
+	var rows []AIMenuPrice
+	err := r.db.Table("menu_items").
+		Select("name, price").
+		Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
+		Order("price desc, name asc").
+		Limit(5).
 		Scan(&rows).Error
 	return rows, err
 }

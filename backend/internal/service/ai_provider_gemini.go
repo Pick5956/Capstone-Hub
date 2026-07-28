@@ -337,6 +337,11 @@ func (s *AIService) getGeminiTools() []geminiTool {
 					Description: "Sales for a specific period named by the user: today, yesterday, last 7 days, or the previous week.",
 					Parameters:  geminiParameters{Type: "OBJECT"},
 				},
+				{
+					Name:        "get_most_expensive_menu",
+					Description: "The menu items with the highest listed price per dish (menu price, not revenue).",
+					Parameters:  geminiParameters{Type: "OBJECT"},
+				},
 			},
 		},
 	}

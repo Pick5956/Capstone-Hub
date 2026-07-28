@@ -381,6 +381,14 @@ func (s *AIService) getGroqTools() []groqTool {
 				Parameters:  groqParameters{Type: "object"},
 			},
 		},
+		{
+			Type: "function",
+			Function: groqFunctionShortcut{
+				Name:        "get_most_expensive_menu",
+				Description: "The menu items with the highest listed price per dish (menu price, not revenue).",
+				Parameters:  groqParameters{Type: "object"},
+			},
+		},
 	}
 }
 
