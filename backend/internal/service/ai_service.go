@@ -225,7 +225,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		}
 		fmt.Printf("[AI Router] Dynamic Out-of-Scope failed: %v. Falling back to static message.\n", err)
 		return &AIAskResponse{
-			Answer:   "เรื่องนี้อยู่นอกขอบเขตที่ผมดูแลในฐานะผู้ช่วยร้านอาหารครับ ผมช่วยได้ในเรื่องยอดขาย วัตถุดิบ กำไรเมนู หรือแคปชั่นโปรโมทร้านครับ",
+			Answer:   "เรื่องนี้อยู่นอกขอบเขตที่ผมดูแลในฐานะผู้ช่วยร้านอาหาร แต่ช่วยได้เรื่องยอดขาย คลังวัตถุดิบ กำไรเมนู หรือแคปชั่นโปรโมทร้านครับ",
 			Intent:   AIIntentOutOfScope,
 			Task:     AITaskOutOfScope,
 			Model:    "local-focus-guard-fallback",
