@@ -4,7 +4,7 @@
 // expires after one shift; nothing is stored server-side.
 
 const CHAT_KEY_PREFIX = "restaurant_ai_chat";
-const CHAT_HISTORY_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
+const CHAT_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type ChatEnvelope<T> = { savedAt?: number; messages?: T[] };
 
