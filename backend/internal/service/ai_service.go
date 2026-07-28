@@ -91,7 +91,7 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 		}
 	}
 
-	if provider == "ollama" || provider == "auto" {
+	if provider == "ollama" {
 		answer, err := s.executeClassifierOllama(question)
 		if err == nil {
 			res, parseErr := parseRouterJSON(answer)
@@ -269,7 +269,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			convOrder = append(convOrder, func() (string, string, error) {
 				return s.askOllamaWithRotation(question, history, nil, true)
 			})
-		default: // auto: Groq → Gemini → Ollama
+		default: // auto: Groq → Gemini (ollama is opt-in only)
 			if len(groqKeys) > 0 {
 				convOrder = append(convOrder, func() (string, string, error) {
 					return s.askGroqWithRotation(question, history, nil, true)
@@ -280,12 +280,9 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 					return s.askGeminiWithRotation(question, history, nil, true)
 				})
 			}
-			convOrder = append(convOrder, func() (string, string, error) {
-				return s.askOllamaWithRotation(question, history, nil, true)
-			})
 		}
 
-		providerNames := []string{"Groq", "Gemini", "Ollama"}
+		providerNames := []string{"Groq", "Gemini"}
 		for i, fn := range convOrder {
 			name := ""
 			if i < len(providerNames) {
@@ -382,7 +379,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		analyticalOrder = append(analyticalOrder, namedAnalytical{"Ollama", func() (string, string, error) {
 			return s.askOllamaWithRotation(question, history, &snapshot, false)
 		}})
-	default: // auto: Groq → Gemini → Ollama
+	default: // auto: Groq → Gemini (ollama is opt-in only)
 		if len(groqKeys) > 0 {
 			analyticalOrder = append(analyticalOrder, namedAnalytical{"Groq", func() (string, string, error) {
 				return s.askGroqWithRotation(question, history, &snapshot, false)
@@ -393,9 +390,6 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 				return s.askGeminiWithRotation(question, history, &snapshot, false)
 			}})
 		}
-		analyticalOrder = append(analyticalOrder, namedAnalytical{"Ollama", func() (string, string, error) {
-			return s.askOllamaWithRotation(question, history, &snapshot, false)
-		}})
 	}
 
 	for _, p := range analyticalOrder {

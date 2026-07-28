@@ -3,10 +3,9 @@ package service
 import "fmt"
 
 // askSecondRoundWithRotation renders a follow-up prompt through the configured
-// provider, falling back Groq -> Gemini -> Ollama in "auto" mode.
+// provider, falling back Groq -> Gemini in "auto" mode (ollama is opt-in only).
 func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, error) {
 	groqKeys := s.getGroqKeys()
-	geminiKeys := s.getGeminiKeys()
 	switch s.getAIProvider() {
 	case "groq":
 		return s.askSecondRoundGroqWithRotation(prompt)
@@ -22,14 +21,7 @@ func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, e
 			}
 			fmt.Printf("[AI Service] Second round Groq failed, trying Gemini fallback: %v\n", err)
 		}
-		if len(geminiKeys) > 0 {
-			answer, model, err := s.askSecondRoundGeminiWithRotation(prompt)
-			if err == nil {
-				return answer, model, nil
-			}
-			fmt.Printf("[AI Service] Second round Gemini failed, trying Ollama fallback: %v\n", err)
-		}
-		return s.executeSecondRoundOllama(prompt)
+		return s.askSecondRoundGeminiWithRotation(prompt)
 	}
 }
 
