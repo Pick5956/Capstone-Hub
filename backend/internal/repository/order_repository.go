@@ -113,7 +113,7 @@ func (r *OrderRepository) FindOrderForUpdate(restaurantID, orderID uint) (*entit
 	return &order, nil
 }
 
-// FindOrderByNumber looks up an order by its human-readable order_number (e.g. "A001")
+// FindOrderByNumber looks up an order by its human-readable order_number (e.g. "20260724-015")
 // instead of the database primary key. This is used when the URL uses order_number.
 func (r *OrderRepository) FindOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
 	var order entity.Order

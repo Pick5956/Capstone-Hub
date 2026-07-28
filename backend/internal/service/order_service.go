@@ -138,7 +138,7 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			RestaurantID:  restaurantID,
 			TableID:       tableID,
 			OrderType:     orderType,
-			OrderNumber:   orderNumberFromIndex(int(count) + 1),
+			OrderNumber:   orderNumberForDate(now.Format("20060102"), int(count)+1),
 			OrderDate:     orderDate,
 			StaffID:       userID,
 			CustomerCount: customerCount,
@@ -214,7 +214,7 @@ func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, erro
 	return s.repo.FindOrder(restaurantID, orderID)
 }
 
-// GetOrderByNumber looks up an order by its human-readable order_number (e.g. "A001").
+// GetOrderByNumber looks up an order by its human-readable order_number (e.g. "20260724-015").
 func (s *OrderService) GetOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
 	if !validOrderNumber(orderNumber) {
 		return nil, errors.New("invalid order number")
@@ -248,10 +248,29 @@ func ValidateOrderListFilters(status, orderDate, paymentStatus, search string) e
 	return nil
 }
 
+// validOrderNumber accepts the current YYYYMMDD-NNN format (e.g. "20260724-015")
+// as well as the legacy letter-prefixed format (e.g. "A001") so that orders
+// created before the format change can still be looked up by number.
 func validOrderNumber(value string) bool {
 	if len(value) < 4 || len(value) > 32 {
 		return false
 	}
+	// Current format: eight leading digits, a dash, then >=3 digits.
+	if strings.IndexByte(value, '-') >= 0 {
+		if len(value) < 12 || value[8] != '-' {
+			return false
+		}
+		for i := 0; i < len(value); i++ {
+			if i == 8 {
+				continue
+			}
+			if value[i] < '0' || value[i] > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	// Legacy format: one or more uppercase letters followed by >=3 digits.
 	split := len(value) - 3
 	for _, char := range value[:split] {
 		if char < 'A' || char > 'Z' {
@@ -649,19 +668,15 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
-func orderNumberFromIndex(index int) string {
+// orderNumberForDate builds a human-readable, internationally recognizable order
+// number in the form YYYYMMDD-NNN (e.g. "20260724-015"). The sequence resets
+// daily (index is the count of that day's orders + 1) and is zero-padded to at
+// least three digits, growing wider past 999.
+func orderNumberForDate(dateCompact string, index int) string {
 	if index < 1 {
 		index = 1
 	}
-	prefixIndex := (index-1)/999 + 1
-	number := ((index - 1) % 999) + 1
-	prefix := ""
-	for prefixIndex > 0 {
-		prefixIndex--
-		prefix = string(rune('A'+prefixIndex%26)) + prefix
-		prefixIndex /= 26
-	}
-	return fmt.Sprintf("%s%03d", prefix, number)
+	return fmt.Sprintf("%s-%03d", dateCompact, index)
 }
 
 func normalizeReceivedAmount(method string, received, grandTotal float64) (float64, error) {

@@ -157,6 +157,90 @@ func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status stri
 	return s.repo.FindTable(restaurantID, updatedID)
 }
 
+// ReserveTable books a table and records the reservation, both in one transaction.
+func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, name string) (*entity.RestaurantTable, error) {
+	phone = strings.TrimSpace(phone)
+	name = strings.TrimSpace(name)
+	if !isValidReservationPhone(phone) {
+		return nil, errors.New("reservation phone is required")
+	}
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if hasOpenOrder {
+			return errors.New("table has an open order")
+		}
+		table.Status = entity.TableStatusReserved
+		table.ReservationName = name
+		table.ReservationPhone = phone
+		if err := tx.UpdateTable(table); err != nil {
+			return err
+		}
+		label := table.DisplayLabel
+		if strings.TrimSpace(label) == "" {
+			label = table.TableNumber
+		}
+		reservation := &entity.Reservation{
+			RestaurantID:     restaurantID,
+			TableID:          tableID,
+			TableLabel:       label,
+			Name:             name,
+			Phone:            phone,
+			Status:           entity.ReservationStatusActive,
+			ReservedByUserID: userID,
+		}
+		if err := tx.CreateReservation(reservation); err != nil {
+			return err
+		}
+		updatedID = table.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindTable(restaurantID, updatedID)
+}
+
+// CancelReservation frees a reserved table and marks its reservation cancelled.
+func (s *TableService) CancelReservation(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
+	return s.releaseReservedTable(restaurantID, tableID, entity.ReservationStatusCancelled)
+}
+
+// SeatReservation frees a reserved table so an order can be opened, marking its
+// reservation as seated (the guests arrived).
+func (s *TableService) SeatReservation(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
+	return s.releaseReservedTable(restaurantID, tableID, entity.ReservationStatusSeated)
+}
+
+func (s *TableService) releaseReservedTable(restaurantID, tableID uint, outcome string) (*entity.RestaurantTable, error) {
+	var updatedID uint
+	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
+		table, err := tx.FindTableForUpdate(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		table.Status = entity.TableStatusFree
+		table.ReservationName = ""
+		table.ReservationPhone = ""
+		if err := tx.UpdateTable(table); err != nil {
+			return err
+		}
+		updatedID = table.ID
+		return tx.ResolveActiveReservation(restaurantID, tableID, outcome)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindTable(restaurantID, updatedID)
+}
+
 func (s *TableService) RegenerateCustomerToken(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
 	var updatedID uint
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {

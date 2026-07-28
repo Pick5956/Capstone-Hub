@@ -77,6 +77,7 @@ export default function OrdersPage() {
         served: "เสิร์ฟแล้ว",
         completed: "เสร็จสิ้น",
         cancelled: "ยกเลิก",
+        cancelledReservation: "ยกเลิกจอง",
         unpaid: "ยังไม่ชำระ",
         paid: "ชำระแล้ว",
         search: "ค้นหาเลขออเดอร์ โต๊ะ โซน หรือลูกค้า",
@@ -91,6 +92,8 @@ export default function OrdersPage() {
         noOrders: "ไม่พบออเดอร์ในเงื่อนไขนี้",
         noOrdersHint: "ลองเปลี่ยนคำค้นหาหรือหมวดหมู่",
         openOrder: "เปิดออเดอร์",
+        noAction: "ไม่มีรายการให้ดำเนินการ",
+        noAmount: "ไม่มียอดต้องชำระ",
         reprintReceipt: "ดูใบเสร็จ / พิมพ์ซ้ำ",
         receiptLoadError: "โหลดใบเสร็จไม่สำเร็จ",
       }
@@ -108,6 +111,7 @@ export default function OrdersPage() {
         served: "Served",
         completed: "Completed",
         cancelled: "Cancelled",
+        cancelledReservation: "Reservation cancelled",
         unpaid: "Unpaid",
         paid: "Paid",
         search: "Search order, table, zone, or customer",
@@ -122,6 +126,8 @@ export default function OrdersPage() {
         noOrders: "No orders match this view",
         noOrdersHint: "Try another search or category.",
         openOrder: "Open order",
+        noAction: "No action available",
+        noAmount: "No amount due",
         reprintReceipt: "View / reprint receipt",
         receiptLoadError: "Could not load the receipt.",
       };
@@ -325,7 +331,13 @@ export default function OrdersPage() {
               </div>
             ) : orders.length ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-900">
-                {orders.map((order, index) => (
+                {orders.map((order, index) => {
+                  // A cancelled order with nothing ordered is a cancelled reservation /
+                  // no-show: there is no order to open, so we relabel it and drop the action.
+                  const isCancelled = order.status === "cancelled";
+                  const isEmptyCancelled = isCancelled && itemCount(order) === 0;
+                  const orderStatusText = isEmptyCancelled ? copy.cancelledReservation : statusLabel(order.status);
+                  return (
                   <div
                     key={order.ID}
                     className={`grid w-full gap-3 px-4 py-3 text-left transition-colors lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center ${
@@ -338,7 +350,7 @@ export default function OrdersPage() {
                       <div className="flex min-w-0 items-center gap-2 lg:justify-center">
                         <p className="truncate font-mono text-[18px] font-semibold text-gray-950 dark:text-white">{order.order_number}</p>
                         <span className={`inline-flex shrink-0 rounded-md border px-2 py-0.5 text-[12px] font-semibold lg:hidden ${statusClass[order.status]}`}>
-                          {statusLabel(order.status)}
+                          {orderStatusText}
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14.4px] text-gray-500 dark:text-gray-400 lg:hidden">
@@ -357,9 +369,14 @@ export default function OrdersPage() {
                       {formatTime(orderTime(order))}
                     </span>
                     <span className={`hidden w-fit justify-self-center rounded-md border px-2 py-1 text-[13.2px] font-semibold lg:inline-flex ${statusClass[order.status]}`}>
-                      {statusLabel(order.status)}
+                      {orderStatusText}
                     </span>
-                    <span className="text-[14.4px] font-semibold text-gray-600 dark:text-gray-300 lg:text-center">{statusLabel(order.payment_status)}</span>
+                    {/* A cancelled order owes nothing, so "unpaid" would falsely imply a pending charge. */}
+                    <span className="text-[14.4px] font-semibold text-gray-600 dark:text-gray-300 lg:text-center">
+                      {isCancelled
+                        ? <span className="text-gray-300 dark:text-gray-600" aria-label={copy.noAmount} title={copy.noAmount}>—</span>
+                        : statusLabel(order.payment_status)}
+                    </span>
                     <span className="text-[14.4px] text-gray-500 lg:text-center">{itemCount(order)} {copy.items}</span>
                     <span className="font-mono text-[16.8px] font-semibold tabular-nums text-gray-950 dark:text-white lg:text-center">
                       {money(order.grand_total || order.total_amount)}
@@ -375,6 +392,14 @@ export default function OrdersPage() {
                           <Printer className="h-4 w-4" aria-hidden="true" />
                           {copy.reprintReceipt}
                         </button>
+                      ) : isEmptyCancelled ? (
+                        <span
+                          className="inline-flex h-10 w-full items-center justify-center text-[16px] font-semibold text-gray-300 dark:text-gray-600 lg:w-auto lg:px-3"
+                          aria-label={copy.noAction}
+                          title={copy.noAction}
+                        >
+                          —
+                        </span>
                       ) : (
                         <Link
                           href={orderPosHref(order)}
@@ -386,7 +411,8 @@ export default function OrdersPage() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex min-h-[360px] items-center justify-center px-4 py-12 text-center">

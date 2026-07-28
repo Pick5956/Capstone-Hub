@@ -73,6 +73,12 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13M19 7v13M8 20h8"/></svg>,
         },
         {
+          label: language === 'th' ? 'ประวัติการจอง' : 'Reservations',
+          href: '/reservations',
+          permission: ['manage_table', 'view_tables', 'take_order'],
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>,
+        },
+        {
           label: language === 'th' ? 'คลังออเดอร์' : 'Order archive',
           href: '/orders',
           permission: ['view_orders', 'take_order'],

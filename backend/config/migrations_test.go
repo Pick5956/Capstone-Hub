@@ -65,6 +65,7 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 	expectedByVersion := map[int64]string{
 		3: "93f62e8ae2c047002f2e9ce2aa18393e5fd69451c9f99cdebb897da0a27794d9",
 		4: "54e77aad004fbfea627460ce1142c09f4135346a7bf045887d8f85f032b689d9",
+		5: "9a0caa9b4098c2671bc08d521de190e2c56e0a4347f9053badf8aa37f132f636",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
