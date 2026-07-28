@@ -50,9 +50,6 @@ type starterIngredient struct {
 	Name                    string
 	SKU                     string
 	Unit                    string
-	BaseUnit                string
-	PurchaseUnitDefault     string
-	ConversionFactorDefault float64
 	Stock                   float64
 	MinStock                float64
 	CostPerUnit             float64
@@ -123,15 +120,15 @@ var restaurantTypeStarterMockups = map[string]starterMockupData{
 	"ร้านอาหาร": {
 		Ingredients: map[string][]starterIngredient{
 			"เนื้อสัตว์": {
-				{Name: "เนื้อหมู", SKU: "ING-PORK", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 15000, MinStock: 2000, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
-				{Name: "เนื้อไก่", SKU: "ING-CHICKEN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
+				{Name: "เนื้อหมู", SKU: "ING-PORK", Unit: "กรัม", Stock: 15000, MinStock: 2000, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
+				{Name: "เนื้อไก่", SKU: "ING-CHICKEN", Unit: "กรัม", Stock: 12000, MinStock: 2000, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
 			},
 			"ผัก": {
-				{Name: "ใบกะเพรา", SKU: "ING-BASIL", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 2500, MinStock: 400, CostPerUnit: 0.05, YieldPercent: 85, StorageType: "chilled"},
-				{Name: "ผักคะน้า", SKU: "ING-KALE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 6000, MinStock: 1000, CostPerUnit: 0.045, YieldPercent: 85, StorageType: "chilled"},
+				{Name: "ใบกะเพรา", SKU: "ING-BASIL", Unit: "กรัม", Stock: 2500, MinStock: 400, CostPerUnit: 0.05, YieldPercent: 85, StorageType: "chilled"},
+				{Name: "ผักคะน้า", SKU: "ING-KALE", Unit: "กรัม", Stock: 6000, MinStock: 1000, CostPerUnit: 0.045, YieldPercent: 85, StorageType: "chilled"},
 			},
 			"เครื่องปรุง": {
-				{Name: "น้ำปลา", SKU: "ING-FISH-SAUCE", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ขวด", ConversionFactorDefault: 700, Stock: 7000, MinStock: 1400, CostPerUnit: 0.04, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "น้ำปลา", SKU: "ING-FISH-SAUCE", Unit: "มิลลิลิตร", Stock: 7000, MinStock: 1400, CostPerUnit: 0.04, YieldPercent: 100, StorageType: "room_temp"},
 			},
 		},
 		MenuItems: map[string][]starterMenuItem{
@@ -147,13 +144,13 @@ var restaurantTypeStarterMockups = map[string]starterMockupData{
 	"คาเฟ่": {
 		Ingredients: map[string][]starterIngredient{
 			"เมล็ดกาแฟ": {
-				{Name: "เมล็ดกาแฟคั่วกลาง", SKU: "ING-COFFEE-BEAN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 5000, MinStock: 1000, CostPerUnit: 0.55, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "เมล็ดกาแฟคั่วกลาง", SKU: "ING-COFFEE-BEAN", Unit: "กรัม", Stock: 5000, MinStock: 1000, CostPerUnit: 0.55, YieldPercent: 100, StorageType: "room_temp"},
 			},
 			"นมและครีม": {
-				{Name: "นมสด", SKU: "ING-MILK", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ลิตร", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.055, YieldPercent: 100, StorageType: "chilled"},
+				{Name: "นมสด", SKU: "ING-MILK", Unit: "มิลลิลิตร", Stock: 12000, MinStock: 2000, CostPerUnit: 0.055, YieldPercent: 100, StorageType: "chilled"},
 			},
 			"ไซรัป": {
-				{Name: "ไซรัปวานิลลา", SKU: "ING-VANILLA-SYRUP", Unit: "มิลลิลิตร", BaseUnit: "มิลลิลิตร", PurchaseUnitDefault: "ขวด", ConversionFactorDefault: 750, Stock: 3000, MinStock: 750, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "ไซรัปวานิลลา", SKU: "ING-VANILLA-SYRUP", Unit: "มิลลิลิตร", Stock: 3000, MinStock: 750, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "room_temp"},
 			},
 		},
 		MenuItems: map[string][]starterMenuItem{
@@ -169,11 +166,11 @@ var restaurantTypeStarterMockups = map[string]starterMockupData{
 	"ชาบู/ปิ้งย่าง": {
 		Ingredients: map[string][]starterIngredient{
 			"เนื้อสัตว์": {
-				{Name: "หมูสไลซ์", SKU: "ING-PORK-SLICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 20000, MinStock: 3000, CostPerUnit: 0.22, YieldPercent: 100, StorageType: "frozen"},
-				{Name: "เนื้อวัวสไลซ์", SKU: "ING-BEEF-SLICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.48, YieldPercent: 100, StorageType: "frozen"},
+				{Name: "หมูสไลซ์", SKU: "ING-PORK-SLICE", Unit: "กรัม", Stock: 20000, MinStock: 3000, CostPerUnit: 0.22, YieldPercent: 100, StorageType: "frozen"},
+				{Name: "เนื้อวัวสไลซ์", SKU: "ING-BEEF-SLICE", Unit: "กรัม", Stock: 12000, MinStock: 2000, CostPerUnit: 0.48, YieldPercent: 100, StorageType: "frozen"},
 			},
 			"ผักสด": {
-				{Name: "ผักกาดขาว", SKU: "ING-NAPA", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 8000, MinStock: 1500, CostPerUnit: 0.035, YieldPercent: 85, StorageType: "chilled"},
+				{Name: "ผักกาดขาว", SKU: "ING-NAPA", Unit: "กรัม", Stock: 8000, MinStock: 1500, CostPerUnit: 0.035, YieldPercent: 85, StorageType: "chilled"},
 			},
 		},
 		MenuItems: map[string][]starterMenuItem{
@@ -186,11 +183,11 @@ var restaurantTypeStarterMockups = map[string]starterMockupData{
 	"เดลิเวอรี": {
 		Ingredients: map[string][]starterIngredient{
 			"วัตถุดิบหลัก": {
-				{Name: "ข้าวหอมมะลิ", SKU: "ING-RICE", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระสอบ", ConversionFactorDefault: 15000, Stock: 45000, MinStock: 10000, CostPerUnit: 0.035, YieldPercent: 100, StorageType: "room_temp"},
-				{Name: "เนื้อไก่", SKU: "ING-DELIVERY-CHICKEN", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 15000, MinStock: 2500, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
+				{Name: "ข้าวหอมมะลิ", SKU: "ING-RICE", Unit: "กรัม", Stock: 45000, MinStock: 10000, CostPerUnit: 0.035, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "เนื้อไก่", SKU: "ING-DELIVERY-CHICKEN", Unit: "กรัม", Stock: 15000, MinStock: 2500, CostPerUnit: 0.09, YieldPercent: 95, StorageType: "chilled"},
 			},
 			"บรรจุภัณฑ์": {
-				{Name: "กล่องอาหาร", SKU: "PACK-BOX", Unit: "ใบ", BaseUnit: "ใบ", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 50, Stock: 500, MinStock: 100, CostPerUnit: 2.5, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "กล่องอาหาร", SKU: "PACK-BOX", Unit: "ใบ", Stock: 500, MinStock: 100, CostPerUnit: 2.5, YieldPercent: 100, StorageType: "room_temp"},
 			},
 		},
 		MenuItems: map[string][]starterMenuItem{
@@ -206,11 +203,11 @@ var restaurantTypeStarterMockups = map[string]starterMockupData{
 	"ฟู้ดทรัค": {
 		Ingredients: map[string][]starterIngredient{
 			"วัตถุดิบหลัก": {
-				{Name: "ขนมปังเบอร์เกอร์", SKU: "ING-BURGER-BUN", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 12, Stock: 120, MinStock: 24, CostPerUnit: 8, YieldPercent: 100, StorageType: "room_temp"},
-				{Name: "หมูบด", SKU: "ING-GROUND-PORK", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 10000, MinStock: 1500, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
+				{Name: "ขนมปังเบอร์เกอร์", SKU: "ING-BURGER-BUN", Unit: "ชิ้น", Stock: 120, MinStock: 24, CostPerUnit: 8, YieldPercent: 100, StorageType: "room_temp"},
+				{Name: "หมูบด", SKU: "ING-GROUND-PORK", Unit: "กรัม", Stock: 10000, MinStock: 1500, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "chilled"},
 			},
 			"ซอสและท็อปปิ้ง": {
-				{Name: "ชีสแผ่น", SKU: "ING-CHEESE", Unit: "แผ่น", BaseUnit: "แผ่น", PurchaseUnitDefault: "แพ็ก", ConversionFactorDefault: 20, Stock: 100, MinStock: 20, CostPerUnit: 5.5, YieldPercent: 100, StorageType: "chilled"},
+				{Name: "ชีสแผ่น", SKU: "ING-CHEESE", Unit: "แผ่น", Stock: 100, MinStock: 20, CostPerUnit: 5.5, YieldPercent: 100, StorageType: "chilled"},
 			},
 		},
 		MenuItems: map[string][]starterMenuItem{
