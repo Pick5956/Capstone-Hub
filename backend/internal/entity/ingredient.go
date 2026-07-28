@@ -20,9 +20,6 @@ type Ingredient struct {
 	CategoryID              *uint   `json:"category_id" gorm:"index"`
 	ImageURL                string  `json:"image_url"`
 	Unit                    string  `json:"unit" gorm:"not null"`
-	BaseUnit                string  `json:"base_unit"`
-	PurchaseUnitDefault     string  `json:"purchase_unit_default"`
-	ConversionFactorDefault float64 `json:"conversion_factor_default" gorm:"default:1"`
 	Stock                   float64 `json:"stock" gorm:"default:0"`
 	MinStock                float64 `json:"min_stock" gorm:"default:0"`
 	CostPerUnit             float64 `json:"cost_per_unit" gorm:"default:0"`

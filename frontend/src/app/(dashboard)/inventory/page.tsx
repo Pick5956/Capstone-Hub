@@ -152,11 +152,9 @@ function buildCopy(language: "th" | "en") {
         quickActions: "การจัดการเร็ว",
         sku: "SKU",
         category: "หมวดหมู่",
-        stockUnit: "หน่วยสต็อก",
-        baseUnit: "หน่วยฐาน",
-        purchaseUnitDefault: "หน่วยซื้อหลัก",
-        conversionFactorDefault: "อัตราแปลง",
+        stockUnit: "หน่วย",
         yieldPercent: "Yield %",
+        yieldHint: "% ของวัตถุดิบที่ใช้ได้จริงหลังเตรียม/หั่น เช่น 80% = มีของเสีย 20% ระบบจะคิดต้นทุนเผื่อส่วนที่เสียให้อัตโนมัติ",
         storageType: "ประเภทการเก็บ",
         imageUrl: "ลิงก์รูปภาพ",
         uncategorized: "ยังไม่จัดหมวด",
@@ -244,11 +242,9 @@ function buildCopy(language: "th" | "en") {
         quickActions: "Quick actions",
         sku: "SKU",
         category: "Category",
-        stockUnit: "Stock unit",
-        baseUnit: "Base unit",
-        purchaseUnitDefault: "Default purchase unit",
-        conversionFactorDefault: "Conversion factor",
+        stockUnit: "Unit",
         yieldPercent: "Yield %",
+        yieldHint: "The share of the ingredient usable after prep/trim. e.g. 80% means 20% waste — the system adds that waste into the cost automatically.",
         storageType: "Storage type",
         imageUrl: "Image URL",
         uncategorized: "Uncategorized",
@@ -434,9 +430,6 @@ export default function InventoryPage() {
       category_id: item.category_id ?? 0,
       image_url: item.image_url ?? "",
       unit: item.unit,
-      base_unit: item.base_unit ?? item.unit,
-      purchase_unit_default: item.purchase_unit_default ?? item.unit,
-      conversion_factor_default: item.conversion_factor_default ?? 1,
       stock: item.stock,
       min_stock: item.min_stock,
       cost_per_unit: item.cost_per_unit,
@@ -991,7 +984,7 @@ export default function InventoryPage() {
                                   {copy.sku} {item.sku || "—"} • {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {copy.stockUnit} {item.unit} • {copy.baseUnit} {item.base_unit ?? item.unit} • {copy.costPerUnit}{" "}
+                                  {copy.stockUnit} {item.unit} • {copy.costPerUnit}{" "}
                                   {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
                                 </p>
                               </div>
@@ -1167,38 +1160,8 @@ export default function InventoryPage() {
                     <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
                     <ThemedSelect
                       value={form.unit}
-                      onChange={(value) =>
-                        setForm((current) => {
-                          const nextUnit = value;
-                          const nextBaseUnit = current.base_unit ? current.base_unit : nextUnit;
-                          const nextPurchaseUnit = current.purchase_unit_default ? current.purchase_unit_default : nextUnit;
-                          return {
-                            ...current,
-                            unit: nextUnit,
-                            base_unit: nextBaseUnit,
-                            purchase_unit_default: nextPurchaseUnit,
-                          };
-                        })
-                      }
-                      options={unitOptions}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.baseUnit}</label>
-                    <ThemedSelect
-                      value={form.base_unit ?? form.unit}
-                      onChange={(value) => setForm((current) => ({ ...current, base_unit: value }))}
-                      options={unitOptions}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.purchaseUnitDefault}</label>
-                    <ThemedSelect
-                      value={form.purchase_unit_default ?? form.unit}
-                      onChange={(value) => setForm((current) => ({ ...current, purchase_unit_default: value }))}
-                      options={unitOptions}
+                      onChange={(value) => setForm((current) => ({ ...current, unit: value }))}
+                      options={!form.unit || UNITS.includes(form.unit) ? unitOptions : [{ value: form.unit, label: form.unit }, ...unitOptions]}
                     />
                   </div>
                   {!editingItem ? (
@@ -1246,26 +1209,24 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {copy.conversionFactorDefault}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={form.conversion_factor_default ?? 1}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          conversion_factor_default: parseFloat(event.target.value) || 1,
-                        }))
-                      }
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
                       {copy.yieldPercent}
+                      <span className="group relative inline-flex">
+                        <span
+                          tabIndex={0}
+                          role="button"
+                          aria-label={copy.yieldHint}
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold leading-none text-slate-400 outline-none transition-colors hover:border-orange-400 hover:text-orange-500 focus-visible:border-orange-400 focus-visible:text-orange-500 dark:border-slate-600 dark:text-slate-500"
+                        >
+                          i
+                        </span>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute left-0 top-6 z-50 w-60 rounded-md border border-gray-200 bg-white px-3 py-2 text-[11px] font-normal leading-relaxed text-slate-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300"
+                        >
+                          {copy.yieldHint}
+                        </span>
+                      </span>
                     </label>
                     <input
                       type="number"

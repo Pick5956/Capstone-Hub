@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
 export type ThemedSelectOption = {
@@ -31,6 +32,7 @@ export default function ThemedSelect({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, width: 0, maxHeight: 256 });
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const buttonId = useId();
   const listboxId = useId();
@@ -114,7 +116,8 @@ export default function ThemedSelect({
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) closeMenu();
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -207,13 +210,14 @@ export default function ThemedSelect({
         </svg>
       </button>
 
-      {renderMenu && !disabled && (
+      {renderMenu && !disabled && createPortal(
         <div
+          ref={menuRef}
           id={listboxId}
           role="listbox"
           aria-labelledby={buttonId}
-          className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed z-[var(--z-dropdown)] overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
-          style={{ left: menuPosition.left, top: menuPosition.top, width: menuPosition.width, maxHeight: menuPosition.maxHeight }}
+          className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
+          style={{ left: menuPosition.left, top: menuPosition.top, width: menuPosition.width, maxHeight: menuPosition.maxHeight, zIndex: 65 }}
         >
           {options.map((option, optionIndex) => {
             const active = option.value === value;
@@ -259,7 +263,8 @@ export default function ThemedSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
