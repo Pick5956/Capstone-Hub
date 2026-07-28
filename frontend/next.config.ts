@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   allowedDevOrigins: ["dishy.pro", "www.dishy.pro"],
+  experimental: {
+    // The built-in Next MCP writes .next/dev/logs/next-development.log.
+    // Project tooling keeps runtime logs in the root logs/ directory instead.
+    mcpServer: false,
+  },
   images: {
     remotePatterns: [
       {

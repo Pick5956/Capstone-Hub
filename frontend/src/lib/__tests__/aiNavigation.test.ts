@@ -23,6 +23,17 @@ describe("resolveNavigationRequest navigation guardrails", () => {
     });
   });
 
+  it("uses the compact kitchen label in Thai navigation responses", () => {
+    const resolution = resolveNavigationRequest("พาไปหน้าจอครัว", ownerMembership, "th", "/home");
+
+    expect(resolution).toMatchObject({
+      kind: "navigate",
+      href: "/kitchen",
+      label: "จอครัว",
+      alreadyThere: false,
+    });
+  });
+
   it.each(["menu", "what does the menu page do?", "show menu margin analysis"])(
     "does not navigate for a mention without a navigation command: %s",
     (input) => {

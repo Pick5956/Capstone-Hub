@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Image, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -49,10 +48,6 @@ export default function TableFormScreen() {
   const isEditing = Number.isFinite(editingId) && editingId !== null;
   const canManage = can(activeMembership, 'manage_table');
   const insets = useSafeAreaInsets();
-  const keyboard = useAnimatedKeyboard();
-  const footerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -Math.max(keyboard.height.value - insets.bottom, 0) }],
-  }));
 
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [zones, setZones] = useState<TableZone[]>([]);
@@ -63,6 +58,7 @@ export default function TableFormScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'bulk' | 'delete' | 'qr' | null>(null);
 
   const editingTable = useMemo(
     () => (isEditing ? tables.find((table) => table.ID === editingId) ?? null : null),
@@ -167,59 +163,34 @@ export default function TableFormScreen() {
 
   async function saveTable() {
     if (!editingTable && Math.max(1, toInt(form.count, 1)) > 1) {
-      Alert.alert('สร้างโต๊ะเป็นชุด?', 'ระบบจะเพิ่มโต๊ะหลายรายการตามจำนวนที่ตั้งไว้และอัปเดตผังโต๊ะทันที', [
-        { text: 'ยกเลิก', style: 'cancel' },
-        { text: 'ยืนยันสร้างโต๊ะ', onPress: persist },
-      ]);
+      if (confirmAction !== 'bulk') {
+        setConfirmAction('bulk');
+        setFormError('ตรวจจำนวนและตัวอย่างเลขโต๊ะ แล้วกดยืนยันสร้างโต๊ะอีกครั้ง');
+        return;
+      }
+      setConfirmAction(null);
+      await persist();
       return;
     }
     await persist();
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!editingTable) return;
-    Alert.alert('ยืนยันการลบ', `ต้องการลบโต๊ะ ${editingTable.display_label || editingTable.table_number} ใช่ไหม?`, [
-      { text: 'ยกเลิก', style: 'cancel' },
-      {
-        text: 'ลบ',
-        style: 'destructive',
-        onPress: async () => {
-          setSubmitting(true);
-          setFormError(null);
-          try {
-            await deleteTable(editingTable.ID);
-            router.replace('/table-management' as never);
-          } catch (err) {
-            setFormError(err instanceof Error ? err.message : 'ลบโต๊ะไม่สำเร็จ');
-          } finally {
-            setSubmitting(false);
-          }
-        },
-      },
-    ]);
+    if (confirmAction !== 'delete') { setConfirmAction('delete'); setFormError('กดยืนยันอีกครั้งเพื่อลบโต๊ะนี้'); return; }
+    setSubmitting(true); setFormError(null);
+    try { await deleteTable(editingTable.ID); router.replace('/table-management' as never); }
+    catch (err) { setFormError(err instanceof Error ? err.message : 'ลบโต๊ะไม่สำเร็จ'); }
+    finally { setSubmitting(false); }
   }
 
-  function regenerateCustomerQr() {
+  async function regenerateCustomerQr() {
     if (!editingTable) return;
-    Alert.alert('สร้าง QR โต๊ะนี้ใหม่?', 'ลิงก์และ QR เดิมจะใช้ไม่ได้ทันที ลูกค้าที่เปิดจาก QR เก่าจะต้องสแกน QR ใหม่', [
-      { text: 'ยกเลิก', style: 'cancel' },
-      {
-        text: 'สร้าง QR ใหม่',
-        style: 'destructive',
-        onPress: async () => {
-          setSubmitting(true);
-          setFormError(null);
-          try {
-            const updated = await regenerateTableCustomerToken(editingTable.ID);
-            setTables((current) => current.map((table) => (table.ID === updated.ID ? updated : table)));
-          } catch (err) {
-            setFormError(err instanceof Error ? err.message : 'สร้าง QR ใหม่ไม่สำเร็จ');
-          } finally {
-            setSubmitting(false);
-          }
-        },
-      },
-    ]);
+    if (confirmAction !== 'qr') { setConfirmAction('qr'); setFormError('กดยืนยันอีกครั้งเพื่อสร้าง QR ใหม่ ลิงก์เดิมจะใช้ไม่ได้ทันที'); return; }
+    setSubmitting(true); setFormError(null);
+    try { const updated = await regenerateTableCustomerToken(editingTable.ID); setTables((current) => current.map((table) => (table.ID === updated.ID ? updated : table))); setConfirmAction(null); }
+    catch (err) { setFormError(err instanceof Error ? err.message : 'สร้าง QR ใหม่ไม่สำเร็จ'); }
+    finally { setSubmitting(false); }
   }
 
   async function shareCustomerLink() {
@@ -238,7 +209,7 @@ export default function TableFormScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.canvas }}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="interactive"
@@ -349,7 +320,7 @@ export default function TableFormScreen() {
               <Text style={layout.primaryButtonText}>เปิดหน้าเมนูลูกค้า</Text>
             </Pressable>
             <Pressable onPress={regenerateCustomerQr} style={layout.secondaryButton}>
-              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>สร้าง QR ใหม่</Text>
+              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'qr' ? 'ยืนยันสร้าง QR ใหม่' : 'สร้าง QR ใหม่'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -359,15 +330,14 @@ export default function TableFormScreen() {
             <Text selectable style={typeScale.cardTitle}>การลบโต๊ะ</Text>
             <Text selectable style={[typeScale.caption, { color: colors.muted }]}>ลบเฉพาะเมื่อโต๊ะนี้ไม่ได้ใช้งานแล้ว</Text>
             <Pressable onPress={confirmDelete} style={layout.secondaryButton}>
-              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>ลบโต๊ะ</Text>
+              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'delete' ? 'ยืนยันลบโต๊ะ' : 'ลบโต๊ะ'}</Text>
             </Pressable>
           </View>
         ) : null}
       </ScrollView>
 
-      <Animated.View
-        style={[
-          {
+      <View
+        style={{
             position: 'absolute',
             left: 0,
             right: 0,
@@ -378,17 +348,15 @@ export default function TableFormScreen() {
             backgroundColor: colors.canvas,
             padding: 16,
             paddingBottom: Math.max(insets.bottom, 12) + 10,
-          },
-          footerStyle,
-        ]}
+          }}
       >
         {formError ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{formError}</Text> : null}
         <Pressable disabled={!canManage || submitting || (isEditing && !editingTable)} onPress={saveTable} style={[layout.primaryButton, (!canManage || submitting || (isEditing && !editingTable)) && { opacity: 0.65 }]}>
           <Text style={layout.primaryButtonText}>
-            {submitting ? 'กำลังบันทึก...' : editingTable ? 'บันทึกโต๊ะ' : 'เพิ่มโต๊ะ'}
+            {submitting ? 'กำลังบันทึก...' : confirmAction === 'bulk' ? 'ยืนยันสร้างโต๊ะ' : editingTable ? 'บันทึกโต๊ะ' : 'เพิ่มโต๊ะ'}
           </Text>
         </Pressable>
-      </Animated.View>
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }

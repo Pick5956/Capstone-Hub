@@ -50,11 +50,36 @@ func (r *TableRepository) FindTable(restaurantID, tableID uint) (*entity.Restaur
 	return &table, nil
 }
 
+func (r *TableRepository) FindTableForUpdate(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
+	var table entity.RestaurantTable
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("TableZone").
+		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Where("restaurant_id = ? AND id = ?", restaurantID, tableID).
+		First(&table).Error
+	if err != nil {
+		return nil, err
+	}
+	return &table, nil
+}
+
 func (r *TableRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
 	var orderID uint
 	result := r.db.Model(&entity.Order{}).
 		Select("id").
 		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Limit(1).
+		Scan(&orderID)
+	return result.RowsAffected > 0, result.Error
+}
+
+func (r *TableRepository) HasAnyOrderForTable(restaurantID, tableID uint) (bool, error) {
+	var orderID uint
+	result := r.db.Unscoped().
+		Model(&entity.Order{}).
+		Select("id").
+		Where("restaurant_id = ? AND table_id = ?", restaurantID, tableID).
 		Limit(1).
 		Scan(&orderID)
 	return result.RowsAffected > 0, result.Error

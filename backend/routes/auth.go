@@ -3,8 +3,6 @@ package routes
 import (
 	"Project-M/config"
 	"Project-M/internal/controller"
-	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,52 +17,6 @@ func SetupAuthRoutes(r *gin.RouterGroup) {
 	r.POST("/reset-password", rateLimitAuth(10, time.Minute), userCtrl.ResetPassword)
 }
 
-type authRateBucket struct {
-	Count      int
-	ResetAfter time.Time
-}
-
-var authRateState = struct {
-	sync.Mutex
-	buckets   map[string]authRateBucket
-	lastSweep time.Time
-}{
-	buckets: map[string]authRateBucket{},
-}
-
-const maxAuthRateBuckets = 10000
-
 func rateLimitAuth(limit int, window time.Duration) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		now := time.Now()
-		key := c.ClientIP() + ":" + c.FullPath()
-
-		authRateState.Lock()
-		if now.Sub(authRateState.lastSweep) > window {
-			for bucketKey, bucket := range authRateState.buckets {
-				if now.After(bucket.ResetAfter) {
-					delete(authRateState.buckets, bucketKey)
-				}
-			}
-			authRateState.lastSweep = now
-		}
-		if len(authRateState.buckets) > maxAuthRateBuckets {
-			authRateState.buckets = map[string]authRateBucket{}
-			authRateState.lastSweep = now
-		}
-		bucket := authRateState.buckets[key]
-		if bucket.ResetAfter.IsZero() || now.After(bucket.ResetAfter) {
-			bucket = authRateBucket{ResetAfter: now.Add(window)}
-		}
-		bucket.Count += 1
-		authRateState.buckets[key] = bucket
-		authRateState.Unlock()
-
-		if bucket.Count > limit {
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
-			return
-		}
-
-		c.Next()
-	}
+	return rateLimitRequests(limit, window)
 }

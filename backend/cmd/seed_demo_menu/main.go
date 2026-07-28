@@ -115,8 +115,24 @@ func main() {
 		log.Fatal("missing -restaurant-id, example: go run ./cmd/seed_demo_menu -restaurant-id 1")
 	}
 
-	config.ConnectionDB()
-	db := config.SetupDatabase()
+	if err := config.LoadRuntimeEnvironment(); err != nil {
+		log.Fatal(err)
+	}
+	if err := config.ValidateDatabaseEnvironment(); err != nil {
+		log.Fatal(err)
+	}
+	if err := config.ConnectionDB(); err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := config.CloseDatabase(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
+	if err := config.EnsureSchemaCurrent(config.DB()); err != nil {
+		log.Fatal(err)
+	}
+	db := config.DB()
 
 	var restaurant entity.Restaurant
 	if err := db.First(&restaurant, *restaurantID).Error; err != nil {

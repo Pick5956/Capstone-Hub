@@ -15,12 +15,15 @@ import (
 )
 
 type InvitationService struct {
-	invRepo    *repository.InvitationRepository
-	memberRepo *repository.RestaurantMemberRepository
-	roleRepo   *repository.RoleRepository
-	userRepo   *repository.UserRepository
-	auditRepo  *repository.RestaurantAuditLogRepository
+	invRepo      *repository.InvitationRepository
+	acceptanceTx repository.InvitationAcceptanceTransactionRunner
+	memberRepo   *repository.RestaurantMemberRepository
+	roleRepo     *repository.RoleRepository
+	userRepo     *repository.UserRepository
+	auditRepo    *repository.RestaurantAuditLogRepository
 }
+
+const invitationTokenBytes = 24
 
 func ProvideInvitationService(
 	invRepo *repository.InvitationRepository,
@@ -30,11 +33,12 @@ func ProvideInvitationService(
 	auditRepo *repository.RestaurantAuditLogRepository,
 ) *InvitationService {
 	return &InvitationService{
-		invRepo:    invRepo,
-		memberRepo: memberRepo,
-		roleRepo:   roleRepo,
-		userRepo:   userRepo,
-		auditRepo:  auditRepo,
+		invRepo:      invRepo,
+		acceptanceTx: invRepo,
+		memberRepo:   memberRepo,
+		roleRepo:     roleRepo,
+		userRepo:     userRepo,
+		auditRepo:    auditRepo,
 	}
 }
 
@@ -45,11 +49,16 @@ type CreateInvitationRequest struct {
 }
 
 func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint, req *CreateInvitationRequest) (*entity.Invitation, error) {
+	actor, err := s.authorizeInvitationManager(invitedByUserID, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+
 	role, err := s.roleRepo.FindByID(req.RoleID)
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if !roleAssignableToRestaurant(role, restaurantID) || role.Name == "owner" {
+	if !roleAssignableToRestaurant(role, restaurantID) || !canAssignMemberRole(actor, role) {
 		return nil, errors.New("role cannot be invited")
 	}
 	if role.RestaurantID == nil {
@@ -133,6 +142,10 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 // GetByToken returns an invitation by its token plus a derived "usable" status.
 // Marks the invitation expired if its expiry has passed and status was pending.
 func (s *InvitationService) GetByToken(token string) (*entity.Invitation, error) {
+	token, err := normalizeInvitationToken(token)
+	if err != nil {
+		return nil, err
+	}
 	inv, err := s.invRepo.FindByToken(token)
 	if err != nil {
 		return nil, err
@@ -141,7 +154,7 @@ func (s *InvitationService) GetByToken(token string) (*entity.Invitation, error)
 	// auto-flip to expired if past expiry
 	if inv.Status == entity.InvitationStatusPending && inv.ExpiresAt != nil && inv.ExpiresAt.Before(time.Now()) {
 		inv.Status = entity.InvitationStatusExpired
-		_ = s.invRepo.Update(inv)
+		_ = s.invRepo.MarkExpiredIfPending(inv.ID)
 	}
 	return inv, nil
 }
@@ -149,95 +162,98 @@ func (s *InvitationService) GetByToken(token string) (*entity.Invitation, error)
 // AcceptInvitation creates a RestaurantMember from a usable invitation for the given user.
 // Validates token, status, expiry, email match (if scoped), and existing membership.
 func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity.RestaurantMember, error) {
-	inv, err := s.GetByToken(token)
+	var err error
+	token, err = normalizeInvitationToken(token)
 	if err != nil {
 		return nil, err
 	}
-	if !inv.IsUsable() {
-		return nil, errors.New("invitation is no longer usable")
+	if s.acceptanceTx == nil {
+		return nil, errors.New("invitation acceptance is unavailable")
 	}
 
-	// already a member?
-	if existing, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID); err == nil {
-		if existing.Status == "active" {
-			if inv.Status == entity.InvitationStatusPending {
-				now := time.Now()
-				uid := userID
-				inv.Status = entity.InvitationStatusAccepted
-				inv.AcceptedAt = &now
-				inv.AcceptedByUserID = &uid
-				_ = s.invRepo.Update(inv)
-			}
-			return existing, nil
-		}
-		existing.RoleID = inv.RoleID
-		existing.Status = "active"
-		existing.InvitedByUserID = &inv.InvitedByUserID
-		if err := s.memberRepo.Update(existing); err != nil {
-			return nil, err
-		}
-
-		inv.Status = entity.InvitationStatusAccepted
-		now := time.Now()
-		inv.AcceptedAt = &now
-		uid := userID
-		inv.AcceptedByUserID = &uid
-		if err := s.invRepo.Update(inv); err != nil {
-			return nil, err
-		}
-
-		loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID)
-		if err == nil {
-			s.logInvitationAccepted(inv, userID, loaded)
-			return loaded, nil
-		}
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-
-	// scoped invitation: only the matching email may accept
-	if inv.Email != "" {
-		user, err := s.userRepo.FindById(userID)
+	var acceptedInvitation *entity.Invitation
+	var acceptedMember *entity.RestaurantMember
+	err = s.acceptanceTx.WithInvitationAcceptanceTransaction(func(store repository.InvitationAcceptanceStore) error {
+		invitation, err := store.FindInvitationByTokenForUpdate(token)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if !strings.EqualFold(user.Email, inv.Email) {
-			return nil, errors.New("invitation is for a different email")
+		if !invitation.IsUsable() {
+			return errors.New("invitation is no longer usable")
 		}
-	}
 
-	now := time.Now()
-	invitedBy := inv.InvitedByUserID
-	member := &entity.RestaurantMember{
-		UserID:          userID,
-		RestaurantID:    inv.RestaurantID,
-		RoleID:          inv.RoleID,
-		Status:          "active",
-		JoinedAt:        now,
-		InvitedByUserID: &invitedBy,
-	}
-	if err := s.memberRepo.Create(member); err != nil {
+		user, err := store.FindUserByID(userID)
+		if err != nil {
+			return err
+		}
+		if user.Status != "active" {
+			return errors.New("user account is not active")
+		}
+
+		// The email guard intentionally precedes all membership reads and writes.
+		// A mismatched invite must not reactivate or change an old membership.
+		if invitation.Email != "" && !strings.EqualFold(user.Email, invitation.Email) {
+			return errors.New("invitation is for a different email")
+		}
+
+		member, err := store.FindMemberByUserAndRestaurant(userID, invitation.RestaurantID)
+		switch {
+		case err == nil:
+			if member.Status != "active" {
+				member.RoleID = invitation.RoleID
+				member.Status = "active"
+				member.InvitedByUserID = &invitation.InvitedByUserID
+				if err := store.UpdateMember(member); err != nil {
+					return err
+				}
+			}
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			now := time.Now()
+			invitedBy := invitation.InvitedByUserID
+			member = &entity.RestaurantMember{
+				UserID:          userID,
+				RestaurantID:    invitation.RestaurantID,
+				RoleID:          invitation.RoleID,
+				Status:          "active",
+				JoinedAt:        now,
+				InvitedByUserID: &invitedBy,
+			}
+			if err := store.CreateMember(member); err != nil {
+				return err
+			}
+		default:
+			return err
+		}
+
+		now := time.Now()
+		acceptedBy := userID
+		invitation.Status = entity.InvitationStatusAccepted
+		invitation.AcceptedAt = &now
+		invitation.AcceptedByUserID = &acceptedBy
+		if err := store.UpdateInvitation(invitation); err != nil {
+			return err
+		}
+
+		if loaded, err := store.FindMemberByUserAndRestaurant(userID, invitation.RestaurantID); err == nil {
+			member = loaded
+		}
+		acceptedInvitation = invitation
+		acceptedMember = member
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
-	inv.Status = entity.InvitationStatusAccepted
-	inv.AcceptedAt = &now
-	uid := userID
-	inv.AcceptedByUserID = &uid
-	if err := s.invRepo.Update(inv); err != nil {
-		return nil, err
-	}
-
-	loaded, err := s.memberRepo.FindByUserAndRestaurant(userID, inv.RestaurantID)
-	if err == nil {
-		s.logInvitationAccepted(inv, userID, loaded)
-		return loaded, nil
-	}
-	s.logInvitationAccepted(inv, userID, member)
-	return member, nil
+	s.logInvitationAccepted(acceptedInvitation, userID, acceptedMember)
+	return acceptedMember, nil
 }
 
 func (s *InvitationService) RevokeInvitation(actorUserID, restaurantID, invitationID uint) error {
+	if _, err := s.authorizeInvitationManager(actorUserID, restaurantID); err != nil {
+		return err
+	}
+
 	inv, err := s.invRepo.FindByID(invitationID)
 	if err != nil {
 		return err
@@ -248,10 +264,10 @@ func (s *InvitationService) RevokeInvitation(actorUserID, restaurantID, invitati
 	if inv.Status != entity.InvitationStatusPending {
 		return errors.New("only pending invitations can be revoked")
 	}
-	inv.Status = entity.InvitationStatusRevoked
-	if err := s.invRepo.Update(inv); err != nil {
+	if err := s.invRepo.RevokePending(inv.ID, restaurantID); err != nil {
 		return err
 	}
+	inv.Status = entity.InvitationStatusRevoked
 
 	writeAuditEvent(
 		s.auditRepo,
@@ -269,16 +285,52 @@ func (s *InvitationService) RevokeInvitation(actorUserID, restaurantID, invitati
 	return nil
 }
 
-func (s *InvitationService) ListPending(restaurantID uint) ([]entity.Invitation, error) {
+func (s *InvitationService) ListPending(actorUserID, restaurantID uint) ([]entity.Invitation, error) {
+	if _, err := s.authorizeInvitationManager(actorUserID, restaurantID); err != nil {
+		return nil, err
+	}
 	return s.invRepo.ListPendingByRestaurant(restaurantID)
 }
 
+func (s *InvitationService) authorizeInvitationManager(userID, restaurantID uint) (*entity.RestaurantMember, error) {
+	if s.memberRepo == nil {
+		return nil, errors.New("membership authorization is unavailable")
+	}
+	member, err := s.memberRepo.FindByUserAndRestaurant(userID, restaurantID)
+	if err != nil || member == nil || member.Status != "active" || member.RestaurantID != restaurantID {
+		return nil, errors.New("not an active member of this restaurant")
+	}
+	if !invitationManagerCanAct(member, restaurantID) {
+		return nil, errors.New("you do not have permission to manage invitations")
+	}
+	return member, nil
+}
+
+func invitationManagerCanAct(member *entity.RestaurantMember, restaurantID uint) bool {
+	return member != nil &&
+		member.RestaurantID == restaurantID &&
+		member.Status == "active" &&
+		canManageInvites(member)
+}
+
 func generateInviteToken() (string, error) {
-	bytes := make([]byte, 24) // 24 bytes -> 32 base64url chars
+	bytes := make([]byte, invitationTokenBytes)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+func normalizeInvitationToken(token string) (string, error) {
+	token = strings.TrimSpace(token)
+	if len(token) != base64.RawURLEncoding.EncodedLen(invitationTokenBytes) {
+		return "", errors.New("invalid invitation token")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(decoded) != invitationTokenBytes {
+		return "", errors.New("invalid invitation token")
+	}
+	return token, nil
 }
 
 func (s *InvitationService) logInvitationAccepted(inv *entity.Invitation, userID uint, member *entity.RestaurantMember) {

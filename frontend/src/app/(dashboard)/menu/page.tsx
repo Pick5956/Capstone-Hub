@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -9,11 +9,14 @@ import { formatCurrency } from "@/src/lib/format";
 import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
 import { listIngredients } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
+import { apiErrorCode } from "@/src/lib/apiErrors";
 import type { Category, MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
 import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
+import MenuImageCropper from "@/src/components/menu/MenuImageCropper";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
@@ -55,6 +58,7 @@ export default function MenuPage() {
   const [submitting, setSubmitting] = useState(false);
   const [availabilitySubmittingId, setAvailabilitySubmittingId] = useState<number | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageEditing, setImageEditing] = useState(false);
   const [error, setError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [itemErrors, setItemErrors] = useState<{ category?: string; name?: string; submit?: string; image?: string; options?: string }>({});
@@ -77,10 +81,10 @@ export default function MenuPage() {
         title: "เมนูอาหาร",
         manageSubtitle: "จัดการหมวดหมู่และเมนูของร้าน",
         viewSubtitle: "ดูเมนูทั้งหมดแบบ read-only",
-        refresh: "รีเฟรช",
         loadError: "โหลดข้อมูลเมนูไม่สำเร็จ",
         categoryRequired: "กรุณากรอกชื่อหมวดหมู่",
         categorySaveError: "บันทึกหมวดหมู่ไม่สำเร็จ",
+        categoryDuplicate: "มีหมวดหมู่ชื่อนี้อยู่แล้ว",
         itemRequired: "กรุณาเลือกหมวดหมู่และกรอกชื่อเมนู",
         itemCategoryRequired: "เลือกหมวดหมู่ก่อนเพิ่มเมนู",
         itemNameRequired: "กรอกชื่อเมนูที่ลูกค้าและพนักงานจำได้",
@@ -115,7 +119,6 @@ export default function MenuPage() {
         editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
         categoryHint: "จัดกลุ่มเมนูให้พนักงานหาเจอเร็ว",
         searchPlaceholder: "ค้นหาเมนู",
-        noImage: "ไม่มีรูป",
         uncategorized: "ไม่ระบุหมวด",
         noDescription: "ไม่มีรายละเอียด",
         available: "พร้อมขาย",
@@ -152,7 +155,19 @@ export default function MenuPage() {
         itemOrder: "ลำดับแสดงผลของเมนู",
         itemOrderHelp: "เลขน้อยจะแสดงก่อนในหมวดหมู่นั้น ถ้าไม่แน่ใจเว้นว่างได้",
         image: "รูปเมนู",
-        imageUrlPlaceholder: "หรือวาง URL รูปภาพเอง",
+        chooseImage: "เลือกรูป",
+        adjustImage: "ปรับตำแหน่งรูป",
+        cropTitle: "จัดวางรูปเมนู",
+        cropHint: "กรอบนี้ตรงกับรูปบนการ์ดเมนู ลากเพื่อจัดตำแหน่ง และปรับ Zoom ได้ตั้งแต่ -100% ถึง +100%",
+        cropAria: "พื้นที่จัดวางรูป ใช้เมาส์ลากหรือปุ่มลูกศรเพื่อเลื่อนรูป",
+        zoom: "Zoom",
+        zoomOut: "ย่อรูป",
+        zoomIn: "ขยายรูป",
+        resetImage: "คืนค่าตำแหน่ง",
+        useImage: "ใช้รูปนี้",
+        preparingImage: "กำลังเตรียมรูป...",
+        imageLoadError: "เปิดรูปเพื่อจัดวางไม่สำเร็จ กรุณาเลือกรูปใหม่",
+        imageCropError: "จัดวางรูปไม่สำเร็จ กรุณาเลือกรูปใหม่",
         uploading: "กำลังอัปโหลดรูป...",
         imageHelp: "รองรับ jpg, png, webp ไม่เกิน 5MB",
         description: "รายละเอียดเมนู",
@@ -177,7 +192,7 @@ export default function MenuPage() {
         removeOption: "ลบ",
         optionError: "กรอกชื่อชุดตัวเลือกและอย่างน้อย 1 ตัวเลือก หรือปล่อยว่างทั้งชุด",
         recipeTitle: "สูตรวัตถุดิบ",
-        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกตอนเสิร์ฟ",
+        recipeHint: "ผูกเมนูกับวัตถุดิบเพื่อคำนวณต้นทุนและหักสต็อกเมื่อครัวทำเสร็จ",
         addRecipeComponent: "เพิ่มวัตถุดิบ",
         ingredient: "วัตถุดิบ",
         quantity: "จำนวน",
@@ -193,10 +208,10 @@ export default function MenuPage() {
         title: "Food menu",
         manageSubtitle: "Manage the restaurant's categories and menu items.",
         viewSubtitle: "View the full menu in read-only mode.",
-        refresh: "Refresh",
         loadError: "Could not load menu data.",
         categoryRequired: "Please enter a category name.",
         categorySaveError: "Could not save category.",
+        categoryDuplicate: "A category with this name already exists.",
         itemRequired: "Please choose a category and enter a menu item name.",
         itemCategoryRequired: "Choose a category before adding a menu item.",
         itemNameRequired: "Enter a menu item name your team can recognize.",
@@ -231,7 +246,6 @@ export default function MenuPage() {
         editorHint: "Add a new item or edit the selected menu item.",
         categoryHint: "Group items so staff can find them quickly.",
         searchPlaceholder: "Search menu",
-        noImage: "No image",
         uncategorized: "Uncategorized",
         noDescription: "No description",
         available: "Available",
@@ -268,7 +282,19 @@ export default function MenuPage() {
         itemOrder: "Menu item display order",
         itemOrderHelp: "Lower numbers appear first inside this category. Leave blank if you are not sure.",
         image: "Menu image",
-        imageUrlPlaceholder: "Or paste an image URL",
+        chooseImage: "Choose image",
+        adjustImage: "Adjust image",
+        cropTitle: "Position menu image",
+        cropHint: "This frame matches the menu card. Drag to reposition and adjust Zoom from -100% to +100%.",
+        cropAria: "Image positioning area. Drag or use the arrow keys to move the image.",
+        zoom: "Zoom",
+        zoomOut: "Zoom out",
+        zoomIn: "Zoom in",
+        resetImage: "Reset position",
+        useImage: "Use this image",
+        preparingImage: "Preparing image...",
+        imageLoadError: "Could not open this image for positioning. Choose a new image.",
+        imageCropError: "Could not position this image. Choose a new image.",
         uploading: "Uploading image...",
         imageHelp: "Supports jpg, png, webp up to 5MB",
         description: "Menu description",
@@ -293,7 +319,7 @@ export default function MenuPage() {
         removeOption: "Remove",
         optionError: "Enter an option group name and at least 1 option, or leave the group empty.",
         recipeTitle: "Recipe ingredients",
-        recipeHint: "Connect this item to stock so serving it deducts inventory and calculates food cost.",
+        recipeHint: "Connect this item to stock so kitchen completion deducts inventory and calculates food cost.",
         addRecipeComponent: "Add ingredient",
         ingredient: "Ingredient",
         quantity: "Quantity",
@@ -303,6 +329,10 @@ export default function MenuPage() {
         recipeCost: "Cost/portion",
         noIngredients: "Add ingredients in Inventory first.",
       };
+
+  const handleImageEditorError = useCallback((message: string) => {
+    setItemErrors((current) => ({ ...current, image: message || undefined }));
+  }, []);
 
   const refresh = async () => {
     if (!canView) return;
@@ -327,7 +357,8 @@ export default function MenuPage() {
   };
 
   useEffect(() => {
-    refresh();
+    const loadTimer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, language]);
 
@@ -357,7 +388,6 @@ export default function MenuPage() {
     { value: "0", label: copy.allCategories },
     ...sortedCategories.map((category) => ({ value: String(category.ID), label: category.name })),
   ], [copy.allCategories, sortedCategories]);
-  const activeCategory = categories.find((category) => category.ID === filterCategory);
   const availableCount = items.filter((item) => item.is_available).length;
   const unavailableCount = items.length - availableCount;
 
@@ -440,8 +470,8 @@ export default function MenuPage() {
       setSelectedCategoryIds([...selectedCategoryIds, res.data.ID]);
       setInlineCategoryName("");
       showToast({ title: copy.categoryCreated });
-    } catch {
-      setInlineCategoryError(copy.categorySaveError);
+    } catch (err) {
+      setInlineCategoryError(apiErrorCode(err) === "CATEGORY_NAME_EXISTS" ? copy.categoryDuplicate : copy.categorySaveError);
     } finally {
       setInlineCategorySaving(false);
     }
@@ -476,8 +506,8 @@ export default function MenuPage() {
         }
         setCategoryName("");
         setEditingCategory(null);
-      } catch {
-        setCategoryError(copy.categorySaveError);
+      } catch (err) {
+        setCategoryError(apiErrorCode(err) === "CATEGORY_NAME_EXISTS" ? copy.categoryDuplicate : copy.categorySaveError);
       } finally {
         setSubmitting(false);
       }
@@ -587,6 +617,7 @@ export default function MenuPage() {
   const editItem = (item: MenuItem) => {
     setEditingItem(item);
     setItemErrors({});
+    setImageEditing(false);
     setItemForm(menuItemToInput(item));
     setItemEditorTab("basic");
     setDrawerOpen(true);
@@ -622,6 +653,7 @@ export default function MenuPage() {
   const startCreateItem = () => {
     setEditingItem(null);
     setItemErrors({});
+    setImageEditing(false);
     const firstID = filterCategory || sortedCategories[0]?.ID || 0;
     setItemForm({ ...emptyItem, category_id: firstID, category_ids: firstID ? [firstID] : [] });
     setInlineCategoryName("");
@@ -639,6 +671,7 @@ export default function MenuPage() {
       setDrawerClosing(false);
       setEditingItem(null);
       setItemErrors({});
+      setImageEditing(false);
     }, 180);
   };
 
@@ -724,10 +757,10 @@ export default function MenuPage() {
   };
 
   const uploadImage = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file) return false;
     if (!file.type.startsWith("image/")) {
       setItemErrors((current) => ({ ...current, image: copy.imageTypeError }));
-      return;
+      return false;
     }
     setUploadingImage(true);
     setError("");
@@ -735,64 +768,64 @@ export default function MenuPage() {
     try {
       const res = await uploadMenuImage(file);
       setItemForm((current) => ({ ...current, image_url: res.data.image_url }));
+      return true;
     } catch {
       setItemErrors((current) => ({ ...current, image: copy.imageUploadError }));
+      return false;
     } finally {
       setUploadingImage(false);
     }
   };
 
+  const renderMenuToolbar = (placement: "desktop" | "mobile") => (
+    <div className={placement === "desktop" ? "flex w-full min-w-0 items-center gap-2 pr-2" : "mb-4 flex flex-col gap-2 lg:hidden"}>
+      <label className={placement === "desktop" ? "relative block w-full max-w-md min-w-0" : "relative block w-full"}>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={copy.searchPlaceholder}
+          aria-label={copy.searchPlaceholder}
+          className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+        />
+      </label>
+      {canManage && (
+        <div className={placement === "desktop" ? "flex shrink-0 items-center gap-2" : "flex justify-end gap-2"}>
+          <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+            {copy.categoryManager}
+          </button>
+          <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+            + {copy.createItem}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{canManage ? copy.manageSubtitle : copy.viewSubtitle}</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <button type="button" onClick={refresh} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            {copy.refresh}
-          </button>
-          {canManage && (
-            <>
-              <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-                {copy.categoryManager}
-              </button>
-              <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
-                + {copy.createItem}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      <DashboardTopBarPortal>
+        {renderMenuToolbar("desktop")}
+      </DashboardTopBarPortal>
+      <h1 className="sr-only">{copy.title}</h1>
+      {renderMenuToolbar("mobile")}
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      <div className="space-y-4">
-        <div className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-          <div className="grid gap-3 lg:grid-cols-[minmax(14rem,20rem)_minmax(16rem,1fr)] lg:items-end">
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.itemCategory}</span>
-              <ThemedSelect
-                value={String(filterCategory)}
-                onChange={(next) => setFilterCategory(Number(next))}
-                options={categoryFilterOptions}
-              />
-            </div>
-            <div>
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.searchPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-            </div>
-          </div>
-        </div>
-
+      <div>
         <section className="space-y-4">
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
+                <div className="w-full max-w-xs">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.catalogTitle}</p>
-                  <h2 className="mt-0.5 text-[16px] font-semibold text-gray-900 dark:text-white">{activeCategory?.name ?? copy.allCategories}</h2>
+                  <div className="mt-1.5">
+                    <ThemedSelect
+                      value={String(filterCategory)}
+                      onChange={(next) => setFilterCategory(Number(next))}
+                      options={categoryFilterOptions}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[11px] sm:min-w-[330px]">
                   {([
@@ -846,16 +879,14 @@ export default function MenuPage() {
                         event.preventDefault();
                         editItem(item);
                       } : undefined}
-                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,background-color,box-shadow,transform] hover:border-orange-200 hover:bg-orange-50/20 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10 ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
+                      className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:bg-transparent ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
                     >
                       <div
-                        className="aspect-[4/3] bg-gray-100 bg-cover bg-center dark:bg-gray-900"
-                        style={item.image_url ? { backgroundImage: `url(${item.image_url})` } : undefined}
+                        className="aspect-[4/3] bg-transparent bg-cover bg-center"
+                        style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
-                      >
-                        {!item.image_url && <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-gray-400">{copy.noImage}</div>}
-                      </div>
-                      <div className="flex min-w-0 flex-1 flex-col border-t border-gray-100 p-3 dark:border-gray-800">
+                      />
+                      <div className="flex min-w-0 flex-1 flex-col p-3">
                         <h3 className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</h3>
                         <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                         <div className="mt-2 flex flex-wrap gap-1">
@@ -1119,15 +1150,32 @@ export default function MenuPage() {
                   <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.image}</span>
                   </div>
-                  <div className="grid gap-3 p-3 sm:grid-cols-[96px_1fr]">
-                    <div className="h-24 rounded-md bg-gray-100 bg-cover bg-center dark:bg-gray-900" style={itemForm.image_url ? { backgroundImage: `url(${itemForm.image_url})` } : undefined}>
-                      {!itemForm.image_url && <div className="flex h-full items-center justify-center text-[11px] text-gray-400">{copy.noImage}</div>}
-                    </div>
-                    <div className="min-w-0 space-y-2">
-                      <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploadingImage} onChange={(event) => uploadImage(event.target.files?.[0])} className="block w-full text-[12px] text-gray-500 file:mr-3 file:h-8 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:text-[12px] file:font-semibold file:text-white disabled:opacity-60 dark:text-gray-400 dark:file:bg-white dark:file:text-gray-900" />
-                      <input value={itemForm.image_url} onChange={(event) => { setItemForm({ ...itemForm, image_url: event.target.value }); setItemErrors((current) => ({ ...current, image: undefined })); }} placeholder={copy.imageUrlPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-                      <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
-                    </div>
+                  <div className="space-y-2 p-3">
+                    <MenuImageCropper
+                      currentImageUrl={itemForm.image_url ?? ""}
+                      disabled={uploadingImage || submitting}
+                      copy={{
+                        chooseImage: copy.chooseImage,
+                        adjustImage: copy.adjustImage,
+                        cropTitle: copy.cropTitle,
+                        cropHint: copy.cropHint,
+                        cropAria: copy.cropAria,
+                        zoom: copy.zoom,
+                        zoomOut: copy.zoomOut,
+                        zoomIn: copy.zoomIn,
+                        reset: copy.resetImage,
+                        cancel: copy.cancel,
+                        apply: copy.useImage,
+                        applying: copy.preparingImage,
+                        invalidFile: copy.imageUploadError,
+                        loadError: copy.imageLoadError,
+                        cropError: copy.imageCropError,
+                      }}
+                      onUpload={uploadImage}
+                      onError={handleImageEditorError}
+                      onEditingChange={setImageEditing}
+                    />
+                    <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
                   </div>
                 </div>
                 <label className="block">
@@ -1266,7 +1314,7 @@ export default function MenuPage() {
               )}
             </div>
             <div className="grid gap-2 border-t border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-[1fr_auto]">
-              <button disabled={submitting || uploadingImage || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+              <button disabled={submitting || uploadingImage || imageEditing || !categories.length} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {editingItem ? copy.saveItem : copy.createItem}
               </button>
               {editingItem ? (

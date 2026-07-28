@@ -1,11 +1,10 @@
-import { router } from 'expo-router';
-import { Pressable, ScrollView, Text, View, type RefreshControlProps } from 'react-native';
+import { View, type RefreshControlProps } from 'react-native';
 
-import { colors, layout, typeScale } from '@/src/theme';
-import { MotionView } from './motion';
+import { AppScreen } from '@/src/components/app-shell';
+import { EmptyState } from '@/src/components/ui';
 
 export function MobileScreen({
-  kicker,
+  kicker: _kicker,
   title,
   subtitle,
   children,
@@ -20,43 +19,12 @@ export function MobileScreen({
   showBack?: boolean;
 }) {
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={layout.scrollContainer}
-      refreshControl={refreshControl}
-    >
-      <MotionView style={layout.headerRow}>
-        <View style={{ flex: 1, gap: 6 }}>
-          <Text selectable style={typeScale.kicker}>{kicker}</Text>
-          <Text selectable style={typeScale.hero}>{title}</Text>
-          {subtitle ? (
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-        {showBack ? (
-          <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-            <Text style={layout.secondaryButtonText}>กลับ</Text>
-          </Pressable>
-        ) : null}
-      </MotionView>
-      <MotionView delay={60} style={{ gap: 20 }}>
-        {children}
-      </MotionView>
-    </ScrollView>
+    <AppScreen title={title} subtitle={subtitle} topLevel={!showBack} refreshControl={refreshControl}>
+      <View style={{ gap: 20 }}>{children}</View>
+    </AppScreen>
   );
 }
 
 export function StateMessage({ title, detail }: { title: string; detail?: string }) {
-  return (
-    <View style={layout.panel}>
-      <Text selectable style={typeScale.cardTitle}>{title}</Text>
-      {detail ? (
-        <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-          {detail}
-        </Text>
-      ) : null}
-    </View>
-  );
+  return <EmptyState title={title} detail={detail} />;
 }

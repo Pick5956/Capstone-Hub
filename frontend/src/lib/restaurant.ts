@@ -18,6 +18,12 @@ export interface CreateRestaurantInput {
   promptpay_name?: string;
   promptpay_qr_image?: string;
   cover_image?: string;
+  /** Whether to split the starter tables into zones. Omit for the zoned default. */
+  split_zones?: boolean;
+  /** QR-ordering geofence. Send null coordinates or radius 0 to disable it. */
+  latitude?: number | null;
+  longitude?: number | null;
+  order_radius_meters?: number;
 }
 
 export type UpdateRestaurantInput = CreateRestaurantInput;
@@ -51,6 +57,16 @@ export const uploadRestaurantCover = (id: number, file: File) => {
   const formData = new FormData();
   formData.append("image", file);
   return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-cover`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
+export const uploadRestaurantPromptPayQR = (id: number, file: File) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  return apiClient.post<{ restaurant: Restaurant }>(`/api/v1/restaurants/${id}/upload-promptpay-qr`, formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

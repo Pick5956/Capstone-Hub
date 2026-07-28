@@ -10,7 +10,7 @@ const copyByLanguage = {
   th: {
     eyebrow: "Account recovery",
     title: "ตั้งรหัสผ่านใหม่",
-    subtitle: "ลิงก์นี้ใช้ได้ช่วงเวลาจำกัด กรุณาตั้งรหัสผ่านใหม่เพื่อกลับเข้าใช้งาน Restaurant Hub",
+    subtitle: "ลิงก์นี้ใช้ได้ช่วงเวลาจำกัด กรุณาตั้งรหัสผ่านใหม่เพื่อกลับเข้าใช้งาน Dishy",
     missingToken: "ลิงก์กู้รหัสผ่านไม่ถูกต้องหรือไม่มี token",
     password: "รหัสผ่านใหม่",
     confirmPassword: "ยืนยันรหัสผ่านใหม่",
@@ -26,7 +26,7 @@ const copyByLanguage = {
   en: {
     eyebrow: "Account recovery",
     title: "Set a new password",
-    subtitle: "This link is time limited. Set a new password to get back into Restaurant Hub.",
+    subtitle: "This link is time limited. Set a new password to get back into Dishy.",
     missingToken: "This reset link is invalid or missing a token.",
     password: "New password",
     confirmPassword: "Confirm new password",

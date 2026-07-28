@@ -87,9 +87,15 @@ func (r *AIRepository) ListIngredients(restaurantID uint) ([]entity.Ingredient, 
 func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([]AISalesSummary, error) {
 	var rows []AISalesSummary
 	err := r.db.Model(&entity.Order{}).
-		Select("order_date, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
-		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
-		Group("order_date").
+		Select("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS order_date, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where(
+			"restaurant_id = ? AND completed_at >= ? AND status = ? AND payment_status = ?",
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
 		Order("order_date desc").
 		Limit(14).
 		Scan(&rows).Error
@@ -98,10 +104,19 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 
 func (r *AIRepository) TopMenuItems(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {
 	var rows []AIMenuSummary
-	err := r.db.Model(&entity.OrderItem{}).
-		Select("menu_name, COALESCE(SUM(quantity), 0) AS quantity, COALESCE(SUM(subtotal), 0) AS revenue").
-		Where("restaurant_id = ? AND created_at >= ? AND status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
-		Group("menu_name").
+	err := r.db.Table("order_items").
+		Select("order_items.menu_name, COALESCE(SUM(order_items.quantity), 0) AS quantity, COALESCE(SUM(order_items.subtotal), 0) AS revenue").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where(
+			"order_items.restaurant_id = ? AND order_items.deleted_at IS NULL AND order_items.status = ? AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("order_items.menu_name").
 		Order("quantity desc, revenue desc").
 		Limit(10).
 		Scan(&rows).Error
@@ -228,11 +243,26 @@ func (r *AIRepository) AnalysisCoverage(restaurantID uint, since time.Time) (AIA
 			COUNT(CASE WHEN order_items.status = ? THEN 1 END) AS margin_items,
 			COUNT(CASE WHEN order_items.status = ? AND deductions.order_item_id IS NOT NULL THEN 1 END) AS costed_margin_items,
 			COUNT(DISTINCT CASE WHEN order_items.status = ? THEN order_items.menu_id END) AS sold_menus,
-			COUNT(DISTINCT CASE WHEN order_items.status = ? AND recipes.menu_item_id IS NOT NULL THEN order_items.menu_id END) AS sold_menus_with_recipes`,
+			COUNT(DISTINCT CASE WHEN order_items.status = ? AND recipes.order_item_id IS NOT NULL THEN order_items.menu_id END) AS sold_menus_with_recipes`,
 			entity.OrderItemStatusServed, entity.OrderItemStatusServed, entity.OrderItemStatusServed, entity.OrderItemStatusServed).
-		Joins("LEFT JOIN (SELECT DISTINCT order_item_id FROM order_inventory_deductions WHERE deleted_at IS NULL) deductions ON deductions.order_item_id = order_items.id").
-		Joins("LEFT JOIN (SELECT DISTINCT menu_item_id FROM menu_item_ingredients WHERE deleted_at IS NULL) recipes ON recipes.menu_item_id = order_items.menu_id").
-		Where("order_items.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status <> ? AND order_items.deleted_at IS NULL", restaurantID, since, entity.OrderItemStatusCancelled).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins(
+			"LEFT JOIN (SELECT DISTINCT order_item_id FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL) deductions ON deductions.order_item_id = order_items.id",
+			restaurantID,
+		).
+		Joins(
+			"LEFT JOIN (SELECT DISTINCT order_item_id FROM order_item_recipe_snapshots WHERE restaurant_id = ? AND deleted_at IS NULL) recipes ON recipes.order_item_id = order_items.id",
+			restaurantID,
+		).
+		Where(
+			"order_items.restaurant_id = ? AND order_items.status = ? AND order_items.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
 		Scan(&coverage).Error
 	return coverage, err
 }
@@ -250,8 +280,20 @@ func (r *AIRepository) menuMargins(restaurantID uint, since time.Time, orderBy s
 				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
 				ELSE 0
 			END AS margin`).
-		Joins("LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id").
-		Where("order_items.restaurant_id = ? AND order_items.created_at >= ? AND order_items.status = ? AND order_items.deleted_at IS NULL", restaurantID, since, entity.OrderItemStatusServed).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins(
+			"LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id",
+			restaurantID,
+		).
+		Where(
+			"order_items.restaurant_id = ? AND order_items.status = ? AND order_items.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
 		Group("order_items.menu_name").
 		Order(orderBy).
 		Limit(limit).

@@ -16,6 +16,9 @@ export interface Ingredient {
   category_id?: number | null;
   image_url?: string;
   unit: string;
+  base_unit?: string;
+  purchase_unit_default?: string;
+  conversion_factor_default?: number;
   stock: number;
   min_stock: number;
   cost_per_unit: number;
@@ -44,6 +47,9 @@ export interface IngredientInput {
   category_id?: number;
   image_url?: string;
   unit: string;
+  base_unit?: string;
+  purchase_unit_default?: string;
+  conversion_factor_default?: number;
   stock: number;
   min_stock: number;
   cost_per_unit: number;

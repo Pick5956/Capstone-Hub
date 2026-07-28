@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"math"
 	"strings"
 
 	"Project-M/internal/entity"
@@ -17,20 +18,23 @@ func ProvideIngredientService(repo *repository.IngredientRepository) *Ingredient
 }
 
 type IngredientRequest struct {
-	Name                    string  `json:"name" binding:"required"`
-	SKU                     string  `json:"sku"`
+	Name                    string  `json:"name" binding:"required,max=160"`
+	SKU                     string  `json:"sku" binding:"max=80"`
 	CategoryID              uint    `json:"category_id"`
-	ImageURL                string  `json:"image_url"`
-	Unit                    string  `json:"unit" binding:"required"`
+	ImageURL                string  `json:"image_url" binding:"max=2048"`
+	Unit                    string  `json:"unit" binding:"required,max=40"`
+	BaseUnit                string  `json:"base_unit" binding:"max=40"`
+	PurchaseUnitDefault     string  `json:"purchase_unit_default" binding:"max=40"`
+	ConversionFactorDefault float64 `json:"conversion_factor_default"`
 	Stock                   float64 `json:"stock"`
 	MinStock                float64 `json:"min_stock"`
 	CostPerUnit             float64 `json:"cost_per_unit"`
 	YieldPercent            float64 `json:"yield_percent"`
-	StorageType             string  `json:"storage_type"`
+	StorageType             string  `json:"storage_type" binding:"max=40"`
 }
 
 type IngredientCategoryRequest struct {
-	Name         string `json:"name" binding:"required"`
+	Name         string `json:"name" binding:"required,max=120"`
 	DisplayOrder int    `json:"display_order"`
 	IsActive     *bool  `json:"is_active"`
 }
@@ -38,8 +42,14 @@ type IngredientCategoryRequest struct {
 type AdjustStockRequest struct {
 	Type     string  `json:"type" binding:"required"` // "in", "out", "adjust"
 	Quantity float64 `json:"quantity" binding:"required"`
-	Note     string  `json:"note"`
+	Note     string  `json:"note" binding:"max=500"`
 }
+
+const (
+	maxIngredientQuantity = 1_000_000_000_000
+	maxIngredientCost     = 1_000_000_000
+	maxConversionFactor   = 1_000_000
+)
 
 func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error) {
 	return s.repo.List(restaurantID)
@@ -53,6 +63,9 @@ func (s *IngredientService) CreateCategory(restaurantID uint, req *IngredientCat
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return nil, errors.New("category name is required")
+	}
+	if len([]rune(name)) > 120 {
+		return nil, errors.New("category name is too long")
 	}
 	category := &entity.IngredientCategory{
 		RestaurantID: restaurantID,
@@ -69,8 +82,8 @@ func (s *IngredientService) CreateCategory(restaurantID uint, req *IngredientCat
 	return category, nil
 }
 
-func (s *IngredientService) Create(restaurantID uint, req *IngredientRequest) (*entity.Ingredient, error) {
-	name, unit, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
+func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientRequest) (*entity.Ingredient, error) {
+	name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -80,34 +93,41 @@ func (s *IngredientService) Create(restaurantID uint, req *IngredientRequest) (*
 	if unit == "" {
 		return nil, errors.New("unit is required")
 	}
-	if req.Stock < 0 {
-		return nil, errors.New("stock must be zero or greater")
+	if err := validateIngredientNumbers(req); err != nil {
+		return nil, err
 	}
 	ingredient := &entity.Ingredient{
-		RestaurantID: restaurantID,
-		Name:         name,
-		SKU:          strings.TrimSpace(req.SKU),
-		CategoryID:   categoryID,
-		ImageURL:     strings.TrimSpace(req.ImageURL),
-		Unit:         unit,
-		Stock:        req.Stock,
-		MinStock:     req.MinStock,
-		CostPerUnit:  req.CostPerUnit,
-		YieldPercent: sanitizeYieldPercent(req.YieldPercent),
-		StorageType:  storageType,
+		RestaurantID:            restaurantID,
+		Name:                    name,
+		SKU:                     strings.TrimSpace(req.SKU),
+		CategoryID:              categoryID,
+		ImageURL:                strings.TrimSpace(req.ImageURL),
+		Unit:                    unit,
+		BaseUnit:                baseUnit,
+		PurchaseUnitDefault:     purchaseUnitDefault,
+		ConversionFactorDefault: sanitizeConversionFactor(req.ConversionFactorDefault),
+		Stock:                   req.Stock,
+		MinStock:                req.MinStock,
+		CostPerUnit:             req.CostPerUnit,
+		YieldPercent:            sanitizeYieldPercent(req.YieldPercent),
+		StorageType:             storageType,
 	}
-	if err := s.repo.Create(ingredient); err != nil {
+	if err := s.repo.Transaction(func(tx *repository.IngredientRepository) error {
+		if err := tx.Create(ingredient); err != nil {
+			return err
+		}
+		if initialTx := buildInitialStockTransaction(ingredient, userID); initialTx != nil {
+			return tx.CreateTransaction(initialTx)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 	return ingredient, nil
 }
 
 func (s *IngredientService) Update(restaurantID, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error) {
-	ingredient, err := s.repo.FindByID(restaurantID, ingredientID)
-	if err != nil {
-		return nil, errors.New("ingredient not found")
-	}
-	name, unit, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
+	name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -117,68 +137,95 @@ func (s *IngredientService) Update(restaurantID, ingredientID uint, req *Ingredi
 	if unit == "" {
 		return nil, errors.New("unit is required")
 	}
+	if err := validateIngredientNumbers(req); err != nil {
+		return nil, err
+	}
+	ingredient, err := s.repo.FindByID(restaurantID, ingredientID)
+	if err != nil {
+		return nil, errors.New("ingredient not found")
+	}
+	if ingredientRecipeUnitChangeBlocked(ingredient.Unit, unit, ingredient.BaseUnit, baseUnit, true) {
+		referenced, err := s.repo.IsReferencedByRecipe(restaurantID, ingredientID)
+		if err != nil {
+			return nil, err
+		}
+		if referenced {
+			return nil, errors.New("cannot change stock units while ingredient is used by a menu recipe")
+		}
+	}
 	ingredient.Name = name
 	ingredient.SKU = strings.TrimSpace(req.SKU)
 	ingredient.CategoryID = categoryID
 	ingredient.ImageURL = strings.TrimSpace(req.ImageURL)
 	ingredient.Unit = unit
+	ingredient.BaseUnit = baseUnit
+	ingredient.PurchaseUnitDefault = purchaseUnitDefault
+	ingredient.ConversionFactorDefault = sanitizeConversionFactor(req.ConversionFactorDefault)
 	ingredient.MinStock = req.MinStock
 	ingredient.CostPerUnit = req.CostPerUnit
 	ingredient.YieldPercent = sanitizeYieldPercent(req.YieldPercent)
 	ingredient.StorageType = storageType
-	if err := s.repo.Update(ingredient); err != nil {
+	if err := s.repo.UpdateMetadata(ingredient); err != nil {
 		return nil, err
 	}
-	return ingredient, nil
+	return s.repo.FindByID(restaurantID, ingredientID)
 }
 
 func (s *IngredientService) Delete(restaurantID, ingredientID uint) error {
-	ingredient, err := s.repo.FindByID(restaurantID, ingredientID)
-	if err != nil {
-		return errors.New("ingredient not found")
-	}
-	return s.repo.Delete(ingredient)
+	return s.repo.Transaction(func(tx *repository.IngredientRepository) error {
+		ingredient, err := tx.FindByIDForUpdate(restaurantID, ingredientID)
+		if err != nil {
+			return errors.New("ingredient not found")
+		}
+		referenced, err := tx.IsReferencedByRecipe(restaurantID, ingredientID)
+		if err != nil {
+			return err
+		}
+		if referenced {
+			return errors.New("ingredient is used by a menu recipe")
+		}
+		return tx.Delete(ingredient)
+	})
 }
 
 func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint, req *AdjustStockRequest) (*entity.Ingredient, error) {
-	ingredient, err := s.repo.FindByID(restaurantID, ingredientID)
-	if err != nil {
-		return nil, errors.New("ingredient not found")
+	var updated *entity.Ingredient
+	kind := strings.ToLower(strings.TrimSpace(req.Type))
+	note := strings.TrimSpace(req.Note)
+	if len([]rune(note)) > 500 {
+		return nil, errors.New("stock note is too long")
 	}
-	if req.Quantity <= 0 {
-		return nil, errors.New("quantity must be greater than zero")
-	}
-	if req.Type != "in" && req.Type != "out" && req.Type != "adjust" {
-		return nil, errors.New("type must be 'in', 'out', or 'adjust'")
-	}
-
-	switch req.Type {
-	case "in":
-		ingredient.Stock += req.Quantity
-	case "out":
-		if ingredient.Stock < req.Quantity {
-			return nil, errors.New("not enough stock")
+	err := s.repo.Transaction(func(tx *repository.IngredientRepository) error {
+		ingredient, err := tx.FindByIDForUpdate(restaurantID, ingredientID)
+		if err != nil {
+			return errors.New("ingredient not found")
 		}
-		ingredient.Stock -= req.Quantity
-	case "adjust":
-		ingredient.Stock = req.Quantity
-	}
-
-	if err := s.repo.Update(ingredient); err != nil {
+		nextStock, err := applyStockAdjustment(ingredient.Stock, kind, req.Quantity)
+		if err != nil {
+			return err
+		}
+		if err := tx.UpdateStock(restaurantID, ingredientID, nextStock); err != nil {
+			return err
+		}
+		stockTransaction := &entity.IngredientTransaction{
+			RestaurantID: restaurantID,
+			IngredientID: ingredientID,
+			Type:         kind,
+			Quantity:     req.Quantity,
+			Note:         note,
+			CreatedByID:  userID,
+		}
+		if err := tx.CreateTransaction(stockTransaction); err != nil {
+			return err
+		}
+		ingredient.Stock = nextStock
+		updated = ingredient
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	tx := &entity.IngredientTransaction{
-		RestaurantID: restaurantID,
-		IngredientID: ingredientID,
-		Type:         req.Type,
-		Quantity:     req.Quantity,
-		Note:         strings.TrimSpace(req.Note),
-		CreatedByID:  userID,
-	}
-	_ = s.repo.CreateTransaction(tx)
-
-	return ingredient, nil
+	return updated, nil
 }
 
 func (s *IngredientService) ListTransactions(restaurantID, ingredientID uint) ([]entity.IngredientTransaction, error) {
@@ -188,23 +235,53 @@ func (s *IngredientService) ListTransactions(restaurantID, ingredientID uint) ([
 func (s *IngredientService) normalizeIngredientFields(
 	restaurantID uint,
 	req *IngredientRequest,
-) (string, string, string, *uint, error) {
+) (string, string, string, string, string, *uint, error) {
 	name := strings.TrimSpace(req.Name)
 	unit := strings.TrimSpace(req.Unit)
+	baseUnit := strings.TrimSpace(req.BaseUnit)
+	if baseUnit == "" {
+		baseUnit = unit
+	}
+	purchaseUnitDefault := strings.TrimSpace(req.PurchaseUnitDefault)
+	if purchaseUnitDefault == "" {
+		purchaseUnitDefault = unit
+	}
 	storageType := strings.TrimSpace(req.StorageType)
 	if storageType == "" {
 		storageType = "room_temp"
+	}
+	if len([]rune(name)) > 160 {
+		return "", "", "", "", "", nil, errors.New("ingredient name is too long")
+	}
+	if len([]rune(strings.TrimSpace(req.SKU))) > 80 {
+		return "", "", "", "", "", nil, errors.New("ingredient SKU is too long")
+	}
+	if len([]rune(strings.TrimSpace(req.ImageURL))) > 2048 {
+		return "", "", "", "", "", nil, errors.New("ingredient image URL is too long")
+	}
+	if len([]rune(unit)) > 40 || len([]rune(baseUnit)) > 40 || len([]rune(purchaseUnitDefault)) > 40 {
+		return "", "", "", "", "", nil, errors.New("ingredient unit is too long")
+	}
+	if len([]rune(storageType)) > 40 {
+		return "", "", "", "", "", nil, errors.New("ingredient storage type is too long")
 	}
 
 	var categoryID *uint
 	if req.CategoryID != 0 {
 		if _, err := s.repo.FindCategory(restaurantID, req.CategoryID); err != nil {
-			return "", "", "", nil, errors.New("ingredient category not found")
+			return "", "", "", "", "", nil, errors.New("ingredient category not found")
 		}
 		categoryID = &req.CategoryID
 	}
 
-	return name, unit, storageType, categoryID, nil
+	return name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, nil
+}
+
+func sanitizeConversionFactor(value float64) float64 {
+	if value <= 0 {
+		return 1
+	}
+	return value
 }
 
 func sanitizeYieldPercent(value float64) float64 {
@@ -215,4 +292,84 @@ func sanitizeYieldPercent(value float64) float64 {
 		return 100
 	}
 	return value
+}
+
+func validateIngredientNumbers(req *IngredientRequest) error {
+	if !isFiniteIngredientNumber(req.Stock) || req.Stock < 0 {
+		return errors.New("stock must be zero or greater")
+	}
+	if !isFiniteIngredientNumber(req.MinStock) || req.MinStock < 0 {
+		return errors.New("minimum stock must be zero or greater")
+	}
+	if !isFiniteIngredientNumber(req.CostPerUnit) || req.CostPerUnit < 0 {
+		return errors.New("cost per unit must be zero or greater")
+	}
+	if !isFiniteIngredientNumber(req.ConversionFactorDefault) || req.ConversionFactorDefault < 0 {
+		return errors.New("conversion factor must be greater than zero")
+	}
+	if !isFiniteIngredientNumber(req.YieldPercent) || req.YieldPercent < 0 || req.YieldPercent > 100 {
+		return errors.New("yield percent must be between 0 and 100")
+	}
+	if req.Stock > maxIngredientQuantity || req.MinStock > maxIngredientQuantity {
+		return errors.New("stock value is too large")
+	}
+	if req.CostPerUnit > maxIngredientCost {
+		return errors.New("cost per unit is too large")
+	}
+	if req.ConversionFactorDefault > maxConversionFactor {
+		return errors.New("conversion factor is too large")
+	}
+	return nil
+}
+
+func applyStockAdjustment(current float64, kind string, quantity float64) (float64, error) {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if !isFiniteIngredientNumber(quantity) || quantity <= 0 {
+		return 0, errors.New("quantity must be greater than zero")
+	}
+	if quantity > maxIngredientQuantity {
+		return 0, errors.New("quantity is too large")
+	}
+	switch kind {
+	case "in":
+		if current > maxIngredientQuantity-quantity {
+			return 0, errors.New("resulting stock is too large")
+		}
+		return current + quantity, nil
+	case "out":
+		if current < quantity {
+			return 0, errors.New("not enough stock")
+		}
+		return current - quantity, nil
+	case "adjust":
+		return quantity, nil
+	default:
+		return 0, errors.New("type must be 'in', 'out', or 'adjust'")
+	}
+}
+
+func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *entity.IngredientTransaction {
+	if ingredient == nil || ingredient.Stock <= 0 {
+		return nil
+	}
+	return &entity.IngredientTransaction{
+		RestaurantID: ingredient.RestaurantID,
+		IngredientID: ingredient.ID,
+		Type:         "adjust",
+		Quantity:     ingredient.Stock,
+		Note:         "initial stock",
+		CreatedByID:  userID,
+	}
+}
+
+func ingredientRecipeUnitChangeBlocked(currentUnit, nextUnit, currentBaseUnit, nextBaseUnit string, referenced bool) bool {
+	if !referenced {
+		return false
+	}
+	return !strings.EqualFold(strings.TrimSpace(currentUnit), strings.TrimSpace(nextUnit)) ||
+		!strings.EqualFold(strings.TrimSpace(currentBaseUnit), strings.TrimSpace(nextBaseUnit))
+}
+
+func isFiniteIngredientNumber(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

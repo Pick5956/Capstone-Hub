@@ -228,7 +228,7 @@ export function inviteUrl(token: string) {
 }
 
 export function inviteMailto(invitation: Invitation, language: Language) {
-  const restaurantName = invitation.restaurant?.name ?? "Restaurant Hub";
+  const restaurantName = invitation.restaurant?.name ?? "Dishy";
   const subject = language === "th"
     ? `คำเชิญเข้าร่วมร้าน ${restaurantName}`
     : `Invitation to join ${restaurantName}`;

@@ -113,7 +113,7 @@ Backend data is scoped by restaurant with `X-Restaurant-ID`. The backend owns pe
 |-- docs/                # Local project documentation and wiki
 |-- PRODUCT.md           # Product direction and audience
 |-- DESIGN.md            # Visual system and UX principles
-`-- docker-compose.yml   # PostgreSQL, PgBouncer, scalable backend, Nginx stack
+`-- docker-compose.yml   # PostgreSQL, PgBouncer, single backend, Nginx stack
 ```
 
 ## Getting Started
@@ -123,7 +123,7 @@ Backend data is scoped by restaurant with `X-Restaurant-ID`. The backend owns pe
 - Go 1.24+
 - Node.js 20+
 - npm
-- PostgreSQL 16, or Docker Desktop for the included PostgreSQL service
+- PostgreSQL 16 installed locally, or Docker Desktop for a localhost-only database container
 
 ### 1. Install dependencies
 
@@ -140,13 +140,29 @@ npm install
 
 ### 2. Start PostgreSQL
 
-Using the included Compose file:
+The Go backend needs PostgreSQL to be reachable at the host and port configured
+in `backend/.env`. You can use an existing local PostgreSQL 16 installation, or
+create a localhost-only Docker container:
 
 ```powershell
-docker compose up -d postgres
+$env:POSTGRES_PASSWORD = Read-Host "Choose a local PostgreSQL password"
+docker run --name dishy-postgres-local `
+  --env POSTGRES_PASSWORD `
+  --env POSTGRES_DB=Project_M `
+  --publish 127.0.0.1:5433:5432 `
+  --detach postgres:16-alpine
+Remove-Item Env:POSTGRES_PASSWORD
 ```
 
-This exposes PostgreSQL on host port `5433` to avoid clashing with a local PostgreSQL installation.
+After the container has been created once, start it again with
+`docker start dishy-postgres-local`.
+
+The root `docker-compose.yml` is the isolated production-style stack.
+PostgreSQL and PgBouncer are intentionally not published to the host, so
+`docker compose up -d postgres` is not the localhost database startup command.
+Running the complete Compose stack requires an ignored root `.env` containing
+`DB_PASSWORD` and `JWT_SECRET`, plus a local `infra/userlist.txt` created from
+the tracked placeholder. Never commit either file.
 
 ### 3. Configure the backend
 
@@ -169,13 +185,20 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 GOOGLE_CLIENT_ID=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
+
+SMTP_HOST=<smtp-host>
+SMTP_PORT=587
+SMTP_FROM=<sender-email>
+SMTP_USER=<smtp-username>
+SMTP_PASSWORD=<smtp-app-password>
 ```
+
+The SMTP values enable the forgot-password email flow. Keep the real credentials only in the ignored `backend/.env` file or the deployment platform's secret store. `FRONTEND_URL` is used to build the one-hour reset link, so it must point to the public web origin in production. The public endpoint always returns a generic response and never writes an email address, reset token, or reset link to logs.
 
 Then run the API:
 
 ```powershell
-cd backend
-go run main.go
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1
 ```
 
 The backend runs on `http://localhost:8080` and exposes `GET /health`.
@@ -198,6 +221,14 @@ npm.cmd run dev
 
 Open `http://localhost:3000`.
 
+After both environment files are configured, you can start the backend and frontend together from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-local.ps1
+```
+
+Managed runtime commands create new timestamped stdout and stderr files directly under `logs/<service>/current/`. They never move, rename, append to, or overwrite an older run. Move old files to `archive/` manually whenever you want to tidy them.
+
 ### 5. Run the mobile app
 
 Create a mobile environment value for the API URL:
@@ -219,27 +250,29 @@ For physical-device testing, use a LAN-accessible backend URL or the included ba
 
 | Command | Location | Purpose |
 | --- | --- | --- |
-| `go run main.go` | `backend/` | Start the Go API from source |
+| `go run ./cmd/migrate` | `backend/` | Apply pending versioned database migrations |
+| `powershell -File .\scripts\start-backend.ps1` | Repository root | Start the Go API from source with automatic runtime logs |
 | `go test ./...` | `backend/` | Run backend tests |
-| `npm.cmd run dev` | `frontend/` | Start the local Next.js app |
+| `powershell -File .\scripts\start-local.ps1` | Repository root | Start the local Go API and Next.js app together |
+| `npm.cmd run dev` | `frontend/` | Start the local Next.js app with automatic runtime logs |
 | `npm.cmd run lint` | `frontend/` | Run ESLint |
 | `npm.cmd run build` | `frontend/` | Build the production frontend |
 | `npm.cmd run test:agent` | `frontend/` | Run frontend Vitest checks |
 | `npm.cmd start` | `mobile/` | Start Expo |
 | `npm.cmd run typecheck` | `mobile/` | Type-check the mobile app |
 
-## Public Development Mode
+## Public Tunnel Mode
 
 The repo includes scripts for serving the local app through the configured Cloudflare public domain.
 
 ```powershell
-cd backend
-go run main.go
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend.ps1 -Mode public
 ```
 
 ```powershell
 cd frontend
-npm.cmd run dev:public
+npm.cmd run build:public
+npm.cmd run start:public
 ```
 
 ```powershell
@@ -251,6 +284,8 @@ Public routes:
 
 - Web app: `https://dishy.pro`
 - API: `https://api.dishy.pro`
+
+The persistent public frontend uses `next start` to keep Node memory low. It has no Hot Reload, so after every frontend source change run `build:public` and restart `start:public` before checking `dishy.pro`, even for a small visual edit. Local `npm.cmd run dev` still uses Hot Reload and only needs full builds at meaningful checkpoints. For a short public editing session that explicitly needs Hot Reload, use `npm.cmd run dev:public` instead.
 
 ## API Surface
 
@@ -286,7 +321,7 @@ The project intentionally keeps several larger features out of the current MVP:
 
 - No payment gateway or automatic PromptPay confirmation.
 - No split bills, refunds, or full tax invoice numbering.
-- No WebSocket/SSE realtime yet; polling is used for current live operations.
+- Web POS/KDS realtime uses SSE on the current single backend process; cross-instance fan-out and mobile SSE are not yet implemented.
 - Inventory is ingredient-focused; full recipe costing and automatic stock deduction are still in progress.
 - Mobile app does not yet cover every web-only workflow such as inventory, reports, AI assistant, and receipt printing.
 

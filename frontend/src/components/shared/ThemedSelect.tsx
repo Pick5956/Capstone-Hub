@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 
@@ -9,6 +9,19 @@ export type ThemedSelectOption = {
   label: string;
   disabled?: boolean;
 };
+
+export function isThemedSelectInteractionTarget(
+  target: Node,
+  triggerRoot: Pick<Node, "contains"> | null,
+  menuRoot: Pick<Node, "contains"> | null,
+) {
+  return Boolean(triggerRoot?.contains(target) || menuRoot?.contains(target));
+}
+
+function ThemedSelectPortal({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
 export default function ThemedSelect({
   value,
@@ -116,8 +129,9 @@ export default function ThemedSelect({
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) closeMenu();
+      if (!isThemedSelectInteractionTarget(event.target as Node, rootRef.current, menuRef.current)) {
+        closeMenu();
+      }
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
@@ -210,61 +224,68 @@ export default function ThemedSelect({
         </svg>
       </button>
 
-      {renderMenu && !disabled && createPortal(
-        <div
-          ref={menuRef}
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={buttonId}
-          className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
-          style={{ left: menuPosition.left, top: menuPosition.top, width: menuPosition.width, maxHeight: menuPosition.maxHeight, zIndex: 65 }}
-        >
-          {options.map((option, optionIndex) => {
-            const active = option.value === value;
-            const highlighted = options[activeIndex]?.value === option.value;
-            return (
-              <button
-                key={option.value}
-                id={`${listboxId}-option-${optionIndex}`}
-                role="option"
-                aria-selected={active}
-                aria-disabled={option.disabled || undefined}
-                type="button"
-                disabled={option.disabled}
-                onMouseEnter={() => {
-                  if (!option.disabled) setActiveIndex(optionIndex);
-                }}
-                onClick={() => {
-                  commitOption(optionIndex);
-                }}
-                style={{ "--select-option-index": optionIndex } as CSSProperties}
-                className={`themed-select-option flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13px] transition-[background-color,color] disabled:cursor-not-allowed disabled:opacity-50 ${
-                  active
-                    ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
-                    : highlighted
-                      ? "bg-gray-50 text-gray-900 dark:bg-gray-800/70 dark:text-white"
-                      : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/70"
-                }`}
-              >
-                <span className="truncate">{option.label}</span>
-                {active ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3.5 w-3.5 shrink-0 text-orange-500"
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>,
-        document.body,
+      {renderMenu && !disabled && (
+        <ThemedSelectPortal>
+          <div
+            ref={menuRef}
+            id={listboxId}
+            role="listbox"
+            aria-labelledby={buttonId}
+            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
+            style={{
+              left: menuPosition.left,
+              top: menuPosition.top,
+              width: menuPosition.width,
+              maxHeight: menuPosition.maxHeight,
+              zIndex: "calc(var(--z-modal) + 1)",
+            }}
+          >
+            {options.map((option, optionIndex) => {
+              const active = option.value === value;
+              const highlighted = options[activeIndex]?.value === option.value;
+              return (
+                <button
+                  key={option.value}
+                  id={`${listboxId}-option-${optionIndex}`}
+                  role="option"
+                  aria-selected={active}
+                  aria-disabled={option.disabled || undefined}
+                  type="button"
+                  disabled={option.disabled}
+                  onMouseEnter={() => {
+                    if (!option.disabled) setActiveIndex(optionIndex);
+                  }}
+                  onClick={() => {
+                    commitOption(optionIndex);
+                  }}
+                  style={{ "--select-option-index": optionIndex } as CSSProperties}
+                  className={`themed-select-option flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-[13px] transition-[background-color,color] disabled:cursor-not-allowed disabled:opacity-50 ${
+                    active
+                      ? "bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white"
+                      : highlighted
+                        ? "bg-gray-50 text-gray-900 dark:bg-gray-800/70 dark:text-white"
+                        : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800/70"
+                  }`}
+                >
+                  <span className="truncate">{option.label}</span>
+                  {active ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5 shrink-0 text-orange-500"
+                    >
+                      <path d="M20 6L9 17l-5-5" />
+                    </svg>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </ThemedSelectPortal>
       )}
     </div>
   );

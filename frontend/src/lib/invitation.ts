@@ -22,3 +22,15 @@ export const getInvitationByToken = (token: string) =>
 
 export const acceptInvitation = (token: string) =>
   apiClient.post<{ membership: Membership }>(`/api/v1/invitations/${token}/accept`);
+
+export const invitationEmailMismatch = (
+  invitationEmail?: string,
+  currentUserEmail?: string,
+) => {
+  const invited = invitationEmail?.trim().toLowerCase() ?? "";
+  const current = currentUserEmail?.trim().toLowerCase() ?? "";
+  if (!invited || !current || invited.includes("*")) {
+    return false;
+  }
+  return invited !== current;
+};

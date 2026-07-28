@@ -26,6 +26,7 @@ interface AuthContextValue {
   selectRestaurant: (membership: Membership) => Promise<void>;
   setActiveRestaurantFromMembership: (membership: Membership) => Promise<void>;
   refreshMemberships: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -45,6 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await getMyMemberships();
     setMemberships(response.memberships);
     return response;
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    const profile = await getCurrentUser();
+    setUser(profile);
   }, []);
 
   const restore = useCallback(async () => {
@@ -137,8 +143,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshMemberships: async () => {
         await refreshMemberships();
       },
+      refreshProfile,
     }),
-    [activeMembership, memberships, refreshMemberships, selectRestaurant, setActiveRestaurantFromMembership, signIn, signOut, status, user],
+    [activeMembership, memberships, refreshMemberships, refreshProfile, selectRestaurant, setActiveRestaurantFromMembership, signIn, signOut, status, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
