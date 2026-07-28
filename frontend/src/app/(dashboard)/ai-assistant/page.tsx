@@ -274,13 +274,8 @@ export default function AIAssistantPage() {
 
   return (
     <main className="flex h-[calc(100dvh-3.5rem)] w-full flex-col gap-4 px-4 py-4 sm:px-6 lg:h-[calc(100dvh-1rem)] lg:px-8 lg:py-6">
-      <header className="flex items-end justify-between gap-4 border-b border-gray-200 pb-4 dark:border-gray-800">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{copy.subtitle}</p>
-        </div>
-        {!isEmpty && (
+      {!isEmpty && (
+        <header className="flex items-center justify-end gap-4 border-b border-gray-200 pb-4 dark:border-gray-800">
           <button
             type="button"
             onClick={handleClearChat}
@@ -289,8 +284,8 @@ export default function AIAssistantPage() {
             <RotateCcw className="h-4 w-4" />
             <span className="hidden sm:inline">{copy.newChat}</span>
           </button>
-        )}
-      </header>
+        </header>
+      )}
 
       <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Conversation column */}
