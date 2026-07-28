@@ -28,6 +28,35 @@ type AIMenuSummary struct {
 	Revenue  float64 `json:"revenue"`
 }
 
+type AIOrderTypeSummary struct {
+	OrderType string  `json:"order_type"`
+	Orders    int64   `json:"orders"`
+	Revenue   float64 `json:"revenue"`
+}
+
+type AIPeriodSummary struct {
+	Period  int     `json:"period"` // weekday 0..6 (Sun..Sat) or hour 0..23 depending on the query
+	Orders  int64   `json:"orders"`
+	Revenue float64 `json:"revenue"`
+}
+
+type AIMenuPrice struct {
+	Name  string  `json:"name"`
+	Price float64 `json:"price"`
+}
+
+// AIIngredientUsage combines each ingredient's current stock with how much of it
+// was consumed (and its cost) over the analysis window. One query serves the
+// reorder-forecast, dead-stock, and top-cost-ingredient tools.
+type AIIngredientUsage struct {
+	Name        string  `json:"name"`
+	Unit        string  `json:"unit"`
+	Stock       float64 `json:"stock"`
+	CostPerUnit float64 `json:"cost_per_unit"`
+	Used        float64 `json:"used"`
+	Cost        float64 `json:"cost"`
+}
+
 type AIMenuMarginSummary struct {
 	MenuName string  `json:"menu_name"`
 	Quantity int64   `json:"quantity"`
@@ -94,12 +123,116 @@ func (r *AIRepository) TopMenuItems(restaurantID uint, since time.Time) ([]AIMen
 	return rows, err
 }
 
+// MostExpensiveMenus lists menus by their listed price (highest first). Menu
+// price is not time-windowed, so this reflects the current menu.
+func (r *AIRepository) MostExpensiveMenus(restaurantID uint) ([]AIMenuPrice, error) {
+	var rows []AIMenuPrice
+	err := r.db.Table("menu_items").
+		Select("name, price").
+		Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
+		Order("price desc, name asc").
+		Limit(5).
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) MenusByRevenue(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {
+	var rows []AIMenuSummary
+	err := r.db.Model(&entity.OrderItem{}).
+		Select("menu_name, COALESCE(SUM(quantity), 0) AS quantity, COALESCE(SUM(subtotal), 0) AS revenue").
+		Where("restaurant_id = ? AND created_at >= ? AND status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
+		Group("menu_name").
+		Order("revenue desc, quantity desc").
+		Limit(10).
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) OrderTypeBreakdown(restaurantID uint, since time.Time) ([]AIOrderTypeSummary, error) {
+	var rows []AIOrderTypeSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("order_type, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
+		Group("order_type").
+		Order("revenue desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *AIRepository) MenuMargins(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
 	return r.menuMargins(restaurantID, since, "profit desc, revenue desc", 8)
 }
 
+// AllMenuMargins returns up to 100 served menus with margin+quantity, used for
+// menu-engineering quadrant classification.
+func (r *AIRepository) AllMenuMargins(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
+	return r.menuMargins(restaurantID, since, "quantity desc, revenue desc", 100)
+}
+
+func (r *AIRepository) PeakSalesByWeekday(restaurantID uint, since time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(DOW FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) PeakSalesByHour(restaurantID uint, since time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(HOUR FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) IngredientUsage(restaurantID uint, since time.Time) ([]AIIngredientUsage, error) {
+	var rows []AIIngredientUsage
+	err := r.db.Table("ingredients").
+		Select(`ingredients.name, ingredients.unit, ingredients.stock, ingredients.cost_per_unit,
+			COALESCE(SUM(d.quantity), 0) AS used,
+			COALESCE(SUM(d.cost_snapshot), 0) AS cost`).
+		Joins("LEFT JOIN order_inventory_deductions d ON d.ingredient_id = ingredients.id AND d.created_at >= ? AND d.deleted_at IS NULL", since).
+		Where("ingredients.restaurant_id = ? AND ingredients.deleted_at IS NULL", restaurantID).
+		Group("ingredients.id, ingredients.name, ingredients.unit, ingredients.stock, ingredients.cost_per_unit").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// SlowMovingMenus lists available menus with the fewest sales (including zero)
+// in the analysis window, to flag candidates for review or removal.
+func (r *AIRepository) SlowMovingMenus(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {
+	var rows []AIMenuSummary
+	err := r.db.Table("menu_items").
+		Select("menu_items.name AS menu_name, COALESCE(sales.qty, 0) AS quantity, COALESCE(sales.revenue, 0) AS revenue").
+		Joins(`LEFT JOIN (
+			SELECT menu_id, SUM(quantity) AS qty, SUM(subtotal) AS revenue
+			FROM order_items
+			WHERE restaurant_id = ? AND created_at >= ? AND status <> ? AND deleted_at IS NULL
+			GROUP BY menu_id
+		) sales ON sales.menu_id = menu_items.id`, restaurantID, since, entity.OrderItemStatusCancelled).
+		Where("menu_items.restaurant_id = ? AND menu_items.deleted_at IS NULL", restaurantID).
+		Order("quantity asc, menu_items.name asc").
+		Limit(8).
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *AIRepository) LowMarginMenus(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
 	return r.menuMargins(restaurantID, since, "margin asc, revenue desc", 8)
+}
+
+func (r *AIRepository) HighMarginMenus(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
+	return r.menuMargins(restaurantID, since, "margin desc, revenue desc", 8)
+}
+
+func (r *AIRepository) LowestCostMenus(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
+	return r.menuMargins(restaurantID, since, "(COALESCE(SUM(deductions.cost), 0) / NULLIF(SUM(order_items.quantity), 0)) asc, quantity desc", 8)
 }
 
 func (r *AIRepository) AnalysisCoverage(restaurantID uint, since time.Time) (AIAnalysisCoverage, error) {

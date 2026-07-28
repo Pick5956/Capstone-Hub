@@ -20,9 +20,6 @@ type Ingredient struct {
 	CategoryID              *uint   `json:"category_id" gorm:"index"`
 	ImageURL                string  `json:"image_url" gorm:"size:2048"`
 	Unit                    string  `json:"unit" gorm:"not null;size:40"`
-	BaseUnit                string  `json:"base_unit" gorm:"size:40"`
-	PurchaseUnitDefault     string  `json:"purchase_unit_default" gorm:"size:40"`
-	ConversionFactorDefault float64 `json:"conversion_factor_default" gorm:"type:numeric(18,6);not null;default:1;check:ingredient_conversion_factor_positive,conversion_factor_default > 0"`
 	Stock                   float64 `json:"stock" gorm:"type:numeric(18,4);not null;default:0;check:ingredient_stock_nonnegative,stock >= 0"`
 	MinStock                float64 `json:"min_stock" gorm:"type:numeric(18,4);not null;default:0;check:ingredient_min_stock_nonnegative,min_stock >= 0"`
 	CostPerUnit             float64 `json:"cost_per_unit" gorm:"type:numeric(14,4);not null;default:0;check:ingredient_cost_nonnegative,cost_per_unit >= 0"`

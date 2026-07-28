@@ -162,12 +162,27 @@ func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
 func TestGetGeminiToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 5 {
+	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 20 {
 		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
-		"get_lowest_margin_menu":    true,
-		"get_low_stock_ingredients": true,
+		"get_lowest_margin_menu":          true,
+		"get_highest_margin_menu":         true,
+		"get_lowest_cost_menu":            true,
+		"get_sales_trend":                 true,
+		"get_average_order_value":         true,
+		"get_order_type_breakdown":        true,
+		"get_menu_revenue_ranking":        true,
+		"get_peak_periods":                true,
+		"get_slow_moving_menus":           true,
+		"get_menu_engineering":            true,
+		"get_ingredient_reorder_forecast": true,
+		"get_dead_stock":                  true,
+		"get_top_cost_ingredients":        true,
+		"get_store_summary":               true,
+		"get_sales_for_period":            true,
+		"get_most_expensive_menu":         true,
+		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
 		"get_sales_summary":         true,
@@ -185,12 +200,27 @@ func TestGetGeminiToolsSchema(t *testing.T) {
 func TestGetGroqToolsSchema(t *testing.T) {
 	svc := &AIService{}
 	tools := svc.getGroqTools()
-	if len(tools) != 5 {
+	if len(tools) != 20 {
 		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
 	}
 	expectedNames := map[string]bool{
-		"get_lowest_margin_menu":    true,
-		"get_low_stock_ingredients": true,
+		"get_lowest_margin_menu":          true,
+		"get_highest_margin_menu":         true,
+		"get_lowest_cost_menu":            true,
+		"get_sales_trend":                 true,
+		"get_average_order_value":         true,
+		"get_order_type_breakdown":        true,
+		"get_menu_revenue_ranking":        true,
+		"get_peak_periods":                true,
+		"get_slow_moving_menus":           true,
+		"get_menu_engineering":            true,
+		"get_ingredient_reorder_forecast": true,
+		"get_dead_stock":                  true,
+		"get_top_cost_ingredients":        true,
+		"get_store_summary":               true,
+		"get_sales_for_period":            true,
+		"get_most_expensive_menu":         true,
+		"get_low_stock_ingredients":       true,
 		"get_top_selling_menus":     true,
 		"get_inventory_valuation":   true,
 		"get_sales_summary":         true,
@@ -238,6 +268,415 @@ func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T)
 	for _, expected := range []string{"ต้นทุนรวม 1250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestHighestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems:           20,
+			MarginItems:          20,
+			CostedMarginItems:    20,
+			SoldMenus:            1,
+			SoldMenusWithRecipes: 1,
+		}),
+		HighMarginMenus: []repository.AIMenuMarginSummary{{
+			MenuName: "ต้มยำกุ้ง",
+			Quantity: 20,
+			Revenue:  3000,
+			Cost:     900,
+			Profit:   2100,
+			Margin:   70.00,
+		}},
+	}
+
+	result, err := executeReadOnlyTool(AIToolGetHighestMarginMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("highest-margin tool should produce an answer when validated data is available")
+	}
+	for _, expected := range []string{"ต้มยำกุ้ง", "Margin 70.00%", "ต้นทุนรวม 900.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 45.00 บาท", "กำไรเฉลี่ยต่อจาน 105.00 บาท"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("highest margin answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestHighestMarginToolBlockedWhenMarginNotReady(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems:        20,
+			MarginItems:       20,
+			CostedMarginItems: 10, // partial cost coverage -> CanAnalyzeMargin false
+		}),
+		HighMarginMenus: []repository.AIMenuMarginSummary{{MenuName: "ต้มยำกุ้ง", Quantity: 20, Revenue: 3000, Cost: 900, Profit: 2100, Margin: 70}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetHighestMarginMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	if result.HighestMarginMenu != nil {
+		t.Fatal("highest-margin tool must not return a menu when margin analysis is not ready")
+	}
+}
+
+func TestLowestCostToolFormatsPerDishCost(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems: 40, MarginItems: 40, CostedMarginItems: 40, SoldMenus: 1, SoldMenusWithRecipes: 1,
+		}),
+		LowestCostMenus: []repository.AIMenuMarginSummary{{
+			MenuName: "ปอเปี๊ยะทอด",
+			Quantity: 40,
+			Revenue:  2000,
+			Cost:     400,
+			Profit:   1600,
+			Margin:   80,
+		}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetLowestCostMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("lowest-cost tool should produce an answer when validated data is available")
+	}
+	// cost per dish = 400/40 = 10.00 ; must report per-dish, not only the total
+	for _, expected := range []string{"ปอเปี๊ยะทอด", "ต้นทุนเฉลี่ยต่อจาน 10.00 บาท"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("lowest cost answer is missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestSalesTrendToolComparesLast7VsPrior7(t *testing.T) {
+	// prior 7 days total 1000, recent 7 days total 1500 -> +50%
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 5, Revenue: 1500}, // recent (ref day)
+			{OrderDate: "2026-07-14", Orders: 4, Revenue: 1000}, // prior (9 days before ref)
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetSalesTrend, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	if result.SalesTrend == nil {
+		t.Fatal("sales trend tool should return a trend when revenue data is available")
+	}
+	tr := result.SalesTrend
+	if !tr.HasPrior || tr.RecentRevenue != 1500 || tr.PriorRevenue != 1000 {
+		t.Fatalf("unexpected trend split: %+v", tr)
+	}
+	if tr.RevenueChangePct < 49.9 || tr.RevenueChangePct > 50.1 {
+		t.Fatalf("expected ~+50%% change, got %.2f", tr.RevenueChangePct)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "เพิ่มขึ้น") {
+		t.Fatalf("sales trend answer should state an increase: %q", answer)
+	}
+}
+
+func TestAverageOrderValueToolComputesAOV(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 4, Revenue: 800},
+			{OrderDate: "2026-07-22", Orders: 6, Revenue: 1200},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetAverageOrderValue, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	// AOV = (800+1200) / (4+6) = 2000/10 = 200.00
+	if result.AverageOrderValue == nil || result.AverageOrderValue.AOV != 200 {
+		t.Fatalf("expected AOV 200, got %+v", result.AverageOrderValue)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "200.00 บาท") {
+		t.Fatalf("AOV answer missing value: %q", answer)
+	}
+}
+
+func TestOrderTypeBreakdownToolFormatsSharesAndLabels(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		OrderTypeBreakdown: []repository.AIOrderTypeSummary{
+			{OrderType: "dine_in", Orders: 8, Revenue: 800},
+			{OrderType: "takeaway", Orders: 2, Revenue: 200},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetOrderTypeBreakdown, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("order type breakdown should produce an answer")
+	}
+	for _, expected := range []string{"ทานที่ร้าน", "ซื้อกลับ", "80.0%", "20.0%"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("order type answer missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestMenuRevenueRankingToolFormatsByRevenue(t *testing.T) {
+	snapshot := AISnapshot{
+		TopMenusByRevenue: []repository.AIMenuSummary{
+			{MenuName: "ต้มยำกุ้ง", Quantity: 20, Revenue: 3000},
+			{MenuName: "ผัดไทย", Quantity: 40, Revenue: 2000},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetMenuRevenueRanking, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("menu revenue ranking should produce an answer")
+	}
+	for _, expected := range []string{"ต้มยำกุ้ง", "รายได้รวม: 3000.00 บาท", "ผัดไทย"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("menu revenue answer missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestPeakPeriodsToolReportsTopWeekdayAndHour(t *testing.T) {
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		PeakWeekdays:      []repository.AIPeriodSummary{{Period: 6, Orders: 40, Revenue: 8000}, {Period: 5, Orders: 20}},
+		PeakHours:         []repository.AIPeriodSummary{{Period: 18, Orders: 25, Revenue: 5000}, {Period: 12, Orders: 15}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetPeakPeriods, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("peak periods should produce an answer")
+	}
+	for _, expected := range []string{"วันเสาร์", "18:00", "40 ออเดอร์", "25 ออเดอร์"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("peak periods answer missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestSlowMovingMenusToolFlagsZeroSales(t *testing.T) {
+	snapshot := AISnapshot{
+		SlowMovingMenus: []repository.AIMenuSummary{
+			{MenuName: "สลัดผัก", Quantity: 0, Revenue: 0},
+			{MenuName: "น้ำเปล่า", Quantity: 2, Revenue: 20},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetSlowMovingMenus, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("slow moving menus should produce an answer")
+	}
+	for _, expected := range []string{"สลัดผัก", "ไม่มีคนสั่งเลย", "น้ำเปล่า"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("slow moving answer missing %q: %s", expected, answer)
+		}
+	}
+}
+
+func TestMenuEngineeringClassifiesQuadrants(t *testing.T) {
+	// median quantity=30, median margin=50 across the 4 menus below
+	snapshot := AISnapshot{
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems: 40, MarginItems: 40, CostedMarginItems: 40, SoldMenus: 4, SoldMenusWithRecipes: 4,
+		}),
+		AllMenuMargins: []repository.AIMenuMarginSummary{
+			{MenuName: "ดาว", Quantity: 50, Margin: 70},      // high pop, high margin -> Star
+			{MenuName: "ชูโรง", Quantity: 50, Margin: 30},    // high pop, low margin -> Plowhorse
+			{MenuName: "ซ่อนเร้น", Quantity: 10, Margin: 70}, // low pop, high margin -> Puzzle
+			{MenuName: "ถ่วง", Quantity: 10, Margin: 30},     // low pop, low margin -> Dog
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetMenuEngineering, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	eng := result.MenuEngineering
+	if eng == nil {
+		t.Fatal("menu engineering should return a classification")
+	}
+	if len(eng.Stars) != 1 || eng.Stars[0] != "ดาว" {
+		t.Fatalf("expected ดาว as the only Star, got %v", eng.Stars)
+	}
+	if len(eng.Dogs) != 1 || eng.Dogs[0] != "ถ่วง" {
+		t.Fatalf("expected ถ่วง as the only Dog, got %v", eng.Dogs)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "ดาวเด่น") {
+		t.Fatalf("menu engineering answer should mention quadrants: %q", answer)
+	}
+}
+
+func TestReorderForecastToolRanksBySoonestOut(t *testing.T) {
+	// used over 14 days -> daily rate; days left = stock / daily
+	snapshot := AISnapshot{
+		IngredientUsage: []repository.AIIngredientUsage{
+			{Name: "กุ้ง", Unit: "กก.", Stock: 7, CostPerUnit: 200, Used: 14}, // 1/day -> 7 days
+			{Name: "ข้าว", Unit: "กก.", Stock: 28, CostPerUnit: 20, Used: 14}, // 1/day -> 28 days
+			{Name: "เกลือ", Unit: "กก.", Stock: 5, CostPerUnit: 10, Used: 0},   // no usage -> excluded
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetIngredientReorderForecast, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	items := result.ReorderForecast
+	if len(items) != 2 {
+		t.Fatalf("expected 2 forecastable ingredients (unused excluded), got %d: %+v", len(items), items)
+	}
+	if items[0].Name != "กุ้ง" { // soonest to run out first
+		t.Fatalf("expected กุ้ง first (7 days), got %s", items[0].Name)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "กุ้ง") {
+		t.Fatalf("reorder answer missing กุ้ง: %q", answer)
+	}
+}
+
+func TestDeadStockToolFlagsUnusedStock(t *testing.T) {
+	snapshot := AISnapshot{
+		IngredientUsage: []repository.AIIngredientUsage{
+			{Name: "ผงกะหรี่", Unit: "กก.", Stock: 10, CostPerUnit: 50, Used: 0}, // dead: value 500
+			{Name: "หมู", Unit: "กก.", Stock: 5, CostPerUnit: 100, Used: 20},      // used -> not dead
+			{Name: "พริกแห้ง", Unit: "กก.", Stock: 0, CostPerUnit: 30, Used: 0},   // no stock -> not dead
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetDeadStock, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	if len(result.DeadStock) != 1 || result.DeadStock[0].Name != "ผงกะหรี่" {
+		t.Fatalf("expected only ผงกะหรี่ as dead stock, got %+v", result.DeadStock)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "ผงกะหรี่") {
+		t.Fatalf("dead stock answer missing ผงกะหรี่: %q", answer)
+	}
+}
+
+func TestTopCostIngredientsToolRanksBySpend(t *testing.T) {
+	snapshot := AISnapshot{
+		IngredientUsage: []repository.AIIngredientUsage{
+			{Name: "กุ้ง", Unit: "กก.", Used: 10, Cost: 2000},
+			{Name: "ข้าว", Unit: "กก.", Used: 30, Cost: 600},
+			{Name: "เกลือ", Unit: "กก.", Used: 0, Cost: 0}, // no cost -> excluded
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetTopCostIngredients, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	if len(result.TopCostIngredients) != 2 || result.TopCostIngredients[0].Name != "กุ้ง" {
+		t.Fatalf("expected กุ้ง first by cost, got %+v", result.TopCostIngredients)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok || !strings.Contains(answer, "2000.00 บาท") {
+		t.Fatalf("top cost answer missing value: %q", answer)
+	}
+}
+
+func TestStoreSummaryToolComposesDeterministicOverview(t *testing.T) {
+	snapshot := AISnapshot{
+		GeneratedAt: "2026-07-23T20:00:00+07:00",
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
+			SalesItems: 40, MarginItems: 40, CostedMarginItems: 40, SoldMenus: 3, SoldMenusWithRecipes: 3,
+		}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 5, Revenue: 1500},
+			{OrderDate: "2026-07-14", Orders: 4, Revenue: 1000},
+		},
+		TopMenuItems:    []repository.AIMenuSummary{{MenuName: "ผัดไทย", Quantity: 30, Revenue: 3000}, {MenuName: "ต้มยำ", Quantity: 20, Revenue: 4000}},
+		HighMarginMenus: []repository.AIMenuMarginSummary{{MenuName: "ปอเปี๊ยะทอด", Quantity: 10, Margin: 89.75}},
+		StockRisks:      []AIStockRisk{{Name: "กุ้ง", Status: "low"}},
+	}
+	result, err := executeReadOnlyTool(AIToolGetStoreSummary, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("store summary should produce an answer")
+	}
+	for _, expected := range []string{"ภาพรวมร้าน", "2500.00 บาท", "9 ออเดอร์", "ผัดไทย", "ปอเปี๊ยะทอด", "วัตถุดิบใกล้หมด**: 1"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("store summary missing %q: %s", expected, answer)
+		}
+	}
+	// Must not mislabel the 14-day window as "today"
+	if strings.Contains(answer, "วันนี้") {
+		t.Fatalf("store summary must not claim 'วันนี้': %s", answer)
+	}
+}
+
+func TestSalesForPeriodResolvesTodayAndYesterday(t *testing.T) {
+	snapshot := AISnapshot{
+		GeneratedAt:       "2026-07-23T20:00:00+07:00", // reference "today" = 2026-07-23
+		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{SalesItems: 10}),
+		SalesDays: []repository.AISalesSummary{
+			{OrderDate: "2026-07-23", Orders: 5, Revenue: 1500}, // today
+			{OrderDate: "2026-07-22", Orders: 3, Revenue: 900},  // yesterday
+			{OrderDate: "2026-07-10", Orders: 2, Revenue: 400},  // outside week
+		},
+	}
+	// today
+	todayRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "วันนี้ขายได้เท่าไหร่")
+	if todayRes.SalesForPeriod == nil || todayRes.SalesForPeriod.Revenue != 1500 || todayRes.SalesForPeriod.Label != "วันนี้" {
+		t.Fatalf("today period wrong: %+v", todayRes.SalesForPeriod)
+	}
+	// yesterday
+	yRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "เมื่อวานขายดีไหม")
+	if yRes.SalesForPeriod == nil || yRes.SalesForPeriod.Revenue != 900 || yRes.SalesForPeriod.Label != "เมื่อวาน" {
+		t.Fatalf("yesterday period wrong: %+v", yRes.SalesForPeriod)
+	}
+	// this week (last 7 days: 07-17..07-23) -> only 23 and 22
+	wRes, _ := executeReadOnlyTool(AIToolGetSalesForPeriod, snapshot, "ยอดสัปดาห์นี้")
+	if wRes.SalesForPeriod == nil || wRes.SalesForPeriod.Revenue != 2400 {
+		t.Fatalf("this-week period wrong (want 2400): %+v", wRes.SalesForPeriod)
+	}
+	answer, ok := localToolAnswer(yRes)
+	if !ok || !strings.Contains(answer, "เมื่อวาน") {
+		t.Fatalf("period answer should mention เมื่อวาน: %q", answer)
+	}
+}
+
+func TestMostExpensiveMenuReportsPriceNotRevenue(t *testing.T) {
+	snapshot := AISnapshot{
+		MostExpensiveMenus: []repository.AIMenuPrice{
+			{Name: "ยำทะเลรวม", Price: 249},
+			{Name: "ต้มยำกุ้ง", Price: 199},
+		},
+	}
+	result, err := executeReadOnlyTool(AIToolGetMostExpensiveMenu, snapshot)
+	if err != nil {
+		t.Fatalf("executeReadOnlyTool: %v", err)
+	}
+	answer, ok := localToolAnswer(result)
+	if !ok {
+		t.Fatal("most expensive menu should produce an answer")
+	}
+	// Must report the actual per-dish price, not a total revenue figure.
+	for _, expected := range []string{"ยำทะเลรวม", "249.00 บาทต่อจาน"} {
+		if !strings.Contains(answer, expected) {
+			t.Fatalf("most expensive answer missing %q: %s", expected, answer)
 		}
 	}
 }

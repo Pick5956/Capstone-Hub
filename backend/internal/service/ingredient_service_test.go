@@ -18,7 +18,6 @@ func TestValidateIngredientNumbers(t *testing.T) {
 				Stock:                   0,
 				MinStock:                1.25,
 				CostPerUnit:             12.50,
-				ConversionFactorDefault: 1,
 				YieldPercent:            85,
 			},
 		},
@@ -121,16 +120,13 @@ func TestBuildInitialStockTransaction(t *testing.T) {
 }
 
 func TestIngredientRecipeUnitChangeBlocked(t *testing.T) {
-	if !ingredientRecipeUnitChangeBlocked("kg", "g", "kg", "kg", true) {
+	if !ingredientRecipeUnitChangeBlocked("kg", "g", true) {
 		t.Fatal("ingredientRecipeUnitChangeBlocked() = false, want true when a referenced stock unit changes")
 	}
-	if !ingredientRecipeUnitChangeBlocked("kg", "kg", "kg", "g", true) {
-		t.Fatal("ingredientRecipeUnitChangeBlocked() = false, want true when a referenced base unit changes")
-	}
-	if ingredientRecipeUnitChangeBlocked("kg", "KG", "kg", "KG", true) {
+	if ingredientRecipeUnitChangeBlocked("kg", "KG", true) {
 		t.Fatal("ingredientRecipeUnitChangeBlocked() = true for case-only change")
 	}
-	if ingredientRecipeUnitChangeBlocked("kg", "g", "kg", "g", false) {
+	if ingredientRecipeUnitChangeBlocked("kg", "g", false) {
 		t.Fatal("ingredientRecipeUnitChangeBlocked() = true for unreferenced ingredient")
 	}
 }

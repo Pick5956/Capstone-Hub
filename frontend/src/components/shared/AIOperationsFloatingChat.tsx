@@ -11,14 +11,16 @@ import {
   Send, 
   TrendingUp, 
   Wallet, 
-  X, 
+  X,
   BarChart2,
-  Lightbulb
+  Lightbulb,
+  RotateCcw
 } from "lucide-react";
 import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
+import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -145,6 +147,7 @@ export default function AIOperationsFloatingChat() {
         hideTips: "ซ่อนคำถามแนะนำ",
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
+        clearChat: "เริ่มแชทใหม่",
       }
     : {
         openAssistant: "Open AI assistant",
@@ -153,6 +156,7 @@ export default function AIOperationsFloatingChat() {
         hideTips: "Hide suggested questions",
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
+        clearChat: "New chat",
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -173,57 +177,33 @@ export default function AIOperationsFloatingChat() {
 
   const canAskAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
 
-  // Load saved messages on mount
+  // Per-(restaurant, user) storage key, shared with the full /ai-assistant page.
+  const storageKey = useMemo(
+    () => chatStorageKey(activeMembership?.restaurant_id, user?.ID),
+    [user, activeMembership],
+  );
+
+  // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
-    const hydrateTimer = window.setTimeout(() => {
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("restaurant_ai_chat");
-        if (saved) {
-          try {
-            const parsed: unknown = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const rehydrated = parsed.map((m) => {
-                const stored = m as StoredMessage;
-                return {
-                  ...m,
-                  createdAt: stored.createdAt ? new Date(stored.createdAt) : new Date(),
-                };
-              });
-              setMessages(rehydrated);
-              return;
-            }
-          } catch (e) {
-            console.error("Failed to parse saved chat messages:", e);
-          }
-        }
-
-        // Default initial welcome message if no history
-        setMessages([
-          {
-            id: "welcome",
-            role: "assistant",
-            content: copy.welcome,
-            createdAt: new Date(),
-          },
-        ]);
-      }
-    }, 0);
-
-    return () => window.clearTimeout(hydrateTimer);
-  }, [copy.welcome]);
-
-  // Save messages to localStorage when updated
-  useEffect(() => {
-    if (typeof window !== "undefined" && messages.length > 0) {
-      localStorage.setItem("restaurant_ai_chat", JSON.stringify(messages));
+    purgeStaleChats(storageKey);
+    const stored = loadStoredMessages<StoredMessage>(storageKey);
+    if (stored && stored.length > 0) {
+      setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
+    } else {
+      setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
     }
-  }, [messages]);
+  }, [storageKey, copy.welcome]);
+
+  // Persist to the shared key; a lone welcome message is not persisted.
+  useEffect(() => {
+    saveMessages(storageKey, messages);
+  }, [messages, storageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
+      messagesEndRef.current.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "end" });
     }
   }, [messages, loading]);
 
@@ -270,6 +250,13 @@ export default function AIOperationsFloatingChat() {
       .slice(-6)
       .map((message) => ({ role: message.role, content: message.content }));
 
+  // Start a fresh chat: drop the stored history and reset to the welcome message.
+  const handleClearChat = () => {
+    clearStoredChat(storageKey);
+    setShowTips(true);
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  };
+
   const handleAction = (action: AIGuidedAction) => {
     if (action.prompt) {
       handleSend(action.prompt);
@@ -283,7 +270,7 @@ export default function AIOperationsFloatingChat() {
     setMessages((previous) => [
       ...previous,
       {
-        id: `confirm-${previous.length}`,
+        id: `confirm-${Date.now()}`,
         role: "assistant",
         content: action.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing."),
         createdAt: new Date(),
@@ -305,30 +292,29 @@ export default function AIOperationsFloatingChat() {
     setInput("");
     
     // Add user message
-    setMessages((previous) => [
-      ...previous,
-      {
-        id: `user-${previous.length}`,
-        role: "user",
-        content: trimmed,
-        createdAt: new Date(),
-      },
-    ]);
+    const userMsgId = `user-${Date.now()}`;
+    const userMsg: Message = {
+      id: userMsgId,
+      role: "user",
+      content: trimmed,
+      createdAt: new Date(),
+    };
+    
+    setMessages(prev => [...prev, userMsg]);
 
     const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
     if (navigation) {
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: `nav-${previous.length}`,
-          role: "assistant",
-          content: navigation.message,
-          createdAt: new Date(),
-          actions: navigation.kind === "suggest"
-            ? navigation.options.map((option) => ({ id: option.href, ...option }))
-            : undefined,
-        },
-      ]);
+      const assistantMsg: Message = {
+        id: `nav-${Date.now()}`,
+        role: "assistant",
+        content: navigation.message,
+        createdAt: new Date(),
+        actions: navigation.kind === "suggest"
+          ? navigation.options.map((option) => ({ id: option.href, ...option }))
+          : undefined,
+      };
+
+      setMessages(prev => [...prev, assistantMsg]);
       if (navigation.kind === "navigate" && !navigation.alreadyThere) {
         router.push(navigation.href);
       }
@@ -340,7 +326,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `clarify-${previous.length}`,
+          id: `clarify-${Date.now()}`,
           role: "assistant",
           content: clarification.message,
           createdAt: new Date(),
@@ -354,7 +340,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `permission-${previous.length}`,
+          id: `permission-${Date.now()}`,
           role: "assistant",
           content: language === "th"
             ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนการวิเคราะห์ยอดขายและคลังต้องใช้สิทธิ์ผู้จัดการหรือเจ้าของร้าน"
@@ -371,20 +357,19 @@ export default function AIOperationsFloatingChat() {
       const response = await askOperationsAI(trimmed, conversationHistory());
       const data: AIAskResponse = response.data;
       
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: `ai-${previous.length}`,
-          role: "assistant",
-          content: data.answer,
-          createdAt: new Date(),
-          actions: data.intent === "unclear"
-            ? getUnclearRequestActions(activeMembership, language)
-            : data.intent === "analysis"
-              ? getGuidedActions(trimmed, data.answer, activeMembership, language)
-              : undefined,
-        },
-      ]);
+      const assistantMsg: Message = {
+        id: `ai-${Date.now()}`,
+        role: "assistant",
+        content: data.answer,
+        createdAt: new Date(),
+        actions: data.intent === "unclear"
+          ? getUnclearRequestActions(activeMembership, language)
+          : data.intent === "analysis"
+            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+            : undefined,
+      };
+      
+      setMessages(prev => [...prev, assistantMsg]);
       
       if (data.snapshot) {
         setLatestSnapshot(data.snapshot);
@@ -408,21 +393,21 @@ export default function AIOperationsFloatingChat() {
           : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
       }
           
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: `err-${previous.length}`,
-          role: "system",
-          content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
-          createdAt: new Date(),
-        },
-      ]);
+      const errorMsg: Message = {
+        id: `err-${Date.now()}`,
+        role: "system",
+        content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
+        createdAt: new Date(),
+      };
+      setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!activeMembership || !showAIAssistant) return null;
+  // Hide the floating widget on the dedicated AI assistant page to avoid two
+  // chat surfaces at once (they share the same history).
+  if (!activeMembership || !showAIAssistant || pathname === "/ai-assistant") return null;
 
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];
@@ -623,6 +608,21 @@ export default function AIOperationsFloatingChat() {
                   <BarChart2 className="h-4.5 w-4.5" />
                 </button>
               )}
+              {/* New Chat / Clear History */}
+              {messages.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={labels.clearChat}
+                  title={labels.clearChat}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClearChat();
+                  }}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
+                >
+                  <RotateCcw className="h-4.5 w-4.5" />
+                </button>
+              )}
               {/* Close Panel */}
               <button
                 type="button"
@@ -639,7 +639,7 @@ export default function AIOperationsFloatingChat() {
           </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (

@@ -1,22 +1,78 @@
 [
-  {
-    "name": "random keyboard input",
-    "question": "rytyt",
-    "expected_intent": "unclear"
-  },
-  {
-    "name": "restaurant analysis request",
-    "question": "ช่วยวิเคราะห์วัตถุดิบที่เสี่ยงหมดให้หน่อย",
-    "expected_intent": "analysis"
-  },
-  {
-    "name": "outside restaurant scope",
-    "question": "วันนี้อากาศที่กรุงเทพเป็นอย่างไร",
-    "expected_intent": "out_of_scope"
-  },
-  {
-    "name": "ordinary conversation",
-    "question": "ขอบคุณครับ ช่วยได้มากเลย",
-    "expected_intent": "conversation"
-  }
+  { "name": "store summary casual", "question": "สรุปสถานการณ์ร้านช่วงนี้หน่อย", "expected_task": "analyze_data", "expected_tool": "get_store_summary" },
+  { "name": "sales summary total", "question": "ยอดขายรวมช่วงนี้เท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_summary" },
+  { "name": "sales for period yesterday", "question": "เมื่อวานขายได้เท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
+  { "name": "sales trend vs last week", "question": "ยอดขายดีขึ้นหรือแย่ลงเทียบสัปดาห์ก่อน", "expected_task": "analyze_data", "expected_tool": "get_sales_trend" },
+  { "name": "average order value", "question": "ลูกค้าจ่ายเฉลี่ยต่อบิลเท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_average_order_value" },
+  { "name": "order type breakdown", "question": "กินที่ร้านกับสั่งกลับบ้านอย่างไหนเยอะกว่า", "expected_task": "analyze_data", "expected_tool": "get_order_type_breakdown" },
+  { "name": "peak periods busiest time", "question": "ช่วงเวลาไหนคนเยอะสุด", "expected_task": "analyze_data", "expected_tool": "get_peak_periods" },
+
+  { "name": "top selling by count", "question": "เมนูไหนขายดีที่สุด", "expected_task": "analyze_data", "expected_tool": "get_top_selling_menus" },
+  { "name": "menu revenue ranking", "question": "เมนูไหนทำเงินให้ร้านมากสุด", "expected_task": "analyze_data", "expected_tool": "get_menu_revenue_ranking" },
+  { "name": "most expensive price", "question": "เมนูไหนตั้งราคาแพงสุด", "expected_task": "analyze_data", "expected_tool": "get_most_expensive_menu" },
+  { "name": "highest margin", "question": "เมนูไหนกำไรดีสุด", "expected_task": "analyze_data", "expected_tool": "get_highest_margin_menu" },
+  { "name": "lowest margin", "question": "เมนูไหนกำไรน้อยสุด ควรตรวจสอบ", "expected_task": "analyze_data", "expected_tool": "get_lowest_margin_menu" },
+  { "name": "lowest cost per dish", "question": "เมนูไหนต้นทุนต่อจานถูกสุด", "expected_task": "analyze_data", "expected_tool": "get_lowest_cost_menu" },
+  { "name": "slow moving menus", "question": "เมนูไหนขายไม่ค่อยออก ควรถอดไหม", "expected_task": "analyze_data", "expected_tool": "get_slow_moving_menus" },
+  { "name": "menu engineering", "question": "วิเคราะห์เมนูให้หน่อย ตัวไหนดาวเด่นตัวไหนตัวถ่วง", "expected_task": "analyze_data", "expected_tool": "get_menu_engineering" },
+
+  { "name": "low stock check", "question": "วัตถุดิบอะไรใกล้หมดบ้าง", "expected_task": "analyze_data", "expected_tool": "get_low_stock_ingredients" },
+  { "name": "inventory valuation", "question": "ตอนนี้มูลค่าของในคลังเท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_inventory_valuation" },
+  { "name": "reorder forecast", "question": "ของไหนใกล้หมด ควรสั่งเพิ่มเมื่อไหร่", "expected_task": "analyze_data", "expected_tool": "get_ingredient_reorder_forecast" },
+  { "name": "dead stock", "question": "มีของค้างสต๊อกที่ซื้อมาแล้วไม่ได้ใช้ไหม", "expected_task": "analyze_data", "expected_tool": "get_dead_stock" },
+  { "name": "top cost ingredients", "question": "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "expected_task": "analyze_data", "expected_tool": "get_top_cost_ingredients" },
+
+  { "name": "concept margin what", "question": "margin คืออะไร", "expected_task": "explain_concept" },
+  { "name": "concept margin how", "question": "มาร์จิ้นคำนวณยังไง", "expected_task": "explain_concept" },
+
+  { "name": "help add menu", "question": "เพิ่มเมนูใหม่ในระบบทำยังไง", "expected_task": "product_help" },
+  { "name": "help set tax", "question": "ตั้งค่าภาษีตรงไหน", "expected_task": "product_help" },
+  { "name": "help add staff", "question": "เพิ่มพนักงานเข้าระบบยังไง", "expected_task": "product_help" },
+
+  { "name": "content caption", "question": "ช่วยคิดแคปชั่นโปรโมทเมนูใหม่หน่อย", "expected_task": "restaurant_content" },
+  { "name": "content rainy promo post", "question": "เขียนโพสต์โปรโมชั่นหน้าฝนให้หน่อย", "expected_task": "restaurant_content" },
+  { "name": "advice slow afternoon", "question": "มีไอเดียดึงลูกค้าช่วงบ่ายที่คนน้อยไหม", "expected_task": "restaurant_advice" },
+
+  { "name": "greeting hello", "question": "สวัสดีครับ", "expected_task": "general_chat" },
+  { "name": "greeting slang yo", "question": "โย่ว", "expected_task": "general_chat" },
+  { "name": "greeting slang friend", "question": "ว่าไงเพื่อน", "expected_task": "general_chat" },
+  { "name": "thanks", "question": "ขอบคุณครับ ช่วยได้เยอะเลย", "expected_task": "general_chat" },
+
+  { "name": "scope who are you", "question": "คุณคือใคร", "expected_task": "scope_question" },
+  { "name": "scope what can you do", "question": "ช่วยอะไรได้บ้าง", "expected_task": "scope_question" },
+
+  { "name": "risky delete menu", "question": "ลบเมนูข้าวผัดออกให้หน่อย", "expected_task": "risky_action" },
+  { "name": "risky bulk price change", "question": "ปรับราคาทุกเมนูขึ้น 10%", "expected_task": "risky_action" },
+  { "name": "risky place order", "question": "สั่งซื้อกะทิเพิ่ม 20 กล่องให้ที", "expected_task": "risky_action" },
+
+  { "name": "out of scope weather", "question": "วันนี้อากาศเป็นไง", "expected_task": "out_of_scope" },
+  { "name": "out of scope poem", "question": "ช่วยแต่งกลอนความรักหน่อย", "expected_task": "out_of_scope" },
+  { "name": "out of scope homework", "question": "ช่วยทำการบ้านคณิตให้หน่อย", "expected_task": "out_of_scope" },
+
+  { "name": "unclear keyboard mash 1", "question": "rytyt", "expected_task": "unclear" },
+  { "name": "unclear keyboard mash 2", "question": "asdfgh", "expected_task": "unclear" },
+  { "name": "unclear question marks", "question": "???", "expected_task": "unclear" },
+
+  { "name": "low stock variant", "question": "เช็คสต๊อกให้หน่อย", "expected_task": "analyze_data", "expected_tool": "get_low_stock_ingredients" },
+  { "name": "reorder variant days left", "question": "ของอะไรจะหมดก่อน พอใช้อีกกี่วัน", "expected_task": "analyze_data", "expected_tool": "get_ingredient_reorder_forecast" },
+  { "name": "peak variant best day", "question": "วันไหนขายดีที่สุด", "expected_task": "analyze_data", "expected_tool": "get_peak_periods" },
+  { "name": "trend variant growing", "question": "ร้านโตขึ้นไหมช่วงนี้", "expected_task": "analyze_data", "expected_tool": "get_sales_trend" },
+  { "name": "sales summary variant orders", "question": "มีกี่ออเดอร์ช่วงนี้", "expected_task": "analyze_data", "expected_tool": "get_sales_summary" },
+
+  { "name": "top selling variant ordered often", "question": "เมนูไหนคนสั่งบ่อยสุด", "expected_task": "analyze_data", "expected_tool": "get_top_selling_menus" },
+  { "name": "revenue variant generates most", "question": "เมนูไหนสร้างรายได้ให้ร้านมากสุด", "expected_task": "analyze_data", "expected_tool": "get_menu_revenue_ranking" },
+  { "name": "price variant highest price", "question": "จานไหนราคาสูงสุดในเมนู", "expected_task": "analyze_data", "expected_tool": "get_most_expensive_menu" },
+  { "name": "margin variant per dish profit", "question": "เมนูไหนได้กำไรต่อจานเยอะสุด", "expected_task": "analyze_data", "expected_tool": "get_highest_margin_menu" },
+  { "name": "cost variant least ingredient cost", "question": "เมนูไหนใช้ต้นทุนวัตถุดิบน้อยสุด", "expected_task": "analyze_data", "expected_tool": "get_lowest_cost_menu" },
+
+  { "name": "ambiguous best menu", "question": "เมนูไหนดีสุด", "expect_clarify": true },
+  { "name": "ambiguous top menu slang", "question": "เมนูไหนเด็ดสุด", "expect_clarify": true },
+  { "name": "ambiguous store okay", "question": "ของในร้านโอเคไหม", "expect_clarify": true },
+
+  { "name": "en sales this week", "question": "how much did we sell this week", "expected_task": "analyze_data", "expected_tool": "get_sales_summary" },
+  { "name": "en best selling menu", "question": "which menu sells best", "expected_task": "analyze_data", "expected_tool": "get_top_selling_menus" },
+  { "name": "en running low stock", "question": "what's running low in stock", "expected_task": "analyze_data", "expected_tool": "get_low_stock_ingredients" },
+  { "name": "en best margin dish", "question": "which dish has the best margin", "expected_task": "analyze_data", "expected_tool": "get_highest_margin_menu" },
+  { "name": "en greeting", "question": "hi there", "expected_task": "general_chat" },
+  { "name": "en risky delete", "question": "delete the fried rice menu", "expected_task": "risky_action" }
 ]

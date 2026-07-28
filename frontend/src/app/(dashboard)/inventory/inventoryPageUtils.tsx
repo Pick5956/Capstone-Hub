@@ -1,7 +1,7 @@
 import type { Ingredient, IngredientInput } from "@/src/types/ingredient";
 import { localeForLanguage } from "@/src/lib/format";
 
-export const UNITS = ["kg", "g", "liter", "ml", "piece", "pack", "bottle", "box", "bag"];
+export const UNITS = ["กรัม", "กก.", "มิลลิลิตร", "ลิตร", "ชิ้น", "ลูก", "ฟอง", "ใบ", "แผ่น", "ขวด", "แพ็ก", "ถุง", "กล่อง"];
 export const STORAGE_TYPES = ["room_temp", "chilled", "frozen", "dry"];
 
 export const emptyForm: IngredientInput = {
@@ -9,10 +9,7 @@ export const emptyForm: IngredientInput = {
   sku: "",
   category_id: 0,
   image_url: "",
-  unit: "kg",
-  base_unit: "kg",
-  purchase_unit_default: "kg",
-  conversion_factor_default: 1,
+  unit: "กก.",
   stock: 0,
   min_stock: 0,
   cost_per_unit: 0,

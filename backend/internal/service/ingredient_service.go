@@ -23,9 +23,6 @@ type IngredientRequest struct {
 	CategoryID              uint    `json:"category_id"`
 	ImageURL                string  `json:"image_url" binding:"max=2048"`
 	Unit                    string  `json:"unit" binding:"required,max=40"`
-	BaseUnit                string  `json:"base_unit" binding:"max=40"`
-	PurchaseUnitDefault     string  `json:"purchase_unit_default" binding:"max=40"`
-	ConversionFactorDefault float64 `json:"conversion_factor_default"`
 	Stock                   float64 `json:"stock"`
 	MinStock                float64 `json:"min_stock"`
 	CostPerUnit             float64 `json:"cost_per_unit"`
@@ -48,7 +45,6 @@ type AdjustStockRequest struct {
 const (
 	maxIngredientQuantity = 1_000_000_000_000
 	maxIngredientCost     = 1_000_000_000
-	maxConversionFactor   = 1_000_000
 )
 
 func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error) {
@@ -83,7 +79,7 @@ func (s *IngredientService) CreateCategory(restaurantID uint, req *IngredientCat
 }
 
 func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientRequest) (*entity.Ingredient, error) {
-	name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
+	name, unit, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +99,6 @@ func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientReq
 		CategoryID:              categoryID,
 		ImageURL:                strings.TrimSpace(req.ImageURL),
 		Unit:                    unit,
-		BaseUnit:                baseUnit,
-		PurchaseUnitDefault:     purchaseUnitDefault,
-		ConversionFactorDefault: sanitizeConversionFactor(req.ConversionFactorDefault),
 		Stock:                   req.Stock,
 		MinStock:                req.MinStock,
 		CostPerUnit:             req.CostPerUnit,
@@ -127,7 +120,7 @@ func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientReq
 }
 
 func (s *IngredientService) Update(restaurantID, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error) {
-	name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
+	name, unit, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +137,7 @@ func (s *IngredientService) Update(restaurantID, ingredientID uint, req *Ingredi
 	if err != nil {
 		return nil, errors.New("ingredient not found")
 	}
-	if ingredientRecipeUnitChangeBlocked(ingredient.Unit, unit, ingredient.BaseUnit, baseUnit, true) {
+	if ingredientRecipeUnitChangeBlocked(ingredient.Unit, unit, true) {
 		referenced, err := s.repo.IsReferencedByRecipe(restaurantID, ingredientID)
 		if err != nil {
 			return nil, err
@@ -158,9 +151,6 @@ func (s *IngredientService) Update(restaurantID, ingredientID uint, req *Ingredi
 	ingredient.CategoryID = categoryID
 	ingredient.ImageURL = strings.TrimSpace(req.ImageURL)
 	ingredient.Unit = unit
-	ingredient.BaseUnit = baseUnit
-	ingredient.PurchaseUnitDefault = purchaseUnitDefault
-	ingredient.ConversionFactorDefault = sanitizeConversionFactor(req.ConversionFactorDefault)
 	ingredient.MinStock = req.MinStock
 	ingredient.CostPerUnit = req.CostPerUnit
 	ingredient.YieldPercent = sanitizeYieldPercent(req.YieldPercent)
@@ -235,53 +225,38 @@ func (s *IngredientService) ListTransactions(restaurantID, ingredientID uint) ([
 func (s *IngredientService) normalizeIngredientFields(
 	restaurantID uint,
 	req *IngredientRequest,
-) (string, string, string, string, string, *uint, error) {
+) (string, string, string, *uint, error) {
 	name := strings.TrimSpace(req.Name)
 	unit := strings.TrimSpace(req.Unit)
-	baseUnit := strings.TrimSpace(req.BaseUnit)
-	if baseUnit == "" {
-		baseUnit = unit
-	}
-	purchaseUnitDefault := strings.TrimSpace(req.PurchaseUnitDefault)
-	if purchaseUnitDefault == "" {
-		purchaseUnitDefault = unit
-	}
 	storageType := strings.TrimSpace(req.StorageType)
 	if storageType == "" {
 		storageType = "room_temp"
 	}
 	if len([]rune(name)) > 160 {
-		return "", "", "", "", "", nil, errors.New("ingredient name is too long")
+		return "", "", "", nil, errors.New("ingredient name is too long")
 	}
 	if len([]rune(strings.TrimSpace(req.SKU))) > 80 {
-		return "", "", "", "", "", nil, errors.New("ingredient SKU is too long")
+		return "", "", "", nil, errors.New("ingredient SKU is too long")
 	}
 	if len([]rune(strings.TrimSpace(req.ImageURL))) > 2048 {
-		return "", "", "", "", "", nil, errors.New("ingredient image URL is too long")
+		return "", "", "", nil, errors.New("ingredient image URL is too long")
 	}
-	if len([]rune(unit)) > 40 || len([]rune(baseUnit)) > 40 || len([]rune(purchaseUnitDefault)) > 40 {
-		return "", "", "", "", "", nil, errors.New("ingredient unit is too long")
+	if len([]rune(unit)) > 40 {
+		return "", "", "", nil, errors.New("ingredient unit is too long")
 	}
 	if len([]rune(storageType)) > 40 {
-		return "", "", "", "", "", nil, errors.New("ingredient storage type is too long")
+		return "", "", "", nil, errors.New("ingredient storage type is too long")
 	}
 
 	var categoryID *uint
 	if req.CategoryID != 0 {
 		if _, err := s.repo.FindCategory(restaurantID, req.CategoryID); err != nil {
-			return "", "", "", "", "", nil, errors.New("ingredient category not found")
+			return "", "", "", nil, errors.New("ingredient category not found")
 		}
 		categoryID = &req.CategoryID
 	}
 
-	return name, unit, baseUnit, purchaseUnitDefault, storageType, categoryID, nil
-}
-
-func sanitizeConversionFactor(value float64) float64 {
-	if value <= 0 {
-		return 1
-	}
-	return value
+	return name, unit, storageType, categoryID, nil
 }
 
 func sanitizeYieldPercent(value float64) float64 {
@@ -304,9 +279,6 @@ func validateIngredientNumbers(req *IngredientRequest) error {
 	if !isFiniteIngredientNumber(req.CostPerUnit) || req.CostPerUnit < 0 {
 		return errors.New("cost per unit must be zero or greater")
 	}
-	if !isFiniteIngredientNumber(req.ConversionFactorDefault) || req.ConversionFactorDefault < 0 {
-		return errors.New("conversion factor must be greater than zero")
-	}
 	if !isFiniteIngredientNumber(req.YieldPercent) || req.YieldPercent < 0 || req.YieldPercent > 100 {
 		return errors.New("yield percent must be between 0 and 100")
 	}
@@ -315,9 +287,6 @@ func validateIngredientNumbers(req *IngredientRequest) error {
 	}
 	if req.CostPerUnit > maxIngredientCost {
 		return errors.New("cost per unit is too large")
-	}
-	if req.ConversionFactorDefault > maxConversionFactor {
-		return errors.New("conversion factor is too large")
 	}
 	return nil
 }
@@ -362,12 +331,11 @@ func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *e
 	}
 }
 
-func ingredientRecipeUnitChangeBlocked(currentUnit, nextUnit, currentBaseUnit, nextBaseUnit string, referenced bool) bool {
+func ingredientRecipeUnitChangeBlocked(currentUnit, nextUnit string, referenced bool) bool {
 	if !referenced {
 		return false
 	}
-	return !strings.EqualFold(strings.TrimSpace(currentUnit), strings.TrimSpace(nextUnit)) ||
-		!strings.EqualFold(strings.TrimSpace(currentBaseUnit), strings.TrimSpace(nextBaseUnit))
+	return !strings.EqualFold(strings.TrimSpace(currentUnit), strings.TrimSpace(nextUnit))
 }
 
 func isFiniteIngredientNumber(value float64) bool {
