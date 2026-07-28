@@ -17,6 +17,15 @@ export function login(email: string, password: string) {
   });
 }
 
+export function googleLogin(idToken: string) {
+  return apiRequest<LoginResponse>('/api/google-login', {
+    method: 'POST',
+    skipAuth: true,
+    skipRestaurant: true,
+    body: JSON.stringify({ id_token: idToken }),
+  });
+}
+
 export function getCurrentUser() {
   return apiRequest<User>('/api/v1/users/profile');
 }

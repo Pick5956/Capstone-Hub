@@ -1,8 +1,22 @@
 import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { getCurrentUser, login } from '@/src/api/auth';
+import {
+  getCurrentUser,
+  googleLogin,
+  login,
+  type LoginResponse,
+} from '@/src/api/auth';
 import { getMyMemberships } from '@/src/api/restaurant';
+import {
+  clearGoogleSignInSession,
+  requestGoogleIdToken,
+} from '@/src/lib/google-sign-in';
+import {
+  resolveActiveRestaurantId,
+  upsertMembership,
+} from '@/src/lib/auth-state';
+import { getDefaultWorkspaceRoute } from '@/src/lib/work-mode';
 import {
   clearActiveRestaurantId,
   clearSession,
@@ -22,6 +36,7 @@ interface AuthContextValue {
   memberships: Membership[];
   activeMembership: Membership | null;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<boolean>;
   signOut: () => Promise<void>;
   selectRestaurant: (membership: Membership) => Promise<void>;
   setActiveRestaurantFromMembership: (membership: Membership) => Promise<void>;
@@ -64,26 +79,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const [profile, membershipResponse, storedRestaurantId] = await Promise.all([
-        getCurrentUser(),
+      const profile = await getCurrentUser();
+      setUser(profile);
+
+      const [membershipResult, storedRestaurantResult] = await Promise.allSettled([
         getMyMemberships(),
         getActiveRestaurantId(),
       ]);
-
-      setUser(profile);
-      setMemberships(membershipResponse.memberships);
-
-      const activeExists = membershipResponse.memberships.some(
-        (membership) => membership.restaurant_id === storedRestaurantId,
+      const nextMemberships = membershipResult.status === 'fulfilled'
+        ? membershipResult.value.memberships
+        : [];
+      const storedRestaurantId = storedRestaurantResult.status === 'fulfilled'
+        ? storedRestaurantResult.value
+        : null;
+      const nextRestaurantId = resolveActiveRestaurantId(
+        nextMemberships,
+        storedRestaurantId,
       );
-      const nextRestaurantId = activeExists ? storedRestaurantId : null;
 
-      if (nextRestaurantId) {
-        await setActiveRestaurantId(nextRestaurantId);
+      setMemberships(nextMemberships);
+      if (membershipResult.status === 'fulfilled') {
+        if (nextRestaurantId) {
+          await setActiveRestaurantId(nextRestaurantId).catch(() => undefined);
+        } else {
+          await clearActiveRestaurantId().catch(() => undefined);
+        }
       }
       setActiveRestaurantIdState(nextRestaurantId);
     } catch {
-      await clearSession();
+      await clearSession().catch(() => undefined);
       setUser(null);
       setMemberships([]);
       setActiveRestaurantIdState(null);
@@ -96,12 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restore();
   }, [restore]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!email || !password) {
-      throw new Error('กรอกอีเมลและรหัสผ่านให้ครบ');
-    }
-
-    const response = await login(email, password);
+  const completeSignIn = useCallback(async (response: LoginResponse) => {
     await setToken(response.token, 'Bearer');
     setUser(response.user);
     setMemberships(response.memberships);
@@ -111,22 +130,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace('/restaurants');
   }, []);
 
+  const signIn = useCallback(async (email: string, password: string) => {
+    if (!email || !password) {
+      throw new Error('กรอกอีเมลและรหัสผ่านให้ครบ');
+    }
+
+    const response = await login(email, password);
+    await completeSignIn(response);
+  }, [completeSignIn]);
+
+  const signInWithGoogle = useCallback(async () => {
+    const idToken = await requestGoogleIdToken();
+    if (!idToken) {
+      return false;
+    }
+
+    const response = await googleLogin(idToken);
+    await completeSignIn(response);
+    return true;
+  }, [completeSignIn]);
+
   const signOut = useCallback(async () => {
+    if (user?.auth_provider === 'google') {
+      await clearGoogleSignInSession();
+    }
     await clearSession();
     setUser(null);
     setMemberships([]);
     setActiveRestaurantIdState(null);
     router.replace('/login');
-  }, []);
+  }, [user?.auth_provider]);
 
   const selectRestaurant = useCallback(async (membership: Membership) => {
     await setActiveRestaurantId(membership.restaurant_id);
     setActiveRestaurantIdState(membership.restaurant_id);
-    router.replace('/home');
+    router.replace(getDefaultWorkspaceRoute(membership));
   }, []);
 
   const setActiveRestaurantFromMembership = useCallback(async (membership: Membership) => {
     await setActiveRestaurantId(membership.restaurant_id);
+    setMemberships((current) => upsertMembership(current, membership));
     setActiveRestaurantIdState(membership.restaurant_id);
   }, []);
 
@@ -137,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       memberships,
       activeMembership,
       signIn,
+      signInWithGoogle,
       signOut,
       selectRestaurant,
       setActiveRestaurantFromMembership,
@@ -145,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       refreshProfile,
     }),
-    [activeMembership, memberships, refreshMemberships, refreshProfile, selectRestaurant, setActiveRestaurantFromMembership, signIn, signOut, status, user],
+    [activeMembership, memberships, refreshMemberships, refreshProfile, selectRestaurant, setActiveRestaurantFromMembership, signIn, signInWithGoogle, signOut, status, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

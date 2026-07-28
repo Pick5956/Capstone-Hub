@@ -1,5 +1,7 @@
-import { ActivityIndicator, Pressable, Text, TextInput, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native';
 
+import { AppText as Text } from '@/src/components/app-text';
+import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
 
 export function Button({
@@ -9,6 +11,7 @@ export function Button({
   disabled,
   loading,
   compact,
+  leading,
   style,
 }: {
   label: string;
@@ -17,6 +20,7 @@ export function Button({
   disabled?: boolean;
   loading?: boolean;
   compact?: boolean;
+  leading?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
   const backgroundColor = variant === 'primary' ? palette.primary : variant === 'danger' ? palette.danger : palette.surface;
@@ -45,7 +49,7 @@ export function Button({
         style,
       ]}
     >
-      {loading ? <ActivityIndicator color={color} size="small" /> : null}
+      {loading ? <ActivityIndicator color={color} size="small" /> : leading}
       <Text style={{ color, fontSize: 14, fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );

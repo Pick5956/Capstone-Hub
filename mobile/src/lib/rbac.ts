@@ -21,13 +21,7 @@ const fallbackRolePermissions: Record<string, Permission[]> = {
   chef: ['view_kitchen', 'update_order_status', 'view_inventory'],
 };
 
-const deprecatedPermissions = new Set<Permission>(['view_menu']);
-
 export function can(membership: Membership | null | undefined, permission: Permission): boolean {
-  if (deprecatedPermissions.has(permission)) {
-    return false;
-  }
-
   const memberOverride = membership?.permissions_override;
   if (memberOverride) {
     try {

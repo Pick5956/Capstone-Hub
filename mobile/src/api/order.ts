@@ -1,13 +1,38 @@
 import { apiRequest } from './client';
+import { buildOrderListPath } from '@/src/lib/order-query';
 import type { Bill, Order, OrderItemStatus, OrderStatus, OrderType } from '@/src/types/order';
 
-export function listOrders(params?: { status?: OrderStatus | ''; table_id?: number; date?: string }) {
-  const query = new URLSearchParams();
-  if (params?.status) query.set('status', params.status);
-  if (params?.table_id) query.set('table_id', String(params.table_id));
-  if (params?.date) query.set('date', params.date);
-  const suffix = query.toString() ? `?${query.toString()}` : '';
-  return apiRequest<{ orders: Order[] }>(`/api/v1/orders${suffix}`);
+export type OrderListStatus = OrderStatus | 'active' | 'closed' | '';
+
+export interface OrderListSummary {
+  total: number;
+  active: number;
+  closed: number;
+  statuses: Record<OrderStatus, number>;
+}
+
+export interface OrderListResponse {
+  orders: Order[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    has_more: boolean;
+  };
+  summary?: OrderListSummary;
+}
+
+export function listOrders(params?: {
+  status?: OrderListStatus;
+  payment_status?: 'paid' | 'unpaid' | '';
+  search?: string;
+  include_summary?: boolean;
+  table_id?: number;
+  date?: string;
+  page?: number;
+  limit?: number;
+}) {
+  return apiRequest<OrderListResponse>(buildOrderListPath(params));
 }
 
 export function kitchenQueue() {
@@ -63,10 +88,10 @@ export function sendOrderToKitchen(orderId: number) {
   });
 }
 
-export function updateOrderItemStatus(orderId: number, itemId: number, status: OrderItemStatus) {
+export function updateOrderItemStatus(orderId: number, itemId: number, status: OrderItemStatus, reason?: string) {
   return apiRequest<Order>(`/api/v1/orders/${orderId}/items/${itemId}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, reason }),
   });
 }
 
@@ -74,11 +99,5 @@ export function payOrder(orderId: number, data: { method: 'cash' | 'promptpay_qr
   return apiRequest<Order>(`/api/v1/orders/${orderId}/pay`, {
     method: 'POST',
     body: JSON.stringify(data),
-  });
-}
-
-export function closeOrder(orderId: number) {
-  return apiRequest<Order>(`/api/v1/orders/${orderId}/close`, {
-    method: 'POST',
   });
 }

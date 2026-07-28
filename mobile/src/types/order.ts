@@ -56,6 +56,8 @@ export interface OrderPayment {
 
 export interface Order {
   ID: number;
+  kitchen_ticket_id?: string;
+  kitchen_batch?: number;
   restaurant_id: number;
   table_id?: number | null;
   order_type: OrderType;
