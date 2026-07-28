@@ -273,23 +273,30 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="flex h-[calc(100dvh-3.5rem)] w-full flex-col gap-4 px-4 py-4 sm:px-6 lg:h-[calc(100dvh-1rem)] lg:px-8 lg:py-6">
-      {!isEmpty && (
-        <header className="flex items-center justify-end gap-4 border-b border-gray-200 pb-4 dark:border-gray-800">
-          <button
-            type="button"
-            onClick={handleClearChat}
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
-          >
-            <RotateCcw className="h-4 w-4" />
-            <span className="hidden sm:inline">{copy.newChat}</span>
-          </button>
-        </header>
-      )}
-
+    <main className="flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
       <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Conversation column */}
-        <div className="flex min-h-0 flex-col rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+        <div className="flex min-h-0 flex-col bg-white dark:bg-gray-950">
+          {/* Card header */}
+          <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
+                <Bot className="h-4 w-4" />
+              </span>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                {language === "th" ? "ผู้ช่วยพร้อมวิเคราะห์" : "Assistant ready"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{copy.newChat}</span>
+            </button>
+          </div>
           {/* Messages */}
           <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
             {messages.map((msg) => {
