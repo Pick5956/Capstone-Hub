@@ -8,22 +8,26 @@ import (
 	"Project-M/internal/entity"
 )
 
-func TestOrderNumberFromIndex(t *testing.T) {
-	cases := map[int]string{
-		1:     "A001",
-		999:   "A999",
-		1000:  "B001",
-		25975: "AA001",
+func TestOrderNumberForDate(t *testing.T) {
+	cases := []struct {
+		index int
+		want  string
+	}{
+		{index: 1, want: "20260724-001"},
+		{index: 15, want: "20260724-015"},
+		{index: 999, want: "20260724-999"},
+		{index: 1000, want: "20260724-1000"},
+		{index: 0, want: "20260724-001"},
 	}
-	for input, want := range cases {
-		if got := orderNumberFromIndex(input); got != want {
-			t.Fatalf("orderNumberFromIndex(%d) = %s, want %s", input, got, want)
+	for _, tc := range cases {
+		if got := orderNumberForDate("20260724", tc.index); got != tc.want {
+			t.Fatalf("orderNumberForDate(20260724, %d) = %s, want %s", tc.index, got, tc.want)
 		}
 	}
 }
 
 func TestOrderListFiltersAndOrderNumberAreBounded(t *testing.T) {
-	if err := ValidateOrderListFilters("active", "2026-07-24", "paid", "A001"); err != nil {
+	if err := ValidateOrderListFilters("active", "2026-07-24", "paid", "20260724-015"); err != nil {
 		t.Fatalf("valid filters rejected: %v", err)
 	}
 	for _, filters := range [][4]string{
@@ -36,12 +40,13 @@ func TestOrderListFiltersAndOrderNumberAreBounded(t *testing.T) {
 			t.Fatalf("invalid filters accepted: %#v", filters)
 		}
 	}
-	for _, valid := range []string{"A001", "Z999", "AA001"} {
+	// New format plus legacy letter-prefixed numbers (kept valid for old orders).
+	for _, valid := range []string{"20260724-015", "20260724-001", "20260724-1000", "A001", "Z999", "AA001"} {
 		if !validOrderNumber(valid) {
 			t.Fatalf("validOrderNumber(%q) = false", valid)
 		}
 	}
-	for _, invalid := range []string{"", "A01", "a001", "001", "A0001", strings.Repeat("A", 30) + "001"} {
+	for _, invalid := range []string{"", "A01", "a001", "001", "2026072-015", "20260724015", "20260724-01", "2026072a-015", "20260724-" + strings.Repeat("0", 30)} {
 		if validOrderNumber(invalid) {
 			t.Fatalf("validOrderNumber(%q) = true", invalid)
 		}
@@ -78,6 +83,19 @@ func TestEffectiveOrderStatusRepairsStaleKitchenAggregate(t *testing.T) {
 	}
 	if err := validateOrderReadyForPayment(order); err != nil {
 		t.Fatalf("stale parent status should not block payment when all active items are ready: %v", err)
+	}
+}
+
+func TestEffectiveOrderStatusReopensWhenAllItemsCancelled(t *testing.T) {
+	order := &entity.Order{
+		Status: entity.OrderStatusCooking,
+		Items: []entity.OrderItem{
+			{Status: entity.OrderItemStatusCancelled},
+			{Status: entity.OrderItemStatusCancelled},
+		},
+	}
+	if got := effectiveOrderStatus(order); got != entity.OrderStatusOpen {
+		t.Fatalf("effective status = %q, want %q", got, entity.OrderStatusOpen)
 	}
 }
 
@@ -127,8 +145,14 @@ func TestCanTransitionItem(t *testing.T) {
 	if canTransitionItem(entity.OrderItemStatusReady, entity.OrderItemStatusPending) {
 		t.Fatal("ready should not transition back to pending")
 	}
-	if canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCancelled) {
-		t.Fatal("served should be terminal for item status")
+	if !canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCancelled) {
+		t.Fatal("served should be voidable via cancellation during checkout")
+	}
+	if canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCooking) {
+		t.Fatal("served should not reopen to cooking")
+	}
+	if canTransitionItem(entity.OrderItemStatusCancelled, entity.OrderItemStatusCancelled) {
+		t.Fatal("cancelled should be terminal for item status")
 	}
 }
 
@@ -211,6 +235,18 @@ func TestValidateEmptyTableClose(t *testing.T) {
 				Items:     []entity.OrderItem{{}},
 			},
 			wantErr: "table order already has items",
+		},
+		{
+			name: "allows a table whose items were all cancelled",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeDineIn,
+				TableID:   &tableID,
+				Status:    entity.OrderStatusOpen,
+				Items: []entity.OrderItem{
+					{Status: entity.OrderItemStatusCancelled},
+					{Status: entity.OrderItemStatusCancelled},
+				},
+			},
 		},
 	}
 

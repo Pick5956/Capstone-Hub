@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bell, MapPin, Minus, Plus, Printer, ReceiptText, Search, ShoppingBasket, UtensilsCrossed, WalletCards, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Bell, MapPin, Minus, Plus, Printer, ReceiptText, Search, ShoppingBasket, UtensilsCrossed, WalletCards, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -12,7 +12,7 @@ import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups"
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
 import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem } from "@/src/lib/order";
+import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
 import type { Bill, Order, OrderItem, OrderPayment } from "@/src/types/order";
@@ -100,6 +100,10 @@ export default function PosOrderDetailPage() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "promptpay_qr">("cash");
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [lastPayment, setLastPayment] = useState<OrderPayment | null>(null);
+  const [billEditMode, setBillEditMode] = useState(false);
+  const [billAddOpen, setBillAddOpen] = useState(false);
+  const [billCancelTarget, setBillCancelTarget] = useState<OrderItemGroup | null>(null);
+  const [billCancelReason, setBillCancelReason] = useState("");
 
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
@@ -145,6 +149,22 @@ export default function PosOrderDetailPage() {
       confirmPayment: "ยืนยันรับเงิน",
       paymentMethod: "วิธีรับเงิน",
       allItems: "รายการทั้งหมด",
+      editItems: "แก้ไขรายการ",
+      doneEditing: "เสร็จสิ้น",
+      addServed: "เพิ่มรายการ (เสิร์ฟแล้ว)",
+      backToBill: "กลับไปที่บิล",
+      requiresOptions: "ต้องเลือกตัวเลือก — เพิ่มจากหน้าสั่งอาหาร",
+      addServedHint: "แตะเมนูเพื่อเพิ่มเป็น “เสิร์ฟแล้ว” ทีละ 1",
+      cancelItemTitle: "ยกเลิกรายการนี้?",
+      cancelItemReason: "เหตุผลที่ยกเลิก",
+      cancelItemPlaceholder: "เช่น พนักงานกดสั่งเกิน",
+      confirmCancelItem: "ยืนยันยกเลิก",
+      keepItemBtn: "เก็บไว้",
+      reasonRequired: "กรุณาระบุเหตุผล",
+      itemCancelledToast: "ยกเลิกรายการแล้ว",
+      itemAddedToast: "เพิ่มรายการแล้ว",
+      notServed: "ยังไม่เสิร์ฟ",
+      undeliveredWarn: "มีรายการที่ยังไม่ได้เสิร์ฟ — ยกเลิก (ครัวทำไม่ทัน) หรือรอครัวก่อนชำระเงิน",
       closeEmptyTable: "ปิดโต๊ะ",
       closeEmptyTableTitle: "ปิดโต๊ะที่เปิดผิด?",
       closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะยกเลิกออเดอร์ว่างและเปลี่ยนโต๊ะกลับเป็นว่าง",
@@ -155,6 +175,7 @@ export default function PosOrderDetailPage() {
       loadError: "โหลดออเดอร์ไม่สำเร็จ",
       saveError: "ทำรายการไม่สำเร็จ",
       noMenu: "ยังไม่มีเมนู",
+      soldOut: "หมด",
     }
     : {
       denied: "You do not have permission to take orders.",
@@ -192,6 +213,22 @@ export default function PosOrderDetailPage() {
       confirmPayment: "Confirm payment",
       paymentMethod: "Payment method",
       allItems: "All items",
+      editItems: "Edit items",
+      doneEditing: "Done",
+      addServed: "Add item (served)",
+      backToBill: "Back to bill",
+      requiresOptions: "Needs options — add from ordering screen",
+      addServedHint: "Tap a menu item to add it as “served” (one each)",
+      cancelItemTitle: "Void this item?",
+      cancelItemReason: "Reason for voiding",
+      cancelItemPlaceholder: "e.g. staff over-ordered",
+      confirmCancelItem: "Void item",
+      keepItemBtn: "Keep",
+      reasonRequired: "Enter a reason",
+      itemCancelledToast: "Item voided",
+      itemAddedToast: "Item added",
+      notServed: "Not served",
+      undeliveredWarn: "Some items haven't been served — void them (kitchen too slow) or wait before payment.",
       closeEmptyTable: "Close table",
       closeEmptyTableTitle: "Close this table opened by mistake?",
       closeEmptyTableBody: "This table has no items. The empty order will be cancelled and the table will become available again.",
@@ -202,6 +239,7 @@ export default function PosOrderDetailPage() {
       loadError: "Could not load order.",
       saveError: "Could not complete the action.",
       noMenu: "No menu items.",
+      soldOut: "Sold out",
     };
 
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
@@ -280,7 +318,8 @@ export default function PosOrderDetailPage() {
     return menuItems.filter((item) => {
       if (categoryId !== "all" && !menuCategoryIds(item).includes(categoryId)) return false;
       if (keyword && !item.name.toLowerCase().includes(keyword)) return false;
-      return item.is_available;
+      // Sold-out items stay in the grid (shown as "sold out"); they are not filtered out.
+      return true;
     });
   }, [categoryId, menuItems, search]);
   const categoryOptions = useMemo(() => [
@@ -360,6 +399,10 @@ export default function PosOrderDetailPage() {
       setPaymentComplete(false);
       setLastPayment(null);
       setBillViewClosing(false);
+      setBillEditMode(false);
+      setBillAddOpen(false);
+      setBillCancelTarget(null);
+      setBillCancelReason("");
     }, 180);
   };
   const paymentBackdrop = useBackdropClose(closeBillModal);
@@ -393,7 +436,7 @@ export default function PosOrderDetailPage() {
       if (background && actionInFlightRef.current) return;
       setOrder(orderRes.data);
       setCategories(categoryRes.data.categories.filter((category) => category.is_active));
-      setMenuItems(menuRes.data.menu_items.filter((item) => item.is_available));
+      setMenuItems(menuRes.data.menu_items);
     } catch {
       setError(copy.loadError);
     } finally {
@@ -585,6 +628,75 @@ export default function PosOrderDetailPage() {
       setLastPayment(latestPayment);
       setBillViewClosing(false);
       setBillViewOpen(true);
+      // If the kitchen is still working on some items (e.g. it ran too long and
+      // the guest wants to leave), open straight into edit mode so the cashier
+      // can void the undelivered lines before charging for what was served.
+      const undelivered = res.data.items.filter((it) => it.status === "pending" || it.status === "cooking").length;
+      setBillEditMode(undelivered > 0);
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const hasRequiredOptions = (item: MenuItem) =>
+    (item.option_groups ?? []).some((group) => menuOptionLimits(group).minSelect > 0);
+
+  // Re-fetch the bill (and refresh the order in the background) after an in-bill
+  // edit so the totals and item list stay in sync without reopening the modal.
+  const reloadBill = async () => {
+    if (!order) return;
+    try {
+      const res = await getOrderBill(order.ID);
+      setBill(res.data);
+      setPaymentComplete(res.data.payment_status === "paid");
+      setLastPayment(res.data.payments.at(-1) ?? null);
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    }
+  };
+
+  const addServedItem = async (item: MenuItem) => {
+    if (!order || submitting || hasRequiredOptions(item)) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await addOrderItem(order.ID, {
+        menu_id: item.ID,
+        quantity: 1,
+        serve_immediately: true,
+        fulfillment_type: order.order_type === "takeaway" ? "takeaway" : "dine_in",
+      });
+      await reloadBill();
+      void load({ background: true });
+      showToast({ title: copy.itemAddedToast });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmCancelBillItem = async () => {
+    if (!order || !billCancelTarget || submitting) return;
+    const reason = billCancelReason.trim();
+    if (!reason) {
+      setError(copy.reasonRequired);
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      const targets = billCancelTarget.items.filter((it) => it.status !== "cancelled");
+      for (const target of targets) {
+        await updateOrderItemStatus(order.ID, target.ID, "cancelled", reason);
+      }
+      setBillCancelTarget(null);
+      setBillCancelReason("");
+      await reloadBill();
+      void load({ background: true });
+      showToast({ title: copy.itemCancelledToast });
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
@@ -594,21 +706,26 @@ export default function PosOrderDetailPage() {
 
   const confirmPayment = async () => {
     if (!order || !bill) return;
-    await runAction(async () => {
-      const res = await payOrder(order.ID, {
+    setSubmitting(true);
+    actionInFlightRef.current = true;
+    setError("");
+    try {
+      await payOrder(order.ID, {
         method: paymentMethod,
         received_amount: bill.grand_total,
       });
-      const latestPayment = res.data.payments?.at(-1) ?? null;
       showToast({ title: paidToastTitle });
-      setLastPayment(latestPayment);
-      setBill((current) => current ? { ...current, order: res.data, payment_status: "paid", payments: res.data.payments ?? current.payments } : current);
-      setPaymentComplete(true);
-      return res.data;
-    });
+      // Payment is done: drop this order page from history and return to the
+      // floor. The receipt can still be reprinted from the order archive.
+      router.replace("/pos/tables");
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+      actionInFlightRef.current = false;
+      setSubmitting(false);
+    }
   };
 
-  const orderItemCount = order?.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const orderItemCount = activeOrderItems.reduce((sum, item) => sum + item.quantity, 0);
   const canCloseTable = order ? canCloseEmptyTableOrder(order) : false;
   const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
@@ -654,7 +771,7 @@ export default function PosOrderDetailPage() {
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
-                {pendingItemCount === 0 && (order.status === "ready" || order.status === "served") ? (
+                {pendingItemCount === 0 && !isTerminal && activeOrderItems.length > 0 ? (
                   <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                     <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
@@ -718,7 +835,12 @@ export default function PosOrderDetailPage() {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:hover:-translate-y-0.5">
+                    {!item.is_available && (
+                      <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
+                        {copy.soldOut}
+                      </span>
+                    )}
                     {orderedQuantity > 0 && (
                       <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
                         {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
@@ -927,9 +1049,10 @@ export default function PosOrderDetailPage() {
         </div>
       )}
       {billViewOpen && bill && (() => {
-        const billGroups = groupOrderItems(bill.items);
+        const billGroups = groupOrderItems(bill.items.filter((it) => it.status !== "cancelled"));
         const billSections = fulfillmentSections(billGroups);
         const billItemCount = billGroups.reduce((sum, group) => sum + group.quantity, 0);
+        const billUndelivered = bill.items.filter((it) => it.status === "pending" || it.status === "cooking").length;
 
         const renderBillGroup = (group: OrderItemGroup) => {
           const item = group.firstItem;
@@ -943,7 +1066,12 @@ export default function PosOrderDetailPage() {
                   style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
                 />
                 <div className="min-w-0">
-                  <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
+                  <p className="text-[14px] font-semibold text-gray-900 dark:text-white">
+                    {item.menu_name}
+                    {group.items.some((entry) => entry.status === "pending" || entry.status === "cooking") ? (
+                      <span data-screen-only className="ml-2 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{copy.notServed}</span>
+                    ) : null}
+                  </p>
                   {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}
                   {item.note ? <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{item.note}</p> : null}
                 </div>
@@ -952,6 +1080,19 @@ export default function PosOrderDetailPage() {
                   <p className="mt-0.5 font-mono text-[11px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">x{group.quantity}</p>
                 </div>
               </div>
+              {billEditMode ? (
+                <div data-screen-only className="mt-2 flex justify-end border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => { setError(""); setBillCancelReason(""); setBillCancelTarget(group); }}
+                    className="ui-press inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-[12px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    {copy.cancelled}
+                  </button>
+                </div>
+              ) : null}
             </div>
           );
         };
@@ -983,25 +1124,102 @@ export default function PosOrderDetailPage() {
                     <h2 className="text-[16px] font-semibold text-gray-900">{copy.bill} #{bill.order.order_number}</h2>
                     <p className="mt-0.5 text-[12px] text-gray-600">{orderLocationLabel(bill.order, language)}</p>
                   </div>
-                  <button data-screen-only type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
+                  <div data-screen-only className="flex shrink-0 items-center gap-2">
+                    {!paymentComplete && canTake ? (
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => { setBillEditMode((value) => !value); setBillAddOpen(false); setBillCancelTarget(null); setError(""); }}
+                        className={`ui-press h-9 rounded-md border px-3 text-[12px] font-semibold disabled:opacity-50 ${billEditMode ? "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}
+                      >
+                        {billEditMode ? copy.doneEditing : copy.editItems}
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
+                  </div>
                 </div>
                 <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
-                  <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.allItems}</h3>
-                      <p className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">{billItemCount} {language === "th" ? "รายการ" : "items"}</p>
-                    </div>
-                    <div className="space-y-3">
-                      {billSections.map((section) => (
-                        <div data-receipt-section key={section.key} className="space-y-2">
-                          {billSections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? <p className="px-1 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</p> : null}
-                          <div className="space-y-2">
-                            {section.groups.map(renderBillGroup)}
+                  {billAddOpen ? (
+                    <section data-screen-only className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.addServed}</h3>
+                        <button type="button" onClick={() => setBillAddOpen(false)} className="ui-press h-8 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.backToBill}</button>
+                      </div>
+                      <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">{copy.addServedHint}</p>
+                      <input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder={copy.search}
+                        className="mb-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-900"
+                      />
+                      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
+                        {categoryOptions.map((option) => {
+                          const active = option.value === "all" ? categoryId === "all" : String(categoryId) === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setCategoryId(option.value === "all" ? "all" : Number(option.value))}
+                              className={`h-8 shrink-0 rounded-md border px-3 text-[12px] font-semibold ${active ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {filteredMenu.map((menu) => {
+                          const needsOptions = hasRequiredOptions(menu);
+                          const disabled = submitting || !menu.is_available || needsOptions;
+                          return (
+                            <button
+                              key={menu.ID}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => { void addServedItem(menu); }}
+                              className="ui-press flex flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950"
+                            >
+                              <div role="img" aria-hidden="true" className="aspect-[4/3] w-full bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${menu.image_url || "/menu-placeholder-v2.webp"})` }} />
+                              <div className="min-w-0 p-2">
+                                <p className="truncate text-[12px] font-semibold text-gray-900 dark:text-white">{menu.name}</p>
+                                <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">฿{menu.price.toLocaleString()}</p>
+                                {needsOptions ? <p className="mt-0.5 text-[10px] leading-tight text-amber-600 dark:text-amber-400">{copy.requiresOptions}</p> : null}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.allItems}</h3>
+                        <p className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">{billItemCount} {language === "th" ? "รายการ" : "items"}</p>
+                      </div>
+                      <div className="space-y-3">
+                        {billSections.map((section) => (
+                          <div data-receipt-section key={section.key} className="space-y-2">
+                            {billSections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? <p className="px-1 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</p> : null}
+                            <div className="space-y-2">
+                              {section.groups.map(renderBillGroup)}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                        ))}
+                      </div>
+                      {billEditMode ? (
+                        <button
+                          data-screen-only
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => { setSearch(""); setCategoryId("all"); setBillAddOpen(true); }}
+                          className="ui-press mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-orange-300 bg-orange-50 text-[13px] font-semibold text-orange-700 hover:bg-orange-100 disabled:opacity-50 dark:border-orange-800 dark:bg-orange-950/25 dark:text-orange-300 dark:hover:bg-orange-950/40"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                          {copy.addServed}
+                        </button>
+                      ) : null}
+                    </section>
+                  )}
                 </div>
                 <div data-screen-receipt className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 text-[12px] dark:border-gray-800 dark:bg-gray-950 sm:px-5">
                   <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
@@ -1024,6 +1242,12 @@ export default function PosOrderDetailPage() {
 
               {!paymentComplete ? (
                 <div className="shrink-0 space-y-3 border-t border-gray-200 bg-slate-50 p-3 dark:border-gray-800 dark:bg-gray-950 sm:px-4">
+                  {billUndelivered > 0 ? (
+                    <div data-screen-only className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>{copy.undeliveredWarn}</span>
+                    </div>
+                  ) : null}
                   <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.paymentMethod}</p>
                     <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-950 sm:w-auto sm:min-w-[220px]">
@@ -1048,12 +1272,36 @@ export default function PosOrderDetailPage() {
                   </div>
                 ) : null}
                 <button type="button" onClick={() => printThermalReceipt("print-bill")} className={paymentComplete ? "ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200" : "h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}>{paymentComplete ? <><Printer className="h-4 w-4" aria-hidden="true" />{receiptCopy.printReceipt}</> : copy.print}</button>
-                {!paymentComplete ? <button type="button" disabled={submitting || !canPay} onClick={confirmPayment} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button> : null}
+                {!paymentComplete ? <button type="button" disabled={submitting || !canPay || billUndelivered > 0} onClick={confirmPayment} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button> : null}
               </div>
             </div>
           </div>
         );
       })()}
+
+      {billCancelTarget ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/50 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="bill-cancel-title" className="w-full max-w-sm rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950">
+            <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.cancelItemTitle}</h2>
+            <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelTarget.firstItem.menu_name} · x{billCancelTarget.quantity}</p>
+            <label htmlFor="bill-cancel-reason" className="mt-3 block text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.cancelItemReason}</label>
+            <textarea
+              id="bill-cancel-reason"
+              value={billCancelReason}
+              onChange={(event) => { setBillCancelReason(event.target.value); if (error) setError(""); }}
+              rows={3}
+              maxLength={500}
+              placeholder={copy.cancelItemPlaceholder}
+              autoFocus
+              className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
+              <button type="button" disabled={submitting || !billCancelReason.trim()} onClick={() => { void confirmCancelBillItem(); }} className="h-10 rounded-md bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-400">{copy.confirmCancelItem}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

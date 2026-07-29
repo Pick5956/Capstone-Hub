@@ -456,7 +456,7 @@ html[data-font-size="extra-large"] {
 
 .kitchen-ticket-shell,
 .kitchen-item-shell {
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .kitchen-ticket-shell {
@@ -466,7 +466,7 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-ticket-collapse {
-  grid-template-rows: 0fr;
+  grid-template-rows: minmax(0, 0fr);
   opacity: 0;
 }
 
@@ -477,7 +477,7 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-item-collapse {
-  grid-template-rows: 0fr;
+  grid-template-rows: minmax(0, 0fr);
   opacity: 0;
 }
 
@@ -531,7 +531,7 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-zone-collapse {
-  grid-template-rows: 0fr;
+  grid-template-rows: minmax(0, 0fr);
   visibility: hidden;
   opacity: 0;
   transition:
@@ -541,7 +541,7 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-zone-collapse-open {
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(0, 1fr);
   visibility: visible;
   opacity: 1;
   transition:

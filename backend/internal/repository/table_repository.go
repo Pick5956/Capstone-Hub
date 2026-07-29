@@ -93,6 +93,21 @@ func (r *TableRepository) DeleteTable(table *entity.RestaurantTable) error {
 	return r.db.Delete(table).Error
 }
 
+// CreateReservation records a new reservation within the current transaction.
+func (r *TableRepository) CreateReservation(reservation *entity.Reservation) error {
+	return r.db.Create(reservation).Error
+}
+
+// ResolveActiveReservation marks the table's active reservation with a terminal
+// status (seated / cancelled). It is a no-op when no active reservation exists,
+// so it stays safe for tables reserved before this feature shipped.
+func (r *TableRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
+	now := BangkokNow()
+	return r.db.Model(&entity.Reservation{}).
+		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
+		Updates(map[string]any{"status": status, "resolved_at": now}).Error
+}
+
 func (r *TableRepository) ReplaceTableTags(table *entity.RestaurantTable, tags []entity.TableTag) error {
 	return r.db.Model(table).Association("Tags").Replace(tags)
 }

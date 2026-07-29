@@ -10,8 +10,10 @@ import { can } from "@/src/lib/rbac";
 import { createOrder, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import { createPosTableNavigationGuard } from "@/src/lib/posTableNavigation";
-import { listTables, updateTableStatus } from "@/src/lib/table";
+import { listTables } from "@/src/lib/table";
+import { reserveTable as reserveTableApi, cancelReservation as cancelReservationApi, seatReservation as seatReservationApi } from "@/src/lib/reservation";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useToast } from "@/src/components/shared/FeedbackProvider";
 import type { Order } from "@/src/types/order";
 import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
@@ -27,6 +29,9 @@ const tableRefreshIntervalMs = 60_000;
 const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-950 dark:text-white";
 type TableSheetMode = "open" | "reserved";
 
+// Thai numbers are 9 digits (landline) or 10 (mobile): keep digits only and cap at 10.
+const PHONE_MAX_DIGITS = 10;
+const normalizePhone = (value: string) => value.replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
 const hasValidPhone = (value: string) => value.replace(/\D/g, "").length >= 9;
 
 function tableAccentClass(status: TableStatus) {
@@ -47,6 +52,7 @@ export default function PosTablesPage() {
   const router = useRouter();
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const { showToast } = useToast();
   const canTake = can(activeMembership, "take_order");
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -67,7 +73,6 @@ export default function PosTablesPage() {
   const [navigationPending, startNavigationTransition] = useTransition();
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [sheetError, setSheetError] = useState("");
   const refreshInFlight = useRef(false);
   const navigationGuardRef = useRef(createPosTableNavigationGuard());
@@ -97,7 +102,7 @@ export default function PosTablesPage() {
         reservationNameOptional: "ชื่อเล่นที่จอง (ไม่บังคับ)",
         reservationNamePlaceholder: "เช่น คุณแนน",
         reservationPhone: "เบอร์ที่จอง",
-        reservationPhonePlaceholder: "เช่น 081-234-5678",
+        reservationPhonePlaceholder: "เช่น 0812345678",
         reservationPhoneRequired: "กรุณาใส่เบอร์ลูกค้าที่จองอย่างน้อย 9 หลัก",
         reservationInfo: "เบอร์จอง",
         acceptReservation: "รับลูกค้าเข้าโต๊ะ",
@@ -116,6 +121,7 @@ export default function PosTablesPage() {
         noZone: "ไม่มีโซน",
         total: "ยอดรวม",
         seats: "ที่นั่ง",
+        customers: "คน",
         elapsed: "นาที",
         loadError: "โหลดผังโต๊ะไม่สำเร็จ",
         saveError: "เปิดออเดอร์ไม่สำเร็จ",
@@ -146,7 +152,7 @@ export default function PosTablesPage() {
         reservationNameOptional: "Reservation nickname (optional)",
         reservationNamePlaceholder: "For example, Nan",
         reservationPhone: "Reservation phone",
-        reservationPhonePlaceholder: "For example, 081-234-5678",
+        reservationPhonePlaceholder: "For example, 0812345678",
         reservationPhoneRequired: "Enter the customer's phone number with at least 9 digits.",
         reservationInfo: "Reserved phone",
         acceptReservation: "Seat guests",
@@ -165,6 +171,7 @@ export default function PosTablesPage() {
         noZone: "No zone",
         total: "Total",
         seats: "seats",
+        customers: "guests",
         elapsed: "min",
         loadError: "Could not load table layout.",
         saveError: "Could not open order.",
@@ -266,7 +273,6 @@ export default function PosTablesPage() {
 
   const openTakeawaySheet = () => {
     if (isNavigating) return;
-    setNotice("");
     setSheetError("");
     setSelectedTable(null);
     setTakeawayOpen(true);
@@ -329,7 +335,6 @@ export default function PosTablesPage() {
     const tableId = Number(event.currentTarget.dataset.tableId);
     const table = tables.find((item) => item.ID === tableId);
     if (!table) return;
-    setNotice("");
     setSheetError("");
     const activeOrder = activeOrderByTable.get(table.ID);
     if (activeOrder) {
@@ -342,7 +347,7 @@ export default function PosTablesPage() {
       setSheetMode("reserved");
       setSheetClosing(false);
       setReservationName(table.reservation_name ?? "");
-      setReservationPhone(table.reservation_phone ?? "");
+      setReservationPhone(normalizePhone(table.reservation_phone ?? ""));
       setCustomerCount(Math.max(1, Math.min(table.capacity || 1, 6)));
       setCustomerName("");
       setCustomerPhone("");
@@ -351,7 +356,7 @@ export default function PosTablesPage() {
       return;
     }
     if (table.status === "inactive") {
-      setNotice(inactiveNoticeLabel);
+      showToast({ title: inactiveNoticeLabel, tone: "warning" });
       return;
     }
     setSelectedTable(table);
@@ -365,7 +370,7 @@ export default function PosTablesPage() {
     setReservationName("");
     setReservationPhone("");
     setReservationDraftOpen(false);
-  }, [activeOrderByTable, inactiveNoticeLabel, isNavigating, navigateToOrder, tables]);
+  }, [activeOrderByTable, inactiveNoticeLabel, isNavigating, navigateToOrder, showToast, tables]);
 
   const closeOpenOrderSheet = () => {
     if (submitting || isNavigating || sheetClosing) return;
@@ -400,9 +405,9 @@ export default function PosTablesPage() {
     setError("");
     setSheetError("");
     try {
-      const res = await updateTableStatus(selectedTable.ID, "reserved", reservationPhone.trim(), reservationName.trim());
+      const res = await reserveTableApi(selectedTable.ID, reservationPhone.trim(), reservationName.trim());
       setTables((current) => current.map((table) => table.ID === res.data.ID ? res.data : table));
-      setNotice(copy.reservedSuccess);
+      showToast({ title: copy.reservedSuccess });
       setSheetClosing(true);
       window.setTimeout(() => {
         setSelectedTable(null);
@@ -421,21 +426,39 @@ export default function PosTablesPage() {
 
   const acceptReservation = async () => {
     if (!selectedTable || submitting || isNavigating) return;
+    const tableID = selectedTable.ID;
+    const guestName = reservationName.trim();
+    const guestPhone = reservationPhone.trim();
     setSubmitting(true);
     setError("");
     setSheetError("");
     try {
-      const res = await updateTableStatus(selectedTable.ID, "free");
-      setTables((current) => current.map((table) => table.ID === res.data.ID ? res.data : table));
-      setSelectedTable(res.data);
-      setSheetMode("open");
-      setReservationName("");
-      setReservationPhone("");
-      setReservationDraftOpen(false);
-      setCustomerCount(Math.max(1, Math.min(res.data.capacity || 1, 6)));
-      setNote("");
+      // Seating the guests IS opening the table. Mark the reservation seated and
+      // free the table (the backend blocks opening an order on a reserved table),
+      // then open the dine-in order in the same action (carrying the contact over).
+      await seatReservationApi(tableID);
+      const res = await createOrder({
+        table_id: tableID,
+        order_type: "dine_in",
+        customer_count: customerCount,
+        customer_name: guestName,
+        customer_phone: guestPhone,
+        note,
+      });
+      navigateToOrder(res.data);
     } catch (error) {
-      setSheetError(apiErrorMessage(error) || copy.saveError);
+      const message = apiErrorMessage(error);
+      if (message.includes("table already has an open order")) {
+        const orderRes = await listOrders({ table_id: tableID });
+        const activeOrder = orderRes.data.orders.find(
+          (order) => order.table_id === tableID && activeOrderStatuses.includes(order.status)
+        );
+        if (activeOrder) {
+          navigateToOrder(activeOrder);
+          return;
+        }
+      }
+      setSheetError(message || copy.saveError);
     } finally {
       setSubmitting(false);
     }
@@ -447,9 +470,9 @@ export default function PosTablesPage() {
     setError("");
     setSheetError("");
     try {
-      const res = await updateTableStatus(selectedTable.ID, "free");
+      const res = await cancelReservationApi(selectedTable.ID);
       setTables((current) => current.map((table) => table.ID === res.data.ID ? res.data : table));
-      setNotice(copy.reservationCancelled);
+      showToast({ title: copy.reservationCancelled });
       setSheetClosing(true);
       window.setTimeout(() => {
         setSelectedTable(null);
@@ -468,6 +491,29 @@ export default function PosTablesPage() {
   };
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
+
+  const customerCountField = (
+    <label className="block">
+      <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerCount}</span>
+      <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <button type="button" onClick={() => setCustomerCount((current) => Math.max(1, current - 1))} disabled={customerCount <= 1} className="ui-press h-14 border-r border-gray-200 text-xl font-semibold text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
+          -
+        </button>
+        <input type="number" min={1} value={customerCount} onChange={(event) => setCustomerCount(Math.max(1, Number(event.target.value) || 1))} className="h-14 min-w-0 border-0 bg-transparent px-2 text-center text-[22px] font-semibold tabular-nums text-gray-900 outline-none dark:text-white" />
+        <button type="button" onClick={() => setCustomerCount((current) => current + 1)} className="ui-press h-14 border-l border-gray-200 text-xl font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200">
+          +
+        </button>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => setCustomerCount((current) => current + 5)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+          +5
+        </button>
+        <button type="button" onClick={() => setCustomerCount((current) => current + 10)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+          +10
+        </button>
+      </div>
+    </label>
+  );
 
   return (
     <>
@@ -520,7 +566,6 @@ export default function PosTablesPage() {
 
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-      {notice && <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] font-medium text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300">{notice}</div>}
       {loading || isNavigating ? (
         <div
           role="status"
@@ -583,7 +628,8 @@ export default function PosTablesPage() {
                               )}
                               <p className="flex items-center gap-1.5">
                                 <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                <span>{table.capacity} {copy.seats}</span>
+                                {/* Occupied tables show live guest count; free/reserved tables show seat capacity. */}
+                                <span>{order ? `${order.customer_count} ${copy.customers}` : `${table.capacity} ${copy.seats}`}</span>
                               </p>
                             </div>
                           </div>
@@ -638,6 +684,7 @@ export default function PosTablesPage() {
                     {selectedTable.reservation_name ? <span className="mb-1 block">{copy.reservationName}: {selectedTable.reservation_name}</span> : null}
                     {copy.reservationInfo}: {selectedTable.reservation_phone || "-"}
                   </div>
+                  {customerCountField}
                 </div>
                 <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:grid-cols-3">
                   <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
@@ -677,26 +724,7 @@ export default function PosTablesPage() {
                       </label>
                     </div>
                   )}
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerCount}</span>
-                    <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-                      <button type="button" onClick={() => setCustomerCount((current) => Math.max(1, current - 1))} disabled={customerCount <= 1} className="ui-press h-14 border-r border-gray-200 text-xl font-semibold text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
-                        -
-                      </button>
-                      <input type="number" min={1} value={customerCount} onChange={(event) => setCustomerCount(Math.max(1, Number(event.target.value) || 1))} className="h-14 min-w-0 border-0 bg-transparent px-2 text-center text-[22px] font-semibold tabular-nums text-gray-900 outline-none dark:text-white" />
-                      <button type="button" onClick={() => setCustomerCount((current) => current + 1)} className="ui-press h-14 border-l border-gray-200 text-xl font-semibold text-gray-700 dark:border-gray-700 dark:text-gray-200">
-                        +
-                      </button>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => setCustomerCount((current) => current + 5)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
-                        +5
-                      </button>
-                      <button type="button" onClick={() => setCustomerCount((current) => current + 10)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
-                        +10
-                      </button>
-                    </div>
-                  </label>
+                  {customerCountField}
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
                     <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:min-h-20 sm:text-[13px]" />
@@ -707,7 +735,7 @@ export default function PosTablesPage() {
                         <span className="mb-1.5 block text-[12px] font-medium text-sky-900 dark:text-sky-100">{copy.reservationPhone}<span className="ml-0.5 text-red-600 dark:text-red-400">*</span></span>
                         <input
                           value={reservationPhone}
-                          onChange={(event) => setReservationPhone(event.target.value)}
+                          onChange={(event) => setReservationPhone(normalizePhone(event.target.value))}
                           inputMode="tel"
                           autoFocus
                           placeholder={copy.reservationPhonePlaceholder}

@@ -157,8 +157,8 @@ func (s *MenuService) DeleteCategory(restaurantID, categoryID uint) error {
 	})
 }
 
-func (s *MenuService) ListMenuItems(restaurantID uint, includeUnavailable bool, categoryID uint) ([]entity.MenuItem, error) {
-	return s.repo.ListMenuItems(restaurantID, includeUnavailable, categoryID)
+func (s *MenuService) ListMenuItems(restaurantID uint, includeInactive bool, categoryID uint) ([]entity.MenuItem, error) {
+	return s.repo.ListMenuItems(restaurantID, includeInactive, categoryID)
 }
 
 func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*entity.MenuItem, error) {

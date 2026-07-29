@@ -124,6 +124,69 @@ func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, table)
 }
 
+// POST /api/v1/tables/:id/reserve
+func (ctrl *TableController) ReserveTable(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	userID, _ := contextUserID(c)
+	var req struct {
+		ReservationName  string `json:"reservation_name"`
+		ReservationPhone string `json:"reservation_phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	table, err := ctrl.tableSvc.ReserveTable(restaurantID, userID, tableID, req.ReservationPhone, req.ReservationName)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
+// POST /api/v1/tables/:id/cancel-reservation
+func (ctrl *TableController) CancelReservation(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	table, err := ctrl.tableSvc.CancelReservation(restaurantID, tableID)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
+// POST /api/v1/tables/:id/seat-reservation
+func (ctrl *TableController) SeatReservation(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	table, err := ctrl.tableSvc.SeatReservation(restaurantID, tableID)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
 func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
 	restaurantID, ok := requireRestaurantWithPermission(c, "manage_table", "missing manage_table permission")
 	if !ok {

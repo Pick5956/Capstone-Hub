@@ -28,7 +28,7 @@ export default function ThermalReceipt({
 }) {
   const locale = language === "th" ? "th-TH" : "en-US";
   const payment = bill.payments.at(-1) ?? null;
-  const groups = groupOrderItems(bill.items);
+  const groups = groupOrderItems(bill.items.filter((item) => item.status !== "cancelled"));
   const sections = (["dine_in", "takeaway"] as const)
     .map((key) => ({ key, groups: groups.filter((group) => fulfillmentType(group.firstItem) === key) }))
     .filter((section) => section.groups.length > 0);

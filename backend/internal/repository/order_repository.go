@@ -118,7 +118,7 @@ func (r *OrderRepository) FindOrderForUpdate(restaurantID, orderID uint) (*entit
 	return &order, nil
 }
 
-// FindOrderByNumber looks up an order by its human-readable order_number (e.g. "A001")
+// FindOrderByNumber looks up an order by its human-readable order_number (e.g. "20260724-015")
 // instead of the database primary key. This is used when the URL uses order_number.
 func (r *OrderRepository) FindOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
 	var order entity.Order
@@ -481,7 +481,10 @@ func (r *OrderRepository) ListPublicMenuItems(restaurantID uint) ([]entity.MenuI
 		Preload("Categories.Category").
 		Preload("OptionGroups", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
 		Preload("OptionGroups.Options", func(db *gorm.DB) *gorm.DB { return db.Where("is_active = ?", true).Order("display_order asc, id asc") }).
-		Where("restaurant_id = ? AND is_available = ?", restaurantID, true).
+		// Sold-out (is_available = false) items stay in the list so the customer
+		// page can show a "sold out" label and block ordering, rather than hiding
+		// them. Items whose only category is inactive are still excluded.
+		Where("restaurant_id = ?", restaurantID).
 		Where("(category_id IN (?) OR id IN (?))", activeCategoryIDs, activeLinkedMenuIDs).
 		Order("display_order asc, id asc").
 		Find(&items).Error
