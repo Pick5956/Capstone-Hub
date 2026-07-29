@@ -62,6 +62,7 @@ Rules:
 7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even when written casually.
 8. Questions such as "มาร์จิ้นคืออะไร" or "how is Margin calculated?" MUST use "explain_concept" with no restaurant data and no tool.
 9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" with the "get_sales_summary" tool.
+10. Ambiguity guard: if the user asks which menu is "best"/"good" or how the store is doing using a vague quality word but names NO measurable metric — so it could mean sales volume, revenue, price, margin, or cost (e.g. "เมนูไหนดีสุด", "เมนูไหนเด็ดสุด", "ของในร้านโอเคไหม", "which menu is best") — do NOT guess a tool. Set "confidence" to 0.4 or lower and leave "suggested_tool" empty so the assistant asks the user to clarify. But if the metric IS explicit (ขายดี/popular = sales, กำไร/margin, ราคา/price, ต้นทุน/cost, สต๊อก/stock), classify normally with high confidence.
 
 User question:
 %s`
@@ -122,6 +123,7 @@ Rules:
 7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even if phrased casually.
 8. Questions such as "มาร์จิ้นคืออะไร" or "Margin คำนวณอย่างไร" MUST be "explain_concept" with no restaurant data and no tool.
 9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" and the "get_sales_summary" tool.
+10. Ambiguity guard: if the user asks which menu is "best"/"good" or how the store is doing using a vague quality word but names NO measurable metric — so it could mean sales volume, revenue, price, margin, or cost (e.g. "เมนูไหนดีสุด", "เมนูไหนเด็ดสุด", "ของในร้านโอเคไหม", "which menu is best") — do NOT guess a tool. Set "confidence" to 0.4 or lower and leave "suggested_tool" empty so the assistant asks to clarify. But if the metric IS explicit (ขายดี/popular = sales, กำไร/margin, ราคา/price, ต้นทุน/cost, สต๊อก/stock), classify normally with high confidence.
 
 User question:
 %s`

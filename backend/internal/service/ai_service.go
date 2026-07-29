@@ -178,7 +178,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	// Step 3: Check Confidence Level and Unclear Input
 	if routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear {
 		return &AIAskResponse{
-			Answer:   "ผมยังไม่ค่อยมั่นใจในคำถามครับ รบกวนช่วยพิมพ์ระบุความต้องการให้ชัดเจนขึ้นอีกนิดได้ไหมครับ เช่น ถามเรื่องยอดขาย หรือให้ช่วยคิดแคปชั่นโปรโมทร้านครับ",
+			Answer:   "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ",
 			Intent:   AIIntentUnclear,
 			Task:     AITaskUnclear,
 			Model:    "local-router-fallback",
