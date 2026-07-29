@@ -74,5 +74,27 @@ export function getGuidedActions(
     });
   }
 
-  return actions.slice(0, 2);
+  // Follow-up question chips: clicking re-asks a related question (uses `prompt`).
+  const followUps: AIGuidedAction[] = [];
+  const addFollowUp = (id: string, labelTh: string, labelEn: string, promptTh: string, promptEn: string) => {
+    followUps.push({ id, label: language === "th" ? labelTh : labelEn, prompt: language === "th" ? promptTh : promptEn });
+  };
+
+  if (includesAny(text, ["ขายดี", "ยอดนิยม", "top selling", "best selling", "popular"])) {
+    addFollowUp("fu-top-margin", "เมนูกำไรดีสุด", "Top-margin menu", "เมนูไหนกำไรดีสุด", "which menu has the highest margin");
+    addFollowUp("fu-slow", "เมนูขายไม่ออก", "Slow movers", "เมนูไหนขายไม่ออก", "which menus are not selling");
+  }
+  if (includesAny(text, ["ยอดขาย", "รายได้", "sales", "revenue"])) {
+    addFollowUp("fu-trend", "เทียบสัปดาห์ก่อน", "vs last week", "ยอดขายเทียบกับสัปดาห์ก่อนเป็นยังไง", "how do sales compare to last week");
+    addFollowUp("fu-peak", "ช่วงไหนคนเยอะ", "Peak times", "ช่วงเวลาไหนขายดีที่สุด", "what are the peak hours");
+  }
+  if (includesAny(text, ["กำไร", "margin", "มาร์จิ้น", "profit"])) {
+    addFollowUp("fu-low-margin", "เมนูกำไรน้อยสุด", "Lowest-margin menu", "เมนูไหนกำไรน้อยสุด", "which menu has the lowest margin");
+  }
+  if (includesAny(text, ["สต๊อก", "วัตถุดิบ", "คลัง", "stock", "inventory", "ingredient"])) {
+    addFollowUp("fu-reorder", "ควรสั่งของเมื่อไหร่", "When to reorder", "วัตถุดิบไหนควรสั่งเพิ่มและเมื่อไหร่", "which ingredients should I reorder and when");
+    addFollowUp("fu-dead", "ของค้างสต๊อก", "Dead stock", "มีวัตถุดิบค้างสต๊อกที่ไม่ได้ใช้ไหม", "is there any dead stock");
+  }
+
+  return [...followUps, ...actions].slice(0, 3);
 }
