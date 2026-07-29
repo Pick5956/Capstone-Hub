@@ -86,6 +86,19 @@ func TestEffectiveOrderStatusRepairsStaleKitchenAggregate(t *testing.T) {
 	}
 }
 
+func TestEffectiveOrderStatusReopensWhenAllItemsCancelled(t *testing.T) {
+	order := &entity.Order{
+		Status: entity.OrderStatusCooking,
+		Items: []entity.OrderItem{
+			{Status: entity.OrderItemStatusCancelled},
+			{Status: entity.OrderItemStatusCancelled},
+		},
+	}
+	if got := effectiveOrderStatus(order); got != entity.OrderStatusOpen {
+		t.Fatalf("effective status = %q, want %q", got, entity.OrderStatusOpen)
+	}
+}
+
 func TestEffectiveOrderStatusDoesNotMaskIncompleteOrTerminalOrders(t *testing.T) {
 	incomplete := &entity.Order{
 		Status: entity.OrderStatusCooking,
@@ -132,8 +145,14 @@ func TestCanTransitionItem(t *testing.T) {
 	if canTransitionItem(entity.OrderItemStatusReady, entity.OrderItemStatusPending) {
 		t.Fatal("ready should not transition back to pending")
 	}
-	if canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCancelled) {
-		t.Fatal("served should be terminal for item status")
+	if !canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCancelled) {
+		t.Fatal("served should be voidable via cancellation during checkout")
+	}
+	if canTransitionItem(entity.OrderItemStatusServed, entity.OrderItemStatusCooking) {
+		t.Fatal("served should not reopen to cooking")
+	}
+	if canTransitionItem(entity.OrderItemStatusCancelled, entity.OrderItemStatusCancelled) {
+		t.Fatal("cancelled should be terminal for item status")
 	}
 }
 
@@ -216,6 +235,18 @@ func TestValidateEmptyTableClose(t *testing.T) {
 				Items:     []entity.OrderItem{{}},
 			},
 			wantErr: "table order already has items",
+		},
+		{
+			name: "allows a table whose items were all cancelled",
+			order: &entity.Order{
+				OrderType: entity.OrderTypeDineIn,
+				TableID:   &tableID,
+				Status:    entity.OrderStatusOpen,
+				Items: []entity.OrderItem{
+					{Status: entity.OrderItemStatusCancelled},
+					{Status: entity.OrderItemStatusCancelled},
+				},
+			},
 		},
 	}
 

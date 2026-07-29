@@ -42,6 +42,10 @@ type AddOrderItemRequest struct {
 	Note              string `json:"note" binding:"max=500"`
 	FulfillmentType   string `json:"fulfillment_type" binding:"omitempty,oneof=dine_in takeaway"`
 	SelectedOptionIDs []uint `json:"selected_option_ids" binding:"max=50"`
+	// ServeImmediately records an item that already reached the guest (e.g. a
+	// drink poured and served before it was keyed in). It skips the kitchen:
+	// the item is created as "served" and its ingredients are deducted at once.
+	ServeImmediately bool `json:"serve_immediately"`
 }
 
 type UpdateOrderItemRequest struct {
@@ -365,6 +369,10 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 		if err != nil {
 			return err
 		}
+		itemStatus := entity.OrderItemStatusPending
+		if req.ServeImmediately {
+			itemStatus = entity.OrderItemStatusServed
+		}
 		item := &entity.OrderItem{
 			OrderID:         order.ID,
 			RestaurantID:    restaurantID,
@@ -376,7 +384,11 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 			Subtotal:        (menu.Price + optionsTotal) * float64(qty),
 			FulfillmentType: fulfillmentType,
 			Note:            strings.TrimSpace(req.Note),
-			Status:          entity.OrderItemStatusPending,
+			Status:          itemStatus,
+		}
+		if req.ServeImmediately {
+			now := repository.BangkokNow()
+			item.ServedAt = &now
 		}
 		if err := tx.CreateItem(item); err != nil {
 			return err
@@ -399,13 +411,28 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 				return err
 			}
 		}
+		if req.ServeImmediately {
+			// Already handed to the guest, so bypass the kitchen and deduct its
+			// ingredients now — the same accounting a completed item receives.
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+				return err
+			}
+		}
 		if err := recalcOrderTotals(tx, order); err != nil {
 			return err
 		}
-		nextStatus := orderStatusAfterPendingItemAdded(order.Status)
-		if nextStatus != order.Status {
-			if err := setOrderStatus(tx, order, nextStatus, userID, "pending item added"); err != nil {
+		if req.ServeImmediately {
+			// The item is already served, so recompute from the item set rather
+			// than reopening the order the way a pending item would.
+			if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
 				return err
+			}
+		} else {
+			nextStatus := orderStatusAfterPendingItemAdded(order.Status)
+			if nextStatus != order.Status {
+				if err := setOrderStatus(tx, order, nextStatus, userID, "pending item added"); err != nil {
+					return err
+				}
 			}
 		}
 		changed = order.ID
@@ -591,8 +618,12 @@ func validateEmptyTableClose(order *entity.Order) error {
 	if order.Status != entity.OrderStatusOpen {
 		return errors.New("only an open table can be closed without an order")
 	}
-	if len(order.Items) > 0 {
-		return errors.New("table order already has items")
+	// Cancelled items (e.g. the kitchen ran out of stock) leave the table empty,
+	// so only outstanding non-cancelled items should block closing it.
+	for _, item := range order.Items {
+		if item.Status != entity.OrderItemStatusCancelled {
+			return errors.New("table order already has items")
+		}
 	}
 	return nil
 }
