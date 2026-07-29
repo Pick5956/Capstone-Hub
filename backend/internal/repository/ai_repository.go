@@ -22,6 +22,15 @@ type AISalesSummary struct {
 	Revenue   float64 `json:"revenue"`
 }
 
+// AISalesRange is a paid-sales aggregate for an arbitrary [start, end) window,
+// used by the dated-sales flow (named month / month-to-month comparison) that
+// looks beyond the fixed 14-day snapshot.
+type AISalesRange struct {
+	Orders  int64   `json:"orders"`
+	Revenue float64 `json:"revenue"`
+	Days    int64   `json:"days"`
+}
+
 type AIMenuSummary struct {
 	MenuName string  `json:"menu_name"`
 	Quantity int64   `json:"quantity"`
@@ -100,6 +109,25 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 		Limit(14).
 		Scan(&rows).Error
 	return rows, err
+}
+
+// SalesForRange aggregates paid, completed sales in the half-open window
+// [start, end). Unlike RecentSalesSummary it is not capped to 14 rows, so it can
+// answer named-month and month-to-month questions.
+func (r *AIRepository) SalesForRange(restaurantID uint, start, end time.Time) (AISalesRange, error) {
+	var res AISalesRange
+	err := r.db.Model(&entity.Order{}).
+		Select("COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue, COUNT(DISTINCT TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS days").
+		Where(
+			"restaurant_id = ? AND completed_at >= ? AND completed_at < ? AND status = ? AND payment_status = ?",
+			restaurantID,
+			start,
+			end,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Scan(&res).Error
+	return res, err
 }
 
 func (r *AIRepository) TopMenuItems(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {

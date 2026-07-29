@@ -303,6 +303,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	}
 
 	// Step 6: Analytical Flow (Needs Data = True, DB snapshot load)
+	// Tier 1-1: a dated total-sales question (named month or month-to-month
+	// comparison) is answered directly from range queries, so it is not limited
+	// to the fixed 14-day snapshot window.
+	if resp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
+		return resp, nil
+	} else if derr != nil {
+		fmt.Printf("[AI Router] Dated-sales query failed, falling back to snapshot flow: %v\n", derr)
+	}
+
 	fmt.Println("[AI Router] Diverting to Rich Analytical business flow (Building DB Snapshot)...")
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
@@ -424,6 +433,54 @@ func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
 		return nil, err
 	}
 	return &snapshot, nil
+}
+
+// answerDatedSalesQuery handles Tier 1-1 dated total-sales questions with
+// range-scoped repository queries that reach beyond the 14-day snapshot. It
+// returns handled=false when the question is not a dated total-sales request, so
+// the caller continues with the normal analytical flow.
+func (s *AIService) answerDatedSalesQuery(restaurantID uint, question string) (*AIAskResponse, bool, error) {
+	if s.repo == nil {
+		return nil, false, nil
+	}
+	req, ok := resolveDatedSalesRequest(question, repository.BangkokNow())
+	if !ok {
+		return nil, false, nil
+	}
+
+	if req.comparison && len(req.periods) >= 2 {
+		a, b := req.periods[0], req.periods[1]
+		da, err := s.repo.SalesForRange(restaurantID, a.Start, a.End)
+		if err != nil {
+			return nil, false, err
+		}
+		db, err := s.repo.SalesForRange(restaurantID, b.Start, b.End)
+		if err != nil {
+			return nil, false, err
+		}
+		return &AIAskResponse{
+			Answer:   formatDatedSalesComparison(a, da, b, db),
+			Intent:   AIIntentAnalysis,
+			Task:     AITaskRetrieveFact,
+			Tool:     AIToolGetSalesForPeriod,
+			Model:    "local-period-range",
+			Snapshot: AISnapshot{},
+		}, true, nil
+	}
+
+	p := req.periods[0]
+	d, err := s.repo.SalesForRange(restaurantID, p.Start, p.End)
+	if err != nil {
+		return nil, false, err
+	}
+	return &AIAskResponse{
+		Answer:   formatDatedSalesAnswer(p, d),
+		Intent:   AIIntentAnalysis,
+		Task:     AITaskRetrieveFact,
+		Tool:     AIToolGetSalesForPeriod,
+		Model:    "local-period-range",
+		Snapshot: AISnapshot{},
+	}, true, nil
 }
 
 func (s *AIService) validateAndIntercept(res AIFinalJSONResponse, result AIToolResult, snapshot AISnapshot) string {

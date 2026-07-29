@@ -74,5 +74,15 @@
   { "name": "en running low stock", "question": "what's running low in stock", "expected_task": "analyze_data", "expected_tool": "get_low_stock_ingredients" },
   { "name": "en best margin dish", "question": "which dish has the best margin", "expected_task": "analyze_data", "expected_tool": "get_highest_margin_menu" },
   { "name": "en greeting", "question": "hi there", "expected_task": "general_chat" },
-  { "name": "en risky delete", "question": "delete the fried rice menu", "expected_task": "risky_action" }
+  { "name": "en risky delete", "question": "delete the fried rice menu", "expected_task": "risky_action" },
+
+  { "name": "en most profitable dish", "question": "which menu is the most profitable", "expected_task": "analyze_data", "expected_tool": "get_highest_margin_menu" },
+  { "name": "en worst margin dish", "question": "which dish has the worst margin", "expected_task": "analyze_data", "expected_tool": "get_lowest_margin_menu" },
+  { "name": "risky bulk price percent en", "question": "raise every menu price by 10 percent", "expected_task": "risky_action" },
+  { "name": "risky restock en", "question": "order 20 more boxes of coconut milk", "expected_task": "risky_action" },
+
+  { "name": "sales named month march", "question": "ยอดขายเดือนมีนาคมเท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
+  { "name": "sales this month total", "question": "ยอดขายเดือนนี้เท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
+  { "name": "compare month over month", "question": "เทียบยอดเดือนนี้กับเดือนก่อน", "expected_task": "analyze_data" },
+  { "name": "en sales in march", "question": "how much did we sell in March", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" }
 ]

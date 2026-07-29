@@ -1,0 +1,291 @@
+package service
+
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"Project-M/internal/repository"
+)
+
+// AIPeriod is a resolved calendar window [Start, End) with a Thai display label.
+// Tier 1-1 uses it to answer named-month and month-to-month sales questions that
+// fall outside the fixed 14-day snapshot.
+type AIPeriod struct {
+	Label string
+	Start time.Time
+	End   time.Time // exclusive
+}
+
+func bangkokLocation() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Bangkok"); err == nil {
+		return loc
+	}
+	return time.FixedZone("Asia/Bangkok", 7*60*60)
+}
+
+var thaiMonthNames = [13]string{
+	1: "มกราคม", 2: "กุมภาพันธ์", 3: "มีนาคม", 4: "เมษายน",
+	5: "พฤษภาคม", 6: "มิถุนายน", 7: "กรกฎาคม", 8: "สิงหาคม",
+	9: "กันยายน", 10: "ตุลาคม", 11: "พฤศจิกายน", 12: "ธันวาคม",
+}
+
+// thaiMonthAliases lists distinctive Thai spellings per month (full, dotted
+// abbreviation, and short form). Bare words like "มี" are intentionally excluded
+// because they collide with common Thai words (e.g. "มี" = to have).
+var thaiMonthAliases = map[int][]string{
+	1:  {"มกราคม", "ม.ค.", "มกรา"},
+	2:  {"กุมภาพันธ์", "กุมภาพันธ", "ก.พ.", "กุมภา"},
+	3:  {"มีนาคม", "มี.ค.", "มีนา"},
+	4:  {"เมษายน", "เม.ย.", "เมษา"},
+	5:  {"พฤษภาคม", "พ.ค.", "พฤษภา"},
+	6:  {"มิถุนายน", "มิ.ย.", "มิถุนา"},
+	7:  {"กรกฎาคม", "กรกฏาคม", "ก.ค.", "กรกฎา", "กรกฏา"},
+	8:  {"สิงหาคม", "ส.ค.", "สิงหา"},
+	9:  {"กันยายน", "ก.ย.", "กันยา"},
+	10: {"ตุลาคม", "ต.ค.", "ตุลา"},
+	11: {"พฤศจิกายน", "พ.ย.", "พฤศจิกา"},
+	12: {"ธันวาคม", "ธ.ค.", "ธันวา"},
+}
+
+// englishMonthAliases maps an English spelling to a month number. Matched with
+// ASCII word boundaries so "dec" does not fire inside "decrease".
+var englishMonthAliases = map[string]int{
+	"january": 1, "jan": 1,
+	"february": 2, "feb": 2,
+	"march": 3, "mar": 3,
+	"april": 4, "apr": 4,
+	"may":  5,
+	"june": 6, "jun": 6,
+	"july": 7, "jul": 7,
+	"august": 8, "aug": 8,
+	"september": 9, "sept": 9, "sep": 9,
+	"october": 10, "oct": 10,
+	"november": 11, "nov": 11,
+	"december": 12, "dec": 12,
+}
+
+var englishMonthPattern = buildEnglishMonthPattern()
+
+func buildEnglishMonthPattern() *regexp.Regexp {
+	aliases := make([]string, 0, len(englishMonthAliases))
+	for a := range englishMonthAliases {
+		aliases = append(aliases, a)
+	}
+	// Longer aliases first so "september" is preferred over "sep".
+	sort.Slice(aliases, func(i, j int) bool { return len(aliases[i]) > len(aliases[j]) })
+	return regexp.MustCompile(`(?i)\b(` + strings.Join(aliases, "|") + `)\b`)
+}
+
+func thaiMonthName(month int) string {
+	if month >= 1 && month <= 12 {
+		return thaiMonthNames[month]
+	}
+	return ""
+}
+
+// monthPeriod builds a [start, end) window for the given calendar month and a
+// Thai label carrying the Buddhist-era year (e.g. "เดือนมีนาคม 2569").
+func monthPeriod(year int, month time.Month, loc *time.Location) AIPeriod {
+	start := time.Date(year, month, 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+	label := fmt.Sprintf("เดือน%s %d", thaiMonthName(int(month)), year+543)
+	return AIPeriod{Label: label, Start: start, End: end}
+}
+
+func thisMonthPeriod(ref time.Time) AIPeriod {
+	return monthPeriod(ref.Year(), ref.Month(), ref.Location())
+}
+
+func previousMonthPeriod(ref time.Time) AIPeriod {
+	firstOfThis := time.Date(ref.Year(), ref.Month(), 1, 0, 0, 0, 0, ref.Location())
+	prev := firstOfThis.AddDate(0, -1, 0)
+	return monthPeriod(prev.Year(), prev.Month(), ref.Location())
+}
+
+// resolveNamedMonthYear picks the most recent past occurrence of a bare month
+// name: a month later than the reference month is assumed to mean last year, so
+// "ธันวาคม" asked in July resolves to last December (which has data).
+func resolveNamedMonthYear(month int, ref time.Time) int {
+	year := ref.Year()
+	if month > int(ref.Month()) {
+		year--
+	}
+	return year
+}
+
+type periodHit struct {
+	pos    int
+	yearMo int // year*100 + month, for de-duplication
+	period AIPeriod
+}
+
+// extractPeriods finds every month window referenced in the question, in the
+// order they appear, de-duplicated by (year, month). It understands named months
+// (Thai + English) and the relative words เดือนนี้ / เดือนก่อน.
+func extractPeriods(question string, ref time.Time) []AIPeriod {
+	loc := bangkokLocation()
+	ref = ref.In(loc)
+	n := strings.ToLower(strings.TrimSpace(question))
+
+	hits := make([]periodHit, 0, 4)
+	addPeriod := func(pos int, p AIPeriod) {
+		hits = append(hits, periodHit{pos: pos, yearMo: p.Start.Year()*100 + int(p.Start.Month()), period: p})
+	}
+
+	// Relative months. Take the earliest position among each set of aliases.
+	if pos := earliestIndex(n, "เดือนนี้", "เดือนปัจจุบัน", "this month"); pos >= 0 {
+		addPeriod(pos, thisMonthPeriod(ref))
+	}
+	if pos := earliestIndex(n, "เดือนก่อนหน้า", "เดือนก่อน", "เดือนที่แล้ว", "เดือนที่ผ่านมา", "last month"); pos >= 0 {
+		addPeriod(pos, previousMonthPeriod(ref))
+	}
+
+	// Named Thai months.
+	for month, aliases := range thaiMonthAliases {
+		if pos := earliestIndex(n, aliases...); pos >= 0 {
+			year := resolveNamedMonthYear(month, ref)
+			addPeriod(pos, monthPeriod(year, time.Month(month), loc))
+		}
+	}
+
+	// Named English months.
+	for _, m := range englishMonthPattern.FindAllStringSubmatchIndex(n, -1) {
+		alias := n[m[2]:m[3]]
+		if month, ok := englishMonthAliases[strings.ToLower(alias)]; ok {
+			year := resolveNamedMonthYear(month, ref)
+			addPeriod(m[0], monthPeriod(year, time.Month(month), loc))
+		}
+	}
+
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].pos < hits[j].pos })
+
+	periods := make([]AIPeriod, 0, len(hits))
+	seen := make(map[int]bool, len(hits))
+	for _, h := range hits {
+		if seen[h.yearMo] {
+			continue
+		}
+		seen[h.yearMo] = true
+		periods = append(periods, h.period)
+	}
+	return periods
+}
+
+// earliestIndex returns the smallest index at which any of the candidates occurs,
+// or -1 if none do.
+func earliestIndex(haystack string, candidates ...string) int {
+	best := -1
+	for _, c := range candidates {
+		if idx := strings.Index(haystack, c); idx >= 0 && (best == -1 || idx < best) {
+			best = idx
+		}
+	}
+	return best
+}
+
+func mentionsComparison(question string) bool {
+	n := strings.ToLower(question)
+	for _, k := range []string{"เทียบ", "เปรียบเทียบ", " vs ", "versus", "compare"} {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// datedSalesExcluded is true when a question names a period but is really about a
+// menu, ingredient, breakdown, or per-order average — those have their own tools
+// and must not be hijacked by the total-sales flow.
+func datedSalesExcluded(n string) bool {
+	for _, ex := range []string{
+		"เมนู", "menu", "dish", "จาน", "วัตถุดิบ", "ingredient",
+		"อันดับ", "ประเภท", "order type", "ต่อบิล", "ต่อออเดอร์", "เฉลี่ย", "average",
+	} {
+		if strings.Contains(n, ex) {
+			return true
+		}
+	}
+	return false
+}
+
+func mentionsSalesTotal(n string) bool {
+	for _, k := range []string{
+		"ยอดขาย", "ยอดรวม", "ยอด", "รายได้", "ขายได้", "ขายไป",
+		"sales", "revenue", "turnover", "how much",
+	} {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
+}
+
+type datedSalesRequest struct {
+	comparison bool
+	periods    []AIPeriod
+}
+
+// resolveDatedSalesRequest decides whether a question is a dated total-sales
+// query (single named/relative month, or a month-to-month comparison) and
+// returns the windows to sum. It returns ok=false for anything that should keep
+// flowing through the normal snapshot pipeline.
+func resolveDatedSalesRequest(question string, ref time.Time) (datedSalesRequest, bool) {
+	n := strings.ToLower(strings.TrimSpace(question))
+	if datedSalesExcluded(n) {
+		return datedSalesRequest{}, false
+	}
+	periods := extractPeriods(question, ref)
+	if len(periods) == 0 {
+		return datedSalesRequest{}, false
+	}
+
+	if mentionsComparison(question) {
+		if len(periods) == 1 {
+			periods = append(periods, previousMonthPeriod(periods[0].Start))
+		} else if len(periods) > 2 {
+			periods = periods[:2]
+		}
+		return datedSalesRequest{comparison: true, periods: periods}, true
+	}
+
+	// A single dated window is only claimed when the question is clearly about a
+	// sales/revenue total, so "เมนูขายดีเดือนมีนาคม" style questions fall through.
+	if !mentionsSalesTotal(n) {
+		return datedSalesRequest{}, false
+	}
+	return datedSalesRequest{comparison: false, periods: periods[:1]}, true
+}
+
+func formatDatedSalesAnswer(p AIPeriod, d repository.AISalesRange) string {
+	if d.Orders == 0 {
+		return fmt.Sprintf("ยอดขาย%s ยังไม่มีออเดอร์ที่ชำระเงินครับ", p.Label)
+	}
+	return fmt.Sprintf(
+		"ยอดขาย%s คือ %.2f บาท จาก %d ออเดอร์ (มีการขาย %d วัน) ครับ",
+		p.Label, d.Revenue, d.Orders, d.Days,
+	)
+}
+
+func formatDatedSalesComparison(a AIPeriod, da repository.AISalesRange, b AIPeriod, db repository.AISalesRange) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("เทียบยอดขายระหว่าง %s กับ %s ครับ\n\n", a.Label, b.Label))
+	sb.WriteString(fmt.Sprintf("- %s: %.2f บาท (%d ออเดอร์)\n", a.Label, da.Revenue, da.Orders))
+	sb.WriteString(fmt.Sprintf("- %s: %.2f บาท (%d ออเดอร์)\n", b.Label, db.Revenue, db.Orders))
+	switch {
+	case db.Revenue > 0:
+		pct := (da.Revenue - db.Revenue) / db.Revenue * 100
+		dir := "เพิ่มขึ้น 📈"
+		if pct < 0 {
+			dir = "ลดลง 📉"
+		}
+		sb.WriteString(fmt.Sprintf("- เปลี่ยนแปลง: %+.1f%% (%s)", pct, dir))
+	case da.Revenue > 0:
+		sb.WriteString(fmt.Sprintf("- %s ยังไม่มียอดขายให้เทียบเป็นเปอร์เซ็นต์ครับ", b.Label))
+	default:
+		sb.WriteString("- ยังไม่มียอดขายทั้งสองช่วงให้เทียบครับ")
+	}
+	return sb.String()
+}
