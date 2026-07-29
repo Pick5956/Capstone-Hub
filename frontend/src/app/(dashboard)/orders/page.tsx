@@ -87,7 +87,6 @@ export default function OrdersPage() {
         table: "โต๊ะ",
         zone: "โซน",
         dateTime: "วันเวลา",
-        items: "รายการ",
         total: "ยอดรวม",
         noOrders: "ไม่พบออเดอร์ในเงื่อนไขนี้",
         noOrdersHint: "ลองเปลี่ยนคำค้นหาหรือหมวดหมู่",
@@ -121,7 +120,6 @@ export default function OrdersPage() {
         table: "Table",
         zone: "Zone",
         dateTime: "Date / time",
-        items: "Items",
         total: "Total",
         noOrders: "No orders match this view",
         noOrdersHint: "Try another search or category.",
@@ -310,15 +308,14 @@ export default function OrdersPage() {
           aria-busy={loading || loadingMore}
           className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable]"
         >
-          <div className="min-w-0 lg:min-w-[1060px]">
-            <div className="sticky top-0 z-10 hidden border-b border-gray-200 bg-slate-100/95 px-4 py-2 text-center text-[13.2px] font-semibold uppercase tracking-[0.12em] text-gray-500 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95 dark:text-gray-400 lg:grid lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center lg:gap-3">
+          <div className="min-w-0 lg:min-w-[980px]">
+            <div className="sticky top-0 z-10 hidden border-b border-gray-200 bg-slate-100/95 px-4 py-2 text-center text-[13.2px] font-semibold uppercase tracking-[0.12em] text-gray-500 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95 dark:text-gray-400 lg:grid lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center lg:gap-3">
               <span>{copy.order}</span>
               <span>{copy.table}</span>
               <span>{copy.zone}</span>
               <span>{copy.dateTime}</span>
               <span>{copy.status}</span>
               <span>{copy.payment}</span>
-              <span>{copy.items}</span>
               <span>{copy.total}</span>
               <span>{actionLabel}</span>
             </div>
@@ -340,7 +337,7 @@ export default function OrdersPage() {
                   return (
                   <div
                     key={order.ID}
-                    className={`grid w-full gap-3 px-4 py-3 text-left transition-colors lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center ${
+                    className={`grid w-full gap-3 px-4 py-3 text-left transition-colors lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center ${
                       index % 2 === 0
                         ? "bg-white hover:bg-gray-100 dark:bg-gray-950 dark:hover:bg-gray-800/70"
                         : "bg-slate-100/70 hover:bg-slate-200/70 dark:bg-gray-900/55 dark:hover:bg-gray-800/80"
@@ -377,7 +374,6 @@ export default function OrdersPage() {
                         ? <span className="text-gray-300 dark:text-gray-600" aria-label={copy.noAmount} title={copy.noAmount}>—</span>
                         : statusLabel(order.payment_status)}
                     </span>
-                    <span className="text-[14.4px] text-gray-500 lg:text-center">{itemCount(order)} {copy.items}</span>
                     <span className="font-mono text-[16.8px] font-semibold tabular-nums text-gray-950 dark:text-white lg:text-center">
                       {money(order.grand_total || order.total_amount)}
                     </span>
