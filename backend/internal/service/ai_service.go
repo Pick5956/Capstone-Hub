@@ -62,9 +62,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 				if parseErr == nil {
 					return res, nil
 				}
-				fmt.Printf("[AI Classifier] Groq Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+				aiStage("warn", "Groq classifier returned invalid JSON (%v) → rotating", parseErr)
 			} else {
-				fmt.Printf("[AI Classifier] Groq Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+				aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 			}
 		}
 	}
@@ -84,9 +84,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 				if parseErr == nil {
 					return res, nil
 				}
-				fmt.Printf("[AI Classifier] Gemini Key succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+				aiStage("warn", "Gemini classifier returned invalid JSON (%v) → rotating", parseErr)
 			} else {
-				fmt.Printf("[AI Classifier] Gemini Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+				aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 			}
 		}
 	}
@@ -98,9 +98,9 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 			if parseErr == nil {
 				return res, nil
 			}
-			fmt.Printf("[AI Classifier] Ollama succeeded but JSON parse failed: %v, body: %s\n", parseErr, answer)
+			aiStage("warn", "Ollama classifier returned invalid JSON (%v)", parseErr)
 		} else {
-			fmt.Printf("[AI Classifier] Ollama failed: %v\n", err)
+			aiStage("warn", "Ollama classifier failed: %v", err)
 		}
 	}
 
@@ -152,7 +152,7 @@ func mapTaskToIntent(task AITask) AIIntent {
 	}
 }
 
-func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskResponse, error) {
+func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *AIAskResponse, err error) {
 	question := strings.TrimSpace(req.Question)
 	if question == "" {
 		return nil, errors.New("question is required")
@@ -161,6 +161,17 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 		return nil, errors.New("question is too long")
 	}
 	history := sanitizeConversationHistory(req.History)
+
+	aiStage("input", "user asked: %q (history %d turns)", aiSnippet(question, 160), len(history))
+	// Log how the request was ultimately answered, whichever branch returns.
+	defer func() {
+		switch {
+		case err != nil:
+			aiStage("done", "error: %v", err)
+		case resp != nil:
+			aiStage("done", "model=%s task=%s tool=%s intent=%s", resp.Model, resp.Task, aiToolOrDash(resp.Tool), resp.Intent)
+		}
+	}()
 
 	// Local intent guards remain disabled: the AI Router handles classification,
 	// while backend policy validates its proposed task and tool.
@@ -172,11 +183,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	// Step 2: Structured JSON AI Router followed by backend policy enforcement.
 	routerResult, routerErr := s.classifyIntent(question)
 	if routerErr != nil {
-		fmt.Printf("[AI Router] Warning: Classifier failed: %v. Defaulting to analysis.\n", routerErr)
+		aiStage("route", "classifier unavailable (%v) → default to analysis", routerErr)
+	} else {
+		aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
+			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
 	}
 
 	// Step 3: Check Confidence Level and Unclear Input
 	if routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear {
+		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
 		return &AIAskResponse{
 			Answer:   "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ",
 			Intent:   AIIntentUnclear,
@@ -188,6 +203,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Step 4: Block Risky Operations (Readiness & Safety Policy Guard)
 	if routerResult.Task == AITaskRiskyAction || routerResult.Risk == "high" || routerResult.Risk == "medium" {
+		aiStage("flow", "blocked — safety guard (task=%s risk=%s)", routerResult.Task, routerResult.Risk)
 		return &AIAskResponse{
 			Answer:   "ระบบความปลอดภัยไม่อนุญาตให้แก้ไขข้อมูลร้าน ลบข้อมูล หรือสั่งซื้อสินค้าโดยตรงผ่านแชทเพื่อป้องกันความผิดพลาดครับ รบกวนดำเนินการด้วยตนเองในหน้าเมนูจัดการที่เกี่ยวข้องนะครับ",
 			Intent:   AIIntentAnalysis,
@@ -200,6 +216,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	// The Router selects this known concept flow; backend supplies an exact,
 	// stable definition instead of allowing a provider to redefine Margin.
 	if routerResult.Task == AITaskExplainConcept && requestsMarginConceptExplanation(question) {
+		aiStage("flow", "concept — margin definition (local policy)")
 		answer, _ := localConceptAnswer(AITaskRoute{Task: AITaskExplainConcept})
 		return &AIAskResponse{
 			Answer:   answer,
@@ -212,7 +229,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Block Out-of-Scope Requests (Focus Guard Policy - Dynamic AI Refusal)
 	if routerResult.Task == AITaskOutOfScope {
-		fmt.Printf("[AI Router] Diverting to Dynamic Out-of-Scope Refusal flow...\n")
+		aiStage("flow", "out-of-scope — dynamic refusal")
 		answer, model, err := s.askOutOfScopeWithRotation(question, history)
 		if err == nil {
 			return &AIAskResponse{
@@ -223,7 +240,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 				Snapshot: AISnapshot{},
 			}, nil
 		}
-		fmt.Printf("[AI Router] Dynamic Out-of-Scope failed: %v. Falling back to static message.\n", err)
+		aiStage("warn", "out-of-scope dynamic refusal failed (%v) → static message", err)
 		return &AIAskResponse{
 			Answer:   "เรื่องนี้อยู่นอกขอบเขตที่ผมดูแลในฐานะผู้ช่วยร้านอาหาร แต่ช่วยได้เรื่องยอดขาย คลังวัตถุดิบ กำไรเมนู หรือแคปชั่นโปรโมทร้านครับ",
 			Intent:   AIIntentOutOfScope,
@@ -238,7 +255,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
 	if !needsData {
-		fmt.Printf("[AI Router] Diverting to conversational flow (%s / %s, 0 DB snapshot load)...\n", routerResult.Task, intent)
+		aiStage("flow", "conversational — no snapshot (task=%s)", routerResult.Task)
 
 		provider := s.getAIProvider()
 
@@ -247,7 +264,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			if e == nil {
 				return a, m, true
 			}
-			fmt.Printf("[AI Service] Conversational %s failed: %v\n", name, e)
+			aiStage("warn", "conversational %s failed: %v", name, e)
 			return "", "", false
 		}
 
@@ -306,18 +323,20 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	// Tier 1-1: a dated total-sales question (named month or month-to-month
 	// comparison) is answered directly from range queries, so it is not limited
 	// to the fixed 14-day snapshot window.
-	if resp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
-		return resp, nil
+	if datedResp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
+		aiStage("flow", "dated-sales — range query (bypassing 14-day snapshot)")
+		return datedResp, nil
 	} else if derr != nil {
-		fmt.Printf("[AI Router] Dated-sales query failed, falling back to snapshot flow: %v\n", derr)
+		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
 
-	fmt.Println("[AI Router] Diverting to Rich Analytical business flow (Building DB Snapshot)...")
+	aiStage("flow", "analytical — building 14-day snapshot")
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
 		return nil, err
 	}
 	if answer, guarded := localAnalyticalGuardrailAnswer(question, snapshot); guarded {
+		aiStage("flow", "readiness guardrail (local) — data not ready for a business decision")
 		return &AIAskResponse{
 			Answer:   answer,
 			Intent:   intent,
@@ -335,11 +354,12 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 	executeAnalytical := func(callFn analyticalFn, providerName string) (*AIAskResponse, error) {
 		answer, model, err := callFn()
 		if err != nil {
-			fmt.Printf("[AI Service] Analytical %s failed: %v\n", providerName, err)
+			aiStage("warn", "analytical %s failed: %v", providerName, err)
 			return nil, err
 		}
 		if strings.HasPrefix(answer, "CALL_TOOL:") {
 			toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
+			aiStage("flow", "%s requested tool %s → local deterministic answer", providerName, toolName)
 			result, err := executeReadOnlyTool(toolName, snapshot, question)
 			if err != nil {
 				return nil, err
@@ -356,6 +376,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 			}
 			return nil, errors.New("read-only AI tool returned no presentable result")
 		}
+		aiStage("flow", "%s answered free-form (no tool — non-deterministic path)", providerName)
 		return &AIAskResponse{
 			Answer:   answer,
 			Intent:   intent,
@@ -409,6 +430,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 
 	// Fallback to local hardcoded tool template only if the LLM analytical loop fails
 	if toolToRun != "" {
+		aiStage("flow", "all providers failed → local tool fallback %s", toolToRun)
 		result, err := executeReadOnlyTool(toolToRun, snapshot, question)
 		if err == nil {
 			if answer, answered := localToolAnswer(result); answered {

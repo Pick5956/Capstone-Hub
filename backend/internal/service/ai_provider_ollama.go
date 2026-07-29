@@ -54,7 +54,7 @@ func (s *AIService) askOllamaWithRotation(question string, history []AIConversat
 func (s *AIService) executeClassifierOllama(question string) (string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Classifier] Calling Ollama %s at %s\n", model, baseURL)
+	aiStage("call", "Ollama classifier model=%s at=%s", model, baseURL)
 
 	prompt := fmt.Sprintf(routerClassifierCompactTemplate, question)
 
@@ -102,7 +102,7 @@ func (s *AIService) executeClassifierOllama(question string) (string, error) {
 func (s *AIService) executeOllama(question string, history []AIConversationMessage, snapshot AISnapshot) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Request] Calling Ollama (Analytical) %s at %s\n", model, baseURL)
+	aiStage("call", "Ollama analytical model=%s at=%s", model, baseURL)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -163,7 +163,7 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 func (s *AIService) executeOllamaConversation(question string, history []AIConversationMessage) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Request] Calling Ollama (Conversation) %s at %s\n", model, baseURL)
+	aiStage("call", "Ollama conversation model=%s at=%s", model, baseURL)
 
 	prompt := fmt.Sprintf(conversationPersonaTemplate, question, conversationPrompt(history))
 
@@ -214,7 +214,7 @@ func (s *AIService) executeOllamaConversation(question string, history []AIConve
 func (s *AIService) executeSecondRoundOllama(prompt string) (string, string, error) {
 	baseURL := s.getOllamaBaseURL()
 	model := s.getOllamaModel()
-	fmt.Printf("[AI Second Round] Calling Ollama %s at %s\n", model, baseURL)
+	aiStage("call", "Ollama second-round model=%s at=%s", model, baseURL)
 
 	payload := ollamaRequest{
 		Model: model,

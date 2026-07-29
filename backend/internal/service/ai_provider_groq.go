@@ -60,10 +60,10 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 
 		lastErr = err
 		if err == errRateLimit {
-			fmt.Printf("[AI Service] Groq Key %d/%d rate limited (429), rotating key...\n", (idx%uint32(numKeys))+1, numKeys)
+			aiStage("warn", "Groq key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Groq Key %d/%d failed with error: %v, rotating key...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Groq key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 	}
 
 	return "", "", lastErr
@@ -74,7 +74,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Classifier] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq classifier model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(routerClassifierTemplate, question)
 
@@ -124,7 +124,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Request] Calling Groq (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq analytical model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -182,7 +182,7 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Request] Calling Groq (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq conversation model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(conversationPersonaTemplate, question, conversationPrompt(history))
 
@@ -397,7 +397,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	fmt.Printf("[AI Second Round] Calling Groq %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq second-round model=%s key=%s", model, maskAPIKey(apiKey))
 	payload := groqRequest{
 		Model: model,
 		Messages: []groqMessage{
@@ -453,10 +453,10 @@ func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, strin
 		}
 		lastErr = err
 		if err == errRateLimit {
-			fmt.Printf("[AI Service] Groq Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
+			aiStage("warn", "Groq second-round key %d/%d rate limited → rotating", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Groq Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Groq second-round key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 	}
 	return "", "", lastErr
 }

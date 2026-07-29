@@ -60,10 +60,10 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 
 		lastErr = err
 		if err == errRateLimit {
-			fmt.Printf("[AI Service] Gemini Key %d/%d rate limited (429), rotating key...\n", (idx%uint32(numKeys))+1, numKeys)
+			aiStage("warn", "Gemini key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Gemini Key %d/%d failed with error: %v, rotating key...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 	}
 
 	return "", "", lastErr
@@ -74,7 +74,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Classifier] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini classifier model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(routerClassifierTemplate, question)
 
@@ -128,7 +128,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Request] Calling Gemini (Analytical) %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini analytical model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -189,7 +189,7 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Request] Calling Gemini (Conversation) %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini conversation model=%s key=%s", model, maskAPIKey(apiKey))
 
 	prompt := fmt.Sprintf(conversationPersonaTemplate, question, conversationPrompt(history))
 
@@ -352,7 +352,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	fmt.Printf("[AI Second Round] Calling Gemini %s using key: %s\n", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini second-round model=%s key=%s", model, maskAPIKey(apiKey))
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -412,10 +412,10 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 		}
 		lastErr = err
 		if err == errRateLimit {
-			fmt.Printf("[AI Service] Gemini Second Round Key %d/%d rate limited, rotating...\n", (idx%uint32(numKeys))+1, numKeys)
+			aiStage("warn", "Gemini second-round key %d/%d rate limited → rotating", (idx%uint32(numKeys))+1, numKeys)
 			continue
 		}
-		fmt.Printf("[AI Service] Gemini Second Round Key %d/%d failed: %v, rotating...\n", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini second-round key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
 	}
 	return "", "", lastErr
 }
