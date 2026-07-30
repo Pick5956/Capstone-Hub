@@ -1,20 +1,40 @@
 import { Redirect, router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { AppText as Text } from '@/src/components/app-text';
 import { AuthScreen } from '@/src/components/auth-screen';
-import { Button, EmptyState, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
 
 export default function RestaurantsScreen() {
-  const { activeMembership, memberships, selectRestaurant, user } = useAuth();
+  const {
+    activeMembership,
+    memberships,
+    membershipsLoadError,
+    refreshMemberships,
+    selectRestaurant,
+    user,
+  } = useAuth();
   const { copy, language } = useDisplayPreferences();
+  const [retrying, setRetrying] = useState(false);
   const locale = language === 'th' ? 'th-TH' : 'en-US';
   const membershipCount = new Intl.NumberFormat(locale).format(memberships.length);
 
   if (!user) return <Redirect href="/login" />;
+
+  async function retryMemberships() {
+    setRetrying(true);
+    try {
+      await refreshMemberships();
+    } catch {
+      // The provider keeps the contextual error visible for another retry.
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <AuthScreen
@@ -27,10 +47,33 @@ export default function RestaurantsScreen() {
       <Surface>
         <SectionHeader
           title={copy('ร้านของฉัน', 'My restaurants')}
-          detail={language === 'th'
-            ? `${membershipCount} ร้านที่เข้าถึงได้`
-            : `${membershipCount} ${memberships.length === 1 ? 'restaurant' : 'restaurants'} available`}
+          detail={membershipsLoadError
+            ? copy(
+              'ยังตรวจสอบรายชื่อร้านล่าสุดไม่ได้',
+              'Could not check your latest restaurant access.',
+            )
+            : language === 'th'
+              ? `${membershipCount} ร้านที่เข้าถึงได้`
+              : `${membershipCount} ${memberships.length === 1 ? 'restaurant' : 'restaurants'} available`}
         />
+        {membershipsLoadError ? (
+          <>
+            <Feedback
+              title={copy('โหลดร้านของคุณไม่สำเร็จ', 'Could not load your restaurants')}
+              detail={copy(
+                'บัญชีของคุณยังอยู่ในระบบ ข้อมูลนี้ไม่ได้หมายความว่าคุณไม่มีร้าน',
+                'You are still signed in. This does not mean that you have no restaurants.',
+              )}
+              tone="warning"
+            />
+            <Button
+              variant="secondary"
+              label={copy('ลองอีกครั้ง', 'Try again')}
+              onPress={retryMemberships}
+              loading={retrying}
+            />
+          </>
+        ) : null}
         {memberships.map((membership) => {
           const active = activeMembership?.restaurant_id === membership.restaurant_id;
           const roleName = membership.role?.name || '';
@@ -106,7 +149,7 @@ export default function RestaurantsScreen() {
             </Pressable>
           );
         })}
-        {!memberships.length ? (
+        {!memberships.length && !membershipsLoadError ? (
           <EmptyState
             title={copy('ยังไม่มีร้าน', 'No restaurants yet')}
             detail={copy(
@@ -116,7 +159,7 @@ export default function RestaurantsScreen() {
           />
         ) : null}
       </Surface>
-      <Surface>
+      {!membershipsLoadError || memberships.length ? <Surface>
         <Button
           label={copy('สร้างร้านใหม่', 'Create a restaurant')}
           onPress={() => router.push('/create-restaurant' as never)}
@@ -126,7 +169,7 @@ export default function RestaurantsScreen() {
           label={copy('รับคำเชิญพนักงาน', 'Accept a staff invitation')}
           onPress={() => router.push('/invite/manual' as never)}
         />
-      </Surface>
+      </Surface> : null}
     </AuthScreen>
   );
 }

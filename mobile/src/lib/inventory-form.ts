@@ -1,14 +1,27 @@
 import type { Ingredient, IngredientInput, IngredientMetadataInput } from '@/src/types/ingredient';
 
+export const INGREDIENT_UNITS = [
+  'กรัม',
+  'กก.',
+  'มิลลิลิตร',
+  'ลิตร',
+  'ชิ้น',
+  'ลูก',
+  'ฟอง',
+  'ใบ',
+  'แผ่น',
+  'ขวด',
+  'แพ็ก',
+  'ถุง',
+  'กล่อง',
+] as const;
+
 export interface IngredientFormValues {
   name: string;
   sku: string;
   categoryId: string;
   imageUrl: string;
   unit: string;
-  baseUnit: string;
-  purchaseUnitDefault: string;
-  conversionFactorDefault: string;
   stock: string;
   minStock: string;
   cost: string;
@@ -21,6 +34,13 @@ export type StockAdjustmentQuantityResult =
   | { ok: false; reason: 'required' | 'invalid' | 'positive' | 'non_negative' };
 
 export type StockAdjustmentType = 'in' | 'out' | 'adjust';
+
+export function ingredientUnitOptions(currentUnit: string): string[] {
+  const unit = currentUnit.trim();
+  return unit && !INGREDIENT_UNITS.some((option) => option === unit)
+    ? [unit, ...INGREDIENT_UNITS]
+    : [...INGREDIENT_UNITS];
+}
 
 function finiteNumber(value: string, fallback: number) {
   const trimmed = value.trim();
@@ -43,9 +63,6 @@ export function ingredientToFormValues(item: Ingredient): IngredientFormValues {
     categoryId: item.category_id ? String(item.category_id) : 'none',
     imageUrl: item.image_url || '',
     unit,
-    baseUnit: item.base_unit || unit,
-    purchaseUnitDefault: item.purchase_unit_default || unit,
-    conversionFactorDefault: String(item.conversion_factor_default ?? 1),
     stock: String(item.stock ?? 0),
     minStock: String(item.min_stock ?? 0),
     cost: String(item.cost_per_unit ?? 0),
@@ -57,7 +74,6 @@ export function ingredientToFormValues(item: Ingredient): IngredientFormValues {
 export function buildIngredientMetadataInput(values: IngredientFormValues): IngredientMetadataInput {
   const unit = values.unit.trim();
   const categoryId = Number(values.categoryId);
-  const conversionFactor = finiteNumber(values.conversionFactorDefault, 1);
   const yieldPercent = finiteNumber(values.yieldPercent, 100);
 
   return {
@@ -66,9 +82,6 @@ export function buildIngredientMetadataInput(values: IngredientFormValues): Ingr
     category_id: values.categoryId === 'none' || !Number.isInteger(categoryId) || categoryId <= 0 ? undefined : categoryId,
     image_url: values.imageUrl.trim(),
     unit,
-    base_unit: values.baseUnit.trim() || unit,
-    purchase_unit_default: values.purchaseUnitDefault.trim() || unit,
-    conversion_factor_default: conversionFactor > 0 ? conversionFactor : 1,
     min_stock: nonNegativeNumber(values.minStock),
     cost_per_unit: nonNegativeNumber(values.cost),
     yield_percent: yieldPercent > 0 && yieldPercent <= 100 ? yieldPercent : 100,

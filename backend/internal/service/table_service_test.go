@@ -3,6 +3,8 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"Project-M/internal/entity"
 )
 
 func TestNormalizeCapacityBounds(t *testing.T) {
@@ -22,6 +24,100 @@ func TestReservationPhoneValidation(t *testing.T) {
 	}
 	if isValidReservationPhone("12345") {
 		t.Fatal("short phone should be rejected")
+	}
+}
+
+func TestValidateTableCanBeReservedRequiresFreeTable(t *testing.T) {
+	if err := validateTableCanBeReserved(entity.TableStatusFree); err != nil {
+		t.Fatalf("free table should be reservable: %v", err)
+	}
+	for _, status := range []string{
+		entity.TableStatusOccupied,
+		entity.TableStatusReserved,
+		entity.TableStatusInactive,
+	} {
+		if err := validateTableCanBeReserved(status); err == nil || err.Error() != "table is not free" {
+			t.Fatalf("status %q error = %v, want table is not free", status, err)
+		}
+	}
+}
+
+func TestValidateReservedTableReleaseRequiresReservedTableWithoutOpenOrder(t *testing.T) {
+	if err := validateReservedTableRelease(entity.TableStatusReserved, false); err != nil {
+		t.Fatalf("reserved table without an open order should be releasable: %v", err)
+	}
+	if err := validateReservedTableRelease(entity.TableStatusFree, false); err == nil || err.Error() != "table is not reserved" {
+		t.Fatalf("free table error = %v, want table is not reserved", err)
+	}
+	if err := validateReservedTableRelease(entity.TableStatusReserved, true); err == nil || err.Error() != "table has an open order" {
+		t.Fatalf("reserved table with open order error = %v, want table has an open order", err)
+	}
+}
+
+func TestTableStatusForMetadataUpdatePreservesLifecycleManagedStatus(t *testing.T) {
+	for _, current := range []string{
+		entity.TableStatusReserved,
+		entity.TableStatusOccupied,
+	} {
+		for _, requested := range []string{
+			entity.TableStatusFree,
+			entity.TableStatusInactive,
+			entity.TableStatusReserved,
+			entity.TableStatusOccupied,
+		} {
+			if got := tableStatusForMetadataUpdate(current, requested); got != current {
+				t.Fatalf("tableStatusForMetadataUpdate(%q, %q) = %q, want current status %q", current, requested, got, current)
+			}
+		}
+	}
+}
+
+func TestTableStatusForMetadataUpdateAllowsAvailabilityChanges(t *testing.T) {
+	for _, testCase := range []struct {
+		current   string
+		requested string
+	}{
+		{current: entity.TableStatusFree, requested: entity.TableStatusInactive},
+		{current: entity.TableStatusInactive, requested: entity.TableStatusFree},
+	} {
+		if got := tableStatusForMetadataUpdate(testCase.current, testCase.requested); got != testCase.requested {
+			t.Fatalf(
+				"tableStatusForMetadataUpdate(%q, %q) = %q, want requested status %q",
+				testCase.current,
+				testCase.requested,
+				got,
+				testCase.requested,
+			)
+		}
+	}
+}
+
+func TestApplyTableMetadataUpdateKeepsReservationWhileChangingCapacity(t *testing.T) {
+	table := &entity.RestaurantTable{
+		Capacity:         2,
+		Status:           entity.TableStatusReserved,
+		ReservationName:  "Guest",
+		ReservationPhone: "0000000000",
+	}
+	requested := &entity.RestaurantTable{
+		Capacity: 6,
+		Status:   entity.TableStatusFree,
+	}
+
+	applyTableMetadataUpdate(table, requested)
+
+	if table.Capacity != 6 {
+		t.Fatalf("capacity = %d, want 6", table.Capacity)
+	}
+	if table.Status != entity.TableStatusReserved {
+		t.Fatalf("status = %q, want reserved", table.Status)
+	}
+	if table.ReservationName != "Guest" || table.ReservationPhone != "0000000000" {
+		t.Fatalf(
+			"reservation metadata = %q/%q, want it preserved",
+			table.ReservationName,
+			table.ReservationPhone,
+		)
 	}
 }
 

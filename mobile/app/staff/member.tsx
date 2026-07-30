@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -27,6 +27,7 @@ import {
   roleLabel,
   userDisplayName,
 } from '@/src/lib/staff-workflow';
+import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
@@ -34,7 +35,8 @@ import type { Membership, MembershipStatus, Role } from '@/src/types/restaurant'
 
 export default function StaffMemberScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const memberId = Number(id);
+  const routeId = parsePositiveRouteId(id);
+  const memberId = routeId.kind === 'valid' ? routeId.id : null;
   const { activeMembership, user } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const restaurantId = activeMembership?.restaurant_id;
@@ -53,11 +55,13 @@ export default function StaffMemberScreen() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!restaurantId || !allowed || !Number.isFinite(memberId) || memberId <= 0) {
+    if (!restaurantId || !allowed || memberId === null) {
       setLoading(false);
       return;
     }
     setLoading(true);
+    setMember(null);
+    setError(null);
     Promise.all([listMembers(restaurantId), getRoles()])
       .then(([memberResponse, roleResponse]) => {
         const next = memberResponse.members.find((item) => item.ID === memberId) || null;
@@ -103,7 +107,7 @@ export default function StaffMemberScreen() {
   }
 
   async function save() {
-    if (!restaurantId || !member || !manageable) return;
+    if (!restaurantId || memberId === null || !member || !manageable) return;
     const riskyStatusChange = status !== member.status && status !== 'active';
     if (riskyStatusChange && confirmStatus !== status) {
       setConfirmStatus(status);
@@ -149,6 +153,27 @@ export default function StaffMemberScreen() {
     }
   }
 
+  if (routeId.kind !== 'valid') {
+    return (
+      <AppScreen title={copy('ข้อมูลพนักงาน', 'Staff details')} topLevel={false}>
+        <EmptyState
+          title={copy('ไม่พบพนักงาน', 'Staff member not found')}
+          detail={copy(
+            'ลิงก์พนักงานนี้ไม่ถูกต้อง กรุณากลับไปเลือกรายการจากหน้าทีมงาน',
+            'This staff link is invalid. Go back and choose a member from the team list.',
+          )}
+          action={(
+            <Button
+              variant="secondary"
+              label={copy('ย้อนกลับ', 'Go back')}
+              onPress={() => router.back()}
+            />
+          )}
+        />
+      </AppScreen>
+    );
+  }
+
   if (!allowed) {
     return (
       <AppScreen title={copy('ข้อมูลพนักงาน', 'Staff details')} topLevel={false}>
@@ -163,7 +188,7 @@ export default function StaffMemberScreen() {
     );
   }
 
-  if (!loading && (!member || !manageable)) {
+  if (!loading && !error && (!member || !manageable)) {
     return (
       <AppScreen title={copy('ข้อมูลพนักงาน', 'Staff details')} topLevel={false}>
         <EmptyState
@@ -179,6 +204,13 @@ export default function StaffMemberScreen() {
               'พนักงานอาจถูกนำออกหรือไม่ได้อยู่ในร้านนี้',
               'This staff member may have been removed or is not in this restaurant.',
             )}
+          action={(
+            <Button
+              variant="secondary"
+              label={copy('ย้อนกลับ', 'Go back')}
+              onPress={() => router.back()}
+            />
+          )}
         />
       </AppScreen>
     );

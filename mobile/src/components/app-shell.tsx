@@ -3,6 +3,8 @@ import { Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/src/components/app-text';
+import { shouldOpenSettings } from '@/src/lib/navigation-runtime';
+import { orderRoutePermissions } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -18,14 +20,15 @@ type NavItem = {
   mark: string;
   permission?: string;
   fallbackPermission?: string;
+  permissions?: readonly string[];
   roles?: string[];
 };
 
 const primaryNavigation: NavItem[] = [
   { key: 'home', label: 'ภาพรวม', labelEn: 'Overview', shortLabel: 'ภาพรวม', shortLabelEn: 'Home', href: '/home', mark: 'ภ', permission: 'view_dashboard' },
-  { key: 'pos', label: 'รับออเดอร์', labelEn: 'Take orders', shortLabel: 'รับออเดอร์', shortLabelEn: 'POS', href: '/tables', mark: 'ร', permission: 'take_order' },
+  { key: 'pos', label: 'รับออเดอร์', labelEn: 'Take orders', shortLabel: 'รับออเดอร์', shortLabelEn: 'Order taking', href: '/tables', mark: 'ร', permission: 'take_order' },
   { key: 'kitchen', label: 'ครัว', labelEn: 'Kitchen', shortLabel: 'ครัว', shortLabelEn: 'Kitchen', href: '/kitchen', mark: 'ค', permission: 'view_kitchen' },
-  { key: 'orders', label: 'ออเดอร์', labelEn: 'Orders', shortLabel: 'ออเดอร์', shortLabelEn: 'Orders', href: '/orders', mark: 'อ', permission: 'view_orders' },
+  { key: 'orders', label: 'ออเดอร์', labelEn: 'Orders', shortLabel: 'ออเดอร์', shortLabelEn: 'Orders', href: '/orders', mark: 'อ', permissions: orderRoutePermissions },
   { key: 'more', label: 'ระบบทั้งหมด', labelEn: 'All tools', shortLabel: 'เพิ่มเติม', shortLabelEn: 'More', href: '/more', mark: '•••' },
 ];
 
@@ -33,6 +36,7 @@ const managementNavigation: NavItem[] = [
   { key: 'menu', label: 'เมนูอาหาร', labelEn: 'Menu', shortLabel: 'เมนู', shortLabelEn: 'Menu', href: '/menu', mark: 'ม', permission: 'view_menu', fallbackPermission: 'manage_menu' },
   { key: 'inventory', label: 'คลังวัตถุดิบ', labelEn: 'Inventory', shortLabel: 'คลัง', shortLabelEn: 'Stock', href: '/inventory', mark: 'ว', permission: 'view_inventory', fallbackPermission: 'manage_inventory' },
   { key: 'tables-manage', label: 'จัดการโต๊ะ', labelEn: 'Table management', shortLabel: 'โต๊ะ', shortLabelEn: 'Tables', href: '/table-management', mark: 'ต', permission: 'view_tables', fallbackPermission: 'manage_table' },
+  { key: 'reservations', label: 'ประวัติการจอง', labelEn: 'Reservations', shortLabel: 'การจอง', shortLabelEn: 'Bookings', href: '/reservations', mark: 'จ', permissions: ['view_tables', 'manage_table', 'take_order'] },
   { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', mark: 'ท', permission: 'manage_staff', roles: ['owner', 'manager'] },
   { key: 'reports', label: 'รายงาน', labelEn: 'Reports', shortLabel: 'รายงาน', shortLabelEn: 'Reports', href: '/reports', mark: 'ร', permission: 'view_reports' },
   { key: 'ai', label: 'ผู้ช่วยวิเคราะห์', labelEn: 'AI assistant', shortLabel: 'AI', shortLabelEn: 'AI', href: '/ai-assistant', mark: 'AI', permission: 'view_reports', fallbackPermission: 'manage_inventory' },
@@ -41,6 +45,9 @@ const managementNavigation: NavItem[] = [
 
 function isAllowed(item: NavItem, membership: ReturnType<typeof useAuth>['activeMembership']) {
   if (item.roles && !item.roles.includes(membership?.role?.name || '')) return false;
+  if (item.permissions?.length) {
+    return item.permissions.some((permission) => can(membership, permission));
+  }
   if (!item.permission) return true;
   return can(membership, item.permission) || Boolean(item.fallbackPermission && can(membership, item.fallbackPermission));
 }
@@ -126,9 +133,11 @@ function PhoneNavigation() {
 }
 
 function RestaurantBar({ detail }: { detail?: boolean }) {
+  const pathname = usePathname();
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const restaurant = activeMembership?.restaurant;
+  const settingsActive = !shouldOpenSettings(pathname);
   return (
     <View style={{ minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: spacing.lg }}>
       {detail ? (
@@ -140,7 +149,7 @@ function RestaurantBar({ detail }: { detail?: boolean }) {
         <Text numberOfLines={1} style={{ color: palette.textStrong, fontSize: 14, fontWeight: '700' }}>{restaurant?.name || 'Dishy'}</Text>
         <Text numberOfLines={1} style={{ color: palette.muted, fontSize: 11 }}>{restaurant?.branch_name || activeMembership?.role?.display_name || activeMembership?.role?.name || copy('เลือกร้าน', 'Choose restaurant')}</Text>
       </Pressable>
-      <Pressable accessibilityLabel={copy('เปิดการตั้งค่า', 'Open settings')} onPress={() => router.push('/settings')} style={({ pressed }) => ({ minHeight: 38, justifyContent: 'center', borderWidth: 1, borderColor: palette.borderStrong, borderRadius: radius.md, paddingHorizontal: spacing.md, opacity: pressed ? 0.7 : 1 })}>
+      <Pressable accessibilityLabel={copy('เปิดการตั้งค่า', 'Open settings')} accessibilityRole="button" accessibilityState={{ selected: settingsActive }} onPress={() => { if (!settingsActive) router.push('/settings'); }} style={({ pressed }) => ({ minHeight: 38, justifyContent: 'center', borderWidth: 1, borderColor: palette.borderStrong, borderRadius: radius.md, paddingHorizontal: spacing.md, opacity: pressed ? 0.7 : 1 })}>
         <Text style={{ color: palette.text, fontSize: 12, fontWeight: '700' }}>{copy('บัญชี', 'Account')}</Text>
       </Pressable>
     </View>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,14 +16,17 @@ import {
 import { AppText as Text } from '@/src/components/app-text';
 import { ChoiceRow, FormField, InlineActions } from '@/src/components/form-controls';
 import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
+import { StatusBadge } from '@/src/components/ui';
+import { tableStatusLabel } from '@/src/lib/format';
 import { toInt } from '@/src/lib/forms';
+import { customerTableUrl } from '@/src/lib/public-web-url';
 import { can } from '@/src/lib/rbac';
+import { parsePositiveRouteId } from '@/src/lib/route-id';
+import { canEditTableAvailability, tableEditorSaveStatus } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { colors, layout, typeScale } from '@/src/theme';
 import type { RestaurantTable, TableStatus, TableTag, TableZone } from '@/src/types/table';
-
-const webUrl = (process.env.EXPO_PUBLIC_WEB_URL?.trim() || 'https://app.example.com').replace(/\/$/, '');
 
 type TableForm = {
   zoneId: number;
@@ -39,10 +42,12 @@ function emptyTableForm(): TableForm {
 
 export default function TableFormScreen() {
   const { activeMembership } = useAuth();
-  const { copy } = useDisplayPreferences();
+  const { copy, language } = useDisplayPreferences();
   const params = useLocalSearchParams<{ tableId?: string; mode?: string }>();
-  const editingId = params.tableId ? Number(params.tableId) : null;
-  const isEditing = Number.isFinite(editingId) && editingId !== null;
+  const routeId = parsePositiveRouteId(params.tableId);
+  const editingId = routeId.kind === 'valid' ? routeId.id : null;
+  const isEditing = routeId.kind === 'valid';
+  const invalidRoute = routeId.kind === 'invalid';
   const canManage = can(activeMembership, 'manage_table');
   const insets = useSafeAreaInsets();
 
@@ -63,6 +68,7 @@ export default function TableFormScreen() {
   );
   const activeZones = useMemo(() => zones.filter((zone) => zone.is_active), [zones]);
   const activeTags = useMemo(() => tags.filter((tag) => tag.is_active), [tags]);
+  const availabilityStatusEditable = !editingTable || canEditTableAvailability(editingTable.status);
   const statusOptions = useMemo<Array<{ label: string; value: TableStatus }>>(() => [
     { label: copy('เปิดใช้งาน', 'Active'), value: 'free' },
     { label: copy('ปิดใช้งาน', 'Inactive'), value: 'inactive' },
@@ -79,11 +85,10 @@ export default function TableFormScreen() {
     const label = (sequence: number) => (zone ? `${zone.prefix || 'Z'}${String(sequence).padStart(2, '0')}` : `T${sequence}`);
     return count === 1 ? label(next) : `${label(next)}-${label(next + count - 1)}`;
   }, [activeZones, form.count, form.zoneId, tables]);
-  const customerOrderLink = editingTable?.customer_token ? `${webUrl}/customer/t/${editingTable.customer_token}` : '';
-  const customerOrderQr = customerOrderLink ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(customerOrderLink)}` : '';
+  const customerOrderLink = editingTable?.customer_token ? customerTableUrl(editingTable.customer_token) : '';
 
   const load = useCallback(async () => {
-    if (!canManage) {
+    if (!canManage || invalidRoute) {
       setLoading(false);
       return;
     }
@@ -104,7 +109,7 @@ export default function TableFormScreen() {
     } finally {
       setLoading(false);
     }
-  }, [canManage, copy]);
+  }, [canManage, copy, invalidRoute]);
 
   useEffect(() => {
     load();
@@ -128,8 +133,57 @@ export default function TableFormScreen() {
   }, [editingTable, initialized, isEditing, loading]);
 
   if (!activeMembership) return <Redirect href="/restaurants" />;
+  if (invalidRoute) {
+    return (
+      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
+        <StateMessage
+          title={copy('ไม่พบโต๊ะ', 'Table not found')}
+          detail={copy(
+            'ลิงก์โต๊ะนี้ไม่ถูกต้อง กรุณากลับไปเลือกรายการจากหน้าจัดการโต๊ะ',
+            'This table link is invalid. Go back and choose a table from table management.',
+          )}
+        />
+        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
+          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
+        </Pressable>
+      </MobileScreen>
+    );
+  }
   if (!canManage) {
     return <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('จัดการโต๊ะ', 'Manage tables')}><StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('ต้องมีสิทธิ์ manage_table', 'You need the manage_table permission.')} /></MobileScreen>;
+  }
+  if (isEditing && loading) {
+    return (
+      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
+        <StateMessage title={copy('กำลังโหลดโต๊ะ', 'Loading table')} detail={copy('กำลังตรวจสอบข้อมูลรายการนี้', 'Checking this table now.')} />
+      </MobileScreen>
+    );
+  }
+  if (isEditing && error) {
+    return (
+      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
+        <StateMessage title={copy('โหลดโต๊ะไม่สำเร็จ', 'Unable to load table')} detail={error} />
+        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
+          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
+        </Pressable>
+      </MobileScreen>
+    );
+  }
+  if (isEditing && !editingTable) {
+    return (
+      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
+        <StateMessage
+          title={copy('ไม่พบโต๊ะ', 'Table not found')}
+          detail={copy(
+            'โต๊ะนี้อาจถูกลบไปแล้ว กรุณากลับไปเลือกรายการจากหน้าจัดการโต๊ะ',
+            'This table may have been deleted. Go back and choose a table from table management.',
+          )}
+        />
+        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
+          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
+        </Pressable>
+      </MobileScreen>
+    );
   }
 
   function toggleTag(id: number) {
@@ -140,13 +194,15 @@ export default function TableFormScreen() {
   }
 
   async function persist() {
-    if (!canManage || submitting) return;
+    if (!canManage || submitting || invalidRoute || (isEditing && !editingTable)) return;
     const safeCapacity = Math.min(50, Math.max(1, toInt(form.capacity, 2)));
     const safeCount = Math.min(200, Math.max(1, toInt(form.count, 1)));
     const payload = {
       zone_id: form.zoneId || null,
       capacity: safeCapacity,
-      status: form.status,
+      status: editingTable
+        ? tableEditorSaveStatus(editingTable.status, form.status)
+        : form.status,
       tag_ids: form.tagIds,
     };
 
@@ -174,6 +230,7 @@ export default function TableFormScreen() {
   }
 
   async function saveTable() {
+    if (invalidRoute || (isEditing && !editingTable)) return;
     if (!editingTable && Math.max(1, toInt(form.count, 1)) > 1) {
       if (confirmAction !== 'bulk') {
         setConfirmAction('bulk');
@@ -199,12 +256,12 @@ export default function TableFormScreen() {
     finally { setSubmitting(false); }
   }
 
-  async function regenerateCustomerQr() {
+  async function regenerateCustomerLink() {
     if (!canManage || !editingTable) return;
-    if (confirmAction !== 'qr') { setConfirmAction('qr'); setFormError(copy('กดยืนยันอีกครั้งเพื่อสร้าง QR ใหม่ ลิงก์เดิมจะใช้ไม่ได้ทันที', 'Press confirm again to create a new QR code. The old link will stop working immediately.')); return; }
+    if (confirmAction !== 'qr') { setConfirmAction('qr'); setFormError(copy('กดยืนยันอีกครั้งเพื่อสร้างลิงก์ใหม่ ลิงก์เดิมจะใช้ไม่ได้ทันที', 'Press confirm again to create a new link. The old link will stop working immediately.')); return; }
     setSubmitting(true); setFormError(null);
     try { const updated = await regenerateTableCustomerToken(editingTable.ID); setTables((current) => current.map((table) => (table.ID === updated.ID ? updated : table))); setConfirmAction(null); }
-    catch (err) { setFormError(err instanceof Error ? err.message : copy('สร้าง QR ใหม่ไม่สำเร็จ', 'Unable to regenerate QR code')); }
+    catch (err) { setFormError(err instanceof Error ? err.message : copy('สร้างลิงก์ใหม่ไม่สำเร็จ', 'Unable to regenerate the link')); }
     finally { setSubmitting(false); }
   }
 
@@ -223,11 +280,6 @@ export default function TableFormScreen() {
   async function openCustomerMenu() {
     if (!customerOrderLink) return;
     await Linking.openURL(customerOrderLink);
-  }
-
-  async function openQrImage() {
-    if (!customerOrderQr) return;
-    await Linking.openURL(customerOrderQr);
   }
 
   return (
@@ -260,10 +312,6 @@ export default function TableFormScreen() {
           <StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('หน้านี้สำหรับเจ้าของร้าน ผู้จัดการ หรือผู้มีสิทธิ์ manage_table', 'This page is for owners, managers, or staff with the manage_table permission.')} />
         ) : null}
         {error ? <StateMessage title={copy('ทำรายการไม่สำเร็จ', 'Unable to complete action')} detail={error} /> : null}
-        {isEditing && !loading && !editingTable ? (
-          <StateMessage title={copy('ไม่พบโต๊ะ', 'Table not found')} detail={copy('โต๊ะนี้อาจถูกลบหรือข้อมูลยังไม่อัปเดต', 'This table may have been deleted or its data is not up to date.')} />
-        ) : null}
-
         <View style={layout.panel}>
           <Text selectable style={typeScale.cardTitle}>{copy('ตั้งค่าโต๊ะ', 'Table settings')}</Text>
           <ChoiceRow
@@ -286,12 +334,28 @@ export default function TableFormScreen() {
             onChangeText={(value) => setForm((current) => ({ ...current, capacity: value }))}
             value={form.capacity}
           />
-          <ChoiceRow
-            label={copy('สถานะ', 'Status')}
-            value={form.status === 'inactive' ? 'inactive' : 'free'}
-            options={statusOptions}
-            onChange={(value) => setForm((current) => ({ ...current, status: value }))}
-          />
+          {availabilityStatusEditable ? (
+            <ChoiceRow
+              label={copy('สถานะ', 'Status')}
+              value={form.status}
+              options={statusOptions}
+              onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+            />
+          ) : editingTable ? (
+            <View style={{ gap: 10 }}>
+              <Text selectable style={typeScale.caption}>{copy('สถานะ', 'Status')}</Text>
+              <StatusBadge
+                label={tableStatusLabel(editingTable.status, language)}
+                tone={editingTable.status === 'reserved' ? 'info' : 'warning'}
+              />
+              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
+                {copy(
+                  'สถานะนี้อัปเดตจากการจองหรือออเดอร์โดยอัตโนมัติ คุณยังแก้โซน จำนวนที่นั่ง และแท็กได้',
+                  'This status is managed automatically by the reservation or order. You can still edit the zone, seating capacity, and tags.',
+                )}
+              </Text>
+            </View>
+          ) : null}
           {!editingTable ? (
             <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12 }}>
               <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
@@ -325,37 +389,22 @@ export default function TableFormScreen() {
 
         {editingTable && customerOrderLink ? (
           <View style={layout.panel}>
-            <Text selectable style={typeScale.cardTitle}>{copy('QR สั่งอาหาร', 'Customer ordering QR')}</Text>
-            <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-              <Image
-                accessible
-                accessibilityLabel={copy('QR เมนูลูกค้าสำหรับโต๊ะนี้', 'Customer menu QR code for this table')}
-                source={{ uri: customerOrderQr }}
-                style={{ width: 112, height: 112, borderRadius: 8, backgroundColor: '#FFFFFF' }}
-              />
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                  {copy(
-                    'ให้ลูกค้าสแกนเพื่อเปิดเมนูโต๊ะนี้และส่งออเดอร์เข้าครัวโดยไม่ต้องล็อกอิน',
-                    'Guests can scan this code to open the table menu and send orders to the kitchen without signing in.',
-                  )}
-                </Text>
-                <Text selectable numberOfLines={2} style={[typeScale.caption, { color: colors.placeholder }]}>{customerOrderLink}</Text>
-              </View>
-            </View>
-            <View style={layout.headerRow}>
-              <Pressable onPress={shareCustomerLink} style={[layout.secondaryButton, { flex: 1 }]}>
-                <Text style={layout.secondaryButtonText}>{copy('แชร์/คัดลอกลิงก์', 'Share/copy link')}</Text>
-              </Pressable>
-              <Pressable onPress={openQrImage} style={[layout.secondaryButton, { flex: 1 }]}>
-                <Text style={layout.secondaryButtonText}>{copy('เปิดภาพ QR', 'Open QR image')}</Text>
-              </Pressable>
-            </View>
+            <Text selectable style={typeScale.cardTitle}>{copy('ลิงก์สั่งอาหารของลูกค้า', 'Customer ordering link')}</Text>
+            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
+              {copy(
+                'แชร์ลิงก์นี้ให้ลูกค้าเพื่อเปิดเมนูโต๊ะและส่งออเดอร์เข้าครัวโดยไม่ต้องล็อกอิน',
+                'Share this link so guests can open the table menu and send orders to the kitchen without signing in.',
+              )}
+            </Text>
+            <Text selectable numberOfLines={2} style={[typeScale.caption, { color: colors.placeholder }]}>{customerOrderLink}</Text>
+            <Pressable onPress={shareCustomerLink} style={layout.secondaryButton}>
+              <Text style={layout.secondaryButtonText}>{copy('แชร์/คัดลอกลิงก์', 'Share/copy link')}</Text>
+            </Pressable>
             <Pressable onPress={openCustomerMenu} style={layout.primaryButton}>
               <Text style={layout.primaryButtonText}>{copy('เปิดหน้าเมนูลูกค้า', 'Open customer menu')}</Text>
             </Pressable>
-            <Pressable onPress={regenerateCustomerQr} style={layout.secondaryButton}>
-              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'qr' ? copy('ยืนยันสร้าง QR ใหม่', 'Confirm new QR code') : copy('สร้าง QR ใหม่', 'Regenerate QR code')}</Text>
+            <Pressable onPress={regenerateCustomerLink} style={layout.secondaryButton}>
+              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'qr' ? copy('ยืนยันสร้างลิงก์ใหม่', 'Confirm new link') : copy('สร้างลิงก์ใหม่', 'Regenerate link')}</Text>
             </Pressable>
           </View>
         ) : null}

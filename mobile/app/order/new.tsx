@@ -8,6 +8,7 @@ import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
+import { canOpenDineInOrder } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { spacing, typeScale } from '@/src/theme';
@@ -17,19 +18,56 @@ export default function NewOrderScreen() {
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const canTakeOrder = can(activeMembership, 'take_order');
-  const params = useLocalSearchParams<{ tableId?: string; type?: string }>();
+  const params = useLocalSearchParams<{
+    tableId?: string;
+    type?: string;
+    customerCount?: string;
+    customerName?: string;
+    customerPhone?: string;
+  }>();
   const tableId = Number(params.tableId || 0);
   const [table, setTable] = useState<RestaurantTable | null>(null);
+  const [tableResolved, setTableResolved] = useState(!tableId);
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway'>(params.type === 'takeaway' ? 'takeaway' : 'dine_in');
-  const [customerCount, setCustomerCount] = useState('1');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerCount, setCustomerCount] = useState(params.customerCount || '1');
+  const [customerName, setCustomerName] = useState(params.customerName || '');
+  const [customerPhone, setCustomerPhone] = useState(params.customerPhone || '');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (canTakeOrder && tableId) listTables().then((response) => { const next = response.tables.find((item) => item.ID === tableId) || null; setTable(next); if (next) setCustomerCount(String(Math.max(1, Math.min(next.capacity || 1, 6)))); }).catch((err) => setError(err instanceof Error ? err.message : copy('โหลดข้อมูลโต๊ะไม่สำเร็จ', 'Could not load table details'))); }, [canTakeOrder, copy, tableId]);
+  useEffect(() => {
+    if (!canTakeOrder || !tableId) {
+      setTableResolved(true);
+      return;
+    }
+    setTableResolved(false);
+    listTables()
+      .then((response) => {
+        const next = response.tables.find((item) => item.ID === tableId) || null;
+        setTable(next);
+        setTableResolved(true);
+        if (!next) {
+          setError(copy('ไม่พบโต๊ะที่เลือก กรุณากลับไปเลือกโต๊ะใหม่', 'The selected table was not found. Go back and choose a table again.'));
+        }
+        if (next && !params.customerCount) {
+          setCustomerCount(String(Math.max(1, Math.min(next.capacity || 1, 6))));
+        }
+      })
+      .catch((err) => {
+        setTableResolved(true);
+        setError(
+          err instanceof Error
+            ? err.message
+            : copy('โหลดข้อมูลโต๊ะไม่สำเร็จ', 'Could not load table details'),
+        );
+      });
+  }, [canTakeOrder, copy, params.customerCount, tableId]);
   async function submit() {
     if (!canTakeOrder) return;
+    if (orderType === 'dine_in' && !canOpenDineInOrder(tableId, Boolean(table))) {
+      setError(copy('เลือกโต๊ะที่ใช้งานได้ก่อนเปิดออเดอร์', 'Choose a valid table before opening the order.'));
+      return;
+    }
     setSaving(true); setError(null);
     try {
       const order = await createOrder({ table_id: orderType === 'dine_in' ? tableId : null, order_type: orderType, customer_count: Math.max(1, Number.parseInt(customerCount || '1', 10) || 1), customer_name: customerName.trim(), customer_phone: customerPhone.trim(), note: note.trim() });
@@ -44,12 +82,12 @@ export default function NewOrderScreen() {
       <Surface>
         <SectionHeader title={copy('ประเภทออเดอร์', 'Order type')} />
         <ChipGroup value={orderType} onChange={setOrderType} options={[{ label: copy('ทานที่ร้าน', 'Dine-in'), value: 'dine_in' }, { label: copy('ซื้อกลับบ้าน', 'Takeaway'), value: 'takeaway' }]} />
-        {orderType === 'dine_in' ? <View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><Text selectable style={typeScale.cardTitle}>{table?.display_label || copy('กำลังโหลดโต๊ะ', 'Loading table')}</Text><Text selectable style={typeScale.caption}>{table ? copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`) : '−'}</Text></View></View> : null}
+        {orderType === 'dine_in' ? <View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><Text selectable style={typeScale.cardTitle}>{table?.display_label || (tableResolved ? copy('ไม่พบโต๊ะ', 'Table not found') : copy('กำลังโหลดโต๊ะ', 'Loading table'))}</Text><Text selectable style={typeScale.caption}>{table ? copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`) : '−'}</Text></View></View> : null}
         <TextField label={copy('จำนวนลูกค้า', 'Guest count')} value={customerCount} onChangeText={setCustomerCount} keyboardType="number-pad" />
         <TextField label={copy('ชื่อลูกค้า (ไม่บังคับ)', 'Customer name (optional)')} value={customerName} onChangeText={setCustomerName} />
         <TextField label={copy('เบอร์โทร (ไม่บังคับ)', 'Phone number (optional)')} value={customerPhone} onChangeText={setCustomerPhone} keyboardType="phone-pad" />
         <TextField label={copy('หมายเหตุออเดอร์', 'Order note')} value={note} onChangeText={setNote} multiline />
-        <Button label={copy('เปิดออเดอร์และเลือกเมนู', 'Open order and choose menu items')} onPress={submit} loading={saving} disabled={orderType === 'dine_in' && !tableId} />
+        <Button label={copy('เปิดออเดอร์และเลือกเมนู', 'Open order and choose menu items')} onPress={submit} loading={saving} disabled={orderType === 'dine_in' && !canOpenDineInOrder(tableId, Boolean(table))} />
       </Surface>
     </AppScreen>
   );

@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   clearActiveRestaurantId,
+  clearActiveRestaurantIdIfCurrent,
   clearSession,
+  clearSessionIfTokenCurrent,
   clearToken,
   getActiveRestaurantId,
   getToken,
@@ -40,5 +42,28 @@ test('clears token and restaurant state without browser storage APIs', async () 
 
   assert.equal(await getToken(), null);
   assert.equal(await getTokenType(), 'Bearer');
+  assert.equal(await getActiveRestaurantId(), null);
+});
+
+test('compare-and-clear preserves a newer restaurant selection', async () => {
+  await setActiveRestaurantId(42);
+
+  assert.equal(await clearActiveRestaurantIdIfCurrent(41), false);
+  assert.equal(await getActiveRestaurantId(), 42);
+  assert.equal(await clearActiveRestaurantIdIfCurrent(42), true);
+  assert.equal(await getActiveRestaurantId(), null);
+});
+
+test('compare-and-clear preserves a newer signed-in session', async () => {
+  const oldToken = generatedToken();
+  const newToken = `${generatedToken()}-NEW`;
+  await setToken(newToken);
+  await setActiveRestaurantId(42);
+
+  assert.equal(await clearSessionIfTokenCurrent(oldToken), false);
+  assert.equal(await getToken(), newToken);
+  assert.equal(await getActiveRestaurantId(), 42);
+  assert.equal(await clearSessionIfTokenCurrent(newToken), true);
+  assert.equal(await getToken(), null);
   assert.equal(await getActiveRestaurantId(), null);
 });

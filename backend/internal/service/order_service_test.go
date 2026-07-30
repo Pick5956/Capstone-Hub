@@ -26,6 +26,59 @@ func TestOrderNumberForDate(t *testing.T) {
 	}
 }
 
+func TestShouldSeatReservationOnOpen(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    string
+		requested bool
+		want      bool
+		wantErr   string
+	}{
+		{
+			name:      "reserved table is seated when explicitly requested",
+			status:    entity.TableStatusReserved,
+			requested: true,
+			want:      true,
+		},
+		{
+			name:      "reserved table remains protected without the explicit flag",
+			status:    entity.TableStatusReserved,
+			requested: false,
+			wantErr:   "table is reserved",
+		},
+		{
+			name:      "free table opens normally without reservation mode",
+			status:    entity.TableStatusFree,
+			requested: false,
+			want:      false,
+		},
+		{
+			name:      "reservation mode cannot be used for a free table",
+			status:    entity.TableStatusFree,
+			requested: true,
+			wantErr:   "table has no active reservation",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := shouldSeatReservationOnOpen(test.status, test.requested)
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("shouldSeatReservationOnOpen() error = %v, want nil", err)
+				}
+				if got != test.want {
+					t.Fatalf("shouldSeatReservationOnOpen() = %v, want %v", got, test.want)
+				}
+				return
+			}
+			if err == nil || err.Error() != test.wantErr {
+				t.Fatalf("shouldSeatReservationOnOpen() error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func TestOrderListFiltersAndOrderNumberAreBounded(t *testing.T) {
 	if err := ValidateOrderListFilters("active", "2026-07-24", "paid", "20260724-015"); err != nil {
 		t.Fatalf("valid filters rejected: %v", err)

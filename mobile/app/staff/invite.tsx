@@ -21,11 +21,10 @@ import {
   INVITATION_EXPIRY_DAY_OPTIONS,
   roleLabel,
 } from '@/src/lib/staff-workflow';
+import { invitationUrl } from '@/src/lib/public-web-url';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import type { Role } from '@/src/types/restaurant';
-
-const webUrl = (process.env.EXPO_PUBLIC_WEB_URL?.trim() || 'https://app.example.com').replace(/\/$/, '');
 
 export default function InviteStaffScreen() {
   const { activeMembership } = useAuth();
@@ -89,7 +88,7 @@ export default function InviteStaffScreen() {
         email: email.trim().toLowerCase() || undefined,
         expires_in_days: days,
       });
-      const invitationLink = `${webUrl}/invitations/${invitation.token}`;
+      const invitationLink = invitationUrl(invitation.token);
       const restaurantName = activeMembership?.restaurant?.name
         || copy('ร้านอาหาร', 'Restaurant');
       const selectedRole = roles.find((role) => role.ID === roleId);

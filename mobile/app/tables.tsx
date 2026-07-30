@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
 
 import { listOrders } from '@/src/api/order';
@@ -9,8 +9,9 @@ import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { AppScreen } from '@/src/components/app-shell';
 import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money, tableStatusLabel } from '@/src/lib/format';
-import { tableEntryAction } from '@/src/lib/table-workflow';
 import { can } from '@/src/lib/rbac';
+import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
+import { tableEntryAction } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { inputStyles, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
@@ -30,19 +31,46 @@ export default function TablesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestGenerationRef = useRef(createRequestGeneration());
+  const foregroundRequestRef = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async (quiet = false) => {
+    if (!shouldStartRequest(quiet, foregroundRequestRef.current !== null)) return;
+
+    const request = requestGenerationRef.current.begin();
+    if (!quiet) {
+      foregroundRequestRef.current = request;
+      setLoading(true);
+    }
+    setError(null);
     try {
       const [tableResponse, orderResponse] = await Promise.all([
         listTables(),
         listOrders({ status: 'active', limit: 200 }),
       ]);
+      if (!requestGenerationRef.current.isCurrent(request)) return;
       setTables(tableResponse.tables || []); setOrders(orderResponse.orders || []);
-    } catch (err) { setError(err instanceof Error ? err.message : copy('โหลดผังโต๊ะไม่สำเร็จ', 'Could not load the table map')); }
-    finally { setLoading(false); }
+    } catch (err) {
+      if (!requestGenerationRef.current.isCurrent(request)) return;
+      setError(err instanceof Error ? err.message : copy('โหลดผังโต๊ะไม่สำเร็จ', 'Could not load the table map'));
+    } finally {
+      if (!quiet && foregroundRequestRef.current === request) {
+        foregroundRequestRef.current = null;
+        if (requestGenerationRef.current.isCurrent(request)) setLoading(false);
+      }
+    }
   }, [copy]);
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    void load();
+    const timer = setInterval(() => {
+      void load(true);
+    }, 10000);
+    return () => {
+      clearInterval(timer);
+      requestGenerationRef.current.invalidate();
+      foregroundRequestRef.current = null;
+    };
+  }, [load]));
 
   const activeOrderByTable = useMemo(() => {
     const map = new Map<number, Order>();
@@ -99,9 +127,32 @@ export default function TablesScreen() {
                     <Text selectable numberOfLines={1} style={[typeScale.title, { flex: 1 }]}>{table.display_label || table.table_number}</Text>
                     <StatusBadge label={ready ? copy(`ครัวเสร็จ ${ready.toLocaleString('th-TH')}`, `Kitchen done ${ready.toLocaleString('en-US')}`) : order ? copy('มีออเดอร์', 'Occupied') : tableStatusLabel(table.status, language)} tone={tone} />
                   </View>
-                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`)}{table.tags?.length ? ` · ${table.tags.map((tag) => tag.name).join(', ')}` : ''}</Text>
+                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{order
+                    ? copy(`${order.customer_count.toLocaleString('th-TH')} คน`, `${order.customer_count.toLocaleString('en-US')} guests`)
+                    : copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`)}
+                  {table.tags?.length ? ` · ${table.tags.map((tag) => tag.name).join(', ')}` : ''}</Text>
                   <View style={{ flex: 1 }} />
-                  {order ? <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}><Text selectable style={[typeScale.caption, { flex: 1, color: palette.muted }]}>{order.order_number}</Text><Text selectable style={typeScale.number}>{money(order.grand_total, language)}</Text></View> : <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{table.status === 'inactive' ? copy('เปิดใช้งานจากหน้าจัดการโต๊ะ', 'Activate this table from Table management') : copy('แตะเพื่อเปิดออเดอร์', 'Tap to open an order')}</Text>}
+                  {order ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                      <Text selectable style={[typeScale.caption, { flex: 1, color: palette.muted }]}>{order.order_number}</Text>
+                      <Text selectable style={typeScale.number}>{money(order.grand_total, language)}</Text>
+                    </View>
+                  ) : table.status === 'reserved' ? (
+                    <View style={{ gap: 2 }}>
+                      <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.info, fontWeight: '700' }]}>
+                        {table.reservation_name || copy('ไม่ระบุชื่อผู้จอง', 'No guest name')}
+                      </Text>
+                      <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>
+                        {table.reservation_phone || copy('แตะเพื่อดูรายละเอียด', 'Tap for details')}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                      {table.status === 'inactive'
+                        ? copy('เปิดใช้งานจากหน้าจัดการโต๊ะ', 'Activate this table from Table management')
+                        : copy('แตะเพื่อเปิดออเดอร์', 'Tap to open an order')}
+                    </Text>
+                  )}
                 </Pressable>
               );
             })}

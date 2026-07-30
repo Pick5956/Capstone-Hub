@@ -32,6 +32,27 @@ export async function clearActiveRestaurantId() {
   activeRestaurantId = null;
 }
 
+export async function clearActiveRestaurantIdIfCurrent(
+  expectedId: number,
+  afterClear?: () => void,
+) {
+  if (activeRestaurantId !== expectedId) return false;
+  activeRestaurantId = null;
+  afterClear?.();
+  return true;
+}
+
 export async function clearSession() {
   await Promise.all([clearToken(), clearActiveRestaurantId()]);
+}
+
+export async function clearSessionIfTokenCurrent(
+  expectedToken: string,
+  afterClear?: () => void,
+) {
+  if (token !== expectedToken) return false;
+  const clearing = clearSession();
+  afterClear?.();
+  await clearing;
+  return true;
 }

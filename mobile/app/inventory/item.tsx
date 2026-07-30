@@ -6,15 +6,17 @@ import { adjustStock, createIngredient, deleteIngredient, listIngredientCategori
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { StateMessage } from '@/src/components/mobile-screen';
-import { Button, ChipGroup, Divider, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import {
   buildIngredientCreateInput,
   buildIngredientMetadataInput,
+  ingredientUnitOptions,
   ingredientToFormValues,
   validateStockAdjustmentQuantity,
 } from '@/src/lib/inventory-form';
 import { inventoryItemAccess } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
+import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, spacing, typeScale } from '@/src/theme';
@@ -25,17 +27,17 @@ export default function InventoryItemScreen() {
   const { copy, language } = useDisplayPreferences();
   const locale = language === 'th' ? 'th-TH' : 'en-US';
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const itemId = Number(id || 0);
+  const routeId = parsePositiveRouteId(id);
+  const itemId = routeId.kind === 'valid' ? routeId.id : null;
+  const editing = routeId.kind === 'valid';
+  const invalidRoute = routeId.kind === 'invalid';
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [transactions, setTransactions] = useState<IngredientTransaction[]>([]);
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [categoryId, setCategoryId] = useState('none');
   const [imageUrl, setImageUrl] = useState('');
-  const [unit, setUnit] = useState(copy('กก.', 'kg'));
-  const [baseUnit, setBaseUnit] = useState(copy('กก.', 'kg'));
-  const [purchaseUnitDefault, setPurchaseUnitDefault] = useState(copy('กก.', 'kg'));
-  const [conversionFactorDefault, setConversionFactorDefault] = useState('1');
+  const [unit, setUnit] = useState('กก.');
   const [stock, setStock] = useState('0');
   const [minStock, setMinStock] = useState('0');
   const [cost, setCost] = useState('0');
@@ -49,7 +51,8 @@ export default function InventoryItemScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const editing = itemId > 0;
+  const [loading, setLoading] = useState(editing);
+  const [itemExists, setItemExists] = useState<boolean | null>(editing ? null : true);
   const canViewInventory = can(activeMembership, 'view_inventory');
   const canManage = can(activeMembership, 'manage_inventory');
   const access = inventoryItemAccess(editing, canViewInventory, canManage);
@@ -59,26 +62,45 @@ export default function InventoryItemScreen() {
     : copy('เพิ่มวัตถุดิบ', 'Add ingredient');
 
   useEffect(() => {
-    if (access === 'denied') return;
-    Promise.all([listIngredientCategories(), listIngredients(), editing ? listTransactions(itemId) : Promise.resolve({ transactions: [] })])
-      .then(([categoryResponse, ingredientResponse, transactionResponse]) => {
+    if (invalidRoute || access === 'denied') {
+      setLoading(false);
+      setItemExists(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setItemExists(editing ? null : true);
+    Promise.all([listIngredientCategories(), listIngredients()])
+      .then(async ([categoryResponse, ingredientResponse]) => {
         setCategories(categoryResponse.categories || []);
-        setTransactions(transactionResponse.transactions || []);
         const item = ingredientResponse.ingredients.find((current) => current.ID === itemId);
+        if (editing && !item) {
+          setTransactions([]);
+          setItemExists(false);
+          return;
+        }
         if (item) fill(item);
+        setItemExists(true);
+        if (editing && itemId !== null) {
+          const transactionResponse = await listTransactions(itemId);
+          setTransactions(transactionResponse.transactions || []);
+        } else {
+          setTransactions([]);
+        }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : copy('โหลดข้อมูลวัตถุดิบไม่สำเร็จ', 'Could not load ingredient data.')));
-  }, [access, copy, editing, itemId]);
+      .catch((err) => setError(err instanceof Error ? err.message : copy('โหลดข้อมูลวัตถุดิบไม่สำเร็จ', 'Could not load ingredient data.')))
+      .finally(() => setLoading(false));
+  }, [access, copy, editing, invalidRoute, itemId]);
 
   function fill(item: Ingredient) {
     const values = ingredientToFormValues(item);
     setName(values.name); setSku(values.sku); setCategoryId(values.categoryId); setImageUrl(values.imageUrl);
-    setUnit(values.unit); setBaseUnit(values.baseUnit); setPurchaseUnitDefault(values.purchaseUnitDefault);
-    setConversionFactorDefault(values.conversionFactorDefault); setStock(values.stock); setMinStock(values.minStock);
+    setUnit(values.unit); setStock(values.stock); setMinStock(values.minStock);
     setCost(values.cost); setYieldPercent(values.yieldPercent); setStorageType(values.storageType);
   }
 
   const categoryOptions = useMemo(() => [{ label: copy('ไม่มีหมวด', 'Uncategorized'), value: 'none' }, ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))], [categories, copy]);
+  const unitOptions = useMemo(() => ingredientUnitOptions(unit).map((option) => ({ label: option, value: option })), [unit]);
   const categoryName = categories.find((item) => String(item.ID) === categoryId)?.name || copy('ไม่มีหมวด', 'Uncategorized');
   const storageLabel = storageType === 'dry'
     ? copy('แห้ง', 'Dry')
@@ -93,16 +115,14 @@ export default function InventoryItemScreen() {
     [copy('หมวด', 'Category'), categoryName],
     [copy('สต็อกคงเหลือ', 'Stock on hand'), `${Number(stock).toLocaleString(locale)} ${unit}`],
     [copy('จุดเตือนขั้นต่ำ', 'Low-stock threshold'), `${Number(minStock).toLocaleString(locale)} ${unit}`],
-    [copy('หน่วยฐาน', 'Base unit'), baseUnit],
-    [copy('หน่วยสั่งซื้อเริ่มต้น', 'Default purchase unit'), purchaseUnitDefault],
-    [copy('อัตราแปลงหน่วย', 'Unit conversion factor'), Number(conversionFactorDefault).toLocaleString(locale)],
     [copy('ต้นทุนต่อหน่วย', 'Cost per unit'), Number(cost).toLocaleString(locale)],
     ['Yield', `${yieldPercent}%`],
     [copy('การจัดเก็บ', 'Storage'), storageLabel],
   ];
 
   async function save() {
-    if (!canManage) return;
+    if (!canManage || invalidRoute) return;
+    if (editing && (itemId === null || itemExists !== true)) return;
     if (!name.trim() || !unit.trim()) { setError(copy('กรอกชื่อและหน่วยให้ครบ', 'Enter both an ingredient name and unit.')); return; }
     setSaving(true); setError(null); setMessage(null);
     try {
@@ -112,9 +132,6 @@ export default function InventoryItemScreen() {
         categoryId,
         imageUrl,
         unit,
-        baseUnit,
-        purchaseUnitDefault,
-        conversionFactorDefault,
         stock,
         minStock,
         cost,
@@ -122,6 +139,7 @@ export default function InventoryItemScreen() {
         storageType,
       };
       if (editing) {
+        if (itemId === null) return;
         await updateIngredient(itemId, buildIngredientMetadataInput(values));
       } else {
         await createIngredient(buildIngredientCreateInput(values));
@@ -132,7 +150,7 @@ export default function InventoryItemScreen() {
   }
 
   async function submitAdjustment() {
-    if (!canManage) return;
+    if (!canManage || itemId === null || itemExists !== true) return;
     const result = validateStockAdjustmentQuantity(adjustQuantity, adjustType);
     if (!result.ok) {
       const detail = result.reason === 'required'
@@ -154,21 +172,68 @@ export default function InventoryItemScreen() {
     try {
       const next = await adjustStock(itemId, { type: adjustType, quantity, note: adjustNote.trim() });
       setStock(String(next.stock)); setAdjustQuantity(''); setAdjustNote(''); setMessage(copy('ปรับสต็อกแล้ว', 'Stock updated.'));
-      const response = await listTransactions(itemId); setTransactions(response.transactions || []);
+      try {
+        const response = await listTransactions(itemId);
+        setTransactions(response.transactions || []);
+      } catch (refreshError) {
+        setError(refreshError instanceof Error
+          ? copy(`ปรับสต๊อกแล้ว แต่โหลดประวัติล่าสุดไม่สำเร็จ: ${refreshError.message}`, `Stock was updated, but the latest history could not be loaded: ${refreshError.message}`)
+          : copy('ปรับสต๊อกแล้ว แต่โหลดประวัติล่าสุดไม่สำเร็จ', 'Stock was updated, but the latest history could not be loaded.'));
+      }
     } catch (err) { setAdjustError(err instanceof Error ? err.message : copy('ปรับสต็อกไม่สำเร็จ', 'Could not update stock.')); }
     finally { setSaving(false); }
   }
 
   async function remove() {
-    if (!canManage) return;
+    if (!canManage || itemId === null || itemExists !== true) return;
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setSaving(true); setError(null);
     try { await deleteIngredient(itemId); router.back(); }
     catch (err) { setError(err instanceof Error ? err.message : copy('ลบวัตถุดิบไม่สำเร็จ', 'Could not delete the ingredient.')); setSaving(false); }
   }
 
+  if (invalidRoute) {
+    return (
+      <AppScreen title={copy('รายละเอียดวัตถุดิบ', 'Ingredient details')} topLevel={false}>
+        <EmptyState
+          title={copy('ไม่พบวัตถุดิบ', 'Ingredient not found')}
+          detail={copy(
+            'ลิงก์วัตถุดิบนี้ไม่ถูกต้อง กรุณากลับไปเลือกรายการจากหน้าคลัง',
+            'This ingredient link is invalid. Go back and choose an item from inventory.',
+          )}
+          action={<Button variant="secondary" label={copy('ย้อนกลับ', 'Go back')} onPress={() => router.back()} />}
+        />
+      </AppScreen>
+    );
+  }
+
   if (access === 'denied') {
     return <AppScreen title={screenTitle} topLevel={false}><StateMessage title={editing ? copy('ไม่มีสิทธิ์ดูวัตถุดิบ', 'Ingredient access unavailable') : copy('ไม่มีสิทธิ์เพิ่มวัตถุดิบ', 'Ingredient creation unavailable')} detail={editing ? copy('บัญชีนี้ต้องมีสิทธิ์ดูหรือจัดการคลังวัตถุดิบ', 'This account needs permission to view or manage inventory.') : copy('บัญชีนี้ต้องมีสิทธิ์จัดการคลังวัตถุดิบ', 'This account needs permission to manage inventory.')} /></AppScreen>;
+  }
+
+  if (editing && itemExists !== true) {
+    const title = loading
+      ? copy('กำลังโหลดวัตถุดิบ', 'Loading ingredient')
+      : error
+        ? copy('โหลดวัตถุดิบไม่สำเร็จ', 'Unable to load ingredient')
+        : copy('ไม่พบวัตถุดิบ', 'Ingredient not found');
+    const detail = loading
+      ? copy('กำลังตรวจสอบข้อมูลรายการนี้', 'Checking this item now.')
+      : error || copy(
+        'วัตถุดิบนี้อาจถูกลบไปแล้ว กรุณากลับไปเลือกรายการจากหน้าคลัง',
+        'This ingredient may have been deleted. Go back and choose an item from inventory.',
+      );
+    return (
+      <AppScreen title={copy('รายละเอียดวัตถุดิบ', 'Ingredient details')} topLevel={false}>
+        <EmptyState
+          title={title}
+          detail={detail}
+          action={loading ? undefined : (
+            <Button variant="secondary" label={copy('ย้อนกลับ', 'Go back')} onPress={() => router.back()} />
+          )}
+        />
+      </AppScreen>
+    );
   }
 
   return (
@@ -203,11 +268,8 @@ export default function InventoryItemScreen() {
         <TextField label={copy('SKU (ไม่บังคับ)', 'SKU (optional)')} value={sku} onChangeText={setSku} />
         <ChipGroup label={copy('หมวด', 'Category')} value={categoryId} options={categoryOptions} onChange={setCategoryId} />
         <TextField label={copy('URL รูปภาพ (ไม่บังคับ)', 'Image URL (optional)')} value={imageUrl} onChangeText={setImageUrl} />
+        <ChipGroup label={copy('หน่วยสต็อก', 'Stock unit')} value={unit} options={unitOptions} onChange={setUnit} />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('หน่วยสต็อก', 'Stock unit')} value={unit} onChangeText={setUnit} /></View>
-          <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('หน่วยฐาน', 'Base unit')} value={baseUnit} onChangeText={setBaseUnit} /></View>
-          <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('หน่วยสั่งซื้อเริ่มต้น', 'Default purchase unit')} value={purchaseUnitDefault} onChangeText={setPurchaseUnitDefault} /></View>
-          <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('อัตราแปลงหน่วย', 'Unit conversion factor')} value={conversionFactorDefault} keyboardType="decimal-pad" onChangeText={setConversionFactorDefault} /></View>
           <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('ต้นทุนต่อหน่วย', 'Cost per unit')} value={cost} keyboardType="decimal-pad" onChangeText={setCost} /></View>
           {!editing ? <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('สต็อกเริ่มต้น', 'Opening stock')} value={stock} keyboardType="decimal-pad" onChangeText={setStock} /></View> : null}
           <View style={{ flex: 1, minWidth: 140 }}><TextField label={copy('จุดเตือนขั้นต่ำ', 'Low-stock threshold')} value={minStock} keyboardType="decimal-pad" onChangeText={setMinStock} /></View>

@@ -76,6 +76,41 @@ func isValidReservationPhone(phone string) bool {
 	return digits >= 9
 }
 
+func validateTableCanBeReserved(status string) error {
+	if status != entity.TableStatusFree {
+		return errors.New("table is not free")
+	}
+	return nil
+}
+
+func validateReservedTableRelease(status string, hasOpenOrder bool) error {
+	if status != entity.TableStatusReserved {
+		return errors.New("table is not reserved")
+	}
+	if hasOpenOrder {
+		return errors.New("table has an open order")
+	}
+	return nil
+}
+
+// tableStatusForMetadataUpdate keeps reservation/order lifecycle status owned
+// by their dedicated workflows while still allowing table metadata to change.
+func tableStatusForMetadataUpdate(current, requested string) string {
+	if current == entity.TableStatusReserved || current == entity.TableStatusOccupied {
+		return current
+	}
+	return requested
+}
+
+func applyTableMetadataUpdate(table, requested *entity.RestaurantTable) {
+	table.Capacity = requested.Capacity
+	table.Status = tableStatusForMetadataUpdate(table.Status, requested.Status)
+	if table.Status != entity.TableStatusReserved {
+		table.ReservationName = ""
+		table.ReservationPhone = ""
+	}
+}
+
 func GenerateCustomerTableToken() (string, error) {
 	bytes := make([]byte, customerTableTokenBytes)
 	if _, err := rand.Read(bytes); err != nil {

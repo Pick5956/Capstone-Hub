@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Download, KeyRound, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, KeyRound } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -13,6 +13,12 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import {
+  createQrMatrix,
+  qrMatrixPath,
+  qrMatrixToPngBlob,
+  qrViewBoxSize,
+} from "@/src/lib/qr";
 import {
   emptyTableForm,
   emptyTagForm,
@@ -52,7 +58,6 @@ export default function TablesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingQr, setDownloadingQr] = useState(false);
-  const [qrImageState, setQrImageState] = useState<{ source: string; status: "loaded" | "error" }>({ source: "", status: "loaded" });
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const saveOnceRef = useRef(createSingleFlight());
@@ -285,14 +290,23 @@ export default function TablesPage() {
     if (!editingTable?.customer_token || typeof window === "undefined") return "";
     return `${window.location.origin}/customer/t/${editingTable.customer_token}`;
   }, [editingTable]);
-  const customerOrderQr = customerOrderLink ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(customerOrderLink)}` : "";
-  const qrImageLoaded = qrImageState.source === customerOrderQr && qrImageState.status === "loaded";
-  const qrImageFailed = qrImageState.source === customerOrderQr && qrImageState.status === "error";
+  const customerOrderQr = useMemo(() => {
+    if (!customerOrderLink) return null;
+    try {
+      const matrix = createQrMatrix(customerOrderLink);
+      return {
+        matrix,
+        path: qrMatrixPath(matrix),
+        viewBoxSize: qrViewBoxSize(matrix),
+      };
+    } catch {
+      return null;
+    }
+  }, [customerOrderLink]);
 
   const toggleTableTag = (id: number) => setTableForm((current) => ({ ...current, tag_ids: current.tag_ids?.includes(id) ? current.tag_ids.filter((item) => item !== id) : [...(current.tag_ids ?? []), id] }));
 
   const startEditTable = (table: RestaurantTable) => {
-    setQrImageState({ source: "", status: "loaded" });
     setEditingTable(table);
     setFormError("");
     setTableForm({ zone_id: table.zone_id ?? null, capacity: table.capacity, status: table.status, tag_ids: table.tags?.map((tag) => tag.ID) ?? [] });
@@ -597,9 +611,7 @@ export default function TablesPage() {
     if (!editingTable || !customerOrderQr) return;
     setDownloadingQr(true);
     try {
-      const response = await fetch(customerOrderQr);
-      if (!response.ok) throw new Error("download failed");
-      const blob = await response.blob();
+      const blob = await qrMatrixToPngBlob(customerOrderQr.matrix);
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
@@ -806,23 +818,19 @@ export default function TablesPage() {
                     </button>
                     <div className="grid grid-cols-[96px_1fr] gap-3">
                       <div className="relative h-24 w-24 overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          key={customerOrderQr}
-                          src={customerOrderQr}
-                          alt={copy.qrOrder}
-                          onLoad={() => setQrImageState({ source: customerOrderQr, status: "loaded" })}
-                          onError={() => setQrImageState({ source: customerOrderQr, status: "error" })}
-                          className={`h-full w-full p-1 transition-opacity duration-150 ${qrImageLoaded ? "opacity-100" : "opacity-0"}`}
-                        />
-                        {!qrImageLoaded && !qrImageFailed && (
-                          <div role="status" className="absolute inset-0 flex items-center justify-center bg-white text-gray-500">
-                            <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                            <span className="sr-only">{copy.qrLoading}</span>
-                          </div>
-                        )}
-                        {qrImageFailed && (
-                          <div role="status" className="absolute inset-0 flex items-center justify-center bg-white p-2 text-center text-[10px] font-medium leading-4 text-red-600">
+                        {customerOrderQr ? (
+                          <svg
+                            viewBox={`0 0 ${customerOrderQr.viewBoxSize} ${customerOrderQr.viewBoxSize}`}
+                            role="img"
+                            aria-label={copy.qrOrder}
+                            shapeRendering="crispEdges"
+                            className="h-full w-full"
+                          >
+                            <rect width="100%" height="100%" fill="#ffffff" />
+                            <path d={customerOrderQr.path} fill="#000000" />
+                          </svg>
+                        ) : (
+                          <div role="alert" className="absolute inset-0 flex items-center justify-center bg-white p-2 text-center text-[10px] font-medium leading-4 text-red-600">
                             {copy.qrImageError}
                           </div>
                         )}
@@ -835,7 +843,7 @@ export default function TablesPage() {
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button type="button" onClick={copyCustomerOrderLink} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.copyLink}</button>
-                      <button type="button" onClick={downloadCustomerQr} disabled={downloadingQr} className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+                      <button type="button" onClick={downloadCustomerQr} disabled={downloadingQr || !customerOrderQr} className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         {copy.downloadQr}
                       </button>

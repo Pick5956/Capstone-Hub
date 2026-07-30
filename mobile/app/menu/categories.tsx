@@ -6,6 +6,7 @@ import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, Divider, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
+import { categoryActiveToggleInput } from '@/src/lib/menu-editor';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -20,11 +21,28 @@ export default function MenuCategoriesScreen() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState(''); const [order, setOrder] = useState('1'); const [active, setActive] = useState<'yes' | 'no'>('yes');
   const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
+  const [updatingCategoryId, setUpdatingCategoryId] = useState<number | null>(null);
   const load = async () => { try { const response = await listCategories(); setCategories(response.categories || []); } catch (err) { setError(err instanceof Error ? err.message : copy('โหลดหมวดเมนูไม่สำเร็จ', 'Could not load menu categories')); } };
   useEffect(() => { if (canManage) load(); }, [canManage]);
   function choose(item?: Category) { setEditing(item || null); setName(item?.name || ''); setOrder(String(item?.display_order ?? categories.length + 1)); setActive(item?.is_active === false ? 'no' : 'yes'); setConfirmDelete(false); }
   async function save() { if (!name.trim()) return; setSaving(true); setError(null); try { const payload = { name: name.trim(), display_order: toInt(order, 0), is_active: active === 'yes' }; if (editing) await updateCategory(editing.ID, payload); else await createCategory(payload); choose(); await load(); } catch (err) { setError(err instanceof Error ? err.message : copy('บันทึกหมวดไม่สำเร็จ', 'Could not save the category')); } finally { setSaving(false); } }
   async function remove() { if (!editing) return; if (!confirmDelete) { setConfirmDelete(true); return; } setSaving(true); setError(null); try { await deleteCategory(editing.ID); choose(); await load(); } catch (err) { setError(err instanceof Error ? err.message : copy('ลบหมวดไม่สำเร็จ', 'Could not delete the category')); } finally { setSaving(false); } }
+  async function toggleActive(item: Category) {
+    setUpdatingCategoryId(item.ID);
+    setError(null);
+    try {
+      const updated = await updateCategory(item.ID, categoryActiveToggleInput(item));
+      setCategories((current) => current.map((category) => category.ID === updated.ID ? updated : category));
+      if (editing?.ID === updated.ID) {
+        setEditing(updated);
+        setActive(updated.is_active ? 'yes' : 'no');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy('เปลี่ยนสถานะหมวดไม่สำเร็จ', 'Could not update the category status'));
+    } finally {
+      setUpdatingCategoryId(null);
+    }
+  }
 
   if (!canManage) {
     return (
@@ -45,7 +63,33 @@ export default function MenuCategoriesScreen() {
         <Button label={editing ? copy('บันทึกหมวด', 'Save category') : copy('เพิ่มหมวด', 'Add category')} onPress={save} loading={saving} disabled={!name.trim()} />
         {editing ? <View style={{ flexDirection: 'row', gap: spacing.sm }}>{confirmDelete ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => setConfirmDelete(false)} style={{ flex: 1 }} /> : null}<Button variant={confirmDelete ? 'danger' : 'secondary'} label={confirmDelete ? copy('ยืนยันลบหมวด', 'Confirm delete') : copy('ลบหมวด', 'Delete category')} onPress={remove} style={{ flex: 1 }} /></View> : null}
       </Surface>
-      <Surface><SectionHeader title={copy('หมวดทั้งหมด', 'All categories')} detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)} />{categories.map((item, index) => <View key={item.ID}>{index ? <Divider /> : null}<View style={{ minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}><View style={{ flex: 1, gap: 2 }}><Text selectable style={typeScale.cardTitle}>{item.name}</Text><Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy(`ลำดับ ${item.display_order.toLocaleString('th-TH')} · ${item.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}`, `Order ${item.display_order.toLocaleString('en-US')} · ${item.is_active ? 'Active' : 'Inactive'}`)}</Text></View><Button compact variant="secondary" label={copy('แก้ไข', 'Edit')} onPress={() => choose(item)} /></View></View>)}</Surface>
+      <Surface>
+        <SectionHeader title={copy('หมวดทั้งหมด', 'All categories')} detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)} />
+        {categories.map((item, index) => (
+          <View key={item.ID}>
+            {index ? <Divider /> : null}
+            <View style={{ minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text selectable style={typeScale.cardTitle}>{item.name}</Text>
+                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                  {copy(`ลำดับ ${item.display_order.toLocaleString('th-TH')} · ${item.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}`, `Order ${item.display_order.toLocaleString('en-US')} · ${item.is_active ? 'Active' : 'Inactive'}`)}
+                </Text>
+              </View>
+              <View style={{ gap: spacing.sm }}>
+                <Button compact variant="secondary" label={copy('แก้ไข', 'Edit')} onPress={() => choose(item)} />
+                <Button
+                  compact
+                  variant="ghost"
+                  label={item.is_active ? copy('ปิดใช้งาน', 'Deactivate') : copy('เปิดใช้งาน', 'Activate')}
+                  onPress={() => void toggleActive(item)}
+                  loading={updatingCategoryId === item.ID}
+                  disabled={updatingCategoryId !== null && updatingCategoryId !== item.ID}
+                />
+              </View>
+            </View>
+          </View>
+        ))}
+      </Surface>
     </AppScreen>
   );
 }

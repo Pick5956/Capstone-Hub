@@ -43,7 +43,15 @@ export function getOrder(id: number) {
   return apiRequest<Order>(`/api/v1/orders/${id}`);
 }
 
-export function createOrder(data: { table_id?: number | null; order_type?: OrderType; customer_count: number; customer_name?: string; customer_phone?: string; note?: string }) {
+export function createOrder(data: {
+  table_id?: number | null;
+  order_type?: OrderType;
+  customer_count: number;
+  customer_name?: string;
+  customer_phone?: string;
+  note?: string;
+  seat_reservation?: boolean;
+}) {
   return apiRequest<Order>('/api/v1/orders', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -62,7 +70,7 @@ export function closeEmptyTable(id: number) {
   return apiRequest<Order>(`/api/v1/orders/${id}/close-empty-table`, { method: 'POST' });
 }
 
-export function addOrderItem(orderId: number, data: { menu_id: number; quantity: number; note?: string; fulfillment_type?: 'dine_in' | 'takeaway'; selected_option_ids?: number[] }) {
+export function addOrderItem(orderId: number, data: { menu_id: number; quantity: number; note?: string; fulfillment_type?: 'dine_in' | 'takeaway'; selected_option_ids?: number[]; serve_immediately?: boolean }) {
   return apiRequest<Order>(`/api/v1/orders/${orderId}/items`, {
     method: 'POST',
     body: JSON.stringify(data),

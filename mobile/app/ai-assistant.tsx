@@ -231,7 +231,23 @@ export default function AIAssistantScreen() {
 
       {history.length ? (
         <Surface>
-          <SectionHeader title={copy('บทสนทนา', 'Conversation')} detail={latestAnswer ? copy('คำตอบล่าสุดอยู่ด้านล่าง', 'The latest answer appears below.') : undefined} />
+          <SectionHeader
+            title={copy('บทสนทนา', 'Conversation')}
+            detail={latestAnswer ? copy('คำตอบล่าสุดอยู่ด้านล่าง', 'The latest answer appears below.') : undefined}
+            action={(
+              <Button
+                compact
+                variant="secondary"
+                label={copy('ล้างบทสนทนา', 'Clear')}
+                onPress={() => {
+                  setHistory([]);
+                  setActions([]);
+                  setPendingAction(null);
+                  setNotice(null);
+                }}
+              />
+            )}
+          />
           {history.map((item, index) => (
             <View
               key={`${item.role}-${index}`}

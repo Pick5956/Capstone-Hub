@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  INGREDIENT_UNITS,
   buildIngredientCreateInput,
   buildIngredientMetadataInput,
+  ingredientUnitOptions,
   ingredientToFormValues,
   validateStockAdjustmentQuantity,
 } from './inventory-form.ts';
@@ -13,10 +15,7 @@ const completeForm = {
   sku: '  FISH-01  ',
   categoryId: '7',
   imageUrl: '  https://example.com/salmon.jpg  ',
-  unit: 'kg',
-  baseUnit: 'g',
-  purchaseUnitDefault: 'box',
-  conversionFactorDefault: '12.5',
+  unit: 'กก.',
   stock: '8.25',
   minStock: '2',
   cost: '315.75',
@@ -32,10 +31,7 @@ test('builds the complete metadata update without including stock', () => {
     sku: 'FISH-01',
     category_id: 7,
     image_url: 'https://example.com/salmon.jpg',
-    unit: 'kg',
-    base_unit: 'g',
-    purchase_unit_default: 'box',
-    conversion_factor_default: 12.5,
+    unit: 'กก.',
     min_stock: 2,
     cost_per_unit: 315.75,
     yield_percent: 92,
@@ -52,10 +48,7 @@ test('round-trips every editable backend metadata field without changing stock',
     sku: 'FISH-01',
     category_id: 7,
     image_url: 'https://example.com/salmon.jpg',
-    unit: 'kg',
-    base_unit: 'g',
-    purchase_unit_default: 'box',
-    conversion_factor_default: 12.5,
+    unit: 'กก.',
     stock: 8.25,
     min_stock: 2,
     cost_per_unit: 315.75,
@@ -73,9 +66,6 @@ test('round-trips every editable backend metadata field without changing stock',
     category_id: item.category_id,
     image_url: item.image_url,
     unit: item.unit,
-    base_unit: item.base_unit,
-    purchase_unit_default: item.purchase_unit_default,
-    conversion_factor_default: item.conversion_factor_default,
     min_stock: item.min_stock,
     cost_per_unit: item.cost_per_unit,
     yield_percent: item.yield_percent,
@@ -89,26 +79,63 @@ test('keeps initial stock only in the create payload', () => {
 
   assert.equal(payload.stock, 8.25);
   assert.equal(payload.image_url, 'https://example.com/salmon.jpg');
-  assert.equal(payload.base_unit, 'g');
-  assert.equal(payload.purchase_unit_default, 'box');
-  assert.equal(payload.conversion_factor_default, 12.5);
+  assert.equal(Object.hasOwn(payload, 'base_unit'), false);
+  assert.equal(Object.hasOwn(payload, 'purchase_unit_default'), false);
+  assert.equal(Object.hasOwn(payload, 'conversion_factor_default'), false);
 });
 
 test('uses backend-compatible metadata defaults without discarding the stock unit', () => {
   const payload = buildIngredientMetadataInput({
     ...completeForm,
     categoryId: 'none',
-    baseUnit: ' ',
-    purchaseUnitDefault: '',
-    conversionFactorDefault: '0',
     storageType: '',
   });
 
   assert.equal(payload.category_id, undefined);
-  assert.equal(payload.base_unit, 'kg');
-  assert.equal(payload.purchase_unit_default, 'kg');
-  assert.equal(payload.conversion_factor_default, 1);
+  assert.equal(payload.unit, 'กก.');
   assert.equal(payload.storage_type, 'room_temp');
+});
+
+test('matches the canonical Thai unit choices used by the web inventory form', () => {
+  assert.deepEqual(INGREDIENT_UNITS, [
+    'กรัม',
+    'กก.',
+    'มิลลิลิตร',
+    'ลิตร',
+    'ชิ้น',
+    'ลูก',
+    'ฟอง',
+    'ใบ',
+    'แผ่น',
+    'ขวด',
+    'แพ็ก',
+    'ถุง',
+    'กล่อง',
+  ]);
+});
+
+test('keeps a legacy custom unit available without duplicating canonical units', () => {
+  assert.deepEqual(ingredientUnitOptions('ลัง'), ['ลัง', ...INGREDIENT_UNITS]);
+  assert.deepEqual(ingredientUnitOptions('กก.'), INGREDIENT_UNITS);
+});
+
+test('falls back to the canonical kilogram unit when backend data has no unit', () => {
+  const values = ingredientToFormValues({
+    ID: 14,
+    restaurant_id: 3,
+    name: 'Salmon',
+    sku: '',
+    category_id: null,
+    image_url: '',
+    unit: ' ',
+    stock: 0,
+    min_stock: 0,
+    cost_per_unit: 0,
+    yield_percent: 100,
+    storage_type: 'room_temp',
+  });
+
+  assert.equal(values.unit, 'กก.');
 });
 
 test('rejects a blank stock adjustment as required', () => {

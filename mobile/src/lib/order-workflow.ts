@@ -3,16 +3,17 @@ import type { Order, OrderItem, OrderItemStatus } from '@/src/types/order';
 type KitchenItem = Pick<OrderItem, 'status'>;
 type KitchenTicket = Pick<Order, 'ID' | 'kitchen_batch' | 'kitchen_ticket_id'>;
 type EmptyOrderCandidate = Pick<Order, 'order_type' | 'table_id' | 'status'> & {
-  items?: unknown[] | null;
+  items?: readonly { status?: string }[] | null;
 };
 
 export function canCloseEmptyOrder(order: EmptyOrderCandidate | null | undefined) {
+  const activeItemCount = order?.items?.filter((item) => item.status !== 'cancelled').length ?? 0;
   return Boolean(
     order
     && order.order_type === 'dine_in'
     && order.table_id
     && order.status === 'open'
-    && (order.items?.length ?? 0) === 0,
+    && activeItemCount === 0,
   );
 }
 
@@ -25,7 +26,31 @@ export function canCancelOrderForRole(
 }
 
 export function isKitchenComplete(items: KitchenItem[] | null | undefined) {
-  const activeItems = (items ?? []).filter((item) => item.status !== 'cancelled');
+  return canTakeOrderPayment(items);
+}
+
+export function activeOrderItems<T extends KitchenItem>(
+  items: readonly T[] | null | undefined,
+) {
+  return (items ?? []).filter((item) => item.status !== 'cancelled');
+}
+
+export function undeliveredOrderItems<T extends KitchenItem>(
+  items: readonly T[] | null | undefined,
+) {
+  return activeOrderItems(items).filter(
+    (item) => item.status === 'pending' || item.status === 'cooking',
+  );
+}
+
+export function canOpenOrderBill(items: readonly KitchenItem[] | null | undefined) {
+  const activeItems = activeOrderItems(items);
+  return activeItems.length > 0
+    && activeItems.every((item) => item.status !== 'pending');
+}
+
+export function canTakeOrderPayment(items: readonly KitchenItem[] | null | undefined) {
+  const activeItems = activeOrderItems(items);
   return activeItems.length > 0
     && activeItems.every((item) => item.status === 'ready' || item.status === 'served');
 }
@@ -40,6 +65,20 @@ export function paymentReceivedAmount(
   grandTotal: number,
 ) {
   return grandTotal;
+}
+
+export function billExitRoute(canTakeOrder: boolean, canViewOrders: boolean) {
+  if (canTakeOrder) return '/tables' as const;
+  if (canViewOrders) return '/orders' as const;
+  return '/home' as const;
+}
+
+export function billPaymentStage(
+  paymentStatus: 'unpaid' | 'paid',
+  paymentRecorded: boolean,
+) {
+  if (paymentStatus === 'paid') return 'paid' as const;
+  return paymentRecorded ? 'recorded' as const : 'due' as const;
 }
 
 export function isCookingItem(status: OrderItemStatus) {

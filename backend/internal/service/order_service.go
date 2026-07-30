@@ -23,12 +23,13 @@ func ProvideOrderService(repo *repository.OrderRepository) *OrderService {
 }
 
 type OpenOrderRequest struct {
-	TableID       *uint  `json:"table_id"`
-	OrderType     string `json:"order_type" binding:"omitempty,oneof=dine_in takeaway"`
-	CustomerCount int    `json:"customer_count" binding:"gte=0,lte=1000"`
-	CustomerName  string `json:"customer_name" binding:"max=80"`
-	CustomerPhone string `json:"customer_phone" binding:"max=32"`
-	Note          string `json:"note" binding:"max=1000"`
+	TableID         *uint  `json:"table_id"`
+	OrderType       string `json:"order_type" binding:"omitempty,oneof=dine_in takeaway"`
+	CustomerCount   int    `json:"customer_count" binding:"gte=0,lte=1000"`
+	CustomerName    string `json:"customer_name" binding:"max=80"`
+	CustomerPhone   string `json:"customer_phone" binding:"max=32"`
+	Note            string `json:"note" binding:"max=1000"`
+	SeatReservation bool   `json:"seat_reservation"`
 }
 
 type UpdateOrderRequest struct {
@@ -110,6 +111,19 @@ type selectedMenuOption struct {
 	PriceDelta    float64
 }
 
+func shouldSeatReservationOnOpen(tableStatus string, requested bool) (bool, error) {
+	if tableStatus == entity.TableStatusReserved {
+		if !requested {
+			return false, errors.New("table is reserved")
+		}
+		return true, nil
+	}
+	if requested {
+		return false, errors.New("table has no active reservation")
+	}
+	return false, nil
+}
+
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
 	var created *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
@@ -119,6 +133,7 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		}
 		var table *entity.RestaurantTable
 		var tableID *uint
+		seatReservation := false
 		if orderType == entity.OrderTypeDineIn {
 			if req.TableID == nil || *req.TableID == 0 {
 				return errors.New("table_id is required for dine-in orders")
@@ -136,9 +151,12 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			if table.Status == entity.TableStatusInactive {
 				return errors.New("table is inactive")
 			}
-			if table.Status == entity.TableStatusReserved {
-				return errors.New("table is reserved")
+			seatReservation, err = shouldSeatReservationOnOpen(table.Status, req.SeatReservation)
+			if err != nil {
+				return err
 			}
+		} else if req.SeatReservation {
+			return errors.New("reservation seating requires a dine-in table")
 		}
 		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
 			return err
@@ -180,6 +198,11 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			return err
 		}
 		if table != nil {
+			if seatReservation {
+				if err := tx.ResolveActiveReservation(restaurantID, table.ID, entity.ReservationStatusSeated); err != nil {
+					return err
+				}
+			}
 			table.Status = entity.TableStatusOccupied
 			table.ReservationName = ""
 			table.ReservationPhone = ""

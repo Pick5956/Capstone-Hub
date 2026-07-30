@@ -21,6 +21,7 @@ import {
   Surface,
 } from '@/src/components/ui';
 import { money, orderStatusLabel } from '@/src/lib/format';
+import { orderListAccess, orderListRequest } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -41,6 +42,9 @@ export default function OrdersScreen() {
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const canViewOrders = can(activeMembership, 'view_orders');
+  const canTakeOrder = can(activeMembership, 'take_order');
+  const access = orderListAccess(canViewOrders, canTakeOrder);
+  const archiveMode = access === 'archive';
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<ArchiveFilter>('active');
   const [search, setSearch] = useState('');
@@ -57,9 +61,27 @@ export default function OrdersScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    requestIdRef.current += 1;
+    setOrders([]);
+    setSummary(null);
+    setPagination(undefined);
+    if (access !== 'archive') {
+      setSearch('');
+      setDebouncedSearch('');
+      setFilter('active');
+    }
+  }, [access]);
+
   const load = useCallback(async (page = 1, append = false) => {
     const requestId = ++requestIdRef.current;
-    if (!canViewOrders) {
+    const request = orderListRequest(access, {
+      status: filter,
+      search: debouncedSearch,
+      page,
+      limit: PAGE_SIZE,
+    });
+    if (!request) {
       setLoading(false);
       return;
     }
@@ -68,11 +90,8 @@ export default function OrdersScreen() {
     setError(null);
     try {
       const response = await listOrders({
-        status: filter as OrderListStatus,
-        search: debouncedSearch,
-        include_summary: true,
-        page,
-        limit: PAGE_SIZE,
+        ...request,
+        status: request.status as OrderListStatus,
       });
       if (requestId !== requestIdRef.current) return;
       setOrders((current) => append
@@ -89,7 +108,7 @@ export default function OrdersScreen() {
         setLoadingMore(false);
       }
     }
-  }, [canViewOrders, copy, debouncedSearch, filter]);
+  }, [access, copy, debouncedSearch, filter]);
 
   useFocusEffect(useCallback(() => {
     load();
@@ -103,45 +122,49 @@ export default function OrdersScreen() {
   const completedCount = summary?.statuses?.completed ?? 0;
   const cancelledCount = summary?.statuses?.cancelled ?? 0;
 
-  if (!canViewOrders) {
-    return <AppScreen title={copy('คลังออเดอร์', 'Order archive')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูออเดอร์', 'No permission to view orders')} detail={copy('ต้องมีสิทธิ์ view_orders', 'The view_orders permission is required.')} /></AppScreen>;
+  if (access === 'denied') {
+    return <AppScreen title={copy('ออเดอร์', 'Orders')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูออเดอร์', 'No permission to view orders')} detail={copy('ต้องมีสิทธิ์รับออเดอร์หรือดูออเดอร์ย้อนหลัง', 'The take_order or view_orders permission is required.')} /></AppScreen>;
   }
 
   return (
     <AppScreen
-      title={copy('คลังออเดอร์', 'Order archive')}
-      subtitle={copy(`${activeCount.toLocaleString('th-TH')} กำลังดำเนินการ · ${totalCount.toLocaleString('th-TH')} ออเดอร์ทั้งหมด`, `${activeCount.toLocaleString('en-US')} active · ${totalCount.toLocaleString('en-US')} total orders`)}
+      title={archiveMode ? copy('คลังออเดอร์', 'Order archive') : copy('ออเดอร์ที่กำลังทำ', 'Active orders')}
+      subtitle={archiveMode
+        ? copy(`${activeCount.toLocaleString('th-TH')} กำลังดำเนินการ · ${totalCount.toLocaleString('th-TH')} ออเดอร์ทั้งหมด`, `${activeCount.toLocaleString('en-US')} active · ${totalCount.toLocaleString('en-US')} total orders`)
+        : copy(`${totalCount.toLocaleString('th-TH')} ออเดอร์ที่ยังไม่ปิด`, `${totalCount.toLocaleString('en-US')} open ${totalCount === 1 ? 'order' : 'orders'}`)}
       topLevel
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
     >
-      {error ? <Feedback title={copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive')} detail={error} tone="danger" /> : null}
-      <Surface>
-        <SectionHeader
-          title={copy('ค้นหาออเดอร์', 'Search orders')}
-          detail={copy('ค้นหาด้วยเลขออเดอร์ โต๊ะ โซน ชื่อลูกค้า หรือเบอร์โทร', 'Search by order number, table, zone, customer name, or phone number.')}
-        />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
-          placeholderTextColor={palette.placeholder}
-          style={inputStyles.input}
-        />
-        <ChipGroup
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { label: copy(`ทั้งหมด ${totalCount.toLocaleString('th-TH')}`, `All ${totalCount.toLocaleString('en-US')}`), value: '' },
-            { label: copy(`กำลังดำเนินการ ${activeCount.toLocaleString('th-TH')}`, `Active ${activeCount.toLocaleString('en-US')}`), value: 'active' },
-            { label: copy(`สำเร็จ ${completedCount.toLocaleString('th-TH')}`, `Completed ${completedCount.toLocaleString('en-US')}`), value: 'completed' },
-            { label: copy(`ยกเลิก ${cancelledCount.toLocaleString('th-TH')}`, `Cancelled ${cancelledCount.toLocaleString('en-US')}`), value: 'cancelled' },
-          ]}
-        />
-      </Surface>
+      {error ? <Feedback title={archiveMode ? copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive') : copy('โหลดออเดอร์ที่กำลังทำไม่ได้', 'Could not load active orders')} detail={error} tone="danger" /> : null}
+      {archiveMode ? (
+        <Surface>
+          <SectionHeader
+            title={copy('ค้นหาออเดอร์', 'Search orders')}
+            detail={copy('ค้นหาด้วยเลขออเดอร์ โต๊ะ โซน ชื่อลูกค้า หรือเบอร์โทร', 'Search by order number, table, zone, customer name, or phone number.')}
+          />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
+            placeholderTextColor={palette.placeholder}
+            style={inputStyles.input}
+          />
+          <ChipGroup
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { label: copy(`ทั้งหมด ${totalCount.toLocaleString('th-TH')}`, `All ${totalCount.toLocaleString('en-US')}`), value: '' },
+              { label: copy(`กำลังดำเนินการ ${activeCount.toLocaleString('th-TH')}`, `Active ${activeCount.toLocaleString('en-US')}`), value: 'active' },
+              { label: copy(`สำเร็จ ${completedCount.toLocaleString('th-TH')}`, `Completed ${completedCount.toLocaleString('en-US')}`), value: 'completed' },
+              { label: copy(`ยกเลิก ${cancelledCount.toLocaleString('th-TH')}`, `Cancelled ${cancelledCount.toLocaleString('en-US')}`), value: 'cancelled' },
+            ]}
+          />
+        </Surface>
+      ) : null}
 
       <View style={{ gap: spacing.md }}>
         <SectionHeader
-          title={copy('รายการออเดอร์', 'Orders')}
+          title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
           detail={copy(
             `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
             `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
@@ -205,10 +228,12 @@ export default function OrdersScreen() {
 
         {!loading && !orders.length ? (
           <EmptyState
-            title={copy('ไม่พบออเดอร์', 'No orders found')}
-            detail={debouncedSearch || filter
-              ? copy('ลองเปลี่ยนตัวกรองหรือคำค้น', 'Try a different filter or search.')
-              : copy('ออเดอร์ใหม่จะปรากฏเมื่อเปิดโต๊ะหรือรับรายการซื้อกลับบ้าน', 'New orders appear after opening a table or starting a takeaway order.')}
+            title={archiveMode ? copy('ไม่พบออเดอร์', 'No orders found') : copy('ไม่มีออเดอร์ที่กำลังทำ', 'No active orders')}
+            detail={archiveMode
+              ? debouncedSearch || filter
+                ? copy('ลองเปลี่ยนตัวกรองหรือคำค้น', 'Try a different filter or search.')
+                : copy('ออเดอร์ใหม่จะปรากฏเมื่อเปิดโต๊ะหรือรับรายการซื้อกลับบ้าน', 'New orders appear after opening a table or starting a takeaway order.')
+              : copy('ออเดอร์โต๊ะและซื้อกลับบ้านที่ยังไม่ปิดจะแสดงที่นี่', 'Open table and takeaway orders appear here so staff can continue them.')}
           />
         ) : null}
       </View>

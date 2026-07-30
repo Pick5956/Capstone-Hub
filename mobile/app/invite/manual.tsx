@@ -45,7 +45,7 @@ export default function ManualInviteScreen() {
           label={copy('ลิงก์หรือ token', 'Link or token')}
           value={value}
           onChangeText={setValue}
-          placeholder="https://app.example.com/invitations/..."
+          placeholder="https://dishy.pro/invitations/..."
           multiline
         />
         <Button

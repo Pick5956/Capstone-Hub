@@ -13,6 +13,27 @@ type InventoryLevel = {
   min_stock: number;
 };
 
+type HomeOrder = {
+  status: string;
+  order_type: string;
+  customer_count?: number | null;
+  payment_status?: string | null;
+  grand_total?: number | string | null;
+  total_amount?: number | string | null;
+};
+
+type HomeSalesDay = {
+  order_date: string;
+  revenue: number;
+  profit: number;
+};
+
+type HomeMenuItem = {
+  menu_id: number;
+  menu_name: string;
+  quantity: number;
+};
+
 export type HomeOperationalCounts = {
   overdueKitchen: number;
   readyKitchen: number;
@@ -46,7 +67,36 @@ export type HomePriority = {
   tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral';
 };
 
+export type HomeOperationalMetricKey =
+  | 'orders-active'
+  | 'tables-occupied'
+  | 'tables-free'
+  | 'tables-reserved'
+  | 'kitchen-active'
+  | 'kitchen-ready';
+
+export type HomeOperationalMetric = {
+  key: HomeOperationalMetricKey;
+  count: number;
+};
+
+export type HomeOperationalSnapshot = {
+  activeOrders: number;
+  occupiedTables: number;
+  freeTables: number;
+  reservedTables: number;
+  activeKitchen: number;
+  readyKitchen: number;
+};
+
+export type HomeOperationalMetricAccess = {
+  canViewOrders: boolean;
+  canViewTables: boolean;
+  canViewKitchen: boolean;
+};
+
 const dateKeyPattern = /^\d{4}-\d{2}-\d{2}$/;
+const activeOrderStatuses = new Set(['open', 'sent_to_kitchen', 'cooking', 'ready', 'served']);
 
 function toDateKey(value: Date) {
   const year = value.getUTCFullYear();
@@ -72,6 +122,139 @@ export function shiftDashboardDate(value: string, days: number) {
 export function clampDashboardDate(current: string, candidate: string, today: string) {
   if (!parseDateKey(candidate) || !parseDateKey(today) || candidate > today) return current;
   return candidate;
+}
+
+function finiteNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function summarizeHomeOrders(orders: HomeOrder[]) {
+  const validOrders = orders.filter((order) => order.status !== 'cancelled');
+  const activeOrders = validOrders.filter((order) => activeOrderStatuses.has(order.status));
+  const paidOrders = validOrders.filter(
+    (order) => order.payment_status === 'paid' || order.status === 'completed',
+  );
+  const paidRevenue = paidOrders.reduce(
+    (sum, order) => sum + finiteNumber(order.grand_total || order.total_amount),
+    0,
+  );
+  const guests = validOrders.reduce((sum, order) => {
+    if (order.order_type !== 'dine_in') return sum;
+    return sum + Math.max(0, finiteNumber(order.customer_count));
+  }, 0);
+
+  return {
+    totalOrders: validOrders.length,
+    activeOrders: activeOrders.length,
+    paidOrders: paidOrders.length,
+    paidRevenue,
+    averageBill: paidOrders.length ? paidRevenue / paidOrders.length : 0,
+    guests,
+  };
+}
+
+export function summarizeHomeSalesTrend(
+  salesDays: HomeSalesDay[],
+  anchorDate: string,
+  requestedDays = 7,
+) {
+  const anchor = parseDateKey(anchorDate);
+  const days = Math.min(45, Math.max(1, Math.trunc(finiteNumber(requestedDays)) || 7));
+  const empty = {
+    days,
+    current: { revenue: 0, profit: 0 },
+    previous: { revenue: 0, profit: 0 },
+    delta: { revenue: 0, profit: 0 },
+  };
+  if (!anchor) return empty;
+
+  const currentEnd = toDateKey(anchor);
+  const currentStart = shiftDashboardDate(currentEnd, -(days - 1));
+  const previousEnd = shiftDashboardDate(currentEnd, -days);
+  const previousStart = shiftDashboardDate(currentEnd, -(days * 2 - 1));
+  const current = { revenue: 0, profit: 0 };
+  const previous = { revenue: 0, profit: 0 };
+
+  for (const day of salesDays) {
+    if (!parseDateKey(day.order_date)) continue;
+    const target = day.order_date >= currentStart && day.order_date <= currentEnd
+      ? current
+      : day.order_date >= previousStart && day.order_date <= previousEnd
+        ? previous
+        : null;
+    if (!target) continue;
+    target.revenue += finiteNumber(day.revenue);
+    target.profit += finiteNumber(day.profit);
+  }
+
+  return {
+    days,
+    current,
+    previous,
+    delta: {
+      revenue: current.revenue - previous.revenue,
+      profit: current.profit - previous.profit,
+    },
+  };
+}
+
+export function buildHomeOperationalMetrics(
+  snapshot: HomeOperationalSnapshot,
+  access: HomeOperationalMetricAccess,
+) {
+  const metrics: HomeOperationalMetric[] = [];
+
+  if (access.canViewOrders) {
+    metrics.push({ key: 'orders-active', count: snapshot.activeOrders });
+  }
+  if (access.canViewTables) {
+    metrics.push(
+      { key: 'tables-occupied', count: snapshot.occupiedTables },
+      { key: 'tables-free', count: snapshot.freeTables },
+      { key: 'tables-reserved', count: snapshot.reservedTables },
+    );
+  }
+  if (access.canViewKitchen) {
+    metrics.push(
+      { key: 'kitchen-active', count: snapshot.activeKitchen },
+      { key: 'kitchen-ready', count: snapshot.readyKitchen },
+    );
+  }
+
+  return metrics;
+}
+
+export function topHomeMenuItems(items: HomeMenuItem[], requestedLimit = 3) {
+  const limit = Math.min(10, Math.max(1, Math.trunc(finiteNumber(requestedLimit)) || 3));
+  return [...items]
+    .sort((first, second) => (
+      finiteNumber(second.quantity) - finiteNumber(first.quantity)
+      || first.menu_name.localeCompare(second.menu_name)
+      || first.menu_id - second.menu_id
+    ))
+    .slice(0, limit);
+}
+
+export function dashboardLoadFailurePolicy(quiet: boolean) {
+  return {
+    preserveSnapshot: quiet,
+    showError: !quiet,
+  };
+}
+
+export function shouldStartDashboardLoad(
+  quiet: boolean,
+  foregroundLoadPending: boolean,
+) {
+  return !quiet || !foregroundLoadPending;
+}
+
+export function shouldReplaceOptionalDashboardSnapshot(
+  quiet: boolean,
+  sourceFailed: boolean,
+) {
+  return !quiet || !sourceFailed;
 }
 
 function minutesSince(value: string | null | undefined, now: Date) {

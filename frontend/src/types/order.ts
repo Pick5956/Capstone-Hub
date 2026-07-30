@@ -129,6 +129,7 @@ export interface OpenOrderInput {
   customer_name?: string;
   customer_phone?: string;
   note?: string;
+  seat_reservation?: boolean;
 }
 
 export interface AddOrderItemInput {

@@ -96,6 +96,16 @@ func (r *OrderRepository) SaveOrder(order *entity.Order) error {
 	return r.db.Omit(clause.Associations).Save(order).Error
 }
 
+// ResolveActiveReservation completes a reservation inside the same transaction
+// that opens its dine-in order. It remains a no-op for legacy reserved tables
+// that predate reservation history.
+func (r *OrderRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
+	now := BangkokNow()
+	return r.db.Model(&entity.Reservation{}).
+		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
+		Updates(map[string]any{"status": status, "resolved_at": now}).Error
+}
+
 func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, error) {
 	var order entity.Order
 	err := withOrderDetails(r.db).

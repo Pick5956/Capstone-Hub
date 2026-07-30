@@ -90,14 +90,9 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 		if err != nil {
 			return err
 		}
-		if hasOpenOrder && next.Status != entity.TableStatusOccupied {
+		applyTableMetadataUpdate(table, next)
+		if hasOpenOrder && table.Status != entity.TableStatusOccupied {
 			return errors.New("table has an open order")
-		}
-		table.Capacity = next.Capacity
-		table.Status = next.Status
-		if table.Status != entity.TableStatusReserved {
-			table.ReservationName = ""
-			table.ReservationPhone = ""
 		}
 		if err := tx.UpdateTable(table); err != nil {
 			return err
@@ -170,6 +165,9 @@ func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, n
 		if err != nil {
 			return err
 		}
+		if err := validateTableCanBeReserved(table.Status); err != nil {
+			return err
+		}
 		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
 		if err != nil {
 			return err
@@ -224,6 +222,13 @@ func (s *TableService) releaseReservedTable(restaurantID, tableID uint, outcome 
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
 		table, err := tx.FindTableForUpdate(restaurantID, tableID)
 		if err != nil {
+			return err
+		}
+		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if err := validateReservedTableRelease(table.Status, hasOpenOrder); err != nil {
 			return err
 		}
 		table.Status = entity.TableStatusFree

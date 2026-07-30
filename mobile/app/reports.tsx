@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 
 import { getManagerReport, getTopMenuItemsByMonth } from '@/src/api/report';
@@ -8,6 +8,7 @@ import { Button, ChipGroup, EmptyState, Feedback, SectionHeader, StatusBadge, Su
 import { money } from '@/src/lib/format';
 import { getBangkokReportMonth, shiftReportMonth } from '@/src/lib/report-query';
 import { can } from '@/src/lib/rbac';
+import { createRequestGeneration } from '@/src/lib/request-generation';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, spacing, typeScale } from '@/src/theme';
@@ -24,25 +25,39 @@ export default function ReportsScreen() {
   const [report, setReport] = useState<ManagerReport | null>(null);
   const [topMenus, setTopMenus] = useState<TopMenuItemsReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setReportError] = useState<string | null>(null);
+  const requestGenerationRef = useRef(createRequestGeneration());
+
   const load = useCallback(async () => {
     if (!canView) {
+      requestGenerationRef.current.invalidate();
       setLoading(false);
       return;
     }
-    setLoading(true); setError(null);
+    const request = requestGenerationRef.current.begin();
+    const setError = (value: string | null) => {
+      if (requestGenerationRef.current.isCurrent(request)) setReportError(value);
+    };
+    setLoading(true);
+    setError(null);
     try {
       const [managerReport, topMenuReport] = await Promise.all([
         getManagerReport(days),
         getTopMenuItemsByMonth(topMenuMonth),
       ]);
+      if (!requestGenerationRef.current.isCurrent(request)) return;
       setReport(managerReport);
       setTopMenus(topMenuReport);
     }
     catch (err) { setError(err instanceof Error ? err.message : copy('โหลดรายงานไม่สำเร็จ', 'Could not load reports.')); }
-    finally { setLoading(false); }
+    finally {
+      if (requestGenerationRef.current.isCurrent(request)) setLoading(false);
+    }
   }, [canView, copy, days, topMenuMonth]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => requestGenerationRef.current.invalidate();
+  }, [load]);
   const canGoPreviousMonth = topMenuMonth.year > 2000 || topMenuMonth.month > 1;
   const canGoNextMonth = topMenuMonth.year < currentMonth.year
     || (topMenuMonth.year === currentMonth.year && topMenuMonth.month < currentMonth.month);

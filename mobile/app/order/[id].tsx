@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, View } from 'react-native';
 
 import { listCategories, listMenuItems } from '@/src/api/menu';
@@ -9,13 +9,16 @@ import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
+import { createOrderDetailRequestGuard } from '@/src/lib/order-detail-runtime';
 import {
+  activeOrderItems,
   canCancelOrderForRole,
   canCloseEmptyOrder,
-  isKitchenComplete,
+  canOpenOrderBill,
   validateKitchenCancelReason,
 } from '@/src/lib/order-workflow';
 import { orderDetailLoadResources } from '@/src/lib/permission-parity';
+import { createRequestGeneration } from '@/src/lib/request-generation';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -33,6 +36,7 @@ function itemTone(status: OrderItem['status']) {
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
+  const validOrderId = Number.isInteger(orderId) && orderId > 0;
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const [order, setOrder] = useState<Order | null>(null);
@@ -47,16 +51,29 @@ export default function OrderDetailScreen() {
   const [confirmEmptyClose, setConfirmEmptyClose] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const requestGuardRef = useRef(createOrderDetailRequestGuard(createRequestGeneration()));
+  const foregroundLoadRef = useRef<number | null>(null);
   const canTakeOrder = can(activeMembership, 'take_order');
   const canPay = can(activeMembership, 'take_payment');
   const canViewOrders = can(activeMembership, 'view_orders');
+  const canAccessOrder = canViewOrders || canTakeOrder || canPay;
 
   const load = useCallback(async (quiet = false) => {
-    if (!canViewOrders) {
+    if (!canAccessOrder || !validOrderId) {
+      requestGuardRef.current.invalidateLoads();
+      foregroundLoadRef.current = null;
       setLoading(false);
       return;
     }
-    if (!quiet) setLoading(true);
+    if (quiet && foregroundLoadRef.current !== null) return;
+
+    const request = requestGuardRef.current.beginLoad();
+    if (request === null) return;
+
+    if (!quiet) {
+      foregroundLoadRef.current = request;
+      setLoading(true);
+    }
     setError(null);
     try {
       const resources = orderDetailLoadResources(canTakeOrder);
@@ -66,21 +83,41 @@ export default function OrderDetailScreen() {
           listMenuItems(),
           listCategories(),
         ]);
+        if (!requestGuardRef.current.canApplyLoad(request)) return;
         setOrder(orderResponse);
-        setMenuItems((menuResponse.menu_items || []).filter((item) => item.is_available));
+        setMenuItems(menuResponse.menu_items || []);
         setCategories(categoryResponse.categories || []);
       } else {
-        setOrder(await getOrder(orderId));
+        const orderResponse = await getOrder(orderId);
+        if (!requestGuardRef.current.canApplyLoad(request)) return;
+        setOrder(orderResponse);
         setMenuItems([]);
         setCategories([]);
       }
-    } catch (err) { setError(err instanceof Error ? err.message : copy('โหลดออเดอร์ไม่สำเร็จ', 'Could not load the order')); }
-    finally { if (!quiet) setLoading(false); }
-  }, [canTakeOrder, canViewOrders, copy, orderId]);
-  useFocusEffect(useCallback(() => { load(); const timer = setInterval(() => load(true), 10000); return () => clearInterval(timer); }, [load]));
+    } catch (err) {
+      if (requestGuardRef.current.canApplyLoad(request)) {
+        setError(err instanceof Error ? err.message : copy('โหลดออเดอร์ไม่สำเร็จ', 'Could not load the order'));
+      }
+    } finally {
+      if (!quiet && foregroundLoadRef.current === request) {
+        foregroundLoadRef.current = null;
+        setLoading(false);
+      }
+    }
+  }, [canAccessOrder, canTakeOrder, copy, orderId, validOrderId]);
+  useFocusEffect(useCallback(() => {
+    load();
+    const timer = setInterval(() => load(true), 10000);
+    return () => {
+      clearInterval(timer);
+      requestGuardRef.current.invalidateLoads();
+      foregroundLoadRef.current = null;
+    };
+  }, [load]));
 
-  const pending = useMemo(() => (order?.items || []).filter((item) => item.status === 'pending'), [order]);
-  const kitchenComplete = useMemo(() => isKitchenComplete(order?.items), [order?.items]);
+  const activeItems = useMemo(() => activeOrderItems(order?.items), [order?.items]);
+  const pending = useMemo(() => activeItems.filter((item) => item.status === 'pending'), [activeItems]);
+  const activeQuantity = useMemo(() => activeItems.reduce((sum, item) => sum + item.quantity, 0), [activeItems]);
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return menuItems.filter((item) => {
@@ -94,11 +131,17 @@ export default function OrderDetailScreen() {
     canTakeOrder
     && order
     && order.payment_status !== 'paid'
-    && order.items?.length
+    && activeItems.length
     && canCancelOrderForRole(activeMembership?.role?.name, order.status),
   );
 
   async function mutate(action: () => Promise<Order>, success?: string): Promise<boolean> {
+    if (!requestGuardRef.current.beginMutation()) return false;
+
+    if (foregroundLoadRef.current !== null) {
+      foregroundLoadRef.current = null;
+      setLoading(false);
+    }
     setSubmitting(true); setError(null); setMessage(null);
     try {
       setOrder(await action());
@@ -108,7 +151,10 @@ export default function OrderDetailScreen() {
       setError(err instanceof Error ? err.message : copy('ทำรายการไม่สำเร็จ', 'Could not complete this action'));
       return false;
     }
-    finally { setSubmitting(false); }
+    finally {
+      requestGuardRef.current.finishMutation();
+      setSubmitting(false);
+    }
   }
 
   async function changeQuantity(item: OrderItem, delta: number) {
@@ -134,17 +180,23 @@ export default function OrderDetailScreen() {
     if (cancelled) setConfirmCancel(false);
   }
 
-  const canOpenBill = order?.payment_status === 'paid'
-    ? canViewOrders
-    : canPay && kitchenComplete;
+  const canOpenBill = Boolean(
+    order
+    && canAccessOrder
+    && (order.payment_status === 'paid' || canOpenOrderBill(order.items)),
+  );
   const primaryAction = pending.length && canTakeOrder
     ? <Button label={copy(`ส่งเข้าครัว ${pending.length.toLocaleString('th-TH')} รายการ`, `Send ${pending.length.toLocaleString('en-US')} items to kitchen`)} onPress={() => mutate(() => sendOrderToKitchen(orderId), copy('ส่งรายการเข้าครัวแล้ว', 'Items sent to kitchen'))} loading={submitting} />
     : canOpenBill
-      ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : copy('ออกบิล / รับเงิน', 'Bill / Pay')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
+      ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
       : null;
 
-  if (!canViewOrders) {
-    return <AppScreen title={copy('รายละเอียดออเดอร์', 'Order details')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์ดูออเดอร์', 'No permission to view orders')} detail={copy('ต้องมีสิทธิ์ view_orders', 'The view_orders permission is required.')} /></AppScreen>;
+  if (!canAccessOrder) {
+    return <AppScreen title={copy('รายละเอียดออเดอร์', 'Order details')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์ดูออเดอร์', 'No permission to view orders')} detail={copy('ต้องมีสิทธิ์รับออเดอร์ ดูออเดอร์ หรือรับชำระเงิน', 'The take_order, view_orders, or take_payment permission is required.')} /></AppScreen>;
+  }
+
+  if (!validOrderId) {
+    return <AppScreen title={copy('รายละเอียดออเดอร์', 'Order details')} topLevel={false}><EmptyState title={copy('ไม่พบออเดอร์นี้', 'Order not found')} detail={copy('รหัสออเดอร์ไม่ถูกต้อง กรุณากลับไปเลือกรายการใหม่', 'The order ID is invalid. Go back and choose an order again.')} /></AppScreen>;
   }
 
   return (
@@ -161,8 +213,8 @@ export default function OrderDetailScreen() {
       {order ? (
         <>
           <Surface>
-            <SectionHeader title={copy('รายการในออเดอร์', 'Order items')} detail={copy(`${(order.items?.length || 0).toLocaleString('th-TH')} รายการ · ยอดรวม ${money(order.grand_total, 'th')}`, `${(order.items?.length || 0).toLocaleString('en-US')} items · Total ${money(order.grand_total, 'en')}`)} />
-            {(order.items || []).map((item, index) => (
+            <SectionHeader title={copy('รายการในออเดอร์', 'Order items')} detail={copy(`${activeQuantity.toLocaleString('th-TH')} รายการ · ยอดรวม ${money(order.grand_total, 'th')}`, `${activeQuantity.toLocaleString('en-US')} items · Total ${money(order.grand_total, 'en')}`)} />
+            {activeItems.map((item, index) => (
               <View key={item.ID}>
                 {index ? <Divider /> : null}
                 <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
@@ -184,7 +236,7 @@ export default function OrderDetailScreen() {
                 </View>
               </View>
             ))}
-            {!order.items?.length ? <EmptyState title={copy('ยังไม่มีรายการอาหาร', 'No items yet')} detail={copy('เลือกเมนูด้านล่างเพื่อเริ่มออเดอร์', 'Choose a menu item below to start the order.')} /> : null}
+            {!activeItems.length ? <EmptyState title={copy('ยังไม่มีรายการอาหาร', 'No items yet')} detail={copy('เลือกเมนูด้านล่างเพื่อเริ่มออเดอร์', 'Choose a menu item below to start the order.')} /> : null}
           </Surface>
 
           {!locked && canTakeOrder ? (
@@ -194,10 +246,13 @@ export default function OrderDetailScreen() {
               <ChipGroup value={categoryId} onChange={setCategoryId} options={[{ label: copy('ทั้งหมด', 'All'), value: 'all' }, ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
                 {filteredMenu.map((item) => (
-                  <Pressable key={item.ID} onPress={() => router.push({ pathname: '/order/item' as never, params: { id: String(orderId), menuId: String(item.ID) } } as never)} style={({ pressed }) => ({ minWidth: 148, minHeight: 112, flexGrow: 1, flexBasis: 160, gap: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: pressed ? 0.74 : 1 })}>
+                  <Pressable key={item.ID} disabled={!item.is_available} onPress={() => router.push({ pathname: '/order/item' as never, params: { id: String(orderId), menuId: String(item.ID) } } as never)} style={({ pressed }) => ({ minWidth: 148, minHeight: 112, flexGrow: 1, flexBasis: 160, gap: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: !item.is_available ? 0.48 : pressed ? 0.74 : 1 })}>
                     <Text selectable numberOfLines={2} style={typeScale.cardTitle}>{item.name}</Text>
                     <View style={{ flex: 1 }} />
-                    <Text selectable style={typeScale.number}>{money(item.price, language)}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <Text selectable style={[typeScale.number, { flex: 1 }]}>{money(item.price, language)}</Text>
+                      {!item.is_available ? <StatusBadge label={copy('หมด', 'Sold out')} tone="danger" /> : null}
+                    </View>
                   </Pressable>
                 ))}
               </View>

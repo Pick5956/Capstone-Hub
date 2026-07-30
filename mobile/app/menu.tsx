@@ -40,7 +40,7 @@ export default function MenuScreen() {
       return categoryMatch && availabilityMatch && (!keyword || [item.name, item.description].some((value) => String(value || '').toLowerCase().includes(keyword)));
     });
   }, [availability, category, items, search]);
-  async function toggle(item: MenuItem) { if (!canManage) return; setSavingId(item.ID); setError(null); try { await setMenuItemAvailability(item.ID, !item.is_available); await load(); } catch (err) { setError(err instanceof Error ? err.message : copy('เปลี่ยนสถานะเมนูไม่สำเร็จ', 'Could not change the menu status')); } finally { setSavingId(null); } }
+  async function toggle(item: MenuItem) { if (!canManage) return; setSavingId(item.ID); setError(null); try { const updated = await setMenuItemAvailability(item.ID, !item.is_available); setItems((current) => current.map((entry) => (entry.ID === updated.ID ? updated : entry))); } catch (err) { setError(err instanceof Error ? err.message : copy('เปลี่ยนสถานะเมนูไม่สำเร็จ', 'Could not change the menu status')); } finally { setSavingId(null); } }
   if (!canView) {
     return <AppScreen title={copy('เมนูอาหาร', 'Menu')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูเมนู', 'Menu access unavailable')} detail={copy('บัญชีนี้ยังไม่ได้รับสิทธิ์ดูหรือจัดการเมนู', 'This account does not have permission to view or manage the menu.')} /></AppScreen>;
   }

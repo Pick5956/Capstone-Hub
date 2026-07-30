@@ -39,6 +39,19 @@ export interface OrderItem {
   cancelled_reason?: string;
   menu?: MenuItem;
   selected_options?: OrderItemOption[];
+  CreatedAt?: string;
+  UpdatedAt?: string;
+}
+
+export interface OrderStatusLog {
+  ID: number;
+  order_id: number;
+  from_status: string;
+  to_status: string;
+  changed_by: number;
+  changed_at: string;
+  note: string;
+  user?: User;
 }
 
 export interface OrderPayment {
@@ -79,10 +92,15 @@ export interface Order {
   opened_at: string;
   closed_at?: string | null;
   cancelled_reason?: string;
+  version: number;
+  kitchen_sent_at?: string | null;
   table?: RestaurantTable;
   staff?: User;
   items?: OrderItem[];
   payments?: OrderPayment[];
+  status_logs?: OrderStatusLog[];
+  CreatedAt?: string;
+  UpdatedAt?: string;
 }
 
 export interface Bill {

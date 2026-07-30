@@ -52,11 +52,14 @@ function AppNavigator() {
         <Stack.Screen name="home" options={topLevelScreenOptions} />
         <Stack.Screen name="more" options={topLevelScreenOptions} />
         <Stack.Screen name="tables" options={topLevelScreenOptions} />
+        <Stack.Screen name="reservations" />
+        <Stack.Screen name="table-reservation" />
         <Stack.Screen name="table-management" />
         <Stack.Screen name="table-management/table" />
         <Stack.Screen name="table-management/zones" />
         <Stack.Screen name="table-management/tags" />
         <Stack.Screen name="order/[id]" />
+        <Stack.Screen name="order/new" />
         <Stack.Screen name="menu" />
         <Stack.Screen name="orders" options={topLevelScreenOptions} />
         <Stack.Screen name="kitchen" options={topLevelScreenOptions} />

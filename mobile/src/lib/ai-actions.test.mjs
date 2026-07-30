@@ -26,6 +26,22 @@ test('navigation requests stay client-side and respect route permissions', () =>
   assert.equal(resolveAINavigationRequest('เมนูไหนขายดี', allowed, '/ai-assistant'), null);
 });
 
+test('order takers can navigate back to active orders without receiving archive permission', () => {
+  const resolution = resolveAINavigationRequest(
+    'open active orders',
+    permissions('take_order'),
+    '/tables',
+    'en',
+  );
+  assert.equal(resolution?.kind, 'navigate');
+  assert.equal(resolution?.href, '/orders');
+  assert.equal(resolution?.label, 'Orders');
+  assert.equal(
+    resolveAINavigationRequest('open reports', permissions('take_order'), '/tables', 'en'),
+    null,
+  );
+});
+
 test('short ambiguous topics offer clarification actions before calling the model', () => {
   const clarification = resolveAIClarificationRequest(
     'คลัง',

@@ -6,10 +6,16 @@ import { listIngredients } from '@/src/api/ingredient';
 import { createMenuItem, deleteMenuItem, listCategories, listMenuItems, updateMenuItem } from '@/src/api/menu';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, Divider, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { toFloat, toInt } from '@/src/lib/forms';
-import { initialMenuCategoryIds, selectableMenuCategories } from '@/src/lib/menu-editor';
+import {
+  initialMenuCategoryIds,
+  selectableMenuCategories,
+  validateMenuOptionGroups,
+  type MenuOptionGroupIssueCode,
+} from '@/src/lib/menu-editor';
 import { can } from '@/src/lib/rbac';
+import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
@@ -22,7 +28,10 @@ export default function MenuItemEditorScreen() {
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const itemId = Number(id || 0); const editing = itemId > 0;
+  const routeId = parsePositiveRouteId(id);
+  const itemId = routeId.kind === 'valid' ? routeId.id : null;
+  const editing = routeId.kind === 'valid';
+  const invalidRoute = routeId.kind === 'invalid';
   const canManage = can(activeMembership, 'manage_menu');
   const canViewInventory = can(activeMembership, 'view_inventory') || can(activeMembership, 'manage_inventory');
   const [categories, setCategories] = useState<Category[]>([]); const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
@@ -30,9 +39,19 @@ export default function MenuItemEditorScreen() {
   const [available, setAvailable] = useState<'yes' | 'no'>('yes'); const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [optionGroups, setOptionGroups] = useState<MenuOptionGroupInput[]>([]); const [ingredients, setIngredients] = useState<MenuIngredientInput[]>([]); const [ingredientCandidate, setIngredientCandidate] = useState('none');
   const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showOptionErrors, setShowOptionErrors] = useState(false);
+  const [loading, setLoading] = useState(editing);
+  const [itemExists, setItemExists] = useState<boolean | null>(editing ? null : true);
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || invalidRoute) {
+      setLoading(false);
+      setItemExists(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setItemExists(editing ? null : true);
     const ingredientRequest = canViewInventory
       ? listIngredients().catch(() => ({ ingredients: [] }))
       : Promise.resolve({ ingredients: [] as Ingredient[] });
@@ -44,39 +63,128 @@ export default function MenuItemEditorScreen() {
         setCategoryIds(initialMenuCategoryIds(item, categoryResponse.categories || []));
         setOptionGroups((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active })) })));
         setIngredients((item.ingredients || []).map((ingredient) => ({ ingredient_id: ingredient.ingredient_id, quantity: ingredient.quantity, unit: ingredient.unit, note: ingredient.note })));
+        setItemExists(true);
       } else if (!editing) {
         setCategoryIds(initialMenuCategoryIds(undefined, categoryResponse.categories || []));
+        setItemExists(true);
       } else {
-        setError(copy('ไม่พบเมนูที่ต้องการแก้ไข', 'The menu item you want to edit was not found.'));
+        setItemExists(false);
       }
-    }).catch((err) => setError(err instanceof Error ? err.message : copy('โหลดข้อมูลเมนูไม่สำเร็จ', 'Could not load menu item data.')));
-  }, [canManage, canViewInventory, copy, editing, itemId]);
+    }).catch((err) => setError(err instanceof Error ? err.message : copy('โหลดข้อมูลเมนูไม่สำเร็จ', 'Could not load menu item data.')))
+      .finally(() => setLoading(false));
+  }, [canManage, canViewInventory, copy, editing, invalidRoute, itemId]);
 
   const ingredientOptions = useMemo(() => [{ label: copy('เลือกวัตถุดิบ', 'Choose an ingredient'), value: 'none' }, ...allIngredients.filter((item) => !ingredients.some((row) => row.ingredient_id === item.ID)).map((item) => ({ label: item.name, value: String(item.ID) }))], [allIngredients, copy, ingredients]);
+  const optionValidation = useMemo(() => validateMenuOptionGroups(optionGroups), [optionGroups]);
   function toggleCategory(categoryId: number) { setCategoryIds((current) => current.includes(categoryId) ? current.filter((value) => value !== categoryId) : [...current, categoryId]); }
   function updateGroup(index: number, patch: Partial<MenuOptionGroupInput>) { setOptionGroups((current) => current.map((group, currentIndex) => currentIndex === index ? { ...group, ...patch } : group)); }
   function updateOption(groupIndex: number, optionIndex: number, patch: Partial<MenuOptionGroupInput['options'][number]>) { setOptionGroups((current) => current.map((group, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...group, options: group.options.map((option, currentOptionIndex) => currentOptionIndex === optionIndex ? { ...option, ...patch } : option) } : group)); }
   function addOption(groupIndex: number) { setOptionGroups((current) => current.map((group, index) => index === groupIndex ? { ...group, options: [...group.options, { name: '', price_delta: 0, is_default: false, display_order: group.options.length + 1, is_active: true }] } : group)); }
   function addIngredient() { const candidate = Number(ingredientCandidate); if (!candidate) return; const item = allIngredients.find((current) => current.ID === candidate); setIngredients((current) => [...current, { ingredient_id: candidate, quantity: 1, unit: item?.unit || '', note: '' }]); setIngredientCandidate('none'); }
 
+  function optionIssueMessage(code: MenuOptionGroupIssueCode) {
+    switch (code) {
+      case 'too_many_groups': return copy('เพิ่มกลุ่มตัวเลือกได้สูงสุด 20 กลุ่ม', 'You can add up to 20 option groups.');
+      case 'group_name_required': return copy('กรอกชื่อกลุ่มตัวเลือก', 'Enter an option group name.');
+      case 'group_name_too_long': return copy('ชื่อกลุ่มต้องไม่เกิน 120 ตัวอักษร', 'The group name must be 120 characters or fewer.');
+      case 'group_name_duplicate': return copy('ชื่อกลุ่มตัวเลือกต้องไม่ซ้ำกัน', 'Option group names must be unique.');
+      case 'too_many_options': return copy('เพิ่มตัวเลือกได้สูงสุด 50 รายการต่อกลุ่ม', 'You can add up to 50 options per group.');
+      case 'option_required': return copy('เพิ่มตัวเลือกอย่างน้อย 1 รายการ', 'Add at least one option.');
+      case 'option_name_required': return copy('กรอกชื่อตัวเลือก', 'Enter an option name.');
+      case 'option_name_too_long': return copy('ชื่อตัวเลือกต้องไม่เกิน 120 ตัวอักษร', 'The option name must be 120 characters or fewer.');
+      case 'option_name_duplicate': return copy('ชื่อตัวเลือกในกลุ่มนี้ต้องไม่ซ้ำกัน', 'Option names in this group must be unique.');
+      case 'option_price_negative': return copy('ราคาเพิ่มต้องไม่ติดลบ', 'Additional price cannot be negative.');
+      case 'option_price_too_large': return copy('ราคาเพิ่มสูงเกินขอบเขตที่รองรับ', 'Additional price exceeds the supported limit.');
+      case 'max_below_min': return copy('จำนวนสูงสุดต้องไม่น้อยกว่าจำนวนขั้นต่ำ', 'Maximum selections cannot be below the minimum.');
+      case 'max_too_large': return copy('เลือกได้สูงสุดไม่เกิน 50 รายการ', 'Maximum selections cannot exceed 50.');
+      case 'min_exceeds_active_options': return copy('จำนวนขั้นต่ำมากกว่าตัวเลือกที่เปิดใช้งาน', 'Minimum selections exceed the active options.');
+      case 'defaults_exceed_max': return copy('ตัวเลือกเริ่มต้นมีมากกว่าจำนวนที่เลือกได้สูงสุด', 'Default selections exceed the maximum.');
+    }
+  }
+
+  function optionIssue(
+    groupIndex: number,
+    codes: MenuOptionGroupIssueCode[],
+    optionIndex?: number,
+  ) {
+    if (!showOptionErrors) return undefined;
+    return optionValidation.issues.find((issue) =>
+      issue.groupIndex === groupIndex
+      && issue.optionIndex === optionIndex
+      && codes.includes(issue.code));
+  }
+
   async function save() {
+    if (!canManage || invalidRoute) return;
+    if (editing && (itemId === null || itemExists !== true)) return;
+    setShowOptionErrors(true);
     if (!name.trim() || !price || !categoryIds.length) { setError(copy('กรอกชื่อ ราคา และเลือกอย่างน้อย 1 หมวด', 'Enter a name and price, then choose at least one category.')); return; }
-    const invalidGroup = optionGroups.some((group) => !group.name.trim() || group.options.some((option) => !option.name.trim()));
-    if (invalidGroup) { setError(copy('กรอกชื่อกลุ่มตัวเลือกและตัวเลือกให้ครบ', 'Complete every option group and option name.')); return; }
+    if (optionValidation.issues.length) { setError(null); return; }
     setSaving(true); setError(null);
     try {
-      const payload = { category_id: categoryIds[0], category_ids: categoryIds, name: name.trim(), price: toFloat(price, 0), image_url: imageUrl.trim(), description: description.trim(), is_available: available === 'yes', display_order: toInt(displayOrder, 0), option_groups: optionGroups, ingredients };
-      if (editing) await updateMenuItem(itemId, payload); else await createMenuItem(payload);
+      const payload = { category_id: categoryIds[0], category_ids: categoryIds, name: name.trim(), price: toFloat(price, 0), image_url: imageUrl.trim(), description: description.trim(), is_available: available === 'yes', display_order: toInt(displayOrder, 0), option_groups: optionValidation.groups, ingredients };
+      if (editing) {
+        if (itemId === null) return;
+        await updateMenuItem(itemId, payload);
+      } else {
+        await createMenuItem(payload);
+      }
       router.back();
     } catch (err) { setError(err instanceof Error ? err.message : copy('บันทึกเมนูไม่สำเร็จ', 'Could not save the menu item.')); }
     finally { setSaving(false); }
   }
-  async function remove() { if (!confirmDelete) { setConfirmDelete(true); return; } setSaving(true); setError(null); try { await deleteMenuItem(itemId); router.back(); } catch (err) { setError(err instanceof Error ? err.message : copy('ลบเมนูไม่สำเร็จ', 'Could not delete the menu item.')); setSaving(false); } }
+  async function remove() {
+    if (!canManage || itemId === null || itemExists !== true) return;
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setSaving(true); setError(null);
+    try { await deleteMenuItem(itemId); router.back(); }
+    catch (err) { setError(err instanceof Error ? err.message : copy('ลบเมนูไม่สำเร็จ', 'Could not delete the menu item.')); setSaving(false); }
+  }
+
+  if (invalidRoute) {
+    return (
+      <AppScreen title={copy('รายละเอียดเมนู', 'Menu item details')} topLevel={false}>
+        <EmptyState
+          title={copy('ไม่พบเมนู', 'Menu item not found')}
+          detail={copy(
+            'ลิงก์เมนูนี้ไม่ถูกต้อง กรุณากลับไปเลือกรายการจากหน้าเมนู',
+            'This menu-item link is invalid. Go back and choose an item from the menu.',
+          )}
+          action={<Button variant="secondary" label={copy('ย้อนกลับ', 'Go back')} onPress={() => router.back()} />}
+        />
+      </AppScreen>
+    );
+  }
 
   if (!canManage) {
     return (
       <AppScreen title={copy('จัดการเมนู', 'Manage menu')} subtitle={copy('เฉพาะผู้ที่ได้รับสิทธิ์จัดการเมนู', 'Available to team members with menu management access')} topLevel={false}>
         <Feedback title={copy('ไม่มีสิทธิ์จัดการเมนู', 'Menu management access unavailable')} detail={copy('กลับไปเลือกโหมดงานที่บัญชีนี้ได้รับอนุญาต', 'Return and choose a workspace your account is allowed to use.')} tone="info" />
+      </AppScreen>
+    );
+  }
+
+  if (editing && itemExists !== true) {
+    const title = loading
+      ? copy('กำลังโหลดเมนู', 'Loading menu item')
+      : error
+        ? copy('โหลดเมนูไม่สำเร็จ', 'Unable to load menu item')
+        : copy('ไม่พบเมนู', 'Menu item not found');
+    const detail = loading
+      ? copy('กำลังตรวจสอบข้อมูลรายการนี้', 'Checking this item now.')
+      : error || copy(
+        'เมนูนี้อาจถูกลบไปแล้ว กรุณากลับไปเลือกรายการจากหน้าเมนู',
+        'This menu item may have been deleted. Go back and choose an item from the menu.',
+      );
+    return (
+      <AppScreen title={copy('รายละเอียดเมนู', 'Menu item details')} topLevel={false}>
+        <EmptyState
+          title={title}
+          detail={detail}
+          action={loading ? undefined : (
+            <Button variant="secondary" label={copy('ย้อนกลับ', 'Go back')} onPress={() => router.back()} />
+          )}
+        />
       </AppScreen>
     );
   }
@@ -96,17 +204,119 @@ export default function MenuItemEditorScreen() {
 
       <Surface>
         <SectionHeader title={copy('ตัวเลือกเมนู', 'Item options')} detail={copy('เช่น ระดับความเผ็ด ขนาด หรือท็อปปิง', 'For example, spice level, size, or toppings.')} action={<Button compact variant="secondary" label={copy('เพิ่มกลุ่ม', 'Add group')} onPress={() => setOptionGroups((current) => [...current, emptyGroup(current.length)])} />} />
-        {optionGroups.map((group, groupIndex) => (
-          <View key={groupIndex} style={{ gap: spacing.md }}>
-            {groupIndex ? <Divider /> : null}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}><Text style={[typeScale.cardTitle, { flex: 1 }]}>{copy(`กลุ่มตัวเลือก ${(groupIndex + 1).toLocaleString('th-TH')}`, `Option group ${(groupIndex + 1).toLocaleString('en-US')}`)}</Text><Button compact variant="ghost" label={copy('ลบกลุ่ม', 'Remove group')} onPress={() => setOptionGroups((current) => current.filter((_, index) => index !== groupIndex))} /></View>
-            <TextField label={copy('ชื่อกลุ่ม', 'Group name')} value={group.name} onChangeText={(value) => updateGroup(groupIndex, { name: value })} />
-            <ChipGroup label={copy('การเลือก', 'Selection rule')} value={group.required ? 'required' : 'optional'} onChange={(value) => updateGroup(groupIndex, { required: value === 'required', min_select: value === 'required' ? Math.max(1, group.min_select) : 0 })} options={[{ label: copy('ไม่บังคับ', 'Optional'), value: 'optional' }, { label: copy('ต้องเลือก', 'Required'), value: 'required' }]} />
-            <View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><TextField label={copy('เลือกขั้นต่ำ', 'Minimum selections')} value={String(group.min_select)} onChangeText={(value) => updateGroup(groupIndex, { min_select: toInt(value, 0) })} keyboardType="number-pad" /></View><View style={{ flex: 1 }}><TextField label={copy('เลือกสูงสุด', 'Maximum selections')} value={String(group.max_select)} onChangeText={(value) => updateGroup(groupIndex, { max_select: Math.max(1, toInt(value, 1)) })} keyboardType="number-pad" /></View></View>
-            {group.options.map((option, optionIndex) => <View key={optionIndex} style={{ gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}><Text style={[typeScale.caption, { flex: 1, fontWeight: '700' }]}>{copy(`ตัวเลือก ${(optionIndex + 1).toLocaleString('th-TH')}`, `Option ${(optionIndex + 1).toLocaleString('en-US')}`)}</Text><Button compact variant="ghost" label={copy('ลบ', 'Remove')} onPress={() => updateGroup(groupIndex, { options: group.options.filter((_, index) => index !== optionIndex) })} /></View><TextField label={copy('ชื่อ', 'Name')} value={option.name} onChangeText={(value) => updateOption(groupIndex, optionIndex, { name: value })} /><TextField label={copy('ราคาเพิ่ม', 'Additional price')} value={String(option.price_delta)} onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: toFloat(value, 0) })} keyboardType="decimal-pad" /><ChipGroup label={copy('ค่าเริ่มต้น', 'Default selection')} value={option.is_default ? 'yes' : 'no'} onChange={(value) => updateOption(groupIndex, optionIndex, { is_default: value === 'yes' })} options={[{ label: copy('ไม่เลือก', 'Not selected'), value: 'no' }, { label: copy('เลือกไว้', 'Selected'), value: 'yes' }]} /></View>)}
-            <Button variant="secondary" label={copy('เพิ่มตัวเลือก', 'Add option')} onPress={() => addOption(groupIndex)} />
-          </View>
-        ))}
+        {showOptionErrors && optionValidation.issues.some((issue) => issue.code === 'too_many_groups')
+          ? <Feedback title={optionIssueMessage('too_many_groups')} tone="danger" />
+          : null}
+        {optionGroups.map((group, groupIndex) => {
+          const groupNameIssue = optionIssue(groupIndex, [
+            'group_name_required',
+            'group_name_too_long',
+            'group_name_duplicate',
+          ]);
+          const groupIssue = optionIssue(groupIndex, ['option_required', 'too_many_options']);
+          const minIssue = optionIssue(groupIndex, ['min_exceeds_active_options']);
+          const maxIssue = optionIssue(groupIndex, [
+            'max_below_min',
+            'max_too_large',
+            'defaults_exceed_max',
+          ]);
+
+          return (
+            <View key={groupIndex} style={{ gap: spacing.md }}>
+              {groupIndex ? <Divider /> : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <Text style={[typeScale.cardTitle, { flex: 1 }]}>
+                  {copy(`กลุ่มตัวเลือก ${(groupIndex + 1).toLocaleString('th-TH')}`, `Option group ${(groupIndex + 1).toLocaleString('en-US')}`)}
+                </Text>
+                <Button compact variant="ghost" label={copy('ลบกลุ่ม', 'Remove group')} onPress={() => setOptionGroups((current) => current.filter((_, index) => index !== groupIndex))} />
+              </View>
+              <TextField
+                label={copy('ชื่อกลุ่ม', 'Group name')}
+                value={group.name}
+                onChangeText={(value) => updateGroup(groupIndex, { name: value })}
+                error={groupNameIssue ? optionIssueMessage(groupNameIssue.code) : undefined}
+              />
+              <ChipGroup
+                label={copy('การเลือก', 'Selection rule')}
+                value={group.required ? 'required' : 'optional'}
+                onChange={(value) => updateGroup(groupIndex, {
+                  required: value === 'required',
+                  min_select: value === 'required' ? Math.max(1, group.min_select) : 0,
+                })}
+                options={[
+                  { label: copy('ไม่บังคับ', 'Optional'), value: 'optional' },
+                  { label: copy('ต้องเลือก', 'Required'), value: 'required' },
+                ]}
+              />
+              <View style={{ flexDirection: 'row', gap: spacing.md }}>
+                <View style={{ flex: 1 }}>
+                  <TextField
+                    label={copy('เลือกขั้นต่ำ', 'Minimum selections')}
+                    value={String(group.min_select)}
+                    onChangeText={(value) => updateGroup(groupIndex, { min_select: toInt(value, 0) })}
+                    keyboardType="number-pad"
+                    error={minIssue ? optionIssueMessage(minIssue.code) : undefined}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <TextField
+                    label={copy('เลือกสูงสุด', 'Maximum selections')}
+                    value={String(group.max_select)}
+                    onChangeText={(value) => updateGroup(groupIndex, { max_select: Math.max(1, toInt(value, 1)) })}
+                    keyboardType="number-pad"
+                    error={maxIssue ? optionIssueMessage(maxIssue.code) : undefined}
+                  />
+                </View>
+              </View>
+              {groupIssue ? <Feedback title={optionIssueMessage(groupIssue.code)} tone="danger" /> : null}
+              {group.options.map((option, optionIndex) => {
+                const optionNameIssue = optionIssue(groupIndex, [
+                  'option_name_required',
+                  'option_name_too_long',
+                  'option_name_duplicate',
+                ], optionIndex);
+                const optionPriceIssue = optionIssue(groupIndex, [
+                  'option_price_negative',
+                  'option_price_too_large',
+                ], optionIndex);
+
+                return (
+                  <View key={optionIndex} style={{ gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <Text style={[typeScale.caption, { flex: 1, fontWeight: '700' }]}>
+                        {copy(`ตัวเลือก ${(optionIndex + 1).toLocaleString('th-TH')}`, `Option ${(optionIndex + 1).toLocaleString('en-US')}`)}
+                      </Text>
+                      <Button compact variant="ghost" label={copy('ลบ', 'Remove')} onPress={() => updateGroup(groupIndex, { options: group.options.filter((_, index) => index !== optionIndex) })} />
+                    </View>
+                    <TextField
+                      label={copy('ชื่อ', 'Name')}
+                      value={option.name}
+                      onChangeText={(value) => updateOption(groupIndex, optionIndex, { name: value })}
+                      error={optionNameIssue ? optionIssueMessage(optionNameIssue.code) : undefined}
+                    />
+                    <TextField
+                      label={copy('ราคาเพิ่ม', 'Additional price')}
+                      value={String(option.price_delta)}
+                      onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: toFloat(value, 0) })}
+                      keyboardType="decimal-pad"
+                      error={optionPriceIssue ? optionIssueMessage(optionPriceIssue.code) : undefined}
+                    />
+                    <ChipGroup
+                      label={copy('ค่าเริ่มต้น', 'Default selection')}
+                      value={option.is_default ? 'yes' : 'no'}
+                      onChange={(value) => updateOption(groupIndex, optionIndex, { is_default: value === 'yes' })}
+                      options={[
+                        { label: copy('ไม่เลือก', 'Not selected'), value: 'no' },
+                        { label: copy('เลือกไว้', 'Selected'), value: 'yes' },
+                      ]}
+                    />
+                  </View>
+                );
+              })}
+              <Button variant="secondary" label={copy('เพิ่มตัวเลือก', 'Add option')} onPress={() => addOption(groupIndex)} />
+            </View>
+          );
+        })}
         {!optionGroups.length ? <Text selectable style={[typeScale.body, { color: palette.muted }]}>{copy('เมนูนี้ยังไม่มีกลุ่มตัวเลือก', 'This item does not have any option groups yet.')}</Text> : null}
       </Surface>
 

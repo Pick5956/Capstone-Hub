@@ -11,7 +11,7 @@ import { createOrder, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import { createPosTableNavigationGuard } from "@/src/lib/posTableNavigation";
 import { listTables } from "@/src/lib/table";
-import { reserveTable as reserveTableApi, cancelReservation as cancelReservationApi, seatReservation as seatReservationApi } from "@/src/lib/reservation";
+import { reserveTable as reserveTableApi, cancelReservation as cancelReservationApi } from "@/src/lib/reservation";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import type { Order } from "@/src/types/order";
@@ -246,7 +246,7 @@ export default function PosTablesPage() {
     if (showLoading) setLoading(true);
     setError("");
     try {
-      const [tableRes, orderRes] = await Promise.all([listTables(), listOrders()]);
+      const [tableRes, orderRes] = await Promise.all([listTables(), listOrders({ status: "active" })]);
       setTables(tableRes.data.tables);
       setOrders(orderRes.data.orders);
     } catch {
@@ -315,7 +315,7 @@ export default function PosTablesPage() {
       const message = apiErrorMessage(error);
       if (capturedTable && tableID && message.includes("table already has an open order")) {
         // Fetch with table_id filter to get the precise active order for this table
-        const orderRes = await listOrders({ table_id: tableID });
+        const orderRes = await listOrders({ status: "active", table_id: tableID });
         const activeOrder = orderRes.data.orders.find(
           (order) => order.table_id === tableID && activeOrderStatuses.includes(order.status)
         );
@@ -433,10 +433,6 @@ export default function PosTablesPage() {
     setError("");
     setSheetError("");
     try {
-      // Seating the guests IS opening the table. Mark the reservation seated and
-      // free the table (the backend blocks opening an order on a reserved table),
-      // then open the dine-in order in the same action (carrying the contact over).
-      await seatReservationApi(tableID);
       const res = await createOrder({
         table_id: tableID,
         order_type: "dine_in",
@@ -444,12 +440,13 @@ export default function PosTablesPage() {
         customer_name: guestName,
         customer_phone: guestPhone,
         note,
+        seat_reservation: true,
       });
       navigateToOrder(res.data);
     } catch (error) {
       const message = apiErrorMessage(error);
       if (message.includes("table already has an open order")) {
-        const orderRes = await listOrders({ table_id: tableID });
+        const orderRes = await listOrders({ status: "active", table_id: tableID });
         const activeOrder = orderRes.data.orders.find(
           (order) => order.table_id === tableID && activeOrderStatuses.includes(order.status)
         );

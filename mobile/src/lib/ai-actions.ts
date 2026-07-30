@@ -14,7 +14,7 @@ type HasPermission = (permission: string) => boolean;
 type NavigationEntry = {
   href: string;
   label: Record<DisplayLanguage, string>;
-  permissions?: string[];
+  permissions?: readonly string[];
   aliases: string[];
 };
 
@@ -39,7 +39,7 @@ const navigationEntries: NavigationEntry[] = [
   { href: '/kitchen', label: { th: 'จอครัว', en: 'Kitchen display' }, permissions: ['view_kitchen'], aliases: ['kitchen', 'kds', 'ครัว', 'จอครัว', 'หน้าครัว'] },
   { href: '/menu', label: { th: 'เมนูอาหาร', en: 'Menu' }, permissions: ['view_menu', 'manage_menu'], aliases: ['menu', 'food menu', 'dish', 'เมนู', 'เมนูอาหาร', 'รายการอาหาร'] },
   { href: '/table-management', label: { th: 'ผังโต๊ะ', en: 'Table layout' }, permissions: ['manage_table', 'view_tables'], aliases: ['tables', 'table layout', 'floor plan', 'ผังโต๊ะ', 'จัดการโต๊ะ'] },
-  { href: '/orders', label: { th: 'คลังออเดอร์', en: 'Order archive' }, permissions: ['view_orders'], aliases: ['orders', 'order archive', 'ออเดอร์', 'รายการออเดอร์', 'คลังออเดอร์'] },
+  { href: '/orders', label: { th: 'ออเดอร์', en: 'Orders' }, permissions: ['view_orders', 'take_order'], aliases: ['orders', 'active orders', 'order archive', 'ออเดอร์', 'ออเดอร์ที่กำลังทำ', 'รายการออเดอร์', 'คลังออเดอร์'] },
   { href: '/inventory', label: { th: 'คลังวัตถุดิบ', en: 'Inventory' }, permissions: ['manage_inventory', 'view_inventory'], aliases: ['inventory', 'stock', 'ingredients', 'คลัง', 'คลังวัตถุดิบ', 'วัตถุดิบ', 'สต๊อก', 'สต็อก'] },
   { href: '/ai-assistant', label: { th: 'AI ผู้ช่วย', en: 'AI assistant' }, permissions: ['view_reports', 'manage_inventory'], aliases: ['ai', 'assistant', 'ai assistant', 'ผู้ช่วย ai', 'ai ผู้ช่วย'] },
   { href: '/staff', label: { th: 'พนักงาน', en: 'Staff' }, permissions: ['manage_staff'], aliases: ['staff', 'team', 'employees', 'พนักงาน', 'ทีม', 'ทีมงาน', 'จัดการคน'] },

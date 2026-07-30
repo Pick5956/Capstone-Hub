@@ -25,6 +25,7 @@ export default function AddOrderItemScreen() {
   const canTakeOrder = can(activeMembership, 'take_order');
   const params = useLocalSearchParams<{ id: string; menuId: string }>();
   const orderId = Number(params.id); const menuId = Number(params.menuId);
+  const validParams = Number.isInteger(orderId) && orderId > 0 && Number.isInteger(menuId) && menuId > 0;
   const [order, setOrder] = useState<Order | null>(null);
   const [menu, setMenu] = useState<MenuItem | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -33,7 +34,7 @@ export default function AddOrderItemScreen() {
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { if (!canTakeOrder) return; Promise.all([getOrder(orderId), listMenuItems()]).then(([nextOrder, response]) => { const nextMenu = response.menu_items.find((item) => item.ID === menuId) || null; setOrder(nextOrder); setMenu(nextMenu); setFulfillment(nextOrder.order_type || 'dine_in'); setSelectedOptionIds((nextMenu?.option_groups || []).flatMap((group) => (group.options || []).filter((option) => option.is_active && option.is_default).map((option) => option.ID))); }).catch((err) => setError(err instanceof Error ? err.message : copy('โหลดเมนูไม่สำเร็จ', 'Could not load this menu item'))); }, [canTakeOrder, copy, menuId, orderId]);
+  useEffect(() => { if (!canTakeOrder || !validParams) return; Promise.all([getOrder(orderId), listMenuItems()]).then(([nextOrder, response]) => { const nextMenu = response.menu_items.find((item) => item.ID === menuId) || null; setOrder(nextOrder); setMenu(nextMenu); setFulfillment(nextOrder.order_type || 'dine_in'); setSelectedOptionIds((nextMenu?.option_groups || []).flatMap((group) => (group.options || []).filter((option) => option.is_active && option.is_default).map((option) => option.ID))); if (!nextMenu) setError(copy('ไม่พบเมนูนี้', 'Menu item not found')); }).catch((err) => setError(err instanceof Error ? err.message : copy('โหลดเมนูไม่สำเร็จ', 'Could not load this menu item'))); }, [canTakeOrder, copy, menuId, orderId, validParams]);
   const optionTotal = useMemo(() => (menu?.option_groups || []).flatMap((group) => group.options || []).filter((option) => selectedOptionIds.includes(option.ID)).reduce((sum, option) => sum + Number(option.price_delta), 0), [menu, selectedOptionIds]);
   const total = (Number(menu?.price || 0) + optionTotal) * quantity;
   const missingRequired = Boolean(menu?.option_groups?.some((group) => (
@@ -56,19 +57,21 @@ export default function AddOrderItemScreen() {
     });
   }
   async function add() {
-    if (!canTakeOrder || !menu || missingRequired) return;
+    if (!canTakeOrder || !menu?.is_available || missingRequired) return;
     setSaving(true); setError(null);
     try { await addOrderItem(orderId, { menu_id: menu.ID, quantity, note: note.trim(), selected_option_ids: selectedOptionIds, fulfillment_type: fulfillment }); router.back(); }
     catch (err) { setError(err instanceof Error ? err.message : copy('เพิ่มเมนูไม่สำเร็จ', 'Could not add this item')); }
     finally { setSaving(false); }
   }
   if (!canTakeOrder) return <AppScreen title={copy('เลือกเมนู', 'Choose menu item')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('ต้องมีสิทธิ์ take_order', 'The take_order permission is required.')} /></AppScreen>;
+  if (!validParams) return <AppScreen title={copy('เลือกเมนู', 'Choose menu item')} topLevel={false}><EmptyState title={copy('ไม่พบรายการนี้', 'Item not found')} detail={copy('รหัสออเดอร์หรือเมนูไม่ถูกต้อง กรุณากลับไปเลือกใหม่', 'The order or menu ID is invalid. Go back and choose again.')} /></AppScreen>;
   return (
     <AppScreen title={menu?.name || copy('เลือกเมนู', 'Choose menu item')} subtitle={menu ? `${money(menu.price, language)} · ${order?.table?.display_label || order?.order_number || ''}` : copy('กำลังโหลด', 'Loading')} topLevel={false}>
       {error ? <Feedback title={copy('เพิ่มเมนูไม่ได้', 'Could not add this item')} detail={error} tone="danger" /> : null}
       {menu ? (
         <>
           {menu.image_url ? <Image source={{ uri: imageUrl(menu.image_url) }} resizeMode="cover" style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: radius.md, backgroundColor: palette.surfaceStrong }} /> : null}
+          {!menu.is_available ? <Feedback title={copy('เมนูนี้หมดชั่วคราว', 'This menu item is sold out')} detail={copy('กลับไปเลือกเมนูอื่นสำหรับออเดอร์นี้', 'Go back and choose another menu item for this order.')} tone="warning" /> : null}
           <Surface>
             <SectionHeader title={copy('รายละเอียดรายการ', 'Item details')} detail={menu.description || copy('เลือกจำนวนและรูปแบบการเสิร์ฟ', 'Choose the quantity and fulfillment type.')} />
             {order?.order_type !== 'takeaway' ? <ChipGroup label={copy('รูปแบบ', 'Fulfillment')} value={fulfillment} onChange={setFulfillment} options={[{ label: copy('ทานที่ร้าน', 'Dine-in'), value: 'dine_in' }, { label: copy('ซื้อกลับบ้าน', 'Takeaway'), value: 'takeaway' }]} /> : null}
@@ -81,7 +84,7 @@ export default function AddOrderItemScreen() {
           </Surface>
           <Surface>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}><Button compact variant="secondary" label="−" onPress={() => setQuantity((value) => Math.max(1, value - 1))} style={{ width: 48 }} /><Text selectable style={[typeScale.number, { minWidth: 42, textAlign: 'center' }]}>{quantity.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</Text><Button compact variant="secondary" label="+" onPress={() => setQuantity((value) => Math.min(100, value + 1))} disabled={quantity >= 100} style={{ width: 48 }} /><View style={{ flex: 1 }} /><Text selectable style={[typeScale.number, { fontSize: 21 }]}>{money(total, language)}</Text></View>
-            <Button label={copy('เพิ่มเข้าออเดอร์', 'Add to order')} onPress={add} loading={saving} disabled={missingRequired} />
+            <Button label={copy('เพิ่มเข้าออเดอร์', 'Add to order')} onPress={add} loading={saving} disabled={missingRequired || !menu.is_available} />
           </Surface>
         </>
       ) : null}

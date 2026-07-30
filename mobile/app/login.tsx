@@ -77,6 +77,10 @@ export default function LoginScreen() {
 
   const busy = submitting || googleSubmitting || status === 'loading';
 
+  if (status === 'recoverable-error') {
+    return <Redirect href="/" />;
+  }
+
   return (
     <AuthScreen
       title={copy('เข้าใช้งานร้าน', 'Sign in to your restaurant')}

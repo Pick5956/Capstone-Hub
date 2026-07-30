@@ -29,6 +29,7 @@ import {
   staffStatusLabel,
   userDisplayName,
 } from '@/src/lib/staff-workflow';
+import { invitationUrl } from '@/src/lib/public-web-url';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, spacing, typeScale } from '@/src/theme';
@@ -38,7 +39,6 @@ import type {
   RestaurantAuditLog,
 } from '@/src/types/restaurant';
 
-const webUrl = (process.env.EXPO_PUBLIC_WEB_URL?.trim() || 'https://app.example.com').replace(/\/$/, '');
 const auditPageSize = 10;
 
 function formatDateTime(value: string | undefined, language: 'th' | 'en') {
@@ -143,7 +143,7 @@ export default function StaffScreen() {
     if (!isInvitationUsableAt(invitation)) return;
     const restaurantName = activeMembership?.restaurant?.name
       || copy('ร้านอาหาร', 'Restaurant');
-    const link = `${webUrl}/invitations/${invitation.token}`;
+    const link = invitationUrl(invitation.token);
     await Share.share({
       title: copy(
         `คำเชิญเข้าร่วมร้าน ${restaurantName} บน Dishy`,
