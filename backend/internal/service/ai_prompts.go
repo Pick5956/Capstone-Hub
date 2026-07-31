@@ -142,6 +142,28 @@ User question:
 Recent conversation context:
 %s`
 
+// contextRewriteTemplate turns a follow-up fragment into a self-contained
+// question using the conversation ONLY to resolve what the user refers to. It is
+// deliberately forbidden from copying numbers/facts from history — those are
+// looked up fresh from the database, so history informs understanding, never the
+// figures in the answer.
+const contextRewriteTemplate = `You rewrite a restaurant assistant user's latest message into ONE self-contained question, using the conversation so far only to resolve what the user is referring to.
+
+STRICT RULES:
+1. Output ONLY the rewritten question text — no quotes, no explanation, and do NOT answer it.
+2. Resolve references (e.g. "it", "that one", "the second", "มัน", "อันนั้น", "อันที่สอง", "แล้ว...ล่ะ") to the concrete subject from the conversation.
+3. Do NOT copy any numbers, prices, amounts, or facts from the conversation into the question — only the subject/topic. All figures are looked up fresh from the database.
+4. Keep the user's language (Thai stays Thai). Keep it short and natural, as a question.
+5. If the latest message is already self-contained, return it unchanged.
+
+Conversation so far:
+%s
+
+Latest user message:
+%s
+
+Rewritten self-contained question:`
+
 func analyticalPrompt(question string, history []AIConversationMessage, snapshot AISnapshot) (string, error) {
 	snapshotJSON, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {

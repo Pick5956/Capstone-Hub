@@ -180,6 +180,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	groqKeys := s.getGroqKeys()
 	geminiKeys := s.getGeminiKeys()
 
+	// Step 1.5: Context resolution. A follow-up fragment ("แล้วอันที่สองล่ะ",
+	// "ทำไม") is rewritten into a self-contained question using history, so the
+	// assistant continues the conversation. Only references are resolved — every
+	// figure is still looked up fresh downstream, never taken from history.
+	if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
+		aiStage("route", "context rewrite → %q", aiSnippet(resolved, 120))
+		question = resolved
+	}
+
 	// Step 2: Structured JSON AI Router followed by backend policy enforcement.
 	routerResult, routerErr := s.classifyIntent(question)
 	if routerErr != nil {
