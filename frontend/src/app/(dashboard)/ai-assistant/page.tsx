@@ -226,7 +226,7 @@ export default function AIAssistantPage() {
         data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+            ? getGuidedActions(trimmed, data.answer, activeMembership, language, data.tool)
             : [];
       setMessages((prev) => [
         ...prev,

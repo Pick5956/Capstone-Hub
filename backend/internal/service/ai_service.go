@@ -349,6 +349,29 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	toolToRun := routerResult.SuggestedTool
 	provider := s.getAIProvider()
 
+	// Deterministic-first: a fact lookup that maps to a supported tool is answered
+	// straight from the snapshot data, skipping the free-form LLM. The LLM already
+	// did its real job (understanding the question) in the router; letting it also
+	// re-read the numbers only risks hallucinated figures, an irrelevant caveat, or
+	// a different phrasing each time. Answering from the tool keeps fact replies
+	// exact, identical on every ask, and free of prior-turn contamination.
+	if routerResult.Task == AITaskRetrieveFact && isSupportedReadOnlyTool(toolToRun) {
+		result, toolErr := executeReadOnlyTool(toolToRun, snapshot, question)
+		if toolErr != nil {
+			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
+		} else if answer, ok := localToolAnswer(result); ok {
+			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   intent,
+				Task:     routerResult.Task,
+				Tool:     toolToRun,
+				Model:    "local-tool-first",
+				Snapshot: snapshot,
+			}, nil
+		}
+	}
+
 	// executeAnalytical runs one provider's analytical call and handles CALL_TOOL responses.
 	type analyticalFn func() (string, string, error)
 	executeAnalytical := func(callFn analyticalFn, providerName string) (*AIAskResponse, error) {

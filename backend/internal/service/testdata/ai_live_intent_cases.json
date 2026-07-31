@@ -84,5 +84,8 @@
   { "name": "sales named month march", "question": "ยอดขายเดือนมีนาคมเท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
   { "name": "sales this month total", "question": "ยอดขายเดือนนี้เท่าไหร่", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
   { "name": "compare month over month", "question": "เทียบยอดเดือนนี้กับเดือนก่อน", "expected_task": "analyze_data" },
-  { "name": "en sales in march", "question": "how much did we sell in March", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" }
+  { "name": "en sales in march", "question": "how much did we sell in March", "expected_task": "analyze_data", "expected_tool": "get_sales_for_period" },
+
+  { "name": "price slang harsh", "question": "จานไหนราคาโหดสุด", "expected_task": "analyze_data", "expected_tool": "get_most_expensive_menu" },
+  { "name": "price slang strong", "question": "เมนูไหนราคาแรงสุดในร้าน", "expected_task": "analyze_data", "expected_tool": "get_most_expensive_menu" }
 ]
