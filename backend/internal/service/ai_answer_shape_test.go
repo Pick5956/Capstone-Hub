@@ -40,6 +40,34 @@ func TestMostExpensiveAnswerHasNoIrrelevantSalesCaveat(t *testing.T) {
 	}
 }
 
+// TestMostExpensiveMenuConciseByDefault: a singular price question answers with
+// only the top item; a runner-up ranking appears only when a count is requested.
+func TestMostExpensiveMenuConciseByDefault(t *testing.T) {
+	snapshot := AISnapshot{MostExpensiveMenus: []repository.AIMenuPrice{
+		{Name: "ต้มยำกุ้งน้ำข้น", Price: 139},
+		{Name: "แกงเขียวหวานไก่", Price: 129},
+		{Name: "ปีกไก่ทอดน้ำปลา", Price: 99},
+	}}
+
+	res, _ := executeReadOnlyTool(AIToolGetMostExpensiveMenu, snapshot, "เมนูไหนแพงสุด")
+	ans, ok := localToolAnswer(res)
+	if !ok {
+		t.Fatal("expected an answer")
+	}
+	if !strings.Contains(ans, "ต้มยำกุ้งน้ำข้น") {
+		t.Fatalf("missing top item: %s", ans)
+	}
+	if strings.Contains(ans, "อันดับถัดไป") || strings.Contains(ans, "แกงเขียวหวานไก่") {
+		t.Fatalf("singular question should be concise (no runner-up list): %s", ans)
+	}
+
+	res2, _ := executeReadOnlyTool(AIToolGetMostExpensiveMenu, snapshot, "3 อันดับเมนูแพงสุด")
+	ans2, _ := localToolAnswer(res2)
+	if !strings.Contains(ans2, "อันดับถัดไป") || !strings.Contains(ans2, "แกงเขียวหวานไก่") {
+		t.Fatalf("a count request should list runner-ups: %s", ans2)
+	}
+}
+
 // TestFactToolAnswersAreNonEmpty guards the deterministic-first path: every fact
 // tool must return a presentable, non-empty answer from a populated snapshot, so
 // AskOperations can safely skip the LLM for these.

@@ -448,7 +448,20 @@ func executeReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 		period := computeSalesForPeriod(snapshot.SalesDays, snapshot.GeneratedAt, q)
 		return AIToolResult{Tool: tool, SalesForPeriod: &period}, nil
 	case AIToolGetMostExpensiveMenu:
-		return AIToolResult{Tool: tool, MostExpensiveMenus: snapshot.MostExpensiveMenus}, nil
+		// Answer the question as asked: "เมนูไหนแพงสุด" (singular) returns just the
+		// top item; a ranking is only listed when the user asks for a count
+		// ("5 อันดับเมนูแพงสุด"), mirroring get_top_selling_menus.
+		menus := snapshot.MostExpensiveMenus
+		limit := 1
+		if len(question) > 0 {
+			if requested, ok := requestedTopSellingLimit(question[0]); ok && requested > 0 {
+				limit = requested
+			}
+		}
+		if limit < len(menus) {
+			menus = menus[:limit]
+		}
+		return AIToolResult{Tool: tool, MostExpensiveMenus: menus}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
