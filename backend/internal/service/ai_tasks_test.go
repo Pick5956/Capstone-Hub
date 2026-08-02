@@ -265,7 +265,7 @@ func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T)
 	if !ok {
 		t.Fatal("lowest-margin tool should produce an answer when validated data is available")
 	}
-	for _, expected := range []string{"ต้นทุนรวม 1250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
+	for _, expected := range []string{"ต้นทุนรวม 1,250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
 		}
@@ -443,7 +443,7 @@ func TestMenuRevenueRankingToolFormatsByRevenue(t *testing.T) {
 	if !ok {
 		t.Fatal("menu revenue ranking should produce an answer")
 	}
-	for _, expected := range []string{"ต้มยำกุ้ง", "รายได้รวม: 3000.00 บาท", "ผัดไทย"} {
+	for _, expected := range []string{"ต้มยำกุ้ง", "รายได้รวม: 3,000.00 บาท", "ผัดไทย"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("menu revenue answer missing %q: %s", expected, answer)
 		}
@@ -589,7 +589,7 @@ func TestTopCostIngredientsToolRanksBySpend(t *testing.T) {
 		t.Fatalf("expected กุ้ง first by cost, got %+v", result.TopCostIngredients)
 	}
 	answer, ok := localToolAnswer(result)
-	if !ok || !strings.Contains(answer, "2000.00 บาท") {
+	if !ok || !strings.Contains(answer, "2,000.00 บาท") {
 		t.Fatalf("top cost answer missing value: %q", answer)
 	}
 }
@@ -616,7 +616,7 @@ func TestStoreSummaryToolComposesDeterministicOverview(t *testing.T) {
 	if !ok {
 		t.Fatal("store summary should produce an answer")
 	}
-	for _, expected := range []string{"ภาพรวมร้าน", "2500.00 บาท", "9 ออเดอร์", "ผัดไทย", "ปอเปี๊ยะทอด", "วัตถุดิบใกล้หมด**: 1"} {
+	for _, expected := range []string{"ภาพรวมร้าน", "2,500.00 บาท", "9 ออเดอร์", "ผัดไทย", "ปอเปี๊ยะทอด", "วัตถุดิบใกล้หมด**: 1"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("store summary missing %q: %s", expected, answer)
 		}
@@ -789,7 +789,7 @@ func TestInventoryValuationToolFormatsCorrectly(t *testing.T) {
 	if !ok {
 		t.Fatal("inventory valuation tool should produce an answer")
 	}
-	for _, expected := range []string{"จำนวนรายการวัตถุดิบทั้งหมด:** 42 รายการ", "วัตถุดิบที่หมดสต็อก:** 3 รายการ", "มูลค่าคลังสินค้ารวม:** **15450.50** บาท"} {
+	for _, expected := range []string{"จำนวนรายการวัตถุดิบทั้งหมด:** 42 รายการ", "วัตถุดิบที่หมดสต็อก:** 3 รายการ", "มูลค่าคลังสินค้ารวม:** **15,450.50** บาท"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("inventory valuation answer is missing %q: %s", expected, answer)
 		}
@@ -811,7 +811,7 @@ func TestSalesSummaryToolFormatsVerifiedTotal(t *testing.T) {
 	if !ok {
 		t.Fatal("sales summary tool should produce an answer")
 	}
-	for _, expected := range []string{"2000.50 บาท", "5 ออเดอร์", "2 วัน"} {
+	for _, expected := range []string{"2,000.50 บาท", "5 ออเดอร์", "2 วัน"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("sales summary answer is missing %q: %s", expected, answer)
 		}
@@ -890,7 +890,7 @@ func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
 	if strings.Contains(finalAnswer2, "1500") || strings.Contains(finalAnswer2, "45%") {
 		t.Fatalf("Hallucinated numbers leaked into final tool answer: %s", finalAnswer2)
 	}
-	for _, expected := range []string{"ข้าวผัดปู", "ต้นทุนรวม 1250.00", "Margin 34.21%"} {
+	for _, expected := range []string{"ข้าวผัดปู", "ต้นทุนรวม 1,250.00", "Margin 34.21%"} {
 		if !strings.Contains(finalAnswer2, expected) {
 			t.Errorf("Expected authoritative answer to mention %q: %s", expected, finalAnswer2)
 		}
@@ -974,7 +974,7 @@ func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testin
 		},
 	}
 	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if strings.Contains(finalAnswer, "12000") || !strings.Contains(finalAnswer, "42 รายการ") || !strings.Contains(finalAnswer, "15450.50") {
+	if strings.Contains(finalAnswer, "12000") || !strings.Contains(finalAnswer, "42 รายการ") || !strings.Contains(finalAnswer, "15,450.50") {
 		t.Fatalf("Hallucinated valuation was not replaced: %s", finalAnswer)
 	}
 }

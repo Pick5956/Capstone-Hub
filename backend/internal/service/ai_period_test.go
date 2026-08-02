@@ -127,7 +127,7 @@ func TestResolveDatedSalesRequestNoPeriod(t *testing.T) {
 func TestFormatDatedSalesAnswer(t *testing.T) {
 	p := monthPeriod(2026, time.March, bangkokLocation())
 	got := formatDatedSalesAnswer(p, repository.AISalesRange{Orders: 42, Revenue: 12345.5, Days: 20})
-	for _, want := range []string{"เดือนมีนาคม 2569", "12345.50 บาท", "42 ออเดอร์", "20 วัน"} {
+	for _, want := range []string{"เดือนมีนาคม 2569", "12,345.50 บาท", "42 ออเดอร์", "20 วัน"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("answer missing %q: %s", want, got)
 		}
@@ -146,7 +146,7 @@ func TestFormatDatedSalesComparison(t *testing.T) {
 		b,
 		repository.AISalesRange{Orders: 40, Revenue: 10000},
 	)
-	for _, want := range []string{"เดือนกรกฎาคม 2569", "เดือนมิถุนายน 2569", "12000.00 บาท", "10000.00 บาท", "+20.0%", "เพิ่มขึ้น"} {
+	for _, want := range []string{"เดือนกรกฎาคม 2569", "เดือนมิถุนายน 2569", "12,000.00 บาท", "10,000.00 บาท", "+20.0%", "เพิ่มขึ้น"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("comparison missing %q: %s", want, got)
 		}

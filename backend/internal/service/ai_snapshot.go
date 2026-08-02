@@ -12,7 +12,9 @@ func (s *AIService) buildSnapshot(restaurantID uint) (AISnapshot, error) {
 	if s.repo == nil {
 		return AISnapshot{}, errors.New("restaurant repository is not initialized")
 	}
-	since := repository.BangkokNow().AddDate(0, 0, -14)
+	// Derived from analysisWindowDays so the data, the forecast maths, and the
+	// wording in every answer always describe the same period.
+	since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
 	ingredients, err := s.repo.ListIngredients(restaurantID)
 	if err != nil {
 		return AISnapshot{}, err

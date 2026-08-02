@@ -264,16 +264,16 @@ func formatDatedSalesAnswer(p AIPeriod, d repository.AISalesRange) string {
 		return fmt.Sprintf("ยอดขาย%s ยังไม่มีออเดอร์ที่ชำระเงินครับ", p.Label)
 	}
 	return fmt.Sprintf(
-		"ยอดขาย%s คือ %.2f บาท จาก %d ออเดอร์ (มีการขาย %d วัน) ครับ",
-		p.Label, d.Revenue, d.Orders, d.Days,
+		"ยอดขาย%s คือ %s บาท จาก %d ออเดอร์ (มีการขาย %d วัน) ครับ",
+		p.Label, formatMoney(d.Revenue), d.Orders, d.Days,
 	)
 }
 
 func formatDatedSalesComparison(a AIPeriod, da repository.AISalesRange, b AIPeriod, db repository.AISalesRange) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("เทียบยอดขายระหว่าง %s กับ %s ครับ\n\n", a.Label, b.Label))
-	sb.WriteString(fmt.Sprintf("- %s: %.2f บาท (%d ออเดอร์)\n", a.Label, da.Revenue, da.Orders))
-	sb.WriteString(fmt.Sprintf("- %s: %.2f บาท (%d ออเดอร์)\n", b.Label, db.Revenue, db.Orders))
+	sb.WriteString(fmt.Sprintf("- %s: %s บาท (%d ออเดอร์)\n", a.Label, formatMoney(da.Revenue), da.Orders))
+	sb.WriteString(fmt.Sprintf("- %s: %s บาท (%d ออเดอร์)\n", b.Label, formatMoney(db.Revenue), db.Orders))
 	switch {
 	case db.Revenue > 0:
 		pct := (da.Revenue - db.Revenue) / db.Revenue * 100

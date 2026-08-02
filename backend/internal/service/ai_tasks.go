@@ -618,8 +618,6 @@ func median(values []float64) float64 {
 	return (sorted[n/2-1] + sorted[n/2]) / 2
 }
 
-const analysisWindowDays = 14.0
-
 // computeReorderForecast estimates days-until-out from each ingredient's usage
 // over the window; ingredients with no usage are excluded (cannot forecast).
 func computeReorderForecast(usage []repository.AIIngredientUsage) []AIReorderItem {
@@ -690,15 +688,15 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+			"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
 			menu.MenuName,
 			menu.Quantity,
-			menu.Revenue,
-			menu.Cost,
-			menu.Profit,
+			formatMoney(menu.Revenue),
+			formatMoney(menu.Cost),
+			formatMoney(menu.Profit),
 			menu.Margin,
-			menu.Cost/quantity,
-			menu.Profit/quantity,
+			formatMoney(menu.Cost/quantity),
+			formatMoney(menu.Profit/quantity),
 		), true
 
 	case AIToolGetHighestMarginMenu:
@@ -708,15 +706,15 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่ทำกำไรได้ดีที่สุด (Margin สูงสุด) คือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %.2f บาท\n- ต้นทุนรวม %.2f บาท\n- กำไรรวม %.2f บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- กำไรเฉลี่ยต่อจาน %.2f บาท\n\nเมนูนี้เป็นตัวทำกำไรหลักของร้าน เหมาะกับการผลักดันให้ขายมากขึ้น หากต้องการวิเคราะห์แนวทางโปรโมทหรือจัดเซ็ต ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+			"เมนูที่ทำกำไรได้ดีที่สุด (Margin สูงสุด) คือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท\n\nเมนูนี้เป็นตัวทำกำไรหลักของร้าน เหมาะกับการผลักดันให้ขายมากขึ้น หากต้องการวิเคราะห์แนวทางโปรโมทหรือจัดเซ็ต ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
 			menu.MenuName,
 			menu.Quantity,
-			menu.Revenue,
-			menu.Cost,
-			menu.Profit,
+			formatMoney(menu.Revenue),
+			formatMoney(menu.Cost),
+			formatMoney(menu.Profit),
 			menu.Margin,
-			menu.Cost/quantity,
-			menu.Profit/quantity,
+			formatMoney(menu.Cost/quantity),
+			formatMoney(menu.Profit/quantity),
 		), true
 
 	case AIToolGetLowStockIngredients:
@@ -740,10 +738,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetTopSellingMenus:
 		menus := result.TopSellingMenus
 		if len(menus) == 0 {
-			return "ในช่วง 14 วันที่ผ่านมาร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", true
+			return fmt.Sprintf("ในช่วง%sร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString("เมนูที่ขายดีที่สุดในช่วงวิเคราะห์มีดังนี้ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("เมนูที่ขายดีที่สุดในช่วง%sมีดังนี้ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -754,8 +752,8 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			if menu.Quantity > 0 {
 				avgPrice = menu.Revenue / float64(menu.Quantity)
 			}
-			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • จำนวนที่ขายได้: %d จาน\n  • รายได้รวม: %.2f บาท (ราคาเฉลี่ย %.2f บาท/จาน)\n",
-				i+1, menu.MenuName, menu.Quantity, menu.Revenue, avgPrice))
+			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • จำนวนที่ขายได้: %d จาน\n  • รายได้รวม: %s บาท (ราคาเฉลี่ย %s บาท/จาน)\n",
+				i+1, menu.MenuName, menu.Quantity, formatMoney(menu.Revenue), formatMoney(avgPrice)))
 		}
 		return sb.String(), true
 
@@ -769,21 +767,22 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 				"- **จำนวนรายการวัตถุดิบทั้งหมด:** %d รายการ\n"+
 				"- **วัตถุดิบที่หมดสต็อก:** %d รายการ\n"+
 				"- **วัตถุดิบที่เหลือน้อย:** %d รายการ\n"+
-				"- **มูลค่าคลังสินค้ารวม:** **%.2f** บาท\n\n"+
+				"- **มูลค่าคลังสินค้ารวม:** **%s** บาท\n\n"+
 				"หากต้องการเช็กรายชื่อวัตถุดิบที่เหลือน้อย สามารถถามว่า \"มีวัตถุดิบอะไรใกล้หมดบ้าง\" ได้เลยครับ",
 			val.TotalItems,
 			val.OutItems,
 			val.LowItems,
-			val.Value,
+			formatMoney(val.Value),
 		), true
 	case AIToolGetSalesSummary:
 		summary := result.SalesSummary
 		if summary == nil {
-			return "ยังไม่มีข้อมูลยอดขายที่ยืนยันได้ในช่วง 14 วันล่าสุดครับ", true
+			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายที่ยืนยันได้ในช่วง%sครับ", analysisWindowLabel()), true
 		}
 		return fmt.Sprintf(
-			"ยอดขายรวมช่วง 14 วันล่าสุดคือ %.2f บาทครับ\n\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
-			summary.Revenue,
+			"ยอดขายรวมช่วง%sคือ %s บาทครับ\n\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			analysisWindowLabel(),
+			formatMoney(summary.Revenue),
 			summary.Orders,
 			summary.Days,
 		), true
@@ -794,12 +793,12 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่มีต้นทุนต่อจานต่ำที่สุดคือ %s ครับ\n\n- ต้นทุนเฉลี่ยต่อจาน %.2f บาท\n- ขายได้ %d จาน\n- ต้นทุนรวม %.2f บาท\n- ราคาขายเฉลี่ยต่อจาน %.2f บาท\n\nต้นทุนต่ำต่อจานทำให้เมนูนี้ยืดหยุ่นในการตั้งราคาหรือจัดโปรได้ครับ",
+			"เมนูที่มีต้นทุนต่อจานต่ำที่สุดคือ %s ครับ\n\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- ขายได้ %d จาน\n- ต้นทุนรวม %s บาท\n- ราคาขายเฉลี่ยต่อจาน %s บาท\n\nต้นทุนต่ำต่อจานทำให้เมนูนี้ยืดหยุ่นในการตั้งราคาหรือจัดโปรได้ครับ",
 			menu.MenuName,
-			menu.Cost/quantity,
+			formatMoney(menu.Cost/quantity),
 			menu.Quantity,
-			menu.Cost,
-			menu.Revenue/quantity,
+			formatMoney(menu.Cost),
+			formatMoney(menu.Revenue/quantity),
 		), true
 	case AIToolGetSalesTrend:
 		trend := result.SalesTrend
@@ -808,8 +807,8 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		if !trend.HasPrior {
 			return fmt.Sprintf(
-				"ยอดขาย 7 วันล่าสุดคือ %.2f บาท (%d ออเดอร์) ครับ\n\nยังไม่มีข้อมูลสัปดาห์ก่อนหน้าให้เทียบแนวโน้ม จึงยังบอกว่าโตหรือหดไม่ได้ครับ",
-				trend.RecentRevenue, trend.RecentOrders,
+				"ยอดขาย 7 วันล่าสุดคือ %s บาท (%d ออเดอร์) ครับ\n\nยังไม่มีข้อมูลสัปดาห์ก่อนหน้าให้เทียบแนวโน้ม จึงยังบอกว่าโตหรือหดไม่ได้ครับ",
+				formatMoney(trend.RecentRevenue), trend.RecentOrders,
 			), true
 		}
 		direction := "เพิ่มขึ้น 📈"
@@ -817,10 +816,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			direction = "ลดลง 📉"
 		}
 		return fmt.Sprintf(
-			"แนวโน้มยอดขายเทียบสัปดาห์ก่อน %s ครับ\n\n- 7 วันล่าสุด: %.2f บาท (%d ออเดอร์)\n- 7 วันก่อนหน้า: %.2f บาท (%d ออเดอร์)\n- เปลี่ยนแปลง: %+.1f%%",
+			"แนวโน้มยอดขายเทียบสัปดาห์ก่อน %s ครับ\n\n- 7 วันล่าสุด: %s บาท (%d ออเดอร์)\n- 7 วันก่อนหน้า: %s บาท (%d ออเดอร์)\n- เปลี่ยนแปลง: %+.1f%%",
 			direction,
-			trend.RecentRevenue, trend.RecentOrders,
-			trend.PriorRevenue, trend.PriorOrders,
+			formatMoney(trend.RecentRevenue), trend.RecentOrders,
+			formatMoney(trend.PriorRevenue), trend.PriorOrders,
 			trend.RevenueChangePct,
 		), true
 	case AIToolGetAverageOrderValue:
@@ -829,13 +828,13 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับคำนวณยอดเฉลี่ยต่อบิลครับ", true
 		}
 		return fmt.Sprintf(
-			"ยอดขายเฉลี่ยต่อบิลช่วง 14 วันล่าสุดคือ %.2f บาทครับ\n\n- รายได้รวม %.2f บาท\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
-			aov.AOV, aov.Revenue, aov.Orders, aov.Days,
+			"ยอดขายเฉลี่ยต่อบิลช่วง%sคือ %s บาทครับ\n\n- รายได้รวม %s บาท\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			analysisWindowLabel(), formatMoney(aov.AOV), formatMoney(aov.Revenue), aov.Orders, aov.Days,
 		), true
 	case AIToolGetOrderTypeBreakdown:
 		types := result.OrderTypeBreakdown
 		if len(types) == 0 {
-			return "ยังไม่มีข้อมูลออเดอร์ในช่วง 14 วันล่าสุดสำหรับแยกตามประเภทการสั่งครับ", true
+			return fmt.Sprintf("ยังไม่มีข้อมูลออเดอร์ในช่วง%sสำหรับแยกตามประเภทการสั่งครับ", analysisWindowLabel()), true
 		}
 		var total float64
 		for _, t := range types {
@@ -843,7 +842,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		labels := map[string]string{"dine_in": "ทานที่ร้าน", "takeaway": "ซื้อกลับ", "take_away": "ซื้อกลับ", "delivery": "เดลิเวอรี"}
 		var sb strings.Builder
-		sb.WriteString("สัดส่วนยอดขายตามประเภทการสั่งช่วง 14 วันล่าสุดครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("สัดส่วนยอดขายตามประเภทการสั่งช่วง%sครับ:\n\n", analysisWindowLabel()))
 		for _, t := range types {
 			name := labels[t.OrderType]
 			if name == "" {
@@ -853,16 +852,16 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			if total > 0 {
 				pct = t.Revenue / total * 100
 			}
-			sb.WriteString(fmt.Sprintf("- **%s**: %.2f บาท (%d ออเดอร์, %.1f%%)\n", name, t.Revenue, t.Orders, pct))
+			sb.WriteString(fmt.Sprintf("- **%s**: %s บาท (%d ออเดอร์, %.1f%%)\n", name, formatMoney(t.Revenue), t.Orders, pct))
 		}
 		return sb.String(), true
 	case AIToolGetMenuRevenueRanking:
 		menus := result.MenuRevenueRanking
 		if len(menus) == 0 {
-			return "ในช่วง 14 วันที่ผ่านมาร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", true
+			return fmt.Sprintf("ในช่วง%sร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString("เมนูที่ทำรายได้สูงที่สุดในช่วงวิเคราะห์มีดังนี้ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("เมนูที่ทำรายได้สูงที่สุดในช่วง%sมีดังนี้ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -873,8 +872,8 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			if menu.Quantity > 0 {
 				avgPrice = menu.Revenue / float64(menu.Quantity)
 			}
-			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • รายได้รวม: %.2f บาท\n  • ขายได้ %d จาน (ราคาเฉลี่ย %.2f บาท/จาน)\n",
-				i+1, menu.MenuName, menu.Revenue, menu.Quantity, avgPrice))
+			sb.WriteString(fmt.Sprintf("%d. **%s**\n  • รายได้รวม: %s บาท\n  • ขายได้ %d จาน (ราคาเฉลี่ย %s บาท/จาน)\n",
+				i+1, menu.MenuName, formatMoney(menu.Revenue), menu.Quantity, formatMoney(avgPrice)))
 		}
 		return sb.String(), true
 	case AIToolGetPeakPeriods:
@@ -883,7 +882,8 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับดูช่วงเวลาขายดีครับ", true
 		}
 		return fmt.Sprintf(
-			"ช่วงที่ร้านขายดีที่สุดในรอบ 14 วันครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
+			"ช่วงที่ร้านขายดีที่สุดในช่วง%sครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
+			analysisWindowLabel(),
 			thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders,
 			peak.TopHour, peak.TopHour, peak.TopHourOrders,
 		), true
@@ -893,7 +893,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลเมนูสำหรับประเมินเมนูขายช้าครับ", true
 		}
 		var sb strings.Builder
-		sb.WriteString("เมนูที่ขายได้น้อยที่สุดในรอบ 14 วัน (ควรพิจารณาปรับปรุงหรือถอด) ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("เมนูที่ขายได้น้อยที่สุดในช่วง%s (ควรพิจารณาปรับปรุงหรือถอด) ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -903,7 +903,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			if menu.Quantity == 0 {
 				sb.WriteString(fmt.Sprintf("- **%s**: ไม่มีคนสั่งเลย\n", menu.MenuName))
 			} else {
-				sb.WriteString(fmt.Sprintf("- **%s**: ขายได้ %d จาน (รายได้ %.2f บาท)\n", menu.MenuName, menu.Quantity, menu.Revenue))
+				sb.WriteString(fmt.Sprintf("- **%s**: ขายได้ %d จาน (รายได้ %s บาท)\n", menu.MenuName, menu.Quantity, formatMoney(menu.Revenue)))
 			}
 		}
 		return sb.String(), true
@@ -945,33 +945,33 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetDeadStock:
 		items := result.DeadStock
 		if len(items) == 0 {
-			return "ไม่พบวัตถุดิบที่มีสต๊อกค้างแต่ไม่ถูกใช้เลยในช่วง 14 วันครับ การหมุนเวียนวัตถุดิบทำได้ดีครับ 👍", true
+			return fmt.Sprintf("ไม่พบวัตถุดิบที่มีสต๊อกค้างแต่ไม่ถูกใช้เลยในช่วง%sครับ การหมุนเวียนวัตถุดิบทำได้ดีครับ 👍", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString("วัตถุดิบที่มีสต๊อกค้างแต่ไม่ได้ถูกใช้เลยในรอบ 14 วัน (เงินจม/เสี่ยงหมดอายุ) ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("วัตถุดิบที่มีสต๊อกค้างแต่ไม่ได้ถูกใช้เลยในช่วง%s (เงินจม/เสี่ยงหมดอายุ) ครับ:\n\n", analysisWindowLabel()))
 		for _, it := range items {
-			sb.WriteString(fmt.Sprintf("- **%s**: คงเหลือ %.2f %s (มูลค่าประมาณ %.2f บาท)\n", it.Name, it.Stock, it.Unit, it.Value))
+			sb.WriteString(fmt.Sprintf("- **%s**: คงเหลือ %.2f %s (มูลค่าประมาณ %s บาท)\n", it.Name, it.Stock, it.Unit, formatMoney(it.Value)))
 		}
 		return sb.String(), true
 	case AIToolGetTopCostIngredients:
 		items := result.TopCostIngredients
 		if len(items) == 0 {
-			return "ยังไม่มีข้อมูลต้นทุนการใช้วัตถุดิบในช่วง 14 วันครับ", true
+			return fmt.Sprintf("ยังไม่มีข้อมูลต้นทุนการใช้วัตถุดิบในช่วง%sครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString("วัตถุดิบที่ใช้ต้นทุนสูงที่สุดในรอบ 14 วัน (ควรจับตา/ต่อรองซัพพลายเออร์) ครับ:\n\n")
+		sb.WriteString(fmt.Sprintf("วัตถุดิบที่ใช้ต้นทุนสูงที่สุดในช่วง%s (ควรจับตา/ต่อรองซัพพลายเออร์) ครับ:\n\n", analysisWindowLabel()))
 		for i, it := range items {
-			sb.WriteString(fmt.Sprintf("%d. **%s**: ต้นทุนรวม %.2f บาท (ใช้ไป %.2f %s)\n", i+1, it.Name, it.Cost, it.Used, it.Unit))
+			sb.WriteString(fmt.Sprintf("%d. **%s**: ต้นทุนรวม %s บาท (ใช้ไป %.2f %s)\n", i+1, it.Name, formatMoney(it.Cost), it.Used, it.Unit))
 		}
 		return sb.String(), true
 	case AIToolGetStoreSummary:
 		s := result.StoreSummary
 		if s == nil || s.Orders == 0 {
-			return "ยังไม่มีข้อมูลยอดขายในช่วง 14 วันล่าสุดสำหรับสรุปภาพรวมครับ", true
+			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายในช่วง%sสำหรับสรุปภาพรวมครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString("สรุปภาพรวมร้าน (ช่วง 14 วันล่าสุด) ครับ:\n\n")
-		sb.WriteString(fmt.Sprintf("- **ยอดขายรวม**: %.2f บาท จาก %d ออเดอร์\n", s.Revenue, s.Orders))
+		sb.WriteString(fmt.Sprintf("สรุปภาพรวมร้าน (ช่วง%s) ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("- **ยอดขายรวม**: %s บาท จาก %d ออเดอร์\n", formatMoney(s.Revenue), s.Orders))
 		if s.Trend != nil && s.Trend.HasPrior {
 			dir := "เพิ่มขึ้น 📈"
 			if s.Trend.RevenueChangePct < 0 {
@@ -1006,7 +1006,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		if p.Orders == 0 {
 			return fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ครับ", p.Label), true
 		}
-		return fmt.Sprintf("ยอดขาย%sคือ %.2f บาท จาก %d ออเดอร์ครับ", p.Label, p.Revenue, p.Orders), true
+		return fmt.Sprintf("ยอดขาย%sคือ %s บาท จาก %d ออเดอร์ครับ", p.Label, formatMoney(p.Revenue), p.Orders), true
 	case AIToolGetMostExpensiveMenu:
 		menus := result.MostExpensiveMenus
 		if len(menus) == 0 {
@@ -1014,7 +1014,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		top := menus[0]
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("เมนูที่ตั้งราคาสูงที่สุดคือ **%s** ราคา %.2f บาทต่อจานครับ", top.Name, top.Price))
+		sb.WriteString(fmt.Sprintf("เมนูที่ตั้งราคาสูงที่สุดคือ **%s** ราคา %s บาทต่อจานครับ", top.Name, formatMoney(top.Price)))
 		if len(menus) > 1 {
 			sb.WriteString("\n\nอันดับถัดไป:")
 			limit := len(menus)
@@ -1022,7 +1022,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 				limit = 5
 			}
 			for i := 1; i < limit; i++ {
-				sb.WriteString(fmt.Sprintf("\n- %s: %.2f บาท", menus[i].Name, menus[i].Price))
+				sb.WriteString(fmt.Sprintf("\n- %s: %s บาท", menus[i].Name, formatMoney(menus[i].Price)))
 			}
 		}
 		return sb.String(), true

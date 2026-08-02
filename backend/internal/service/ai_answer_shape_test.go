@@ -68,6 +68,37 @@ func TestMostExpensiveMenuConciseByDefault(t *testing.T) {
 	}
 }
 
+func TestFormatMoneyGroupsThousands(t *testing.T) {
+	cases := map[float64]string{
+		0:          "0.00",
+		9.5:        "9.50",
+		999:        "999.00",
+		1000:       "1,000.00",
+		12345.5:    "12,345.50",
+		588804:     "588,804.00",
+		3851244:    "3,851,244.00",
+		-12345.5:   "-12,345.50",
+		1234567.89: "1,234,567.89",
+	}
+	for in, want := range cases {
+		if got := formatMoney(in); got != want {
+			t.Errorf("formatMoney(%v) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The window wording must be derived from the constant, so the data and the text
+// can never disagree about which period a figure covers.
+func TestAnalysisWindowLabelMatchesConstant(t *testing.T) {
+	want := "30 วันล่าสุด"
+	if analysisWindowDays != 30 {
+		t.Fatalf("analysisWindowDays changed to %v — update this expectation and check every answer string", analysisWindowDays)
+	}
+	if got := analysisWindowLabel(); got != want {
+		t.Errorf("analysisWindowLabel() = %q, want %q", got, want)
+	}
+}
+
 // TestFactToolAnswersAreNonEmpty guards the deterministic-first path: every fact
 // tool must return a presentable, non-empty answer from a populated snapshot, so
 // AskOperations can safely skip the LLM for these.

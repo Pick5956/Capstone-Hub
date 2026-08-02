@@ -172,7 +172,7 @@ func ingredientDescriptor(dim, dir string) string {
 func ingredientValueString(dim string, r ingredientMetricRow) string {
 	switch dim {
 	case "cost":
-		return fmt.Sprintf("ต้นทุนที่ใช้ %.2f บาท", r.Cost)
+		return fmt.Sprintf("ต้นทุนที่ใช้ %s บาท", formatMoney(r.Cost))
 	case "usage":
 		return fmt.Sprintf("ใช้ไป %.2f %s", r.Used, r.Unit)
 	case "stock":

@@ -106,7 +106,9 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 		).
 		Group("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
 		Order("order_date desc").
-		Limit(14).
+		// Generous cap: one row per day, so it must not truncate the analysis
+		// window (the caller decides the window via `since`).
+		Limit(120).
 		Scan(&rows).Error
 	return rows, err
 }

@@ -120,7 +120,7 @@ func TestLocalLowestMarginFactAnswerKeepsTotalsAndPerItemValuesSeparate(t *testi
 	if !ok {
 		t.Fatal("lowest margin fact should use a deterministic local answer when margin data is ready")
 	}
-	for _, expected := range []string{"ต้นทุนรวม 1250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
+	for _, expected := range []string{"ต้นทุนรวม 1,250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
 		}

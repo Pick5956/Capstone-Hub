@@ -231,15 +231,15 @@ func menuRankDescriptor(metric, direction string, rank int) string {
 func menuValueString(metric string, r menuMetricRow) string {
 	switch metric {
 	case "price":
-		return fmt.Sprintf("ราคา %.2f บาท", r.Price)
+		return fmt.Sprintf("ราคา %s บาท", formatMoney(r.Price))
 	case "margin":
 		return fmt.Sprintf("Margin %.2f%%", r.Margin)
 	case "revenue":
-		return fmt.Sprintf("รายได้ %.2f บาท", r.Revenue)
+		return fmt.Sprintf("รายได้ %s บาท", formatMoney(r.Revenue))
 	case "quantity":
 		return fmt.Sprintf("ขายได้ %d จาน", r.Quantity)
 	case "cost":
-		return fmt.Sprintf("ต้นทุน %.2f บาท/จาน", r.Cost)
+		return fmt.Sprintf("ต้นทุน %s บาท/จาน", formatMoney(r.Cost))
 	}
 	return ""
 }
