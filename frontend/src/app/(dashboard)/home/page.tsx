@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -294,8 +294,7 @@ function CollapsibleCard({
   summary,
   expanded,
   dimmed,
-  animateOpen,
-  orderRank,
+  collapsedRank,
   onToggle,
   children,
 }: {
@@ -304,41 +303,104 @@ function CollapsibleCard({
   summary?: CardSummaryItem[];
   expanded: boolean;
   dimmed?: boolean;
-  animateOpen?: boolean;
-  orderRank: number;
+  collapsedRank: number;
   onToggle: () => void;
   children: ReactNode;
 }) {
-  // Closing (or switching straight to a different card) snaps shut instantly.
-  // Opening only fades in when `animateOpen` is set — i.e. opening from a
-  // fully-closed state, not switching from one open card to another.
+  // Fades both ways now: opening fades in, closing fades out before actually
+  // unmounting the section (the parent also delays opening the next card
+  // until this one has fully closed, so switches read as close-then-open).
   const [mounted, setMounted] = useState(expanded);
   const [visible, setVisible] = useState(expanded);
 
   useEffect(() => {
     if (expanded) {
-      if (animateOpen) {
-        setMounted(true);
-        // Two rAFs: the first lets the browser paint the just-mounted "invisible"
-        // state; only then do we flip to visible, so the transition has a real
-        // starting point to animate from (a single rAF can land in the same
-        // paint as the mount and skip the animation entirely).
-        let innerRaf = 0;
-        const outerRaf = requestAnimationFrame(() => {
-          innerRaf = requestAnimationFrame(() => setVisible(true));
-        });
-        return () => {
-          cancelAnimationFrame(outerRaf);
-          cancelAnimationFrame(innerRaf);
-        };
-      }
       setMounted(true);
-      setVisible(true);
+      // Two rAFs: the first lets the browser paint the just-mounted "invisible"
+      // state; only then do we flip to visible, so the transition has a real
+      // starting point to animate from (a single rAF can land in the same
+      // paint as the mount and skip the animation entirely).
+      let innerRaf = 0;
+      const outerRaf = requestAnimationFrame(() => {
+        innerRaf = requestAnimationFrame(() => setVisible(true));
+      });
+      return () => {
+        cancelAnimationFrame(outerRaf);
+        cancelAnimationFrame(innerRaf);
+      };
+    }
+    setVisible(false);
+    const timeout = window.setTimeout(() => setMounted(false), 200);
+    return () => window.clearTimeout(timeout);
+  }, [expanded]);
+
+  // Growing back to the full tile (once `dimmed` clears — which the parent
+  // already delays until the closing card has actually finished fading out)
+  // should itself fade/scale in smoothly instead of just popping into place.
+  const [tileVisible, setTileVisible] = useState(!dimmed);
+  useEffect(() => {
+    setTileVisible(false);
+    if (dimmed) return;
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => setTileVisible(true));
+    });
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      cancelAnimationFrame(innerRaf);
+    };
+  }, [dimmed]);
+
+  // Collapsed cards stack on top, ordered by `collapsedRank` (untouched
+  // siblings keep their relative order; whichever card was just opened or
+  // closed gets bumped to the end); the open one falls below all of them.
+  // Keyed off `mounted` (the shape actually on screen) rather than the raw
+  // `expanded` prop, so a click doesn't jump the tile to its new slot first
+  // and only grow into the section afterwards — position and shape change
+  // together, in the same render, on both open and close.
+  const orderRank = mounted ? 100 : collapsedRank;
+
+  // FLIP: while collapsed (tile or dimmed row), a sibling opening/closing can
+  // shove this card to a different grid slot via `order` or by changing how
+  // many other collapsed cards share the row — both snap instantly by
+  // default. On every render, compare this card's last measured position to
+  // its new one and, if it moved, jump it back with no transition, then
+  // animate the native `translate` back to zero on the next frame.
+  const collapsedRef = useRef<HTMLButtonElement | null>(null);
+  const prevCollapsedRectRef = useRef<DOMRect | null>(null);
+
+  useLayoutEffect(() => {
+    const node = collapsedRef.current;
+    if (mounted || !node) {
+      prevCollapsedRectRef.current = null;
       return;
     }
-    setMounted(false);
-    setVisible(false);
-  }, [expanded, animateOpen]);
+    const newRect = node.getBoundingClientRect();
+    const prevRect = prevCollapsedRectRef.current;
+    if (prevRect) {
+      const deltaX = prevRect.left - newRect.left;
+      const deltaY = prevRect.top - newRect.top;
+      if (deltaX || deltaY) {
+        // Drive this transition entirely via inline style rather than
+        // depending on the button's own className — the dimmed row and tile
+        // have different (and differently-timed) transitions for hover/press
+        // feedback, and this shouldn't borrow or override those.
+        node.style.setProperty("transition", "none", "important");
+        node.style.translate = `${deltaX}px ${deltaY}px`;
+        // Force a reflow so the jump above is committed before animating away from it.
+        void node.getBoundingClientRect();
+        requestAnimationFrame(() => {
+          node.style.setProperty("transition", "translate 320ms cubic-bezier(0.2, 0, 0, 1)", "important");
+          node.style.translate = "0px 0px";
+          window.setTimeout(() => {
+            node.style.removeProperty("transition");
+            node.style.translate = "";
+          }, 320);
+        });
+      }
+    }
+    prevCollapsedRectRef.current = newRect;
+  });
 
   if (!mounted) {
     // A sibling card is expanded and this one isn't — shrink way down, but
@@ -346,6 +408,7 @@ function CollapsibleCard({
     if (dimmed) {
       return (
         <button
+          ref={collapsedRef}
           type="button"
           onClick={onToggle}
           className="ui-press flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-md border border-gray-200 bg-white px-3.5 py-2 text-left hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900"
@@ -368,10 +431,13 @@ function CollapsibleCard({
     }
     return (
       <button
+        ref={collapsedRef}
         type="button"
         onClick={onToggle}
         style={{ order: orderRank }}
-        className="ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out hover:z-10 hover:-rotate-1 hover:scale-[1.05] hover:shadow-lg dark:border-gray-800 dark:bg-gray-950"
+        className={`ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out hover:z-10 hover:-rotate-1 hover:scale-[1.05] hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${
+          tileVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
+        }`}
       >
         <div className="text-center">
           <h2 className="text-[20px] font-bold leading-snug text-gray-950 dark:text-white">{title}</h2>
@@ -463,19 +529,83 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loadedDate, setLoadedDate] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  // Multiple cards can be open at once — opening one just adds it, doesn't close the others.
-  const [expandedCardOrder, setExpandedCardOrder] = useState<string[]>([]);
-  // Every open fades in; closing always snaps shut instantly (no forced-close
-  // sibling to coordinate with anymore, since opening no longer replaces anything).
-  const [freshOpenKey, setFreshOpenKey] = useState<string | null>(null);
+  // Only one card open at a time. Switching to a different card closes the
+  // current one first and only opens the new one once that close has
+  // actually finished fading out, instead of opening on top of it.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [switchingCard, setSwitchingCard] = useState(false);
+  // The card that's currently mid-close (fading out) — excluded from
+  // `isCardDimmed` so it goes straight from "expanded section" to "full
+  // tile" once it unmounts, instead of flashing as a dimmed row for the
+  // last few ms of the `switchingCard` window (it's not a *sibling*, it's
+  // the one that just closed).
+  const [closingKey, setClosingKey] = useState<string | null>(null);
+  // Order the collapsed cards are shown in — whichever card was most
+  // recently interacted with (opened OR just closed) gets bumped to the end,
+  // so the other, untouched cards keep their same relative order and just
+  // slide over to make room, instead of the whole group reshuffling.
+  const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
+  const [cardOrderQueue, setCardOrderQueue] = useState<string[]>(defaultCardOrder);
+  const bumpCardToEnd = (key: string) => {
+    setCardOrderQueue((queue) => (queue[queue.length - 1] === key ? queue : [...queue.filter((k) => k !== key), key]));
+  };
+  // Back to every card showing as a full tile (nothing open, nothing mid
+  // close/switch) — reset back to the default left-to-right order instead of
+  // leaving them wherever the last few opens/closes happened to shuffle them.
+  useEffect(() => {
+    if (expandedKey === null && !switchingCard && closingKey === null) {
+      setCardOrderQueue((queue) => (queue.join() === defaultCardOrder.join() ? queue : defaultCardOrder));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedKey, switchingCard, closingKey]);
+  const pendingSwitchRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (pendingSwitchRef.current) window.clearTimeout(pendingSwitchRef.current);
+    };
+  }, []);
   const toggleCard = (key: string) => {
-    if (expandedCardOrder.includes(key)) {
-      setFreshOpenKey(null);
-      setExpandedCardOrder((order) => order.filter((k) => k !== key));
+    bumpCardToEnd(key);
+    if (pendingSwitchRef.current) {
+      window.clearTimeout(pendingSwitchRef.current);
+      pendingSwitchRef.current = null;
+    }
+    if (expandedKey === key) {
+      // Plain close — keep the other cards dimmed until this one has
+      // actually finished fading out, instead of snapping them back to full
+      // size the instant the close starts.
+      setSwitchingCard(true);
+      setClosingKey(key);
+      setExpandedKey(null);
+      pendingSwitchRef.current = window.setTimeout(() => {
+        setSwitchingCard(false);
+        setClosingKey(null);
+        pendingSwitchRef.current = null;
+      }, 210);
       return;
     }
-    setFreshOpenKey(key);
-    setExpandedCardOrder((order) => [...order, key]);
+    if (expandedKey === null && !switchingCard) {
+      // Nothing was open (and no switch already in flight) — open immediately.
+      setExpandedKey(key);
+      return;
+    }
+    // Something is open, or a previous switch is still closing out — close
+    // (or keep closing) first, then open the new one once that's done. Also
+    // covers re-clicking a third card mid-switch: the stale pending timeout
+    // was already cleared above, so this just restarts the sequence aimed
+    // at the newly clicked key instead. `closingKey` may already be set (if
+    // we're interrupting a still-in-flight close) — keep pointing at that
+    // real card rather than overwriting it with `expandedKey`, which is
+    // already null at this point during an interruption.
+    setSwitchingCard(true);
+    setClosingKey((current) => current ?? expandedKey);
+    setExpandedKey(null);
+    pendingSwitchRef.current = window.setTimeout(() => {
+      setExpandedKey(key);
+      setSwitchingCard(false);
+      setClosingKey(null);
+      pendingSwitchRef.current = null;
+    }, 210);
   };
   const [chartMode, setChartMode] = useState<ChartMode>("hour");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
@@ -770,16 +900,15 @@ export default function Home() {
     { key: "reserved", label: copy.reserved, value: reservedTables.toLocaleString() },
   ];
 
-  // While any card is expanded, its collapsed siblings shrink down to just
-  // their title instead of staying full tiles.
-  const isCardDimmed = (key: string) => expandedCardOrder.length > 0 && !expandedCardOrder.includes(key);
+  // While a card is expanded (or the switch to a different one is still in
+  // its close-then-open sequence), every other card shrinks down to a
+  // compact summary row instead of staying a full tile. The card that's
+  // itself mid-close is excluded so it goes straight back to a full tile
+  // once it finishes collapsing, rather than flashing as a dimmed row first.
+  const isCardDimmed = (key: string) => (expandedKey !== null || switchingCard) && expandedKey !== key && closingKey !== key;
 
-  // Collapsed cards stack on top; expanded ones fall in below, with the
-  // most-recently-opened one first within that group.
-  const cardOrderRank = (key: string) => {
-    const index = expandedCardOrder.indexOf(key);
-    return index === -1 ? -1 : expandedCardOrder.length - index;
-  };
+  // Position among the collapsed cards, per `cardOrderQueue`.
+  const collapsedRank = (key: string) => cardOrderQueue.indexOf(key);
 
   const dateLoading = loading && loadedDate !== selectedDate;
 
@@ -831,10 +960,9 @@ export default function Home() {
             <CollapsibleCard
               title={copy.salesOverview}
               summary={summary}
-              expanded={expandedCardOrder.includes("sales")}
+              expanded={expandedKey === "sales"}
               dimmed={isCardDimmed("sales")}
-              animateOpen={freshOpenKey === "sales"}
-              orderRank={cardOrderRank("sales")}
+              collapsedRank={collapsedRank("sales")}
               onToggle={() => toggleCard("sales")}
             >
               <div className="grid overflow-visible lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
@@ -1019,10 +1147,9 @@ export default function Home() {
               <CollapsibleCard
                 title={copy.liveWork}
                 summary={liveWorkSummary}
-                expanded={expandedCardOrder.includes("liveWork")}
+                expanded={expandedKey === "liveWork"}
                 dimmed={isCardDimmed("liveWork")}
-                animateOpen={freshOpenKey === "liveWork"}
-                orderRank={cardOrderRank("liveWork")}
+                collapsedRank={collapsedRank("liveWork")}
                 onToggle={() => toggleCard("liveWork")}
               >
                 {isToday ? (
@@ -1103,10 +1230,9 @@ export default function Home() {
                 <CollapsibleCard
                   title={copy.floorStatus}
                   summary={floorStatusSummary}
-                  expanded={expandedCardOrder.includes("floorStatus")}
+                  expanded={expandedKey === "floorStatus"}
                   dimmed={isCardDimmed("floorStatus")}
-                  animateOpen={freshOpenKey === "floorStatus"}
-                  orderRank={cardOrderRank("floorStatus")}
+                  collapsedRank={collapsedRank("floorStatus")}
                   onToggle={() => toggleCard("floorStatus")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
