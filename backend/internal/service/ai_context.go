@@ -27,6 +27,11 @@ func looksContextDependent(question string) bool {
 			return true
 		}
 	}
+	// A bare ordinal ("อันดับรองลงมา", "อันดับสอง") names no metric of its own, so
+	// it can only mean something relative to the previous turn.
+	if explicitRank(n) > 1 && !hasMetricWord(n) {
+		return true
+	}
 	return false
 }
 

@@ -106,6 +106,35 @@ func detectMenuDirection(n string) string {
 	return "high"
 }
 
+// explicitRank reads a rank the user stated outright ("รองลงมา", "อันดับสอง",
+// "อันดับที่ 3"), returning 0 when none is present. It is read from the user's own
+// words rather than any rewritten form, so a follow-up never loses its ordinal.
+func explicitRank(question string) int {
+	n := strings.ToLower(strings.TrimSpace(question))
+	if m := reMenuRankNum.FindStringSubmatch(n); m != nil {
+		if v, err := strconv.Atoi(m[1]); err == nil && v > 1 {
+			return v
+		}
+	}
+	if r := detectOrdinalRank(n); r > 1 {
+		return r
+	}
+	return 0
+}
+
+// hasMetricWord reports whether the text names a menu or ingredient metric by
+// itself. "อันดับรองลงมา" does not, which is exactly what makes it a follow-up.
+func hasMetricWord(question string) bool {
+	n := strings.ToLower(strings.TrimSpace(question))
+	if _, ok := detectMenuMetric(n); ok {
+		return true
+	}
+	if _, _, ok := detectIngredientDimension(n); ok {
+		return true
+	}
+	return false
+}
+
 // detectOrdinalRank maps runner-up / ordinal wording to a rank. This is the piece
 // that fixes "รองลงมา".
 func detectOrdinalRank(n string) int {

@@ -184,6 +184,9 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	// "ทำไม") is rewritten into a self-contained question using history, so the
 	// assistant continues the conversation. Only references are resolved — every
 	// figure is still looked up fresh downstream, never taken from history.
+	// askedQuestion keeps the user's own wording; a rewrite can drop details the
+	// structured path still needs (an ordinal such as "รองลงมา").
+	askedQuestion := question
 	if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
 		aiStage("route", "context rewrite → %q", aiSnippet(resolved, 120))
 		question = resolved
@@ -198,8 +201,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
 	}
 
+	// A rank follow-up ("อันดับรองลงมา") reads as vague to the router, but the
+	// previous turn pins down exactly what is being ranked, so it is answerable.
+	structuredFollowUp := hasStructuredRankFollowUp(question, askedQuestion, history)
+	if structuredFollowUp {
+		aiStage("route", "structured rank follow-up detected → skipping clarify/scope gates")
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
-	if routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear {
+	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
 		return &AIAskResponse{
 			Answer:   "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ",
@@ -237,7 +247,7 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	}
 
 	// Block Out-of-Scope Requests (Focus Guard Policy - Dynamic AI Refusal)
-	if routerResult.Task == AITaskOutOfScope {
+	if routerResult.Task == AITaskOutOfScope && !structuredFollowUp {
 		aiStage("flow", "out-of-scope — dynamic refusal")
 		answer, model, err := s.askOutOfScopeWithRotation(question, history)
 		if err == nil {
@@ -261,6 +271,11 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 
 	intent = mapTaskToIntent(routerResult.Task)
 	needsData := routerResult.NeedsRestaurantData || intent == AIIntentAnalysis
+	if structuredFollowUp {
+		// It is a read-only ranking question regardless of how the router labelled it.
+		intent = AIIntentAnalysis
+		needsData = true
+	}
 
 	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
 	if !needsData {
@@ -362,12 +377,13 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	// flow cannot express — "แพงรองลงมา", "กำไรดีอันดับสอง". Those used to fall back
 	// to the #1 item, which reads as a wrong answer. It deliberately claims only
 	// rank >= 2, so every existing rank-1 answer below is untouched.
-	if answer, structuredTool, handled := structuredQueryAnswer(question, snapshot); handled {
+	if answer, structuredTool, handled := structuredQueryAnswer(question, askedQuestion, history, snapshot); handled {
 		aiStage("flow", "structured-query (rank>1) → %s", aiToolOrDash(structuredTool))
 		return &AIAskResponse{
-			Answer:   answer,
-			Intent:   intent,
-			Task:     routerResult.Task,
+			Answer: answer,
+			Intent: intent,
+			// A ranking lookup is a fact retrieval, whatever the router called it.
+			Task:     AITaskRetrieveFact,
 			Tool:     structuredTool,
 			Model:    "local-structured-query",
 			Snapshot: snapshot,

@@ -14,25 +14,157 @@ package service
 // matters because some snapshot lists are one-directional (e.g. the price list
 // holds only the five most expensive menus, so it cannot answer "cheapest").
 
+import "strings"
+
 // structuredQueryAnswer tries the menu domain, then the ingredient domain.
-// Returns the Thai answer, the closest existing tool name (used by the frontend
-// to pick follow-up chips), and whether it handled the question.
-func structuredQueryAnswer(question string, snapshot AISnapshot) (string, AIToolName, bool) {
-	if q, ok := parseMenuRankQuery(question); ok && q.Rank > 1 {
-		if rows, tool, hasData := menuRowsForMetric(snapshot, q.Metric, q.Direction); hasData {
-			if selected := executeMenuRank(rows, q); len(selected) > 0 {
-				return formatMenuRank(q, selected), tool, true
+//
+// question is the (possibly context-rewritten) text; askedQuestion is what the
+// user actually typed. The rank is always read from askedQuestion, because a
+// rewrite can silently drop the ordinal — "อันดับรองลงมาล่ะครับ" must stay rank 2
+// even if the rewrite collapses it back into the earlier question.
+//
+// A follow-up that states only a rank ("อันดับรองลงมา") carries no metric, so the
+// metric is inherited from the most recent question in history that had one. That
+// resolution is deterministic and needs no LLM, which is what makes the follow-up
+// reliable rather than dependent on how the rewrite happened to phrase things.
+//
+// Returns the Thai answer, the closest existing tool name (used by the frontend to
+// pick follow-up chips), and whether it handled the question.
+func structuredQueryAnswer(question, askedQuestion string, history []AIConversationMessage, snapshot AISnapshot) (string, AIToolName, bool) {
+	rank := explicitRank(askedQuestion)
+	if r := explicitRank(question); r > rank {
+		rank = r
+	}
+
+	if q, ok := parseMenuRankQuery(question); ok {
+		if rank > 1 && q.Rank <= 1 {
+			q.Rank, q.Limit = rank, 1
+		}
+		if q.Rank > 1 {
+			if answer, tool, done := answerMenuRank(q, snapshot); done {
+				return answer, tool, true
 			}
 		}
 	}
-	if q, ok := parseIngredientRankQuery(question); ok && q.Rank > 1 {
-		if rows, tool, hasData := ingredientRowsForDimension(snapshot, q.Dimension, q.Direction); hasData {
-			if selected := executeIngredientRank(rows, q); len(selected) > 0 {
-				return formatIngredientRank(q, selected), tool, true
+	if q, ok := parseIngredientRankQuery(question); ok {
+		if rank > 1 && q.Rank <= 1 {
+			q.Rank, q.Limit = rank, 1
+		}
+		if q.Rank > 1 {
+			if answer, tool, done := answerIngredientRank(q, snapshot); done {
+				return answer, tool, true
+			}
+		}
+	}
+
+	// Rank-only follow-up: take the subject from the conversation.
+	if rank > 1 {
+		if q, ok := inheritRankQueryFromHistory(history, askedQuestion, question); ok {
+			q.Rank, q.Limit = rank, 1
+			if answer, tool, done := answerMenuRank(q, snapshot); done {
+				return answer, tool, true
+			}
+		}
+		if q, ok := inheritIngredientQueryFromHistory(history, askedQuestion, question); ok {
+			q.Rank, q.Limit = rank, 1
+			if answer, tool, done := answerIngredientRank(q, snapshot); done {
+				return answer, tool, true
 			}
 		}
 	}
 	return "", "", false
+}
+
+// hasStructuredRankFollowUp reports whether the message is a rank request we can
+// resolve deterministically. It needs no snapshot, so AskOperations can check it
+// before the confidence gate: "อันดับรองลงมา" looks vague to the router and would
+// otherwise be answered with "please be more specific", even though the previous
+// turn tells us exactly what is being ranked.
+func hasStructuredRankFollowUp(question, askedQuestion string, history []AIConversationMessage) bool {
+	if explicitRank(askedQuestion) <= 1 && explicitRank(question) <= 1 {
+		return false
+	}
+	if _, ok := parseMenuRankQuery(question); ok {
+		return true
+	}
+	if _, ok := parseIngredientRankQuery(question); ok {
+		return true
+	}
+	if _, ok := inheritRankQueryFromHistory(history, askedQuestion, question); ok {
+		return true
+	}
+	_, ok := inheritIngredientQueryFromHistory(history, askedQuestion, question)
+	return ok
+}
+
+func answerMenuRank(q menuRankQuery, snapshot AISnapshot) (string, AIToolName, bool) {
+	rows, tool, hasData := menuRowsForMetric(snapshot, q.Metric, q.Direction)
+	if !hasData {
+		return "", "", false
+	}
+	selected := executeMenuRank(rows, q)
+	if len(selected) == 0 {
+		return "", "", false
+	}
+	return formatMenuRank(q, selected), tool, true
+}
+
+func answerIngredientRank(q ingredientRankQuery, snapshot AISnapshot) (string, AIToolName, bool) {
+	rows, tool, hasData := ingredientRowsForDimension(snapshot, q.Dimension, q.Direction)
+	if !hasData {
+		return "", "", false
+	}
+	selected := executeIngredientRank(rows, q)
+	if len(selected) == 0 {
+		return "", "", false
+	}
+	return formatIngredientRank(q, selected), tool, true
+}
+
+// inheritRankQueryFromHistory walks the user's earlier messages newest-first and
+// returns the most recent one that named a menu metric.
+func inheritRankQueryFromHistory(history []AIConversationMessage, exclude ...string) (menuRankQuery, bool) {
+	for i := len(history) - 1; i >= 0; i-- {
+		content, ok := historyUserQuestion(history[i], exclude)
+		if !ok {
+			continue
+		}
+		if q, ok := parseMenuRankQuery(content); ok && hasMetricWord(content) {
+			return q, true
+		}
+	}
+	return menuRankQuery{}, false
+}
+
+func inheritIngredientQueryFromHistory(history []AIConversationMessage, exclude ...string) (ingredientRankQuery, bool) {
+	for i := len(history) - 1; i >= 0; i-- {
+		content, ok := historyUserQuestion(history[i], exclude)
+		if !ok {
+			continue
+		}
+		if q, ok := parseIngredientRankQuery(content); ok && hasMetricWord(content) {
+			return q, true
+		}
+	}
+	return ingredientRankQuery{}, false
+}
+
+// historyUserQuestion returns a past user message, skipping the current question
+// in case the client included it in the history it sent.
+func historyUserQuestion(msg AIConversationMessage, exclude []string) (string, bool) {
+	if msg.Role != "user" {
+		return "", false
+	}
+	content := strings.TrimSpace(msg.Content)
+	if content == "" {
+		return "", false
+	}
+	for _, ex := range exclude {
+		if strings.EqualFold(content, strings.TrimSpace(ex)) {
+			return "", false
+		}
+	}
+	return content, true
 }
 
 // menuRowsForMetric maps a metric onto the snapshot list that can rank it
