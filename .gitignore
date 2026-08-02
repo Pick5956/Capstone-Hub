@@ -52,8 +52,7 @@ PRODUCT.md
 /.obsidian
 
 # AI Agent Capstone Docs - Local Only
-AI_AGENT_BEHAVIOR_TESTING.md
-AI_AGENT_OVERVIEW.md
+/Agent_testing
 
 # seed ข้อมูลทดสอบ — เก็บ local เท่านั้น ไม่ push
 backend/cmd/seed_demo_orders/
