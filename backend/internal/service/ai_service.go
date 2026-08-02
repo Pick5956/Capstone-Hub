@@ -360,6 +360,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
 
+	// Sales for a service period ("ช่วงเที่ยงวันนี้") — finer than a whole day, so
+	// it cannot come from the day-level snapshot.
+	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
+		aiStage("flow", "day-part sales query — hour-scoped range query")
+		return partResp, nil
+	} else if pErr != nil {
+		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
+	}
+
 	// "How far does the data reach?" — answered from the full history, not the
 	// rolling window, so it works even when today has no sales.
 	if covResp, handled, cErr := s.answerDataCoverage(restaurantID, question); handled {

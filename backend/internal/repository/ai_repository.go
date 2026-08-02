@@ -116,6 +116,34 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 // SalesForRange aggregates paid, completed sales in the half-open window
 // [start, end). Unlike RecentSalesSummary it is not capped to 14 rows, so it can
 // answer named-month and month-to-month questions.
+// SalesForHourRange aggregates paid sales inside [start, end) that were closed
+// during the hours [startHour, endHour) in Bangkok time — "how did lunch go?".
+// The hour is taken from completed_at so the figure stays consistent with every
+// other revenue number, which is also attributed to when the bill was closed.
+func (r *AIRepository) SalesForHourRange(restaurantID uint, start, end time.Time, startHour, endHour int) (AISalesRange, error) {
+	var res AISalesRange
+	err := r.db.Model(&entity.Order{}).
+		Select(`
+			COUNT(*) AS orders,
+			COALESCE(SUM(grand_total), 0) AS revenue,
+			COUNT(DISTINCT TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS days`).
+		Where(
+			`restaurant_id = ? AND completed_at >= ? AND completed_at < ?
+			 AND EXTRACT(HOUR FROM completed_at AT TIME ZONE 'Asia/Bangkok') >= ?
+			 AND EXTRACT(HOUR FROM completed_at AT TIME ZONE 'Asia/Bangkok') < ?
+			 AND status = ? AND payment_status = ?`,
+			restaurantID,
+			start,
+			end,
+			startHour,
+			endHour,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Scan(&res).Error
+	return res, err
+}
+
 // AISalesCoverage describes how far the recorded sales history actually reaches.
 type AISalesCoverage struct {
 	FirstDate string  `json:"first_date"`
