@@ -358,6 +358,22 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	toolToRun := routerResult.SuggestedTool
 	provider := s.getAIProvider()
 
+	// Structured query (intent-schema): handles ranks the one-tool-per-question
+	// flow cannot express — "แพงรองลงมา", "กำไรดีอันดับสอง". Those used to fall back
+	// to the #1 item, which reads as a wrong answer. It deliberately claims only
+	// rank >= 2, so every existing rank-1 answer below is untouched.
+	if answer, structuredTool, handled := structuredQueryAnswer(question, snapshot); handled {
+		aiStage("flow", "structured-query (rank>1) → %s", aiToolOrDash(structuredTool))
+		return &AIAskResponse{
+			Answer:   answer,
+			Intent:   intent,
+			Task:     routerResult.Task,
+			Tool:     structuredTool,
+			Model:    "local-structured-query",
+			Snapshot: snapshot,
+		}, nil
+	}
+
 	// Deterministic-first: a fact lookup that maps to a supported tool is answered
 	// straight from the snapshot data, skipping the free-form LLM. The LLM already
 	// did its real job (understanding the question) in the router; letting it also
