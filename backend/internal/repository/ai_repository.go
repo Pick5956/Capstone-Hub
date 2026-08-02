@@ -195,6 +195,45 @@ func (r *AIRepository) MenuMargins(restaurantID uint, since time.Time) ([]AIMenu
 	return r.menuMargins(restaurantID, since, "profit desc, revenue desc", 8)
 }
 
+// MenuMetricsForRange returns per-menu quantity, revenue, cost, profit and margin
+// for the half-open window [start, end). Unlike the snapshot lists it is scoped to
+// an arbitrary calendar period, so questions like "เมนูไหนกำไรดีสุดเดือนที่ผ่านมา"
+// are answered from that month rather than the rolling analysis window.
+func (r *AIRepository) MenuMetricsForRange(restaurantID uint, start, end time.Time) ([]AIMenuMarginSummary, error) {
+	var rows []AIMenuMarginSummary
+	err := r.db.Table("order_items").
+		Select(`
+			order_items.menu_name,
+			COALESCE(SUM(order_items.quantity), 0) AS quantity,
+			COALESCE(SUM(order_items.subtotal), 0) AS revenue,
+			COALESCE(SUM(deductions.cost), 0) AS cost,
+			COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0) AS profit,
+			CASE WHEN COALESCE(SUM(order_items.subtotal), 0) > 0
+				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
+				ELSE 0
+			END AS margin`).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins(
+			"LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id",
+			restaurantID,
+		).
+		Where(
+			"order_items.restaurant_id = ? AND order_items.status = ? AND order_items.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.completed_at < ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			start,
+			end,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("order_items.menu_name").
+		Order("revenue desc").
+		Limit(200).
+		Scan(&rows).Error
+	return rows, err
+}
+
 // AllMenuMargins returns up to 100 served menus with margin+quantity, used for
 // menu-engineering quadrant classification.
 func (r *AIRepository) AllMenuMargins(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {

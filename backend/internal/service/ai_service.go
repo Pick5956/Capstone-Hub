@@ -354,7 +354,16 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
 
-	aiStage("flow", "analytical — building 14-day snapshot")
+	// A menu question that names a calendar period is answered from that period's
+	// own numbers, instead of the rolling analysis window.
+	if menuResp, handled, mErr := s.answerPeriodMenuQuery(restaurantID, question, askedQuestion); handled {
+		aiStage("flow", "menu-period query — range query (bypassing rolling window)")
+		return menuResp, nil
+	} else if mErr != nil {
+		aiStage("warn", "menu-period query failed (%v) → snapshot flow", mErr)
+	}
+
+	aiStage("flow", "analytical — building %s snapshot", analysisWindowLabel())
 	snapshot, err := s.buildSnapshot(restaurantID)
 	if err != nil {
 		return nil, err

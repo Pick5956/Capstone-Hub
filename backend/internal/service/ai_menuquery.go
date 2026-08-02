@@ -33,6 +33,7 @@ type menuMetricRow struct {
 	Quantity int64
 	Revenue  float64
 	Cost     float64
+	Profit   float64
 	Margin   float64
 }
 
@@ -199,15 +200,25 @@ func menuMetricValue(r menuMetricRow, metric string) float64 {
 }
 
 func formatMenuRank(q menuRankQuery, rows []menuMetricRow) string {
+	return formatMenuRankInPeriod(q, rows, "")
+}
+
+// formatMenuRankInPeriod renders the ranking, optionally stating the calendar
+// period it covers so the reader never has to guess which window a figure is from.
+func formatMenuRankInPeriod(q menuRankQuery, rows []menuMetricRow, periodLabel string) string {
 	if len(rows) == 0 {
 		return "ยังไม่มีข้อมูลเมนูสำหรับจัดอันดับครับ"
 	}
+	scope := ""
+	if periodLabel != "" {
+		scope = "ใน" + periodLabel + " "
+	}
 	if q.Limit <= 1 {
 		r := rows[0]
-		return fmt.Sprintf("เมนูที่%sคือ **%s** (%s) ครับ", menuRankDescriptor(q.Metric, q.Direction, q.Rank), r.Name, menuValueString(q.Metric, r))
+		return fmt.Sprintf("%sเมนูที่%sคือ **%s** (%s) ครับ", scope, menuRankDescriptor(q.Metric, q.Direction, q.Rank), r.Name, menuValueString(q.Metric, r))
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("เมนูที่%s เรียงตามลำดับครับ:\n\n", menuRankDescriptor(q.Metric, q.Direction, 1)))
+	sb.WriteString(fmt.Sprintf("%sเมนูที่%s เรียงตามลำดับครับ:\n\n", scope, menuRankDescriptor(q.Metric, q.Direction, 1)))
 	for i, r := range rows {
 		sb.WriteString(fmt.Sprintf("%d. **%s** (%s)\n", q.Rank+i, r.Name, menuValueString(q.Metric, r)))
 	}
@@ -233,6 +244,11 @@ func menuValueString(metric string, r menuMetricRow) string {
 	case "price":
 		return fmt.Sprintf("ราคา %s บาท", formatMoney(r.Price))
 	case "margin":
+		// Show the baht figure too when known: "กำไรดี" can mean either the
+		// percentage or the money, and the two can rank differently.
+		if r.Profit != 0 {
+			return fmt.Sprintf("Margin %.2f%% — กำไร %s บาท", r.Margin, formatMoney(r.Profit))
+		}
 		return fmt.Sprintf("Margin %.2f%%", r.Margin)
 	case "revenue":
 		return fmt.Sprintf("รายได้ %s บาท", formatMoney(r.Revenue))
