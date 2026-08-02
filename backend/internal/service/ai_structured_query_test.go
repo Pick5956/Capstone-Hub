@@ -170,6 +170,36 @@ func TestStructuredQueryRankOnlyFollowUpIngredient(t *testing.T) {
 	}
 }
 
+// Field bug #2: "แล้วอันดับ 40 ล่ะ" on a menu with only a few items used to fall
+// through to the #1 answer. It must instead say how deep the ranking goes.
+func TestStructuredQueryRankBeyondDataAnswersHonestly(t *testing.T) {
+	asked := "แล้วอันดับ 40 ล่ะ"
+	answer, _, ok := structuredQueryAnswer(asked, asked, priceConversation(), bridgeSnapshot())
+	if !ok {
+		t.Fatal("out-of-range rank must be handled (not fall through to the #1 tool)")
+	}
+	if strings.Contains(answer, "ต้มยำกุ้งน้ำข้น") {
+		t.Fatalf("must not answer with the #1 menu: %s", answer)
+	}
+	// bridgeSnapshot has 3 priced menus → the honest ceiling is 3.
+	if !strings.Contains(answer, "อันดับที่ 3") {
+		t.Fatalf("should state the actual ranking depth (3): %s", answer)
+	}
+}
+
+// Same guard when the rank arrives via the rewritten question instead.
+func TestStructuredQueryRankBeyondDataViaRewrite(t *testing.T) {
+	rewritten := "เมนูไหนที่ขายแพงที่สุดอันดับที่ 40 ภายในร้านของเรา"
+	asked := "แล้วอันดับ 40 ล่ะ"
+	answer, _, ok := structuredQueryAnswer(rewritten, asked, priceConversation(), bridgeSnapshot())
+	if !ok {
+		t.Fatal("out-of-range rank via rewrite must be handled")
+	}
+	if strings.Contains(answer, "ต้มยำกุ้งน้ำข้น") {
+		t.Fatalf("must not answer with the #1 menu: %s", answer)
+	}
+}
+
 // Without a conversation there is nothing to inherit, so it must decline rather
 // than guess a subject.
 func TestStructuredQueryRankOnlyWithoutHistoryDeclines(t *testing.T) {

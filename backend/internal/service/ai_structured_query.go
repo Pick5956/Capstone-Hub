@@ -14,7 +14,10 @@ package service
 // matters because some snapshot lists are one-directional (e.g. the price list
 // holds only the five most expensive menus, so it cannot answer "cheapest").
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // structuredQueryAnswer tries the menu domain, then the ingredient domain.
 //
@@ -104,9 +107,35 @@ func answerMenuRank(q menuRankQuery, snapshot AISnapshot) (string, AIToolName, b
 	}
 	selected := executeMenuRank(rows, q)
 	if len(selected) == 0 {
+		// The rank was understood but exceeds what exists ("อันดับ 40" of an
+		// 11-item menu). Answering the #1 item here would be wrong; say how deep
+		// the ranking actually goes instead.
+		if q.Rank > len(rows) {
+			return fmt.Sprintf(
+				"ตอนนี้จัดอันดับเมนูตาม%sได้ถึงอันดับที่ %d เท่านั้นครับ (มี %d เมนู) ลองถามอันดับ 1-%d ได้เลยครับ",
+				menuMetricNoun(q.Metric), len(rows), len(rows), len(rows),
+			), tool, true
+		}
 		return "", "", false
 	}
 	return formatMenuRank(q, selected), tool, true
+}
+
+// menuMetricNoun names the metric in Thai for out-of-range messages.
+func menuMetricNoun(metric string) string {
+	switch metric {
+	case "price":
+		return "ราคา"
+	case "margin":
+		return "กำไร"
+	case "revenue":
+		return "รายได้"
+	case "quantity":
+		return "ยอดขาย"
+	case "cost":
+		return "ต้นทุน"
+	}
+	return "ข้อมูล"
 }
 
 func answerIngredientRank(q ingredientRankQuery, snapshot AISnapshot) (string, AIToolName, bool) {
@@ -116,6 +145,12 @@ func answerIngredientRank(q ingredientRankQuery, snapshot AISnapshot) (string, A
 	}
 	selected := executeIngredientRank(rows, q)
 	if len(selected) == 0 {
+		if q.Rank > len(rows) {
+			return fmt.Sprintf(
+				"ตอนนี้จัดอันดับวัตถุดิบได้ถึงอันดับที่ %d เท่านั้นครับ (มี %d รายการ) ลองถามอันดับ 1-%d ได้เลยครับ",
+				len(rows), len(rows), len(rows),
+			), tool, true
+		}
 		return "", "", false
 	}
 	return formatIngredientRank(q, selected), tool, true

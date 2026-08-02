@@ -152,14 +152,16 @@ func (r *AIRepository) TopMenuItems(restaurantID uint, since time.Time) ([]AIMen
 }
 
 // MostExpensiveMenus lists menus by their listed price (highest first). Menu
-// price is not time-windowed, so this reflects the current menu.
+// price is not time-windowed, so this reflects the current menu. The limit is
+// deep (not 5) so rank-N questions ("แพงอันดับที่ 8") can be answered for the
+// whole menu; answer formatters still cap how many rows they display.
 func (r *AIRepository) MostExpensiveMenus(restaurantID uint) ([]AIMenuPrice, error) {
 	var rows []AIMenuPrice
 	err := r.db.Table("menu_items").
 		Select("name, price").
 		Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
 		Order("price desc, name asc").
-		Limit(5).
+		Limit(100).
 		Scan(&rows).Error
 	return rows, err
 }
