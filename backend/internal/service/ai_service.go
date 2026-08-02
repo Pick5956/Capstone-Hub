@@ -350,23 +350,28 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	}
 
 	// Step 6: Analytical Flow (Needs Data = True, DB snapshot load)
-	// Tier 1-1: a dated total-sales question (named month or month-to-month
-	// comparison) is answered directly from range queries, so it is not limited
-	// to the fixed 14-day snapshot window.
-	if datedResp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
-		aiStage("flow", "dated-sales — range query (bypassing 14-day snapshot)")
-		return datedResp, nil
-	} else if derr != nil {
-		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
-	}
+	//
+	// These deterministic intercepts run from the most specific scope to the least,
+	// because a broader one would otherwise swallow a narrower question: asking for
+	// lunch on one day must not be answered with the whole month's total.
 
-	// Sales for a service period ("ช่วงเที่ยงวันนี้") — finer than a whole day, so
-	// it cannot come from the day-level snapshot.
+	// Sales for a service period ("ช่วงเที่ยงวันที่ 2 กรกฎาคม") — an hour window
+	// within a day, finer than anything the day-level snapshot holds.
 	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
 		aiStage("flow", "day-part sales query — hour-scoped range query")
 		return partResp, nil
 	} else if pErr != nil {
 		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
+	}
+
+	// Tier 1-1: a dated total-sales question (a specific day, a named month, or a
+	// month-to-month comparison) is answered directly from range queries, so it is
+	// not limited to the rolling snapshot window.
+	if datedResp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
+		aiStage("flow", "dated-sales — range query (bypassing rolling window)")
+		return datedResp, nil
+	} else if derr != nil {
+		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
 
 	// "How far does the data reach?" — answered from the full history, not the

@@ -72,6 +72,10 @@ func dayScope(question string, ref time.Time) (start, end time.Time, label strin
 	today := time.Date(ref.Year(), ref.Month(), ref.Day(), 0, 0, 0, 0, loc)
 	n := strings.ToLower(strings.TrimSpace(question))
 
+	// A specific date is the most precise scope, so it is checked before months.
+	if day, ok := extractSpecificDate(question, ref); ok {
+		return day.Start, day.End, day.Label
+	}
 	if periods := extractPeriods(question, ref); len(periods) > 0 {
 		return periods[0].Start, periods[0].End, periods[0].Label
 	}
@@ -103,7 +107,7 @@ func (s *AIService) answerDayPartSalesQuery(restaurantID uint, question string) 
 	}
 
 	// State the hours used, so "เที่ยง" is never ambiguous to the reader.
-	header := fmt.Sprintf("ยอดขาย%s%s (%s)", scopeLabel, part.Label, part.hoursText())
+	header := fmt.Sprintf("ยอดขาย%s %s (%s)", scopeLabel, part.Label, part.hoursText())
 	answer := fmt.Sprintf("%s ยังไม่มีออเดอร์ที่ปิดบิลครับ", header)
 	if data.Orders > 0 {
 		answer = fmt.Sprintf("%s คือ %s บาท จาก %d ออเดอร์ครับ", header, formatMoney(data.Revenue), data.Orders)

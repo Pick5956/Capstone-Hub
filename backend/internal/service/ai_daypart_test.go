@@ -99,6 +99,80 @@ func TestDayScopeDefaultsAndVariants(t *testing.T) {
 	}
 }
 
+// The field bug: "ช่วงเที่ยงวันที่ 2 เดือนกรกฎาคม" was answered with the whole
+// month's total. The day must win over the month it belongs to.
+func TestDayScopeUsesSpecificDateOverMonth(t *testing.T) {
+	ref := time.Date(2026, time.August, 2, 20, 0, 0, 0, bangkokLocation())
+	start, end, label := dayScope("ยอดขายช่วงเที่ยงวันที่ 2 เดือนกรกฎาคม เป็นไง", ref)
+
+	wantStart := time.Date(2026, time.July, 2, 0, 0, 0, 0, bangkokLocation())
+	if !start.Equal(wantStart) {
+		t.Fatalf("start = %v, want %v", start, wantStart)
+	}
+	if !end.Equal(wantStart.AddDate(0, 0, 1)) {
+		t.Fatalf("end = %v, want a single day", end)
+	}
+	if label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("label = %q", label)
+	}
+}
+
+func TestExtractSpecificDateFormats(t *testing.T) {
+	ref := time.Date(2026, time.August, 2, 12, 0, 0, 0, bangkokLocation())
+	cases := map[string]string{
+		"ยอดขายวันที่ 2 เดือนกรกฎาคม": "วันที่ 2 กรกฎาคม 2569",
+		"ยอดขายวันที่ 15 ก.ค.":        "วันที่ 15 กรกฎาคม 2569",
+		"ยอดขาย 9 มีนาคม":             "วันที่ 9 มีนาคม 2569",
+		"ยอดขายวันที่ 2026-07-02":     "วันที่ 2 กรกฎาคม 2569",
+		"ยอดขาย 2/7/2569":             "วันที่ 2 กรกฎาคม 2569",
+		"sales on 2 march":            "วันที่ 2 มีนาคม 2569",
+	}
+	for q, want := range cases {
+		got, ok := extractSpecificDate(q, ref)
+		if !ok {
+			t.Errorf("%q: expected a specific date", q)
+			continue
+		}
+		if got.Label != want {
+			t.Errorf("%q: label = %q, want %q", q, got.Label, want)
+		}
+	}
+
+	// A bare day with no month means this month, unless that day is still ahead.
+	got, ok := extractSpecificDate("ยอดขายวันที่ 1", ref)
+	if !ok || got.Label != "วันที่ 1 สิงหาคม 2569" {
+		t.Errorf("bare day-of-month wrong: %+v ok=%v", got, ok)
+	}
+	got, ok = extractSpecificDate("ยอดขายวันที่ 20", ref) // 20 Aug has not happened
+	if !ok || got.Label != "วันที่ 20 กรกฎาคม 2569" {
+		t.Errorf("future day should roll back a month: %+v ok=%v", got, ok)
+	}
+
+	// Impossible dates are rejected rather than silently shifted.
+	if _, ok := extractSpecificDate("ยอดขายวันที่ 31 กุมภาพันธ์", ref); ok {
+		t.Error("31 February must not parse")
+	}
+	// A month with no day stays a month question.
+	if _, ok := extractSpecificDate("ยอดขายเดือนกรกฎาคม", ref); ok {
+		t.Error("a month without a day is not a specific date")
+	}
+}
+
+// A specific day must also work for a plain total (no day part).
+func TestDatedSalesRequestUsesSpecificDate(t *testing.T) {
+	ref := time.Date(2026, time.August, 2, 12, 0, 0, 0, bangkokLocation())
+	req, ok := resolveDatedSalesRequest("ยอดขายวันที่ 2 กรกฎาคม เท่าไหร่", ref)
+	if !ok || len(req.periods) != 1 {
+		t.Fatalf("expected a single-day request: ok=%v %+v", ok, req)
+	}
+	if req.periods[0].Label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("label = %q", req.periods[0].Label)
+	}
+	if req.periods[0].End.Sub(req.periods[0].Start) != 24*time.Hour {
+		t.Fatalf("window should be exactly one day: %v..%v", req.periods[0].Start, req.periods[0].End)
+	}
+}
+
 func TestDayPartHoursText(t *testing.T) {
 	if got := (dayPart{StartHour: 11, EndHour: 14}).hoursText(); got != "11:00-13:59" {
 		t.Fatalf("hoursText = %q, want 11:00-13:59 (end hour is exclusive)", got)

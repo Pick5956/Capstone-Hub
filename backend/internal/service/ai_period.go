@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,152 @@ func buildEnglishMonthPattern() *regexp.Regexp {
 	// Longer aliases first so "september" is preferred over "sep".
 	sort.Slice(aliases, func(i, j int) bool { return len(aliases[i]) > len(aliases[j]) })
 	return regexp.MustCompile(`(?i)\b(` + strings.Join(aliases, "|") + `)\b`)
+}
+
+// allMonthAliases maps every Thai and English month spelling to its month
+// number, and reAnyMonth matches any of them (longest alias first so
+// "กรกฎาคม" wins over "ก.ค.").
+var allMonthAliases, reAnyMonth = buildMonthAliasIndex()
+
+func buildMonthAliasIndex() (map[string]int, *regexp.Regexp) {
+	index := make(map[string]int)
+	for month, aliases := range thaiMonthAliases {
+		for _, a := range aliases {
+			index[a] = month
+		}
+	}
+	for alias, month := range englishMonthAliases {
+		index[alias] = month
+	}
+	keys := make([]string, 0, len(index))
+	for k := range index {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+	quoted := make([]string, 0, len(keys))
+	for _, k := range keys {
+		quoted = append(quoted, regexp.QuoteMeta(k))
+	}
+	return index, regexp.MustCompile(`(?i)(` + strings.Join(quoted, "|") + `)`)
+}
+
+var (
+	reISODate        = regexp.MustCompile(`(\d{4})-(\d{1,2})-(\d{1,2})`)
+	reSlashDate      = regexp.MustCompile(`(\d{1,2})/(\d{1,2})/(\d{4})`)
+	reThaiDayOfMonth = regexp.MustCompile(`วันที่\s*(\d{1,2})`)
+)
+
+// dayPeriod is a single calendar day [day, day+1).
+func dayPeriod(year int, month time.Month, day int, loc *time.Location) AIPeriod {
+	start := time.Date(year, month, day, 0, 0, 0, 0, loc)
+	return AIPeriod{
+		Label: fmt.Sprintf("วันที่ %d %s %d", day, thaiMonthName(int(month)), year+543),
+		Start: start,
+		End:   start.AddDate(0, 0, 1),
+	}
+}
+
+func validCalendarDate(year, month, day int) bool {
+	if month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 3000 {
+		return false
+	}
+	// Reject overflow dates such as 31 February.
+	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return t.Day() == day && int(t.Month()) == month
+}
+
+// detectMonthInText returns the first month named anywhere in the text.
+func detectMonthInText(n string) (int, bool) {
+	if m := reAnyMonth.FindStringSubmatch(n); m != nil {
+		if month, ok := allMonthAliases[strings.ToLower(m[1])]; ok {
+			return month, true
+		}
+	}
+	return 0, false
+}
+
+// extractSpecificDate finds a single calendar day named in the question
+// ("วันที่ 2 เดือนกรกฎาคม", "2 ก.ค.", "2026-07-02", "2/7/2569"). Without it, such a
+// question falls back to the whole month, which reports a figure ~30x too large.
+func extractSpecificDate(question string, ref time.Time) (AIPeriod, bool) {
+	loc := bangkokLocation()
+	ref = ref.In(loc)
+	n := strings.ToLower(strings.TrimSpace(question))
+
+	if m := reISODate.FindStringSubmatch(n); m != nil {
+		year, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		day, _ := strconv.Atoi(m[3])
+		if validCalendarDate(year, month, day) {
+			return dayPeriod(year, time.Month(month), day, loc), true
+		}
+	}
+	if m := reSlashDate.FindStringSubmatch(n); m != nil {
+		day, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		year, _ := strconv.Atoi(m[3])
+		if year > 2400 { // Buddhist era
+			year -= 543
+		}
+		if validCalendarDate(year, month, day) {
+			return dayPeriod(year, time.Month(month), day, loc), true
+		}
+	}
+
+	day := 0
+	if m := reThaiDayOfMonth.FindStringSubmatch(n); m != nil {
+		day, _ = strconv.Atoi(m[1])
+	}
+	month, hasMonth := detectMonthInText(n)
+	if day == 0 && hasMonth {
+		// "2 กรกฎาคม" — a bare number immediately before the month name.
+		if loc := reAnyMonth.FindStringIndex(n); loc != nil {
+			if d, ok := trailingDayNumber(n[:loc[0]]); ok {
+				day = d
+			}
+		}
+	}
+	if day == 0 {
+		return AIPeriod{}, false
+	}
+
+	year := ref.Year()
+	if hasMonth {
+		year = resolveNamedMonthYear(month, ref)
+	} else {
+		month = int(ref.Month())
+		// A day later this month has not happened yet — mean last month.
+		if day > ref.Day() {
+			prev := time.Date(ref.Year(), ref.Month(), 1, 0, 0, 0, 0, loc).AddDate(0, -1, 0)
+			year, month = prev.Year(), int(prev.Month())
+		}
+	}
+	if !validCalendarDate(year, month, day) {
+		return AIPeriod{}, false
+	}
+	return dayPeriod(year, time.Month(month), day, loc), true
+}
+
+// trailingDayNumber reads a 1-2 digit day at the end of the text preceding a
+// month name, allowing an optional "เดือน" between them.
+func trailingDayNumber(prefix string) (int, bool) {
+	trimmed := strings.TrimRight(prefix, " \t")
+	trimmed = strings.TrimSuffix(trimmed, "เดือน")
+	trimmed = strings.TrimRight(trimmed, " \t")
+
+	end := len(trimmed)
+	start := end
+	for start > 0 && trimmed[start-1] >= '0' && trimmed[start-1] <= '9' {
+		start--
+	}
+	if start == end || end-start > 2 {
+		return 0, false
+	}
+	value, err := strconv.Atoi(trimmed[start:end])
+	if err != nil || value < 1 || value > 31 {
+		return 0, false
+	}
+	return value, true
 }
 
 func thaiMonthName(month int) string {
@@ -236,6 +383,10 @@ func resolveDatedSalesRequest(question string, ref time.Time) (datedSalesRequest
 	n := strings.ToLower(strings.TrimSpace(question))
 	if datedSalesExcluded(n) {
 		return datedSalesRequest{}, false
+	}
+	// A named day is more specific than the month containing it.
+	if day, ok := extractSpecificDate(question, ref); ok && mentionsSalesTotal(n) {
+		return datedSalesRequest{periods: []AIPeriod{day}}, true
 	}
 	periods := extractPeriods(question, ref)
 	if len(periods) == 0 {
