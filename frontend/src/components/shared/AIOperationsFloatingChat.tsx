@@ -21,7 +21,6 @@ import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
-import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -175,7 +174,7 @@ export default function AIOperationsFloatingChat() {
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
   const snapshotRequestedRef = useRef(false);
 
-  const canAskAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
+  const canAskAI = activeMembership?.role?.name === "owner";
 
   // Per-(restaurant, user) storage key, shared with the full /ai-assistant page.
   const storageKey = useMemo(
@@ -343,8 +342,8 @@ export default function AIOperationsFloatingChat() {
           id: `permission-${Date.now()}`,
           role: "assistant",
           content: language === "th"
-            ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนการวิเคราะห์ยอดขายและคลังต้องใช้สิทธิ์ผู้จัดการหรือเจ้าของร้าน"
-            : "I can guide you to pages you can access. Sales and inventory analysis requires manager or owner access.",
+            ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนผู้ช่วย AI สำหรับข้อมูลร้านเปิดให้เจ้าของร้านเท่านั้น"
+            : "I can guide you to pages you can access. The restaurant AI assistant is available to the owner only.",
           createdAt: new Date(),
         },
       ]);

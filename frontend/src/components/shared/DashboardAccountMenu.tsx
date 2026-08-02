@@ -65,7 +65,7 @@ function OptionButton({ label, active, onClick }: { label: string; active: boole
 }
 
 export default function DashboardAccountMenu() {
-  const { user, logout } = useAuth();
+  const { user, logout, activeMembership } = useAuth();
   const { language, setLanguage } = useLanguage();
   const { theme, fontSize, mounted, toggle, setFontSize, showAIAssistant, setShowAIAssistant } = useTheme();
   const [open, setOpen] = useState(false);
@@ -222,7 +222,9 @@ export default function DashboardAccountMenu() {
               <MenuButton icon={isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} label={copy.theme} value={copy.themeValue} chevron onClick={() => setPanel("theme")} />
               <MenuButton icon={<Languages className="h-4 w-4" />} label={copy.language} value={copy.languageValue} chevron onClick={() => setPanel("language")} />
               <MenuButton icon={<CaseSensitive className="h-4 w-4" />} label={copy.fontSize} value={fontLabel ? (language === "th" ? fontLabel.th : fontLabel.en) : ""} chevron onClick={() => setPanel("font")} />
-              <MenuButton icon={<Sparkles className="h-4 w-4" />} label={copy.aiAssistant} value={copy.aiAssistantValue} chevron onClick={() => setPanel("assistant")} />
+              {activeMembership?.role?.name === "owner" ? (
+                <MenuButton icon={<Sparkles className="h-4 w-4" />} label={copy.aiAssistant} value={copy.aiAssistantValue} chevron onClick={() => setPanel("assistant")} />
+              ) : null}
               <div className="border-t border-[#dfe3e8] dark:border-[#253142]" />
               <MenuButton icon={<LogOut className="h-4 w-4" />} label={copy.logout} danger onClick={logout} />
             </>
@@ -262,7 +264,7 @@ export default function DashboardAccountMenu() {
             </>
           ) : null}
 
-          {panel === "assistant" ? (
+          {panel === "assistant" && activeMembership?.role?.name === "owner" ? (
             <>
               <button type="button" onClick={() => setPanel("main")} className="flex h-10 w-full items-center gap-2 px-3 text-left text-[13px] font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-gray-900">
                 <ChevronLeft className="h-4 w-4" />

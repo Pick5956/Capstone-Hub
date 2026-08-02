@@ -24,6 +24,7 @@ type NavItem = {
   badge?: string;
   comingSoon?: boolean;
   permission?: Permission | Permission[];
+  ownerOnly?: boolean;
   subItems?: readonly SubItem[];
 };
 
@@ -93,7 +94,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'AI ผู้ช่วย' : 'AI assistant',
           href: '/ai-assistant',
-          permission: ['view_reports', 'manage_inventory'],
+          ownerOnly: true,
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M9 13h.01"/><path d="M15 13h.01"/><path d="M10 17h4"/></svg>,
         },
         {
@@ -164,7 +165,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   const visibleNav = nav
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => canSee(item.permission)),
+      items: section.items.filter((item) => (!item.ownerOnly || activeMembership?.role?.name === 'owner') && canSee(item.permission)),
     }))
     .filter((section) => section.items.length > 0);
 

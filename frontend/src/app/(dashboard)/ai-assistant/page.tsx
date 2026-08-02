@@ -8,7 +8,6 @@ import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
-import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AISnapshot, AIConversationMessage } from "@/src/types/ai";
@@ -53,7 +52,7 @@ function buildCopy(language: "th" | "en") {
         salesDays: "วันที่มียอดขาย",
         inventoryValue: "มูลค่าคงคลัง",
         stockRisks: "รายการเสี่ยง",
-        permissionDenied: "หน้านี้สำหรับเจ้าของร้านหรือผู้จัดการ",
+        permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
         empty: "เลือกคำถามลัดหรือพิมพ์คำถามเพื่อเริ่มวิเคราะห์",
         welcome: "สวัสดีครับ ผมเป็นผู้ช่วยวิเคราะห์ร้าน ถามผมได้เลยเรื่องยอดขาย กำไรเมนู หรือคลังวัตถุดิบครับ",
         error: "เรียก AI ไม่สำเร็จ",
@@ -79,7 +78,7 @@ function buildCopy(language: "th" | "en") {
         salesDays: "Sales days",
         inventoryValue: "Inventory value",
         stockRisks: "Stock risks",
-        permissionDenied: "This page is for owners or managers",
+        permissionDenied: "This page is for the restaurant owner only",
         empty: "Pick a quick question or type one to start",
         welcome: "Hi! I'm your restaurant analysis assistant. Ask me about sales, menu profit, or ingredient stock.",
         error: "AI request failed",
@@ -127,7 +126,7 @@ export default function AIAssistantPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const snapshotRequestedRef = useRef(false);
-  const canUseAI = can(activeMembership, "view_reports") || can(activeMembership, "manage_inventory");
+  const canUseAI = activeMembership?.role?.name === "owner";
 
   const storageKey = useMemo(
     () => chatStorageKey(activeMembership?.restaurant_id, user?.ID),

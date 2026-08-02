@@ -22,6 +22,15 @@ type AIOperationsService interface {
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 }
 
+func requireAIOwner(c *gin.Context) bool {
+	member, ok := contextMember(c)
+	if !ok || member.Role == nil || member.Role.Name != "owner" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "AI operations are available to the restaurant owner only"})
+		return false
+	}
+	return true
+}
+
 func ProvideAIController(db *gorm.DB) *AIController {
 	return NewAIController(service.ProvideAIService(repository.NewAIRepository(db)))
 }
@@ -35,8 +44,7 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !memberCan(c, "view_reports") && !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing AI operations permission"})
+	if !requireAIOwner(c) {
 		return
 	}
 	var req service.AIAskRequest
@@ -93,8 +101,7 @@ func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !memberCan(c, "view_reports") && !memberCan(c, "manage_inventory") {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing AI operations permission"})
+	if !requireAIOwner(c) {
 		return
 	}
 	result, err := ctrl.svc.OperationsSnapshot(restaurantID)

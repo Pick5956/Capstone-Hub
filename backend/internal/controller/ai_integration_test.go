@@ -75,18 +75,22 @@ func TestAskOperationsRequiresRestaurantContext(t *testing.T) {
 	}
 }
 
-func TestAskOperationsRejectsMemberWithoutPermission(t *testing.T) {
-	svc := &fakeAIOperationsService{}
-	router := testAIRouter(svc, memberWithRole("waiter", `["view_menu"]`), true)
-	recorder := httptest.NewRecorder()
+func TestAskOperationsRejectsNonOwner(t *testing.T) {
+	for _, role := range []string{"manager", "waiter"} {
+		t.Run(role, func(t *testing.T) {
+			svc := &fakeAIOperationsService{}
+			router := testAIRouter(svc, memberWithRole(role, `["view_reports","manage_inventory"]`), true)
+			recorder := httptest.NewRecorder()
 
-	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"ยอดขายวันนี้"}`)))
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"ยอดขายวันนี้"}`)))
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("AskOperations without permission status = %d, want %d", recorder.Code, http.StatusForbidden)
-	}
-	if svc.askCalls != 0 {
-		t.Fatal("AskOperations must not reach the service when permission is denied")
+			if recorder.Code != http.StatusForbidden {
+				t.Fatalf("AskOperations for %s status = %d, want %d", role, recorder.Code, http.StatusForbidden)
+			}
+			if svc.askCalls != 0 {
+				t.Fatal("AskOperations must not reach the service for a non-owner")
+			}
+		})
 	}
 }
 
@@ -101,7 +105,7 @@ func TestAskOperationsReturnsServiceResponseSchema(t *testing.T) {
 			},
 		},
 	}
-	router := testAIRouter(svc, memberWithRole("manager", `["view_reports"]`), true)
+	router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
 	recorder := httptest.NewRecorder()
 
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"rytyt","history":[{"role":"user","content":"menu"}]}`)))
@@ -150,7 +154,7 @@ func TestAskOperationsReturnsBadRequestForInvalidBodyAndServiceError(t *testing.
 func TestOperationsSnapshotReturnsPayloadAndMapsServiceFailure(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		svc := &fakeAIOperationsService{snapshotResponse: &service.AISnapshot{GeneratedAt: "2026-05-26T17:00:00+07:00"}}
-		router := testAIRouter(svc, memberWithRole("manager", `["manage_inventory"]`), true)
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
 		recorder := httptest.NewRecorder()
 
 		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ai/operations/snapshot", nil))
