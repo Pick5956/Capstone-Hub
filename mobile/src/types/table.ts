@@ -1,4 +1,4 @@
-export type TableStatus = 'free' | 'occupied' | 'reserved';
+export type TableStatus = 'free' | 'occupied' | 'reserved' | 'inactive';
 
 export interface TableZone {
   ID: number;

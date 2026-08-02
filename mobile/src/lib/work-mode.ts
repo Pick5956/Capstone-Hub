@@ -1,9 +1,16 @@
+import { can } from '@/src/lib/rbac';
+import { resolveWorkspaceRoute } from '@/src/lib/workspace-route';
 import type { Membership } from '@/src/types/restaurant';
+
+export function getDefaultWorkspaceRoute(membership: Membership | null | undefined) {
+  const roleName = membership?.role?.name ?? '';
+  return resolveWorkspaceRoute(roleName, (permission) => can(membership, permission));
+}
 
 export function getWorkModeCopy(membership: Membership | null | undefined) {
   const roleName = membership?.role?.name ?? '';
 
-  if (roleName === 'chef') {
+  if (roleName === 'chef' && can(membership, 'view_kitchen')) {
     return {
       title: 'โหมดครัว',
       hint: 'เปิดคิวครัวไว้เพื่อดูออเดอร์ที่ส่งเข้ามาและอัปเดตสถานะอาหาร',

@@ -1,5 +1,12 @@
 import { apiRequest } from './client';
-import type { Invitation, Membership, Restaurant, RestaurantInput } from '@/src/types/restaurant';
+import type {
+  AdminInvitation,
+  Invitation,
+  Membership,
+  Restaurant,
+  RestaurantAuditLog,
+  RestaurantInput,
+} from '@/src/types/restaurant';
 
 export function getMyMemberships() {
   return apiRequest<{ memberships: Membership[] }>('/api/v1/restaurants/me', {
@@ -30,15 +37,12 @@ export function updateRestaurant(id: number, data: RestaurantInput) {
 }
 
 export function listMembers(restaurantId: number) {
-  return apiRequest<{ members: Membership[] }>(`/api/v1/restaurants/${restaurantId}/members`, {
-    skipRestaurant: true,
-  });
+  return apiRequest<{ members: Membership[] }>(`/api/v1/restaurants/${restaurantId}/members`);
 }
 
 export function updateMemberStatus(restaurantId: number, memberId: number, status: Membership['status']) {
   return apiRequest<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/status`, {
     method: 'PATCH',
-    skipRestaurant: true,
     body: JSON.stringify({ status }),
   });
 }
@@ -46,7 +50,6 @@ export function updateMemberStatus(restaurantId: number, memberId: number, statu
 export function updateMemberRole(restaurantId: number, memberId: number, roleId: number) {
   return apiRequest<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/role`, {
     method: 'PATCH',
-    skipRestaurant: true,
     body: JSON.stringify({ role_id: roleId }),
   });
 }
@@ -58,29 +61,24 @@ export function deleteRestaurant(id: number) {
 export function updateMemberPermissions(restaurantId: number, memberId: number, permissions: string[] | null) {
   return apiRequest<{ member: Membership }>(`/api/v1/restaurants/${restaurantId}/members/${memberId}/permissions`, {
     method: 'PATCH',
-    skipRestaurant: true,
     body: JSON.stringify({ use_role_permissions: permissions === null, permissions: permissions || [] }),
   });
 }
 
 export function createInvitation(restaurantId: number, data: { role_id: number; email?: string; expires_in_days?: number }) {
-  return apiRequest<Invitation>(`/api/v1/restaurants/${restaurantId}/invitations`, {
+  return apiRequest<AdminInvitation>(`/api/v1/restaurants/${restaurantId}/invitations`, {
     method: 'POST',
-    skipRestaurant: true,
     body: JSON.stringify(data),
   });
 }
 
 export function listPendingInvitations(restaurantId: number) {
-  return apiRequest<{ invitations: Invitation[] }>(`/api/v1/restaurants/${restaurantId}/invitations`, {
-    skipRestaurant: true,
-  });
+  return apiRequest<{ invitations: AdminInvitation[] }>(`/api/v1/restaurants/${restaurantId}/invitations`);
 }
 
 export function revokeInvitation(restaurantId: number, invitationId: number) {
   return apiRequest<{ status: string }>(`/api/v1/restaurants/${restaurantId}/invitations/${invitationId}`, {
     method: 'DELETE',
-    skipRestaurant: true,
   });
 }
 
@@ -96,4 +94,12 @@ export function acceptInvitation(token: string) {
     method: 'POST',
     skipRestaurant: true,
   });
+}
+
+export function listAuditLogs(restaurantId: number, limit = 20, offset = 0) {
+  const safeLimit = Math.min(50, Math.max(1, Math.trunc(limit) || 20));
+  const safeOffset = Math.max(0, Math.trunc(offset) || 0);
+  return apiRequest<{ logs: RestaurantAuditLog[]; has_more: boolean; next_offset: number }>(
+    `/api/v1/restaurants/${restaurantId}/audit-logs?limit=${safeLimit}&offset=${safeOffset}`,
+  );
 }

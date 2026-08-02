@@ -1,0 +1,105 @@
+import type { Order, OrderItem, OrderItemStatus } from '@/src/types/order';
+
+type KitchenItem = Pick<OrderItem, 'status'>;
+type KitchenTicket = Pick<Order, 'ID' | 'kitchen_batch' | 'kitchen_ticket_id'>;
+type EmptyOrderCandidate = Pick<Order, 'order_type' | 'table_id' | 'status'> & {
+  items?: readonly { status?: string }[] | null;
+};
+
+export function canCloseEmptyOrder(order: EmptyOrderCandidate | null | undefined) {
+  const activeItemCount = order?.items?.filter((item) => item.status !== 'cancelled').length ?? 0;
+  return Boolean(
+    order
+    && order.order_type === 'dine_in'
+    && order.table_id
+    && order.status === 'open'
+    && activeItemCount === 0,
+  );
+}
+
+export function canCancelOrderForRole(
+  roleName: string | null | undefined,
+  status: Order['status'],
+) {
+  if (status === 'completed' || status === 'cancelled') return false;
+  return roleName !== 'waiter' || status === 'open';
+}
+
+export function isKitchenComplete(items: KitchenItem[] | null | undefined) {
+  return canTakeOrderPayment(items);
+}
+
+export function activeOrderItems<T extends KitchenItem>(
+  items: readonly T[] | null | undefined,
+) {
+  return (items ?? []).filter((item) => item.status !== 'cancelled');
+}
+
+export function undeliveredOrderItems<T extends KitchenItem>(
+  items: readonly T[] | null | undefined,
+) {
+  return activeOrderItems(items).filter(
+    (item) => item.status === 'pending' || item.status === 'cooking',
+  );
+}
+
+export function canOpenOrderBill(items: readonly KitchenItem[] | null | undefined) {
+  const activeItems = activeOrderItems(items);
+  return activeItems.length > 0
+    && activeItems.every((item) => item.status !== 'pending');
+}
+
+export function canTakeOrderPayment(items: readonly KitchenItem[] | null | undefined) {
+  const activeItems = activeOrderItems(items);
+  return activeItems.length > 0
+    && activeItems.every((item) => item.status === 'ready' || item.status === 'served');
+}
+
+export function kitchenTicketKey(ticket: KitchenTicket) {
+  const backendKey = ticket.kitchen_ticket_id?.trim();
+  return backendKey || `${ticket.ID}:${ticket.kitchen_batch ?? 0}`;
+}
+
+export function paymentReceivedAmount(
+  _method: 'cash' | 'promptpay_qr',
+  grandTotal: number,
+) {
+  return grandTotal;
+}
+
+export function billExitRoute(canTakeOrder: boolean, canViewOrders: boolean) {
+  if (canTakeOrder) return '/tables' as const;
+  if (canViewOrders) return '/orders' as const;
+  return '/home' as const;
+}
+
+export function billPaymentStage(
+  paymentStatus: 'unpaid' | 'paid',
+  paymentRecorded: boolean,
+) {
+  if (paymentStatus === 'paid') return 'paid' as const;
+  return paymentRecorded ? 'recorded' as const : 'due' as const;
+}
+
+export function isCookingItem(status: OrderItemStatus) {
+  return status === 'pending' || status === 'cooking';
+}
+
+export function isKitchenDoneItem(status: OrderItemStatus) {
+  return status === 'ready' || status === 'served';
+}
+
+export function isOptionSelectionBelowMinimum(
+  minSelect: number | null | undefined,
+  selectedCount: number,
+) {
+  const normalizedMinimum = Math.max(0, Number(minSelect) || 0);
+  return selectedCount < normalizedMinimum;
+}
+
+export function validateKitchenCancelReason(value: string) {
+  const reason = value.trim();
+  if (!reason) return { reason: null, error: 'required' as const };
+  if (reason.length > 500) return { reason: null, error: 'too_long' as const };
+  return { reason, error: null };
+}

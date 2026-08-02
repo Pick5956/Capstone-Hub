@@ -129,6 +129,7 @@ export interface OpenOrderInput {
   customer_name?: string;
   customer_phone?: string;
   note?: string;
+  seat_reservation?: boolean;
 }
 
 export interface AddOrderItemInput {
@@ -137,4 +138,7 @@ export interface AddOrderItemInput {
   note?: string;
   fulfillment_type?: OrderItemFulfillmentType;
   selected_option_ids?: number[];
+  /** Record an item already handed to the guest (e.g. a drink) as served,
+   *  skipping the kitchen. Used when reconciling items during checkout. */
+  serve_immediately?: boolean;
 }

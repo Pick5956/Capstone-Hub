@@ -58,7 +58,6 @@ type HeroProof = {
 };
 
 const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1750950388492-f803d12c4a8a?auto=format&fit=crop&w=2200&q=80";
-const PHONE_IMAGE_URL = "https://static.vecteezy.com/system/resources/thumbnails/019/859/715/small/realistic-models-smartphone-with-transparent-screens-smartphone-mockup-collection-device-front-view-3d-mobile-phone-with-shadow-transparent-background-illustration-png.png"
 
 function safeNextPathFromSearch(search: string) {
   const next = new URLSearchParams(search).get("next");
@@ -479,18 +478,128 @@ function HeroImage({ alt }: { alt: string }) {
   );
 }
 
-function PhoneImage({ alt }: { alt: string }) {
+function PhoneMockup({ label, language }: { label: string; language: Language }) {
+  const copy = LANDING_COPY[language].mockup;
+  const phoneTables = [TABLES[language][0], TABLES[language][1], TABLES[language][4]];
+  const phoneTickets = KITCHEN_TICKETS[language].slice(0, 2);
+
   return (
-    <div className="relative aspect-[9/16] w-48 sm:w-64 md:w-80 lg:w-96">
-      <Image
-        src={PHONE_IMAGE_URL}
-        alt={alt}
-        fill
-        priority
-        unoptimized
-        sizes="(max-width: 640px) 192px, (max-width: 768px) 256px, (max-width: 1024px) 320px, 384px"
-        className="landing-hero-photo object-contain"
-      />
+    <div
+      role="img"
+      aria-label={label}
+      className="relative aspect-[9/16] w-48 shrink-0 sm:w-64 md:w-80 lg:w-96"
+    >
+      <div
+        aria-hidden="true"
+        className="relative h-full overflow-hidden rounded-[2rem] bg-gray-950 p-[5px] shadow-[0_8px_8px_rgba(3,7,18,0.32)] sm:rounded-[2.5rem] sm:p-2 md:rounded-[3rem]"
+      >
+        <div className="relative flex h-full flex-col overflow-hidden rounded-[1.7rem] bg-slate-50 text-gray-950 sm:rounded-[2.05rem] md:rounded-[2.5rem]">
+          <div className="absolute left-1/2 top-2 z-10 h-3 w-14 -translate-x-1/2 rounded-full bg-gray-950 sm:top-3 sm:h-4 sm:w-20" />
+
+          <div className="flex items-center justify-between px-4 pb-1 pt-2.5 font-mono text-[7px] font-semibold tabular-nums text-gray-600 sm:px-5 sm:pb-2 sm:pt-4 sm:text-[9px] md:px-6 md:text-[11px]">
+            <span>09:41</span>
+            <span className="flex items-end gap-0.5">
+              <span className="h-1 w-0.5 rounded-full bg-gray-500 sm:h-1.5" />
+              <span className="h-1.5 w-0.5 rounded-full bg-gray-600 sm:h-2" />
+              <span className="h-2 w-0.5 rounded-full bg-gray-800 sm:h-2.5" />
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 border-b border-gray-200 bg-white px-2.5 py-2 sm:gap-2.5 sm:px-4 sm:py-3 md:px-5">
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-orange-500 text-white sm:h-7 sm:w-7 md:h-9 md:w-9">
+              <Store className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" strokeWidth={2} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[8px] font-semibold sm:text-[11px] md:text-sm">Dishy</p>
+              <p className="truncate text-[6px] text-gray-500 sm:text-[9px] md:text-[11px]">{copy.shift}</p>
+            </div>
+            <span className="rounded bg-emerald-50 px-1 py-0.5 text-[6px] font-semibold text-emerald-700 sm:px-1.5 sm:text-[8px] md:text-[10px]">
+              {copy.open}
+            </span>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-hidden px-2.5 py-2 sm:px-4 sm:py-3 md:px-5 md:py-4">
+            <div className="rounded-md bg-gray-950 px-2.5 py-2 text-white sm:px-3.5 sm:py-3 md:px-4 md:py-4">
+              <p className="text-[6px] font-medium text-orange-300 sm:text-[8px] md:text-[10px]">
+                {copy.focusLabel}
+              </p>
+              <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-tight sm:text-xs md:text-base">
+                {copy.focusTitle}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 border-b border-gray-200 py-2 sm:py-3 md:py-4">
+              {[copy.front, copy.kitchen, copy.cashier].map((item, index) => {
+                const Icon = [Table2, ChefHat, ReceiptText][index];
+                return (
+                  <div
+                    key={item}
+                    className={`min-w-0 px-1.5 text-center sm:px-2 ${index > 0 ? "border-l border-gray-200" : ""}`}
+                  >
+                    <Icon className="mx-auto h-3 w-3 text-gray-700 sm:h-4 sm:w-4 md:h-5 md:w-5" strokeWidth={1.8} />
+                    <p className="mt-1 truncate text-[6px] font-medium text-gray-600 sm:text-[8px] md:text-[10px]">
+                      {item}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="border-b border-gray-200 py-2 sm:py-3 md:py-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[8px] font-semibold sm:text-[10px] md:text-xs">{copy.floorMap}</p>
+                <span className="text-[6px] text-gray-500 sm:text-[8px] md:text-[10px]">{copy.zones}</span>
+              </div>
+              <div className="mt-1.5 grid grid-cols-3 gap-1 sm:mt-2 sm:gap-1.5 md:gap-2">
+                {phoneTables.map((table) => (
+                  <div key={table.id} className={`rounded-md border px-1 py-1.5 text-center sm:py-2 md:py-2.5 ${table.tone}`}>
+                    <p className="font-mono text-[8px] font-semibold tabular-nums sm:text-[10px] md:text-xs">{table.id}</p>
+                    <p className="mt-0.5 truncate text-[5px] font-medium sm:text-[7px] md:text-[9px]">{table.status}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-b border-gray-200 py-2 sm:py-3 md:py-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[8px] font-semibold sm:text-[10px] md:text-xs">{copy.kitchenQueue}</p>
+                <span className="text-[6px] font-medium text-gray-500 sm:text-[8px] md:text-[10px]">{copy.live}</span>
+              </div>
+              <div className="mt-1.5 space-y-1 sm:mt-2 sm:space-y-1.5">
+                {phoneTickets.map((ticket) => (
+                  <div key={`${ticket.table}-${ticket.item}`} className="flex items-center gap-1.5 sm:gap-2">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full sm:h-2 sm:w-2 ${ticket.dot}`} />
+                    <p className="shrink-0 font-mono text-[6px] font-semibold tabular-nums sm:text-[8px] md:text-[10px]">
+                      {ticket.table}
+                    </p>
+                    <p className="min-w-0 flex-1 truncate text-[6px] text-gray-600 sm:text-[8px] md:text-[10px]">
+                      {ticket.item}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 py-1.5 sm:py-2.5 md:py-4">
+              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 sm:h-7 sm:w-7 md:h-8 md:w-8">
+                <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" strokeWidth={1.8} />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[7px] font-semibold sm:text-[9px] md:text-[11px]">{copy.paymentTitle}</p>
+                <p className="mt-0.5 truncate text-[5px] text-gray-500 sm:text-[7px] md:text-[9px]">{copy.paymentDesc}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 border-t border-gray-200 bg-white px-3 py-1.5 text-gray-400 sm:px-5 sm:py-2.5 md:py-3">
+            {[BarChart3, Table2, ChefHat, UsersRound].map((Icon, index) => (
+              <span key={index} className={`flex justify-center ${index === 0 ? "text-orange-600" : ""}`}>
+                <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" strokeWidth={1.8} />
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -500,7 +609,7 @@ function ImageAndDownload({ btn, language }: { btn: () => void; language: Langua
 
   return (
     <div className="m-6 mb-6 flex flex-col items-center gap-6 sm:flex-row sm:justify-start sm:gap-16 md:gap-24 lg:gap-64">
-      <PhoneImage alt={copy.phoneImageAlt} />
+      <PhoneMockup label={copy.phoneImageAlt} language={language} />
       <div className="flex flex-col items-center gap-4 sm:items-center">
         <PrimaryButton onClick={btn}>{copy.register}</PrimaryButton>
        <HeroProofStrip language={language} />

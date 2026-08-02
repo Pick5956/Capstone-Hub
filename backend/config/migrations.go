@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 4
+	CurrentSchemaVersion int64 = 5
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -107,6 +107,18 @@ func schemaMigrationPlan() []SchemaMigration {
 				// table orders from being sent outside the restaurant.
 				if err := ctx.DB.AutoMigrate(&entity.Restaurant{}); err != nil {
 					return fmt.Errorf("migrate restaurant order geofence: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 5,
+			Name:    "add_reservations",
+			Up: func(ctx *MigrationContext) error {
+				// Reservation history: track table bookings and their outcome
+				// (seated / cancelled / no-show) separately from the order archive.
+				if err := ctx.DB.AutoMigrate(&entity.Reservation{}); err != nil {
+					return fmt.Errorf("migrate reservations: %w", err)
 				}
 				return nil
 			},

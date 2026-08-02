@@ -1,0 +1,57 @@
+# This repository contains independent web, API, and Expo projects.
+# EAS Build starts its archive at the Git root, so exclude every sibling project
+# and local workspace directory explicitly. The mobile directory stays included.
+/.agents/
+/.codex/
+/.git/
+/.github/
+/.impeccable/
+/.obsidian/
+/.vscode/
+/backend/
+/data/
+/docs/
+/frontend/
+/infra/
+/logs/
+/scripts/
+/.env
+/.env.*
+/*.md
+/docker-compose.yml
+
+# Mobile dependencies and generated output
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/dist/
+/mobile/web-build/
+/mobile/expo-env.d.ts
+/mobile/android/
+/mobile/ios/
+/mobile/.kotlin/
+/mobile/*.orig.*
+
+# Local environment and credentials
+/mobile/.env
+/mobile/.env.*
+!/mobile/.env.example
+/mobile/credentials.json
+/mobile/google-services.json
+/mobile/GoogleService-Info.plist
+/mobile/*.jks
+/mobile/*.keystore
+/mobile/*.p8
+/mobile/*.p12
+/mobile/*.key
+/mobile/*.pem
+/mobile/*.mobileprovision
+
+# Local tooling and reports
+/mobile/.vscode/
+/mobile/coverage/
+/mobile/*.log
+/mobile/*.tsbuildinfo
+/mobile/npm-debug.*
+/mobile/yarn-debug.*
+/mobile/yarn-error.*
+/mobile/.DS_Store

@@ -60,7 +60,10 @@ func orderStatusFromItems(current string, items []entity.OrderItem) string {
 		}
 	}
 	if len(active) == 0 {
-		return current
+		// Every item was cancelled (or none were ever added), so the table is
+		// empty again. Fall back to "open" instead of leaving a stale kitchen
+		// status that would block both payment and closing the empty table.
+		return entity.OrderStatusOpen
 	}
 	if allItems(active, entity.OrderItemStatusServed) {
 		return entity.OrderStatusServed
@@ -284,7 +287,11 @@ func canTransitionItem(from, to string) bool {
 		return to == entity.OrderItemStatusReady || to == entity.OrderItemStatusCancelled
 	case entity.OrderItemStatusReady:
 		return to == entity.OrderItemStatusCooking || to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
-	case entity.OrderItemStatusServed, entity.OrderItemStatusCancelled:
+	case entity.OrderItemStatusServed:
+		// A served item can still be voided (with a reason) during checkout —
+		// e.g. staff keyed it by mistake or the guest never received it.
+		return to == entity.OrderItemStatusCancelled
+	case entity.OrderItemStatusCancelled:
 		return false
 	default:
 		return false

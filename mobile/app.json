@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Restaurant Hub",
+    "name": "Dishy",
     "slug": "restaurant-hub-mobile",
     "version": "1.0.0",
     "orientation": "default",
@@ -9,9 +9,11 @@
     "scheme": "restauranthub",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "pro.dishy.restauranthub"
     },
     "android": {
+      "package": "pro.dishy.restauranthub",
       "adaptiveIcon": {
         "backgroundColor": "#F8FAFC",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,6 +29,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       [
         "expo-splash-screen",
         {
@@ -40,6 +43,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {}
     }
   }
 }

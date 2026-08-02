@@ -1,5 +1,7 @@
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 
+import { AppText as Text } from '@/src/components/app-text';
+import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { colors, inputStyles, layout, typeScale } from '@/src/theme';
 
 export function FormField({

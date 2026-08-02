@@ -9,6 +9,7 @@ import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
+import { listMenuItems } from "@/src/lib/menu";
 import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -77,10 +78,6 @@ function shouldShowItemFulfillment(order: Order, item: OrderItem) {
   return (item.fulfillment_type ?? order.order_type) !== order.order_type;
 }
 
-function orderItemImageUrl(item: OrderItem) {
-  return item.menu?.image_url || "/menu-placeholder-v2.webp";
-}
-
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -89,6 +86,7 @@ export default function KitchenPage() {
   const canView = can(activeMembership, "view_kitchen");
   const canUpdate = can(activeMembership, "update_order_status");
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuImageById, setMenuImageById] = useState<Map<number, string>>(() => new Map());
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -280,6 +278,27 @@ export default function KitchenPage() {
     eventFilter: { kind: "kitchen" },
   });
   useVisiblePolling(load, { enabled: canView, intervalMs: 60_000 });
+
+  // The kitchen queue payload does not embed each item's menu, so fetch the menu
+  // catalogue once and resolve thumbnails by menu_id (mirrors the POS order page).
+  useEffect(() => {
+    if (!canView) return;
+    let active = true;
+    listMenuItems()
+      .then((res) => {
+        if (!active) return;
+        setMenuImageById(new Map(res.data.menu_items.map((item) => [item.ID, item.image_url])));
+      })
+      .catch(() => {
+        // Kitchen-only roles may lack menu access; fall back to the placeholder image.
+      });
+    return () => {
+      active = false;
+    };
+  }, [canView]);
+
+  const orderItemImageUrl = (item: OrderItem) =>
+    item.menu?.image_url || menuImageById.get(item.menu_id) || "/menu-placeholder-v2.webp";
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);

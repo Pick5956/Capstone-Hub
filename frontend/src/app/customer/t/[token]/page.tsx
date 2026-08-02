@@ -77,6 +77,8 @@ export default function CustomerTableOrderPage() {
         tableOrders: "ที่สั่งแล้ว",
         itemUnit: "รายการ",
         added: "เพิ่มแล้ว",
+        noImage: "ไม่มีรูป",
+        soldOut: "สินค้าหมด",
         total: "รวม",
         close: "ปิด",
         remove: "ลบ",
@@ -112,6 +114,8 @@ export default function CustomerTableOrderPage() {
         tableOrders: "Ordered",
         itemUnit: "items",
         added: "Added",
+        noImage: "No image",
+        soldOut: "Sold out",
         total: "Total",
         close: "Close",
         remove: "Remove",
@@ -155,7 +159,8 @@ export default function CustomerTableOrderPage() {
     return menuItems.filter((item) => {
       if (categoryId !== "all" && !menuCategoryIds(item).includes(categoryId)) return false;
       if (keyword && !item.name.toLowerCase().includes(keyword)) return false;
-      return item.is_available;
+      // Sold-out items stay in the list (shown as "sold out"); not filtered out.
+      return true;
     });
   }, [categoryId, menuItems, search]);
 
@@ -399,7 +404,12 @@ export default function CustomerTableOrderPage() {
               const orderedQuantity = cartMenuQuantities.get(item.ID) ?? 0;
 
               return (
-                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:hover:-translate-y-0.5">
+                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:hover:-translate-y-0.5">
+                  {!item.is_available && (
+                    <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
+                      {copy.soldOut}
+                    </span>
+                  )}
                   {orderedQuantity > 0 && (
                     <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
                       {copy.added} x{orderedQuantity}

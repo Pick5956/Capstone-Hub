@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  buildReservationActionPath,
+  buildReservationListPath,
+} from './reservation-query.ts';
+import {
+  canEditTableAvailability,
+  canOpenDineInOrder,
+  canViewReservationHistory,
+  reservationArrivalOrderInput,
+  tableEditorSaveStatus,
+  tableEntryAction,
+} from './table-workflow.ts';
+
+test('inactive tables cannot open a new order', () => {
+  assert.equal(tableEntryAction('inactive', false), 'blocked');
+});
+
+test('table selection resumes orders before considering the resting table status', () => {
+  assert.equal(tableEntryAction('occupied', true), 'resume');
+  assert.equal(tableEntryAction('reserved', false), 'reservation');
+  assert.equal(tableEntryAction('free', false), 'new');
+});
+
+test('the table editor only exposes availability changes for resting table states', () => {
+  assert.equal(canEditTableAvailability('free'), true);
+  assert.equal(canEditTableAvailability('inactive'), true);
+  assert.equal(canEditTableAvailability('reserved'), false);
+  assert.equal(canEditTableAvailability('occupied'), false);
+});
+
+test('the table editor preserves reservation and order lifecycle status on save', () => {
+  assert.equal(tableEditorSaveStatus('reserved', 'free'), 'reserved');
+  assert.equal(tableEditorSaveStatus('occupied', 'inactive'), 'occupied');
+  assert.equal(tableEditorSaveStatus('free', 'inactive'), 'inactive');
+  assert.equal(tableEditorSaveStatus('inactive', 'free'), 'free');
+});
+
+test('reservation API paths preserve the backend list and lifecycle contract', () => {
+  assert.equal(buildReservationListPath(), '/api/v1/reservations');
+  assert.equal(
+    buildReservationListPath({ status: 'seated', limit: 50, offset: 20 }),
+    '/api/v1/reservations?status=seated&limit=50&offset=20',
+  );
+  assert.equal(
+    buildReservationListPath({ status: '', limit: 500, offset: -2 }),
+    '/api/v1/reservations?limit=100',
+  );
+  assert.equal(buildReservationActionPath(42, 'reserve'), '/api/v1/tables/42/reserve');
+  assert.equal(buildReservationActionPath(42, 'cancel'), '/api/v1/tables/42/cancel-reservation');
+  assert.equal(buildReservationActionPath(42, 'seat'), '/api/v1/tables/42/seat-reservation');
+});
+
+test('reservation history follows the same OR permission contract as web', () => {
+  assert.equal(canViewReservationHistory(true, false, false), true);
+  assert.equal(canViewReservationHistory(false, true, false), true);
+  assert.equal(canViewReservationHistory(false, false, true), true);
+  assert.equal(canViewReservationHistory(false, false, false), false);
+});
+
+test('accepting a reservation builds an atomic reserved-table order request', () => {
+  assert.deepEqual(reservationArrivalOrderInput(42, {
+    customerCount: 4,
+    customerName: '  คุณแนน  ',
+    customerPhone: ' 0812345678 ',
+  }), {
+    table_id: 42,
+    order_type: 'dine_in',
+    customer_count: 4,
+    customer_name: 'คุณแนน',
+    customer_phone: '0812345678',
+    seat_reservation: true,
+  });
+});
+
+test('a dine-in order cannot be submitted for an invalid or missing table', () => {
+  assert.equal(canOpenDineInOrder(42, true), true);
+  assert.equal(canOpenDineInOrder(42, false), false);
+  assert.equal(canOpenDineInOrder(0, true), false);
+  assert.equal(canOpenDineInOrder(Number.NaN, true), false);
+});

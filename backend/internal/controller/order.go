@@ -53,6 +53,59 @@ func requireOrderAccess(c *gin.Context, permission string) bool {
 	return false
 }
 
+func normalizedOrderListStatus(c *gin.Context) string {
+	return strings.TrimSpace(c.Query("status"))
+}
+
+func requireOrderListAccess(c *gin.Context) bool {
+	if memberCan(c, "view_orders") {
+		return true
+	}
+	if memberCan(c, "take_order") &&
+		normalizedOrderListStatus(c) == "active" &&
+		c.Query("include_summary") != "true" {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": "missing view_orders permission or operational take_order query"})
+	return false
+}
+
+func requireOrderReadAccess(c *gin.Context) bool {
+	return requireAnyPermission(
+		c,
+		"missing view_orders, take_order, or take_payment permission",
+		"view_orders",
+		"take_order",
+		"take_payment",
+	)
+}
+
+func orderHasNoPendingItems(order *entity.Order) bool {
+	if order == nil {
+		return false
+	}
+	for _, item := range order.Items {
+		if item.Status == entity.OrderItemStatusPending {
+			return false
+		}
+	}
+	return true
+}
+
+func requireOrderItemStatusAccess(c *gin.Context, status string, order *entity.Order) bool {
+	if memberCan(c, "update_order_status") {
+		return true
+	}
+	if status == entity.OrderItemStatusServed && memberCan(c, "take_order") {
+		return true
+	}
+	if status == entity.OrderItemStatusCancelled && memberCan(c, "take_order") && orderHasNoPendingItems(order) {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{"error": "missing permission for this order item status transition"})
+	return false
+}
+
 func (ctrl *OrderController) CreateOrder(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
@@ -85,7 +138,7 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !requireOrderAccess(c, "view_orders") {
+	if !requireOrderListAccess(c) {
 		return
 	}
 	tableID, ok := optionalUintQuery(c, "table_id", "invalid table_id")
@@ -95,22 +148,26 @@ func (ctrl *OrderController) ListOrders(c *gin.Context) {
 	page := boundedQueryInt(c, "page", 1, 1, 1000)
 	limit := boundedQueryInt(c, "limit", 100, 1, 200)
 	includeSummary := c.Query("include_summary") == "true"
+	status := normalizedOrderListStatus(c)
+	orderDate := strings.TrimSpace(c.Query("date"))
+	paymentStatus := strings.TrimSpace(c.Query("payment_status"))
+	search := strings.TrimSpace(c.Query("search"))
 	if err := service.ValidateOrderListFilters(
-		strings.TrimSpace(c.Query("status")),
-		strings.TrimSpace(c.Query("date")),
-		strings.TrimSpace(c.Query("payment_status")),
-		strings.TrimSpace(c.Query("search")),
+		status,
+		orderDate,
+		paymentStatus,
+		search,
 	); err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	result, err := ctrl.orderSvc.ListOrders(
 		restaurantID,
-		c.Query("status"),
+		status,
 		tableID,
-		c.Query("date"),
-		c.Query("payment_status"),
-		c.Query("search"),
+		orderDate,
+		paymentStatus,
+		search,
 		includeSummary,
 		page,
 		limit,
@@ -165,7 +222,7 @@ func (ctrl *OrderController) GetOrder(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !requireOrderAccess(c, "view_orders") {
+	if !requireOrderReadAccess(c) {
 		return
 	}
 	order, ok := ctrl.resolveOrder(c, restaurantID)
@@ -275,7 +332,7 @@ func (ctrl *OrderController) Bill(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !requireOrderAccess(c, "view_orders") {
+	if !requireOrderReadAccess(c) {
 		return
 	}
 	resolved, ok := ctrl.resolveOrder(c, restaurantID)
@@ -431,19 +488,14 @@ func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	// Marking an item "served" is a front-of-house step (the waiter serving what
-	// the kitchen flagged ready), so take_order is allowed for it as well. Every
-	// other transition is a kitchen change and still requires update_order_status.
+	// Serving and voiding at checkout are front-of-house steps, so take_order is
+	// accepted for those transitions. Cooking/ready changes remain kitchen-only.
 	status := strings.TrimSpace(req.Status)
-	if status == entity.OrderItemStatusServed {
-		if !requireAnyPermission(c, "missing update_order_status or take_order permission", "update_order_status", "take_order") {
-			return
-		}
-	} else if !requireOrderAccess(c, "update_order_status") {
-		return
-	}
 	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
+		return
+	}
+	if !requireOrderItemStatusAccess(c, status, resolved) {
 		return
 	}
 	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, resolved.ID, itemID, status, req.Reason)
@@ -477,6 +529,7 @@ func (ctrl *OrderController) OrderEvents(c *gin.Context) {
 		"missing order realtime permission",
 		"view_orders",
 		"take_order",
+		"take_payment",
 		"view_kitchen",
 		"update_order_status",
 	)
