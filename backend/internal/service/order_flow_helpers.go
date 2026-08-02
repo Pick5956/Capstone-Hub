@@ -15,10 +15,44 @@ func roundMoney(value float64) float64 {
 }
 
 func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
+	if order == nil || isTerminalOrder(order.Status) {
+		return nil
+	}
 	items, err := tx.ListItems(order.ID)
 	if err != nil {
 		return err
 	}
+	next := orderStatusFromItems(order.Status, items)
+	if next == order.Status {
+		return nil
+	}
+	note := "items in kitchen"
+	switch next {
+	case entity.OrderStatusServed:
+		note = "all items served"
+	case entity.OrderStatusReady:
+		note = "all remaining items ready"
+	}
+	return setOrderStatus(tx, order, next, userID, note)
+}
+
+func effectiveOrderStatus(order *entity.Order) string {
+	if order == nil {
+		return ""
+	}
+	if isTerminalOrder(order.Status) {
+		return order.Status
+	}
+	return orderStatusFromItems(order.Status, order.Items)
+}
+
+func applyEffectiveOrderStatus(order *entity.Order) {
+	if order != nil {
+		order.Status = effectiveOrderStatus(order)
+	}
+}
+
+func orderStatusFromItems(current string, items []entity.OrderItem) string {
 	active := make([]entity.OrderItem, 0, len(items))
 	for _, item := range items {
 		if item.Status != entity.OrderItemStatusCancelled {
@@ -26,21 +60,30 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		}
 	}
 	if len(active) == 0 {
-		return nil
+		// Every item was cancelled (or none were ever added), so the table is
+		// empty again. Fall back to "open" instead of leaving a stale kitchen
+		// status that would block both payment and closing the empty table.
+		return entity.OrderStatusOpen
 	}
 	if allItems(active, entity.OrderItemStatusServed) {
-		return setOrderStatus(tx, order, entity.OrderStatusServed, userID, "all items served")
+		return entity.OrderStatusServed
 	}
-	if allItems(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusReady, userID, "all items ready")
+	remaining := make([]entity.OrderItem, 0, len(active))
+	for _, item := range active {
+		if item.Status != entity.OrderItemStatusServed {
+			remaining = append(remaining, item)
+		}
 	}
-	if order.Status == entity.OrderStatusSentToKitchen && anyItem(active, entity.OrderItemStatusCooking) {
-		return nil
+	if len(remaining) > 0 && allItems(remaining, entity.OrderItemStatusReady) {
+		return entity.OrderStatusReady
 	}
-	if anyItem(active, entity.OrderItemStatusCooking) || anyItem(active, entity.OrderItemStatusReady) {
-		return setOrderStatus(tx, order, entity.OrderStatusCooking, userID, "items in kitchen")
+	if current == entity.OrderStatusSentToKitchen && anyItem(remaining, entity.OrderItemStatusCooking) {
+		return current
 	}
-	return nil
+	if anyItem(remaining, entity.OrderItemStatusCooking) || anyItem(remaining, entity.OrderItemStatusReady) {
+		return entity.OrderStatusCooking
+	}
+	return current
 }
 
 func sendPendingItemsToKitchen(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
@@ -70,38 +113,38 @@ func sendPendingItemsToKitchenByIDs(tx *repository.OrderRepository, order *entit
 	return setOrderStatus(tx, order, entity.OrderStatusSentToKitchen, userID, fmt.Sprintf("sent batch %d to kitchen", nextBatch))
 }
 
-func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
-	components, err := tx.ListRecipeComponents(restaurantID, item.MenuID)
+func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order, item *entity.OrderItem) error {
+	snapshots, err := tx.ListItemRecipeSnapshots(restaurantID, item.ID)
 	if err != nil {
 		return err
 	}
-	if len(components) == 0 {
+	if len(snapshots) == 0 {
 		return nil
 	}
-	for _, component := range components {
-		required := component.Quantity * float64(item.Quantity)
+	for _, snapshot := range snapshots {
+		required := snapshot.QuantityPerItem * float64(item.Quantity)
 		if required <= 0 {
 			continue
 		}
-		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, component.IngredientID)
+		alreadyDeducted, err := tx.HasInventoryDeduction(item.ID, snapshot.IngredientID)
 		if err != nil {
 			return err
 		}
 		if alreadyDeducted {
 			continue
 		}
-		ingredient, err := tx.FindIngredientForUpdate(restaurantID, component.IngredientID)
+		ingredient, err := tx.FindIngredientForUpdate(restaurantID, snapshot.IngredientID)
 		if err != nil {
 			return err
 		}
 		if ingredient.Stock < required {
-			return fmt.Errorf("%s stock is not enough for %s", ingredient.Name, item.MenuName)
+			return fmt.Errorf("%s stock is not enough for %s", snapshot.IngredientName, item.MenuName)
 		}
 		ingredient.Stock -= required
 		if err := tx.SaveIngredient(ingredient); err != nil {
 			return err
 		}
-		cost := recipeComponentCost(required, ingredient.CostPerUnit, ingredient.YieldPercent)
+		cost := recipeComponentCost(required, snapshot.CostPerUnit, snapshot.YieldPercent)
 		deduction := &entity.OrderInventoryDeduction{
 			RestaurantID: restaurantID,
 			OrderID:      order.ID,
@@ -125,6 +168,25 @@ func deductInventoryForServedItem(tx *repository.OrderRepository, restaurantID, 
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateIngredientTransaction(stockTx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func finalizeReadyItemsForPayment(tx *repository.OrderRepository, restaurantID, userID uint, order *entity.Order) error {
+	now := repository.BangkokNow()
+	for index := range order.Items {
+		item := &order.Items[index]
+		if item.Status != entity.OrderItemStatusReady {
+			continue
+		}
+		if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+			return err
+		}
+		item.Status = entity.OrderItemStatusServed
+		item.ServedAt = &now
+		if err := tx.SaveItem(item); err != nil {
 			return err
 		}
 	}
@@ -224,8 +286,12 @@ func canTransitionItem(from, to string) bool {
 	case entity.OrderItemStatusCooking:
 		return to == entity.OrderItemStatusReady || to == entity.OrderItemStatusCancelled
 	case entity.OrderItemStatusReady:
-		return to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
-	case entity.OrderItemStatusServed, entity.OrderItemStatusCancelled:
+		return to == entity.OrderItemStatusCooking || to == entity.OrderItemStatusServed || to == entity.OrderItemStatusCancelled
+	case entity.OrderItemStatusServed:
+		// A served item can still be voided (with a reason) during checkout —
+		// e.g. staff keyed it by mistake or the guest never received it.
+		return to == entity.OrderItemStatusCancelled
+	case entity.OrderItemStatusCancelled:
 		return false
 	default:
 		return false

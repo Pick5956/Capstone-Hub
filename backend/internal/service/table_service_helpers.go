@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
+
+const customerTableTokenBytes = 24
 
 func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *TableRequest) (*entity.RestaurantTable, []entity.TableTag, error) {
 	capacity := req.Capacity
@@ -41,6 +42,10 @@ func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *
 		return nil, nil, err
 	}
 	label := tableLabel(zone, next)
+	customerToken, err := GenerateCustomerTableToken()
+	if err != nil {
+		return nil, nil, err
+	}
 	return &entity.RestaurantTable{
 		RestaurantID:   restaurantID,
 		ZoneID:         zoneID,
@@ -50,7 +55,7 @@ func tableFromRequest(repo *repository.TableRepository, restaurantID uint, req *
 		Capacity:       normalizedCapacity,
 		Zone:           zoneName(zone),
 		Status:         status,
-		CustomerToken:  GenerateCustomerTableToken(),
+		CustomerToken:  customerToken,
 	}, tags, nil
 }
 
@@ -71,12 +76,59 @@ func isValidReservationPhone(phone string) bool {
 	return digits >= 9
 }
 
-func GenerateCustomerTableToken() string {
-	bytes := make([]byte, 24)
-	if _, err := rand.Read(bytes); err != nil {
-		return fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+func validateTableCanBeReserved(status string) error {
+	if status != entity.TableStatusFree {
+		return errors.New("table is not free")
 	}
-	return hex.EncodeToString(bytes)
+	return nil
+}
+
+func validateReservedTableRelease(status string, hasOpenOrder bool) error {
+	if status != entity.TableStatusReserved {
+		return errors.New("table is not reserved")
+	}
+	if hasOpenOrder {
+		return errors.New("table has an open order")
+	}
+	return nil
+}
+
+// tableStatusForMetadataUpdate keeps reservation/order lifecycle status owned
+// by their dedicated workflows while still allowing table metadata to change.
+func tableStatusForMetadataUpdate(current, requested string) string {
+	if current == entity.TableStatusReserved || current == entity.TableStatusOccupied {
+		return current
+	}
+	return requested
+}
+
+func applyTableMetadataUpdate(table, requested *entity.RestaurantTable) {
+	table.Capacity = requested.Capacity
+	table.Status = tableStatusForMetadataUpdate(table.Status, requested.Status)
+	if table.Status != entity.TableStatusReserved {
+		table.ReservationName = ""
+		table.ReservationPhone = ""
+	}
+}
+
+func GenerateCustomerTableToken() (string, error) {
+	bytes := make([]byte, customerTableTokenBytes)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", errors.New("failed to generate customer table token")
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func normalizeCustomerTableToken(token string) (string, error) {
+	token = strings.TrimSpace(token)
+	if len(token) != customerTableTokenBytes*2 {
+		return "", errors.New("table QR code is not valid")
+	}
+	decoded, err := hex.DecodeString(token)
+	if err != nil || len(decoded) != customerTableTokenBytes {
+		return "", errors.New("table QR code is not valid")
+	}
+	return token, nil
 }
 
 func normalizeCapacity(capacity int) (int, error) {
@@ -124,7 +176,25 @@ func zoneFromRequest(repo *repository.TableRepository, restaurantID, currentID u
 		return nil, errors.New("zone name is required")
 	}
 	prefix := strings.ToUpper(strings.TrimSpace(req.Prefix))
-	if prefix != "" {
+	if len(prefix) > 8 {
+		return nil, errors.New("zone prefix must be 8 characters or fewer")
+	}
+	if prefix == "" {
+		for suffix := 1; ; suffix++ {
+			candidate := "Z"
+			if suffix > 1 {
+				candidate = fmt.Sprintf("Z%d", suffix)
+			}
+			exists, err := repo.PrefixExists(restaurantID, candidate, currentID)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				prefix = candidate
+				break
+			}
+		}
+	} else {
 		exists, err := repo.PrefixExists(restaurantID, prefix, currentID)
 		if err != nil {
 			return nil, err

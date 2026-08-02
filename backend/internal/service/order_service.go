@@ -3,7 +3,10 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -20,46 +23,65 @@ func ProvideOrderService(repo *repository.OrderRepository) *OrderService {
 }
 
 type OpenOrderRequest struct {
-	TableID       *uint  `json:"table_id"`
-	OrderType     string `json:"order_type"`
-	CustomerCount int    `json:"customer_count"`
-	CustomerName  string `json:"customer_name"`
-	CustomerPhone string `json:"customer_phone"`
-	Note          string `json:"note"`
+	TableID         *uint  `json:"table_id"`
+	OrderType       string `json:"order_type" binding:"omitempty,oneof=dine_in takeaway"`
+	CustomerCount   int    `json:"customer_count" binding:"gte=0,lte=1000"`
+	CustomerName    string `json:"customer_name" binding:"max=80"`
+	CustomerPhone   string `json:"customer_phone" binding:"max=32"`
+	Note            string `json:"note" binding:"max=1000"`
+	SeatReservation bool   `json:"seat_reservation"`
 }
 
 type UpdateOrderRequest struct {
-	CustomerCount int    `json:"customer_count"`
-	Note          string `json:"note"`
+	CustomerCount int    `json:"customer_count" binding:"gte=0,lte=1000"`
+	Note          string `json:"note" binding:"max=1000"`
 }
 
 type AddOrderItemRequest struct {
 	MenuID            uint   `json:"menu_id" binding:"required"`
-	Quantity          int    `json:"quantity"`
-	Note              string `json:"note"`
-	FulfillmentType   string `json:"fulfillment_type"`
-	SelectedOptionIDs []uint `json:"selected_option_ids"`
+	Quantity          int    `json:"quantity" binding:"gte=0,lte=100"`
+	Note              string `json:"note" binding:"max=500"`
+	FulfillmentType   string `json:"fulfillment_type" binding:"omitempty,oneof=dine_in takeaway"`
+	SelectedOptionIDs []uint `json:"selected_option_ids" binding:"max=50"`
+	// ServeImmediately records an item that already reached the guest (e.g. a
+	// drink poured and served before it was keyed in). It skips the kitchen:
+	// the item is created as "served" and its ingredients are deducted at once.
+	ServeImmediately bool `json:"serve_immediately"`
 }
 
 type UpdateOrderItemRequest struct {
-	Quantity int    `json:"quantity"`
-	Note     string `json:"note"`
+	Quantity int    `json:"quantity" binding:"required,gte=1,lte=100"`
+	Note     string `json:"note" binding:"max=500"`
 }
 
 type StatusRequest struct {
-	Status string `json:"status" binding:"required"`
-	Reason string `json:"reason"`
-	Note   string `json:"note"`
+	Status string `json:"status" binding:"required,oneof=pending cooking ready served cancelled"`
+	Reason string `json:"reason" binding:"max=500"`
+	Note   string `json:"note" binding:"max=500"`
+}
+
+func normalizeItemCancellationReason(status, reason string) (string, error) {
+	if status != entity.OrderItemStatusCancelled {
+		return "", nil
+	}
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		return "", errors.New("cancellation reason is required")
+	}
+	if utf8.RuneCountInString(normalized) > 500 {
+		return "", errors.New("cancellation reason must not exceed 500 characters")
+	}
+	return normalized, nil
 }
 
 type CancelRequest struct {
-	Reason string `json:"reason" binding:"required"`
+	Reason string `json:"reason" binding:"required,max=500"`
 }
 
 type PayOrderRequest struct {
-	Method         string  `json:"method" binding:"required"`
-	ReceivedAmount float64 `json:"received_amount"`
-	Note           string  `json:"note"`
+	Method         string  `json:"method" binding:"required,oneof=cash promptpay_qr"`
+	ReceivedAmount float64 `json:"received_amount" binding:"gte=0"`
+	Note           string  `json:"note" binding:"max=500"`
 }
 
 type BillResponse struct {
@@ -89,6 +111,19 @@ type selectedMenuOption struct {
 	PriceDelta    float64
 }
 
+func shouldSeatReservationOnOpen(tableStatus string, requested bool) (bool, error) {
+	if tableStatus == entity.TableStatusReserved {
+		if !requested {
+			return false, errors.New("table is reserved")
+		}
+		return true, nil
+	}
+	if requested {
+		return false, errors.New("table has no active reservation")
+	}
+	return false, nil
+}
+
 func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderRequest) (*entity.Order, error) {
 	var created *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
@@ -98,12 +133,13 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 		}
 		var table *entity.RestaurantTable
 		var tableID *uint
+		seatReservation := false
 		if orderType == entity.OrderTypeDineIn {
 			if req.TableID == nil || *req.TableID == 0 {
 				return errors.New("table_id is required for dine-in orders")
 			}
 			tableID = req.TableID
-			table, err = tx.FindTable(restaurantID, *req.TableID)
+			table, err = tx.FindTableForUpdate(restaurantID, *req.TableID)
 			if err != nil {
 				return errors.New("table not found")
 			}
@@ -115,9 +151,12 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			if table.Status == entity.TableStatusInactive {
 				return errors.New("table is inactive")
 			}
-			if table.Status == entity.TableStatusReserved {
-				return errors.New("table is reserved")
+			seatReservation, err = shouldSeatReservationOnOpen(table.Status, req.SeatReservation)
+			if err != nil {
+				return err
 			}
+		} else if req.SeatReservation {
+			return errors.New("reservation seating requires a dine-in table")
 		}
 		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
 			return err
@@ -136,14 +175,14 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			RestaurantID:  restaurantID,
 			TableID:       tableID,
 			OrderType:     orderType,
-			OrderNumber:   orderNumberFromIndex(int(count) + 1),
+			OrderNumber:   orderNumberForDate(now.Format("20060102"), int(count)+1),
 			OrderDate:     orderDate,
 			StaffID:       userID,
 			CustomerCount: customerCount,
 			CustomerName:  strings.TrimSpace(req.CustomerName),
 			CustomerPhone: strings.TrimSpace(req.CustomerPhone),
 			Status:        entity.OrderStatusOpen,
-			PaymentStatus: "unpaid",
+			PaymentStatus: entity.PaymentStatusUnpaid,
 			Note:          strings.TrimSpace(req.Note),
 			OpenedAt:      now,
 			Version:       1,
@@ -159,6 +198,11 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 			return err
 		}
 		if table != nil {
+			if seatReservation {
+				if err := tx.ResolveActiveReservation(restaurantID, table.ID, entity.ReservationStatusSeated); err != nil {
+					return err
+				}
+			}
 			table.Status = entity.TableStatusOccupied
 			table.ReservationName = ""
 			table.ReservationPhone = ""
@@ -175,9 +219,12 @@ func (s *OrderService) OpenOrder(restaurantID, userID uint, req *OpenOrderReques
 	return s.repo.FindOrder(restaurantID, created.ID)
 }
 
-func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate string, page, limit int) ([]entity.Order, error) {
+func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint, orderDate, paymentStatus, search string, includeSummary bool, page, limit int) (*repository.OrderListResult, error) {
 	if page < 1 {
 		page = 1
+	}
+	if page > 1000 {
+		page = 1000
 	}
 	if limit < 1 {
 		limit = 100
@@ -185,22 +232,115 @@ func (s *OrderService) ListOrders(restaurantID uint, status string, tableID uint
 	if limit > 200 {
 		limit = 200
 	}
-	return s.repo.ListOrders(restaurantID, strings.TrimSpace(status), tableID, strings.TrimSpace(orderDate), page, limit)
+	status = strings.TrimSpace(status)
+	orderDate = strings.TrimSpace(orderDate)
+	paymentStatus = strings.TrimSpace(paymentStatus)
+	search = strings.TrimSpace(search)
+	if err := ValidateOrderListFilters(status, orderDate, paymentStatus, search); err != nil {
+		return nil, err
+	}
+	return s.repo.ListOrders(
+		restaurantID,
+		status,
+		tableID,
+		orderDate,
+		paymentStatus,
+		search,
+		includeSummary,
+		page,
+		limit,
+	)
 }
 
 func (s *OrderService) GetOrder(restaurantID, orderID uint) (*entity.Order, error) {
-	return s.repo.FindOrder(restaurantID, orderID)
+	order, err := s.repo.FindOrder(restaurantID, orderID)
+	if err != nil {
+		return nil, err
+	}
+	applyEffectiveOrderStatus(order)
+	return order, nil
 }
 
-// GetOrderByNumber looks up an order by its human-readable order_number (e.g. "A001").
+// GetOrderByNumber looks up an order by its human-readable order_number (e.g. "20260724-015").
 func (s *OrderService) GetOrderByNumber(restaurantID uint, orderNumber string) (*entity.Order, error) {
-	return s.repo.FindOrderByNumber(restaurantID, orderNumber)
+	if !validOrderNumber(orderNumber) {
+		return nil, errors.New("invalid order number")
+	}
+	order, err := s.repo.FindOrderByNumber(restaurantID, orderNumber)
+	if err != nil {
+		return nil, err
+	}
+	applyEffectiveOrderStatus(order)
+	return order, nil
+}
+
+func ValidateOrderListFilters(status, orderDate, paymentStatus, search string) error {
+	validStatuses := map[string]bool{
+		"": true, "active": true, "closed": true,
+		entity.OrderStatusOpen: true, entity.OrderStatusSentToKitchen: true,
+		entity.OrderStatusCooking: true, entity.OrderStatusReady: true,
+		entity.OrderStatusServed: true, entity.OrderStatusCompleted: true,
+		entity.OrderStatusCancelled: true,
+	}
+	if !validStatuses[status] {
+		return errors.New("invalid order status")
+	}
+	if paymentStatus != "" && paymentStatus != entity.PaymentStatusPaid && paymentStatus != entity.PaymentStatusUnpaid {
+		return errors.New("invalid payment status")
+	}
+	if orderDate != "" {
+		parsed, err := time.Parse("2006-01-02", orderDate)
+		if err != nil || parsed.Format("2006-01-02") != orderDate {
+			return errors.New("invalid order date")
+		}
+	}
+	if utf8.RuneCountInString(search) > 100 {
+		return errors.New("search is too long")
+	}
+	return nil
+}
+
+// validOrderNumber accepts the current YYYYMMDD-NNN format (e.g. "20260724-015")
+// as well as the legacy letter-prefixed format (e.g. "A001") so that orders
+// created before the format change can still be looked up by number.
+func validOrderNumber(value string) bool {
+	if len(value) < 4 || len(value) > 32 {
+		return false
+	}
+	// Current format: eight leading digits, a dash, then >=3 digits.
+	if strings.IndexByte(value, '-') >= 0 {
+		if len(value) < 12 || value[8] != '-' {
+			return false
+		}
+		for i := 0; i < len(value); i++ {
+			if i == 8 {
+				continue
+			}
+			if value[i] < '0' || value[i] > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	// Legacy format: one or more uppercase letters followed by >=3 digits.
+	split := len(value) - 3
+	for _, char := range value[:split] {
+		if char < 'A' || char > 'Z' {
+			return false
+		}
+	}
+	for _, char := range value[split:] {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *OrderService) UpdateOrder(restaurantID, userID, orderID uint, req *UpdateOrderRequest) (*entity.Order, error) {
 	var updated *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
@@ -223,10 +363,10 @@ func (s *OrderService) UpdateOrder(restaurantID, userID, orderID uint, req *Upda
 	return s.repo.FindOrder(restaurantID, updated.ID)
 }
 
-func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequest) (*entity.Order, error) {
+func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrderItemRequest) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
@@ -252,6 +392,10 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 		if err != nil {
 			return err
 		}
+		itemStatus := entity.OrderItemStatusPending
+		if req.ServeImmediately {
+			itemStatus = entity.OrderItemStatusServed
+		}
 		item := &entity.OrderItem{
 			OrderID:         order.ID,
 			RestaurantID:    restaurantID,
@@ -263,9 +407,16 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 			Subtotal:        (menu.Price + optionsTotal) * float64(qty),
 			FulfillmentType: fulfillmentType,
 			Note:            strings.TrimSpace(req.Note),
-			Status:          entity.OrderItemStatusPending,
+			Status:          itemStatus,
+		}
+		if req.ServeImmediately {
+			now := repository.BangkokNow()
+			item.ServedAt = &now
 		}
 		if err := tx.CreateItem(item); err != nil {
+			return err
+		}
+		if err := snapshotRecipeForOrderItem(tx, order, item); err != nil {
 			return err
 		}
 		for _, option := range selectedOptions {
@@ -283,8 +434,29 @@ func (s *OrderService) AddItem(restaurantID, orderID uint, req *AddOrderItemRequ
 				return err
 			}
 		}
+		if req.ServeImmediately {
+			// Already handed to the guest, so bypass the kitchen and deduct its
+			// ingredients now — the same accounting a completed item receives.
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+				return err
+			}
+		}
 		if err := recalcOrderTotals(tx, order); err != nil {
 			return err
+		}
+		if req.ServeImmediately {
+			// The item is already served, so recompute from the item set rather
+			// than reopening the order the way a pending item would.
+			if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
+				return err
+			}
+		} else {
+			nextStatus := orderStatusAfterPendingItemAdded(order.Status)
+			if nextStatus != order.Status {
+				if err := setOrderStatus(tx, order, nextStatus, userID, "pending item added"); err != nil {
+					return err
+				}
+			}
 		}
 		changed = order.ID
 		return nil
@@ -349,7 +521,7 @@ func (s *OrderService) DeleteItem(restaurantID, orderID, itemID uint) (*entity.O
 func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
@@ -371,14 +543,14 @@ func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entit
 func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID uint, status, reason string) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
 		if isTerminalOrder(order.Status) {
 			return errors.New("cannot update item status on closed order")
 		}
-		item, err := tx.FindItem(restaurantID, order.ID, itemID)
+		item, err := tx.FindItemForUpdate(restaurantID, order.ID, itemID)
 		if err != nil {
 			return err
 		}
@@ -386,22 +558,41 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 		if !canTransitionItem(item.Status, next) {
 			return fmt.Errorf("invalid item status transition from %s to %s", item.Status, next)
 		}
+		cancelReason, err := normalizeItemCancellationReason(next, reason)
+		if err != nil {
+			return err
+		}
 		now := repository.BangkokNow()
 		item.Status = next
+		if next == entity.OrderItemStatusCooking {
+			item.ReadyAt = nil
+			item.ServedAt = nil
+			item.CancelledReason = ""
+		}
 		if next == entity.OrderItemStatusReady {
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
+				return err
+			}
 			item.ReadyAt = &now
+			item.CancelledReason = ""
 		}
 		if next == entity.OrderItemStatusServed {
-			if err := deductInventoryForServedItem(tx, restaurantID, userID, order, item); err != nil {
+			if err := deductInventoryForCompletedKitchenItem(tx, restaurantID, userID, order, item); err != nil {
 				return err
 			}
 			item.ServedAt = &now
+			item.CancelledReason = ""
 		}
 		if next == entity.OrderItemStatusCancelled {
-			item.CancelledReason = strings.TrimSpace(reason)
+			item.CancelledReason = cancelReason
 		}
 		if err := tx.SaveItem(item); err != nil {
 			return err
+		}
+		if next == entity.OrderItemStatusCancelled {
+			if err := recalcOrderTotals(tx, order); err != nil {
+				return err
+			}
 		}
 		if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
 			return err
@@ -418,7 +609,7 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 func (s *OrderService) CancelOrder(restaurantID, userID, orderID uint, reason string) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
@@ -443,19 +634,39 @@ func (s *OrderService) CancelOrder(restaurantID, userID, orderID uint, reason st
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
-func (s *OrderService) CloseOrder(restaurantID, userID, orderID uint) (*entity.Order, error) {
+func validateEmptyTableClose(order *entity.Order) error {
+	if order == nil || order.OrderType != entity.OrderTypeDineIn || order.TableID == nil || *order.TableID == 0 {
+		return errors.New("only an empty dine-in table can be closed")
+	}
+	if order.Status != entity.OrderStatusOpen {
+		return errors.New("only an open table can be closed without an order")
+	}
+	// Cancelled items (e.g. the kitchen ran out of stock) leave the table empty,
+	// so only outstanding non-cancelled items should block closing it.
+	for _, item := range order.Items {
+		if item.Status != entity.OrderItemStatusCancelled {
+			return errors.New("table order already has items")
+		}
+	}
+	return nil
+}
+
+func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
-		if order.Status != entity.OrderStatusServed {
-			return errors.New("order must be served before closing")
+		if err := validateEmptyTableClose(order); err != nil {
+			return err
 		}
+
+		const reason = "empty table closed"
+		order.CancelledReason = reason
 		now := repository.BangkokNow()
 		order.ClosedAt = &now
-		if err := setOrderStatus(tx, order, entity.OrderStatusCompleted, userID, "order closed"); err != nil {
+		if err := setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, reason); err != nil {
 			return err
 		}
 		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
@@ -479,6 +690,7 @@ func (s *OrderService) Bill(restaurantID, orderID uint) (*BillResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	applyEffectiveOrderStatus(order)
 	restaurant, err := s.repo.FindRestaurant(restaurantID)
 	if err != nil {
 		return nil, err
@@ -488,16 +700,29 @@ func (s *OrderService) Bill(restaurantID, orderID uint) (*BillResponse, error) {
 
 func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrderRequest) (*entity.Order, error) {
 	var changed uint
+	var reconciledFrom, reconciledTo string
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
-		order, err := tx.FindOrder(restaurantID, orderID)
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
 			return err
 		}
-		if order.Status != entity.OrderStatusServed {
-			return errors.New("order must be served before payment")
+		if order.PaymentStatus == entity.PaymentStatusPaid {
+			changed = order.ID
+			return nil
 		}
-		if order.PaymentStatus == "paid" {
-			return errors.New("order is already paid")
+		statusBeforeReconcile := order.Status
+		if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
+			return err
+		}
+		if order.Status != statusBeforeReconcile {
+			reconciledFrom = statusBeforeReconcile
+			reconciledTo = order.Status
+		}
+		if err := validateOrderReadyForPayment(order); err != nil {
+			return err
+		}
+		if err := finalizeReadyItemsForPayment(tx, restaurantID, userID, order); err != nil {
+			return err
 		}
 		method := strings.TrimSpace(req.Method)
 		if method != "cash" && method != "promptpay_qr" {
@@ -509,19 +734,22 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 		}
 		bill := billFromOrder(order, restaurant)
 		received := req.ReceivedAmount
-		if method == "promptpay_qr" || received <= 0 {
-			received = bill.GrandTotal
-		}
-		if received < bill.GrandTotal {
-			return errors.New("received amount is less than grand total")
+		received, err = normalizeReceivedAmount(method, received, bill.GrandTotal)
+		if err != nil {
+			return err
 		}
 		now := repository.BangkokNow()
 		order.ServiceChargeAmount = bill.ServiceChargeAmount
 		order.VATAmount = bill.VATAmount
 		order.TotalAmount = bill.TotalAmount
 		order.GrandTotal = bill.GrandTotal
-		order.PaymentStatus = "paid"
+		order.PaymentStatus = entity.PaymentStatusPaid
 		order.ClosedAt = &now
+		order.CompletedAt = &now
+		order.ServiceChargeEnabledSnapshot = restaurant.ServiceChargeEnabled
+		order.ServiceChargeRateSnapshot = restaurant.ServiceChargeRate
+		order.VATEnabledSnapshot = restaurant.VATEnabled
+		order.VATRateSnapshot = restaurant.VATRate
 		if err := setOrderStatus(tx, order, entity.OrderStatusCompleted, userID, "payment received"); err != nil {
 			return err
 		}
@@ -548,30 +776,133 @@ func (s *OrderService) PayOrder(restaurantID, userID, orderID uint, req *PayOrde
 	if err != nil {
 		return nil, err
 	}
+	if reconciledFrom != "" {
+		log.Printf(
+			"order_status_aggregate_reconciled restaurant_id=%d order_id=%d from=%s to=%s",
+			restaurantID,
+			orderID,
+			reconciledFrom,
+			reconciledTo,
+		)
+	}
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
-func orderNumberFromIndex(index int) string {
+// orderNumberForDate builds a human-readable, internationally recognizable order
+// number in the form YYYYMMDD-NNN (e.g. "20260724-015"). The sequence resets
+// daily (index is the count of that day's orders + 1) and is zero-padded to at
+// least three digits, growing wider past 999.
+func orderNumberForDate(dateCompact string, index int) string {
 	if index < 1 {
 		index = 1
 	}
-	letterIndex := (index - 1) / 999
-	number := ((index - 1) % 999) + 1
-	if letterIndex > 25 {
-		letterIndex = 25
+	return fmt.Sprintf("%s-%03d", dateCompact, index)
+}
+
+func normalizeReceivedAmount(method string, received, grandTotal float64) (float64, error) {
+	if received < 0 {
+		return 0, errors.New("received amount cannot be negative")
 	}
-	return fmt.Sprintf("%c%03d", rune('A'+letterIndex), number)
+	if method == "promptpay_qr" || received == 0 {
+		received = grandTotal
+	}
+	if received < grandTotal {
+		return 0, errors.New("received amount is less than grand total")
+	}
+	return received, nil
+}
+
+func validateOrderReadyForPayment(order *entity.Order) error {
+	status := effectiveOrderStatus(order)
+	if status != entity.OrderStatusReady && status != entity.OrderStatusServed {
+		return errors.New("order must be completed by the kitchen before payment")
+	}
+	activeItems := 0
+	for _, item := range order.Items {
+		if item.Status == entity.OrderItemStatusCancelled {
+			continue
+		}
+		activeItems++
+		if item.Status != entity.OrderItemStatusReady && item.Status != entity.OrderItemStatusServed {
+			return errors.New("all active order items must be completed by the kitchen before payment")
+		}
+	}
+	if activeItems == 0 {
+		return errors.New("order must include a completed kitchen item before payment")
+	}
+	return nil
+}
+
+func orderStatusAfterPendingItemAdded(status string) string {
+	if status == entity.OrderStatusReady || status == entity.OrderStatusServed {
+		return entity.OrderStatusOpen
+	}
+	return status
+}
+
+func buildOrderItemRecipeSnapshots(
+	order *entity.Order,
+	item *entity.OrderItem,
+	components []entity.MenuItemIngredient,
+) []entity.OrderItemRecipeSnapshot {
+	snapshots := make([]entity.OrderItemRecipeSnapshot, 0, len(components))
+	for _, component := range components {
+		if component.Quantity <= 0 || component.Ingredient == nil {
+			continue
+		}
+		unit := strings.TrimSpace(component.Unit)
+		if unit == "" {
+			unit = strings.TrimSpace(component.Ingredient.Unit)
+		}
+		costPerUnit := component.Ingredient.CostPerUnit
+		if costPerUnit < 0 {
+			costPerUnit = 0
+		}
+		yieldPercent := component.Ingredient.YieldPercent
+		if yieldPercent <= 0 || yieldPercent > 100 {
+			yieldPercent = 100
+		}
+		snapshots = append(snapshots, entity.OrderItemRecipeSnapshot{
+			RestaurantID:    order.RestaurantID,
+			OrderID:         order.ID,
+			OrderItemID:     item.ID,
+			MenuItemID:      item.MenuID,
+			IngredientID:    component.IngredientID,
+			IngredientName:  strings.TrimSpace(component.Ingredient.Name),
+			Unit:            unit,
+			QuantityPerItem: component.Quantity,
+			CostPerUnit:     costPerUnit,
+			YieldPercent:    yieldPercent,
+		})
+	}
+	return snapshots
+}
+
+func snapshotRecipeForOrderItem(
+	tx *repository.OrderRepository,
+	order *entity.Order,
+	item *entity.OrderItem,
+) error {
+	components, err := tx.ListRecipeComponents(order.RestaurantID, item.MenuID)
+	if err != nil {
+		return err
+	}
+	snapshots := buildOrderItemRecipeSnapshots(order, item, components)
+	if len(snapshots) != len(components) {
+		return errors.New("menu recipe contains an unavailable ingredient")
+	}
+	return tx.CreateItemRecipeSnapshots(snapshots)
 }
 
 func editablePendingItem(tx *repository.OrderRepository, restaurantID, orderID, itemID uint) (*entity.Order, *entity.OrderItem, error) {
-	order, err := tx.FindOrder(restaurantID, orderID)
+	order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 	if err != nil {
 		return nil, nil, err
 	}
 	if isTerminalOrder(order.Status) {
 		return nil, nil, errors.New("cannot edit item on a closed order")
 	}
-	item, err := tx.FindItem(restaurantID, order.ID, itemID)
+	item, err := tx.FindItemForUpdate(restaurantID, order.ID, itemID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -636,12 +967,7 @@ func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) erro
 	if err != nil {
 		return err
 	}
-	subtotal := 0.0
-	for _, item := range items {
-		if item.Status != entity.OrderItemStatusCancelled {
-			subtotal += item.Subtotal
-		}
-	}
+	subtotal := orderSubtotalFromItems(items)
 	order.Subtotal = subtotal
 	if order.DiscountAmount < 0 {
 		order.DiscountAmount = 0
@@ -655,6 +981,16 @@ func recalcOrderTotals(tx *repository.OrderRepository, order *entity.Order) erro
 	}
 	order.GrandTotal = order.TotalAmount + order.ServiceChargeAmount + order.VATAmount
 	return tx.SaveOrder(order)
+}
+
+func orderSubtotalFromItems(items []entity.OrderItem) float64 {
+	subtotal := 0.0
+	for _, item := range items {
+		if item.Status != entity.OrderItemStatusCancelled {
+			subtotal += item.Subtotal
+		}
+	}
+	return subtotal
 }
 
 func billFromOrder(order *entity.Order, restaurant *entity.Restaurant) *BillResponse {
@@ -677,7 +1013,13 @@ func billFromOrder(order *entity.Order, restaurant *entity.Restaurant) *BillResp
 	serviceAmount := order.ServiceChargeAmount
 	vatAmount := order.VATAmount
 	grandTotal := order.GrandTotal
-	if order.PaymentStatus != "paid" {
+	if order.PaymentStatus == entity.PaymentStatusPaid {
+		serviceEnabled = order.ServiceChargeEnabledSnapshot
+		serviceRate = order.ServiceChargeRateSnapshot
+		vatEnabled = order.VATEnabledSnapshot
+		vatRate = order.VATRateSnapshot
+	}
+	if order.PaymentStatus != entity.PaymentStatusPaid {
 		if serviceEnabled {
 			serviceAmount = roundMoney(total * serviceRate / 100)
 		} else {

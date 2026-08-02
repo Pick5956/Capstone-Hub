@@ -85,7 +85,6 @@ export default function StaffPage() {
         eyebrow: "Team management",
         title: "พนักงานและคำเชิญ",
         subtitle: "จัดการสมาชิกในร้าน สร้างคำเชิญ และดูประวัติการเปลี่ยนแปลงของทีม",
-        refresh: "รีเฟรช",
         loadError: "โหลดข้อมูลทีมไม่สำเร็จ",
         emailError: "รูปแบบอีเมลไม่ถูกต้อง",
         createError: "สร้างคำเชิญไม่สำเร็จ",
@@ -183,7 +182,6 @@ export default function StaffPage() {
         eyebrow: "Team management",
         title: "Staff and invitations",
         subtitle: "Manage restaurant members, create invitations, and review team activity history.",
-        refresh: "Refresh",
         loadError: "Could not load team data.",
         emailError: "Email format is invalid.",
         createError: "Could not create invitation.",
@@ -312,7 +310,8 @@ export default function StaffPage() {
   };
 
   useEffect(() => {
-    refresh();
+    const loadTimer = window.setTimeout(() => void refresh(), 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId, allowed, language]);
 
@@ -663,13 +662,6 @@ export default function StaffPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{copy.subtitle}</p>
         </div>
-        <button
-          type="button"
-          onClick={refresh}
-          className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
-        >
-          {copy.refresh}
-        </button>
       </div>
 
       {error && (

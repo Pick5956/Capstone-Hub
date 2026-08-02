@@ -11,14 +11,14 @@ const (
 
 type RestaurantTable struct {
 	gorm.Model
-	RestaurantID     uint   `json:"restaurant_id" gorm:"not null;index;index:idx_restaurant_tables_layout,priority:1"`
+	RestaurantID     uint   `json:"restaurant_id" gorm:"not null;index;index:idx_restaurant_tables_layout,priority:1;uniqueIndex:idx_restaurant_table_number_active,priority:1,where:deleted_at IS NULL"`
 	ZoneID           *uint  `json:"zone_id" gorm:"index;index:idx_restaurant_tables_layout,priority:2"`
-	TableNumber      string `json:"table_number" gorm:"not null"`
+	TableNumber      string `json:"table_number" gorm:"not null;size:32;uniqueIndex:idx_restaurant_table_number_active,priority:2,where:deleted_at IS NULL"`
 	DisplayLabel     string `json:"display_label"`
 	SequenceNumber   int    `json:"sequence_number" gorm:"not null;default:0;index;index:idx_restaurant_tables_layout,priority:3"`
-	Capacity         int    `json:"capacity" gorm:"default:2"`
+	Capacity         int    `json:"capacity" gorm:"not null;default:2;check:restaurant_table_capacity_range,capacity >= 1 AND capacity <= 50"`
 	Zone             string `json:"zone"`
-	Status           string `json:"status" gorm:"default:'free'"`
+	Status           string `json:"status" gorm:"not null;default:'free';check:restaurant_table_status_valid,status IN ('free','occupied','reserved','inactive')"`
 	CustomerToken    string `json:"customer_token" gorm:"size:64;uniqueIndex"`
 	ReservationName  string `json:"reservation_name" gorm:"size:80"`
 	ReservationPhone string `json:"reservation_phone" gorm:"size:32"`

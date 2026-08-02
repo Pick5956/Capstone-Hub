@@ -4,6 +4,7 @@ import (
 	"Project-M/internal/entity"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type IngredientRepository struct {
@@ -12,6 +13,12 @@ type IngredientRepository struct {
 
 func NewIngredientRepository(db *gorm.DB) *IngredientRepository {
 	return &IngredientRepository{db: db}
+}
+
+func (r *IngredientRepository) Transaction(fn func(tx *IngredientRepository) error) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		return fn(NewIngredientRepository(tx))
+	})
 }
 
 func (r *IngredientRepository) List(restaurantID uint) ([]entity.Ingredient, error) {
@@ -29,16 +36,54 @@ func (r *IngredientRepository) FindByID(restaurantID, ingredientID uint) (*entit
 	return &ingredient, nil
 }
 
+func (r *IngredientRepository) FindByIDForUpdate(restaurantID, ingredientID uint) (*entity.Ingredient, error) {
+	var ingredient entity.Ingredient
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("restaurant_id = ? AND id = ?", restaurantID, ingredientID).
+		First(&ingredient).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ingredient, nil
+}
+
 func (r *IngredientRepository) Create(ingredient *entity.Ingredient) error {
 	return r.db.Create(ingredient).Error
 }
 
-func (r *IngredientRepository) Update(ingredient *entity.Ingredient) error {
-	return r.db.Save(ingredient).Error
+func (r *IngredientRepository) UpdateMetadata(ingredient *entity.Ingredient) error {
+	return r.db.Model(&entity.Ingredient{}).
+		Where("restaurant_id = ? AND id = ?", ingredient.RestaurantID, ingredient.ID).
+		Updates(map[string]any{
+			"name":                      ingredient.Name,
+			"sku":                       ingredient.SKU,
+			"category_id":               ingredient.CategoryID,
+			"image_url":                 ingredient.ImageURL,
+			"unit":                      ingredient.Unit,
+			"min_stock":                 ingredient.MinStock,
+			"cost_per_unit":             ingredient.CostPerUnit,
+			"yield_percent":             ingredient.YieldPercent,
+			"storage_type":              ingredient.StorageType,
+		}).Error
+}
+
+func (r *IngredientRepository) UpdateStock(restaurantID, ingredientID uint, stock float64) error {
+	return r.db.Model(&entity.Ingredient{}).
+		Where("restaurant_id = ? AND id = ?", restaurantID, ingredientID).
+		Update("stock", stock).Error
 }
 
 func (r *IngredientRepository) Delete(ingredient *entity.Ingredient) error {
 	return r.db.Delete(ingredient).Error
+}
+
+func (r *IngredientRepository) IsReferencedByRecipe(restaurantID, ingredientID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&entity.MenuItemIngredient{}).
+		Where("restaurant_id = ? AND ingredient_id = ?", restaurantID, ingredientID).
+		Count(&count).Error
+	return count > 0, err
 }
 
 func (r *IngredientRepository) CreateTransaction(tx *entity.IngredientTransaction) error {
@@ -47,7 +92,7 @@ func (r *IngredientRepository) CreateTransaction(tx *entity.IngredientTransactio
 
 func (r *IngredientRepository) ListTransactions(restaurantID, ingredientID uint) ([]entity.IngredientTransaction, error) {
 	var txs []entity.IngredientTransaction
-	query := r.db.Preload("CreatedBy").Where("restaurant_id = ?", restaurantID)
+	query := r.db.Where("restaurant_id = ?", restaurantID)
 	if ingredientID != 0 {
 		query = query.Where("ingredient_id = ?", ingredientID)
 	}

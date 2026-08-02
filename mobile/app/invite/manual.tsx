@@ -1,45 +1,58 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
-import { FormField } from '@/src/components/form-controls';
-import { MobileScreen } from '@/src/components/mobile-screen';
-import { colors, layout, typeScale } from '@/src/theme';
-
-function extractToken(raw: string) {
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  const parts = trimmed.split('/').filter(Boolean);
-  return parts[parts.length - 1] || trimmed;
-}
+import { AuthScreen } from '@/src/components/auth-screen';
+import { Button, Feedback, Surface, TextField } from '@/src/components/ui';
+import { invitationTokenFrom } from '@/src/lib/staff-workflow';
+import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 
 export default function ManualInviteScreen() {
-  const [tokenOrLink, setTokenOrLink] = useState('');
+  const { copy } = useDisplayPreferences();
+  const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   function submit() {
-    const token = extractToken(tokenOrLink);
+    const token = invitationTokenFrom(value);
     if (!token) {
-      setError('ใส่ลิงก์หรือ token คำเชิญก่อน');
+      setError(copy(
+        'ลิงก์หรือ token คำเชิญไม่ถูกต้อง',
+        'The invitation link or token is invalid',
+      ));
       return;
     }
+    setError(null);
     router.push({ pathname: '/invite/[token]', params: { token } } as never);
   }
 
   return (
-    <MobileScreen kicker="INVITE" title="รับคำเชิญพนักงาน" subtitle="วางลิงก์จากเจ้าของร้าน">
-      <View style={layout.panel}>
-        <FormField
-          label="ลิงก์หรือ token"
-          value={tokenOrLink}
-          onChangeText={setTokenOrLink}
+    <AuthScreen
+      title={copy('รับคำเชิญเข้าร่วมร้าน', 'Join a restaurant')}
+      subtitle={copy(
+        'วางลิงก์ Dishy ที่เจ้าของร้านหรือผู้จัดการส่งให้',
+        'Paste the Dishy link sent by the restaurant owner or manager',
+      )}
+      showBack
+    >
+      <Surface>
+        {error ? (
+          <Feedback
+            title={copy('ตรวจคำเชิญไม่ได้', 'Unable to check invitation')}
+            detail={error}
+            tone="danger"
+          />
+        ) : null}
+        <TextField
+          label={copy('ลิงก์หรือ token', 'Link or token')}
+          value={value}
+          onChangeText={setValue}
           placeholder="https://dishy.pro/invitations/..."
+          multiline
         />
-        {error ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{error}</Text> : null}
-        <Pressable onPress={submit} style={layout.primaryButton}>
-          <Text style={layout.primaryButtonText}>ตรวจคำเชิญ</Text>
-        </Pressable>
-      </View>
-    </MobileScreen>
+        <Button
+          label={copy('ตรวจคำเชิญ', 'Check invitation')}
+          onPress={submit}
+        />
+      </Surface>
+    </AuthScreen>
   );
 }

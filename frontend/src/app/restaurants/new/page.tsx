@@ -68,13 +68,13 @@ function Field({
 }: FieldProps) {
   return (
     <label className="block space-y-2">
-      <span className="text-sm font-medium text-gray-800">
+      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
         {label}
-        {required ? <span className="ml-1 text-orange-600">*</span> : null}
+        {required ? <span className="ml-1 text-orange-600 dark:text-orange-400">*</span> : null}
       </span>
       <input
-        className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 disabled:bg-gray-50 disabled:text-gray-500 ${
-          error ? "border-red-300" : "border-gray-300"
+        className={`w-full rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:bg-gray-50 disabled:text-gray-500 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 dark:disabled:bg-gray-900/60 dark:disabled:text-gray-500 ${
+          error ? "border-red-300 dark:border-red-900/60" : "border-gray-300 dark:border-gray-700"
         }`}
         type={type}
         value={value}
@@ -85,8 +85,8 @@ function Field({
         disabled={disabled}
         aria-invalid={error ? "true" : undefined}
       />
-      {help ? <p className="text-xs text-gray-500">{help}</p> : null}
-      {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
+      {help ? <p className="text-xs text-gray-500 dark:text-gray-400">{help}</p> : null}
+      {error ? <p className="text-xs font-medium text-red-600 dark:text-red-300">{error}</p> : null}
     </label>
   );
 }
@@ -108,18 +108,18 @@ function TextAreaField({
 }) {
   return (
     <label className="block space-y-2">
-      <span className="text-sm font-medium text-gray-800">{label}</span>
+      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</span>
       <textarea
-        className={`min-h-24 w-full resize-y rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-gray-900 focus:ring-2 focus:ring-gray-900/10 ${
-          error ? "border-red-300" : "border-gray-300"
+        className={`min-h-24 w-full resize-y rounded-md border bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500 ${
+          error ? "border-red-300 dark:border-red-900/60" : "border-gray-300 dark:border-gray-700"
         }`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         aria-invalid={error ? "true" : undefined}
       />
-      {help ? <p className="text-xs text-gray-500">{help}</p> : null}
-      {error ? <p className="text-xs font-medium text-red-600">{error}</p> : null}
+      {help ? <p className="text-xs text-gray-500 dark:text-gray-400">{help}</p> : null}
+      {error ? <p className="text-xs font-medium text-red-600 dark:text-red-300">{error}</p> : null}
     </label>
   );
 }
@@ -137,9 +137,9 @@ function TimeField({
 }) {
   return (
     <div className="block space-y-2">
-      <span className="text-sm font-medium text-gray-800">
+      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
         {label}
-        <span className="ml-1 text-orange-600">*</span>
+        <span className="ml-1 text-orange-600 dark:text-orange-400">*</span>
       </span>
       <ThemedTimeInput value={value} onChange={onChange} error={error} />
     </div>
@@ -148,9 +148,9 @@ function TimeField({
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-b-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className="max-w-56 text-right text-sm font-semibold text-gray-900">{value}</span>
+    <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-b-0 dark:border-gray-800">
+      <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="max-w-56 text-right text-sm font-semibold text-gray-900 dark:text-white">{value}</span>
     </div>
   );
 }
@@ -207,18 +207,17 @@ export default function NewRestaurantPage() {
   const [openTime, setOpenTime] = useState(defaults.openTime);
   const [closeTime, setCloseTime] = useState(defaults.closeTime);
   const [initialTables, setInitialTables] = useState(defaults.tables);
+  const [splitZones, setSplitZones] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reviewSubmitReady, setReviewSubmitReady] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const submitOnceRef = useRef(createSingleFlight());
 
   useEffect(() => {
-    if (activeStep !== "review") {
-      setReviewSubmitReady(false);
-      return;
-    }
-
-    const readyTimer = window.setTimeout(() => setReviewSubmitReady(true), 150);
+    const readyTimer = window.setTimeout(
+      () => setReviewSubmitReady(activeStep === "review"),
+      activeStep === "review" ? 150 : 0,
+    );
     return () => window.clearTimeout(readyTimer);
   }, [activeStep]);
 
@@ -245,6 +244,11 @@ export default function NewRestaurantPage() {
         openTime: "เวลาเปิด",
         closeTime: "เวลาปิด",
         initialTables: "จำนวนโต๊ะเริ่มต้น",
+        splitZonesLabel: "แบ่งโซนอัตโนมัติ",
+        splitZonesHelp: "ระบบจะแบ่งโต๊ะออกเป็นโซนตามประเภทร้าน (เช่น โซนหน้าร้าน โซนครอบครัว)",
+        noSplitZonesHelp: "สร้างโต๊ะเรียงลำดับ T1–T{count} โดยไม่แบ่งโซน",
+        zonedSummary: "แบ่งโซนอัตโนมัติ",
+        flatSummary: "ไม่แบ่งโซน (เรียงลำดับ)",
         optional: "ไม่บังคับ",
         phonePlaceholder: "เช่น 081-234-5678",
         addressPlaceholder: "ที่อยู่สำหรับแสดงบนบิลหรือข้อมูลร้าน",
@@ -256,7 +260,7 @@ export default function NewRestaurantPage() {
         nextReview: "ต่อไป: ตรวจสอบ",
         skipContact: "ข้ามข้อมูลเสริม",
         previous: "ย้อนกลับ",
-        submitIdle: "สร้างร้านและเข้า dashboard",
+        submitIdle: "สร้างร้าน",
         submitBusy: "กำลังสร้างร้าน...",
         reviewHeading: "ข้อมูลที่จะสร้าง",
         reviewNote: "ระบบจะใช้ข้อมูลนี้สร้าง workspace ร้านและพาคุณไปตั้งค่าต่อใน dashboard",
@@ -308,6 +312,11 @@ export default function NewRestaurantPage() {
         openTime: "Opening time",
         closeTime: "Closing time",
         initialTables: "Initial tables",
+        splitZonesLabel: "Split into zones automatically",
+        splitZonesHelp: "Tables are divided into zones based on the restaurant type (e.g. front, family).",
+        noSplitZonesHelp: "Create tables numbered T1–T{count} in sequence, without zones.",
+        zonedSummary: "Auto-split into zones",
+        flatSummary: "No zones (sequential)",
         optional: "Optional",
         phonePlaceholder: "e.g. 081-234-5678",
         addressPlaceholder: "Address shown on bills or restaurant profile",
@@ -319,7 +328,7 @@ export default function NewRestaurantPage() {
         nextReview: "Next: review",
         skipContact: "Skip optional details",
         previous: "Back",
-        submitIdle: "Create restaurant and open dashboard",
+        submitIdle: "Create restaurant",
         submitBusy: "Creating restaurant...",
         reviewHeading: "Setup to create",
         reviewNote: "The system will use this information to create the restaurant workspace.",
@@ -503,6 +512,7 @@ export default function NewRestaurantPage() {
           open_time: openTime,
           close_time: closeTime,
           table_count: tableCount,
+          split_zones: splitZones,
         };
 
         const res = await createRestaurant(payload);
@@ -539,18 +549,18 @@ export default function NewRestaurantPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="mx-auto mt-3 max-w-3xl">
-        <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+        <section className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-950 dark:shadow-none">
+          <div className="border-b border-gray-200 px-4 py-4 dark:border-gray-800 sm:px-6">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-semibold text-gray-500">
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 {copy.stepLabel} {activeStepIndex + 1} / {SETUP_STEPS.length}
               </span>
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
-              <div className="h-full rounded-full bg-gray-950 transition-[width]" style={{ width: `${progressPercent}%` }} />
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" aria-hidden="true">
+              <div className="h-full rounded-full bg-gray-950 transition-[width] motion-reduce:transition-none dark:bg-white" style={{ width: `${progressPercent}%` }} />
             </div>
-            <h2 className="mt-4 text-xl font-bold text-gray-950">{currentStep.title}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-gray-600">{currentStep.description}</p>
+            <h2 className="mt-4 text-xl font-bold text-gray-950 dark:text-white">{currentStep.title}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-gray-600 dark:text-gray-400">{currentStep.description}</p>
           </div>
 
           <div className="px-4 py-5 sm:px-6">
@@ -576,7 +586,7 @@ export default function NewRestaurantPage() {
                 </div>
 
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium text-gray-800">{copy.type}</span>
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{copy.type}</span>
                   <ThemedSelect
                     value={type}
                     onChange={(value) => applyRestaurantType(value as RestaurantType)}
@@ -585,7 +595,7 @@ export default function NewRestaurantPage() {
                       label: getRestaurantTypeLabel(option, language),
                     }))}
                   />
-                  <p className="text-xs text-gray-500">{copy.typeHelp}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{copy.typeHelp}</p>
                 </label>
               </div>
             ) : null}
@@ -618,6 +628,23 @@ export default function NewRestaurantPage() {
                   help={copy.tableHelp}
                   required
                 />
+
+                <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-gray-300 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-gray-800 dark:text-gray-200">{copy.splitZonesLabel}</span>
+                    <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                      {splitZones
+                        ? copy.splitZonesHelp
+                        : copy.noSplitZonesHelp.replace("{count}", Number.isInteger(tableCount) && tableCount > 0 ? String(tableCount) : "N")}
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={splitZones}
+                    onChange={(event) => setSplitZones(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-orange-600"
+                  />
+                </label>
               </div>
             ) : null}
 
@@ -646,11 +673,11 @@ export default function NewRestaurantPage() {
             {activeStep === "review" ? (
               <div className="grid gap-5">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-950">{copy.reviewHeading}</h3>
-                  <p className="mt-1 text-sm text-gray-600">{copy.reviewNote}</p>
+                  <h3 className="text-lg font-bold text-gray-950 dark:text-white">{copy.reviewHeading}</h3>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{copy.reviewNote}</p>
                 </div>
 
-                <div className="rounded-md border border-gray-200 px-4">
+                <div className="rounded-md border border-gray-200 px-4 dark:border-gray-800">
                   <SummaryRow label={copy.name} value={trimmedName || copy.emptyName} />
                   <SummaryRow label={copy.branch} value={trimmedBranch || copy.emptyBranch} />
                   <SummaryRow label={copy.type} value={restaurantTypeLabel} />
@@ -660,6 +687,10 @@ export default function NewRestaurantPage() {
                     label={copy.initialTables}
                     value={`${Number.isFinite(tableCount) ? initialTables : "-"} ${copy.tableWord}`}
                   />
+                  <SummaryRow
+                    label={copy.splitZonesLabel}
+                    value={splitZones ? copy.zonedSummary : copy.flatSummary}
+                  />
                   <SummaryRow label={copy.phone} value={trimmedPhone || copy.emptyPhone} />
                   <SummaryRow label={copy.address} value={trimmedAddress || copy.emptyAddress} />
                 </div>
@@ -667,9 +698,9 @@ export default function NewRestaurantPage() {
             ) : null}
           </div>
 
-          <div className="border-t border-gray-200 px-4 py-4 sm:px-6">
+          <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-800 sm:px-6">
             {errors.submit ? (
-              <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+              <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
                 {errors.submit}
               </div>
             ) : null}
@@ -677,7 +708,7 @@ export default function NewRestaurantPage() {
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
-                className="inline-flex justify-center rounded-md border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="ui-press inline-flex min-h-10 justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:bg-gray-900"
                 onClick={handlePrevious}
                 disabled={activeStepIndex === 0 || submitting}
               >
@@ -687,7 +718,7 @@ export default function NewRestaurantPage() {
               {activeStep === "review" ? (
                 <button
                   type="submit"
-                  className="inline-flex justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950"
                   disabled={submitting || !reviewSubmitReady}
                 >
                   {submitting ? copy.submitBusy : copy.submitIdle}
@@ -695,7 +726,7 @@ export default function NewRestaurantPage() {
               ) : (
                 <button
                   type="button"
-                  className="inline-flex justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800"
+                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-950"
                   onClick={handleNext}
                 >
                   {nextButtonLabel}

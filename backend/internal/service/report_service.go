@@ -63,10 +63,6 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 	if err != nil {
 		return nil, err
 	}
-	totalFoodCost, err := s.repo.TotalFoodCost(restaurantID, since)
-	if err != nil {
-		return nil, err
-	}
 	if sales == nil {
 		sales = []repository.ReportSalesDay{}
 	}
@@ -83,8 +79,9 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 	for _, day := range sales {
 		summary.Orders += day.Orders
 		summary.Revenue += day.Revenue
+		summary.Cost += day.Cost
 	}
-	summary.Cost = roundMoney(totalFoodCost)
+	summary.Cost = roundMoney(summary.Cost)
 	summary.Profit = roundMoney(summary.Revenue - summary.Cost)
 	if summary.Revenue > 0 {
 		summary.Margin = roundMoney(summary.Profit / summary.Revenue * 100)

@@ -1,290 +1,153 @@
 package config
 
 import (
-	"Project-M/config/seed"
-	"Project-M/internal/entity"
-	"crypto/rand"
-	"encoding/hex"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-var db *gorm.DB
-
-func DB() *gorm.DB {
-	return db
-}
-
-func ConnectionDB() {
-	if os.Getenv("GIN_MODE") != ginReleaseMode {
-		err := godotenv.Load()
-		if err != nil {
-			log.Fatal("Error loading .env file")
-		}
-	}
-
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	dbname := os.Getenv("DB_NAME")
-
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Bangkok", host, user, password, dbname, port)
-
-	// GORM config: PrepareStmt caches prepared statements for reuse,
-	// and production logger is quieter in release mode.
-	gormCfg := &gorm.Config{
-		PrepareStmt: true,
-	}
-	if os.Getenv("GIN_MODE") == ginReleaseMode {
-		gormCfg.Logger = logger.Default.LogMode(logger.Warn)
-	}
-
-	database, err := gorm.Open(postgres.Open(dsn), gormCfg)
-
-	if err != nil {
-		panic(fmt.Sprintf("failed to connect database: %v", err))
-	}
-
-	// Connection pool tuning — values configurable via env vars.
-	sqlDB, err := database.DB()
-	if err != nil {
-		panic(fmt.Sprintf("failed to get underlying sql.DB: %v", err))
-	}
-	sqlDB.SetMaxOpenConns(envInt("DB_MAX_OPEN_CONNS", 100))
-	sqlDB.SetMaxIdleConns(envInt("DB_MAX_IDLE_CONNS", 25))
-	sqlDB.SetConnMaxLifetime(time.Duration(envInt("DB_CONN_MAX_LIFETIME_MIN", 30)) * time.Minute)
-	sqlDB.SetConnMaxIdleTime(time.Duration(envInt("DB_CONN_MAX_IDLE_TIME_MIN", 5)) * time.Minute)
-
-	fmt.Println("Connect database")
-	db = database
-}
-
 const ginReleaseMode = "release"
 
-// envInt reads an integer from an environment variable, returning fallback if unset or invalid.
-func envInt(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
+var (
+	db   *gorm.DB
+	dbMu sync.RWMutex
+)
+
+type databaseSettings struct {
+	Host               string
+	Port               int
+	User               string
+	Password           string
+	Name               string
+	SSLMode            string
+	SSLRootCert        string
+	MaxOpenConns       int
+	MaxIdleConns       int
+	ConnMaxLifetimeMin int
+	ConnMaxIdleTimeMin int
 }
 
-func SetupDatabase() *gorm.DB {
-	if db.Migrator().HasColumn(&entity.User{}, "role_id") {
-		_ = db.Migrator().DropColumn(&entity.User{}, "role_id")
-	}
-	if db.Migrator().HasColumn(&entity.User{}, "restaurant_id") {
-		_ = db.Migrator().DropColumn(&entity.User{}, "restaurant_id")
-	}
-	if db.Migrator().HasTable(&entity.Role{}) && !db.Migrator().HasColumn(&entity.Role{}, "name") {
-		_ = db.Migrator().DropTable(&entity.Role{})
-	}
-	if db.Migrator().HasColumn("restaurants", "invite_code") {
-		_ = db.Migrator().DropColumn("restaurants", "invite_code")
-	}
-	_ = db.Exec("DO $$ BEGIN IF to_regclass('public.users') IS NOT NULL THEN ALTER TABLE users DROP CONSTRAINT IF EXISTS uni_users_email; END IF; END $$;").Error
-	if db.Migrator().HasIndex(&entity.User{}, "uni_users_email") {
-		_ = db.Migrator().DropIndex(&entity.User{}, "uni_users_email")
-	}
-	if err := db.AutoMigrate(
-		&entity.Role{},
-		&entity.RestaurantRoleHidden{},
-		&entity.User{},
-		&entity.Restaurant{},
-		&entity.RestaurantMember{},
-		&entity.Invitation{},
-		&entity.RestaurantAuditLog{},
-		&entity.Category{},
-		&entity.MenuItem{},
-		&entity.MenuItemCategory{},
-		&entity.MenuItemIngredient{},
-		&entity.MenuOptionGroup{},
-		&entity.MenuOption{},
-		&entity.TableZone{},
-		&entity.TableTag{},
-		&entity.RestaurantTable{},
-		&entity.Order{},
-		&entity.OrderItem{},
-		&entity.OrderItemOption{},
-		&entity.OrderPayment{},
-		&entity.OrderStatusLog{},
-		&entity.OrderInventoryDeduction{},
-		&entity.IngredientCategory{},
-		&entity.Ingredient{},
-		&entity.IngredientTransaction{},
-	); err != nil {
-		log.Fatalf("failed to migrate database schema: %v", err)
-	}
-	dropLegacyTableZonePrefixIndex(db)
-	dropLegacyOrderNumberIndex(db)
-	migrateLegacyTableLayout(db)
-	backfillCustomerTableTokens(db)
-	ensureOrderTakeawayColumns(db)
-	ensureOrderItemFulfillmentColumns(db)
-
-	seed.SeedRoles(db)
-
+func DB() *gorm.DB {
+	dbMu.RLock()
+	defer dbMu.RUnlock()
 	return db
 }
 
-func backfillCustomerTableTokens(db *gorm.DB) {
-	var tables []entity.RestaurantTable
-	if err := db.Where("customer_token = '' OR customer_token IS NULL").Find(&tables).Error; err != nil {
-		return
+func ConnectionDB() error {
+	settings, err := databaseSettingsFromEnvironment()
+	if err != nil {
+		return err
 	}
-	for i := range tables {
-		token := randomCustomerTableToken()
-		if token == "" {
-			continue
-		}
-		_ = db.Model(&tables[i]).Update("customer_token", token).Error
+
+	logLevel := logger.Warn
+	if os.Getenv("GIN_MODE") != ginReleaseMode && strings.EqualFold(strings.TrimSpace(os.Getenv("DB_LOG_LEVEL")), "info") {
+		logLevel = logger.Info
 	}
+	databaseLogger := logger.New(log.New(os.Stdout, "", log.LstdFlags), logger.Config{
+		SlowThreshold:             500 * time.Millisecond,
+		LogLevel:                  logLevel,
+		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
+		Colorful:                  false,
+	})
+	gormConfig := &gorm.Config{
+		PrepareStmt: false,
+		Logger:      databaseLogger,
+	}
+	if os.Getenv("GIN_MODE") == ginReleaseMode {
+		gormConfig.Logger = databaseLogger.LogMode(logger.Warn)
+	}
+
+	database, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  settings.dsn(),
+		PreferSimpleProtocol: true,
+	}), gormConfig)
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("access database connection pool: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(settings.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(settings.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(settings.ConnMaxLifetimeMin) * time.Minute)
+	sqlDB.SetConnMaxIdleTime(time.Duration(settings.ConnMaxIdleTimeMin) * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := sqlDB.PingContext(ctx); err != nil {
+		_ = sqlDB.Close()
+		return fmt.Errorf("ping database: %w", err)
+	}
+
+	dbMu.Lock()
+	db = database
+	dbMu.Unlock()
+	return nil
 }
 
-func randomCustomerTableToken() string {
-	bytes := make([]byte, 24)
-	if _, err := rand.Read(bytes); err != nil {
-		return ""
+func PingDatabase(ctx context.Context) error {
+	database := DB()
+	if database == nil {
+		return errors.New("database is not connected")
 	}
-	return hex.EncodeToString(bytes)
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("access database connection pool: %w", err)
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	return nil
 }
 
-func migrateLegacyTableLayout(db *gorm.DB) {
-	var tables []entity.RestaurantTable
-	if err := db.Where("(display_label = '' OR display_label IS NULL) OR (zone_id IS NULL AND zone <> '')").Find(&tables).Error; err != nil {
-		return
-	}
-	zoneCache := map[string]*entity.TableZone{}
-	for i := range tables {
-		table := &tables[i]
-		if strings.TrimSpace(table.DisplayLabel) == "" {
-			table.DisplayLabel = table.TableNumber
-		}
-		if strings.TrimSpace(table.TableNumber) == "" {
-			table.TableNumber = table.DisplayLabel
-		}
-		if table.SequenceNumber == 0 {
-			table.SequenceNumber = int(table.ID)
-		}
-		legacyZone := strings.TrimSpace(table.Zone)
-		if table.ZoneID == nil && legacyZone != "" {
-			key := fmt.Sprintf("%d:%s", table.RestaurantID, legacyZone)
-			zone := zoneCache[key]
-			if zone == nil {
-				zone = findOrCreateLegacyTableZone(db, table.RestaurantID, legacyZone)
-				zoneCache[key] = zone
-			}
-			if zone != nil {
-				table.ZoneID = &zone.ID
-			}
-		}
-		_ = db.Save(table).Error
-	}
-}
-
-func findOrCreateLegacyTableZone(db *gorm.DB, restaurantID uint, name string) *entity.TableZone {
-	var existing entity.TableZone
-	if result := db.Where("restaurant_id = ? AND name = ?", restaurantID, name).Limit(1).Find(&existing); result.Error == nil && result.RowsAffected > 0 {
-		return &existing
-	}
-	prefix := nextLegacyTableZonePrefix(db, restaurantID, name)
-	zone := &entity.TableZone{
-		RestaurantID: restaurantID,
-		Name:         name,
-		Prefix:       prefix,
-		DisplayOrder: 0,
-		IsActive:     true,
-	}
-	if err := db.Create(zone).Error; err != nil {
+func CloseDatabase() error {
+	dbMu.Lock()
+	database := db
+	db = nil
+	dbMu.Unlock()
+	if database == nil {
 		return nil
 	}
-	return zone
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("access database connection pool: %w", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		return fmt.Errorf("close database: %w", err)
+	}
+	return nil
 }
 
-func dropLegacyTableZonePrefixIndex(db *gorm.DB) {
-	const legacyIndex = "idx_table_zones_restaurant_prefix"
-	const currentIndex = "idx_table_zones_restaurant_prefix_v2"
-	if db.Migrator().HasIndex(&entity.TableZone{}, currentIndex) && db.Migrator().HasIndex(&entity.TableZone{}, legacyIndex) {
-		_ = db.Migrator().DropIndex(&entity.TableZone{}, legacyIndex)
+func (settings databaseSettings) dsn() string {
+	parts := []string{
+		"host=" + quoteDSNValue(settings.Host),
+		fmt.Sprintf("port=%d", settings.Port),
+		"user=" + quoteDSNValue(settings.User),
+		"password=" + quoteDSNValue(settings.Password),
+		"dbname=" + quoteDSNValue(settings.Name),
+		"sslmode=" + settings.SSLMode,
+		"TimeZone=Asia/Bangkok",
 	}
+	if settings.SSLRootCert != "" {
+		parts = append(parts, "sslrootcert="+quoteDSNValue(settings.SSLRootCert))
+	}
+	return strings.Join(parts, " ")
 }
 
-func nextLegacyTableZonePrefix(db *gorm.DB, restaurantID uint, name string) string {
-	runes := []rune(strings.TrimSpace(name))
-	prefix := "Z"
-	if len(runes) > 0 {
-		prefix = strings.ToUpper(string(runes[0]))
-	}
-	if !tableZonePrefixExists(db, restaurantID, prefix) {
-		return prefix
-	}
-	for i := 2; i <= 99; i++ {
-		candidate := fmt.Sprintf("%s%d", prefix, i)
-		if !tableZonePrefixExists(db, restaurantID, candidate) {
-			return candidate
-		}
-	}
-	return fmt.Sprintf("Z%d", restaurantID)
-}
-
-func tableZonePrefixExists(db *gorm.DB, restaurantID uint, prefix string) bool {
-	var count int64
-	_ = db.Model(&entity.TableZone{}).Where("restaurant_id = ? AND prefix = ?", restaurantID, prefix).Count(&count).Error
-	return count > 0
-}
-
-func dropLegacyOrderNumberIndex(db *gorm.DB) {
-	const legacyIndex = "idx_orders_restaurant_day_number"
-	const currentIndex = "idx_orders_restaurant_day_number_v2"
-	if db.Migrator().HasIndex(&entity.Order{}, currentIndex) && db.Migrator().HasIndex(&entity.Order{}, legacyIndex) {
-		_ = db.Migrator().DropIndex(&entity.Order{}, legacyIndex)
-	}
-}
-
-func ensureOrderTakeawayColumns(db *gorm.DB) {
-	if db.Migrator().HasTable(&entity.Order{}) && db.Migrator().HasColumn(&entity.Order{}, "table_id") {
-		columnTypes, err := db.Migrator().ColumnTypes(&entity.Order{})
-		if err == nil {
-			for _, column := range columnTypes {
-				if column.Name() != "table_id" {
-					continue
-				}
-				if nullable, ok := column.Nullable(); ok && !nullable {
-					_ = db.Exec("ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL").Error
-				}
-				break
-			}
-		}
-	}
-	_ = db.Model(&entity.Order{}).
-		Where("order_type = '' OR order_type IS NULL").
-		Update("order_type", entity.OrderTypeDineIn).Error
-}
-
-func ensureOrderItemFulfillmentColumns(db *gorm.DB) {
-	if !db.Migrator().HasTable(&entity.OrderItem{}) || !db.Migrator().HasColumn(&entity.OrderItem{}, "fulfillment_type") {
-		return
-	}
-	_ = db.Exec(`
-		UPDATE order_items
-		SET fulfillment_type = COALESCE(NULLIF(orders.order_type, ''), ?)
-		FROM orders
-		WHERE order_items.order_id = orders.id
-			AND (order_items.fulfillment_type = '' OR order_items.fulfillment_type IS NULL)
-	`, entity.OrderItemFulfillmentDineIn).Error
+func quoteDSNValue(value string) string {
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `'`, `\'`)
+	return "'" + escaped + "'"
 }

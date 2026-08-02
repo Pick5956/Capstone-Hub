@@ -91,14 +91,17 @@ export default function AccountSettingsPage() {
   const isGoogleAccount = user?.auth_provider === "google";
 
   useEffect(() => {
-    setForm({
-      first_name: user?.first_name ?? "",
-      last_name: user?.last_name === "-" ? "" : user?.last_name ?? "",
-      nickname: user?.nickname ?? "",
-      phone: user?.phone ?? "",
-    });
-    setError("");
-    setMessage("");
+    const syncTimer = window.setTimeout(() => {
+      setForm({
+        first_name: user?.first_name ?? "",
+        last_name: user?.last_name === "-" ? "" : user?.last_name ?? "",
+        nickname: user?.nickname ?? "",
+        phone: user?.phone ?? "",
+      });
+      setError("");
+      setMessage("");
+    }, 0);
+    return () => window.clearTimeout(syncTimer);
   }, [user]);
 
   const setField = (key: keyof typeof form, value: string) => {

@@ -1,119 +1,34 @@
-import { Redirect } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, View } from 'react-native';
 
-import { updateRestaurant } from '@/src/api/restaurant';
-import { FormField, ToggleRow } from '@/src/components/form-controls';
-import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
-import { timeOrDefault, toFloat, toInt } from '@/src/lib/forms';
+import { AppScreen } from '@/src/components/app-shell';
+import { AppText as Text } from '@/src/components/app-text';
+import { Button, Divider, SectionHeader, Surface } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
-import { colors, layout, typeScale } from '@/src/theme';
+import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { palette, radius, spacing, typeScale } from '@/src/theme';
 
 export default function SettingsScreen() {
-  const { activeMembership, refreshMemberships, user } = useAuth();
-  const restaurant = activeMembership?.restaurant;
-  const [name, setName] = useState('');
-  const [branchName, setBranchName] = useState('');
-  const [restaurantType, setRestaurantType] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [openTime, setOpenTime] = useState('');
-  const [closeTime, setCloseTime] = useState('');
-  const [tableCount, setTableCount] = useState('');
-  const [serviceChargeEnabled, setServiceChargeEnabled] = useState(false);
-  const [serviceChargeRate, setServiceChargeRate] = useState('');
-  const [vatEnabled, setVatEnabled] = useState(false);
-  const [vatRate, setVatRate] = useState('');
-  const [promptPayName, setPromptPayName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!restaurant) return;
-    setName(restaurant.name || '');
-    setBranchName(restaurant.branch_name || '');
-    setRestaurantType(restaurant.restaurant_type || '');
-    setPhone(restaurant.phone || '');
-    setAddress(restaurant.address || '');
-    setOpenTime(restaurant.open_time || '10:00');
-    setCloseTime(restaurant.close_time || '22:00');
-    setTableCount(String(restaurant.table_count || 0));
-    setServiceChargeEnabled(Boolean(restaurant.service_charge_enabled));
-    setServiceChargeRate(String(restaurant.service_charge_rate || 0));
-    setVatEnabled(Boolean(restaurant.vat_enabled));
-    setVatRate(String(restaurant.vat_rate || 0));
-    setPromptPayName(restaurant.promptpay_name || '');
-  }, [restaurant]);
-
-  if (!user) return <Redirect href="/login" />;
-  if (!activeMembership) return <Redirect href="/restaurants" />;
-
-  const editable = can(activeMembership, 'manage_table') || activeMembership.role?.name === 'owner' || activeMembership.role?.name === 'manager';
-
-  async function save() {
-    if (!restaurant) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      await updateRestaurant(restaurant.ID, {
-        name: name.trim(),
-        branch_name: branchName.trim() || 'สำนักงานใหญ่',
-        restaurant_type: restaurantType.trim() || 'ร้านอาหาร',
-        phone: phone.trim(),
-        address: address.trim(),
-        open_time: timeOrDefault(openTime, '10:00'),
-        close_time: timeOrDefault(closeTime, '22:00'),
-        table_count: toInt(tableCount, 0),
-        service_charge_enabled: serviceChargeEnabled,
-        service_charge_rate: toFloat(serviceChargeRate, 0),
-        vat_enabled: vatEnabled,
-        vat_rate: toFloat(vatRate, 0),
-        promptpay_name: promptPayName.trim(),
-        promptpay_qr_image: restaurant.promptpay_qr_image || '',
-        logo: restaurant.logo || '',
-      });
-      await refreshMemberships();
-      setMessage('บันทึกการตั้งค่าร้านแล้ว');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
-    } finally {
-      setSaving(false);
-    }
-  }
-
+  const { activeMembership, signOut, user } = useAuth();
+  const { copy } = useDisplayPreferences();
+  const managementRole = activeMembership?.role?.name === 'owner' || activeMembership?.role?.name === 'manager';
+  const canManageRestaurant = managementRole && can(activeMembership, 'manage_staff');
+  const canManageTeam = managementRole && can(activeMembership, 'manage_staff');
+  const items = [
+    { title: copy('บัญชีของฉัน', 'My account'), detail: user?.email || copy('แก้ไขชื่อและเบอร์โทร', 'Edit name and phone'), href: '/settings/account', show: true },
+    { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษาและการอ่านบนอุปกรณ์', 'Language and readability'), href: '/settings/display', show: true },
+    { title: copy('ข้อมูลร้าน', 'Restaurant'), detail: copy('ชื่อร้าน เวลาเปิด ค่าบริการ VAT และ PromptPay', 'Name, hours, service charge, VAT and PromptPay'), href: '/settings/restaurant', show: canManageRestaurant },
+    { title: copy('ทีมและสิทธิ์', 'Team and access'), detail: copy('พนักงาน บทบาท และคำเชิญ', 'Staff, roles and invitations'), href: '/staff', show: canManageTeam },
+    { title: copy('สลับร้าน', 'Switch restaurant'), detail: copy('เลือกร้านหรือสาขาอื่นที่คุณเป็นสมาชิก', 'Choose another restaurant or branch'), href: '/restaurants', show: true },
+  ].filter((item) => item.show);
   return (
-    <KeyboardAvoidingView behavior="padding" style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <MobileScreen kicker="SETTINGS" title="ตั้งค่าร้าน" subtitle={restaurant?.name || 'ร้านปัจจุบัน'}>
-        {!editable ? <StateMessage title="ไม่มีสิทธิ์แก้ไขร้าน" detail="ต้องเป็น owner หรือ manager" /> : null}
-        <View style={layout.panel}>
-          <FormField label="ชื่อร้าน" value={name} onChangeText={setName} />
-          <FormField label="สาขา" value={branchName} onChangeText={setBranchName} />
-          <FormField label="ประเภทร้าน" value={restaurantType} onChangeText={setRestaurantType} />
-          <FormField label="เบอร์โทร" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-          <FormField label="ที่อยู่" value={address} onChangeText={setAddress} multiline />
-          <FormField label="เวลาเปิด" value={openTime} onChangeText={setOpenTime} />
-          <FormField label="เวลาปิด" value={closeTime} onChangeText={setCloseTime} />
-          <FormField label="จำนวนโต๊ะ" value={tableCount} onChangeText={setTableCount} keyboardType="numeric" />
-        </View>
-
-        <View style={layout.panel}>
-          <Text selectable style={typeScale.cardTitle}>ภาษีและการชำระเงิน</Text>
-          <ToggleRow label="คิด Service Charge" value={serviceChargeEnabled} onValueChange={setServiceChargeEnabled} />
-          <FormField label="Service Charge (%)" value={serviceChargeRate} onChangeText={setServiceChargeRate} keyboardType="numeric" />
-          <ToggleRow label="คิด VAT" value={vatEnabled} onValueChange={setVatEnabled} />
-          <FormField label="VAT (%)" value={vatRate} onChangeText={setVatRate} keyboardType="numeric" />
-          <FormField label="ชื่อ PromptPay" value={promptPayName} onChangeText={setPromptPayName} />
-        </View>
-
-        {message ? <Text selectable style={[typeScale.caption, { color: colors.accent }]}>{message}</Text> : null}
-        {error ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{error}</Text> : null}
-        <Pressable disabled={!editable || saving} onPress={save} style={[layout.primaryButton, (!editable || saving) && { opacity: 0.6 }]}>
-          <Text style={layout.primaryButtonText}>{saving ? 'กำลังบันทึก' : 'บันทึกตั้งค่าร้าน'}</Text>
-        </Pressable>
-      </MobileScreen>
-    </KeyboardAvoidingView>
+    <AppScreen title={copy('ตั้งค่า', 'Settings')} subtitle={copy('บัญชี ร้าน และทีม แยกเป็นหน้าเต็มเพื่อใช้งานง่ายบนมือถือ', 'Account, restaurant and team settings in focused mobile screens')} topLevel>
+      <Surface>
+        <SectionHeader title={copy('การตั้งค่า', 'Settings')} />
+        {items.map((item, index) => <View key={item.href}>{index ? <Divider /> : null}<Pressable onPress={() => router.push(item.href as never)} style={({ pressed }) => ({ minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: spacing.md, opacity: pressed ? 0.72 : 1 })}><View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}><Text style={{ color: palette.text, fontWeight: '800' }}>{item.title.slice(0, 1)}</Text></View><View style={{ minWidth: 0, flex: 1, gap: 2 }}><Text selectable style={typeScale.cardTitle}>{item.title}</Text><Text selectable numberOfLines={2} style={[typeScale.caption, { color: palette.muted }]}>{item.detail}</Text></View><Text style={{ color: palette.muted, fontSize: 20 }}>›</Text></Pressable></View>)}
+      </Surface>
+      <Surface><SectionHeader title={copy('ออกจากระบบ', 'Sign out')} detail={copy('ข้อมูลร้านยังคงอยู่ คุณสามารถเข้าสู่ระบบใหม่ได้ทุกเมื่อ', 'Restaurant data remains available when you sign in again.')} /><Button variant="secondary" label={copy('ออกจากระบบ', 'Sign out')} onPress={signOut} /></Surface>
+    </AppScreen>
   );
 }

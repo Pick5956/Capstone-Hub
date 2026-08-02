@@ -21,13 +21,16 @@ func ProvideTableController(db *gorm.DB) *TableController {
 }
 
 func (ctrl *TableController) ListTables(c *gin.Context) {
-	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table")
+	// take_order is included so the order-taking floor can load the table list
+	// without granting view_tables (which also gates the Tables management page).
+	// Consistent with UpdateTableStatus, which already accepts take_order.
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table permission", "view_tables", "manage_table", "take_order")
 	if !ok {
 		return
 	}
 	tables, err := ctrl.tableSvc.ListTables(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"tables": tables})
@@ -40,12 +43,12 @@ func (ctrl *TableController) CreateTable(c *gin.Context) {
 	}
 	var req service.TableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	table, err := ctrl.tableSvc.CreateTable(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, table)
@@ -58,12 +61,12 @@ func (ctrl *TableController) BulkCreateTables(c *gin.Context) {
 	}
 	var req service.BulkCreateTablesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	tables, err := ctrl.tableSvc.BulkCreateTables(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"tables": tables})
@@ -80,12 +83,12 @@ func (ctrl *TableController) UpdateTable(c *gin.Context) {
 	}
 	var req service.TableRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	table, err := ctrl.tableSvc.UpdateTable(restaurantID, tableID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, table)
@@ -106,7 +109,7 @@ func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
 		ReservationPhone string `json:"reservation_phone"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	if !memberCan(c, "manage_table") && req.Status != "free" && req.Status != "reserved" {
@@ -115,7 +118,70 @@ func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
 	}
 	table, err := ctrl.tableSvc.UpdateTableStatus(restaurantID, tableID, req.Status, req.ReservationPhone, req.ReservationName)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
+// POST /api/v1/tables/:id/reserve
+func (ctrl *TableController) ReserveTable(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	userID, _ := contextUserID(c)
+	var req struct {
+		ReservationName  string `json:"reservation_name"`
+		ReservationPhone string `json:"reservation_phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	table, err := ctrl.tableSvc.ReserveTable(restaurantID, userID, tableID, req.ReservationPhone, req.ReservationName)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
+// POST /api/v1/tables/:id/cancel-reservation
+func (ctrl *TableController) CancelReservation(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	table, err := ctrl.tableSvc.CancelReservation(restaurantID, tableID)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, table)
+}
+
+// POST /api/v1/tables/:id/seat-reservation
+func (ctrl *TableController) SeatReservation(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	if !ok {
+		return
+	}
+	tableID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	table, err := ctrl.tableSvc.SeatReservation(restaurantID, tableID)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, table)
@@ -132,7 +198,7 @@ func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {
 	}
 	table, err := ctrl.tableSvc.RegenerateCustomerToken(restaurantID, tableID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, table)
@@ -149,12 +215,12 @@ func (ctrl *TableController) MoveTableZone(c *gin.Context) {
 	}
 	var req service.MoveTableZoneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	table, err := ctrl.tableSvc.MoveTableZone(restaurantID, tableID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, table)
@@ -170,7 +236,7 @@ func (ctrl *TableController) DeleteTable(c *gin.Context) {
 		return
 	}
 	if err := ctrl.tableSvc.DeleteTable(restaurantID, tableID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusConflict, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -183,7 +249,7 @@ func (ctrl *TableController) ListZones(c *gin.Context) {
 	}
 	zones, err := ctrl.tableSvc.ListZones(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"zones": zones})
@@ -196,12 +262,12 @@ func (ctrl *TableController) CreateZone(c *gin.Context) {
 	}
 	var req service.TableZoneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	zone, err := ctrl.tableSvc.CreateZone(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, zone)
@@ -218,12 +284,12 @@ func (ctrl *TableController) UpdateZone(c *gin.Context) {
 	}
 	var req service.TableZoneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	zone, err := ctrl.tableSvc.UpdateZone(restaurantID, zoneID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, zone)
@@ -239,7 +305,7 @@ func (ctrl *TableController) DeleteZone(c *gin.Context) {
 		return
 	}
 	if err := ctrl.tableSvc.DeleteZone(restaurantID, zoneID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusConflict, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -252,7 +318,7 @@ func (ctrl *TableController) ListTags(c *gin.Context) {
 	}
 	tags, err := ctrl.tableSvc.ListTags(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"tags": tags})
@@ -265,12 +331,12 @@ func (ctrl *TableController) CreateTag(c *gin.Context) {
 	}
 	var req service.TableTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	tag, err := ctrl.tableSvc.CreateTag(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, tag)
@@ -287,12 +353,12 @@ func (ctrl *TableController) UpdateTag(c *gin.Context) {
 	}
 	var req service.TableTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	tag, err := ctrl.tableSvc.UpdateTag(restaurantID, tagID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, tag)
@@ -308,7 +374,7 @@ func (ctrl *TableController) DeleteTag(c *gin.Context) {
 		return
 	}
 	if err := ctrl.tableSvc.DeleteTag(restaurantID, tagID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})

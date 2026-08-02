@@ -2,6 +2,7 @@ package repository
 
 import (
 	"Project-M/internal/entity"
+	"errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -31,7 +32,15 @@ func (r *RoleRepository) FindAssignableByRestaurant(restaurantID uint) ([]entity
 		Where("restaurant_id = ? OR (restaurant_id IS NULL AND id NOT IN (?))", restaurantID, hiddenRoleIDs).
 		Order("is_system desc, id asc").
 		Find(&roles).Error
-	return roles, err
+	if err != nil {
+		return nil, err
+	}
+	for index := range roles {
+		if err := applyEffectiveRolePermissions(r.db, restaurantID, &roles[index]); err != nil {
+			return nil, err
+		}
+	}
+	return roles, nil
 }
 
 func (r *RoleRepository) FindByID(id uint) (*entity.Role, error) {
@@ -44,6 +53,21 @@ func (r *RoleRepository) FindByID(id uint) (*entity.Role, error) {
 
 func (r *RoleRepository) Update(role *entity.Role) error {
 	return r.db.Save(role).Error
+}
+
+func (r *RoleRepository) UpsertRestaurantPermissionOverride(restaurantID, roleID uint, permissions string) error {
+	override := &entity.RestaurantRolePermissionOverride{
+		RestaurantID: restaurantID,
+		RoleID:       roleID,
+		Permissions:  permissions,
+	}
+	return r.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "restaurant_id"},
+			{Name: "role_id"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{"permissions", "updated_at"}),
+	}).Create(override).Error
 }
 
 func (r *RoleRepository) Create(role *entity.Role) error {
@@ -89,4 +113,23 @@ func (r *RoleRepository) FindByName(name string) (*entity.Role, error) {
 		return nil, err
 	}
 	return &role, nil
+}
+
+func applyEffectiveRolePermissions(db *gorm.DB, restaurantID uint, role *entity.Role) error {
+	if role == nil || role.RestaurantID != nil {
+		return nil
+	}
+
+	var override entity.RestaurantRolePermissionOverride
+	err := db.
+		Where("restaurant_id = ? AND role_id = ?", restaurantID, role.ID).
+		First(&override).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	role.Permissions = override.Permissions
+	return nil
 }

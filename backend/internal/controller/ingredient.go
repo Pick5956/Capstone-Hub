@@ -28,7 +28,7 @@ func (ctrl *IngredientController) List(c *gin.Context) {
 	}
 	items, err := ctrl.svc.List(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ingredients": items})
@@ -41,7 +41,7 @@ func (ctrl *IngredientController) ListCategories(c *gin.Context) {
 	}
 	items, err := ctrl.svc.ListCategories(restaurantID, memberCan(c, "manage_inventory"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"categories": items})
@@ -54,12 +54,12 @@ func (ctrl *IngredientController) CreateCategory(c *gin.Context) {
 	}
 	var req service.IngredientCategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	category, err := ctrl.svc.CreateCategory(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, category)
@@ -70,14 +70,19 @@ func (ctrl *IngredientController) Create(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req service.IngredientRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
 		return
 	}
-	ingredient, err := ctrl.svc.Create(restaurantID, &req)
+	var req service.IngredientRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	ingredient, err := ctrl.svc.Create(restaurantID, userID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, ingredient)
@@ -94,12 +99,12 @@ func (ctrl *IngredientController) Update(c *gin.Context) {
 	}
 	var req service.IngredientRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	ingredient, err := ctrl.svc.Update(restaurantID, ingredientID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, ingredient)
@@ -115,7 +120,7 @@ func (ctrl *IngredientController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.Delete(restaurantID, ingredientID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusConflict, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -132,13 +137,13 @@ func (ctrl *IngredientController) AdjustStock(c *gin.Context) {
 	}
 	var req service.AdjustStockRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	userID, _ := contextUserID(c)
 	ingredient, err := ctrl.svc.AdjustStock(restaurantID, ingredientID, userID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, ingredient)
@@ -158,7 +163,7 @@ func (ctrl *IngredientController) ListTransactions(c *gin.Context) {
 	}
 	txs, err := ctrl.svc.ListTransactions(restaurantID, ingredientID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"transactions": txs})

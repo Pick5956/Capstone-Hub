@@ -99,7 +99,6 @@ func newReadinessScenario(t *testing.T, db *gorm.DB, name string) *readinessScen
 		RestaurantID: scenario.restaurant.ID,
 		Name:         "Scenario Ingredient",
 		Unit:         "g",
-		BaseUnit:     "g",
 		Stock:        1000,
 		MinStock:     100,
 		CostPerUnit:  1,

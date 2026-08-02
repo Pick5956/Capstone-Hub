@@ -152,11 +152,9 @@ function buildCopy(language: "th" | "en") {
         quickActions: "การจัดการเร็ว",
         sku: "SKU",
         category: "หมวดหมู่",
-        stockUnit: "หน่วยสต็อก",
-        baseUnit: "หน่วยฐาน",
-        purchaseUnitDefault: "หน่วยซื้อหลัก",
-        conversionFactorDefault: "อัตราแปลง",
+        stockUnit: "หน่วย",
         yieldPercent: "Yield %",
+        yieldHint: "% วัตถุดิบที่ใช้ได้จริงหลังหั่น/ทำความสะอาด เช่น 80% = ซื้อ 1 กก. ใช้ได้จริง 800 กรัม ระบบใช้ค่านี้คำนวณต้นทุนต่อจานให้แม่นขึ้น",
         storageType: "ประเภทการเก็บ",
         imageUrl: "ลิงก์รูปภาพ",
         uncategorized: "ยังไม่จัดหมวด",
@@ -244,11 +242,9 @@ function buildCopy(language: "th" | "en") {
         quickActions: "Quick actions",
         sku: "SKU",
         category: "Category",
-        stockUnit: "Stock unit",
-        baseUnit: "Base unit",
-        purchaseUnitDefault: "Default purchase unit",
-        conversionFactorDefault: "Conversion factor",
+        stockUnit: "Unit",
         yieldPercent: "Yield %",
+        yieldHint: "Usable percentage after trimming or cleaning. e.g. 80% means 1 kg bought yields 800 g usable. Used to compute per-dish cost more accurately.",
         storageType: "Storage type",
         imageUrl: "Image URL",
         uncategorized: "Uncategorized",
@@ -359,16 +355,27 @@ export default function InventoryPage() {
   );
 
   useEffect(() => {
-    if (!canView) {
-      setLoading(false);
-      return;
-    }
-    Promise.all([listIngredients(), listIngredientCategories()])
-      .then(([ingredientResponse, categoryResponse]) => {
-        setIngredients(ingredientResponse.data.ingredients ?? []);
-        setCategories(categoryResponse.data.categories ?? []);
-      })
-      .finally(() => setLoading(false));
+    let active = true;
+    const loadTimer = window.setTimeout(() => {
+      if (!canView) {
+        setLoading(false);
+        return;
+      }
+      Promise.all([listIngredients(), listIngredientCategories()])
+        .then(([ingredientResponse, categoryResponse]) => {
+          if (!active) return;
+          setIngredients(ingredientResponse.data.ingredients ?? []);
+          setCategories(categoryResponse.data.categories ?? []);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(loadTimer);
+    };
   }, [canView]);
 
   const totalItems = ingredients.length;
@@ -434,9 +441,6 @@ export default function InventoryPage() {
       category_id: item.category_id ?? 0,
       image_url: item.image_url ?? "",
       unit: item.unit,
-      base_unit: item.base_unit ?? item.unit,
-      purchase_unit_default: item.purchase_unit_default ?? item.unit,
-      conversion_factor_default: item.conversion_factor_default ?? 1,
       stock: item.stock,
       min_stock: item.min_stock,
       cost_per_unit: item.cost_per_unit,
@@ -636,14 +640,9 @@ export default function InventoryPage() {
       <div className="space-y-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.eyebrow}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
-                {formatNumber(totalItems, lang)} {copy.total}
-              </span>
-            </div>
-            <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
+            <span className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
+              {formatNumber(totalItems, lang)} {copy.total}
+            </span>
           </div>
 
           <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px] md:flex-row md:items-center">
@@ -752,11 +751,8 @@ export default function InventoryPage() {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{copy.tableSummary}</p>
-                    <h2 className="mt-0.5 text-[16px] font-semibold text-slate-900 dark:text-white">{copy.title}</h2>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">{copy.tableSummary}</p>
                   <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     {formatNumber(filtered.length, lang)} {lang === "th" ? "รายการ" : "items"}
                     {ingredients.length !== filtered.length ? ` / ${formatNumber(ingredients.length, lang)}` : ""}
@@ -764,7 +760,7 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              <div className="p-4">
+              <div className="p-2">
                 {filtered.length === 0 ? (
                   <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
                     <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
@@ -775,75 +771,55 @@ export default function InventoryPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="divide-y divide-slate-100 dark:divide-gray-800">
                     {filtered.map((item) => {
                       const status = getStatus(item);
                       const meta = statusMeta(status, copy);
                       const percent = getStockPercent(item);
                       const value = getInventoryValue(item);
-                      const refill = getRestockAmount(item);
 
                       return (
-                        <article key={item.ID} className="flex min-h-60 flex-col rounded-md border border-slate-200 bg-white transition-colors hover:border-orange-200 hover:bg-orange-50/20 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-900/50 dark:hover:bg-orange-900/10">
-                          <div className="flex items-start justify-between gap-3 p-4">
-                            <div className="min-w-0">
-                              <p className="truncate text-[15px] font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                              <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                                {copy.sku} {item.sku || "-"} · {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
-                              </p>
+                        <div key={item.ID} className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-gray-900/40">
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                              <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${meta.badge}`}>{meta.label}</span>
                             </div>
-                            <span className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-semibold ${meta.badge}`}>
-                              {meta.label}
-                            </span>
+                            <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+                              {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
+                            </p>
                           </div>
-
-                          <div className="px-4">
-                            <div className="flex items-end justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] text-slate-400">{copy.current}</p>
-                                <p className={`mt-1 text-2xl font-semibold tabular-nums ${meta.value}`}>
-                                  {formatNumber(item.stock, lang)} <span className="text-xs font-medium text-slate-400">{item.unit}</span>
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[11px] text-slate-400">{copy.minStock}</p>
-                                <p className="mt-1 text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
-                                  {item.min_stock > 0 ? `${formatNumber(item.min_stock, lang)} ${item.unit}` : "-"}
-                                </p>
-                              </div>
+                          <div className="hidden w-40 shrink-0 sm:block">
+                            <div className="flex items-baseline justify-between text-[13px]">
+                              <span className={`font-semibold tabular-nums ${meta.value}`}>
+                                {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
+                              </span>
+                              <span className="text-slate-400">/ {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "-"}</span>
                             </div>
-                            <div className="mt-3 h-2 rounded-full bg-slate-200/80 dark:bg-gray-800">
-                              <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
+                            <div className="mt-1 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                              <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
                             </div>
                           </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-px border-y border-slate-200 bg-slate-200 text-xs dark:border-gray-800 dark:bg-gray-800">
-                            <div className="bg-white px-4 py-3 dark:bg-gray-950">
-                              <p className="text-slate-400">{copy.rowValue}</p>
-                              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{value > 0 ? formatCurrency(value, lang) : "-"}</p>
-                            </div>
-                            <div className="bg-white px-4 py-3 dark:bg-gray-950">
-                              <p className="text-slate-400">{copy.recommendedTopup}</p>
-                              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{formatNumber(refill, lang)} {item.unit}</p>
-                            </div>
+                          <div className="hidden w-20 shrink-0 text-right text-[13px] font-semibold tabular-nums text-slate-700 dark:text-slate-200 md:block">
+                            {value > 0 ? formatCurrency(value, lang) : "-"}
                           </div>
-
-                          <div className="mt-auto flex items-center justify-between gap-2 p-3">
+                          <div className="flex shrink-0 items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => openTransactions(item)}
-                              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                              title={copy.history}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
                             >
                               <History className="h-4 w-4" />
-                              {copy.history}
                             </button>
                             {canManage && (
-                              <div className="flex gap-1.5">
+                              <>
                                 <button
                                   type="button"
                                   onClick={() => openAdjust(item)}
                                   title={copy.adjust}
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
                                 >
                                   <Plus className="h-4 w-4" />
                                 </button>
@@ -851,7 +827,7 @@ export default function InventoryPage() {
                                   type="button"
                                   onClick={() => openEdit(item)}
                                   title={copy.edit}
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900 dark:hover:text-white"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </button>
@@ -859,14 +835,14 @@ export default function InventoryPage() {
                                   type="button"
                                   onClick={() => setDeleteTarget(item)}
                                   title={copy.delete}
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
-                              </div>
+                              </>
                             )}
                           </div>
-                        </article>
+                        </div>
                       );
                     })}
                   </div>
@@ -991,7 +967,7 @@ export default function InventoryPage() {
                                   {copy.sku} {item.sku || "—"} • {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
                                 </p>
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {copy.stockUnit} {item.unit} • {copy.baseUnit} {item.base_unit ?? item.unit} • {copy.costPerUnit}{" "}
+                                  {copy.stockUnit} {item.unit} • {copy.costPerUnit}{" "}
                                   {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
                                 </p>
                               </div>
@@ -1167,38 +1143,8 @@ export default function InventoryPage() {
                     <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
                     <ThemedSelect
                       value={form.unit}
-                      onChange={(value) =>
-                        setForm((current) => {
-                          const nextUnit = value;
-                          const nextBaseUnit = current.base_unit ? current.base_unit : nextUnit;
-                          const nextPurchaseUnit = current.purchase_unit_default ? current.purchase_unit_default : nextUnit;
-                          return {
-                            ...current,
-                            unit: nextUnit,
-                            base_unit: nextBaseUnit,
-                            purchase_unit_default: nextPurchaseUnit,
-                          };
-                        })
-                      }
-                      options={unitOptions}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.baseUnit}</label>
-                    <ThemedSelect
-                      value={form.base_unit ?? form.unit}
-                      onChange={(value) => setForm((current) => ({ ...current, base_unit: value }))}
-                      options={unitOptions}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.purchaseUnitDefault}</label>
-                    <ThemedSelect
-                      value={form.purchase_unit_default ?? form.unit}
-                      onChange={(value) => setForm((current) => ({ ...current, purchase_unit_default: value }))}
-                      options={unitOptions}
+                      onChange={(value) => setForm((current) => ({ ...current, unit: value }))}
+                      options={!form.unit || UNITS.includes(form.unit) ? unitOptions : [{ value: form.unit, label: form.unit }, ...unitOptions]}
                     />
                   </div>
                   {!editingItem ? (
@@ -1246,26 +1192,24 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {copy.conversionFactorDefault}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={form.conversion_factor_default ?? 1}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          conversion_factor_default: parseFloat(event.target.value) || 1,
-                        }))
-                      }
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
                       {copy.yieldPercent}
+                      <span className="group relative inline-flex">
+                        <span
+                          tabIndex={0}
+                          role="button"
+                          aria-label={copy.yieldHint}
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-400 transition hover:border-orange-400 hover:text-orange-500 focus-visible:border-orange-400 focus-visible:text-orange-500 focus:outline-none dark:border-gray-600 dark:text-gray-500"
+                        >
+                          i
+                        </span>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute left-0 top-6 z-50 w-60 rounded-md border border-gray-200 bg-white px-3 py-2 text-[11px] font-normal leading-relaxed text-slate-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300"
+                        >
+                          {copy.yieldHint}
+                        </span>
+                      </span>
                     </label>
                     <input
                       type="number"
@@ -1278,14 +1222,14 @@ export default function InventoryPage() {
                       className={inputCls}
                     />
                   </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
-                  <ThemedSelect
-                    value={form.storage_type ?? "room_temp"}
-                    onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
-                    options={storageOptions}
-                  />
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
+                    <ThemedSelect
+                      value={form.storage_type ?? "room_temp"}
+                      onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
+                      options={storageOptions}
+                    />
+                  </div>
                 </div>
                 {formError && <p className="text-xs text-red-500">{formError}</p>}
               </div>

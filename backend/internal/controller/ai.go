@@ -41,12 +41,12 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	}
 	var req service.AIAskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	result, err := ctrl.svc.AskOperations(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {
 	}
 	result, err := ctrl.svc.OperationsSnapshot(restaurantID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, result)

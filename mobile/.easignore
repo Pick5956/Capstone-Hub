@@ -1,0 +1,37 @@
+# Dependencies and generated Expo output
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Generated native projects (EAS Prebuild recreates them)
+/android
+/ios
+.kotlin/
+*.orig.*
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+credentials.json
+google-services.json
+GoogleService-Info.plist
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+
+# Local tooling and reports
+.vscode/
+coverage/
+*.log
+*.tsbuildinfo
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store

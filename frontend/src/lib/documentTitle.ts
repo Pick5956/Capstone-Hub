@@ -3,7 +3,7 @@ import type { Language } from "@/src/providers/LanguageProvider";
 const routeTitles: Array<{ match: (pathname: string) => boolean; th: string; en: string }> = [
   { match: (path) => path === "/home", th: "ภาพรวมร้าน", en: "Restaurant overview" },
   { match: (path) => path === "/pos/tables", th: "รับออเดอร์", en: "Take orders" },
-  { match: (path) => path === "/kitchen", th: "คิวครัว", en: "Kitchen queue" },
+  { match: (path) => path === "/kitchen", th: "จอครัว", en: "Kitchen" },
   { match: (path) => path === "/orders", th: "คลังออเดอร์", en: "Order archive" },
   { match: (path) => path === "/menu", th: "จัดการเมนู", en: "Menu management" },
   { match: (path) => path === "/tables", th: "จัดการโต๊ะ", en: "Table management" },
@@ -21,10 +21,11 @@ const routeTitles: Array<{ match: (pathname: string) => boolean; th: string; en:
   { match: (path) => path === "/restaurants/join", th: "เข้าร่วมร้าน", en: "Join restaurant" },
   { match: (path) => path.startsWith("/invitations/"), th: "คำเชิญเข้าร่วมร้าน", en: "Restaurant invitation" },
   { match: (path) => path === "/reset-password", th: "ตั้งรหัสผ่านใหม่", en: "Reset password" },
+  { match: (path) => /^\/customer\/t\/[^/]+\/orders\/?$/.test(path), th: "รายการที่สั่ง", en: "Table orders" },
   { match: (path) => path.startsWith("/customer/t/"), th: "สั่งอาหาร", en: "Order food" },
 ];
 
-export function pageTitle(pathname: string, language: Language, brand = "Restaurant Hub", orderReference?: string) {
+export function pageTitle(pathname: string, language: Language, brand = "Dishy", orderReference?: string) {
   const orderMatch = pathname.match(/^\/pos\/orders\/([^/]+)$/);
   if (orderMatch) {
     const orderNumber = orderReference?.trim() || decodeURIComponent(orderMatch[1]);

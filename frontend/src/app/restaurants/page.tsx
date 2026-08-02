@@ -11,7 +11,7 @@ import type { Membership } from "@/src/types/restaurant";
 import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUser } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
-import { Plus, LogIn, Clock, Grid, ChevronRight, Phone, Calendar } from "lucide-react";
+import { Plus, LogIn, Clock, Grid, ChevronRight, Phone } from "lucide-react";
 
 const ROLE_LABEL: Record<string, Record<Language, string>> = {
   owner: { th: "เจ้าของร้าน", en: "Owner" },
@@ -19,14 +19,6 @@ const ROLE_LABEL: Record<string, Record<Language, string>> = {
   cashier: { th: "แคชเชียร์", en: "Cashier" },
   waiter: { th: "พนักงานเสิร์ฟ", en: "Waiter" },
   chef: { th: "ครัว", en: "Kitchen" },
-};
-
-const ROLE_TONE: Record<string, string> = {
-  owner: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300",
-  manager: "bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300",
-  cashier: "bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300",
-  waiter: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300",
-  chef: "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300",
 };
 
 function roleNameOf(membership: Membership) {
@@ -38,27 +30,19 @@ function roleLabelOf(membership: Membership, language: Language) {
 }
 
 export function getRestaurantCoverPath(type: string | undefined) {
-  const t = type?.trim() || "";
-  if (t.includes("คาเฟ่") || t.includes("Cafe")) {
+  const normalized = type?.trim().toLowerCase() || "";
+  if (normalized.includes("คาเฟ่") || normalized.includes("cafe")) {
     return "/cafe_cover.png";
   }
-  if (t.includes("ชาบู") || t.includes("ปิ้งย่าง") || t.includes("Grill") || t.includes("Shabu")) {
+  if (
+    normalized.includes("ชาบู") ||
+    normalized.includes("ปิ้งย่าง") ||
+    normalized.includes("shabu") ||
+    normalized.includes("grill")
+  ) {
     return "/grill_cover.png";
   }
   return "/restaurant_cover.png";
-}
-
-function formatJoinedDate(dateStr: string, language: Language) {
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
 }
 
 function RestaurantCard({
@@ -70,13 +54,11 @@ function RestaurantCard({
 }) {
   const { language } = useLanguage();
   const restaurant = membership.restaurant;
-  const roleName = roleNameOf(membership);
-  const membershipStyle = ROLE_TONE[roleName] ?? ROLE_TONE.waiter;
   const roleLabel = roleLabelOf(membership, language);
   const restaurantName = restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant");
   const branchName = restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch");
   const restaurantType = getRestaurantTypeLabel(restaurant?.restaurant_type?.trim() || "ร้านอาหาร", language);
-  const coverPath = restaurant?.cover_image || getRestaurantCoverPath(restaurant?.restaurant_type);
+  const coverPath = restaurant?.cover_image?.trim() || getRestaurantCoverPath(restaurant?.restaurant_type);
   const hours = restaurant?.open_time && restaurant?.close_time
     ? `${restaurant.open_time} - ${restaurant.close_time}`
     : language === "th" ? "ยังไม่ระบุเวลา" : "Hours not set";
@@ -85,18 +67,17 @@ function RestaurantCard({
     <button
       type="button"
       onClick={onEnter}
-      className="group relative flex flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-all duration-300 ease-out hover:-translate-y-1 hover:border-orange-500 hover:ring-2 hover:ring-orange-500/10 hover:shadow-sm dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-500 flex-1 min-h-[260px]"
+      className="group relative flex min-h-[282px] flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-[border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/30 dark:border-gray-800 dark:bg-gray-950 dark:hover:border-orange-500"
     >
       {/* Cover Image banner */}
-      <div className="relative h-28 w-full overflow-hidden bg-gray-100 dark:bg-gray-900">
+      <div className="relative h-32 w-full overflow-hidden bg-gray-100 dark:bg-gray-900">
         <Image
           src={coverPath}
           alt=""
           fill
           unoptimized
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
+          className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025] motion-reduce:transition-none"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
       </div>
 
       {/* Logo overlapping the cover */}
@@ -112,9 +93,9 @@ function RestaurantCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-              <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 002-2V2" />
-              <path d="M7 2v20M21 15V2a5 5 0 00-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+              <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+              <path d="M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3M21 15v7" />
             </svg>
           </div>
         )}
@@ -127,7 +108,7 @@ function RestaurantCard({
             <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
               {restaurantName}
             </h3>
-            <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${membershipStyle}`}>
+            <span className="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
               {roleLabel}
             </span>
           </div>
@@ -160,21 +141,14 @@ function RestaurantCard({
                 <span className="font-mono">{restaurant.phone}</span>
               </div>
             )}
-            <div className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-gray-400 shrink-0" />
-              <span className="truncate">
-                {language === "th" ? "เข้าร่วมเมื่อ " : "Joined "}
-                <span className="font-mono">{formatJoinedDate(membership.joined_at, language)}</span>
-              </span>
-            </div>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-800/60 pt-3 text-xs font-semibold text-gray-900 dark:text-white">
-          <span className="group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
-            {language === "th" ? "เข้าสู่บอร์ดจัดการ" : "Enter workspace"}
+        <div className="-mx-4 -mb-4 mt-4 flex items-center justify-between bg-gray-950 px-4 py-3 text-xs font-semibold text-white transition-colors group-hover:bg-orange-600 dark:bg-black dark:group-hover:bg-orange-500">
+          <span>
+            {language === "th" ? "เปิดร้านนี้ใน Dishy" : "Open in Dishy"}
           </span>
-          <ChevronRight className="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-orange-500" />
+          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </div>
       </div>
     </button>
@@ -194,7 +168,7 @@ function EmptyRestaurantsState() {
           </svg>
         </div>
         <h3 className="mt-4 text-[18px] font-semibold text-gray-900 dark:text-white">
-          {language === "th" ? "ยินดีต้อนรับสู่ Restaurant Hub" : "Welcome to Restaurant Hub"}
+          {language === "th" ? "ยินดีต้อนรับสู่ Dishy" : "Welcome to Dishy"}
         </h3>
         <p className="mx-auto mt-2 max-w-md text-[13px] text-gray-500 dark:text-gray-400">
           {language === "th"
@@ -283,15 +257,16 @@ export default function RestaurantsPage() {
 
   return (
     <WorkspaceShell hideIntro={true} maxWidthClass="max-w-[1400px]">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 dark:border-gray-800 pb-5 mb-6">
+      <div className="mb-7 flex flex-col gap-5 border-b border-gray-200 pb-6 sm:flex-row sm:items-end sm:justify-between dark:border-gray-800">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-2xl">
-            {language === "th" ? `สวัสดีคุณ ${userName}` : `Hello, ${userName}`}
+          <p className="text-[12px] font-semibold tracking-[0.12em] text-orange-600 dark:text-orange-400">DISHY</p>
+          <h1 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-gray-950 dark:text-white sm:text-3xl">
+            {language === "th" ? "เลือกร้านเพื่อเริ่มงาน" : "Choose a restaurant to start"}
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400">
             {language === "th"
-              ? "เลือกพื้นที่จัดการร้านอาหารด้านล่าง เพื่อเข้าสู่ระบบดูแลร้านอาหารของคุณ"
-              : "Choose a restaurant workspace below to enter your restaurant management board."}
+              ? `ยินดีต้อนรับคุณ ${userName} เลือกสาขาที่ต้องการดูแลในรอบนี้`
+              : `Welcome, ${userName}. Select the location you want to manage this shift.`}
           </p>
         </div>
 
@@ -316,8 +291,9 @@ export default function RestaurantsPage() {
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-            {language === "th" ? `พื้นที่ทำงานของคุณ (${memberships.length})` : `Your workspaces (${memberships.length})`}
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+            <span>{language === "th" ? "ร้านของคุณ" : "Your restaurants"}</span>
+            <span className="rounded-md bg-gray-200 px-1.5 py-0.5 font-mono text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-300">{memberships.length}</span>
           </h2>
         </div>
 

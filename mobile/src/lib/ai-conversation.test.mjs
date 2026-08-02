@@ -1,0 +1,84 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  appendConversationTurn,
+  recentConversationHistory,
+  selectOperationsSnapshot,
+} from './ai-conversation.ts';
+
+const snapshot = {
+  generated_at: '2026-07-29T10:00:00+07:00',
+  sales_days: [],
+  top_menu_items: [],
+  menu_margins: [],
+  low_margin_menus: [],
+  analysis_readiness: {
+    has_sales: true,
+    sales_items: 3,
+    margin_items: 2,
+    costed_margin_items: 2,
+    sold_menus: 2,
+    sold_menus_with_recipes: 2,
+    margin_cost_coverage_percent: 100,
+    menu_recipe_coverage_percent: 100,
+    can_analyze_revenue: true,
+    can_analyze_margin: true,
+    can_recommend_business_actions: true,
+    warnings: [],
+  },
+  inventory_summary: {
+    total_items: 4,
+    low_items: 1,
+    out_items: 0,
+    value: 1200,
+  },
+  stock_risks: [],
+};
+
+test('keeps only the latest six messages sent to the AI backend', () => {
+  const history = Array.from({ length: 8 }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    content: `message-${index + 1}`,
+  }));
+
+  assert.deepEqual(
+    recentConversationHistory(history).map((message) => message.content),
+    ['message-3', 'message-4', 'message-5', 'message-6', 'message-7', 'message-8'],
+  );
+});
+
+test('appends one complete turn and caps visible conversation context', () => {
+  const history = Array.from({ length: 6 }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    content: `old-${index + 1}`,
+  }));
+
+  assert.deepEqual(
+    appendConversationTurn(history, 'ยอดขายวันนี้', 'ยอดขายวันนี้คือ...').map(
+      (message) => message.content,
+    ),
+    ['old-3', 'old-4', 'old-5', 'old-6', 'ยอดขายวันนี้', 'ยอดขายวันนี้คือ...'],
+  );
+});
+
+test('preserves the latest real snapshot when a conversational reply contains an empty snapshot', () => {
+  const emptySnapshot = {
+    ...snapshot,
+    generated_at: '',
+    analysis_readiness: {
+      ...snapshot.analysis_readiness,
+      has_sales: false,
+      can_recommend_business_actions: false,
+    },
+    inventory_summary: {
+      total_items: 0,
+      low_items: 0,
+      out_items: 0,
+      value: 0,
+    },
+  };
+
+  assert.equal(selectOperationsSnapshot(snapshot, emptySnapshot), snapshot);
+  assert.equal(selectOperationsSnapshot(snapshot, { ...snapshot, generated_at: '2026-07-29T11:00:00+07:00' })?.generated_at, '2026-07-29T11:00:00+07:00');
+});

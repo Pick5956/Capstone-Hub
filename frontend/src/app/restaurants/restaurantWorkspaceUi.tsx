@@ -106,9 +106,9 @@ export function BrandMark() {
   return (
     <Link href="/restaurants" className="flex items-center gap-2.5">
       <AppLogo size={36} />
-      <div>
-        <p className="text-[10px] font-semibold uppercase leading-none text-gray-400">Restaurant</p>
-        <p className="text-sm font-semibold leading-snug tracking-tight text-gray-900 dark:text-white">HUB</p>
+      <div className="leading-none">
+        <p className="text-[16px] font-bold tracking-[-0.025em] text-gray-950 dark:text-white">Dishy</p>
+        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-400">Restaurant operations</p>
       </div>
     </Link>
   );

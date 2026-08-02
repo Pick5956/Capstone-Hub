@@ -10,6 +10,7 @@ import (
 func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 	menuCtrl := controller.ProvideMenuController(config.DB())
 	tableCtrl := controller.ProvideTableController(config.DB())
+	reservationCtrl := controller.ProvideReservationController(config.DB())
 
 	v1.GET("/categories", menuCtrl.ListCategories)
 	v1.POST("/categories", menuCtrl.CreateCategory)
@@ -29,8 +30,13 @@ func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 	v1.POST("/tables/:id/regenerate-customer-token", tableCtrl.RegenerateCustomerToken)
 	v1.PUT("/tables/:id", tableCtrl.UpdateTable)
 	v1.PATCH("/tables/:id/status", tableCtrl.UpdateTableStatus)
+	v1.POST("/tables/:id/reserve", tableCtrl.ReserveTable)
+	v1.POST("/tables/:id/cancel-reservation", tableCtrl.CancelReservation)
+	v1.POST("/tables/:id/seat-reservation", tableCtrl.SeatReservation)
 	v1.PATCH("/tables/:id/move-zone", tableCtrl.MoveTableZone)
 	v1.DELETE("/tables/:id", tableCtrl.DeleteTable)
+
+	v1.GET("/reservations", reservationCtrl.ListReservations)
 
 	v1.GET("/table-zones", tableCtrl.ListZones)
 	v1.POST("/table-zones", tableCtrl.CreateZone)

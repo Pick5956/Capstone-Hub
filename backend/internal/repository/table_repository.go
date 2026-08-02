@@ -50,11 +50,36 @@ func (r *TableRepository) FindTable(restaurantID, tableID uint) (*entity.Restaur
 	return &table, nil
 }
 
+func (r *TableRepository) FindTableForUpdate(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
+	var table entity.RestaurantTable
+	err := r.db.
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		Preload("TableZone").
+		Preload("Tags", func(db *gorm.DB) *gorm.DB { return db.Order("display_order asc, id asc") }).
+		Where("restaurant_id = ? AND id = ?", restaurantID, tableID).
+		First(&table).Error
+	if err != nil {
+		return nil, err
+	}
+	return &table, nil
+}
+
 func (r *TableRepository) HasOpenOrderForTable(restaurantID, tableID uint) (bool, error) {
 	var orderID uint
 	result := r.db.Model(&entity.Order{}).
 		Select("id").
 		Where("restaurant_id = ? AND table_id = ? AND status NOT IN ?", restaurantID, tableID, []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Limit(1).
+		Scan(&orderID)
+	return result.RowsAffected > 0, result.Error
+}
+
+func (r *TableRepository) HasAnyOrderForTable(restaurantID, tableID uint) (bool, error) {
+	var orderID uint
+	result := r.db.Unscoped().
+		Model(&entity.Order{}).
+		Select("id").
+		Where("restaurant_id = ? AND table_id = ?", restaurantID, tableID).
 		Limit(1).
 		Scan(&orderID)
 	return result.RowsAffected > 0, result.Error
@@ -66,6 +91,21 @@ func (r *TableRepository) UpdateTable(table *entity.RestaurantTable) error {
 
 func (r *TableRepository) DeleteTable(table *entity.RestaurantTable) error {
 	return r.db.Delete(table).Error
+}
+
+// CreateReservation records a new reservation within the current transaction.
+func (r *TableRepository) CreateReservation(reservation *entity.Reservation) error {
+	return r.db.Create(reservation).Error
+}
+
+// ResolveActiveReservation marks the table's active reservation with a terminal
+// status (seated / cancelled). It is a no-op when no active reservation exists,
+// so it stays safe for tables reserved before this feature shipped.
+func (r *TableRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
+	now := BangkokNow()
+	return r.db.Model(&entity.Reservation{}).
+		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
+		Updates(map[string]any{"status": status, "resolved_at": now}).Error
 }
 
 func (r *TableRepository) ReplaceTableTags(table *entity.RestaurantTable, tags []entity.TableTag) error {

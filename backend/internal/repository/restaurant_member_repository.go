@@ -33,6 +33,9 @@ func (r *RestaurantMemberRepository) FindByID(id uint) (*entity.RestaurantMember
 	if err != nil {
 		return nil, err
 	}
+	if err := applyEffectiveRolePermissions(r.db, member.RestaurantID, member.Role); err != nil {
+		return nil, err
+	}
 	return &member, nil
 }
 
@@ -44,6 +47,9 @@ func (r *RestaurantMemberRepository) FindByUserAndRestaurant(userID, restaurantI
 		Where("user_id = ? AND restaurant_id = ?", userID, restaurantID).
 		First(&member).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := applyEffectiveRolePermissions(r.db, member.RestaurantID, member.Role); err != nil {
 		return nil, err
 	}
 	return &member, nil
@@ -61,6 +67,11 @@ func (r *RestaurantMemberRepository) FindActiveByUser(userID uint) ([]entity.Res
 	if err != nil {
 		return nil, err
 	}
+	for index := range members {
+		if err := applyEffectiveRolePermissions(r.db, members[index].RestaurantID, members[index].Role); err != nil {
+			return nil, err
+		}
+	}
 	return members, nil
 }
 
@@ -76,6 +87,11 @@ func (r *RestaurantMemberRepository) FindActiveByRestaurant(restaurantID uint) (
 	if err != nil {
 		return nil, err
 	}
+	for index := range members {
+		if err := applyEffectiveRolePermissions(r.db, restaurantID, members[index].Role); err != nil {
+			return nil, err
+		}
+	}
 	return members, nil
 }
 
@@ -90,10 +106,14 @@ func (r *RestaurantMemberRepository) FindAllByRestaurant(restaurantID uint) ([]e
 	if err != nil {
 		return nil, err
 	}
+	for index := range members {
+		if err := applyEffectiveRolePermissions(r.db, restaurantID, members[index].Role); err != nil {
+			return nil, err
+		}
+	}
 	return members, nil
 }
 
 func (r *RestaurantMemberRepository) DeleteByRestaurant(restaurantID uint) error {
 	return r.db.Where("restaurant_id = ?", restaurantID).Delete(&entity.RestaurantMember{}).Error
 }
-

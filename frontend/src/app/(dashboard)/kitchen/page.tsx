@@ -1,18 +1,40 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Check, CheckCircle2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock3, Undo2, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
+import { listMenuItems } from "@/src/lib/menu";
 import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
+
+type KitchenLane = "cooking" | "ready";
+type CancelTarget = { order: Order; item: OrderItem };
+
+const ITEM_COMPLETE_FEEDBACK_MS = 220;
+const ITEM_COLLAPSE_MS = 220;
+const TICKET_COMPLETE_FEEDBACK_MS = 360;
+const TICKET_COLLAPSE_MS = 260;
+
+function waitForAnimation(duration: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, duration));
+}
+
+function shouldReduceMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 function minutesSince(value?: string | null) {
   if (!value) return 0;
@@ -22,16 +44,15 @@ function minutesSince(value?: string | null) {
 function urgencyClass(minutes: number) {
   if (minutes >= 10) return "border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20";
   if (minutes >= 5) return "border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20";
-  return "border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/15";
-}
-
-function isOrderReady(order: Order) {
-  const items = order.items ?? [];
-  return items.length > 0 && items.every((item) => item.status === "ready");
+  return "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
 }
 
 function ticketKey(order: Order) {
   return order.kitchen_ticket_id ?? `${order.ID}:${order.kitchen_batch ?? 0}`;
+}
+
+function orderTableLabel(order: Order) {
+  return order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
 }
 
 function orderLocationLabel(order: Order, language: "th" | "en") {
@@ -39,8 +60,7 @@ function orderLocationLabel(order: Order, language: "th" | "en") {
     const base = language === "th" ? "กลับบ้าน" : "Takeaway";
     return order.customer_name?.trim() ? `${base} · ${order.customer_name.trim()}` : base;
   }
-  const tableLabel = order.table?.display_label || order.table?.table_number || (order.table_id ? String(order.table_id) : "-");
-  return `${language === "th" ? "โต๊ะ" : "Table"} ${tableLabel}`;
+  return `${language === "th" ? "โต๊ะ" : "Table"} ${orderTableLabel(order)}`;
 }
 
 function itemFulfillmentLabel(item: OrderItem, language: "th" | "en") {
@@ -61,69 +81,134 @@ function shouldShowItemFulfillment(order: Order, item: OrderItem) {
 export default function KitchenPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const confirm = useConfirm();
+  const { showToast } = useToast();
   const canView = can(activeMembership, "view_kitchen");
   const canUpdate = can(activeMembership, "update_order_status");
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuImageById, setMenuImageById] = useState<Map<number, string>>(() => new Map());
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [completingTicketIds, setCompletingTicketIds] = useState<Set<string>>(new Set());
-  const [hiddenReadyTicketIds, setHiddenReadyTicketIds] = useState<Set<string>>(new Set());
+  const [cookingZoneOpen, setCookingZoneOpen] = useState(true);
+  const [readyZoneOpen, setReadyZoneOpen] = useState(true);
+  const [zoneRipple, setZoneRipple] = useState<{ id: number; lane: KitchenLane; size: number; x: number; y: number } | null>(null);
+  const [completingItemIds, setCompletingItemIds] = useState<Set<number>>(() => new Set());
+  const [collapsingItemIds, setCollapsingItemIds] = useState<Set<number>>(() => new Set());
+  const [completingTicketIds, setCompletingTicketIds] = useState<Set<string>>(() => new Set());
+  const [collapsingTicketIds, setCollapsingTicketIds] = useState<Set<string>>(() => new Set());
+  const [enteringReadyItemIds, setEnteringReadyItemIds] = useState<Set<number>>(() => new Set());
+  const [cancelTarget, setCancelTarget] = useState<CancelTarget | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonError, setCancelReasonError] = useState("");
+  const [cancelDialogClosing, setCancelDialogClosing] = useState(false);
   const hasLoadedRef = useRef(false);
   const ticketIdsRef = useRef<Set<string>>(new Set());
+  const zoneRippleIdRef = useRef(0);
+  const transitioningItemIdsRef = useRef<Set<number>>(new Set());
+  const submittingIdRef = useRef<number | null>(null);
+  const cancelDialogRef = useRef<HTMLFormElement>(null);
+  const cancelReasonRef = useRef<HTMLTextAreaElement>(null);
+  const cancelPreviousFocusRef = useRef<HTMLElement | null>(null);
 
   const copy = language === "th"
     ? {
         denied: "ไม่มีสิทธิ์ดูจอครัว",
         eyebrow: "Kitchen",
         title: "จอครัว",
-        subtitle: "ดูออเดอร์ที่ส่งเข้าครัวและอัปเดตเมนูที่พร้อมเสิร์ฟ",
-        refresh: "รีเฟรช",
+        subtitle: "ดูรายการกำลังทำและรายการที่ครัวทำเสร็จ",
         emptyTitle: "ยังไม่มีงานในครัว",
         emptyHint: "เมื่อพนักงานส่งออเดอร์เข้าครัว รายการจะแสดงที่นี่",
         table: "โต๊ะ",
+        kitchenBatch: (batch: number) => `รอบ ${batch}`,
         elapsed: "นาที",
-        markReady: "พร้อม",
-        markAllReady: "พร้อมทั้งหมด",
-        completedTicket: "พร้อมเสิร์ฟทั้งออเดอร์",
-        ready: "พร้อมแล้ว",
+        markReady: "เสร็จแล้ว",
+        markAllReady: "เสร็จทั้งหมด",
+        ready: "เสร็จแล้ว",
         cooking: "กำลังทำ",
+        cookingZone: "โซนกำลังทำ",
+        readyZone: "โซนเสร็จแล้ว",
+        cookingEmpty: "ยังไม่มีรายการกำลังทำ",
+        readyEmpty: "ยังไม่มีรายการที่ทำเสร็จ",
+        allDone: "เสร็จครบแล้ว",
         remaining: (count: number) => `เหลือ ${count} รายการ`,
-        sent_to_kitchen: "ส่งเข้าครัว",
+        undo: "ย้ายไปกำลังทำ",
+        undoAria: (name: string) => `ย้าย ${name} ไปโซนกำลังทำ`,
+        undoConfirmTitle: (name: string) => `ต้องการย้าย “${name}” กลับไปโซนกำลังทำหรือไม่?`,
+        undoConfirmAction: "ยืนยัน",
+        undoConfirmCancel: "ยกเลิก",
+        undoSuccess: "ย้ายรายการไปโซนกำลังทำแล้ว",
+        cancelItem: "ยกเลิก",
+        cancelItemAria: (name: string) => `ยกเลิกรายการ ${name}`,
+        cancelTitle: "ยกเลิกรายการอาหาร",
+        cancelDescription: (name: string) => `ระบุเหตุผลสำหรับ “${name}” เพื่อเก็บไว้ในประวัติออเดอร์`,
+        cancelReason: "เหตุผลที่ยกเลิก",
+        cancelPlaceholder: "เช่น ของหมด หรือเหตุสุดวิสัย",
+        cancelPresets: ["ของหมด", "อุปกรณ์ขัดข้อง", "เหตุสุดวิสัย"],
+        keepItem: "เก็บรายการไว้",
+        confirmCancel: "ยืนยันยกเลิก",
+        reasonRequired: "กรุณาระบุเหตุผลที่ยกเลิก",
+        cancelSuccess: "ยกเลิกรายการแล้ว",
         loadError: "โหลดคิวครัวไม่สำเร็จ",
         saveError: "อัปเดตสถานะไม่สำเร็จ",
       }
     : {
         denied: "You do not have permission to view the kitchen.",
         eyebrow: "Kitchen",
-        title: "Kitchen Display",
-        subtitle: "Track sent orders and mark items ready for service.",
-        refresh: "Refresh",
+        title: "Kitchen",
+        subtitle: "Track items being prepared and completed by the kitchen.",
         emptyTitle: "No kitchen tickets",
         emptyHint: "Orders will appear here after staff send them to the kitchen.",
         table: "Table",
+        kitchenBatch: (batch: number) => `Batch ${batch}`,
         elapsed: "min",
-        markReady: "Ready",
-        markAllReady: "Mark all ready",
-        completedTicket: "Order ready",
-        ready: "Ready",
+        markReady: "Done",
+        markAllReady: "Mark all done",
+        ready: "Done",
         cooking: "Cooking",
+        cookingZone: "Cooking",
+        readyZone: "Done",
+        cookingEmpty: "No items are being prepared",
+        readyEmpty: "No completed items",
+        allDone: "All items done",
         remaining: (count: number) => `${count} items left`,
-        sent_to_kitchen: "Sent",
+        undo: "Undo",
+        undoAria: (name: string) => `Move ${name} back to cooking`,
+        undoConfirmTitle: (name: string) => `Move “${name}” back to the cooking zone?`,
+        undoConfirmAction: "Confirm",
+        undoConfirmCancel: "Cancel",
+        undoSuccess: "Item moved back to cooking",
+        cancelItem: "Cancel",
+        cancelItemAria: (name: string) => `Cancel ${name}`,
+        cancelTitle: "Cancel menu item",
+        cancelDescription: (name: string) => `Give a reason for cancelling “${name}” so it is recorded with the order.`,
+        cancelReason: "Cancellation reason",
+        cancelPlaceholder: "For example, out of stock or an unexpected issue",
+        cancelPresets: ["Out of stock", "Equipment issue", "Unexpected issue"],
+        keepItem: "Keep item",
+        confirmCancel: "Confirm cancellation",
+        reasonRequired: "Enter a cancellation reason",
+        cancelSuccess: "Item cancelled",
         loadError: "Could not load kitchen queue.",
         saveError: "Could not update item status.",
       };
 
   const visibleOrders = useMemo(
-    () => orders.filter((order) => completingTicketIds.has(ticketKey(order)) || (!isOrderReady(order) && !hiddenReadyTicketIds.has(ticketKey(order)))),
-    [completingTicketIds, hiddenReadyTicketIds, orders],
+    () => orders.filter((order) => order.items?.some((item) => item.status === "cooking" || item.status === "ready")),
+    [orders],
+  );
+  const cookingOrders = useMemo(
+    () => visibleOrders.filter((order) => order.items?.some((item) => item.status === "cooking")),
+    [visibleOrders],
+  );
+  const readyOrders = useMemo(
+    () => visibleOrders.filter((order) => order.items?.some((item) => item.status === "ready")),
+    [visibleOrders],
   );
   const activeItems = useMemo(
     () => visibleOrders.flatMap((order) => order.items?.map((item) => ({ order, item })) ?? []),
     [visibleOrders],
   );
-  const delayedCount = activeItems.filter(({ item, order }) => minutesSince(item.sent_at ?? order.kitchen_sent_at ?? order.opened_at) >= 10).length;
   const cookingCount = activeItems.filter(({ item }) => item.status === "cooking").length;
   const readyCount = activeItems.filter(({ item }) => item.status === "ready").length;
 
@@ -135,10 +220,20 @@ export default function KitchenPage() {
       const res = await kitchenQueue();
       const nextIds = new Set(res.data.orders.map((order) => ticketKey(order)));
       const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
-      setOrders(res.data.orders);
+      const transitioningItemIds = transitioningItemIdsRef.current;
+      const nextOrders = transitioningItemIds.size
+        ? res.data.orders.map((order) => ({
+            ...order,
+            items: order.items?.map((item) => (
+              transitioningItemIds.has(item.ID) && item.status === "ready"
+                ? { ...item, status: "cooking" as const }
+                : item
+            )),
+          }))
+        : res.data.orders;
+      setOrders(nextOrders);
       if (hasNewTicket) playBeep(740, "square", 0.04, 0.18);
       ticketIdsRef.current = nextIds;
-      setLastUpdated(new Date());
       hasLoadedRef.current = true;
     } catch (error) {
       setError(apiErrorMessage(error) || copy.loadError);
@@ -147,42 +242,90 @@ export default function KitchenPage() {
     }
   };
 
-  const completeTicketIfReady = (order: Order) => {
-    if (!isOrderReady(order)) return;
+  const applyItemStatuses = (order: Order, itemIds: number[], status: OrderItem["status"]) => {
     const key = ticketKey(order);
-    setCompletingTicketIds((current) => new Set(current).add(key));
+    const changedItemIds = new Set(itemIds);
+    setOrders((current) => current.map((currentOrder) => (
+      ticketKey(currentOrder) === key
+        ? {
+            ...currentOrder,
+            items: currentOrder.items?.map((item: OrderItem) => (
+              changedItemIds.has(item.ID) ? { ...item, status } : item
+            )),
+          }
+        : currentOrder
+    )));
+  };
+
+  const showReadyEntry = (itemIds: number[]) => {
+    setEnteringReadyItemIds((current) => {
+      const next = new Set(current);
+      itemIds.forEach((itemId) => next.add(itemId));
+      return next;
+    });
     window.setTimeout(() => {
-      setCompletingTicketIds((current) => {
+      setEnteringReadyItemIds((current) => {
         const next = new Set(current);
-        next.delete(key);
+        itemIds.forEach((itemId) => next.delete(itemId));
         return next;
       });
-      setHiddenReadyTicketIds((current) => new Set(current).add(key));
-      setOrders((current) => current.filter((item) => ticketKey(item) !== key));
-    }, 980);
+    }, 260);
   };
 
-  const applyReadyResponse = (order: Order, itemId?: number) => {
-    const key = ticketKey(order);
-    const nextOrder = itemId
-      ? {
-          ...order,
-          items: order.items?.map((item: OrderItem) => item.ID === itemId ? { ...item, status: "ready" as const } : item),
-        }
-      : order;
-    setOrders((current) => current.map((item) => ticketKey(item) === key ? nextOrder : item));
-    completeTicketIfReady(nextOrder);
-  };
+  const realtimeStatus = useOrderEvents(load, {
+    enabled: canView,
+    restaurantId: activeMembership?.restaurant_id,
+    eventFilter: { kind: "kitchen" },
+  });
+  useVisiblePolling(load, { enabled: canView, intervalMs: 60_000 });
 
-  useVisiblePolling(load, { enabled: canView, intervalMs: 5_000 });
+  // The kitchen queue payload does not embed each item's menu, so fetch the menu
+  // catalogue once and resolve thumbnails by menu_id (mirrors the POS order page).
+  useEffect(() => {
+    if (!canView) return;
+    let active = true;
+    listMenuItems()
+      .then((res) => {
+        if (!active) return;
+        setMenuImageById(new Map(res.data.menu_items.map((item) => [item.ID, item.image_url])));
+      })
+      .catch(() => {
+        // Kitchen-only roles may lack menu access; fall back to the placeholder image.
+      });
+    return () => {
+      active = false;
+    };
+  }, [canView]);
+
+  const orderItemImageUrl = (item: OrderItem) =>
+    item.menu?.image_url || menuImageById.get(item.menu_id) || "/menu-placeholder-v2.webp";
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);
     setError("");
+    transitioningItemIdsRef.current.add(itemId);
     try {
       await updateOrderItemStatus(order.ID, itemId, "ready");
-      applyReadyResponse(order, itemId);
+      const animate = !shouldReduceMotion();
+      if (animate) setCompletingItemIds((current) => new Set(current).add(itemId));
+      await waitForAnimation(animate ? ITEM_COMPLETE_FEEDBACK_MS : 0);
+      if (animate) setCollapsingItemIds((current) => new Set(current).add(itemId));
+      await waitForAnimation(animate ? ITEM_COLLAPSE_MS : 0);
+      transitioningItemIdsRef.current.delete(itemId);
+      setCompletingItemIds((current) => {
+        const next = new Set(current);
+        next.delete(itemId);
+        return next;
+      });
+      setCollapsingItemIds((current) => {
+        const next = new Set(current);
+        next.delete(itemId);
+        return next;
+      });
+      if (animate) showReadyEntry([itemId]);
+      applyItemStatuses(order, [itemId], "ready");
     } catch (error) {
+      transitioningItemIdsRef.current.delete(itemId);
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
       setSubmittingId(null);
@@ -192,154 +335,598 @@ export default function KitchenPage() {
   const markAllReady = async (order: Order) => {
     const cookingItems = order.items?.filter((item) => item.status === "cooking") ?? [];
     if (!cookingItems.length) return;
+    const itemIds = cookingItems.map((item) => item.ID);
+    const key = ticketKey(order);
     setSubmittingId(order.ID);
     setError("");
+    itemIds.forEach((itemId) => transitioningItemIdsRef.current.add(itemId));
     try {
       await Promise.all(cookingItems.map((item) => updateOrderItemStatus(order.ID, item.ID, "ready")));
-      applyReadyResponse({
-        ...order,
-        items: order.items?.map((item) => item.status === "cooking" ? { ...item, status: "ready" as const } : item),
+      const animate = !shouldReduceMotion();
+      if (animate) setCompletingTicketIds((current) => new Set(current).add(key));
+      await waitForAnimation(animate ? TICKET_COMPLETE_FEEDBACK_MS : 0);
+      if (animate) setCollapsingTicketIds((current) => new Set(current).add(key));
+      await waitForAnimation(animate ? TICKET_COLLAPSE_MS : 0);
+      itemIds.forEach((itemId) => transitioningItemIdsRef.current.delete(itemId));
+      setCompletingTicketIds((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
       });
+      setCollapsingTicketIds((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+      if (animate) showReadyEntry(itemIds);
+      applyItemStatuses(order, itemIds, "ready");
     } catch (error) {
+      itemIds.forEach((itemId) => transitioningItemIdsRef.current.delete(itemId));
       setError(apiErrorMessage(error) || copy.saveError);
     } finally {
       setSubmittingId(null);
     }
   };
 
-  if (!canView) return <PermissionDenied title={copy.denied} />;
+  const revertToCooking = async (order: Order, item: OrderItem) => {
+    if (!canUpdate || submittingId !== null) return;
+    const confirmed = await confirm({
+      title: copy.undoConfirmTitle(item.menu_name),
+      confirmLabel: copy.undoConfirmAction,
+      cancelLabel: copy.undoConfirmCancel,
+      tone: "warning",
+    });
+    if (!confirmed) return;
 
-  const lastUpdatedText = lastUpdated
-    ? `${language === "th" ? "อัปเดต" : "Updated"} ${lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}`
-    : undefined;
+    setSubmittingId(item.ID);
+    setError("");
+    transitioningItemIdsRef.current.add(item.ID);
+    try {
+      await updateOrderItemStatus(order.ID, item.ID, "cooking");
+      applyItemStatuses(order, [item.ID], "cooking");
+      showToast({ title: copy.undoSuccess, tone: "info" });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      transitioningItemIdsRef.current.delete(item.ID);
+      setSubmittingId(null);
+    }
+  };
+
+  const openCancelDialog = (order: Order, item: OrderItem) => {
+    if (!canUpdate || submittingId !== null) return;
+    setCancelTarget({ order, item });
+    setCancelReason("");
+    setCancelReasonError("");
+    setCancelDialogClosing(false);
+  };
+
+  const closeCancelDialog = useCallback(() => {
+    setCancelDialogClosing(true);
+    window.setTimeout(() => {
+      setCancelTarget(null);
+      setCancelReason("");
+      setCancelReasonError("");
+      setCancelDialogClosing(false);
+    }, 180);
+  }, []);
+
+  const cancelBackdrop = useBackdropClose(() => {
+    if (submittingId === null) closeCancelDialog();
+  });
+
+  useEffect(() => {
+    submittingIdRef.current = submittingId;
+  }, [submittingId]);
+
+  useEffect(() => {
+    if (!cancelTarget) return;
+
+    cancelPreviousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => cancelReasonRef.current?.focus());
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (submittingIdRef.current !== null) return;
+        event.preventDefault();
+        closeCancelDialog();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(cancelDialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ) ?? []).filter((element) => element.offsetParent !== null || element === document.activeElement);
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      cancelPreviousFocusRef.current?.focus();
+      cancelPreviousFocusRef.current = null;
+    };
+  }, [cancelTarget, closeCancelDialog]);
+
+  const cancelItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!cancelTarget || !canUpdate || submittingId !== null) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelReasonError(copy.reasonRequired);
+      cancelReasonRef.current?.focus();
+      return;
+    }
+
+    const { order, item } = cancelTarget;
+    setSubmittingId(item.ID);
+    setCancelReasonError("");
+    setError("");
+    try {
+      await updateOrderItemStatus(order.ID, item.ID, "cancelled", reason);
+      applyItemStatuses(order, [item.ID], "cancelled");
+      showToast({ title: copy.cancelSuccess });
+      closeCancelDialog();
+    } catch (error) {
+      setCancelReasonError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const renderTicket = (order: Order, lane: KitchenLane) => {
+    const laneItems = order.items?.filter((item) => item.status === lane) ?? [];
+    if (!laneItems.length) return null;
+
+    const oldestStatusAt = laneItems.reduce<string | null>((oldest, item) => {
+      const value = lane === "ready"
+        ? item.ready_at ?? item.UpdatedAt ?? item.sent_at ?? null
+        : item.sent_at ?? order.kitchen_sent_at ?? null;
+      if (!value) return oldest;
+      if (!oldest || new Date(value) < new Date(oldest)) return value;
+      return oldest;
+    }, order.kitchen_sent_at ?? null);
+    const elapsed = minutesSince(oldestStatusAt ?? order.opened_at);
+    const isReadyLane = lane === "ready";
+    const locationLabel = orderLocationLabel(order, language);
+    const readyCornerValue = order.order_type === "takeaway"
+      ? (language === "th" ? "กลับบ้าน" : "Takeaway")
+      : orderTableLabel(order);
+    const kitchenBatch = order.kitchen_batch || 1;
+    const currentTicketKey = ticketKey(order);
+    const isCompletingTicket = !isReadyLane && completingTicketIds.has(currentTicketKey);
+    const isCollapsingTicket = !isReadyLane && collapsingTicketIds.has(currentTicketKey);
+
+    return (
+      <div
+        key={`${lane}:${ticketKey(order)}`}
+        className={`kitchen-ticket-shell grid ${isCollapsingTicket ? "kitchen-ticket-collapse" : ""}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <article
+            className={`relative overflow-hidden rounded-md border ${
+              isReadyLane
+                ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/20"
+                : urgencyClass(elapsed)
+            }`}
+          >
+            {isCompletingTicket ? (
+              <div className="kitchen-ticket-success absolute inset-0 z-20 grid place-items-center bg-emerald-600/95 text-white dark:bg-emerald-500/95 dark:text-emerald-950">
+                <div className="text-center">
+                  <span className="kitchen-success-icon mx-auto grid h-14 w-14 place-items-center rounded-full bg-white text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    <CheckCircle2 className="h-8 w-8" strokeWidth={2.5} aria-hidden="true" />
+                  </span>
+                  <p className="mt-2 text-[14px] font-semibold">{copy.allDone}</p>
+                </div>
+              </div>
+            ) : null}
+            <div className={`flex items-start justify-between gap-3 px-4 ${isReadyLane ? "py-3" : "py-4"}`}>
+              <div className="min-w-0">
+                {isReadyLane ? (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <h3 className="text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
+                    <span className="text-[14px] font-bold text-gray-500 dark:text-gray-400">{copy.kitchenBatch(kitchenBatch)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px] font-bold text-gray-500 dark:text-gray-400">
+                      <span>{locationLabel}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{copy.kitchenBatch(kitchenBatch)}</span>
+                    </p>
+                    <h3 className="mt-1 text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
+                  </>
+                )}
+              </div>
+              <div className="text-right">
+                {isReadyLane ? (
+                  order.order_type === "takeaway" ? (
+                    <p className="text-[16px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{readyCornerValue}</p>
+                  ) : (
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="text-[14px] font-bold text-gray-500">{copy.table}</span>
+                      <p className="font-mono text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{readyCornerValue}</p>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <p className="font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{elapsed}</p>
+                    <p className="text-[11px] text-gray-500">{copy.elapsed}</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {!isReadyLane ? (
+              <div className="flex min-h-14 items-center justify-between gap-3 border-y border-black/5 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
+                <p className="text-[12px] font-medium tabular-nums text-gray-600 dark:text-gray-300">
+                  {copy.remaining(laneItems.length)}
+                </p>
+                {canUpdate && laneItems.length > 1 ? (
+                  <button
+                    type="button"
+                    disabled={submittingId !== null}
+                    onClick={() => markAllReady(order)}
+                    className="ui-press inline-flex h-11 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
+                  >
+                    {copy.markAllReady}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className={`divide-y divide-black/5 bg-white/45 dark:divide-white/10 dark:bg-gray-950/25 ${isReadyLane ? "border-t border-black/5 dark:border-white/10" : ""}`}>
+              {laneItems.map((item) => (
+                <div
+                  key={item.ID}
+                  className={`kitchen-item-shell grid ${collapsingItemIds.has(item.ID) ? "kitchen-item-collapse" : ""}`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                    <div
+                      className={`flex min-h-[72px] items-center gap-3 px-3 py-3 sm:px-4 ${
+                        isReadyLane ? "bg-emerald-50/35 dark:bg-emerald-950/10" : ""
+                      } ${completingItemIds.has(item.ID) ? "kitchen-item-complete" : ""} ${
+                        isReadyLane && enteringReadyItemIds.has(item.ID) ? "kitchen-item-ready-enter" : ""
+                      }`}
+                    >
+                      <div
+                        role="img"
+                        aria-label={`${language === "th" ? "รูปเมนู" : "Menu image"} ${item.menu_name}`}
+                        className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                        style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className={`font-semibold leading-5 ${isReadyLane ? "text-gray-700 dark:text-gray-200" : "text-gray-900 dark:text-white"}`}>{item.quantity}x {item.menu_name}</p>
+                          {shouldShowItemFulfillment(order, item) ? (
+                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${itemFulfillmentBadgeClass(item)}`}>
+                              {itemFulfillmentLabel(item, language)}
+                            </span>
+                          ) : null}
+                        </div>
+                        {item.selected_options?.length ? (
+                          <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+                            {item.selected_options.map((option) => (
+                              <p key={option.ID}>{option.group_name}: {option.option_name}</p>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
+                      </div>
+                      {!canUpdate && isReadyLane ? (
+                        <span className="inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                          {copy.ready}
+                        </span>
+                      ) : canUpdate ? (
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {isReadyLane ? (
+                            <button
+                              type="button"
+                              aria-label={copy.undoAria(item.menu_name)}
+                              title={copy.undo}
+                              disabled={submittingId !== null}
+                              onClick={() => revertToCooking(order, item)}
+                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
+                            >
+                              <Undo2 className="h-[18px] w-[18px]" aria-hidden="true" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`${copy.markReady}: ${item.menu_name}`}
+                              title={copy.markReady}
+                              disabled={submittingId !== null}
+                              onClick={() => markReady(order, item.ID)}
+                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
+                            >
+                              <Check className="h-5 w-5" strokeWidth={3} aria-hidden="true" />
+                            </button>
+                          )}
+                          {!isReadyLane ? (
+                            <button
+                              type="button"
+                              aria-label={copy.cancelItemAria(item.menu_name)}
+                              title={copy.cancelItem}
+                              disabled={submittingId !== null}
+                              onClick={() => openCancelDialog(order, item)}
+                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
+                            >
+                              <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300">{copy.cooking}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      </div>
+    );
+  };
+
+  const startZoneRipple = (lane: KitchenLane, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const radius = Math.hypot(
+      Math.max(x, bounds.width - x),
+      Math.max(y, bounds.height - y),
+    );
+    zoneRippleIdRef.current += 1;
+    setZoneRipple({
+      id: zoneRippleIdRef.current,
+      lane,
+      size: Math.ceil(radius * 2),
+      x,
+      y,
+    });
+  };
+
+  const renderZone = (lane: KitchenLane) => {
+    const isReadyLane = lane === "ready";
+    const open = isReadyLane ? readyZoneOpen : cookingZoneOpen;
+    const setOpen = isReadyLane ? setReadyZoneOpen : setCookingZoneOpen;
+    const laneOrders = isReadyLane ? readyOrders : cookingOrders;
+    const count = isReadyLane ? readyCount : cookingCount;
+    const contentId = `kitchen-${lane}-zone`;
+    const label = isReadyLane ? copy.readyZone : copy.cookingZone;
+    const emptyLabel = isReadyLane ? copy.readyEmpty : copy.cookingEmpty;
+    const Icon = isReadyLane ? CheckCircle2 : Clock3;
+
+    return (
+      <section
+        aria-label={label}
+        className={`overflow-hidden rounded-md border-2 ${
+          isReadyLane
+            ? "border-emerald-800 bg-emerald-50/50 dark:border-emerald-500 dark:bg-emerald-950/10"
+            : "border-amber-800 bg-amber-50/50 dark:border-amber-500 dark:bg-amber-950/10"
+        }`}
+      >
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={contentId}
+          onPointerDown={(event) => startZoneRipple(lane, event)}
+          onClick={() => setOpen((current) => !current)}
+          className={`kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden px-4 py-1.5 text-left transition-colors ${
+            isReadyLane
+              ? "bg-emerald-700 text-white hover:bg-emerald-600"
+              : "bg-amber-700 text-white hover:bg-amber-600"
+          }`}
+        >
+          {zoneRipple?.lane === lane ? (
+            <span
+              key={zoneRipple.id}
+              aria-hidden="true"
+              className="kitchen-zone-ripple"
+              style={{ height: zoneRipple.size, left: zoneRipple.x, top: zoneRipple.y, width: zoneRipple.size }}
+            />
+          ) : null}
+          <span className="relative z-10 flex min-w-0 items-center gap-3">
+            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
+              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[21px] font-semibold leading-tight">{label}</span>
+            </span>
+          </span>
+          <span className="relative z-10 flex shrink-0 items-center gap-2">
+            <span
+              aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
+              className="min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums text-white drop-shadow-[0_1px_0_rgba(3,7,18,0.35)]"
+            >
+              {count}
+            </span>
+            <span className="grid h-9 w-9 place-items-center text-white">
+              <ChevronDown
+                className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
+                strokeWidth={3}
+                aria-hidden="true"
+              />
+            </span>
+          </span>
+        </button>
+
+        <div
+          id={contentId}
+          aria-hidden={!open}
+          inert={open ? undefined : true}
+          className={`kitchen-zone-collapse grid ${open ? "kitchen-zone-collapse-open" : ""}`}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="kitchen-zone-collapse-content border-t border-white/20 p-3 sm:p-4">
+              {loading ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <Skeleton className="h-52" />
+                  <Skeleton className="h-52" />
+                  <Skeleton className="h-52" />
+                </div>
+              ) : laneOrders.length ? (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {laneOrders.map((order) => renderTicket(order, lane))}
+                </div>
+              ) : (
+                <div className="flex min-h-24 items-center justify-center px-4 py-6 text-center text-[13px] font-semibold text-gray-600 dark:text-gray-300">
+                  {emptyLabel}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  if (!canView) return <PermissionDenied title={copy.denied} />;
 
   return (
     <OperationalPageShell
       eyebrow={copy.eyebrow}
       title={copy.title}
       subtitle={copy.subtitle}
-      lastUpdated={lastUpdatedText}
-      actions={(
-        <button type="button" onClick={load} className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">
-          {copy.refresh}
-        </button>
-      )}
-      stats={[
-        { label: copy.cooking, value: cookingCount, tone: "warning" },
-        { label: copy.ready, value: readyCount, tone: "good" },
-        { label: language === "th" ? "เกินเวลา" : "Overdue", value: delayedCount, tone: "danger" },
-      ]}
+      showHeader={false}
     >
+      <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <Skeleton className="h-52" />
-          <Skeleton className="h-52" />
-          <Skeleton className="h-52" />
-        </div>
-      ) : activeItems.length ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visibleOrders.map((order) => {
-            const oldestSent = order.items?.reduce<string | null>((oldest, item) => {
-              if (!item.sent_at) return oldest;
-              if (!oldest || new Date(item.sent_at) < new Date(oldest)) return item.sent_at;
-              return oldest;
-            }, order.kitchen_sent_at ?? null);
-            const elapsed = minutesSince(oldestSent ?? order.kitchen_sent_at ?? order.opened_at);
-            const completing = completingTicketIds.has(ticketKey(order));
-            const cookingItems = order.items?.filter((item) => item.status === "cooking") ?? [];
-            return (
-              <article key={ticketKey(order)} className={`relative overflow-hidden rounded-md border ${urgencyClass(elapsed)} ${completing ? "kitchen-ticket-complete" : ""}`}>
-                {completing && (
-                  <div className="kitchen-ticket-success absolute inset-0 z-20 grid place-items-center bg-emerald-50/95 text-emerald-700 backdrop-blur-[1px] dark:bg-emerald-950/90 dark:text-emerald-200">
-                    <div className="text-center">
-                      <div className="kitchen-success-icon mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 dark:bg-emerald-500 dark:text-emerald-950">
-                        <CheckCircle2 className="h-12 w-12" strokeWidth={2.6} />
-                      </div>
-                      <p className="mt-3 text-[14px] font-semibold">{copy.completedTicket}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-start justify-between gap-3 p-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">{orderLocationLabel(order, language)}</p>
-                    <h2 className="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{order.order_number}</h2>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{elapsed}</p>
-                    <p className="text-[11px] text-gray-500">{copy.elapsed}</p>
-                  </div>
-                </div>
-                <div className="flex min-h-14 items-center justify-between gap-3 border-y border-black/5 bg-white/55 px-3 py-2 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
-                  <p className="text-[12px] font-medium tabular-nums text-gray-600 dark:text-gray-300">{copy.remaining(cookingItems.length)}</p>
-                  {canUpdate && cookingItems.length > 0 ? (
-                    <button
-                      type="button"
-                      disabled={submittingId === order.ID}
-                      onClick={() => markAllReady(order)}
-                      className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900"
-                    >
-                      <Check className="h-4 w-4" aria-hidden="true" />
-                      {copy.markAllReady}
-                    </button>
-                  ) : null}
-                </div>
+      <div className="space-y-5">
+        {renderZone("cooking")}
+        {renderZone("ready")}
+      </div>
 
-                <div className="divide-y divide-black/5 bg-white/45 dark:divide-white/10 dark:bg-gray-950/25">
-                  {order.items?.map((item) => (
-                    <div key={item.ID} className={`flex min-h-[72px] items-center gap-3 px-3 py-3 sm:px-4 ${item.status === "ready" ? "bg-emerald-50/50 dark:bg-emerald-950/15" : ""}`}>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <p className={`font-semibold leading-5 ${item.status === "ready" ? "text-gray-600 dark:text-gray-300" : "text-gray-900 dark:text-white"}`}>{item.quantity}x {item.menu_name}</p>
-                            {shouldShowItemFulfillment(order, item) ? (
-                              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${itemFulfillmentBadgeClass(item)}`}>
-                                {itemFulfillmentLabel(item, language)}
-                              </span>
-                            ) : null}
-                          </div>
-                          {item.selected_options?.length ? (
-                            <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
-                              {item.selected_options.map((option) => (
-                                <p key={option.ID}>{option.group_name}: {option.option_name}</p>
-                              ))}
-                            </div>
-                          ) : null}
-                          {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
-                        </div>
-                        {item.status === "ready" ? (
-                          <span className="inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
-                            <Check className="h-4 w-4" aria-hidden="true" />
-                            {copy.ready}
-                          </span>
-                        ) : canUpdate ? (
-                          <button
-                            type="button"
-                            aria-label={`${copy.markReady}: ${item.menu_name}`}
-                            disabled={submittingId === item.ID}
-                            onClick={() => markReady(order, item.ID)}
-                            className="ui-press inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 text-[12px] font-semibold text-gray-800 hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-200"
-                          >
-                            <Check className="h-4 w-4" aria-hidden="true" />
-                            {copy.markReady}
-                          </button>
-                        ) : (
-                          <span className="shrink-0 text-[11px] font-medium text-amber-700 dark:text-amber-300">{copy.cooking}</span>
-                        )}
-                    </div>
-                  ))}
-                </div>
-              </article>
-            );
-          })}
+      {cancelTarget ? (
+        <div
+          {...cancelBackdrop}
+          className={`${cancelDialogClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}
+        >
+          <form
+            ref={cancelDialogRef}
+            onSubmit={cancelItem}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kitchen-cancel-title"
+            aria-describedby="kitchen-cancel-description"
+            className={`${cancelDialogClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950`}
+          >
+            <div className="flex items-start gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 id="kitchen-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">
+                  {copy.cancelTitle}
+                </h2>
+                <p id="kitchen-cancel-description" className="mt-1 text-[13px] leading-5 text-gray-600 dark:text-gray-400">
+                  {copy.cancelDescription(cancelTarget.item.menu_name)}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={copy.keepItem}
+                disabled={submittingId !== null}
+                onClick={closeCancelDialog}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 dark:hover:bg-gray-900 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-4 py-4">
+              <label htmlFor="kitchen-cancel-reason" className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">
+                {copy.cancelReason}
+              </label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {copy.cancelPresets.map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    disabled={submittingId !== null}
+                    onClick={() => {
+                      setCancelReason(reason);
+                      setCancelReasonError("");
+                      cancelReasonRef.current?.focus();
+                    }}
+                    className={`h-9 rounded-md border px-3 text-[12px] font-semibold transition-colors disabled:opacity-50 ${
+                      cancelReason === reason
+                        ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-950"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-gray-500 dark:hover:bg-gray-900"
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={cancelReasonRef}
+                id="kitchen-cancel-reason"
+                value={cancelReason}
+                maxLength={500}
+                rows={3}
+                disabled={submittingId !== null}
+                placeholder={copy.cancelPlaceholder}
+                aria-invalid={Boolean(cancelReasonError)}
+                aria-describedby={cancelReasonError ? "kitchen-cancel-error" : undefined}
+                onChange={(event) => {
+                  setCancelReason(event.target.value);
+                  if (cancelReasonError) setCancelReasonError("");
+                }}
+                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:ring-2 disabled:opacity-60 dark:bg-gray-950 dark:text-white ${
+                  cancelReasonError
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/15 dark:border-red-700"
+                    : "border-gray-300 focus:border-gray-500 focus:ring-gray-500/15 dark:border-gray-700 dark:focus:border-gray-500"
+                }`}
+              />
+              <div className="mt-1 flex min-h-5 items-start justify-between gap-3">
+                {cancelReasonError ? (
+                  <p id="kitchen-cancel-error" role="alert" className="text-[12px] font-medium text-red-600 dark:text-red-300">
+                    {cancelReasonError}
+                  </p>
+                ) : <span />}
+                <span className="shrink-0 text-[11px] tabular-nums text-gray-400">{cancelReason.length}/500</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+              <button
+                type="button"
+                disabled={submittingId !== null}
+                onClick={closeCancelDialog}
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+              >
+                {copy.keepItem}
+              </button>
+              <button
+                type="submit"
+                disabled={submittingId !== null || !cancelReason.trim()}
+                className="h-10 rounded-md bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-400"
+              >
+                {copy.confirmCancel}
+              </button>
+            </div>
+          </form>
         </div>
-      ) : (
-        <div className="rounded-md border border-gray-200 bg-white px-4 py-14 text-center dark:border-gray-800 dark:bg-gray-950">
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.emptyTitle}</p>
-          <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.emptyHint}</p>
-        </div>
-      )}
+      ) : null}
     </OperationalPageShell>
   );
 }

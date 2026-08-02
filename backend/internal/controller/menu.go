@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -150,7 +151,7 @@ func (ctrl *MenuController) ListCategories(c *gin.Context) {
 	}
 	categories, err := ctrl.menuSvc.ListCategories(restaurantID, memberCan(c, "manage_menu"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"categories": categories})
@@ -163,12 +164,17 @@ func (ctrl *MenuController) CreateCategory(c *gin.Context) {
 	}
 	var req service.CategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	category, err := ctrl.menuSvc.CreateCategory(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// Keep the explicit payload: the menu page matches on this exact code.
+		if errors.Is(err, service.ErrCategoryNameExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "CATEGORY_NAME_EXISTS"})
+			return
+		}
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, category)
@@ -185,12 +191,17 @@ func (ctrl *MenuController) UpdateCategory(c *gin.Context) {
 	}
 	var req service.CategoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	category, err := ctrl.menuSvc.UpdateCategory(restaurantID, categoryID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// Keep the explicit payload: the menu page matches on this exact code.
+		if errors.Is(err, service.ErrCategoryNameExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error(), "code": "CATEGORY_NAME_EXISTS"})
+			return
+		}
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, category)
@@ -206,7 +217,7 @@ func (ctrl *MenuController) DeleteCategory(c *gin.Context) {
 		return
 	}
 	if err := ctrl.menuSvc.DeleteCategory(restaurantID, categoryID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusConflict, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -223,7 +234,7 @@ func (ctrl *MenuController) ListMenuItems(c *gin.Context) {
 	}
 	items, err := ctrl.menuSvc.ListMenuItems(restaurantID, memberCan(c, "manage_menu"), categoryID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"menu_items": items})
@@ -236,12 +247,12 @@ func (ctrl *MenuController) CreateMenuItem(c *gin.Context) {
 	}
 	var req service.MenuItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	item, err := ctrl.menuSvc.CreateMenuItem(restaurantID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusCreated, item)
@@ -258,12 +269,12 @@ func (ctrl *MenuController) UpdateMenuItem(c *gin.Context) {
 	}
 	var req service.MenuItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	item, err := ctrl.menuSvc.UpdateMenuItem(restaurantID, itemID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, item)
@@ -280,12 +291,12 @@ func (ctrl *MenuController) UpdateMenuItemAvailability(c *gin.Context) {
 	}
 	var req service.MenuItemAvailabilityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondInvalidRequest(c)
 		return
 	}
 	item, err := ctrl.menuSvc.UpdateMenuItemAvailability(restaurantID, itemID, &req)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, item)
@@ -301,7 +312,7 @@ func (ctrl *MenuController) DeleteMenuItem(c *gin.Context) {
 		return
 	}
 	if err := ctrl.menuSvc.DeleteMenuItem(restaurantID, itemID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
@@ -320,7 +331,7 @@ func (ctrl *MenuController) UploadMenuImage(c *gin.Context) {
 	}
 	ext, err := validateImageUpload(file)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 
@@ -331,6 +342,10 @@ func (ctrl *MenuController) UploadMenuImage(c *gin.Context) {
 	}
 	fileName := hex.EncodeToString(random) + ext
 	relativeDir := filepath.Join("uploads", "menu", strconv.FormatUint(uint64(restaurantID), 10))
+	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
+		respondAPIError(c, http.StatusInsufficientStorage, err)
+		return
+	}
 	if err := os.MkdirAll(relativeDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
 		return

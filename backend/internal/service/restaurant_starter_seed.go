@@ -8,6 +8,10 @@ import (
 	"Project-M/internal/repository"
 )
 
+// starterFlatTableCapacity is the default seat count for tables seeded without a
+// zone, matching the tables page default for manually added tables.
+const starterFlatTableCapacity = 2
+
 type starterProfile struct {
 	TableZones           []starterTableZone
 	Categories           []starterMenuCategory
@@ -32,7 +36,7 @@ type starterIngredientCategory struct {
 	Items []starterIngredient
 }
 
-func seedRestaurantStarterSetup(repo *repository.RestaurantSetupRepository, restaurantID uint, restaurantType string, tableCount int) error {
+func seedRestaurantStarterSetup(repo repository.RestaurantSetupWriter, restaurantID uint, restaurantType string, tableCount int, splitZones bool) error {
 	profile := starterProfileFor(restaurantType)
 	ingredientIDs, err := seedStarterIngredientCatalog(repo, restaurantID, profile.IngredientCategories)
 	if err != nil {
@@ -40,6 +44,9 @@ func seedRestaurantStarterSetup(repo *repository.RestaurantSetupRepository, rest
 	}
 	if err := seedStarterMenu(repo, restaurantID, profile.Categories, ingredientIDs); err != nil {
 		return err
+	}
+	if !splitZones {
+		return seedStarterTablesFlat(repo, restaurantID, tableCount)
 	}
 	return seedStarterTables(repo, restaurantID, tableCount, profile.TableZones)
 }
@@ -62,7 +69,7 @@ func starterProfileFor(restaurantType string) starterProfile {
 // seedStarterIngredientCatalog creates the ingredient categories + ingredients for a
 // starter profile and returns a map of ingredient name -> created ingredient ID, so
 // seedStarterMenu can resolve each menu item's recipe lines to real ingredient IDs.
-func seedStarterIngredientCatalog(repo *repository.RestaurantSetupRepository, restaurantID uint, categories []starterIngredientCategory) (map[string]uint, error) {
+func seedStarterIngredientCatalog(repo repository.RestaurantSetupWriter, restaurantID uint, categories []starterIngredientCategory) (map[string]uint, error) {
 	ingredientIDs := make(map[string]uint)
 	for categoryIndex, categorySeed := range categories {
 		category := &entity.IngredientCategory{
@@ -82,9 +89,6 @@ func seedStarterIngredientCatalog(repo *repository.RestaurantSetupRepository, re
 				SKU:                     itemSeed.SKU,
 				CategoryID:              &categoryID,
 				Unit:                    itemSeed.Unit,
-				BaseUnit:                itemSeed.BaseUnit,
-				PurchaseUnitDefault:     itemSeed.PurchaseUnitDefault,
-				ConversionFactorDefault: itemSeed.ConversionFactorDefault,
 				Stock:                   itemSeed.Stock,
 				MinStock:                itemSeed.MinStock,
 				CostPerUnit:             itemSeed.CostPerUnit,
@@ -100,7 +104,7 @@ func seedStarterIngredientCatalog(repo *repository.RestaurantSetupRepository, re
 	return ingredientIDs, nil
 }
 
-func seedStarterMenu(repo *repository.RestaurantSetupRepository, restaurantID uint, categories []starterMenuCategory, ingredientIDs map[string]uint) error {
+func seedStarterMenu(repo repository.RestaurantSetupWriter, restaurantID uint, categories []starterMenuCategory, ingredientIDs map[string]uint) error {
 	for categoryIndex, categorySeed := range categories {
 		category := &entity.Category{
 			RestaurantID: restaurantID,
@@ -143,10 +147,10 @@ func seedStarterMenu(repo *repository.RestaurantSetupRepository, restaurantID ui
 }
 
 // seedStarterMenuRecipe links a menu item to its starter ingredients so stock gets
-// deducted automatically once orders are served. Recipe lines that reference an
+// deducted automatically once the kitchen marks an order item completed. Recipe lines that reference an
 // ingredient name not present in the seeded catalog are skipped rather than failing
 // the whole setup, since option-level variants aren't modeled at the recipe level.
-func seedStarterMenuRecipe(repo *repository.RestaurantSetupRepository, restaurantID, menuItemID uint, lines []starterRecipeLine, ingredientIDs map[string]uint) error {
+func seedStarterMenuRecipe(repo repository.RestaurantSetupWriter, restaurantID, menuItemID uint, lines []starterRecipeLine, ingredientIDs map[string]uint) error {
 	for _, line := range lines {
 		ingredientID, ok := ingredientIDs[line.IngredientName]
 		if !ok {
@@ -165,7 +169,7 @@ func seedStarterMenuRecipe(repo *repository.RestaurantSetupRepository, restauran
 	return nil
 }
 
-func seedStarterMenuOptions(repo *repository.RestaurantSetupRepository, restaurantID, menuItemID uint, groups []starterOptionGroup) error {
+func seedStarterMenuOptions(repo repository.RestaurantSetupWriter, restaurantID, menuItemID uint, groups []starterOptionGroup) error {
 	for groupIndex, groupSeed := range groups {
 		group := &entity.MenuOptionGroup{
 			RestaurantID: restaurantID,
@@ -199,7 +203,7 @@ func seedStarterMenuOptions(repo *repository.RestaurantSetupRepository, restaura
 	return nil
 }
 
-func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID uint, tableCount int, zones []starterTableZone) error {
+func seedStarterTables(repo repository.RestaurantSetupWriter, restaurantID uint, tableCount int, zones []starterTableZone) error {
 	counts := starterZoneCounts(tableCount, len(zones))
 	for zoneIndex, zoneSeed := range zones {
 		zoneTableCount := counts[zoneIndex]
@@ -218,6 +222,10 @@ func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID 
 		}
 		for sequence := 1; sequence <= zoneTableCount; sequence++ {
 			label := fmt.Sprintf("%s%02d", zoneSeed.Prefix, sequence)
+			customerToken, err := GenerateCustomerTableToken()
+			if err != nil {
+				return err
+			}
 			table := &entity.RestaurantTable{
 				RestaurantID:   restaurantID,
 				ZoneID:         &zone.ID,
@@ -227,11 +235,42 @@ func seedStarterTables(repo *repository.RestaurantSetupRepository, restaurantID 
 				Capacity:       zoneSeed.Capacity,
 				Zone:           zoneSeed.Name,
 				Status:         entity.TableStatusFree,
-				CustomerToken:  GenerateCustomerTableToken(),
+				CustomerToken:  customerToken,
 			}
 			if err := repo.CreateTable(table); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// seedStarterTablesFlat creates a single, un-zoned run of tables numbered in the
+// order the owner asked for (T1..Tn). It mirrors the label convention the tables
+// page uses when adding tables without a zone, so manual additions continue the
+// same sequence.
+func seedStarterTablesFlat(repo repository.RestaurantSetupWriter, restaurantID uint, tableCount int) error {
+	if tableCount < 1 {
+		tableCount = 1
+	}
+	for sequence := 1; sequence <= tableCount; sequence++ {
+		label := fmt.Sprintf("T%d", sequence)
+		customerToken, err := GenerateCustomerTableToken()
+		if err != nil {
+			return err
+		}
+		table := &entity.RestaurantTable{
+			RestaurantID:   restaurantID,
+			ZoneID:         nil,
+			TableNumber:    label,
+			DisplayLabel:   label,
+			SequenceNumber: sequence,
+			Capacity:       starterFlatTableCapacity,
+			Status:         entity.TableStatusFree,
+			CustomerToken:  customerToken,
+		}
+		if err := repo.CreateTable(table); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -267,48 +306,48 @@ func restaurantStarterProfile() starterProfile {
 			{
 				Name: "เนื้อสัตว์",
 				Items: []starterIngredient{
-					{Name: "ไก่สับ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 6000, MinStock: 1500, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "กุ้งสด", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "เนื้อปู", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 2000, MinStock: 500, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "หมูสับ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 5000, MinStock: 1200, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ไข่ไก่", Unit: "ฟอง", BaseUnit: "ฟอง", PurchaseUnitDefault: "แผง (30 ฟอง)", ConversionFactorDefault: 30, Stock: 90, MinStock: 30, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ปีกไก่", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.13, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ไก่สับ", Unit: "กรัม", Stock: 6000, MinStock: 1500, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "กุ้งสด", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "เนื้อปู", Unit: "กรัม", Stock: 2000, MinStock: 500, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "หมูสับ", Unit: "กรัม", Stock: 5000, MinStock: 1200, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ไข่ไก่", Unit: "ฟอง", Stock: 90, MinStock: 30, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ปีกไก่", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.13, YieldPercent: 100, StorageType: "chilled"},
 				},
 			},
 			{
 				Name: "ผักและสมุนไพร",
 				Items: []starterIngredient{
-					{Name: "กะเพรา", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 1200, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "คะน้า", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 1200, MinStock: 300, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "มะเขือ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 800, MinStock: 200, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ต้นหอม", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 500, MinStock: 150, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ถั่วลิสง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 500, MinStock: 150, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "มะนาว", Unit: "ลูก", BaseUnit: "ลูก", PurchaseUnitDefault: "ถุง (10 ลูก)", ConversionFactorDefault: 10, Stock: 60, MinStock: 15, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "พริกป่น", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 500, MinStock: 100, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "เห็ด", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 800, MinStock: 200, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "กะเพรา", Unit: "กรัม", Stock: 1200, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "คะน้า", Unit: "กรัม", Stock: 1200, MinStock: 300, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "มะเขือ", Unit: "กรัม", Stock: 800, MinStock: 200, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ต้นหอม", Unit: "กรัม", Stock: 500, MinStock: 150, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ถั่วลิสง", Unit: "กรัม", Stock: 500, MinStock: 150, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "มะนาว", Unit: "ลูก", Stock: 60, MinStock: 15, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "พริกป่น", Unit: "กรัม", Stock: 500, MinStock: 100, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "เห็ด", Unit: "กรัม", Stock: 800, MinStock: 200, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
 				},
 			},
 			{
 				Name: "ของแห้งและเครื่องปรุง",
 				Items: []starterIngredient{
-					{Name: "ข้าวสาร", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระสอบ (15 กก.)", ConversionFactorDefault: 15000, Stock: 30000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "เส้นจันท์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "เส้นใหญ่", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำปลา", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 2800, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ซอสมะขาม", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 1400, MinStock: 700, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ซีอิ๊วขาว", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 2100, MinStock: 700, CostPerUnit: 0.04, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "กะทิ", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "กล่อง (500 มล.)", ConversionFactorDefault: 500, Stock: 2000, MinStock: 500, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "พริกแกงเขียวหวาน", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 800, MinStock: 200, CostPerUnit: 0.4, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ข้าวคั่ว", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 400, MinStock: 100, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ข้าวสาร", Unit: "กรัม", Stock: 30000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "เส้นจันท์", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "เส้นใหญ่", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำปลา", Unit: "มล.", Stock: 2800, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ซอสมะขาม", Unit: "มล.", Stock: 1400, MinStock: 700, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ซีอิ๊วขาว", Unit: "มล.", Stock: 2100, MinStock: 700, CostPerUnit: 0.04, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "กะทิ", Unit: "มล.", Stock: 2000, MinStock: 500, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "พริกแกงเขียวหวาน", Unit: "กรัม", Stock: 800, MinStock: 200, CostPerUnit: 0.4, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ข้าวคั่ว", Unit: "กรัม", Stock: 400, MinStock: 100, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 			{
 				Name: "เครื่องดื่ม",
 				Items: []starterIngredient{
-					{Name: "ใบชาไทย", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 600, MinStock: 150, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "นมข้นหวาน", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "กระป๋อง (385 มล.)", ConversionFactorDefault: 385, Stock: 1540, MinStock: 385, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "โซดา", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (325 มล.)", ConversionFactorDefault: 325, Stock: 1950, MinStock: 325, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำเปล่าขวด", Unit: "ขวด", BaseUnit: "ขวด", PurchaseUnitDefault: "แพ็ค (12 ขวด)", ConversionFactorDefault: 12, Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ใบชาไทย", Unit: "กรัม", Stock: 600, MinStock: 150, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "นมข้นหวาน", Unit: "มล.", Stock: 1540, MinStock: 385, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "โซดา", Unit: "มล.", Stock: 1950, MinStock: 325, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำเปล่าขวด", Unit: "ขวด", Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 		},
@@ -455,21 +494,21 @@ func cafeStarterProfile() starterProfile {
 			{
 				Name: "กาแฟและชา",
 				Items: []starterIngredient{
-					{Name: "เมล็ดกาแฟคั่ว", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 800, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "นมสด", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ลิตร", ConversionFactorDefault: 1000, Stock: 12000, MinStock: 2000, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ผงมัทฉะ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระป๋อง (100 กรัม)", ConversionFactorDefault: 100, Stock: 300, MinStock: 100, CostPerUnit: 2, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ผงโกโก้", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (500 กรัม)", ConversionFactorDefault: 500, Stock: 1500, MinStock: 300, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ชาผลไม้กลิ่นพีช", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 600, MinStock: 150, CostPerUnit: 1, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำเชื่อม", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (750 มล.)", ConversionFactorDefault: 750, Stock: 2250, MinStock: 750, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำแข็ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (5 กก.)", ConversionFactorDefault: 5000, Stock: 20000, MinStock: 5000, CostPerUnit: 0.01, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "เมล็ดกาแฟคั่ว", Unit: "กรัม", Stock: 4000, MinStock: 800, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "นมสด", Unit: "มล.", Stock: 12000, MinStock: 2000, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ผงมัทฉะ", Unit: "กรัม", Stock: 300, MinStock: 100, CostPerUnit: 2, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ผงโกโก้", Unit: "กรัม", Stock: 1500, MinStock: 300, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ชาผลไม้กลิ่นพีช", Unit: "กรัม", Stock: 600, MinStock: 150, CostPerUnit: 1, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำเชื่อม", Unit: "มล.", Stock: 2250, MinStock: 750, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำแข็ง", Unit: "กรัม", Stock: 20000, MinStock: 5000, CostPerUnit: 0.01, YieldPercent: 100, StorageType: "frozen"},
 				},
 			},
 			{
 				Name: "เบเกอรี่",
 				Items: []starterIngredient{
-					{Name: "ครัวซองต์เนยสด (ชิ้นสำเร็จ)", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "แพ็ค (20 ชิ้น)", ConversionFactorDefault: 20, Stock: 40, MinStock: 20, CostPerUnit: 25, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "เค้กช็อกโกแลต (ชิ้นสำเร็จ)", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "กล่อง (8 ชิ้น)", ConversionFactorDefault: 8, Stock: 16, MinStock: 8, CostPerUnit: 45, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ชีสเค้กหน้าไหม้ (ชิ้นสำเร็จ)", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "กล่อง (8 ชิ้น)", ConversionFactorDefault: 8, Stock: 16, MinStock: 8, CostPerUnit: 50, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ครัวซองต์เนยสด (ชิ้นสำเร็จ)", Unit: "ชิ้น", Stock: 40, MinStock: 20, CostPerUnit: 25, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "เค้กช็อกโกแลต (ชิ้นสำเร็จ)", Unit: "ชิ้น", Stock: 16, MinStock: 8, CostPerUnit: 45, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ชีสเค้กหน้าไหม้ (ชิ้นสำเร็จ)", Unit: "ชิ้น", Stock: 16, MinStock: 8, CostPerUnit: 50, YieldPercent: 100, StorageType: "chilled"},
 				},
 			},
 		},
@@ -576,34 +615,34 @@ func shabuGrillStarterProfile() starterProfile {
 			{
 				Name: "เนื้อสัตว์และอาหารทะเล",
 				Items: []starterIngredient{
-					{Name: "หมูสไลซ์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 8000, MinStock: 2000, CostPerUnit: 0.22, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "เนื้อสไลซ์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 6000, MinStock: 1500, CostPerUnit: 0.45, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "ลูกชิ้นรวม", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "กุ้ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "หมึก", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "ปลา", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.28, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "หมูสามชั้นสไลซ์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "เนื้อริบอายสไลซ์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 2000, MinStock: 500, CostPerUnit: 0.55, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "หมูสไลซ์", Unit: "กรัม", Stock: 8000, MinStock: 2000, CostPerUnit: 0.22, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "เนื้อสไลซ์", Unit: "กรัม", Stock: 6000, MinStock: 1500, CostPerUnit: 0.45, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "ลูกชิ้นรวม", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "กุ้ง", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "หมึก", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.3, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "ปลา", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.28, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "หมูสามชั้นสไลซ์", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "เนื้อริบอายสไลซ์", Unit: "กรัม", Stock: 2000, MinStock: 500, CostPerUnit: 0.55, YieldPercent: 100, StorageType: "frozen"},
 				},
 			},
 			{
 				Name: "ผักและเครื่องจิ้ม",
 				Items: []starterIngredient{
-					{Name: "ผักรวมชาบู", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "น้ำจิ้มสุกี้", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 2100, MinStock: 700, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ผักรวมชาบู", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "น้ำจิ้มสุกี้", Unit: "มล.", Stock: 2100, MinStock: 700, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 			{
 				Name: "น้ำซุปและเครื่องดื่ม",
 				Items: []starterIngredient{
-					{Name: "ผงซุปใส", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (500 กรัม)", ConversionFactorDefault: 500, Stock: 1500, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ซุปดำสำเร็จรูป", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (500 กรัม)", ConversionFactorDefault: 500, Stock: 1000, MinStock: 300, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "พริกแกงต้มยำ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 600, MinStock: 150, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "พริกหม่าล่า", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 600, MinStock: 150, CostPerUnit: 0.45, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ใบชาอู่หลง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 400, MinStock: 100, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ดอกเก๊กฮวยแห้ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (100 กรัม)", ConversionFactorDefault: 100, Stock: 300, MinStock: 100, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำตาลกรวด", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (1 กก.)", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 500, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำเปล่าขวด", Unit: "ขวด", BaseUnit: "ขวด", PurchaseUnitDefault: "แพ็ค (12 ขวด)", ConversionFactorDefault: 12, Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ผงซุปใส", Unit: "กรัม", Stock: 1500, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ซุปดำสำเร็จรูป", Unit: "กรัม", Stock: 1000, MinStock: 300, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "พริกแกงต้มยำ", Unit: "กรัม", Stock: 600, MinStock: 150, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "พริกหม่าล่า", Unit: "กรัม", Stock: 600, MinStock: 150, CostPerUnit: 0.45, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ใบชาอู่หลง", Unit: "กรัม", Stock: 400, MinStock: 100, CostPerUnit: 0.6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ดอกเก๊กฮวยแห้ง", Unit: "กรัม", Stock: 300, MinStock: 100, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำตาลกรวด", Unit: "กรัม", Stock: 3000, MinStock: 500, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำเปล่าขวด", Unit: "ขวด", Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 		},
@@ -699,40 +738,40 @@ func deliveryStarterProfile() starterProfile {
 			{
 				Name: "เนื้อสัตว์และของสด",
 				Items: []starterIngredient{
-					{Name: "ไก่สับ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 5000, MinStock: 1200, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "หมูสับ", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "กุ้งสด", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ไข่ไก่", Unit: "ฟอง", BaseUnit: "ฟอง", PurchaseUnitDefault: "แผง (30 ฟอง)", ConversionFactorDefault: 30, Stock: 90, MinStock: 30, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ไก่สับ", Unit: "กรัม", Stock: 5000, MinStock: 1200, CostPerUnit: 0.12, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "หมูสับ", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "กุ้งสด", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.35, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ไข่ไก่", Unit: "ฟอง", Stock: 90, MinStock: 30, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
 				},
 			},
 			{
 				Name: "ผักและเครื่องปรุง",
 				Items: []starterIngredient{
-					{Name: "กะเพรา", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 1000, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "กระเทียม", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 1000, MinStock: 300, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ต้นหอม", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 500, MinStock: 150, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ถั่วลิสง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 500, MinStock: 150, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "พริกไทย", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 400, MinStock: 100, CostPerUnit: 0.4, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำปลา", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 2100, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ซอสมะขาม", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 1400, MinStock: 700, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "มะนาว", Unit: "ลูก", BaseUnit: "ลูก", PurchaseUnitDefault: "ถุง (10 ลูก)", ConversionFactorDefault: 10, Stock: 60, MinStock: 15, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "กะเพรา", Unit: "กรัม", Stock: 1000, MinStock: 300, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "กระเทียม", Unit: "กรัม", Stock: 1000, MinStock: 300, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ต้นหอม", Unit: "กรัม", Stock: 500, MinStock: 150, CostPerUnit: 0.1, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ถั่วลิสง", Unit: "กรัม", Stock: 500, MinStock: 150, CostPerUnit: 0.2, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "พริกไทย", Unit: "กรัม", Stock: 400, MinStock: 100, CostPerUnit: 0.4, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำปลา", Unit: "มล.", Stock: 2100, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ซอสมะขาม", Unit: "มล.", Stock: 1400, MinStock: 700, CostPerUnit: 0.08, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "มะนาว", Unit: "ลูก", Stock: 60, MinStock: 15, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
 				},
 			},
 			{
 				Name: "ข้าวและเส้น",
 				Items: []starterIngredient{
-					{Name: "ข้าวสาร", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระสอบ (15 กก.)", ConversionFactorDefault: 15000, Stock: 30000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "เส้นจันท์", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ข้าวสาร", Unit: "กรัม", Stock: 30000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "เส้นจันท์", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 			{
 				Name: "เครื่องดื่มและบรรจุภัณฑ์",
 				Items: []starterIngredient{
-					{Name: "ใบชาไทย", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (200 กรัม)", ConversionFactorDefault: 200, Stock: 600, MinStock: 150, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "นมข้นหวาน", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "กระป๋อง (385 มล.)", ConversionFactorDefault: 385, Stock: 1540, MinStock: 385, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "กล่องอาหารเดลิเวอรี", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "แพ็ค (50 ชิ้น)", ConversionFactorDefault: 50, Stock: 300, MinStock: 100, CostPerUnit: 2.5, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ถุงพลาสติกหูหิ้ว", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "แพ็ค (100 ชิ้น)", ConversionFactorDefault: 100, Stock: 400, MinStock: 100, CostPerUnit: 0.8, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำเปล่าขวด", Unit: "ขวด", BaseUnit: "ขวด", PurchaseUnitDefault: "แพ็ค (12 ขวด)", ConversionFactorDefault: 12, Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ใบชาไทย", Unit: "กรัม", Stock: 600, MinStock: 150, CostPerUnit: 0.5, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "นมข้นหวาน", Unit: "มล.", Stock: 1540, MinStock: 385, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "กล่องอาหารเดลิเวอรี", Unit: "ชิ้น", Stock: 300, MinStock: 100, CostPerUnit: 2.5, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ถุงพลาสติกหูหิ้ว", Unit: "ชิ้น", Stock: 400, MinStock: 100, CostPerUnit: 0.8, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำเปล่าขวด", Unit: "ขวด", Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 		},
@@ -858,30 +897,30 @@ func foodTruckStarterProfile() starterProfile {
 			{
 				Name: "เนื้อสัตว์และวัตถุดิบหลัก",
 				Items: []starterIngredient{
-					{Name: "เนื้อหมูเบอร์เกอร์ (แพตตี้)", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "ถุง (20 ชิ้น)", ConversionFactorDefault: 20, Stock: 60, MinStock: 20, CostPerUnit: 15, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "ขนมปังเบอร์เกอร์", Unit: "ชิ้น", BaseUnit: "ชิ้น", PurchaseUnitDefault: "ถุง (10 ชิ้น)", ConversionFactorDefault: 10, Stock: 40, MinStock: 10, CostPerUnit: 8, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ไก่กรอบชิ้น", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 3000, MinStock: 800, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "ซอสเผ็ด", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (700 มล.)", ConversionFactorDefault: 700, Stock: 1400, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "แป้งทาโก้", Unit: "แผ่น", BaseUnit: "แผ่น", PurchaseUnitDefault: "แพ็ค (12 แผ่น)", ConversionFactorDefault: 12, Stock: 36, MinStock: 12, CostPerUnit: 4, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "ไก่ฉีก", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กิโลกรัม", ConversionFactorDefault: 1000, Stock: 2000, MinStock: 500, CostPerUnit: 0.14, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "ข้าวสาร", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "กระสอบ (15 กก.)", ConversionFactorDefault: 15000, Stock: 15000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "เนื้อหมูเบอร์เกอร์ (แพตตี้)", Unit: "ชิ้น", Stock: 60, MinStock: 20, CostPerUnit: 15, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "ขนมปังเบอร์เกอร์", Unit: "ชิ้น", Stock: 40, MinStock: 10, CostPerUnit: 8, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ไก่กรอบชิ้น", Unit: "กรัม", Stock: 3000, MinStock: 800, CostPerUnit: 0.18, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "ซอสเผ็ด", Unit: "มล.", Stock: 1400, MinStock: 700, CostPerUnit: 0.05, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "แป้งทาโก้", Unit: "แผ่น", Stock: 36, MinStock: 12, CostPerUnit: 4, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "ไก่ฉีก", Unit: "กรัม", Stock: 2000, MinStock: 500, CostPerUnit: 0.14, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "ข้าวสาร", Unit: "กรัม", Stock: 15000, MinStock: 5000, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 			{
 				Name: "ของทานเล่นแช่แข็ง",
 				Items: []starterIngredient{
-					{Name: "มันฝรั่งแช่แข็ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (2.5 กก.)", ConversionFactorDefault: 2500, Stock: 10000, MinStock: 2500, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "นักเก็ตไก่แช่แข็ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (1 กก.)", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "frozen"},
-					{Name: "ไก่ป๊อปแช่แข็ง", Unit: "กรัม", BaseUnit: "กรัม", PurchaseUnitDefault: "ถุง (1 กก.)", ConversionFactorDefault: 1000, Stock: 4000, MinStock: 1000, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "มันฝรั่งแช่แข็ง", Unit: "กรัม", Stock: 10000, MinStock: 2500, CostPerUnit: 0.06, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "นักเก็ตไก่แช่แข็ง", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.15, YieldPercent: 100, StorageType: "frozen"},
+					{Name: "ไก่ป๊อปแช่แข็ง", Unit: "กรัม", Stock: 4000, MinStock: 1000, CostPerUnit: 0.16, YieldPercent: 100, StorageType: "frozen"},
 				},
 			},
 			{
 				Name: "เครื่องดื่ม",
 				Items: []starterIngredient{
-					{Name: "น้ำอัดลมโค้ก", Unit: "กระป๋อง", BaseUnit: "กระป๋อง", PurchaseUnitDefault: "แพ็ค (24 กระป๋อง)", ConversionFactorDefault: 24, Stock: 96, MinStock: 24, CostPerUnit: 10, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "มะนาว", Unit: "ลูก", BaseUnit: "ลูก", PurchaseUnitDefault: "ถุง (10 ลูก)", ConversionFactorDefault: 10, Stock: 40, MinStock: 10, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
-					{Name: "โซดา", Unit: "มล.", BaseUnit: "มล.", PurchaseUnitDefault: "ขวด (325 มล.)", ConversionFactorDefault: 325, Stock: 1950, MinStock: 325, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
-					{Name: "น้ำเปล่าขวด", Unit: "ขวด", BaseUnit: "ขวด", PurchaseUnitDefault: "แพ็ค (12 ขวด)", ConversionFactorDefault: 12, Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำอัดลมโค้ก", Unit: "กระป๋อง", Stock: 96, MinStock: 24, CostPerUnit: 10, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "มะนาว", Unit: "ลูก", Stock: 40, MinStock: 10, CostPerUnit: 5, YieldPercent: 100, StorageType: "chilled"},
+					{Name: "โซดา", Unit: "มล.", Stock: 1950, MinStock: 325, CostPerUnit: 0.03, YieldPercent: 100, StorageType: "room_temp"},
+					{Name: "น้ำเปล่าขวด", Unit: "ขวด", Stock: 48, MinStock: 12, CostPerUnit: 6, YieldPercent: 100, StorageType: "room_temp"},
 				},
 			},
 		},

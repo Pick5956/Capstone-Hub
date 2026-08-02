@@ -16,7 +16,6 @@ import {
   Loader2,
   PackageOpen,
   ReceiptText,
-  RefreshCw,
   Table2,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
@@ -37,6 +36,8 @@ import { getManagerReport, getTopMenuItemsByMonth } from "@/src/lib/report";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
 import type { ReportSalesDay, ReportTopMenuItem } from "@/src/types/report";
+import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
 
@@ -87,7 +88,7 @@ function buildCopy(language: "th" | "en") {
         previousDay: "วันก่อน",
         nextDay: "วันถัดไป",
         chooseDate: "เลือกวันที่",
-        refresh: "รีเฟรช",
+        loading: "กำลังโหลด",
         updated: "อัปเดต",
         ordersTotal: "ออเดอร์ทั้งหมด",
         paidRevenue: "ยอดรับชำระ",
@@ -97,14 +98,14 @@ function buildCopy(language: "th" | "en") {
         liveWork: "งานที่ต้องจัดการตอนนี้",
         liveWorkHint: "กดเพื่อไปยังหน้าที่จัดการงานนั้นได้ทันที",
         lateKitchen: "คิวครัวเกินเวลา",
-        readyToServe: "พร้อมเสิร์ฟ",
+        readyToServe: "ครัวทำเสร็จแล้ว",
         occupiedTables: "โต๊ะใช้งาน",
         lowStock: "วัตถุดิบควรเติม",
         kitchenQueue: "คิวครัว",
         viewKitchen: "เปิดหน้าครัว",
         delayed: "เกินเวลา",
         cooking: "กำลังทำ",
-        ready: "พร้อมเสิร์ฟ",
+        ready: "เสร็จแล้ว",
         tickets: "ใบ",
         minutes: "นาที",
         noKitchen: "ไม่มีงานค้างในครัว",
@@ -133,7 +134,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "ดูออเดอร์ทั้งหมด",
         noOrders: "ไม่มีออเดอร์ในวันที่เลือก",
         floorStatus: "สถานะโต๊ะ",
-        openPOS: "เปิดหน้า POS",
+        openOrderTaking: "รับออเดอร์",
         occupied: "ใช้งาน",
         available: "ว่าง",
         reserved: "จอง",
@@ -148,7 +149,7 @@ function buildCopy(language: "th" | "en") {
         time: "เวลา",
         open: "เปิดอยู่",
         sent_to_kitchen: "ส่งครัวแล้ว",
-        served: "เสิร์ฟแล้ว",
+        served: "เสร็จแล้ว",
         completed: "ชำระแล้ว",
         cancelled: "ยกเลิก",
       }
@@ -160,7 +161,7 @@ function buildCopy(language: "th" | "en") {
         previousDay: "Previous day",
         nextDay: "Next day",
         chooseDate: "Choose date",
-        refresh: "Refresh",
+        loading: "Loading",
         updated: "Updated",
         ordersTotal: "Total orders",
         paidRevenue: "Paid revenue",
@@ -170,14 +171,14 @@ function buildCopy(language: "th" | "en") {
         liveWork: "Needs attention now",
         liveWorkHint: "Open the related workspace to handle it.",
         lateKitchen: "Late kitchen queue",
-        readyToServe: "Ready to serve",
+        readyToServe: "Kitchen completed",
         occupiedTables: "Occupied tables",
         lowStock: "Ingredients to refill",
         kitchenQueue: "Kitchen queue",
         viewKitchen: "Open kitchen",
         delayed: "Overdue",
         cooking: "Cooking",
-        ready: "Ready",
+        ready: "Done",
         tickets: "tickets",
         minutes: "mins",
         noKitchen: "No kitchen work waiting",
@@ -206,7 +207,7 @@ function buildCopy(language: "th" | "en") {
         viewAllOrders: "View all orders",
         noOrders: "No orders on the selected date",
         floorStatus: "Floor status",
-        openPOS: "Open POS",
+        openOrderTaking: "Take orders",
         occupied: "Occupied",
         available: "Available",
         reserved: "Reserved",
@@ -221,7 +222,7 @@ function buildCopy(language: "th" | "en") {
         time: "Time",
         open: "Open",
         sent_to_kitchen: "Sent",
-        served: "Served",
+        served: "Done",
         completed: "Paid",
         cancelled: "Cancelled",
       };
@@ -310,8 +311,7 @@ function CollapsibleCard({
   // Fades both ways now: opening fades in, closing fades out before actually
   // unmounting the section (the parent also delays opening the next card
   // until this one has fully closed, so switches read as close-then-open).
-  const [mounted, setMounted] = useState(expanded);
-  const [visible, setVisible] = useState(expanded);
+  const [animatedVisible, setAnimatedVisible] = useState(false);
 
   useEffect(() => {
     if (expanded) {
@@ -373,6 +373,20 @@ function CollapsibleCard({
     const node = collapsedRef.current;
     if (mounted || !node) {
       prevCollapsedRectRef.current = null;
+      if (animateOpen) {
+        // Two rAFs: the first lets the browser paint the just-mounted "invisible"
+        // state; only then do we flip to visible, so the transition has a real
+        // starting point to animate from (a single rAF can land in the same
+        // paint as the mount and skip the animation entirely).
+        let innerRaf = 0;
+        const outerRaf = requestAnimationFrame(() => {
+          innerRaf = requestAnimationFrame(() => setAnimatedVisible(true));
+        });
+        return () => {
+          cancelAnimationFrame(outerRaf);
+          cancelAnimationFrame(innerRaf);
+        };
+      }
       return;
     }
     const newRect = node.getBoundingClientRect();
@@ -401,8 +415,13 @@ function CollapsibleCard({
     }
     prevCollapsedRectRef.current = newRect;
   });
+    const resetRaf = requestAnimationFrame(() => setAnimatedVisible(false));
+    return () => cancelAnimationFrame(resetRaf);
+  }, [expanded, animateOpen]);
 
-  if (!mounted) {
+  const visible = expanded && (!animateOpen || animatedVisible);
+
+  if (!expanded) {
     // A sibling card is expanded and this one isn't — shrink way down, but
     // keep showing the summary numbers (just in a much more compact row).
     if (dimmed) {
@@ -467,7 +486,7 @@ function CollapsibleCard({
         onToggle();
       }}
       style={{ order: orderRank }}
-      className={`col-span-full origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 ${
+      className={`col-span-full cursor-pointer origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 ${
         visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
       }`}
     >
@@ -622,7 +641,9 @@ export default function Home() {
   useEffect(() => {
     if (!activeMembership?.restaurant_id) return;
     let cancelled = false;
-    setTopItemsLoading(true);
+    const loadingFrame = requestAnimationFrame(() => {
+      if (!cancelled) setTopItemsLoading(true);
+    });
     getTopMenuItemsByMonth(topItemsMonthDate.getFullYear(), topItemsMonthDate.getMonth() + 1)
       .then((res) => {
         if (!cancelled) setTopItemsData(res.data.items ?? []);
@@ -635,6 +656,7 @@ export default function Home() {
       });
     return () => {
       cancelled = true;
+      cancelAnimationFrame(loadingFrame);
     };
   }, [topItemsMonthDate, activeMembership?.restaurant_id]);
 
@@ -727,11 +749,16 @@ export default function Home() {
   }, [activeMembership?.restaurant_id, copy.loadError, isToday, selectedDate]);
 
   useEffect(() => {
-    void loadOperations();
+    const loadTimer = window.setTimeout(() => void loadOperations(), 0);
+    return () => window.clearTimeout(loadTimer);
   }, [loadOperations]);
+  const realtimeStatus = useOrderEvents(() => loadOperations(true), {
+    enabled: isToday && Boolean(activeMembership?.restaurant_id),
+    restaurantId: activeMembership?.restaurant_id,
+  });
   useVisiblePolling(() => loadOperations(true), {
     enabled: isToday && Boolean(activeMembership?.restaurant_id),
-    intervalMs: 10_000,
+    intervalMs: 60_000,
     runImmediately: false,
   });
 
@@ -874,7 +901,7 @@ export default function Home() {
 
   const attention = [
     { key: "late", icon: AlertTriangle, label: copy.lateKitchen, value: delayed.length, href: "/kitchen", tone: "text-red-600 dark:text-red-300" },
-    { key: "ready", icon: CheckCircle2, label: copy.readyToServe, value: ready.length, href: "/orders", tone: "text-emerald-600 dark:text-emerald-300" },
+    { key: "ready", icon: CheckCircle2, label: copy.readyToServe, value: ready.length, href: "/kitchen", tone: "text-emerald-600 dark:text-emerald-300" },
     { key: "tables", icon: Table2, label: copy.occupiedTables, value: occupied.length, href: "/pos/tables", tone: "text-amber-600 dark:text-amber-300" },
     { key: "stock", icon: PackageOpen, label: copy.lowStock, value: lowStock.length, href: "/inventory", tone: lowStock.length ? "text-amber-600 dark:text-amber-300" : "text-gray-400" },
   ];
@@ -919,7 +946,7 @@ export default function Home() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-[22px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label={copy.refresh} /> : null}
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label={copy.loading} /> : null}
             </div>
             <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{isToday ? copy.todayMode : copy.historyMode} · {selectedDateLabel}</p>
           </div>
@@ -939,20 +966,18 @@ export default function Home() {
               </button>
             </div>
             {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
-            <button type="button" disabled={loading || refreshing} onClick={() => { void loadOperations(true); }} aria-label={copy.refresh} title={copy.refresh} className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            </button>
           </div>
         </div>
       </header>
 
       <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
+        <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
         {dateLoading ? (
           <div className="flex min-h-72 items-center justify-center rounded-md border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {copy.refresh}
+            {copy.loading}
           </div>
         ) : (
           <>
@@ -1008,7 +1033,7 @@ export default function Home() {
                   {activeChartLoading ? (
                     <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {copy.refresh}
+                      {copy.loading}
                     </div>
                   ) : activeChartHasData ? (
                     <ChartBox data={activeChartData} title={activeChartTitle} language={language} lossColoring={chartMetric === "profit"} />
@@ -1237,7 +1262,7 @@ export default function Home() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {availableTables} · {copy.reserved} {reservedTables}</p>
-                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openPOS}<ArrowRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {tables.map((table) => (

@@ -29,7 +29,7 @@ export default function PaidReceiptDialog({
   const [closing, setClosing] = useState(false);
   const locale = language === "th" ? "th-TH" : "en-US";
   const payment = bill.payments.at(-1) ?? null;
-  const groups = groupOrderItems(bill.items);
+  const groups = groupOrderItems(bill.items.filter((item) => item.status !== "cancelled"));
   const sections = (["dine_in", "takeaway"] as const)
     .map((key) => ({ key, groups: groups.filter((group) => fulfillmentType(group.firstItem) === key) }))
     .filter((section) => section.groups.length > 0);
@@ -98,7 +98,7 @@ export default function PaidReceiptDialog({
           #archive-print-receipt .dark\\:border-gray-800 { border-color: #d1d5db !important; }
         }
       `}</style>
-      <div data-reprint-dialog role="dialog" aria-modal="true" aria-labelledby="archive-receipt-title" className={`${closing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
+      <div data-reprint-dialog role="dialog" aria-modal="true" aria-labelledby="archive-receipt-title" className={`${closing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
         <div id="archive-print-receipt" className="flex min-h-0 flex-1 flex-col">
           <div data-screen-receipt className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
             <div data-screen-only className="min-w-0">
@@ -113,19 +113,25 @@ export default function PaidReceiptDialog({
             <button data-screen-only type="button" onClick={requestClose} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.close}</button>
           </div>
 
-          <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
-            <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-              <h3 className="mb-3 text-[13px] font-semibold text-gray-900 dark:text-white">{copy.items}</h3>
-              <div className="space-y-3">
+          <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5">
+            <section aria-labelledby="archive-receipt-items-title">
+              <h3 id="archive-receipt-items-title" className="border-b border-gray-200 py-3 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:text-white">{copy.items}</h3>
+              <div>
                 {sections.map((section) => (
-                  <div key={section.key} className="space-y-2">
-                    {sections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? <p className="px-1 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{section.key === "takeaway" ? copy.takeaway : copy.dineIn}</p> : null}
-                    <div className="space-y-2">
+                  <div key={section.key}>
+                    {sections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? <p className="border-b border-gray-100 py-2 text-[12px] font-semibold text-gray-600 dark:border-gray-800 dark:text-gray-300">{section.key === "takeaway" ? copy.takeaway : copy.dineIn}</p> : null}
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {section.groups.map((group) => {
                         const item = group.firstItem;
                         return (
-                          <div data-receipt-item key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
-                            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                          <div data-receipt-item key={group.key} className="py-3">
+                            <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
+                              <div
+                                role="img"
+                                aria-label={`${item.menu_name}`}
+                                className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
+                                style={{ backgroundImage: `url(${item.menu?.image_url || "/menu-placeholder-v2.webp"})` }}
+                              />
                               <div className="min-w-0">
                                 <p className="text-[14px] font-semibold text-gray-900 dark:text-white">{item.menu_name}</p>
                                 {item.selected_options?.length ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(" · ")}</p> : null}

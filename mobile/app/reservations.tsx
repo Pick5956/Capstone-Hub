@@ -1,0 +1,257 @@
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { RefreshControl, View } from 'react-native';
+
+import { listReservations } from '@/src/api/reservation';
+import { AppText as Text } from '@/src/components/app-text';
+import { AppScreen } from '@/src/components/app-shell';
+import {
+  Button,
+  ChipGroup,
+  EmptyState,
+  Feedback,
+  SectionHeader,
+  StatusBadge,
+  Surface,
+} from '@/src/components/ui';
+import { can } from '@/src/lib/rbac';
+import { createRequestGeneration } from '@/src/lib/request-generation';
+import { canViewReservationHistory } from '@/src/lib/table-workflow';
+import { useAuth } from '@/src/providers/auth-provider';
+import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { palette, spacing, typeScale } from '@/src/theme';
+import type {
+  Reservation,
+  ReservationStatus,
+} from '@/src/types/reservation';
+
+type ReservationFilter = 'all' | ReservationStatus;
+
+const pageSize = 50;
+
+function formatDateTime(value: string | null | undefined, language: 'th' | 'en') {
+  if (!value) return '−';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '−';
+  return date.toLocaleString(language === 'th' ? 'th-TH' : 'en-US', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export default function ReservationsScreen() {
+  const { activeMembership } = useAuth();
+  const { copy, language } = useDisplayPreferences();
+  const canView = canViewReservationHistory(
+    can(activeMembership, 'view_tables'),
+    can(activeMembership, 'manage_table'),
+    can(activeMembership, 'take_order'),
+  );
+  const [filter, setFilter] = useState<ReservationFilter>('all');
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [counts, setCounts] = useState<Partial<Record<ReservationStatus, number>>>({});
+  const [hasMore, setHasMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestGenerationRef = useRef(createRequestGeneration());
+
+  const load = useCallback(async () => {
+    if (!canView) {
+      setLoading(false);
+      return;
+    }
+    const request = requestGenerationRef.current.begin();
+    setLoading(true);
+    setLoadingMore(false);
+    setError(null);
+    try {
+      const response = await listReservations({
+        status: filter === 'all' ? '' : filter,
+        limit: pageSize,
+      });
+      if (!requestGenerationRef.current.isCurrent(request)) return;
+      setReservations(response.reservations || []);
+      setCounts(response.counts || {});
+      setHasMore(Boolean(response.has_more));
+      setNextOffset(response.next_offset || 0);
+    } catch (err) {
+      if (!requestGenerationRef.current.isCurrent(request)) return;
+      setError(err instanceof Error
+        ? err.message
+        : copy('โหลดประวัติการจองไม่สำเร็จ', 'Could not load reservation history'));
+    } finally {
+      if (requestGenerationRef.current.isCurrent(request)) setLoading(false);
+    }
+  }, [canView, copy, filter]);
+
+  useFocusEffect(useCallback(() => {
+    void load();
+    return () => {
+      requestGenerationRef.current.invalidate();
+    };
+  }, [load]));
+
+  async function loadMore() {
+    if (!canView || loading || loadingMore || !hasMore) return;
+    const request = requestGenerationRef.current.begin();
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const response = await listReservations({
+        status: filter === 'all' ? '' : filter,
+        limit: pageSize,
+        offset: nextOffset,
+      });
+      if (!requestGenerationRef.current.isCurrent(request)) return;
+      setReservations((current) => {
+        const known = new Set(current.map((reservation) => reservation.ID));
+        return [...current, ...(response.reservations || []).filter((reservation) => !known.has(reservation.ID))];
+      });
+      setCounts(response.counts || {});
+      setHasMore(Boolean(response.has_more));
+      setNextOffset(response.next_offset || nextOffset);
+    } catch (err) {
+      if (!requestGenerationRef.current.isCurrent(request)) return;
+      setError(err instanceof Error
+        ? err.message
+        : copy('โหลดประวัติเพิ่มไม่สำเร็จ', 'Could not load more reservations'));
+    } finally {
+      if (requestGenerationRef.current.isCurrent(request)) setLoadingMore(false);
+    }
+  }
+
+  if (!canView) {
+    return (
+      <AppScreen title={copy('ประวัติการจองโต๊ะ', 'Reservation history')} topLevel={false}>
+        <EmptyState
+          title={copy('ไม่มีสิทธิ์ดูประวัติการจอง', 'No permission to view reservations')}
+          detail={copy(
+            'ต้องมีสิทธิ์ดูโต๊ะ จัดการโต๊ะ หรือรับออเดอร์',
+            'Table viewing, table management, or order-taking permission is required.',
+          )}
+        />
+      </AppScreen>
+    );
+  }
+
+  const statusCopy: Record<ReservationStatus, string> = {
+    active: copy('กำลังจอง', 'Active'),
+    seated: copy('รับลูกค้าแล้ว', 'Seated'),
+    cancelled: copy('ยกเลิก / ไม่มา', 'Cancelled / no-show'),
+  };
+  const statusTone: Record<ReservationStatus, 'info' | 'success' | 'danger'> = {
+    active: 'info',
+    seated: 'success',
+    cancelled: 'danger',
+  };
+  const totalCount = (counts.active || 0) + (counts.seated || 0) + (counts.cancelled || 0);
+  const filterOptions: Array<{ label: string; value: ReservationFilter }> = [
+    { label: copy(`ทั้งหมด ${totalCount.toLocaleString('th-TH')}`, `All ${totalCount.toLocaleString('en-US')}`), value: 'all' },
+    { label: copy(`กำลังจอง ${(counts.active || 0).toLocaleString('th-TH')}`, `Active ${(counts.active || 0).toLocaleString('en-US')}`), value: 'active' },
+    { label: copy(`รับแล้ว ${(counts.seated || 0).toLocaleString('th-TH')}`, `Seated ${(counts.seated || 0).toLocaleString('en-US')}`), value: 'seated' },
+    { label: copy(`ยกเลิก ${(counts.cancelled || 0).toLocaleString('th-TH')}`, `Cancelled ${(counts.cancelled || 0).toLocaleString('en-US')}`), value: 'cancelled' },
+  ];
+
+  return (
+    <AppScreen
+      title={copy('ประวัติการจองโต๊ะ', 'Reservation history')}
+      subtitle={copy(
+        'ตรวจสอบรายการที่ยังรอลูกค้า รับลูกค้าแล้ว และยกเลิกหรือไม่มา',
+        'Review active bookings, seated guests, cancellations, and no-shows.',
+      )}
+      topLevel={false}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+    >
+      <ChipGroup value={filter} onChange={setFilter} options={filterOptions} />
+      {error ? (
+        <Feedback
+          title={copy('โหลดประวัติการจองไม่ได้', 'Could not load reservation history')}
+          detail={error}
+          tone="danger"
+        />
+      ) : null}
+      <Surface>
+        <SectionHeader
+          title={filter === 'all' ? copy('รายการจองทั้งหมด', 'All reservations') : statusCopy[filter]}
+          detail={copy(
+            `แสดง ${reservations.length.toLocaleString('th-TH')} รายการ`,
+            `Showing ${reservations.length.toLocaleString('en-US')} reservations`,
+          )}
+        />
+        {loading && !reservations.length ? (
+          <EmptyState title={copy('กำลังโหลดประวัติการจอง', 'Loading reservation history')} />
+        ) : reservations.length ? (
+          <View>
+            {reservations.map((reservation, index) => (
+              <View
+                key={reservation.ID}
+                style={{
+                  gap: spacing.sm,
+                  borderTopWidth: index ? 1 : 0,
+                  borderTopColor: palette.border,
+                  paddingVertical: spacing.lg,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+                  <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
+                    <Text selectable style={typeScale.cardTitle}>
+                      {reservation.table_label
+                        || reservation.table?.display_label
+                        || reservation.table?.table_number
+                        || copy('ไม่ระบุโต๊ะ', 'Unknown table')}
+                    </Text>
+                    <Text selectable style={[typeScale.body, { color: palette.text }]}>
+                      {reservation.name || copy('ไม่ระบุชื่อ', 'No guest name')}
+                    </Text>
+                  </View>
+                  <StatusBadge label={statusCopy[reservation.status]} tone={statusTone[reservation.status]} />
+                </View>
+                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                  {copy('เบอร์โทร', 'Phone')}: {reservation.phone || '−'}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }}>
+                  <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                      {copy('จองเมื่อ', 'Reserved at')}
+                    </Text>
+                    <Text selectable style={typeScale.caption}>
+                      {formatDateTime(reservation.CreatedAt, language)}
+                    </Text>
+                  </View>
+                  <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                      {copy('ปิดรายการเมื่อ', 'Closed at')}
+                    </Text>
+                    <Text selectable style={typeScale.caption}>
+                      {formatDateTime(reservation.resolved_at, language)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <EmptyState
+            title={copy('ยังไม่มีประวัติในสถานะนี้', 'No reservations in this status')}
+            detail={copy(
+              'รายการใหม่จะปรากฏหลังมีการจองโต๊ะ',
+              'New entries appear after a table is reserved.',
+            )}
+          />
+        )}
+      </Surface>
+      {hasMore ? (
+        <Button
+          variant="secondary"
+          label={copy('ดูรายการก่อนหน้าเพิ่ม', 'Load earlier reservations')}
+          onPress={() => { void loadMore(); }}
+          loading={loadingMore}
+        />
+      ) : null}
+    </AppScreen>
+  );
+}

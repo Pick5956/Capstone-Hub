@@ -23,9 +23,6 @@ type demoIngredient struct {
 	SKU                     string
 	ImageURL                string
 	Unit                    string
-	BaseUnit                string
-	PurchaseUnitDefault     string
-	ConversionFactorDefault float64
 	Stock                   float64
 	MinStock                float64
 	CostPerUnit             float64
@@ -46,9 +43,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-MEAT-PORK",
 				ImageURL:                commonsFile("Ground pork (cooked).jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   15000, // 15 kg
 				MinStock:                2000,  // 2 kg
 				CostPerUnit:             0.16,  // 160 THB/kg -> 0.16 THB/g
@@ -60,9 +54,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-MEAT-CHICKEN-SLICED",
 				ImageURL:                commonsFile("Raw Chicken Breast.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   20000, // 20 kg
 				MinStock:                3000,
 				CostPerUnit:             0.095, // 95 THB/kg -> 0.095 THB/g
@@ -74,9 +65,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-SEAFOOD-SHRIMP",
 				ImageURL:                commonsFile("Shrimp cooked.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   10000, // 10 kg
 				MinStock:                1500,
 				CostPerUnit:             0.28, // 280 THB/kg -> 0.28 THB/g
@@ -88,9 +76,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-SEAFOOD-SQUID",
 				ImageURL:                commonsFile("Fresh squid at market.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   8000, // 8 kg
 				MinStock:                1000,
 				CostPerUnit:             0.22, // 220 THB/kg -> 0.22 THB/g
@@ -102,9 +87,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-SEAFOOD-CRAB",
 				ImageURL:                commonsFile("Crab meat inside shell.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   5000, // 5 kg
 				MinStock:                500,
 				CostPerUnit:             0.85, // 850 THB/kg -> 0.85 THB/g
@@ -121,9 +103,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-BASIL",
 				ImageURL:                commonsFile("Holy Basil leaves.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   3000, // 3 kg
 				MinStock:                500,
 				CostPerUnit:             0.05, // 50 THB/kg -> 0.05 THB/g
@@ -135,9 +114,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-LIME",
 				ImageURL:                commonsFile("Thai lime.jpg"),
 				Unit:                    "ลูก",
-				BaseUnit:                "ลูก",
-				PurchaseUnitDefault:     "ถุง (100 ลูก)",
-				ConversionFactorDefault: 100.0,
 				Stock:                   200,
 				MinStock:                30,
 				CostPerUnit:             3.5, // 3.5 THB/lime
@@ -149,9 +125,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-CHILI",
 				ImageURL:                commonsFile("Red Bird's Eye Chili.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   2000,
 				MinStock:                300,
 				CostPerUnit:             0.12, // 120 THB/kg -> 0.12 THB/g
@@ -163,9 +136,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-GARLIC",
 				ImageURL:                commonsFile("Garlic bulbs.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   5000,
 				MinStock:                1000,
 				CostPerUnit:             0.09, // 90 THB/kg -> 0.09 THB/g
@@ -177,9 +147,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-KANASE",
 				ImageURL:                commonsFile("Chinese Broccoli.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   8000,
 				MinStock:                1500,
 				CostPerUnit:             0.045, // 45 THB/kg -> 0.045 THB/g
@@ -191,9 +158,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-VEG-PAPAYA",
 				ImageURL:                commonsFile("Green papaya sliced.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.025, // 25 THB/kg -> 0.025 THB/g
@@ -210,9 +174,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-COND-FISHSANCE",
 				ImageURL:                commonsFile("Thai fish sauce bottle.jpg"),
 				Unit:                    "มิลลิลิตร",
-				BaseUnit:                "มิลลิลิตร",
-				PurchaseUnitDefault:     "ขวด (700 ml)",
-				ConversionFactorDefault: 700.0,
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.04, // approx 28 THB/bottle -> 0.04 THB/ml
@@ -224,9 +185,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-COND-OYSTER",
 				ImageURL:                commonsFile("Oyster sauce bowl.jpg"),
 				Unit:                    "มิลลิลิตร",
-				BaseUnit:                "มิลลิลิตร",
-				PurchaseUnitDefault:     "แกลลอน (4500 ml)",
-				ConversionFactorDefault: 4500.0,
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.05,
@@ -238,9 +196,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-COND-COCOSugar",
 				ImageURL:                commonsFile("Coconut palm sugar.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "ถุง (1 kg)",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   5000,
 				MinStock:                1000,
 				CostPerUnit:             0.065, // 65 THB/kg -> 0.065 THB/g
@@ -252,9 +207,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-COND-OIL",
 				ImageURL:                commonsFile("Vegetable oil bottle.jpg"),
 				Unit:                    "มิลลิลิตร",
-				BaseUnit:                "มิลลิลิตร",
-				PurchaseUnitDefault:     "ขวด (1000 ml)",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   20000,
 				MinStock:                3000,
 				CostPerUnit:             0.045, // 45 THB/liter -> 0.045 THB/ml
@@ -271,9 +223,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-DRY-RICE",
 				ImageURL:                commonsFile("Jasmine rice grains.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กระสอบ (15 kg)",
-				ConversionFactorDefault: 15000.0,
 				Stock:                   50000, // 50 kg
 				MinStock:                10000,
 				CostPerUnit:             0.035, // 0.035 THB/g -> 35 THB/kg
@@ -285,9 +234,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-DRY-EGG",
 				ImageURL:                commonsFile("Chicken eggs brown.jpg"),
 				Unit:                    "ฟอง",
-				BaseUnit:                "ฟอง",
-				PurchaseUnitDefault:     "แผง (30 ฟอง)",
-				ConversionFactorDefault: 30.0,
 				Stock:                   300,
 				MinStock:                50,
 				CostPerUnit:             4.2, // 4.2 THB/egg
@@ -299,9 +245,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-DRY-NOODLE-PADTHAI",
 				ImageURL:                commonsFile("Dry rice noodles.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "ถุง (1 kg)",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.055, // 55 THB/kg -> 0.055 THB/g
@@ -313,9 +256,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				SKU:                     "ING-DRY-NOODLE-SENYAI",
 				ImageURL:                commonsFile("Fresh flat rice noodles.jpg"),
 				Unit:                    "กรัม",
-				BaseUnit:                "กรัม",
-				PurchaseUnitDefault:     "กิโลกรัม",
-				ConversionFactorDefault: 1000.0,
 				Stock:                   8000,
 				MinStock:                1500,
 				CostPerUnit:             0.03, // 30 THB/kg -> 0.03 THB/g
@@ -334,8 +274,24 @@ func main() {
 		log.Fatal("missing -restaurant-id, example: go run ./cmd/seed_demo_ingredients -restaurant-id 1")
 	}
 
-	config.ConnectionDB()
-	db := config.SetupDatabase()
+	if err := config.LoadRuntimeEnvironment(); err != nil {
+		log.Fatal(err)
+	}
+	if err := config.ValidateDatabaseEnvironment(); err != nil {
+		log.Fatal(err)
+	}
+	if err := config.ConnectionDB(); err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := config.CloseDatabase(); err != nil {
+			log.Printf("close database: %v", err)
+		}
+	}()
+	if err := config.EnsureSchemaCurrent(config.DB()); err != nil {
+		log.Fatal(err)
+	}
+	db := config.DB()
 
 	var restaurant entity.Restaurant
 	if err := db.First(&restaurant, *restaurantID).Error; err != nil {
@@ -416,9 +372,6 @@ func upsertIngredient(tx *gorm.DB, restaurantID, categoryID uint, seed demoIngre
 	ingredient.SKU = strings.TrimSpace(seed.SKU)
 	ingredient.ImageURL = strings.TrimSpace(seed.ImageURL)
 	ingredient.Unit = strings.TrimSpace(seed.Unit)
-	ingredient.BaseUnit = strings.TrimSpace(seed.BaseUnit)
-	ingredient.PurchaseUnitDefault = strings.TrimSpace(seed.PurchaseUnitDefault)
-	ingredient.ConversionFactorDefault = seed.ConversionFactorDefault
 	ingredient.Stock = seed.Stock
 	ingredient.MinStock = seed.MinStock
 	ingredient.CostPerUnit = seed.CostPerUnit

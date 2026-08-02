@@ -28,14 +28,14 @@ type NavItem = {
 };
 
 type NavGroup = {
-  group: string;
+  id: 'work' | 'management' | 'general';
   items: NavItem[];
 };
 
 function buildNav(language: 'th' | 'en'): NavGroup[] {
   return [
     {
-      group: language === 'th' ? 'เริ่มงาน' : 'Start work',
+      id: 'work',
       items: [
         {
           label: language === 'th' ? 'ภาพรวม' : 'Overview',
@@ -50,7 +50,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M4 9h16"/><path d="M5 9l1-5h12l1 5"/><path d="M6 9v10a1 1 0 001 1h10a1 1 0 001-1V9"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
         },
         {
-          label: language === 'th' ? 'จอครัว' : 'Kitchen screen',
+          label: language === 'th' ? 'จอครัว' : 'Kitchen',
           href: '/kitchen',
           permission: 'view_kitchen',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M6 2v20"/><path d="M18 2v20"/><path d="M6 8h12"/><path d="M6 16h12"/><path d="M9 5h6"/><path d="M9 19h6"/></svg>,
@@ -58,7 +58,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
       ],
     },
     {
-      group: language === 'th' ? 'จัดการร้าน' : 'Restaurant setup',
+      id: 'management',
       items: [
         {
           label: language === 'th' ? 'เมนูอาหาร' : 'Menu',
@@ -71,6 +71,12 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           href: '/tables',
           permission: ['manage_table', 'view_tables'],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13M19 7v13M8 20h8"/></svg>,
+        },
+        {
+          label: language === 'th' ? 'ประวัติการจอง' : 'Reservations',
+          href: '/reservations',
+          permission: ['manage_table', 'view_tables', 'take_order'],
+          icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>,
         },
         {
           label: language === 'th' ? 'คลังออเดอร์' : 'Order archive',
@@ -96,17 +102,17 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
           permission: 'manage_staff',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
         },
-      ],
-    },
-    {
-      group: language === 'th' ? 'รายงานและตั้งค่า' : 'Reports & Settings',
-      items: [
         {
           label: language === 'th' ? 'รายได้และยอดขาย' : 'Revenue and sales',
           href: '/reports',
           permission: 'view_reports',
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
         },
+      ],
+    },
+    {
+      id: 'general',
+      items: [
         {
           label: language === 'th' ? 'ตั้งค่า' : 'Settings',
           href: '/settings',
@@ -155,22 +161,26 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
     const permissions = Array.isArray(permission) ? permission : [permission];
     return permissions.some((item) => can(activeMembership, item));
   };
+  const visibleNav = nav
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => canSee(item.permission)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
-    <nav className="sidebar-nav-scroll flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2">
-      {nav.map(({ group, items }, groupIndex) => (
-        <div key={group || `group-${groupIndex}`} className={items.some((item) => canSee(item.permission)) ? '' : 'hidden'}>
-          {group && (
-            <p
-              className={`mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-600 [@media(max-height:760px)]:mb-1 [@media(max-height:760px)]:text-[9px] transition-all duration-300 ${
-                collapsed ? 'h-0 opacity-0 mb-0 overflow-hidden' : 'h-auto opacity-100'
-              }`}
-            >
-              {group}
-            </p>
+    <nav className="sidebar-nav-scroll flex-1 overflow-y-auto overscroll-contain px-3 py-3 [@media(max-height:760px)]:py-2">
+      {visibleNav.map(({ id, items }, groupIndex) => (
+        <div key={id}>
+          {groupIndex > 0 && (
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              className="mx-1 my-2 border-t border-[#dfe3e8] dark:border-[#253142] [@media(max-height:760px)]:my-1.5"
+            />
           )}
           <div className="space-y-0.5">
-            {items.filter((item) => canSee(item.permission)).map((item) => {
+            {items.map((item) => {
               const { label, href, icon, badge, comingSoon, subItems } = item;
               const visibleSubItems = subItems ? subItems.filter(sub => canSee(sub.permission)) : [];
               const visibleSubItemsCount = visibleSubItems.length;
@@ -180,16 +190,15 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
               // Active if either this parent href matches or one of its child sub-items matches
               const active = !comingSoon && (isActive(href) || (hasSubItems && visibleSubItems.some(sub => isActive(sub.href))));
 
-              const itemClassName = `relative flex w-full items-center rounded-md border px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow,gap] duration-300 [@media(max-height:760px)]:py-1.5 ${
+              const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
                 active
-                  ? 'border-[#dfe3e8] bg-white text-gray-950 shadow-sm dark:border-[#253142] dark:bg-gray-900 dark:text-white'
-                  : 'border-transparent text-gray-800 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
+                  ? 'border border-transparent bg-orange-50 text-orange-700 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
+                  : 'border border-transparent text-gray-800 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
               } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
 
               const content = (
                 <>
-                  {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-orange-500" />}
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-500' : 'text-gray-500 dark:text-gray-400'}`}>{icon}</span>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500 dark:text-gray-400'}`}>{icon}</span>
                   <span
                     className={`flex min-w-0 flex-1 items-center justify-between gap-2 transition-all duration-300 ${
                       collapsed ? 'w-0 opacity-0 pointer-events-none overflow-hidden' : 'w-auto opacity-100'
@@ -204,7 +213,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         stroke="currentColor"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-600 dark:text-orange-300' : 'text-gray-400'} ${isExpanded ? 'rotate-90' : ''}`}
                       >
                         <polyline points="9 18 15 12 9 6"/>
                       </svg>

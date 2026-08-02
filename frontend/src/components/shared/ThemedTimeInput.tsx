@@ -64,7 +64,8 @@ export default function ThemedTimeInput({
       };
 
   useEffect(() => {
-    setDraft(normalizeTime(value));
+    const syncTimer = window.setTimeout(() => setDraft(normalizeTime(value)), 0);
+    return () => window.clearTimeout(syncTimer);
   }, [value]);
 
   useEffect(() => {

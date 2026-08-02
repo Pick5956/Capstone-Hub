@@ -7,8 +7,15 @@ import { Membership } from "../../types/restaurant";
 import { googleLogin, login, register, requestPasswordReset, LoginResponse } from "../../lib/auth";
 import { authRepository } from "../../app/repositories/authRepository";
 import { apiErrorCode } from "@/src/lib/apiErrors";
+import {
+  authModalMotionClasses,
+  scheduleAuthModalClose,
+  scheduleAuthModalFocus,
+  type AuthModalMotionPhase,
+} from "@/src/lib/authModalMotion";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -177,8 +184,8 @@ function BrandLine() {
     <div className="flex items-center gap-2">
       <AppLogo size={28} />
       <div className="leading-none">
-        <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Restaurant</p>
-        <p className="text-[13px] font-semibold tracking-tight text-gray-900 dark:text-white">HUB</p>
+        <p className="text-[13px] font-bold tracking-[-0.02em] text-gray-900 dark:text-white">Dishy</p>
+        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-400 dark:text-gray-500">Restaurant operations</p>
       </div>
     </div>
   );
@@ -216,12 +223,20 @@ export default function AuthModal({
   const { language } = useLanguage();
   const [authMode, setAuthMode] = useState<AuthMode>(initialMode);
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [lastIsOpen, setLastIsOpen] = useState(isOpen);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const router = useRouter();
+
+  if (lastIsOpen !== isOpen) {
+    setLastIsOpen(isOpen);
+    if (!isOpen) setClosing(false);
+  }
 
   const copy = language === "th"
     ? {
@@ -316,12 +331,32 @@ export default function AuthModal({
       };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      return;
+    }
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setAuthMode(initialMode);
-    setError("");
-    setNotice("");
-  }, [isOpen, initialMode]);
+  }, [isOpen]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const [loginEmail, setLoginEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -339,13 +374,14 @@ export default function AuthModal({
   const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || closing) return;
     const targetId = authMode === "forgot" ? "forgot-email" : authMode === "register" ? "firstName" : "login-email";
-    const timer = window.setTimeout(() => {
-      document.getElementById(targetId)?.focus();
-    }, 0);
+    const timer = scheduleAuthModalFocus(
+      () => document.getElementById(targetId),
+      (callback, delay) => window.setTimeout(callback, delay),
+    );
     return () => window.clearTimeout(timer);
-  }, [authMode, isOpen]);
+  }, [authMode, closing, isOpen]);
 
   const handleRegisterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setRegisterForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -395,6 +431,16 @@ export default function AuthModal({
     [completeAuth, copy.googleCredentialMissing, copy.googleLoginFailed, copy.googleLoginRetry]
   );
 
+  // Keep the latest credential handler in a ref so the GIS setup effect does not
+  // depend on its identity (which changes whenever the parent re-renders).
+  const googleCredentialRef = useRef(handleGoogleCredential);
+  useEffect(() => {
+    googleCredentialRef.current = handleGoogleCredential;
+  }, [handleGoogleCredential]);
+
+  // Guard so google.accounts.id.initialize() runs at most once per mount.
+  const googleInitializedRef = useRef(false);
+
   useEffect(() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!isOpen || authMode !== "login" || !clientId) return;
@@ -402,10 +448,13 @@ export default function AuthModal({
     let cancelled = false;
     const initializeGoogleButton = () => {
       if (cancelled || !window.google || !googleButtonRef.current) return;
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredential,
-      });
+      if (!googleInitializedRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => googleCredentialRef.current(response),
+        });
+        googleInitializedRef.current = true;
+      }
       const buttonWidth = Math.min(320, googleButtonRef.current.clientWidth || 320);
       googleButtonRef.current.innerHTML = "";
       window.google.accounts.id.renderButton(googleButtonRef.current, {
@@ -438,7 +487,7 @@ export default function AuthModal({
     return () => {
       cancelled = true;
     };
-  }, [authMode, handleGoogleCredential, isOpen]);
+  }, [authMode, isOpen]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -549,12 +598,25 @@ export default function AuthModal({
   };
 
   const closeAndRestoreFocus = useCallback(() => {
-    onClose();
+    if (!isOpen || closeTimerRef.current !== null) return;
     const restoreTarget = restoreFocusRef.current;
-    window.setTimeout(() => {
-      restoreTarget?.focus();
-    }, 0);
-  }, [onClose]);
+    setClosing(true);
+    closeTimerRef.current = scheduleAuthModalClose(
+      () => {
+        setClosing(false);
+        setAuthMode(initialMode);
+        setError("");
+        setNotice("");
+        onClose();
+        restoreTarget?.focus({ preventScroll: true });
+        closeTimerRef.current = null;
+      },
+      (callback, delay) => window.setTimeout(callback, delay),
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+    );
+  }, [initialMode, isOpen, onClose]);
+
+  const backdropCloseHandlers = useBackdropClose(closeAndRestoreFocus);
 
   const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -587,14 +649,16 @@ export default function AuthModal({
   const isForgot = authMode === "forgot";
   const title = isForgot ? copy.forgotTitle : isLogin ? copy.loginTitle : copy.registerTitle;
   const subtitle = isForgot ? copy.forgotSubtitle : isLogin ? copy.loginSubtitle : copy.registerSubtitle;
+  const motionPhase: AuthModalMotionPhase = !isOpen ? "closed" : closing ? "closing" : "entering";
+  const motionClasses = authModalMotionClasses(motionPhase);
 
   return (
+    // Keep the full-screen blur stable; animate opacity and the dialog surface only.
     <div
       aria-hidden={!isOpen}
       inert={!isOpen}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-[background-color,opacity,backdrop-filter] duration-200 ${
-        isOpen ? "bg-black/40 opacity-100 backdrop-blur-sm" : "pointer-events-none bg-black/0 opacity-0 backdrop-blur-none"
-      }`}
+      {...backdropCloseHandlers}
+      className={`${motionClasses.overlay} fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm`}
     >
       <div
         ref={dialogRef}
@@ -602,9 +666,9 @@ export default function AuthModal({
         aria-modal="true"
         aria-labelledby="auth-modal-title"
         onKeyDown={handleDialogKeyDown}
-        className={`w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl transition-[opacity,transform] duration-200 dark:border-gray-800 dark:bg-gray-950 ${
+        className={`${motionClasses.dialog} w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 ${
           isLogin || isForgot ? "max-w-sm" : "max-w-lg"
-        } ${isOpen ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"}`}
+        }`}
       >
         <div className="flex items-start justify-between border-b border-gray-100 px-5 pb-3 pt-4 dark:border-gray-800">
           <div>
@@ -628,7 +692,7 @@ export default function AuthModal({
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+        <div className="max-h-[70vh] overflow-y-auto overscroll-contain px-5 py-4">
           {isLogin ? (
             <form onSubmit={handleLoginSubmit} className="space-y-3.5">
               <InputField
@@ -691,7 +755,19 @@ export default function AuthModal({
                     <span className="text-[11px] text-gray-400 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
-                  <div className="flex min-h-10 justify-center" ref={googleButtonRef} />
+                  {/* Google briefly resizes and restyles its iframe while initializing or
+                      returning from the account picker. Keep sizing and the visible border
+                      on our wrapper so the button does not jump or lose its outline. */}
+                  <div className="group relative mx-auto h-11 w-full max-w-80 rounded-md">
+                    <div
+                      className="flex h-11 overflow-hidden rounded-md"
+                      ref={googleButtonRef}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-md border border-gray-300 transition-[border-color,box-shadow] group-focus-within:border-orange-500 group-focus-within:ring-2 group-focus-within:ring-orange-500/15 dark:border-gray-700"
+                    />
+                  </div>
                 </>
               )}
             </form>
