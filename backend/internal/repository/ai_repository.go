@@ -116,6 +116,37 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 // SalesForRange aggregates paid, completed sales in the half-open window
 // [start, end). Unlike RecentSalesSummary it is not capped to 14 rows, so it can
 // answer named-month and month-to-month questions.
+// AISalesCoverage describes how far the recorded sales history actually reaches.
+type AISalesCoverage struct {
+	FirstDate string  `json:"first_date"`
+	LastDate  string  `json:"last_date"`
+	Days      int64   `json:"days"`
+	Orders    int64   `json:"orders"`
+	Revenue   float64 `json:"revenue"`
+}
+
+// SalesCoverage reports the first and last day that has paid sales. "Today has no
+// orders" is useless on its own; knowing the history stops on a given date is what
+// actually answers the user.
+func (r *AIRepository) SalesCoverage(restaurantID uint) (AISalesCoverage, error) {
+	var res AISalesCoverage
+	err := r.db.Model(&entity.Order{}).
+		Select(`
+			TO_CHAR(MIN(completed_at) AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS first_date,
+			TO_CHAR(MAX(completed_at) AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS last_date,
+			COUNT(DISTINCT TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')) AS days,
+			COUNT(*) AS orders,
+			COALESCE(SUM(grand_total), 0) AS revenue`).
+		Where(
+			"restaurant_id = ? AND status = ? AND payment_status = ? AND completed_at IS NOT NULL",
+			restaurantID,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Scan(&res).Error
+	return res, err
+}
+
 func (r *AIRepository) SalesForRange(restaurantID uint, start, end time.Time) (AISalesRange, error) {
 	var res AISalesRange
 	err := r.db.Model(&entity.Order{}).

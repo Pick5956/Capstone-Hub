@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // analysisWindowDays is the single source of truth for the rolling window the
@@ -17,6 +18,17 @@ const analysisWindowDays = 30.0
 // period a figure actually covered.
 func analysisWindowLabel() string {
 	return fmt.Sprintf("%.0f วันล่าสุด", analysisWindowDays)
+}
+
+// formatThaiDate turns a "2006-01-02" date into "31 กรกฎาคม 2569" (Buddhist era).
+// Falls back to the raw value if it cannot be parsed, so a formatting problem
+// never hides the underlying fact.
+func formatThaiDate(isoDate string) string {
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(isoDate))
+	if err != nil {
+		return isoDate
+	}
+	return fmt.Sprintf("%d %s %d", t.Day(), thaiMonthName(int(t.Month())), t.Year()+543)
 }
 
 // formatMoney renders a baht amount with thousand separators, e.g.

@@ -118,6 +118,10 @@ type AISalesPeriod struct {
 	Days    int
 	Revenue float64
 	Orders  int64
+	// LatestDate is the newest day in the snapshot that actually has sales
+	// ("2006-01-02"). Reporting it turns a bare "no orders today" into something
+	// the user can act on, since it says where the data does reach.
+	LatestDate string
 }
 
 type AIReorderItem struct {
@@ -562,12 +566,19 @@ func computeSalesForPeriod(days []repository.AISalesSummary, generatedAt string,
 	}
 
 	res := AISalesPeriod{Label: label}
+	var latest time.Time
 	for _, r := range rows {
+		if r.orders > 0 && r.date.After(latest) {
+			latest = r.date
+		}
 		if !r.date.Before(start) && !r.date.After(end) {
 			res.Revenue += r.revenue
 			res.Orders += r.orders
 			res.Days++
 		}
+	}
+	if !latest.IsZero() {
+		res.LatestDate = latest.Format("2006-01-02")
 	}
 	return res
 }
@@ -738,10 +749,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetTopSellingMenus:
 		menus := result.TopSellingMenus
 		if len(menus) == 0 {
-			return fmt.Sprintf("ในช่วง%sร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ในช่วง %s ร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("เมนูที่ขายดีที่สุดในช่วง%sมีดังนี้ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("เมนูที่ขายดีที่สุดในช่วง %s มีดังนี้ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -777,10 +788,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetSalesSummary:
 		summary := result.SalesSummary
 		if summary == nil {
-			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายที่ยืนยันได้ในช่วง%sครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายที่ยืนยันได้ในช่วง %sครับ", analysisWindowLabel()), true
 		}
 		return fmt.Sprintf(
-			"ยอดขายรวมช่วง%sคือ %s บาทครับ\n\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			"ยอดขายรวมช่วง %sคือ %s บาทครับ\n\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
 			analysisWindowLabel(),
 			formatMoney(summary.Revenue),
 			summary.Orders,
@@ -828,13 +839,13 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับคำนวณยอดเฉลี่ยต่อบิลครับ", true
 		}
 		return fmt.Sprintf(
-			"ยอดขายเฉลี่ยต่อบิลช่วง%sคือ %s บาทครับ\n\n- รายได้รวม %s บาท\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
+			"ยอดขายเฉลี่ยต่อบิลช่วง %sคือ %s บาทครับ\n\n- รายได้รวม %s บาท\n- จำนวนออเดอร์รวม %d ออเดอร์\n- วันที่มีรายการขาย %d วัน",
 			analysisWindowLabel(), formatMoney(aov.AOV), formatMoney(aov.Revenue), aov.Orders, aov.Days,
 		), true
 	case AIToolGetOrderTypeBreakdown:
 		types := result.OrderTypeBreakdown
 		if len(types) == 0 {
-			return fmt.Sprintf("ยังไม่มีข้อมูลออเดอร์ในช่วง%sสำหรับแยกตามประเภทการสั่งครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ยังไม่มีข้อมูลออเดอร์ในช่วง %s สำหรับแยกตามประเภทการสั่งครับ", analysisWindowLabel()), true
 		}
 		var total float64
 		for _, t := range types {
@@ -842,7 +853,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		labels := map[string]string{"dine_in": "ทานที่ร้าน", "takeaway": "ซื้อกลับ", "take_away": "ซื้อกลับ", "delivery": "เดลิเวอรี"}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("สัดส่วนยอดขายตามประเภทการสั่งช่วง%sครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("สัดส่วนยอดขายตามประเภทการสั่งช่วง %sครับ:\n\n", analysisWindowLabel()))
 		for _, t := range types {
 			name := labels[t.OrderType]
 			if name == "" {
@@ -858,10 +869,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetMenuRevenueRanking:
 		menus := result.MenuRevenueRanking
 		if len(menus) == 0 {
-			return fmt.Sprintf("ในช่วง%sร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ในช่วง %s ร้านยังไม่มีข้อมูลบันทึกยอดขายเข้ามาครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("เมนูที่ทำรายได้สูงที่สุดในช่วง%sมีดังนี้ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("เมนูที่ทำรายได้สูงที่สุดในช่วง %s มีดังนี้ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -882,7 +893,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับดูช่วงเวลาขายดีครับ", true
 		}
 		return fmt.Sprintf(
-			"ช่วงที่ร้านขายดีที่สุดในช่วง%sครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
+			"ช่วงที่ร้านขายดีที่สุดในช่วง %sครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
 			analysisWindowLabel(),
 			thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders,
 			peak.TopHour, peak.TopHour, peak.TopHourOrders,
@@ -893,7 +904,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลเมนูสำหรับประเมินเมนูขายช้าครับ", true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("เมนูที่ขายได้น้อยที่สุดในช่วง%s (ควรพิจารณาปรับปรุงหรือถอด) ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("เมนูที่ขายได้น้อยที่สุดในช่วง %s (ควรพิจารณาปรับปรุงหรือถอด) ครับ:\n\n", analysisWindowLabel()))
 		limit := len(menus)
 		if limit > 5 {
 			limit = 5
@@ -945,10 +956,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetDeadStock:
 		items := result.DeadStock
 		if len(items) == 0 {
-			return fmt.Sprintf("ไม่พบวัตถุดิบที่มีสต๊อกค้างแต่ไม่ถูกใช้เลยในช่วง%sครับ การหมุนเวียนวัตถุดิบทำได้ดีครับ 👍", analysisWindowLabel()), true
+			return fmt.Sprintf("ไม่พบวัตถุดิบที่มีสต๊อกค้างแต่ไม่ถูกใช้เลยในช่วง %sครับ การหมุนเวียนวัตถุดิบทำได้ดีครับ 👍", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("วัตถุดิบที่มีสต๊อกค้างแต่ไม่ได้ถูกใช้เลยในช่วง%s (เงินจม/เสี่ยงหมดอายุ) ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("วัตถุดิบที่มีสต๊อกค้างแต่ไม่ได้ถูกใช้เลยในช่วง %s (เงินจม/เสี่ยงหมดอายุ) ครับ:\n\n", analysisWindowLabel()))
 		for _, it := range items {
 			sb.WriteString(fmt.Sprintf("- **%s**: คงเหลือ %.2f %s (มูลค่าประมาณ %s บาท)\n", it.Name, it.Stock, it.Unit, formatMoney(it.Value)))
 		}
@@ -956,10 +967,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetTopCostIngredients:
 		items := result.TopCostIngredients
 		if len(items) == 0 {
-			return fmt.Sprintf("ยังไม่มีข้อมูลต้นทุนการใช้วัตถุดิบในช่วง%sครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ยังไม่มีข้อมูลต้นทุนการใช้วัตถุดิบในช่วง %sครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("วัตถุดิบที่ใช้ต้นทุนสูงที่สุดในช่วง%s (ควรจับตา/ต่อรองซัพพลายเออร์) ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("วัตถุดิบที่ใช้ต้นทุนสูงที่สุดในช่วง %s (ควรจับตา/ต่อรองซัพพลายเออร์) ครับ:\n\n", analysisWindowLabel()))
 		for i, it := range items {
 			sb.WriteString(fmt.Sprintf("%d. **%s**: ต้นทุนรวม %s บาท (ใช้ไป %.2f %s)\n", i+1, it.Name, formatMoney(it.Cost), it.Used, it.Unit))
 		}
@@ -967,10 +978,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 	case AIToolGetStoreSummary:
 		s := result.StoreSummary
 		if s == nil || s.Orders == 0 {
-			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายในช่วง%sสำหรับสรุปภาพรวมครับ", analysisWindowLabel()), true
+			return fmt.Sprintf("ยังไม่มีข้อมูลยอดขายในช่วง %s สำหรับสรุปภาพรวมครับ", analysisWindowLabel()), true
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("สรุปภาพรวมร้าน (ช่วง%s) ครับ:\n\n", analysisWindowLabel()))
+		sb.WriteString(fmt.Sprintf("สรุปภาพรวมร้าน (ช่วง %s) ครับ:\n\n", analysisWindowLabel()))
 		sb.WriteString(fmt.Sprintf("- **ยอดขายรวม**: %s บาท จาก %d ออเดอร์\n", formatMoney(s.Revenue), s.Orders))
 		if s.Trend != nil && s.Trend.HasPrior {
 			dir := "เพิ่มขึ้น 📈"
@@ -1004,6 +1015,10 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลยอดขายสำหรับช่วงที่ถามครับ", true
 		}
 		if p.Orders == 0 {
+			if p.LatestDate != "" {
+				return fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ครับ — ข้อมูลล่าสุดที่บันทึกไว้คือวันที่ %s",
+					p.Label, formatThaiDate(p.LatestDate)), true
+			}
 			return fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ครับ", p.Label), true
 		}
 		return fmt.Sprintf("ยอดขาย%sคือ %s บาท จาก %d ออเดอร์ครับ", p.Label, formatMoney(p.Revenue), p.Orders), true

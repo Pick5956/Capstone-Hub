@@ -207,6 +207,12 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	if structuredFollowUp {
 		aiStage("route", "structured rank follow-up detected → skipping clarify/scope gates")
 	}
+	// "ข้อมูลมีถึงวันไหน" is answerable straight from the database, so it must not be
+	// turned away by the clarify gate.
+	if looksLikeDataCoverageQuestion(question) {
+		aiStage("route", "data-coverage question detected → skipping clarify/scope gates")
+		structuredFollowUp = true
+	}
 
 	// Step 3: Check Confidence Level and Unclear Input
 	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
@@ -352,6 +358,15 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 		return datedResp, nil
 	} else if derr != nil {
 		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
+	}
+
+	// "How far does the data reach?" — answered from the full history, not the
+	// rolling window, so it works even when today has no sales.
+	if covResp, handled, cErr := s.answerDataCoverage(restaurantID, question); handled {
+		aiStage("flow", "data-coverage query")
+		return covResp, nil
+	} else if cErr != nil {
+		aiStage("warn", "data-coverage query failed (%v) → snapshot flow", cErr)
 	}
 
 	// A menu question that names a calendar period is answered from that period's
