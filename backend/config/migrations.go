@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 5
+	CurrentSchemaVersion int64 = 6
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -119,6 +119,24 @@ func schemaMigrationPlan() []SchemaMigration {
 				// (seated / cancelled / no-show) separately from the order archive.
 				if err := ctx.DB.AutoMigrate(&entity.Reservation{}); err != nil {
 					return fmt.Errorf("migrate reservations: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 6,
+			Name:    "add_ai_conversation_state",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only persistence for compact AI conversation state and
+				// bounded turn history. Feature rollback leaves these unused tables in
+				// place instead of destructively dropping user history. A schema-v5
+				// binary is still rejected by the existing schema-ledger policy.
+				models := []any{
+					&entity.AIConversation{},
+					&entity.AIConversationTurn{},
+				}
+				if err := ctx.DB.AutoMigrate(models...); err != nil {
+					return fmt.Errorf("migrate AI conversation state: %w", err)
 				}
 				return nil
 			},
