@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"Project-M/internal/repository"
@@ -20,6 +19,9 @@ type AIService struct {
 	httpClient     *http.Client
 	groqKeyIndex   uint32
 	geminiKeyIndex uint32
+	// providerAdapters is nil in production and resolves lazily to Groq then
+	// Gemini. Tests may inject provider-neutral fakes without making live calls.
+	providerAdapters []aiProviderAdapter
 }
 
 func ProvideAIService(repo *repository.AIRepository) *AIService {
@@ -32,76 +34,30 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 }
 
 // getAIProvider returns the configured AI provider mode.
-// Valid values: "auto" | "groq" | "gemini" | "ollama" (default: "auto")
+// Valid values: "auto" | "groq" | "gemini" (default: "auto")
 func (s *AIService) getAIProvider() string {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
 	switch v {
-	case "groq", "gemini", "ollama":
+	case "groq", "gemini":
 		return v
 	}
 	return "auto"
 }
 
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
-	groqKeys := s.getGroqKeys()
-	geminiKeys := s.getGeminiKeys()
 	provider := s.getAIProvider()
-
-	if provider == "groq" || provider == "auto" {
-		if len(groqKeys) == 0 && provider == "groq" {
-			return AIRouterResult{}, errors.New("GROQ_API_KEYS is not configured")
-		}
-		numKeys := len(groqKeys)
-		for i := 0; i < numKeys; i++ {
-			idx := atomic.AddUint32(&s.groqKeyIndex, 1) - 1
-			currentKey := groqKeys[idx%uint32(numKeys)]
-
-			answer, err := s.executeClassifierGroq(question, currentKey)
-			if err == nil {
-				res, parseErr := parseRouterJSON(answer)
-				if parseErr == nil {
-					return res, nil
-				}
-				aiStage("warn", "Groq classifier returned invalid JSON (%v) → rotating", parseErr)
-			} else {
-				aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+	for _, adapter := range s.orderedProviderAdapters() {
+		if !adapter.Configured() {
+			if provider != "auto" {
+				return AIRouterResult{}, missingProviderConfigurationError(adapter.ID())
 			}
+			continue
 		}
-	}
-
-	if provider == "gemini" || provider == "auto" {
-		if len(geminiKeys) == 0 && provider == "gemini" {
-			return AIRouterResult{}, errors.New("GEMINI_API_KEYS is not configured")
-		}
-		numKeys := len(geminiKeys)
-		for i := 0; i < numKeys; i++ {
-			idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
-			currentKey := geminiKeys[idx%uint32(numKeys)]
-
-			answer, err := s.executeClassifierGemini(question, currentKey)
-			if err == nil {
-				res, parseErr := parseRouterJSON(answer)
-				if parseErr == nil {
-					return res, nil
-				}
-				aiStage("warn", "Gemini classifier returned invalid JSON (%v) → rotating", parseErr)
-			} else {
-				aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
-			}
-		}
-	}
-
-	if provider == "ollama" {
-		answer, err := s.executeClassifierOllama(question)
+		result, err := adapter.Classify(question)
 		if err == nil {
-			res, parseErr := parseRouterJSON(answer)
-			if parseErr == nil {
-				return res, nil
-			}
-			aiStage("warn", "Ollama classifier returned invalid JSON (%v)", parseErr)
-		} else {
-			aiStage("warn", "Ollama classifier failed: %v", err)
+			return result, nil
 		}
+		aiStage("warn", "%s classifier failed: %v", adapter.DisplayName(), err)
 	}
 
 	// Preserve analytical usefulness if provider classification is unavailable.
@@ -176,9 +132,6 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	// Local intent guards remain disabled: the AI Router handles classification,
 	// while backend policy validates its proposed task and tool.
 	var intent AIIntent
-
-	groqKeys := s.getGroqKeys()
-	geminiKeys := s.getGeminiKeys()
 
 	// Step 1.5: Context resolution. A follow-up fragment ("แล้วอันที่สองล่ะ",
 	// "ทำไม") is rewritten into a self-contained question using history, so the
@@ -286,64 +239,26 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
 	if !needsData {
 		aiStage("flow", "conversational — no snapshot (task=%s)", routerResult.Task)
-
-		provider := s.getAIProvider()
-
-		tryConv := func(name string, fn func() (string, string, error)) (string, string, bool) {
-			a, m, e := fn()
-			if e == nil {
-				return a, m, true
-			}
-			aiStage("warn", "conversational %s failed: %v", name, e)
-			return "", "", false
+		request := aiProviderAnswerRequest{
+			Question: question,
+			History:  history,
+			Mode:     aiProviderAnswerConversation,
 		}
-
-		var convOrder []func() (string, string, error)
-		switch provider {
-		case "groq":
-			if len(groqKeys) > 0 {
-				convOrder = append(convOrder, func() (string, string, error) {
-					return s.askGroqWithRotation(question, history, nil, true)
-				})
+		for _, adapter := range s.orderedProviderAdapters() {
+			if !adapter.Configured() {
+				continue
 			}
-		case "gemini":
-			if len(geminiKeys) > 0 {
-				convOrder = append(convOrder, func() (string, string, error) {
-					return s.askGeminiWithRotation(question, history, nil, true)
-				})
-			}
-		case "ollama":
-			convOrder = append(convOrder, func() (string, string, error) {
-				return s.askOllamaWithRotation(question, history, nil, true)
-			})
-		default: // auto: Groq → Gemini (ollama is opt-in only)
-			if len(groqKeys) > 0 {
-				convOrder = append(convOrder, func() (string, string, error) {
-					return s.askGroqWithRotation(question, history, nil, true)
-				})
-			}
-			if len(geminiKeys) > 0 {
-				convOrder = append(convOrder, func() (string, string, error) {
-					return s.askGeminiWithRotation(question, history, nil, true)
-				})
-			}
-		}
-
-		providerNames := []string{"Groq", "Gemini"}
-		for i, fn := range convOrder {
-			name := ""
-			if i < len(providerNames) {
-				name = providerNames[i]
-			}
-			if a, m, ok := tryConv(name, fn); ok {
+			answer, adapterErr := adapter.Answer(request)
+			if adapterErr == nil {
 				return &AIAskResponse{
-					Answer:   a,
+					Answer:   answer.Text,
 					Intent:   intent,
 					Task:     routerResult.Task,
-					Model:    m,
+					Model:    answer.Model,
 					Snapshot: AISnapshot{},
 				}, nil
 			}
+			aiStage("warn", "conversational %s failed: %v", adapter.DisplayName(), adapterErr)
 		}
 
 		return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
@@ -409,7 +324,6 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 	}
 
 	toolToRun := routerResult.SuggestedTool
-	provider := s.getAIProvider()
 
 	// Structured query (intent-schema): handles ranks the one-tool-per-question
 	// flow cannot express — "แพงรองลงมา", "กำไรดีอันดับสอง". Those used to fall back
@@ -451,14 +365,20 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 		}
 	}
 
-	// executeAnalytical runs one provider's analytical call and handles CALL_TOOL responses.
-	type analyticalFn func() (string, string, error)
-	executeAnalytical := func(callFn analyticalFn, providerName string) (*AIAskResponse, error) {
-		answer, model, err := callFn()
+	// executeAnalytical runs one provider adapter and handles CALL_TOOL responses.
+	executeAnalytical := func(adapter aiProviderAdapter) (*AIAskResponse, error) {
+		providerName := adapter.DisplayName()
+		providerAnswer, err := adapter.Answer(aiProviderAnswerRequest{
+			Question: question,
+			History:  history,
+			Snapshot: &snapshot,
+			Mode:     aiProviderAnswerAnalytical,
+		})
 		if err != nil {
 			aiStage("warn", "analytical %s failed: %v", providerName, err)
 			return nil, err
 		}
+		answer := providerAnswer.Text
 		if strings.HasPrefix(answer, "CALL_TOOL:") {
 			toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
 			aiStage("flow", "%s requested tool %s → local deterministic answer", providerName, toolName)
@@ -483,49 +403,16 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *A
 			Answer:   answer,
 			Intent:   intent,
 			Task:     routerResult.Task,
-			Model:    model,
+			Model:    providerAnswer.Model,
 			Snapshot: snapshot,
 		}, nil
 	}
 
-	// Build ordered list of analytical providers by config
-	type namedAnalytical struct {
-		name string
-		fn   analyticalFn
-	}
-	var analyticalOrder []namedAnalytical
-	switch provider {
-	case "groq":
-		if len(groqKeys) > 0 {
-			analyticalOrder = append(analyticalOrder, namedAnalytical{"Groq", func() (string, string, error) {
-				return s.askGroqWithRotation(question, history, &snapshot, false)
-			}})
+	for _, adapter := range s.orderedProviderAdapters() {
+		if !adapter.Configured() {
+			continue
 		}
-	case "gemini":
-		if len(geminiKeys) > 0 {
-			analyticalOrder = append(analyticalOrder, namedAnalytical{"Gemini", func() (string, string, error) {
-				return s.askGeminiWithRotation(question, history, &snapshot, false)
-			}})
-		}
-	case "ollama":
-		analyticalOrder = append(analyticalOrder, namedAnalytical{"Ollama", func() (string, string, error) {
-			return s.askOllamaWithRotation(question, history, &snapshot, false)
-		}})
-	default: // auto: Groq → Gemini (ollama is opt-in only)
-		if len(groqKeys) > 0 {
-			analyticalOrder = append(analyticalOrder, namedAnalytical{"Groq", func() (string, string, error) {
-				return s.askGroqWithRotation(question, history, &snapshot, false)
-			}})
-		}
-		if len(geminiKeys) > 0 {
-			analyticalOrder = append(analyticalOrder, namedAnalytical{"Gemini", func() (string, string, error) {
-				return s.askGeminiWithRotation(question, history, &snapshot, false)
-			}})
-		}
-	}
-
-	for _, p := range analyticalOrder {
-		if resp, err := executeAnalytical(p.fn, p.name); err == nil {
+		if resp, err := executeAnalytical(adapter); err == nil {
 			return resp, nil
 		}
 	}

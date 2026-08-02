@@ -67,67 +67,6 @@ Rules:
 User question:
 %s`
 
-const routerClassifierCompactTemplate = `You are the AI Task Router for a Thai restaurant management assistant.
-You MUST reply with a valid JSON object ONLY. Do NOT wrap it in markdown block formatting (like triple backticks json). Do NOT include any extra conversational text.
-
-Response format:
-{
-  "task": "explain_concept" | "scope_question" | "general_chat" | "restaurant_data" | "recommend_action" | "restaurant_advice" | "restaurant_content" | "product_help" | "risky_action" | "unclear" | "out_of_scope",
-  "confidence": 0.0 to 1.0,
-  "needs_restaurant_data": true | false,
-  "needs_tool": true | false,
-  "risk": "low" | "medium" | "high",
-  "suggested_tool": "get_lowest_margin_menu" | "get_highest_margin_menu" | "get_low_stock_ingredients" | "get_top_selling_menus" | "get_inventory_valuation" | "get_sales_summary" | "get_lowest_cost_menu" | "get_sales_trend" | "get_average_order_value" | "get_order_type_breakdown" | "get_menu_revenue_ranking" | "get_peak_periods" | "get_slow_moving_menus" | "get_menu_engineering" | "get_ingredient_reorder_forecast" | "get_dead_stock" | "get_top_cost_ingredients" | "get_store_summary" | "get_sales_for_period" | "get_most_expensive_menu" | ""
-}
-
-Task descriptions:
-- explain_concept: asking what Margin means or how Margin is calculated, without requesting this restaurant's numbers.
-- scope_question: user asking what you can do outside the restaurant system.
-- general_chat: small talk, greetings, thanks, jokes, or basic chitchat.
-- restaurant_data: requests for live numbers, sales, profits, top menus, low stock, inventory, margins.
-- recommend_action: asking whether this restaurant should change a price, remove a menu, buy/restock ingredients, or take another decision that needs current restaurant data.
-- restaurant_advice: general business ideas or pricing tips that do not depend on this restaurant's current data.
-- restaurant_content: generating captions, menu descriptions, promotion text.
-- product_help: instructions on how to use the restaurant management system.
-- risky_action: any command to create, edit, delete, apply a bulk/percentage price change, or place a purchase/restock order (e.g. "ลบเมนูข้าวผัด", "ปรับราคาทุกเมนูขึ้น 10%%", "delete the fried rice menu", "raise all prices by 10%%", "order 20 more boxes"). A command to DO the change is risky even when it names price; only a "ควร...ไหม" advice question is recommend_action.
-- unclear: unreadable text, keyboard mashing, meaningless words.
-- out_of_scope: completely unrelated to restaurants, food, or restaurant software.
-
-Rules:
-1. "needs_restaurant_data" MUST be true only for "restaurant_data" or "recommend_action" tasks.
-2. "needs_tool" MUST be true if the query refers to one of these tasks. You MUST match the "suggested_tool" exactly as follows:
-   - "get_lowest_margin_menu": when the query asks about poorly selling items, items with lowest margins/profits, or items to consider removing (e.g. "อะไรขายไม่ดี", "เมนูกำไรน้อยที่สุด", "เมนูที่มาร์จิ้นต่ำสุด", "lowest margin menu", "worst margin menu", "which dish has the lowest/worst margin", "poorly selling menu"). "margin"/"profit" here means profit percentage, NOT sales quantity.
-   - "get_highest_margin_menu": when the query asks about the most profitable menu, highest margin/profit items, or the best items to push or promote (e.g. "เมนูไหนกำไรดีที่สุด", "เมนูมาร์จิ้นสูงสุด", "เมนูทำกำไรเยอะสุด", "highest margin menu", "best margin menu", "which dish has the best margin", "which dish is most profitable", "highest profit per dish"). Any English "margin"/"profit" superlative about a dish routes here.
-   - "get_low_stock_ingredients": when the query asks about low stock ingredients, out of stock ingredients, raw material stock risks, or ingredient counts (e.g. "วัตถุดิบอะไรใกล้หมด", "มีวัตถุดิบอะไรหมดบ้าง", "เช็กสต็อกวัตถุดิบ", "low stock ingredients", "out of stock").
-   - "get_top_selling_menus": when the query asks about best selling menus, popular dishes, or top items (e.g. "เมนูไหนขายดี", "เมนูยอดนิยม", "5 อันดับเมนูขายดี", "top selling menus").
-   - "get_inventory_valuation": when the query asks about total inventory value or cost of current ingredients in stock (e.g. "มูลค่าคลังสินค้าทั้งหมด", "มีมูลค่าวัตถุดิบเท่าไหร่", "inventory valuation").
-   - "get_sales_summary": when the query asks about total sales revenue, order counts, or sales statistics (e.g. "สรุปยอดขาย", "รายได้รวมช่วงนี้", "ออเดอร์ทั้งหมด", "sales summary", "total sales").
-   - "get_lowest_cost_menu": when the query asks about the cheapest menu to make, the lowest cost per dish, or menus with the smallest ingredient cost (e.g. "เมนูต้นทุนต่ำสุด", "เมนูไหนต้นทุนถูกสุด", "ต้นทุนต่อจานต่ำสุด", "lowest cost menu", "cheapest to make").
-   - "get_sales_trend": when the query asks whether sales are going up or down, comparing this week to last week, or the sales trend/direction (e.g. "ยอดขายดีขึ้นไหม", "ร้านโตหรือหด", "เทียบยอดสัปดาห์นี้กับสัปดาห์ก่อน", "sales trend", "week over week").
-   - "get_average_order_value": when the query asks about the average spend per bill/order or average check size (e.g. "ลูกค้าจ่ายเฉลี่ยต่อบิลเท่าไหร่", "ยอดเฉลี่ยต่อออเดอร์", "average order value", "average check").
-   - "get_order_type_breakdown": when the query asks about the split between dine-in, takeaway, and delivery (e.g. "กินที่ร้านกับซื้อกลับสัดส่วนเท่าไหร่", "ยอดเดลิเวอรีเทียบหน้าร้าน", "dine-in vs takeaway", "order type breakdown").
-   - "get_menu_revenue_ranking": when the query asks which menus make the most revenue/money (not just quantity sold) (e.g. "เมนูไหนทำรายได้เยอะสุด", "เมนูทำเงินมากสุด", "menu by revenue", "top revenue menus").
-   - "get_peak_periods": when the query asks about the busiest day of the week or busiest time/hour of day (e.g. "วันไหนขายดีสุด", "ช่วงเวลาไหนคนเยอะ", "ร้านพีคตอนไหน", "busiest day", "peak hours").
-   - "get_slow_moving_menus": when the query asks which menus rarely sell, are not selling, or should be removed (e.g. "เมนูไหนขายไม่ออก", "เมนูไหนไม่มีคนสั่ง", "เมนูควรถอด", "slow moving menu", "menus not selling").
-   - "get_menu_engineering": when the query asks for a menu analysis by popularity and profit, or which menus are stars/dogs, or which to promote vs remove (e.g. "วิเคราะห์เมนู", "เมนูไหนดาวเด่นเมนูไหนตัวถ่วง", "เมนูไหนควรดันควรถอด", "menu engineering", "star or dog menus").
-   - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
-   - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
-   - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
-   - "get_store_summary": when the query asks for an overall summary/overview of how the store is doing, without naming one specific metric (e.g. "สรุปสถานการณ์ร้าน", "สรุปร้านวันนี้", "ภาพรวมร้านเป็นไง", "วันนี้เป็นยังไงบ้าง", "summarize the store", "overall how are we doing"). Prefer this over a free-form analysis for broad summary requests.
-   - "get_sales_for_period": when the query asks about sales for a specific time frame such as today, yesterday, this week, last week, a named month, or a month-to-month comparison (e.g. "วันนี้ขายได้เท่าไหร่", "เมื่อวานขายดีไหม", "ยอด 7 วันนี้", "ยอดขายเดือนมีนาคม", "ยอดเดือนนี้เท่าไหร่", "เทียบยอดเดือนนี้กับเดือนก่อน", "sales today", "yesterday's sales", "sales in March", "compare this month vs last month"). Any question about a total sales/revenue figure scoped to a named period is "restaurant_data" and needs this tool.
-   - "get_most_expensive_menu": when the query asks which menu has the highest PRICE / is the most expensive item on the menu (about the menu price per dish, NOT total revenue) (e.g. "เมนูไหนแพงที่สุด", "เมนูราคาสูงสุด", "เมนูที่ขายแพงสุด", "most expensive menu", "highest priced item"). Do not confuse this with revenue.
-3. If "needs_tool" is true, provide the matching tool in "suggested_tool". Otherwise set it to "".
-4. Set risk to "high" or "medium" only when the user orders the assistant to perform a change (including bulk/percentage changes such as "ปรับราคาทุกเมนูขึ้น 10%%" / "raise all prices by 10%%", which are "risky_action"). A request for advice such as "ควรขึ้นราคาเมนูนี้ไหม" is "recommend_action" with risk "low".
-5. Set "task" to "out_of_scope" for anything unrelated to restaurants.
-6. "out_of_scope" takes priority over "general_chat": greetings and thanks are chat, but requests for unrelated information or content are not chat.
-7. Weather, news, politics, sports, homework, programming help, and general poems/stories MUST be "out_of_scope", even if phrased casually.
-8. Questions such as "มาร์จิ้นคืออะไร" or "Margin คำนวณอย่างไร" MUST be "explain_concept" with no restaurant data and no tool.
-9. Questions asking for sales totals or recent revenue MUST use "restaurant_data" and the "get_sales_summary" tool.
-10. Ambiguity guard: if the user asks which menu is "best"/"good" or how the store is doing using a vague quality word but names NO measurable metric — so it could mean sales volume, revenue, price, margin, or cost (e.g. "เมนูไหนดีสุด", "เมนูไหนเด็ดสุด", "ของในร้านโอเคไหม", "which menu is best") — do NOT guess a tool. Set "confidence" to 0.4 or lower and leave "suggested_tool" empty so the assistant asks to clarify. But if the metric IS explicit (ขายดี/popular = sales, กำไร/margin, ราคา/price, ต้นทุน/cost, สต๊อก/stock), classify normally with high confidence.
-
-User question:
-%s`
-
 const conversationPersonaTemplate = `You are a concise, professional assistant inside a Thai restaurant management system.
 Reply in natural Thai using "ครับ" consistently. Answer the user's actual message directly.
 Do not introduce yourself, and do not repeat a welcome message.

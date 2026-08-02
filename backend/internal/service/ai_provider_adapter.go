@@ -1,0 +1,192 @@
+package service
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"sync/atomic"
+)
+
+// aiProviderAnswerMode describes the current response path without exposing a
+// provider's wire format to the orchestration layer.
+type aiProviderAnswerMode uint8
+
+const (
+	aiProviderAnswerConversation aiProviderAnswerMode = iota + 1
+	aiProviderAnswerAnalytical
+)
+
+type aiProviderAnswerRequest struct {
+	Question string
+	History  []AIConversationMessage
+	Snapshot *AISnapshot
+	Mode     aiProviderAnswerMode
+}
+
+type aiProviderAnswer struct {
+	Text  string
+	Model string
+}
+
+// aiProviderAdapter is the provider-neutral boundary used by AIService.
+// Groq and Gemini keep their own HTTP payloads and response parsing behind this
+// interface, while routing, fallback order, and backend policy remain shared.
+type aiProviderAdapter interface {
+	ID() string
+	DisplayName() string
+	Configured() bool
+	Classify(question string) (AIRouterResult, error)
+	Answer(request aiProviderAnswerRequest) (aiProviderAnswer, error)
+	Complete(prompt string) (aiProviderAnswer, error)
+}
+
+type groqProviderAdapter struct {
+	service *AIService
+}
+
+func (a *groqProviderAdapter) ID() string          { return "groq" }
+func (a *groqProviderAdapter) DisplayName() string { return "Groq" }
+func (a *groqProviderAdapter) Configured() bool    { return len(a.service.getGroqKeys()) > 0 }
+
+func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) {
+	keys := a.service.getGroqKeys()
+	if len(keys) == 0 {
+		return AIRouterResult{}, errors.New("GROQ_API_KEYS is not configured")
+	}
+
+	var lastErr error
+	for i := 0; i < len(keys); i++ {
+		idx := atomic.AddUint32(&a.service.groqKeyIndex, 1) - 1
+		keyPosition := idx % uint32(len(keys))
+		raw, err := a.service.executeClassifierGroq(question, keys[keyPosition])
+		if err == nil {
+			result, parseErr := parseRouterJSON(raw)
+			if parseErr == nil {
+				return result, nil
+			}
+			lastErr = parseErr
+			aiStage("warn", "Groq classifier returned invalid JSON (%v) → rotating", parseErr)
+			continue
+		}
+		lastErr = err
+		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+	}
+	return AIRouterResult{}, fmt.Errorf("Groq classifier exhausted configured keys: %w", lastErr)
+}
+
+func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProviderAnswer, error) {
+	if request.Mode == aiProviderAnswerConversation {
+		text, model, err := a.service.askGroqWithRotation(request.Question, request.History, nil, true)
+		return aiProviderAnswer{Text: text, Model: model}, err
+	}
+	if request.Mode != aiProviderAnswerAnalytical {
+		return aiProviderAnswer{}, errors.New("unsupported AI provider answer mode")
+	}
+	if request.Snapshot == nil {
+		return aiProviderAnswer{}, errors.New("analytical provider request requires a snapshot")
+	}
+	text, model, err := a.service.askGroqWithRotation(request.Question, request.History, request.Snapshot, false)
+	return aiProviderAnswer{Text: text, Model: model}, err
+}
+
+func (a *groqProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt)
+	return aiProviderAnswer{Text: text, Model: model}, err
+}
+
+type geminiProviderAdapter struct {
+	service *AIService
+}
+
+func (a *geminiProviderAdapter) ID() string          { return "gemini" }
+func (a *geminiProviderAdapter) DisplayName() string { return "Gemini" }
+func (a *geminiProviderAdapter) Configured() bool    { return len(a.service.getGeminiKeys()) > 0 }
+
+func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error) {
+	keys := a.service.getGeminiKeys()
+	if len(keys) == 0 {
+		return AIRouterResult{}, errors.New("GEMINI_API_KEYS is not configured")
+	}
+
+	var lastErr error
+	for i := 0; i < len(keys); i++ {
+		idx := atomic.AddUint32(&a.service.geminiKeyIndex, 1) - 1
+		keyPosition := idx % uint32(len(keys))
+		raw, err := a.service.executeClassifierGemini(question, keys[keyPosition])
+		if err == nil {
+			result, parseErr := parseRouterJSON(raw)
+			if parseErr == nil {
+				return result, nil
+			}
+			lastErr = parseErr
+			aiStage("warn", "Gemini classifier returned invalid JSON (%v) → rotating", parseErr)
+			continue
+		}
+		lastErr = err
+		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+	}
+	return AIRouterResult{}, fmt.Errorf("Gemini classifier exhausted configured keys: %w", lastErr)
+}
+
+func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProviderAnswer, error) {
+	if request.Mode == aiProviderAnswerConversation {
+		text, model, err := a.service.askGeminiWithRotation(request.Question, request.History, nil, true)
+		return aiProviderAnswer{Text: text, Model: model}, err
+	}
+	if request.Mode != aiProviderAnswerAnalytical {
+		return aiProviderAnswer{}, errors.New("unsupported AI provider answer mode")
+	}
+	if request.Snapshot == nil {
+		return aiProviderAnswer{}, errors.New("analytical provider request requires a snapshot")
+	}
+	text, model, err := a.service.askGeminiWithRotation(request.Question, request.History, request.Snapshot, false)
+	return aiProviderAnswer{Text: text, Model: model}, err
+}
+
+func (a *geminiProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt)
+	return aiProviderAnswer{Text: text, Model: model}, err
+}
+
+func defaultAIProviderAdapters(service *AIService) []aiProviderAdapter {
+	return []aiProviderAdapter{
+		&groqProviderAdapter{service: service},
+		&geminiProviderAdapter{service: service},
+	}
+}
+
+func (s *AIService) allProviderAdapters() []aiProviderAdapter {
+	if s.providerAdapters != nil {
+		return s.providerAdapters
+	}
+	return defaultAIProviderAdapters(s)
+}
+
+// orderedProviderAdapters applies the public AI_PROVIDER policy in one place.
+// Auto mode retains the established Groq -> Gemini fallback order.
+func (s *AIService) orderedProviderAdapters() []aiProviderAdapter {
+	adapters := s.allProviderAdapters()
+	provider := s.getAIProvider()
+	if provider == "auto" {
+		return adapters
+	}
+	for _, adapter := range adapters {
+		if adapter.ID() == provider {
+			return []aiProviderAdapter{adapter}
+		}
+	}
+	return nil
+}
+
+func (s *AIService) hasConfiguredProvider() bool {
+	for _, adapter := range s.orderedProviderAdapters() {
+		if adapter.Configured() {
+			return true
+		}
+	}
+	return false
+}
+
+func missingProviderConfigurationError(provider string) error {
+	return fmt.Errorf("%s_API_KEYS is not configured", strings.ToUpper(provider))
+}

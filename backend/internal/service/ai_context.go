@@ -56,7 +56,7 @@ func (s *AIService) resolveContextualQuestion(question string, history []AIConve
 		return question, false
 	}
 	// A rewrite needs a configured provider; without one, keep the original.
-	if len(s.getGroqKeys()) == 0 && len(s.getGeminiKeys()) == 0 && s.getAIProvider() != "ollama" {
+	if !s.hasConfiguredProvider() {
 		return question, false
 	}
 

@@ -167,8 +167,7 @@ func TestFormatDatedSalesComparison(t *testing.T) {
 // must be written as "%%" or the rendered prompt gets fmt error markers.
 func TestRouterTemplatesRenderCleanly(t *testing.T) {
 	for name, tmpl := range map[string]string{
-		"full":    routerClassifierTemplate,
-		"compact": routerClassifierCompactTemplate,
+		"full": routerClassifierTemplate,
 	} {
 		rendered := fmt.Sprintf(tmpl, "ปรับราคาทุกเมนูขึ้น 10%")
 		if strings.Contains(rendered, "%!") {

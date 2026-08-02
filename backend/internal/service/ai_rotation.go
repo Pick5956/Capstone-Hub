@@ -1,26 +1,30 @@
 package service
 
+import "errors"
+
 // askSecondRoundWithRotation renders a follow-up prompt through the configured
-// provider, falling back Groq -> Gemini in "auto" mode (ollama is opt-in only).
+// provider, falling back Groq -> Gemini in "auto" mode.
 func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, error) {
-	groqKeys := s.getGroqKeys()
-	switch s.getAIProvider() {
-	case "groq":
-		return s.askSecondRoundGroqWithRotation(prompt)
-	case "gemini":
-		return s.askSecondRoundGeminiWithRotation(prompt)
-	case "ollama":
-		return s.executeSecondRoundOllama(prompt)
-	default:
-		if len(groqKeys) > 0 {
-			answer, model, err := s.askSecondRoundGroqWithRotation(prompt)
-			if err == nil {
-				return answer, model, nil
+	var lastErr error
+	provider := s.getAIProvider()
+	for _, adapter := range s.orderedProviderAdapters() {
+		if !adapter.Configured() {
+			if provider != "auto" {
+				return "", "", missingProviderConfigurationError(adapter.ID())
 			}
-			aiStage("warn", "second-round Groq failed → trying Gemini fallback: %v", err)
+			continue
 		}
-		return s.askSecondRoundGeminiWithRotation(prompt)
+		answer, err := adapter.Complete(prompt)
+		if err == nil {
+			return answer.Text, answer.Model, nil
+		}
+		lastErr = err
+		aiStage("warn", "second-round %s failed → trying next provider: %v", adapter.DisplayName(), err)
 	}
+	if lastErr != nil {
+		return "", "", lastErr
+	}
+	return "", "", errors.New("no configured AI provider")
 }
 
 func (s *AIService) askOutOfScopeWithRotation(question string, history []AIConversationMessage) (string, string, error) {

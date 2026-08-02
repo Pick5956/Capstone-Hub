@@ -37,7 +37,7 @@ func liveAIServiceOrSkip(t *testing.T) *AIService {
 
 	_ = godotenv.Load(filepath.Join("..", "..", ".env"))
 	svc := ProvideAIService(nil)
-	if svc.getAIProvider() != "ollama" && len(svc.getGroqKeys()) == 0 && len(svc.getGeminiKeys()) == 0 {
+	if len(svc.getGroqKeys()) == 0 && len(svc.getGeminiKeys()) == 0 {
 		t.Skip("live provider evaluation enabled, but no configured provider is available")
 	}
 	return svc
@@ -167,7 +167,7 @@ func TestLiveProviderRoutingAccuracy(t *testing.T) {
 	const threshold = 90.0
 	gate := func(label string, hit, total int) {
 		if total == 0 {
-			t.Errorf("%s has no successful samples; cannot verify (check provider quota / run Ollama)", label)
+			t.Errorf("%s has no successful samples; cannot verify provider configuration or quota", label)
 			return
 		}
 		if acc := pct(hit, total); acc < threshold {

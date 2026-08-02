@@ -170,18 +170,6 @@ type groqRequest struct {
 	Tools    []groqTool    `json:"tools,omitempty"`
 }
 
-type ollamaRequest struct {
-	Model    string        `json:"model"`
-	Messages []groqMessage `json:"messages"`
-	Tools    []groqTool    `json:"tools,omitempty"`
-	Think    bool          `json:"think"`
-	Options  ollamaOptions `json:"options"`
-}
-
-type ollamaOptions struct {
-	NumCtx int `json:"num_ctx"`
-}
-
 type groqTool struct {
 	Type     string               `json:"type"`
 	Function groqFunctionShortcut `json:"function"`

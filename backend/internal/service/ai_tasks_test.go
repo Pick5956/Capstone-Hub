@@ -1,9 +1,7 @@
 package service
 
 import (
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -12,31 +10,8 @@ import (
 	"Project-M/internal/repository"
 )
 
-func newOllamaRouterTestService(t *testing.T, answers ...string) (*AIService, *int) {
-	t.Helper()
-	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if calls >= len(answers) {
-			t.Fatalf("received unexpected Ollama request %d", calls+1)
-		}
-		answer := answers[calls]
-		calls++
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]string{"content": answer}}},
-		})
-	}))
-	t.Cleanup(server.Close)
-	t.Setenv("AI_PROVIDER", "ollama")
-	t.Setenv("OLLAMA_BASE_URL", server.URL)
-	t.Setenv("OLLAMA_MODEL", "test-ollama")
-	t.Setenv("GROQ_API_KEYS", "")
-	t.Setenv("GEMINI_API_KEYS", "")
-	return &AIService{httpClient: server.Client()}, &calls
-}
-
 func TestAIRouterScopeQuestionUsesConversationFlowWithoutSnapshot(t *testing.T) {
-	svc, calls := newOllamaRouterTestService(t,
+	svc, provider := newScriptedProviderTestService(t,
 		`{"task":"scope_question","confidence":0.97,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
 		"ผมเป็นผู้ช่วย AI ของระบบจัดการร้านอาหารครับ ช่วยดูยอดขาย สต๊อก เมนู และการใช้งานระบบได้ครับ",
 	)
@@ -45,19 +20,19 @@ func TestAIRouterScopeQuestionUsesConversationFlowWithoutSnapshot(t *testing.T) 
 	if err != nil {
 		t.Fatalf("AskOperations identity question: %v", err)
 	}
-	if response.Intent != AIIntentCapability || response.Task != AITaskScopeQuestion || response.Model != "test-ollama" {
+	if response.Intent != AIIntentCapability || response.Task != AITaskScopeQuestion || response.Model != "test-provider" {
 		t.Fatalf("identity route = intent %q, task %q, model %q", response.Intent, response.Task, response.Model)
 	}
 	if response.Snapshot.GeneratedAt != "" || len(response.Snapshot.StockRisks) != 0 {
 		t.Fatalf("identity question loaded operational data unexpectedly: %+v", response.Snapshot)
 	}
-	if *calls != 2 {
-		t.Fatalf("identity question made %d Ollama requests, want router plus conversation response", *calls)
+	if provider.calls != 2 {
+		t.Fatalf("identity question made %d provider calls, want router plus conversation response", provider.calls)
 	}
 }
 
-func TestAIRouterOutOfScopeUsesConfiguredOllamaRefusal(t *testing.T) {
-	svc, calls := newOllamaRouterTestService(t,
+func TestAIRouterOutOfScopeUsesConfiguredProviderRefusal(t *testing.T) {
+	svc, provider := newScriptedProviderTestService(t,
 		`{"task":"out_of_scope","confidence":0.99,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
 		"เรื่องนี้อยู่นอกขอบเขตผู้ช่วยร้านอาหารครับ ผมช่วยดูยอดขายหรือคลังวัตถุดิบให้ได้ครับ",
 	)
@@ -66,19 +41,19 @@ func TestAIRouterOutOfScopeUsesConfiguredOllamaRefusal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AskOperations out-of-scope request: %v", err)
 	}
-	if response.Intent != AIIntentOutOfScope || response.Task != AITaskOutOfScope || response.Model != "test-ollama" {
+	if response.Intent != AIIntentOutOfScope || response.Task != AITaskOutOfScope || response.Model != "test-provider" {
 		t.Fatalf("out-of-scope route = intent %q, task %q, model %q", response.Intent, response.Task, response.Model)
 	}
 	if response.Snapshot.GeneratedAt != "" {
 		t.Fatalf("out-of-scope request loaded operational data unexpectedly: %+v", response.Snapshot)
 	}
-	if *calls != 2 {
-		t.Fatalf("out-of-scope request made %d Ollama requests, want router plus refusal response", *calls)
+	if provider.calls != 2 {
+		t.Fatalf("out-of-scope request made %d provider calls, want router plus refusal response", provider.calls)
 	}
 }
 
 func TestAIRouterMarginConceptUsesAuthoritativeDefinitionWithoutSnapshot(t *testing.T) {
-	svc, calls := newOllamaRouterTestService(t,
+	svc, provider := newScriptedProviderTestService(t,
 		`{"task":"explain_concept","confidence":0.99,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
 	)
 
@@ -92,70 +67,23 @@ func TestAIRouterMarginConceptUsesAuthoritativeDefinitionWithoutSnapshot(t *test
 	if response.Snapshot.GeneratedAt != "" || !strings.Contains(response.Answer, "%") || !strings.Contains(response.Answer, "มาร์จิ้น") {
 		t.Fatalf("margin concept answer/snapshot = %q / %+v", response.Answer, response.Snapshot)
 	}
-	if *calls != 1 {
-		t.Fatalf("margin concept made %d Ollama requests, want router only", *calls)
+	if provider.calls != 1 {
+		t.Fatalf("margin concept made %d provider calls, want router only", provider.calls)
 	}
 }
 
-func TestSecondRoundUsesConfiguredOllamaProvider(t *testing.T) {
-	svc, calls := newOllamaRouterTestService(t, `{"answer":"ผลจากข้อมูลจริงครับ","verify":{}}`)
+func TestSecondRoundUsesConfiguredProviderAdapter(t *testing.T) {
+	svc, provider := newScriptedProviderTestService(t, `{"answer":"ผลจากข้อมูลจริงครับ","verify":{}}`)
 
 	answer, model, err := svc.askSecondRoundWithRotation("second-round tool result prompt")
 	if err != nil {
-		t.Fatalf("askSecondRoundWithRotation with Ollama: %v", err)
+		t.Fatalf("askSecondRoundWithRotation with provider adapter: %v", err)
 	}
-	if model != "test-ollama" || !strings.Contains(answer, "ผลจากข้อมูลจริง") {
+	if model != "test-provider" || !strings.Contains(answer, "ผลจากข้อมูลจริง") {
 		t.Fatalf("second round answer/model = %q/%q", answer, model)
 	}
-	if *calls != 1 {
-		t.Fatalf("second round made %d requests, want one Ollama request", *calls)
-	}
-}
-
-func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
-	var requests []map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatalf("decode Ollama request: %v", err)
-		}
-		requests = append(requests, request)
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []map[string]any{{"message": map[string]string{"content": `{"task":"general_chat"}`}}},
-		})
-	}))
-	t.Cleanup(server.Close)
-	t.Setenv("OLLAMA_BASE_URL", server.URL)
-	t.Setenv("OLLAMA_MODEL", "test-ollama")
-	t.Setenv("OLLAMA_CONTEXT_LENGTH", "2048")
-
-	svc := &AIService{httpClient: server.Client()}
-	if _, err := svc.executeClassifierOllama("สวัสดี"); err != nil {
-		t.Fatalf("executeClassifierOllama: %v", err)
-	}
-	if _, _, err := svc.executeOllamaConversation("สวัสดี", nil); err != nil {
-		t.Fatalf("executeOllamaConversation: %v", err)
-	}
-	if _, _, err := svc.executeOllama("ยอดขายวันนี้", nil, AISnapshot{}); err != nil {
-		t.Fatalf("executeOllama: %v", err)
-	}
-	if _, _, err := svc.executeSecondRoundOllama("tool result prompt"); err != nil {
-		t.Fatalf("executeSecondRoundOllama: %v", err)
-	}
-
-	if len(requests) != 4 {
-		t.Fatalf("captured %d Ollama requests, want 4", len(requests))
-	}
-	for i, request := range requests {
-		think, ok := request["think"].(bool)
-		if !ok || think {
-			t.Fatalf("Ollama request %d think = %#v, want explicit false", i+1, request["think"])
-		}
-		options, ok := request["options"].(map[string]any)
-		if !ok || options["num_ctx"] != float64(2048) {
-			t.Fatalf("Ollama request %d options = %#v, want num_ctx 2048", i+1, request["options"])
-		}
+	if provider.calls != 1 {
+		t.Fatalf("second round made %d calls, want one provider call", provider.calls)
 	}
 }
 
@@ -1105,53 +1033,5 @@ func TestLiveAITaskRouterOutOfScopeIntegration(t *testing.T) {
 
 	if res.Task != AITaskOutOfScope {
 		t.Errorf("Expected live router to map %q to out_of_scope, got %q", question, res.Task)
-	}
-}
-
-func TestLiveOllamaRouterIntegration(t *testing.T) {
-	ollamaURL := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL"))
-	provider := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
-	if ollamaURL == "" || provider != "ollama" {
-		t.Skip("Skipping Ollama integration test: set AI_PROVIDER=ollama and OLLAMA_BASE_URL to run")
-	}
-
-	svc := &AIService{
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second, // Ollama on CPU can be slow
-		},
-	}
-
-	cases := []struct {
-		name     string
-		question string
-		tool     AIToolName
-	}{
-		{name: "lowest margin", question: "เมนูไหนมีกำไรน้อยสุดในร้าน", tool: AIToolGetLowestMarginMenu},
-		{name: "low stock", question: "วัตถุดิบอะไรใกล้หมดบ้าง", tool: AIToolGetLowStockIngredients},
-		{name: "top selling", question: "เมนูไหนขายดีที่สุด", tool: AIToolGetTopSellingMenus},
-		{name: "inventory value", question: "มูลค่าคลังวัตถุดิบทั้งหมดเท่าไหร่", tool: AIToolGetInventoryValuation},
-		{name: "sales summary", question: "ยอดขายรวมช่วง 14 วันล่าสุดเท่าไหร่", tool: AIToolGetSalesSummary},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res, err := svc.classifyIntent(tc.question)
-			if err != nil {
-				t.Fatalf("Ollama classifyIntent failed: %v", err)
-			}
-
-			t.Logf("Ollama Router Result: task=%s confidence=%.2f needs_data=%v tool=%s",
-				res.Task, res.Confidence, res.NeedsRestaurantData, res.SuggestedTool)
-
-			if res.Task != AITaskRetrieveFact {
-				t.Errorf("Expected Ollama to normalize %q to retrieve_fact, got %q", tc.question, res.Task)
-			}
-			if res.Confidence <= 0 || !res.NeedsRestaurantData {
-				t.Errorf("Expected valid data route for %q, got confidence=%.2f needsData=%t", tc.question, res.Confidence, res.NeedsRestaurantData)
-			}
-			if !res.NeedsTool || res.SuggestedTool != tc.tool {
-				t.Errorf("Expected Ollama to choose %q, got needsTool=%t tool=%q", tc.tool, res.NeedsTool, res.SuggestedTool)
-			}
-		})
 	}
 }

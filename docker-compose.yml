@@ -30,6 +30,11 @@ x-backend-environment: &backend-environment
   SMTP_FROM: ${SMTP_FROM:-}
   SMTP_USER: ${SMTP_USER:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  AI_PROVIDER: ${AI_PROVIDER:-auto}
+  GROQ_API_KEYS: ${GROQ_API_KEYS:-}
+  GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+  GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
 
 services:
   postgres:
