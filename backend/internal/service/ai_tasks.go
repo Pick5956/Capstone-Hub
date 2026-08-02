@@ -186,13 +186,38 @@ type AISalesTrend struct {
 	HasPrior         bool    // false when there is no prior-period data to compare against
 }
 
-func isSupportedReadOnlyTool(tool AIToolName) bool {
-	switch tool {
-	case AIToolGetLowestMarginMenu, AIToolGetHighestMarginMenu, AIToolGetLowStockIngredients, AIToolGetTopSellingMenus, AIToolGetInventoryValuation, AIToolGetSalesSummary, AIToolGetLowestCostMenu, AIToolGetSalesTrend, AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetMenuRevenueRanking, AIToolGetPeakPeriods, AIToolGetSlowMovingMenus, AIToolGetMenuEngineering, AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients, AIToolGetStoreSummary, AIToolGetSalesForPeriod, AIToolGetMostExpensiveMenu:
-		return true
-	default:
-		return false
+func supportedReadOnlyToolNames() [20]AIToolName {
+	return [20]AIToolName{
+		AIToolGetLowestMarginMenu,
+		AIToolGetHighestMarginMenu,
+		AIToolGetLowStockIngredients,
+		AIToolGetTopSellingMenus,
+		AIToolGetInventoryValuation,
+		AIToolGetSalesSummary,
+		AIToolGetLowestCostMenu,
+		AIToolGetSalesTrend,
+		AIToolGetAverageOrderValue,
+		AIToolGetOrderTypeBreakdown,
+		AIToolGetMenuRevenueRanking,
+		AIToolGetPeakPeriods,
+		AIToolGetSlowMovingMenus,
+		AIToolGetMenuEngineering,
+		AIToolGetIngredientReorderForecast,
+		AIToolGetDeadStock,
+		AIToolGetTopCostIngredients,
+		AIToolGetStoreSummary,
+		AIToolGetSalesForPeriod,
+		AIToolGetMostExpensiveMenu,
 	}
+}
+
+func isSupportedReadOnlyTool(tool AIToolName) bool {
+	for _, supported := range supportedReadOnlyToolNames() {
+		if tool == supported {
+			return true
+		}
+	}
+	return false
 }
 
 // enforceRouterPolicy treats model routing as a proposal. The backend decides
