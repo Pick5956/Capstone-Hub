@@ -9,6 +9,7 @@ const (
 	AuditActionMemberStatusChanged      = "member_status_changed"
 	AuditActionMemberRoleChanged        = "member_role_changed"
 	AuditActionMemberPermissionsChanged = "member_permissions_changed"
+	AuditActionAISetMenuAvailability    = "ai_set_menu_availability"
 )
 
 type RestaurantAuditLog struct {

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 6
+	CurrentSchemaVersion int64 = 7
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -141,7 +141,46 @@ func schemaMigrationPlan() []SchemaMigration {
 				return nil
 			},
 		},
+		{
+			Version: 7,
+			Name:    "add_ai_action_previews",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only persistence for short-lived, owner-confirmed AI
+				// actions. Disabling AI actions leaves this table unused and is the
+				// supported application rollback. Once version 7 is recorded, the
+				// schema ledger intentionally rejects an older version-6 binary.
+				if err := migrateAIActionPreviews(ctx.DB); err != nil {
+					return fmt.Errorf("migrate AI action previews: %w", err)
+				}
+				return nil
+			},
+		},
 	}
+}
+
+var aiActionPreviewForeignKeys = []string{"Restaurant", "Owner", "Conversation", "Turn", "TargetMenuItem"}
+
+func migrateAIActionPreviews(database *gorm.DB) error {
+	// AutoMigrate normally walks relationship dependencies and can migrate the
+	// referenced restaurant, user, conversation, turn, and menu tables too. Keep
+	// version 7 truly additive by creating/updating only the preview table, then
+	// add its reviewed foreign keys explicitly.
+	migrationDB := database.Session(&gorm.Session{NewDB: true})
+	configCopy := *migrationDB.Config
+	configCopy.IgnoreRelationshipsWhenMigrating = true
+	migrationDB.Config = &configCopy
+	if err := migrationDB.AutoMigrate(&entity.AIActionPreview{}); err != nil {
+		return err
+	}
+	for _, relationship := range aiActionPreviewForeignKeys {
+		if database.Migrator().HasConstraint(&entity.AIActionPreview{}, relationship) {
+			continue
+		}
+		if err := database.Migrator().CreateConstraint(&entity.AIActionPreview{}, relationship); err != nil {
+			return fmt.Errorf("create AI action preview %s constraint: %w", relationship, err)
+		}
+	}
+	return nil
 }
 
 func createOrderSearchIndexes(database *gorm.DB) error {
