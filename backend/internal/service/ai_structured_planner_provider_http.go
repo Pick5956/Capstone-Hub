@@ -25,10 +25,27 @@ const (
 	structuredPlannerMaxOutputTokens = 2048
 )
 
+// groqStrictStructuredPlannerModels lists the Groq models that accept
+// response_format=json_schema with strict:true. Models outside this list still
+// work through JSON object mode, where the schema is carried in the prompt
+// instead of enforced by the provider.
 var groqStrictStructuredPlannerModels = map[string]struct{}{
-	"openai/gpt-oss-20b":  {},
-	"openai/gpt-oss-120b": {},
+	"openai/gpt-oss-20b":                        {},
+	"openai/gpt-oss-120b":                       {},
+	"moonshotai/kimi-k2-instruct-0905":          {},
+	"meta-llama/llama-4-scout-17b-16e-instruct":  {},
+	"meta-llama/llama-4-maverick-17b-128e-instruct": {},
 }
+
+// jsonObjectPlannerInstruction is appended to the system prompt when the chosen
+// model cannot have the schema enforced by the provider. The backend still
+// normalises and validates the result, so this only has to get the model close.
+const jsonObjectPlannerInstruction = `
+You MUST reply with a single JSON object and nothing else — no markdown fences, no commentary.
+The object MUST conform exactly to this JSON Schema (every "required" field must be present,
+and no property outside "properties" is allowed):
+
+%s`
 
 // NewGroqStructuredPlannerProvider creates the hosted Groq implementation of
 // StructuredPlannerProvider. Keys are copied so callers may safely reuse or
@@ -80,25 +97,39 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner endpoint is not configured")
 	}
 
-	model := structuredPlannerModel("GROQ_PLANNER_MODEL", defaultGroqPlannerModel)
-	if _, supported := groqStrictStructuredPlannerModels[model]; !supported {
-		return StructuredPlannerProviderResponse{}, fmt.Errorf("Groq planner model %q does not support the required strict JSON schema mode", model)
-	}
-	payload, err := json.Marshal(groqStructuredPlannerRequest{
-		Model:               model,
-		MaxCompletionTokens: structuredPlannerMaxOutputTokens,
-		Messages: []groqStructuredPlannerMessage{
-			{Role: "system", Content: request.SystemPrompt},
-			{Role: "user", Content: request.UserPrompt},
-		},
-		ResponseFormat: groqStructuredPlannerResponseFormat{
+	// Prefer a planner-specific model, then the model the rest of the assistant
+	// already uses, so one GROQ_MODEL setting drives both flows.
+	model := structuredPlannerModelChain("GROQ_PLANNER_MODEL", "GROQ_MODEL", defaultGroqPlannerModel)
+
+	systemPrompt := request.SystemPrompt
+	responseFormat := groqStructuredPlannerResponseFormat{Type: "json_object"}
+	if _, strictSupported := groqStrictStructuredPlannerModels[model]; strictSupported {
+		responseFormat = groqStructuredPlannerResponseFormat{
 			Type: "json_schema",
-			JSONSchema: groqStructuredPlannerSchema{
+			JSONSchema: &groqStructuredPlannerSchema{
 				Name:   strings.TrimSpace(request.SchemaName),
 				Strict: true,
 				Schema: request.JSONSchema,
 			},
+		}
+	} else {
+		// The provider will not police the shape, so state it in the prompt and
+		// rely on the backend's Normalize/Validate to reject anything off-contract.
+		schemaJSON, marshalErr := json.Marshal(request.JSONSchema)
+		if marshalErr != nil {
+			return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner schema could not be encoded")
+		}
+		systemPrompt = strings.TrimSpace(systemPrompt) + "\n" + fmt.Sprintf(jsonObjectPlannerInstruction, schemaJSON)
+	}
+
+	payload, err := json.Marshal(groqStructuredPlannerRequest{
+		Model:               model,
+		MaxCompletionTokens: structuredPlannerMaxOutputTokens,
+		Messages: []groqStructuredPlannerMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: request.UserPrompt},
 		},
+		ResponseFormat: responseFormat,
 	})
 	if err != nil {
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner request could not be encoded")
@@ -199,8 +230,9 @@ type groqStructuredPlannerMessage struct {
 }
 
 type groqStructuredPlannerResponseFormat struct {
-	Type       string                      `json:"type"`
-	JSONSchema groqStructuredPlannerSchema `json:"json_schema"`
+	Type string `json:"type"`
+	// Omitted entirely in JSON object mode; an empty json_schema is rejected.
+	JSONSchema *groqStructuredPlannerSchema `json:"json_schema,omitempty"`
 }
 
 type groqStructuredPlannerSchema struct {
@@ -256,7 +288,7 @@ func (p *geminiStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Conte
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner endpoint is not configured")
 	}
 
-	model := structuredPlannerModel("GEMINI_PLANNER_MODEL", defaultGeminiPlannerModel)
+	model := structuredPlannerModelChain("GEMINI_PLANNER_MODEL", "GEMINI_MODEL", defaultGeminiPlannerModel)
 	payload, err := json.Marshal(geminiStructuredPlannerRequest{
 		SystemInstruction: geminiStructuredPlannerContent{
 			Parts: []geminiStructuredPlannerPart{{Text: request.SystemPrompt}},
@@ -445,6 +477,20 @@ func normalizedStructuredPlannerKeys(keys []string) []string {
 
 func structuredPlannerModel(environmentName string, fallback string) string {
 	if configured := strings.TrimSpace(os.Getenv(environmentName)); configured != "" {
+		return configured
+	}
+	return fallback
+}
+
+// structuredPlannerModelChain resolves the planner model from the most specific
+// setting to the least: a planner-only override, then the model the rest of the
+// assistant already uses, then the built-in default. This keeps one model
+// setting in .env driving both the legacy flow and the planner.
+func structuredPlannerModelChain(plannerEnvironment, sharedEnvironment, fallback string) string {
+	if configured := strings.TrimSpace(os.Getenv(plannerEnvironment)); configured != "" {
+		return configured
+	}
+	if configured := strings.TrimSpace(os.Getenv(sharedEnvironment)); configured != "" {
 		return configured
 	}
 	return fallback

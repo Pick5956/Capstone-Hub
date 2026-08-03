@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,11 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+// groqStructuredPlannerSuccessBody is a minimal well-formed Groq chat response.
+func groqStructuredPlannerSuccessBody() string {
+	return `{"choices":[{"message":{"content":"{\"answer\":\"ok\"}"}}],"usage":{"prompt_tokens":31,"completion_tokens":12}}`
+}
 
 func structuredPlannerProviderTestRequest() StructuredPlannerProviderRequest {
 	return StructuredPlannerProviderRequest{
@@ -294,21 +300,112 @@ func TestStructuredPlannerProviderErrorsDoNotExposeProviderBodyOrKey(t *testing.
 	}
 }
 
-func TestGroqStructuredPlannerRejectsModelWithoutStrictSchemaSupport(t *testing.T) {
+// A model without strict-schema support must still be usable: the request
+// degrades to JSON object mode and carries the schema in the system prompt,
+// because the backend validates the plan either way.
+func TestGroqStructuredPlannerFallsBackToJSONObjectModeForNonStrictModel(t *testing.T) {
 	t.Setenv("GROQ_PLANNER_MODEL", "llama-3.3-70b-versatile")
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(groqStructuredPlannerSuccessBody()))
+	}))
+	defer server.Close()
+
+	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"key"}, server.URL)
+	response, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest())
+	if err != nil {
+		t.Fatalf("GenerateResolvedPlan: %v", err)
+	}
+	if response.Model != "llama-3.3-70b-versatile" {
+		t.Fatalf("model = %q, want the configured model", response.Model)
+	}
+
+	var sent struct {
+		Model          string `json:"model"`
+		ResponseFormat struct {
+			Type       string          `json:"type"`
+			JSONSchema json.RawMessage `json:"json_schema"`
+		} `json:"response_format"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &sent); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+	if sent.ResponseFormat.Type != "json_object" {
+		t.Fatalf("response_format.type = %q, want json_object", sent.ResponseFormat.Type)
+	}
+	if len(sent.ResponseFormat.JSONSchema) != 0 {
+		t.Fatalf("json_schema must be omitted in JSON object mode, got %s", sent.ResponseFormat.JSONSchema)
+	}
+	if len(sent.Messages) == 0 || !strings.Contains(sent.Messages[0].Content, "JSON Schema") {
+		t.Fatal("system prompt must carry the schema when the provider cannot enforce it")
+	}
+}
+
+// The planner reuses GROQ_MODEL when no planner-specific override is set, so one
+// model setting drives both the legacy flow and the planner.
+func TestStructuredPlannerModelChainPrefersPlannerThenSharedThenDefault(t *testing.T) {
+	t.Setenv("GROQ_PLANNER_MODEL", "")
+	t.Setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+	if got := structuredPlannerModelChain("GROQ_PLANNER_MODEL", "GROQ_MODEL", defaultGroqPlannerModel); got != "llama-3.3-70b-versatile" {
+		t.Fatalf("shared model not used: %q", got)
+	}
+
+	t.Setenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-120b")
+	if got := structuredPlannerModelChain("GROQ_PLANNER_MODEL", "GROQ_MODEL", defaultGroqPlannerModel); got != "openai/gpt-oss-120b" {
+		t.Fatalf("planner override not used: %q", got)
+	}
+
+	t.Setenv("GROQ_PLANNER_MODEL", "")
+	t.Setenv("GROQ_MODEL", "")
+	if got := structuredPlannerModelChain("GROQ_PLANNER_MODEL", "GROQ_MODEL", defaultGroqPlannerModel); got != defaultGroqPlannerModel {
+		t.Fatalf("default not used: %q", got)
+	}
+}
+
+func TestGroqStructuredPlannerUsesStrictSchemaForSupportedModel(t *testing.T) {
+	t.Setenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-20b")
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(groqStructuredPlannerSuccessBody()))
+	}))
+	defer server.Close()
+
+	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"key"}, server.URL)
+	if _, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest()); err != nil {
+		t.Fatalf("GenerateResolvedPlan: %v", err)
+	}
+	var sent struct {
+		ResponseFormat struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Strict bool `json:"strict"`
+			} `json:"json_schema"`
+		} `json:"response_format"`
+	}
+	if err := json.Unmarshal(body, &sent); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+	if sent.ResponseFormat.Type != "json_schema" || !sent.ResponseFormat.JSONSchema.Strict {
+		t.Fatalf("supported model must keep strict schema mode, got %+v", sent.ResponseFormat)
+	}
+}
+
+func TestGroqStructuredPlannerUnusedRejectionHelper(t *testing.T) {
 	var calls int32
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		atomic.AddInt32(&calls, 1)
 	}))
 	defer server.Close()
-
-	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"key"}, server.URL)
-	_, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest())
-	if err == nil || !strings.Contains(err.Error(), "strict JSON schema") {
-		t.Fatalf("error = %v, want unsupported strict-schema model", err)
-	}
 	if calls != 0 {
-		t.Fatalf("provider made %d calls for an unsupported model", calls)
+		t.Fatalf("unexpected calls %d", calls)
 	}
 }
 
