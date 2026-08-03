@@ -60,6 +60,9 @@ type StructuredPlannerProviderResponse struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	HTTPAttempts int
+	KeyFallbacks int
+	RateLimits   int
 }
 
 // StructuredPlannerProvider is the boundary implemented by Groq and Gemini
@@ -86,6 +89,9 @@ type StructuredPlannerAttempt struct {
 	Duration     time.Duration
 	InputTokens  int
 	OutputTokens int
+	HTTPAttempts int
+	KeyFallbacks int
+	RateLimits   int
 	Succeeded    bool
 	FailureStage StructuredPlannerFailureStage
 	Error        string
@@ -177,6 +183,9 @@ func (p *StructuredPlanner) Plan(ctx context.Context, request StructuredPlannerR
 			Duration:     time.Since(startedAt),
 			InputTokens:  maxPlannerUsage(providerResponse.InputTokens),
 			OutputTokens: maxPlannerUsage(providerResponse.OutputTokens),
+			HTTPAttempts: maxPlannerUsage(providerResponse.HTTPAttempts),
+			KeyFallbacks: maxPlannerUsage(providerResponse.KeyFallbacks),
+			RateLimits:   maxPlannerUsage(providerResponse.RateLimits),
 		}
 
 		if callErr != nil {

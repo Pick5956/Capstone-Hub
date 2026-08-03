@@ -107,6 +107,9 @@ func TestGroqStructuredPlannerProviderRotatesKeyAfter429(t *testing.T) {
 	if response.RawJSON != `{"answer":"fallback-key"}` || response.Model != "openai/gpt-oss-120b" {
 		t.Fatalf("response = %+v", response)
 	}
+	if response.HTTPAttempts != 2 || response.KeyFallbacks != 1 || response.RateLimits != 1 {
+		t.Fatalf("rotation stats = %+v", response)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -256,6 +259,9 @@ func TestGeminiStructuredPlannerProviderRotatesKeyAfter429(t *testing.T) {
 	}
 	if response.RawJSON != `{"answer":"fallback-key"}` || response.Model != "gemini-planner-test" {
 		t.Fatalf("response = %+v", response)
+	}
+	if response.HTTPAttempts != 2 || response.KeyFallbacks != 1 || response.RateLimits != 1 {
+		t.Fatalf("rotation stats = %+v", response)
 	}
 
 	mu.Lock()

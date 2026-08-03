@@ -28,6 +28,8 @@ type fakeAIOperationsService struct {
 	request          *service.AIAskRequest
 	deleteCalls      int
 	deletedID        string
+	usageResponse    *service.AIUsageSnapshot
+	usageCalls       int
 }
 
 func (f *fakeAIOperationsService) AskOperationsForOwner(_ context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
@@ -51,6 +53,12 @@ func (f *fakeAIOperationsService) DeleteConversationForOwner(actor service.AIAct
 	return f.askErr
 }
 
+func (f *fakeAIOperationsService) AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error) {
+	f.usageCalls++
+	f.actor = actor
+	return f.usageResponse, f.askErr
+}
+
 func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, includeRestaurant bool) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -67,6 +75,7 @@ func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, incl
 	})
 	router.POST("/ai/operations/ask", ctrl.AskOperations)
 	router.GET("/ai/operations/snapshot", ctrl.OperationsSnapshot)
+	router.GET("/ai/operations/metrics", ctrl.UsageMetrics)
 	router.DELETE("/ai/operations/conversations/:conversationID", ctrl.DeleteConversation)
 	return router
 }
@@ -155,6 +164,21 @@ func TestDeleteAIConversationUsesOwnerAndRestaurantScope(t *testing.T) {
 	}
 }
 
+func TestAIUsageMetricsUsesOwnerAndRestaurantScope(t *testing.T) {
+	svc := &fakeAIOperationsService{usageResponse: &service.AIUsageSnapshot{Enabled: true, PlannerRequests: 3}}
+	router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/ai/operations/metrics", nil))
+
+	if recorder.Code != http.StatusOK || svc.usageCalls != 1 {
+		t.Fatalf("UsageMetrics status=%d calls=%d", recorder.Code, svc.usageCalls)
+	}
+	if svc.actor.RestaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" {
+		t.Fatalf("UsageMetrics actor = %+v", svc.actor)
+	}
+}
+
 func TestAskOperationsReturnsBadRequestForInvalidBodyAndServiceError(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		svc := &fakeAIOperationsService{}
@@ -201,6 +225,18 @@ func TestAskOperationsReturnsBadRequestForInvalidBodyAndServiceError(t *testing.
 
 		if recorder.Code != http.StatusInternalServerError || svc.askCalls != 1 {
 			t.Fatalf("conversation persistence status=%d askCalls=%d, want internal server error", recorder.Code, svc.askCalls)
+		}
+	})
+
+	t.Run("daily AI quota", func(t *testing.T) {
+		svc := &fakeAIOperationsService{askErr: service.ErrAIQuotaExceeded}
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+		recorder := httptest.NewRecorder()
+
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"ยอดขายวันนี้"}`)))
+
+		if recorder.Code != http.StatusTooManyRequests || svc.askCalls != 1 {
+			t.Fatalf("quota status=%d askCalls=%d, want too many requests", recorder.Code, svc.askCalls)
 		}
 	})
 }

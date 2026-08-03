@@ -60,6 +60,13 @@ func (s *AIService) prepareOwnerOrchestration(ctx context.Context, actor AIActor
 		}
 		return nil, err
 	}
+	if err := s.beginAIPlannerObservation(actor.RestaurantID); err != nil {
+		if mode == aiOrchestratorShadow {
+			aiStage("warn", "structured planner shadow skipped by quota")
+			return nil, nil
+		}
+		return nil, err
+	}
 
 	plannerContext, cancel := context.WithTimeout(ctx, structuredPlannerTotalTimeout)
 	defer cancel()
@@ -69,12 +76,14 @@ func (s *AIService) prepareOwnerOrchestration(ctx context.Context, actor AIActor
 		ReferenceTime: repository.BangkokNow(),
 	})
 	if err != nil {
+		s.recordAIPlannerError(actor.RestaurantID)
 		if mode == aiOrchestratorShadow && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			aiStage("warn", "structured planner shadow failed: %v", err)
 			return nil, nil
 		}
 		return nil, err
 	}
+	s.recordAIPlannerResult(actor.RestaurantID, result)
 
 	prepared, err := prepareAuthorizedPlannerResult(result, actor)
 	if mode == aiOrchestratorShadow {

@@ -106,25 +106,36 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 
 	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
 	var lastErr error
+	stats := StructuredPlannerProviderResponse{Model: model}
 	for offset := range p.apiKeys {
 		if err := ctx.Err(); err != nil {
 			return StructuredPlannerProviderResponse{}, err
 		}
 		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
+		stats.HTTPAttempts++
 		response, callErr := p.generateWithKey(ctx, payload, key, model)
 		if callErr == nil {
+			response.HTTPAttempts = stats.HTTPAttempts
+			response.KeyFallbacks = stats.KeyFallbacks
+			response.RateLimits = stats.RateLimits
 			return response, nil
 		}
 		if err := ctx.Err(); err != nil {
 			return StructuredPlannerProviderResponse{}, err
 		}
 		lastErr = callErr
+		if errors.Is(callErr, errRateLimit) {
+			stats.RateLimits++
+		}
 		if !structuredPlannerShouldTryNextKey(callErr) {
 			break
 		}
+		if offset+1 < len(p.apiKeys) {
+			stats.KeyFallbacks++
+		}
 	}
 
-	return StructuredPlannerProviderResponse{}, fmt.Errorf("Groq structured planner exhausted configured API keys: %w", lastErr)
+	return stats, fmt.Errorf("Groq structured planner exhausted configured API keys: %w", lastErr)
 }
 
 func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, model string) (StructuredPlannerProviderResponse, error) {
@@ -267,25 +278,36 @@ func (p *geminiStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Conte
 	endpoint := p.baseURL + "/" + url.PathEscape(model) + ":generateContent"
 	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
 	var lastErr error
+	stats := StructuredPlannerProviderResponse{Model: model}
 	for offset := range p.apiKeys {
 		if err := ctx.Err(); err != nil {
 			return StructuredPlannerProviderResponse{}, err
 		}
 		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
+		stats.HTTPAttempts++
 		response, callErr := p.generateWithKey(ctx, payload, key, endpoint, model)
 		if callErr == nil {
+			response.HTTPAttempts = stats.HTTPAttempts
+			response.KeyFallbacks = stats.KeyFallbacks
+			response.RateLimits = stats.RateLimits
 			return response, nil
 		}
 		if err := ctx.Err(); err != nil {
 			return StructuredPlannerProviderResponse{}, err
 		}
 		lastErr = callErr
+		if errors.Is(callErr, errRateLimit) {
+			stats.RateLimits++
+		}
 		if !structuredPlannerShouldTryNextKey(callErr) {
 			break
 		}
+		if offset+1 < len(p.apiKeys) {
+			stats.KeyFallbacks++
+		}
 	}
 
-	return StructuredPlannerProviderResponse{}, fmt.Errorf("Gemini structured planner exhausted configured API keys: %w", lastErr)
+	return stats, fmt.Errorf("Gemini structured planner exhausted configured API keys: %w", lastErr)
 }
 
 func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, endpoint string, model string) (StructuredPlannerProviderResponse, error) {

@@ -28,6 +28,7 @@ type AIService struct {
 	// structuredPlannerProviders are long-lived so key rotation remains fair
 	// across requests. Runtime mode and provider ordering are resolved per ask.
 	structuredPlannerProviders []StructuredPlannerProvider
+	observability              *aiObservability
 }
 
 func ProvideAIService(repo *repository.AIRepository) *AIService {
@@ -41,6 +42,7 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys()),
 		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys()),
 	}
+	service.observability = newAIObservability()
 	return service
 }
 

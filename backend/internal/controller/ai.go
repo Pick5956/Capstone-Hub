@@ -24,6 +24,7 @@ type AIOperationsService interface {
 	AskOperationsForOwner(ctx context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error)
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
+	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
 }
 
 func requireAIOwner(c *gin.Context) bool {
@@ -70,6 +71,10 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		Role:         "owner",
 	}, &req)
 	if err != nil {
+		if errors.Is(err, service.ErrAIQuotaExceeded) {
+			respondAPIError(c, http.StatusTooManyRequests, err)
+			return
+		}
 		if errors.Is(err, repository.ErrAIConversationConflict) {
 			respondAPIError(c, http.StatusConflict, err)
 			return
@@ -117,6 +122,31 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, result)
+}
+
+func (ctrl *AIController) UsageMetrics(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	result, err := ctrl.svc.AIUsageForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	})
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
 	c.JSON(http.StatusOK, result)
 }
 
