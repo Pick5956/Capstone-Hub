@@ -55,4 +55,6 @@ export interface AdjustStockInput {
   type: "in" | "out" | "adjust";
   quantity: number;
   note?: string;
+  /** What the restock cost. Stock-in only; a positive value writes an expense entry. */
+  amount?: number;
 }

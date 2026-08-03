@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -14,28 +15,39 @@ import {
   ChevronUp,
   Clock,
   Loader2,
-  PackageOpen,
   ReceiptText,
-  Table2,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { formatCurrency } from "@/src/lib/format";
 import {
+  activeOrderStatuses,
   shiftDashboardDate,
   toDashboardDate,
   toDashboardFloorTables,
+  totalExpensesByDate,
   uniqueOrdersById,
   type DashboardFloorTable,
 } from "@/src/lib/homeDashboard";
+import { listExpenses, type Expense, type ExpenseCategory } from "@/src/lib/expense";
 import { listIngredients } from "@/src/lib/ingredient";
 import { kitchenQueue, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
-import { getManagerReport, getTopMenuItemsByMonth } from "@/src/lib/report";
+import {
+  getManagerReport,
+  getSalesByHour,
+  getSalesDetail,
+  getTopMenuItemsByMonth,
+} from "@/src/lib/report";
 import { listTables } from "@/src/lib/table";
 import type { Ingredient } from "@/src/types/ingredient";
-import type { ReportSalesDay, ReportTopMenuItem } from "@/src/types/report";
+import type {
+  ReportSalesDay,
+  ReportSalesHour,
+  ReportTopMenuItem,
+  SalesDetailReport,
+} from "@/src/types/report";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
@@ -53,10 +65,12 @@ type KitchenTicket = {
 };
 type ChartPoint = { key: string; label: string; value: number };
 type ChartMode = "hour" | "day" | "month";
-type ChartMetric = "revenue" | "profit";
+type ChartMetric = "revenue" | "cost" | "profit";
 type Copy = ReturnType<typeof buildCopy>;
 
-const activeOrderStatuses = new Set<OrderStatus>(["open", "sent_to_kitchen", "cooking", "ready", "served"]);
+// Collapsed cards start left-to-right in this order; the queue in `Home`
+// reshuffles from here as cards get opened and closed.
+const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
 
 function minutesSince(value: string | null | undefined, now: Date) {
   if (!value) return 0;
@@ -78,6 +92,13 @@ function itemSummaryLabel(item: OrderItem, language: "th" | "en") {
   return `${item.quantity}× ${item.menu_name}${suffix}`;
 }
 
+// Kept out of buildCopy: every value there must stay a plain string, since the
+// order-status label looks itself up by indexing the whole copy object.
+const expenseCategoryLabels: Record<"th" | "en", Record<ExpenseCategory, string>> = {
+  th: { ingredient: "วัตถุดิบ", labor: "ค่าแรง", rent: "ค่าเช่า", utilities: "ค่าน้ำ/ไฟ", equipment: "อุปกรณ์", other: "อื่นๆ" },
+  en: { ingredient: "Supplies", labor: "Wages", rent: "Rent", utilities: "Utilities", equipment: "Equipment", other: "Other" },
+};
+
 function buildCopy(language: "th" | "en") {
   return language === "th"
     ? {
@@ -92,11 +113,8 @@ function buildCopy(language: "th" | "en") {
         updated: "อัปเดต",
         ordersTotal: "ออเดอร์ทั้งหมด",
         paidRevenue: "ยอดรับชำระ",
-        averageBill: "บิลเฉลี่ย",
-        guestsTotal: "ลูกค้ารวม",
         activeOrders: "กำลังดำเนินการ",
         liveWork: "งานที่ต้องจัดการตอนนี้",
-        liveWorkHint: "กดเพื่อไปยังหน้าที่จัดการงานนั้นได้ทันที",
         lateKitchen: "คิวครัวเกินเวลา",
         readyToServe: "ครัวทำเสร็จแล้ว",
         occupiedTables: "โต๊ะใช้งาน",
@@ -111,16 +129,34 @@ function buildCopy(language: "th" | "en") {
         noKitchen: "ไม่มีงานค้างในครัว",
         salesOverview: "สรุปยอดขาย",
         metricRevenue: "รายได้ทั้งหมด",
+        metricCost: "รายจ่าย",
+        viewExpenseLedger: "ดูบันทึกรายจ่าย",
         metricProfit: "กำไร/ขาดทุน",
         chartTitleRevenueHour: "รายได้รายชั่วโมง",
         chartTitleRevenueDay: "รายได้รายวัน",
         chartTitleRevenueMonth: "รายได้รายเดือน",
+        chartTitleCostDay: "รายจ่ายรายวัน",
+        chartTitleCostMonth: "รายจ่ายรายเดือน",
+        expenseMonthly: "รายจ่ายเดือนนี้",
+        expenseHint: "เงินที่จ่ายซื้อของจริง ไม่ใช่ต้นทุนวัตถุดิบของอาหารที่ขาย",
+        expenseCategory: "ประเภท",
+        expenseNote: "รายละเอียด",
+        chartTitleProfitHour: "กำไร/ขาดทุนรายชั่วโมง",
         chartTitleProfitDay: "กำไร/ขาดทุนรายวัน",
         chartTitleProfitMonth: "กำไร/ขาดทุนรายเดือน",
-        profitHourlyUnavailable: "ข้อมูลกำไร/ขาดทุนดูได้เฉพาะรายวันขึ้นไป",
         chartHour: "รายชั่วโมง",
         chartDay: "รายวัน",
         chartMonth: "รายเดือน",
+        drillHint: "กดที่แท่งกราฟเพื่อดูบิลที่อยู่เบื้องหลัง",
+        drillTitle: "บิลในช่วงนี้",
+        drillClose: "ปิด",
+        drillEmpty: "ไม่มีข้อมูลในช่วงนี้",
+        drillCapped: "แสดง 300 รายการแรกของช่วงนี้",
+        ingredient: "วัตถุดิบ",
+        ingredients: "รายการ",
+        cost: "ต้นทุน",
+        profit: "กำไร",
+        revenue: "รายได้",
         topItems: "เมนูขายดีประจำเดือน",
         otherItems: "อื่นๆ",
         previousMonth: "เดือนก่อน",
@@ -128,7 +164,6 @@ function buildCopy(language: "th" | "en") {
         chooseMonth: "เลือกเดือน",
         noSales: "ยังไม่มีข้อมูลยอดขายในวันนี้",
         noSalesMonth: "ยังไม่มีข้อมูลยอดขายในเดือนนี้",
-        sold: "ขาย",
         dishes: "จาน",
         dailyOrders: "รายการออเดอร์",
         viewAllOrders: "ดูออเดอร์ทั้งหมด",
@@ -165,11 +200,8 @@ function buildCopy(language: "th" | "en") {
         updated: "Updated",
         ordersTotal: "Total orders",
         paidRevenue: "Paid revenue",
-        averageBill: "Average bill",
-        guestsTotal: "Guests",
         activeOrders: "Active",
         liveWork: "Needs attention now",
-        liveWorkHint: "Open the related workspace to handle it.",
         lateKitchen: "Late kitchen queue",
         readyToServe: "Kitchen completed",
         occupiedTables: "Occupied tables",
@@ -184,16 +216,34 @@ function buildCopy(language: "th" | "en") {
         noKitchen: "No kitchen work waiting",
         salesOverview: "Daily sales",
         metricRevenue: "Total revenue",
+        metricCost: "Expenses",
+        viewExpenseLedger: "View expense ledger",
         metricProfit: "Profit / loss",
         chartTitleRevenueHour: "Revenue by hour",
         chartTitleRevenueDay: "Revenue by day",
         chartTitleRevenueMonth: "Revenue by month",
+        chartTitleCostDay: "Expenses by day",
+        chartTitleCostMonth: "Expenses by month",
+        expenseMonthly: "Expenses this month",
+        expenseHint: "Money actually paid out, not the ingredient cost of food sold",
+        expenseCategory: "Category",
+        expenseNote: "Details",
+        chartTitleProfitHour: "Profit/loss by hour",
         chartTitleProfitDay: "Profit/loss by day",
         chartTitleProfitMonth: "Profit/loss by month",
-        profitHourlyUnavailable: "Profit/loss data is only available by day or month",
         chartHour: "Hourly",
         chartDay: "Daily",
         chartMonth: "Monthly",
+        drillHint: "Click a bar to see the bills behind it",
+        drillTitle: "Bills in this window",
+        drillClose: "Close",
+        drillEmpty: "Nothing recorded in this window",
+        drillCapped: "Showing the first 300 rows in this window",
+        ingredient: "Ingredient",
+        ingredients: "items",
+        cost: "Cost",
+        profit: "Profit",
+        revenue: "Revenue",
         topItems: "Top items this month",
         otherItems: "Others",
         previousMonth: "Previous month",
@@ -201,7 +251,6 @@ function buildCopy(language: "th" | "en") {
         chooseMonth: "Choose month",
         noSales: "No sales data for this day",
         noSalesMonth: "No sales data for this month",
-        sold: "Sold",
         dishes: "items",
         dailyOrders: "Orders",
         viewAllOrders: "View all orders",
@@ -242,11 +291,15 @@ function ChartBox({
   title,
   language,
   lossColoring,
+  selectedKey,
+  onSelect,
 }: {
   data: ChartPoint[];
   title: string;
   language: "th" | "en";
   lossColoring?: boolean;
+  selectedKey?: string | null;
+  onSelect?: (point: ChartPoint) => void;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -276,9 +329,29 @@ function ChartBox({
             formatter={(value) => [formatCurrency(Number(value), language), title]}
             labelFormatter={(label) => String(label)}
           />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+          <Bar
+            dataKey="value"
+            radius={[4, 4, 0, 0]}
+            cursor={onSelect ? "pointer" : undefined}
+            onClick={(_entry, index) => {
+              const point = data[index];
+              if (point && onSelect) onSelect(point);
+            }}
+          >
             {data.map((point) => (
-              <Cell key={point.key} fill={lossColoring && point.value < 0 ? "#dc2626" : "#475569"} />
+              <Cell
+                key={point.key}
+                fill={
+                  lossColoring && point.value < 0
+                    ? "#dc2626"
+                    : selectedKey === point.key
+                    ? "#0ea5e9"
+                    : "#475569"
+                }
+                // Dim the unpicked bars so the drilled-into one reads as the
+                // source of the table below.
+                fillOpacity={selectedKey && selectedKey !== point.key ? 0.35 : 1}
+              />
             ))}
           </Bar>
         </BarChart>
@@ -287,7 +360,21 @@ function ChartBox({
   );
 }
 
-type CardSummaryItem = { key: string; label: string; value: string; helper?: string };
+type CardTone = "revenue" | "profit" | "cost";
+type CardSummaryItem = { key: string; label: string; value: string; valueClass?: string; helper?: string; tone?: CardTone; href?: string };
+
+// Money tiles are colour-coded so the three read as a set at a glance. Tints
+// only — the value keeps its normal text colour so it stays legible either way.
+const cardToneTile: Record<CardTone, string> = {
+  revenue: "bg-sky-50 dark:bg-sky-950/40",
+  profit: "bg-emerald-50 dark:bg-emerald-950/40",
+  cost: "bg-rose-50 dark:bg-rose-950/40",
+};
+const cardToneRow: Record<CardTone, string> = {
+  revenue: "bg-sky-50 dark:bg-sky-950/30",
+  profit: "bg-emerald-50 dark:bg-emerald-950/30",
+  cost: "bg-rose-50 dark:bg-rose-950/30",
+};
 
 function CollapsibleCard({
   title,
@@ -311,7 +398,8 @@ function CollapsibleCard({
   // Fades both ways now: opening fades in, closing fades out before actually
   // unmounting the section (the parent also delays opening the next card
   // until this one has fully closed, so switches read as close-then-open).
-  const [animatedVisible, setAnimatedVisible] = useState(false);
+  const [mounted, setMounted] = useState(expanded);
+  const [visible, setVisible] = useState(expanded);
 
   useEffect(() => {
     if (expanded) {
@@ -373,20 +461,6 @@ function CollapsibleCard({
     const node = collapsedRef.current;
     if (mounted || !node) {
       prevCollapsedRectRef.current = null;
-      if (animateOpen) {
-        // Two rAFs: the first lets the browser paint the just-mounted "invisible"
-        // state; only then do we flip to visible, so the transition has a real
-        // starting point to animate from (a single rAF can land in the same
-        // paint as the mount and skip the animation entirely).
-        let innerRaf = 0;
-        const outerRaf = requestAnimationFrame(() => {
-          innerRaf = requestAnimationFrame(() => setAnimatedVisible(true));
-        });
-        return () => {
-          cancelAnimationFrame(outerRaf);
-          cancelAnimationFrame(innerRaf);
-        };
-      }
       return;
     }
     const newRect = node.getBoundingClientRect();
@@ -415,13 +489,8 @@ function CollapsibleCard({
     }
     prevCollapsedRectRef.current = newRect;
   });
-    const resetRaf = requestAnimationFrame(() => setAnimatedVisible(false));
-    return () => cancelAnimationFrame(resetRaf);
-  }, [expanded, animateOpen]);
 
-  const visible = expanded && (!animateOpen || animatedVisible);
-
-  if (!expanded) {
+  if (!mounted) {
     // A sibling card is expanded and this one isn't — shrink way down, but
     // keep showing the summary numbers (just in a much more compact row).
     if (dimmed) {
@@ -465,9 +534,9 @@ function CollapsibleCard({
         {summary?.length ? (
           <div className="grid flex-1 grid-cols-2 gap-3">
             {summary.map((item) => (
-              <div key={item.key} className="flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md bg-gray-50 p-2 text-center dark:bg-gray-900">
+              <div key={item.key} className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md p-2 text-center ${item.tone ? cardToneTile[item.tone] : "bg-gray-50 dark:bg-gray-900"}`}>
                 <p className="truncate text-[14px] font-medium leading-tight text-gray-500 dark:text-gray-400">{item.label}</p>
-                <p className="truncate font-mono text-[24px] font-bold leading-tight tabular-nums text-gray-950 dark:text-white">{item.value}</p>
+                <p className={`truncate font-mono text-[24px] font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
               </div>
             ))}
           </div>
@@ -480,9 +549,11 @@ function CollapsibleCard({
     <section
       onClick={(event) => {
         // Clicking anywhere in the card that isn't an actual control (button,
-        // link, form field, ...) collapses it back to a tile.
+        // link, form field, ...) collapses it back to a tile. `.recharts-wrapper`
+        // counts as a control too: its bars are plain SVG paths, so without it a
+        // click that drills into a bar would collapse the whole card underneath.
         const target = event.target as HTMLElement;
-        if (target.closest("button, a, input, select, textarea, [role='button']")) return;
+        if (target.closest("button, a, input, select, textarea, [role='button'], .recharts-wrapper")) return;
         onToggle();
       }}
       style={{ order: orderRank }}
@@ -503,13 +574,23 @@ function CollapsibleCard({
       </button>
       {summary?.length ? (
         <div className="grid grid-cols-2 gap-px border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4">
-          {summary.map((item) => (
-            <div key={item.key} className="bg-white px-4 py-3.5 dark:bg-gray-950">
-              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{item.label}</p>
-              <p className="mt-1 font-mono text-[20px] font-semibold tabular-nums text-gray-950 dark:text-white">{item.value}</p>
-              {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
-            </div>
-          ))}
+          {summary.map((item) => {
+            // A tile with an `href` drills into its own page; the section's
+            // click-to-collapse handler already skips anchors.
+            const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white dark:bg-gray-950"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
+            const content = (
+              <>
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{item.label}</p>
+                <p className={`mt-1 font-mono text-[20px] font-semibold tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
+              </>
+            );
+            return item.href ? (
+              <Link key={item.key} href={item.href} className={className}>{content}</Link>
+            ) : (
+              <div key={item.key} className={className}>{content}</div>
+            );
+          })}
         </div>
       ) : null}
       {children}
@@ -548,6 +629,12 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loadedDate, setLoadedDate] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  // Bumped by background refreshes (realtime order events, the 60s poll) so the
+  // server-side report views reload with them. Without it they would only
+  // refetch when the mode or date changed, and a bill paid while the page sat
+  // open would never reach the chart. Only background refreshes bump it — the
+  // first load already fetches them once on its own.
+  const [refreshTick, setRefreshTick] = useState(0);
   // Only one card open at a time. Switching to a different card closes the
   // current one first and only opens the new one once that close has
   // actually finished fading out, instead of opening on top of it.
@@ -563,7 +650,6 @@ export default function Home() {
   // recently interacted with (opened OR just closed) gets bumped to the end,
   // so the other, untouched cards keep their same relative order and just
   // slide over to make room, instead of the whole group reshuffling.
-  const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
   const [cardOrderQueue, setCardOrderQueue] = useState<string[]>(defaultCardOrder);
   const bumpCardToEnd = (key: string) => {
     setCardOrderQueue((queue) => (queue[queue.length - 1] === key ? queue : [...queue.filter((k) => k !== key), key]));
@@ -575,7 +661,6 @@ export default function Home() {
     if (expandedKey === null && !switchingCard && closingKey === null) {
       setCardOrderQueue((queue) => (queue.join() === defaultCardOrder.join() ? queue : defaultCardOrder));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedKey, switchingCard, closingKey]);
   const pendingSwitchRef = useRef<number | null>(null);
   useEffect(() => {
@@ -628,9 +713,35 @@ export default function Home() {
   };
   const [chartMode, setChartMode] = useState<ChartMode>("hour");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
+  // Expenses have no hour to plot; land on the day view instead of a blank one.
+  const selectChartMetric = (metric: ChartMetric) => {
+    setChartMetric(metric);
+    if (metric === "cost" && chartMode === "hour") setChartMode("day");
+  };
   const [salesDays, setSalesDays] = useState<ReportSalesDay[]>([]);
   const [salesDaysLoading, setSalesDaysLoading] = useState(false);
   const salesDaysLoadedRef = useRef(false);
+  const [salesHours, setSalesHours] = useState<ReportSalesHour[]>([]);
+  const [salesHoursLoading, setSalesHoursLoading] = useState(false);
+  // A failed request must not render as "no sales today" — that reads as a real
+  // zero and hides an outage (a stale backend missing the route 404s here).
+  const [salesHoursFailed, setSalesHoursFailed] = useState(false);
+  const [detailFailed, setDetailFailed] = useState(false);
+  // Cash that actually left the till, keyed by Bangkok calendar day. This is the
+  // expense ledger (a supplier payment, rent, a new fridge) — deliberately not
+  // the recipe cost of food sold, which is what ReportSalesDay.cost carries.
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  // Revenue and profit share the bills table; only cost gets the ledger one.
+  const detailKind: "sales" | "cost" = chartMetric === "cost" ? "cost" : "sales";
+  // Which bar the user drilled into, and the bills behind it. One table covers
+  // every metric — it carries revenue, cost and profit columns together.
+  const [detailBar, setDetailBar] = useState<ChartPoint | null>(null);
+  // Tagged with the bar AND the kind it belongs to, so neither a different bar
+  // nor a switch between the bills and ingredients tables can render stale rows
+  // under the new heading while the next request is in flight.
+  const [detail, setDetail] = useState<{ key: string; kind: "sales"; data: SalesDetailReport } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [topItemsMonthDate, setTopItemsMonthDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [topItemsData, setTopItemsData] = useState<ReportTopMenuItem[]>([]);
   const [topItemsLoading, setTopItemsLoading] = useState(false);
@@ -699,10 +810,88 @@ export default function Home() {
       .finally(() => setSalesDaysLoading(false));
   }, [chartMode, activeMembership?.restaurant_id]);
 
-  const setChartMetricAndMode = (metric: ChartMetric) => {
-    setChartMetric(metric);
-    if (metric === "profit" && chartMode === "hour") setChartMode("day");
-  };
+  // Unlike the 90-day manager report, the hourly breakdown is per-date, so it
+  // refetches whenever the selected day changes rather than loading once. It is
+  // fetched regardless of the chart mode because the summary tiles read the
+  // day's cost off it, and those show even while the card is collapsed.
+  useEffect(() => {
+    if (!activeMembership?.restaurant_id) return;
+    let cancelled = false;
+    setSalesHoursLoading(true);
+    getSalesByHour(selectedDate)
+      .then((res) => {
+        if (cancelled) return;
+        setSalesHours(res.data.hours ?? []);
+        setSalesHoursFailed(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSalesHours([]);
+        setSalesHoursFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setSalesHoursLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, activeMembership?.restaurant_id, refreshTick]);
+
+  // The ledger for the calendar month around the selected date, with a week of
+  // slack either side so the Mon–Sun week view can straddle a month boundary.
+  // One fetch feeds the expense tile, the cost bars and their drill-down.
+  const expenseMonth = selectedDate.slice(0, 7);
+  useEffect(() => {
+    if (!activeMembership?.restaurant_id) return;
+    let cancelled = false;
+    const anchor = new Date(`${expenseMonth}-01T12:00:00`);
+    const from = new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
+    const until = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
+    setExpensesLoading(true);
+    listExpenses({ from: toDashboardDate(from), until: toDashboardDate(until) })
+      .then((res) => {
+        if (!cancelled) setExpenses(res.data.expenses ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setExpenses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setExpensesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expenseMonth, activeMembership?.restaurant_id, refreshTick]);
+
+  // A bar's key is an hour number in hour view and a YYYY-MM-DD date in the day
+  // and month views (both of those plot days), so that alone picks the window.
+  useEffect(() => {
+    // A cost bar drills into the ledger rows already in `expenses` — no request.
+    if (!detailBar || detailKind !== "sales" || !activeMembership?.restaurant_id) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    const [date, hour] =
+      chartMode === "hour" ? [selectedDate, Number(detailBar.key)] : [detailBar.key, undefined];
+    getSalesDetail(date, hour)
+      .then((res) => ({ key: detailBar.key, kind: "sales" as const, data: res.data }))
+      .then((next) => {
+        if (cancelled) return;
+        setDetail(next);
+        setDetailFailed(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDetail(null);
+        setDetailFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailBar, detailKind, chartMode, selectedDate, activeMembership?.restaurant_id, refreshTick]);
+
 
   const loadOperations = useCallback(async (background = false) => {
     if (!activeMembership?.restaurant_id) return;
@@ -738,6 +927,7 @@ export default function Home() {
       }
       setLoadedDate(selectedDate);
       setLastUpdated(new Date());
+      if (background) setRefreshTick((tick) => tick + 1);
     } catch {
       if (requestId === requestIdRef.current) setError(copy.loadError);
     } finally {
@@ -794,8 +984,19 @@ export default function Home() {
   const validOrders = orders.filter((order) => order.status !== "cancelled");
   const paidOrders = validOrders.filter((order) => order.payment_status === "paid" || order.status === "completed");
   const paidRevenue = paidOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0);
-  const averageBill = paidOrders.length ? Math.round(paidRevenue / paidOrders.length) : 0;
-  const guestCount = validOrders.reduce((sum, order) => sum + (order.order_type === "dine_in" ? order.customer_count : 0), 0);
+  // Ledger totals per Bangkok calendar day. spent_at is a date-only value in
+  // Bangkok time, so its first ten characters are the key the chart plots.
+  const expenseByDate = useMemo(() => totalExpensesByDate(expenses), [expenses]);
+  // What the day's spending tile shows: money paid out, not the recipe cost of
+  // the food sold. Profit stays gross (revenue − COGS) — the two never mix.
+  // Whole calendar month, not the selected day: a rent transfer or a pork
+  // delivery lands on one date, so a per-day figure reads as zero most days.
+  // The fetch window carries a week of slack either side — filter it back out.
+  const monthExpense = expenses.reduce(
+    (sum, item) => (item.spent_at.startsWith(expenseMonth) ? sum + item.amount : sum),
+    0,
+  );
+  const dayProfit = salesHours.reduce((sum, hour) => sum + hour.profit, 0);
   const activeOrders = validOrders.filter((order) => activeOrderStatuses.has(order.status)).length;
 
   const sortedItems = topItemsData
@@ -821,24 +1022,19 @@ export default function Home() {
   const operatingHourCount = Math.min(24, Math.max(1, closeHourRaw - openHour));
   const operatingHours = Array.from({ length: operatingHourCount }, (_, index) => (openHour + index) % 24);
 
-  const hourlyPoints: ChartPoint[] = operatingHours.map((hourNumber) => {
-    const hourOrders = validOrders.filter((order) => new Date(order.opened_at).getHours() === hourNumber);
-    return {
-      key: String(hourNumber),
-      label: String(hourNumber).padStart(2, "0"),
-      value: hourOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0),
-    };
-  });
+  const salesByHour = new Map(salesHours.map((entry) => [entry.hour, entry]));
+  const hourlyPoints: ChartPoint[] = operatingHours.map((hourNumber) => ({
+    key: String(hourNumber),
+    label: String(hourNumber).padStart(2, "0"),
+    value: salesByHour.get(hourNumber)?.[chartMetric] ?? 0,
+  }));
 
   const salesByDate = new Map(salesDays.map((day) => [day.order_date, day]));
-  const dateKey = (date: Date) => {
-    const pad = (part: number) => String(part).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  };
   const valueForDate = (date: Date) => {
-    const day = salesByDate.get(dateKey(date));
-    if (!day) return 0;
-    return chartMetric === "profit" ? day.profit : day.revenue;
+    const key = toDashboardDate(date);
+    if (chartMetric === "cost") return expenseByDate.get(key) ?? 0;
+    const day = salesByDate.get(key);
+    return day ? day[chartMetric] : 0;
   };
 
   // Day view: the Monday-Sunday week containing the selected date.
@@ -850,7 +1046,7 @@ export default function Home() {
   const dailyPoints: ChartPoint[] = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
-    return { key: dateKey(date), label: weekdayLabels[index], value: valueForDate(date) };
+    return { key: toDashboardDate(date), label: weekdayLabels[index], value: valueForDate(date) };
   });
 
   // Month view: every day of the calendar month containing the selected date.
@@ -858,33 +1054,75 @@ export default function Home() {
   const monthlyPoints: ChartPoint[] = Array.from({ length: daysInMonth }, (_, index) => {
     const dayNumber = index + 1;
     const date = new Date(selectedDateAtNoon.getFullYear(), selectedDateAtNoon.getMonth(), dayNumber, 12);
-    return { key: dateKey(date), label: String(dayNumber), value: valueForDate(date) };
+    return { key: toDashboardDate(date), label: String(dayNumber), value: valueForDate(date) };
   });
 
-  const chartModeOptions: { key: ChartMode; label: string }[] = (
-    chartMetric === "profit"
-      ? [
-          { key: "day" as const, label: copy.chartDay },
-          { key: "month" as const, label: copy.chartMonth },
-        ]
-      : [
-          { key: "hour" as const, label: copy.chartHour },
-          { key: "day" as const, label: copy.chartDay },
-          { key: "month" as const, label: copy.chartMonth },
-        ]
-  );
-  const chartTitles: Record<ChartMetric, Partial<Record<ChartMode, string>>> = {
+  const metricOptions: { key: ChartMetric; label: string }[] = [
+    { key: "revenue", label: copy.metricRevenue },
+    { key: "cost", label: copy.metricCost },
+    { key: "profit", label: copy.metricProfit },
+  ];
+  // The ledger records the day money was spent, never the hour, so hourly
+  // expense bars would be a row of zeros. Day and month only for that metric.
+  const chartModeOptions: { key: ChartMode; label: string }[] = [
+    ...(chartMetric === "cost" ? [] : [{ key: "hour" as const, label: copy.chartHour }]),
+    { key: "day", label: copy.chartDay },
+    { key: "month", label: copy.chartMonth },
+  ];
+  const chartTitles: Record<ChartMetric, Record<ChartMode, string>> = {
     revenue: { hour: copy.chartTitleRevenueHour, day: copy.chartTitleRevenueDay, month: copy.chartTitleRevenueMonth },
-    profit: { day: copy.chartTitleProfitDay, month: copy.chartTitleProfitMonth },
+    cost: { hour: copy.chartTitleCostDay, day: copy.chartTitleCostDay, month: copy.chartTitleCostMonth },
+    profit: { hour: copy.chartTitleProfitHour, day: copy.chartTitleProfitDay, month: copy.chartTitleProfitMonth },
   };
-  const activeChartTitle = chartTitles[chartMetric][chartMode] ?? chartTitles[chartMetric].day ?? "";
+  const activeChartTitle = chartTitles[chartMetric][chartMode];
   const activeChartData = chartMode === "hour" ? hourlyPoints : chartMode === "day" ? dailyPoints : monthlyPoints;
-  const activeChartLoading = chartMode !== "hour" && salesDaysLoading;
-  const activeChartHasData = chartMode === "hour" ? validOrders.length > 0 : activeChartData.some((point) => salesByDate.has(point.key));
+  // Only block on the very first load. A background refresh keeps the current
+  // bars on screen instead of blinking the chart to a spinner every minute —
+  // the header already shows that a refresh is in flight.
+  const activeChartLoading =
+    chartMetric === "cost"
+      ? expensesLoading && expenses.length === 0
+      : chartMode === "hour"
+        ? salesHoursLoading && salesHours.length === 0
+        : salesDaysLoading;
+  const activeChartHasData =
+    chartMetric === "cost"
+      ? activeChartData.some((point) => point.value > 0)
+      : chartMode === "hour"
+        ? salesHours.length > 0
+        : activeChartData.some((point) => salesByDate.has(point.key));
+  // Switching view drops the drilled-into bar by itself: an hour key stops
+  // existing once the chart plots dates. Switching metric keeps it, which is
+  // right — the table already carries revenue, cost and profit columns.
+  const activeDetailBar = detailBar && activeChartData.some((point) => point.key === detailBar.key) ? detailBar : null;
+  const matchedDetail = activeDetailBar && detail?.key === activeDetailBar.key ? detail : null;
+  const shownSales = detailKind === "sales" ? (matchedDetail?.data ?? null) : null;
+  // The ledger rows behind a cost bar are already loaded, so they are filtered
+  // out of the same list the bar was summed from and can never disagree with it.
+  const shownExpenses =
+    detailKind === "cost" && activeDetailBar
+      ? expenses.filter((item) => item.spent_at.slice(0, 10) === activeDetailBar.key)
+      : [];
+  const shownExpensesTotal = shownExpenses.reduce((sum, item) => sum + item.amount, 0);
 
-  const lowStock = ingredients
-    .filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5)
-    .sort((first, second) => (first.stock / first.min_stock) - (second.stock / second.min_stock));
+  // The bar's own label is an axis tick ("จ", "3", "13") and never states which
+  // day it is. Spell the window out instead, from the same key the request used.
+  const detailWindowLabel = (() => {
+    if (!activeDetailBar) return "";
+    const dateKey = chartMode === "hour" ? selectedDate : activeDetailBar.key;
+    const dayLabel = new Date(`${dateKey}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+    if (chartMode !== "hour") return dayLabel;
+    const startHour = Number(activeDetailBar.key);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${dayLabel} · ${pad(startHour)}:00–${pad((startHour + 1) % 24)}:00`;
+  })();
+
+  const lowStockCount = ingredients.filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5).length;
 
   const selectedDateLabel = selectedDateAtNoon.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
     weekday: "long",
@@ -899,25 +1137,32 @@ export default function Home() {
     { key: "ready" as const, icon: CheckCircle2, title: copy.ready, items: ready, color: "text-emerald-600 dark:text-emerald-300" },
   ];
 
-  const attention = [
-    { key: "late", icon: AlertTriangle, label: copy.lateKitchen, value: delayed.length, href: "/kitchen", tone: "text-red-600 dark:text-red-300" },
-    { key: "ready", icon: CheckCircle2, label: copy.readyToServe, value: ready.length, href: "/kitchen", tone: "text-emerald-600 dark:text-emerald-300" },
-    { key: "tables", icon: Table2, label: copy.occupiedTables, value: occupied.length, href: "/pos/tables", tone: "text-amber-600 dark:text-amber-300" },
-    { key: "stock", icon: PackageOpen, label: copy.lowStock, value: lowStock.length, href: "/inventory", tone: lowStock.length ? "text-amber-600 dark:text-amber-300" : "text-gray-400" },
-  ];
-
   const summary = [
     { key: "orders", label: copy.ordersTotal, value: validOrders.length.toLocaleString(), helper: `${copy.activeOrders} ${activeOrders}` },
-    { key: "revenue", label: copy.paidRevenue, value: formatCurrency(paidRevenue, language), helper: `${paidOrders.length} ${copy.order}` },
-    { key: "average", label: copy.averageBill, value: formatCurrency(averageBill, language), helper: paidOrders.length ? undefined : copy.noSales },
-    { key: "guests", label: copy.guestsTotal, value: guestCount.toLocaleString(), helper: copy.people },
+    { key: "revenue", label: copy.paidRevenue, value: formatCurrency(paidRevenue, language), helper: `${paidOrders.length} ${copy.order}`, tone: "revenue" as const },
+    // A loss on a green tile would read as good news, so it borrows the cost
+    // tone, and the signed figure is coloured to match.
+    {
+      key: "profit",
+      label: copy.metricProfit,
+      value: formatCurrency(dayProfit, language, 0, "exceptZero"),
+      valueClass:
+        dayProfit < 0
+          ? "text-red-600 dark:text-red-400"
+          : dayProfit > 0
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-gray-950 dark:text-white",
+      tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
+    },
+    { key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), helper: copy.expenseHint, tone: "cost" as const, href: "/expenses" },
   ];
 
-  const liveWorkSummary: CardSummaryItem[] = attention.map((item) => ({
-    key: item.key,
-    label: item.label,
-    value: item.value.toLocaleString(),
-  }));
+  const liveWorkSummary: CardSummaryItem[] = [
+    { key: "late", label: copy.lateKitchen, value: delayed.length.toLocaleString() },
+    { key: "ready", label: copy.readyToServe, value: ready.length.toLocaleString() },
+    { key: "tables", label: copy.occupiedTables, value: occupied.length.toLocaleString() },
+    { key: "stock", label: copy.lowStock, value: lowStockCount.toLocaleString() },
+  ];
 
   const availableTables = tables.filter((table) => table.status === "available").length;
   const reservedTables = tables.filter((table) => table.status === "reserved").length;
@@ -994,18 +1239,18 @@ export default function Home() {
                 <div className="min-w-0 border-b border-gray-200 p-4 dark:border-gray-800 lg:border-b-0 lg:border-r">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-                      {(["revenue", "profit"] as const).map((metric) => (
+                      {metricOptions.map(({ key: metric, label }) => (
                         <button
                           key={metric}
                           type="button"
-                          onClick={() => setChartMetricAndMode(metric)}
+                          onClick={() => selectChartMetric(metric)}
                           className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
                             chartMetric === metric
                               ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                               : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
                           }`}
                         >
-                          {metric === "revenue" ? copy.metricRevenue : copy.metricProfit}
+                          {label}
                         </button>
                       ))}
                     </div>
@@ -1026,20 +1271,136 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-                  <h3 className="mt-2 text-[12px] font-medium text-gray-600 dark:text-gray-300">{activeChartTitle}</h3>
-                  {chartMetric === "profit" ? (
-                    <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{copy.profitHourlyUnavailable}</p>
-                  ) : null}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{activeChartTitle}</h3>
+                    {chartMetric === "cost" ? (
+                      <button
+                        type="button"
+                        onClick={() => router.push("/expenses")}
+                        className="ui-press inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+                      >
+                        {copy.viewExpenseLedger}
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    ) : null}
+                  </div>
                   {activeChartLoading ? (
                     <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       {copy.loading}
                     </div>
                   ) : activeChartHasData ? (
-                    <ChartBox data={activeChartData} title={activeChartTitle} language={language} lossColoring={chartMetric === "profit"} />
+                    <ChartBox
+                      data={activeChartData}
+                      title={activeChartTitle}
+                      language={language}
+                      lossColoring={chartMetric === "profit"}
+                      selectedKey={activeDetailBar?.key ?? null}
+                      onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
+                    />
                   ) : (
-                    <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">{copy.noSales}</div>
+                    <div className={`flex h-56 items-center justify-center px-3 text-center text-[12px] ${chartMode === "hour" && salesHoursFailed ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                      {chartMode === "hour" && salesHoursFailed ? copy.loadError : copy.noSales}
+                    </div>
                   )}
+
+                  {activeDetailBar ? (
+                    <div className="mt-3 rounded-md border border-gray-200 dark:border-gray-800">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                        <div className="min-w-0">
+                          <h4 className="text-[12px] font-semibold text-gray-950 dark:text-white">
+                            {detailKind === "cost" ? copy.metricCost : copy.drillTitle} · {detailWindowLabel}
+                          </h4>
+                          {shownSales ? (
+                            <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                              {copy.revenue} {formatCurrency(shownSales.summary.revenue, language)} · {copy.cost}{" "}
+                              {formatCurrency(shownSales.summary.cost, language)} · {copy.profit}{" "}
+                              {formatCurrency(shownSales.summary.profit, language)}
+                            </p>
+                          ) : detailKind === "cost" ? (
+                            <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                              {copy.metricCost} {formatCurrency(shownExpensesTotal, language)} · {shownExpenses.length}{" "}
+                              {copy.ingredients}
+                            </p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDetailBar(null)}
+                          className="ui-press shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                        >
+                          {copy.drillClose}
+                        </button>
+                      </div>
+
+                      {detailLoading && !matchedDetail ? (
+                        <div className="flex items-center justify-center px-3 py-8 text-[12px] text-gray-400">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {copy.loading}
+                        </div>
+                      ) : shownExpenses.length ? (
+                        <div className="max-h-64 overflow-y-auto">
+                          <div className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                            <span>{copy.expenseCategory}</span>
+                            <span>{copy.expenseNote}</span>
+                            <span className="text-right">{copy.metricCost}</span>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {shownExpenses.map((item) => (
+                              <div key={item.ID} className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] items-center gap-2 px-3 py-2">
+                                <span className="truncate text-[11px] text-gray-700 dark:text-gray-200">{expenseCategoryLabels[language][item.category] ?? item.category}</span>
+                                <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{item.note || "-"}</span>
+                                <span className="text-right font-mono text-[11px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(item.amount, language)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : shownSales?.orders.length ? (
+                        <div className="max-h-64 overflow-y-auto">
+                          <div className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                            <span>{copy.order}</span>
+                            <span>{copy.location}</span>
+                            <span className="text-right">{copy.time}</span>
+                            <span className="text-right">{copy.revenue}</span>
+                            <span className="text-right">{copy.cost}</span>
+                            <span className="text-right">{copy.profit}</span>
+                          </div>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {shownSales.orders.map((row) => (
+                              <button
+                                key={row.order_id}
+                                type="button"
+                                onClick={() => router.push(orderPosHref({ ID: row.order_id, order_number: row.order_number }))}
+                                className="ui-press grid w-full grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
+                              >
+                                <span className="font-mono text-[11px] font-semibold text-gray-950 dark:text-white">#{row.order_number}</span>
+                                <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
+                                  {row.table_label || row.customer_name || (row.order_type === "takeaway" ? (language === "th" ? "กลับบ้าน" : "Takeaway") : "-")}
+                                </span>
+                                <span className="text-right font-mono text-[10px] text-gray-400">
+                                  {new Date(row.completed_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                                <span className="text-right font-mono text-[11px] tabular-nums text-gray-700 dark:text-gray-200">{formatCurrency(row.revenue, language)}</span>
+                                <span className="text-right font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{formatCurrency(row.cost, language)}</span>
+                                <span className={`text-right font-mono text-[11px] font-semibold tabular-nums ${row.profit < 0 ? "text-red-600 dark:text-red-400" : "text-gray-950 dark:text-white"}`}>
+                                  {formatCurrency(row.profit, language)}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          {shownSales.orders.length >= 300 ? (
+                            <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                          {detailFailed && detailKind === "sales" ? copy.loadError : copy.drillEmpty}
+                        </p>
+                      )}
+                    </div>
+                  ) : activeChartHasData ? (
+                    <p className="mt-2 text-center text-[10px] text-gray-400 dark:text-gray-500">{copy.drillHint}</p>
+                  ) : null}
                 </div>
                 <div className="p-4">
                   <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{copy.topItems}</h3>

@@ -128,6 +128,14 @@ export const PERMISSION_SECTIONS = [
         permissions: ["manage_inventory"],
       },
       {
+        id: "expenses-manage",
+        th: "บันทึกรายจ่าย",
+        en: "Manage expenses",
+        descriptionTh: "อนุญาตให้เพิ่ม แก้ไข และลบรายการเงินที่จ่ายออกจริง",
+        descriptionEn: "Allow adding, editing, and deleting records of cash paid out.",
+        permissions: ["manage_expenses"],
+      },
+      {
         id: "reports-view",
         th: "ดูรายงาน",
         en: "View reports",

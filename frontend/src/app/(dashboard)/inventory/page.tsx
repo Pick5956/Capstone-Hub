@@ -109,6 +109,8 @@ function buildCopy(language: "th" | "en") {
         deleteMsg: (name: string) => `ลบ "${name}" ออกจากคลังวัตถุดิบ?`,
         adjustTitle: "ปรับสต็อก",
         adjustIn: "รับเข้า",
+        spentAmount: "บันทึกเป็นรายจ่าย",
+        spentAmountHint: "คำนวณจากต้นทุนต่อหน่วยที่ตั้งไว้",
         adjustOut: "จ่ายออก",
         adjustSet: "ตั้งค่าใหม่",
         quantity: "จำนวน",
@@ -199,6 +201,8 @@ function buildCopy(language: "th" | "en") {
         deleteMsg: (name: string) => `Remove "${name}" from inventory?`,
         adjustTitle: "Adjust stock",
         adjustIn: "Stock in",
+        spentAmount: "Recorded as expense",
+        spentAmountHint: "Calculated from the saved cost per unit",
         adjustOut: "Stock out",
         adjustSet: "Set value",
         quantity: "Quantity",
@@ -547,7 +551,12 @@ export default function InventoryPage() {
     await adjustOnce.current(async () => {
       setAdjusting(true);
       try {
-        const response = await adjustStock(adjustTarget.ID, { type: adjustType, quantity: qty, note: adjustNote });
+        // Stock-in expenses are priced by the backend from cost_per_unit.
+        const response = await adjustStock(adjustTarget.ID, {
+          type: adjustType,
+          quantity: qty,
+          note: adjustNote,
+        });
         setIngredients((prev) => prev.map((item) => (item.ID === adjustTarget.ID ? response.data : item)));
         closeAdjustModal();
         showToast({ title: copy.stockAdjusted });
@@ -1366,6 +1375,17 @@ export default function InventoryPage() {
                   autoFocus
                 />
               </div>
+              {adjustType === "in" && adjustTarget.cost_per_unit > 0 && (
+                <div className="rounded-md bg-slate-50 px-3 py-2 dark:bg-gray-900">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span>{copy.spentAmount}</span>
+                    <span className="text-sm text-slate-900 dark:text-white">
+                      {formatCurrency((parseFloat(adjustQty) || 0) * adjustTarget.cost_per_unit, lang)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{copy.spentAmountHint}</p>
+                </div>
+              )}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.note}</label>
                 <input
