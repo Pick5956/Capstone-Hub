@@ -205,19 +205,25 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		if err := tx.UpdateStock(restaurantID, ingredientID, nextStock); err != nil {
 			return err
 		}
+		// Nobody typed a cost — fall back to what this ingredient is already
+		// priced at rather than leaving the restock out of the ledger.
+		finalAmount := amount
+		if kind == "in" && finalAmount == 0 {
+			finalAmount = estimateRestockAmount(req.Quantity, ingredient.CostPerUnit)
+		}
 		stockTransaction := &entity.IngredientTransaction{
 			RestaurantID: restaurantID,
 			IngredientID: ingredientID,
 			Type:         kind,
 			Quantity:     req.Quantity,
-			Amount:       amount,
+			Amount:       finalAmount,
 			Note:         note,
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateTransaction(stockTransaction); err != nil {
 			return err
 		}
-		if amount > 0 {
+		if finalAmount > 0 {
 			// Same transaction as the stock movement, so the ledger can never
 			// disagree with what actually came into the store room.
 			expenseNote := ingredient.Name
@@ -228,7 +234,7 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 			if err := tx.CreateExpense(&entity.Expense{
 				RestaurantID:            restaurantID,
 				Category:                "ingredient",
-				Amount:                  amount,
+				Amount:                  finalAmount,
 				SpentAt:                 time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
 				Note:                    expenseNote,
 				CreatedByID:             userID,

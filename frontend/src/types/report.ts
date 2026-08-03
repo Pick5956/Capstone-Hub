@@ -6,6 +6,53 @@ export type ReportSalesDay = {
   profit: number;
 };
 
+export type ReportSalesHour = {
+  hour: number;
+  orders: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+};
+
+export type SalesByHourReport = {
+  date: string;
+  hours: ReportSalesHour[];
+};
+
+export type ReportSalesDetailOrder = {
+  order_id: number;
+  order_number: string;
+  order_type: string;
+  table_label: string;
+  customer_name: string;
+  completed_at: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+};
+
+export type SalesDetailReport = {
+  date: string;
+  hour: number | null;
+  orders: ReportSalesDetailOrder[];
+  summary: { revenue: number; cost: number; profit: number };
+};
+
+export type ReportExpenseDetailItem = {
+  ingredient_id: number;
+  ingredient_name: string;
+  unit: string;
+  quantity: number;
+  cost: number;
+};
+
+export type ExpenseDetailReport = {
+  date: string;
+  hour: number | null;
+  items: ReportExpenseDetailItem[];
+  total: number;
+};
+
 export type ReportMenuMargin = {
   menu_id: number;
   menu_name: string;

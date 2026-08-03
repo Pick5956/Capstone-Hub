@@ -1,7 +1,7 @@
 import type { Order } from "../types/order";
 import type { RestaurantTable } from "../types/table";
 
-const activeOrderStatuses = new Set(["open", "sent_to_kitchen", "cooking", "ready", "served"]);
+export const activeOrderStatuses = new Set(["open", "sent_to_kitchen", "cooking", "ready", "served"]);
 
 export type DashboardFloorTable = {
   key: number;
@@ -23,6 +23,18 @@ export function shiftDashboardDate(value: string, days: number) {
   const next = new Date(year, month - 1, day, 12, 0, 0, 0);
   next.setDate(next.getDate() + days);
   return toDashboardDate(next);
+}
+
+// Ledger spending per Bangkok calendar day. `spent_at` is a date-only value
+// already anchored to Bangkok, so the leading YYYY-MM-DD is the day it belongs
+// to — parsing it into a Date would drag it across midnight in other zones.
+export function totalExpensesByDate(expenses: { spent_at: string; amount: number }[]) {
+  const totals = new Map<string, number>();
+  for (const expense of expenses) {
+    const key = expense.spent_at.slice(0, 10);
+    totals.set(key, (totals.get(key) ?? 0) + expense.amount);
+  }
+  return totals;
 }
 
 export function uniqueOrdersById(orders: Order[]) {

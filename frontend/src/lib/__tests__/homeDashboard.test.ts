@@ -3,6 +3,7 @@ import {
   shiftDashboardDate,
   toDashboardDate,
   toDashboardFloorTables,
+  totalExpensesByDate,
   uniqueOrdersById,
 } from "../homeDashboard";
 import type { Order } from "../../types/order";
@@ -52,6 +53,19 @@ describe("home dashboard helpers", () => {
 
   it("deduplicates repeated kitchen orders by database ID", () => {
     expect(uniqueOrdersById([order(16), order(16), order(17)]).map((item) => item.ID)).toEqual([16, 17]);
+  });
+
+  it("sums the expense ledger onto the Bangkok day it was spent", () => {
+    const totals = totalExpensesByDate([
+      { spent_at: "2026-07-13T00:00:00+07:00", amount: 250 },
+      { spent_at: "2026-07-13T00:00:00+07:00", amount: 120.5 },
+      // Midnight in Bangkok is the previous day in UTC; the key must not shift.
+      { spent_at: "2026-07-14T00:00:00+07:00", amount: 80 },
+    ]);
+
+    expect(totals.get("2026-07-13")).toBe(370.5);
+    expect(totals.get("2026-07-14")).toBe(80);
+    expect(totals.get("2026-07-15")).toBeUndefined();
   });
 
   it("moves dashboard dates without UTC conversion", () => {

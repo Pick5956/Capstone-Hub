@@ -4,11 +4,19 @@ export function localeForLanguage(language: AppLanguage) {
   return language === "th" ? "th-TH" : "en-US";
 }
 
-export function formatCurrency(value: number, language: AppLanguage, maximumFractionDigits = 0) {
+// `signDisplay: "exceptZero"` is the one worth knowing: it prints the + on a
+// gain that the default drops, and leaves a flat zero unsigned.
+export function formatCurrency(
+  value: number,
+  language: AppLanguage,
+  maximumFractionDigits = 0,
+  signDisplay: Intl.NumberFormatOptions["signDisplay"] = "auto",
+) {
   return new Intl.NumberFormat(localeForLanguage(language), {
     style: "currency",
     currency: "THB",
     maximumFractionDigits,
+    signDisplay,
   }).format(value);
 }
 
