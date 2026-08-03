@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import {
+  formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
   getAIActionCancellationErrorMessage,
   isTerminalAIActionCancellationError,
@@ -78,6 +79,22 @@ describe("formatAIActionConfirmationMessage", () => {
   });
 });
 
+describe("formatAIActionPreviewAnswer", () => {
+  const backendThaiAnswer = "เตรียมปิดขายเมนูให้แล้ว กรุณายืนยัน";
+
+  it("replaces the backend action prose with localized English above the preview", () => {
+    const answer = formatAIActionPreviewAnswer(backendThaiAnswer, preview, "en");
+
+    expect(answer).toBe("I've prepared this change for review. Nothing will change until you confirm.");
+    expect(answer).not.toContain(backendThaiAnswer);
+  });
+
+  it("preserves the backend answer for Thai and for responses without an action preview", () => {
+    expect(formatAIActionPreviewAnswer(backendThaiAnswer, preview, "th")).toBe(backendThaiAnswer);
+    expect(formatAIActionPreviewAnswer("Regular analysis answer", undefined, "en")).toBe("Regular analysis answer");
+  });
+});
+
 describe("getAIActionCancellationErrorMessage", () => {
   it("does not claim an unknown server-side preview state", () => {
     expect(getAIActionCancellationErrorMessage("en")).toBe(
@@ -104,6 +121,8 @@ describe("AI action request invalidation", () => {
       )).toHaveLength(2);
       expect(source).toContain("async function discardPendingActionPreview(): Promise<boolean>");
       expect(source.match(/await discardPendingActionPreview\(\)/g)).toHaveLength(3);
+      expect(source).toContain("subscribeToChatWrites(");
+      expect(source).toContain("formatAIActionPreviewAnswer(data.answer, data.action_preview, language)");
     }
   });
 });

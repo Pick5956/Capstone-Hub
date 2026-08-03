@@ -5,6 +5,15 @@ function availabilityLabel(isAvailable: boolean, language: "th" | "en") {
   return isAvailable ? "available" : "unavailable";
 }
 
+export function formatAIActionPreviewAnswer(
+  answer: string,
+  preview: AIActionPreview | null | undefined,
+  language: "th" | "en",
+) {
+  if (!preview || language === "th") return answer;
+  return "I've prepared this change for review. Nothing will change until you confirm.";
+}
+
 export function describeAIActionPreview(preview: AIActionPreview, language: "th" | "en") {
   const before = availabilityLabel(preview.current.is_available, language);
   const after = availabilityLabel(preview.requested.is_available, language);

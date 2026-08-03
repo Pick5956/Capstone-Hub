@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
 import {
+  formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
   getAIActionCancellationErrorMessage,
   getAIActionErrorMessage,
@@ -23,6 +24,7 @@ import {
   saveConversationId,
   saveMessages,
   subscribeToChatClear,
+  subscribeToChatWrites,
 } from "@/src/lib/aiChatStorage";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -152,6 +154,7 @@ export default function AIAssistantPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const snapshotRequestedRef = useRef(false);
+  const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
 
   const storageKey = useMemo(
@@ -187,8 +190,20 @@ export default function AIAssistantPage() {
 
   useEffect(() => {
     if (hydratedStorageKey !== storageKey) return;
-    saveMessages(storageKey, messages);
+    saveMessages(storageKey, messages, chatWriteSourceRef.current);
   }, [hydratedStorageKey, messages, storageKey]);
+
+  useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
+    if (write.kind === "conversation") {
+      setConversationId(write.conversationId);
+      return;
+    }
+    const stored = write.messages as StoredMessage[];
+    setMessages(stored.map((message) => ({
+      ...message,
+      createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
+    })));
+  }), [storageKey]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -304,7 +319,7 @@ export default function AIAssistantPage() {
       const data = response.data;
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
-        saveConversationId(storageKey, data.conversation_id);
+        saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
       }
       if (data.snapshot) {
         snapshotRequests.invalidate();
@@ -322,7 +337,7 @@ export default function AIAssistantPage() {
         {
           id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
           role: "assistant",
-          content: data.answer,
+          content: formatAIActionPreviewAnswer(data.answer, data.action_preview, language),
           createdAt: new Date(),
           actions,
           model: data.model,

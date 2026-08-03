@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   dailyExpenseTotalsByDate,
@@ -10,6 +12,11 @@ import {
 } from "../homeDashboard";
 import type { Order } from "../../types/order";
 import type { RestaurantTable } from "../../types/table";
+
+const homePageSource = readFileSync(
+  fileURLToPath(new URL("../../app/(dashboard)/home/page.tsx", import.meta.url)),
+  "utf8",
+);
 
 const table = (id: number, label: string): RestaurantTable => ({
   ID: id,
@@ -44,6 +51,17 @@ const order = (id: number): Order => ({
 });
 
 describe("home dashboard helpers", () => {
+  it("never renders expense aggregates from a previously active restaurant", () => {
+    expect(homePageSource).toContain("const restaurantId = activeMembership?.restaurant_id ?? null;");
+    expect(homePageSource).toContain(
+      "const expenseScopeMatches = canViewExpenses && expenseLedger.restaurantId === restaurantId;",
+    );
+    expect(homePageSource).toContain(
+      "setExpenseLedger((current) => (current.restaurantId === restaurantId ? current : EMPTY_EXPENSE_LEDGER));",
+    );
+    expect(homePageSource).toContain("restaurantId: requestedRestaurantId,");
+  });
+
   it("keeps table keys unique even when display labels are duplicated", () => {
     const floor = toDashboardFloorTables([
       table(11, "16"),

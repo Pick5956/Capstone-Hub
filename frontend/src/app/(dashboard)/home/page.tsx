@@ -69,7 +69,18 @@ type KitchenTicket = {
 type ChartPoint = { key: string; label: string; value: number };
 type ChartMode = "hour" | "day" | "month";
 type ChartMetric = "revenue" | "cost" | "profit";
+type ExpenseLedgerState = {
+  restaurantId: number | null;
+  expenses: Expense[];
+  daily: ExpenseDailyTotal[];
+};
 type Copy = ReturnType<typeof buildCopy>;
+
+const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
+  restaurantId: null,
+  expenses: [],
+  daily: [],
+};
 
 // Collapsed cards start left-to-right in this order; the queue in `Home`
 // reshuffles from here as cards get opened and closed.
@@ -639,6 +650,7 @@ function orderStatusClass(status: OrderStatus) {
 export default function Home() {
   const router = useRouter();
   const { activeMembership } = useAuth();
+  const restaurantId = activeMembership?.restaurant_id ?? null;
   const canViewExpenses = can(activeMembership, "manage_expenses") || can(activeMembership, "view_reports");
   const { language } = useLanguage();
   const copy = useMemo(() => buildCopy(language), [language]);
@@ -757,8 +769,10 @@ export default function Home() {
   // Cash that actually left the till, keyed by Bangkok calendar day. This is the
   // expense ledger (a supplier payment, rent, a new fridge) — deliberately not
   // the recipe cost of food sold, which is what ReportSalesDay.cost carries.
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [expenseDaily, setExpenseDaily] = useState<ExpenseDailyTotal[]>([]);
+  const [expenseLedger, setExpenseLedger] = useState<ExpenseLedgerState>(EMPTY_EXPENSE_LEDGER);
+  const expenseScopeMatches = canViewExpenses && expenseLedger.restaurantId === restaurantId;
+  const expenses = expenseScopeMatches ? expenseLedger.expenses : EMPTY_EXPENSE_LEDGER.expenses;
+  const expenseDaily = expenseScopeMatches ? expenseLedger.daily : EMPTY_EXPENSE_LEDGER.daily;
   const [expensesLoading, setExpensesLoading] = useState(false);
   // Revenue and profit share the bills table; only cost gets the ledger one.
   const visibleChartMetric: ChartMetric = chartMetric === "cost" && !canViewExpenses ? "revenue" : chartMetric;
@@ -872,11 +886,10 @@ export default function Home() {
   const expenseMonth = selectedDate.slice(0, 7);
   useEffect(() => {
     let cancelled = false;
-    if (!activeMembership?.restaurant_id || !canViewExpenses) {
+    if (restaurantId === null || !canViewExpenses) {
       const resetFrame = requestAnimationFrame(() => {
         if (cancelled) return;
-        setExpenses([]);
-        setExpenseDaily([]);
+        setExpenseLedger(EMPTY_EXPENSE_LEDGER);
         setExpensesLoading(false);
         setChartMetric((current) => (current === "cost" ? "revenue" : current));
         setDetailBar(null);
@@ -889,17 +902,21 @@ export default function Home() {
     const anchor = new Date(`${expenseMonth}-01T12:00:00`);
     const from = new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
     const until = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
+    const requestedRestaurantId = restaurantId;
+    setExpenseLedger((current) => (current.restaurantId === restaurantId ? current : EMPTY_EXPENSE_LEDGER));
     setExpensesLoading(true);
     listExpenses({ from: toDashboardDate(from), until: toDashboardDate(until) })
       .then((res) => {
         if (cancelled) return;
-        setExpenses(res.data.expenses ?? []);
-        setExpenseDaily(res.data.daily ?? []);
+        setExpenseLedger({
+          restaurantId: requestedRestaurantId,
+          expenses: res.data.expenses ?? [],
+          daily: res.data.daily ?? [],
+        });
       })
       .catch(() => {
         if (cancelled) return;
-        setExpenses([]);
-        setExpenseDaily([]);
+        setExpenseLedger(EMPTY_EXPENSE_LEDGER);
       })
       .finally(() => {
         if (!cancelled) setExpensesLoading(false);
@@ -907,7 +924,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [expenseMonth, activeMembership?.restaurant_id, canViewExpenses, refreshTick]);
+  }, [expenseMonth, restaurantId, canViewExpenses, refreshTick]);
 
   // A bar's key is an hour number in hour view and a YYYY-MM-DD date in the day
   // and month views (both of those plot days), so that alone picks the window.

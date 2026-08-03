@@ -11,7 +11,21 @@ type ChatEnvelope<T> = { savedAt?: number; messages?: T[] };
 type ConversationEnvelope = { savedAt?: number; conversationId?: string };
 type ChatClearListener = (key: string) => void;
 
+export type ChatWriteSource = symbol;
+export type ChatStorageWrite =
+  | { key: string; kind: "messages"; messages: unknown[] }
+  | { key: string; kind: "conversation"; conversationId: string };
+
+type ChatWriteSubscription = {
+  key: string;
+  source: ChatWriteSource;
+  listener: (write: ChatStorageWrite) => void;
+};
+
 const chatClearListeners = new Set<ChatClearListener>();
+const chatWriteSubscriptions = new Set<ChatWriteSubscription>();
+const messageFingerprints = new Map<string, string>();
+const conversationFingerprints = new Map<string, string>();
 
 function serverConversationStorageKey(key: string): string {
   return `${key}${SERVER_CONVERSATION_KEY_SUFFIX}`;
@@ -45,15 +59,41 @@ export function loadStoredMessages<T = unknown>(key: string | null): T[] | null 
 }
 
 // Persist the messages with a timestamp. A lone welcome message is not persisted.
-export function saveMessages(key: string | null, messages: unknown[]): void {
+export function saveMessages(
+  key: string | null,
+  messages: unknown[],
+  source?: ChatWriteSource,
+): void {
   if (typeof window === "undefined" || !key || messages.length === 0) return;
   const lone = messages.length === 1 ? (messages[0] as { id?: string }) : null;
   if (lone && lone.id === "welcome") return;
+  const fingerprint = JSON.stringify(messages);
+  let unchangedInStorage = false;
   try {
-    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), messages }));
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const current = JSON.parse(raw) as ChatEnvelope<unknown>;
+        const isFresh = Boolean(current.savedAt) && Date.now() - Number(current.savedAt) <= CHAT_HISTORY_TTL_MS;
+        unchangedInStorage = isFresh && JSON.stringify(current.messages) === fingerprint;
+      } catch {
+        // A corrupt envelope should be repaired by the write below.
+      }
+    }
   } catch {
     // storage may be unavailable (private mode) — ignore
   }
+  let stored = false;
+  try {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), messages }));
+    stored = true;
+  } catch {
+    // Keep same-window synchronization available when persistence is blocked.
+  }
+  const unchanged = stored ? unchangedInStorage : messageFingerprints.get(key) === fingerprint;
+  messageFingerprints.set(key, fingerprint);
+  if (unchanged) return;
+  notifyChatWrite({ key, kind: "messages", messages }, source);
 }
 
 export function loadStoredConversationId(key: string | null): string | null {
@@ -86,20 +126,70 @@ export function loadStoredConversationId(key: string | null): string | null {
   }
 }
 
-export function saveConversationId(key: string | null, conversationId: string | null | undefined): void {
+export function saveConversationId(
+  key: string | null,
+  conversationId: string | null | undefined,
+  source?: ChatWriteSource,
+): void {
   if (typeof window === "undefined" || !key || !validConversationId(conversationId)) return;
+  let unchangedInStorage = false;
+  try {
+    const raw = localStorage.getItem(serverConversationStorageKey(key));
+    if (raw) {
+      try {
+        const current = JSON.parse(raw) as ConversationEnvelope;
+        const isFresh = Boolean(current.savedAt) && Date.now() - Number(current.savedAt) <= CHAT_HISTORY_TTL_MS;
+        unchangedInStorage = isFresh && current.conversationId === conversationId;
+      } catch {
+        // A corrupt envelope should be repaired by the write below.
+      }
+    }
+  } catch {
+    // Reads can be unavailable even while the same-window channel still works.
+  }
+  let stored = false;
   try {
     localStorage.setItem(
       serverConversationStorageKey(key),
       JSON.stringify({ savedAt: Date.now(), conversationId }),
     );
+    stored = true;
   } catch {
-    // storage may be unavailable (private mode) -- ignore
+    // Keep same-window synchronization available when persistence is blocked.
   }
+  const unchanged = stored
+    ? unchangedInStorage
+    : conversationFingerprints.get(key) === conversationId;
+  conversationFingerprints.set(key, conversationId);
+  if (unchanged) return;
+  notifyChatWrite({ key, kind: "conversation", conversationId }, source);
+}
+
+function notifyChatWrite(write: ChatStorageWrite, source?: ChatWriteSource): void {
+  chatWriteSubscriptions.forEach((subscription) => {
+    if (subscription.key === write.key && subscription.source !== source) {
+      subscription.listener(write);
+    }
+  });
+}
+
+// localStorage's storage event is cross-document only. This in-memory channel
+// keeps the full page and floating assistant synchronized in the same window.
+export function subscribeToChatWrites(
+  key: string | null,
+  source: ChatWriteSource,
+  listener: (write: ChatStorageWrite) => void,
+): () => void {
+  if (!key) return () => undefined;
+  const subscription = { key, source, listener };
+  chatWriteSubscriptions.add(subscription);
+  return () => chatWriteSubscriptions.delete(subscription);
 }
 
 export function clearStoredChat(key: string | null): void {
   if (!key) return;
+  messageFingerprints.delete(key);
+  conversationFingerprints.delete(key);
   if (typeof window !== "undefined") {
     try {
       localStorage.removeItem(key);

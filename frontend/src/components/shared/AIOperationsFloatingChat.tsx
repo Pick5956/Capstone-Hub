@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
 import {
+  formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
   getAIActionCancellationErrorMessage,
   getAIActionErrorMessage,
@@ -36,6 +37,7 @@ import {
   saveConversationId,
   saveMessages,
   subscribeToChatClear,
+  subscribeToChatWrites,
 } from "@/src/lib/aiChatStorage";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -199,6 +201,7 @@ export default function AIOperationsFloatingChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
   const snapshotRequestedRef = useRef(false);
+  const chatWriteSourceRef = useRef(Symbol("ai-floating-chat"));
 
   const canAskAI = activeMembership?.role?.name === "owner";
 
@@ -234,8 +237,20 @@ export default function AIOperationsFloatingChat() {
   // Persist to the shared key; a lone welcome message is not persisted.
   useEffect(() => {
     if (hydratedStorageKey !== storageKey) return;
-    saveMessages(storageKey, messages);
+    saveMessages(storageKey, messages, chatWriteSourceRef.current);
   }, [hydratedStorageKey, messages, storageKey]);
+
+  useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
+    if (write.kind === "conversation") {
+      setConversationId(write.conversationId);
+      return;
+    }
+    const stored = write.messages as StoredMessage[];
+    setMessages(stored.map((message) => ({
+      ...message,
+      createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
+    })));
+  }), [storageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -435,13 +450,13 @@ export default function AIOperationsFloatingChat() {
       const data: AIAskResponse = response.data;
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
-        saveConversationId(storageKey, data.conversation_id);
+        saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
       }
       
       const assistantMsg: Message = {
         id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
         role: "assistant",
-        content: data.answer,
+        content: formatAIActionPreviewAnswer(data.answer, data.action_preview, language),
         createdAt: new Date(),
         actions: data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)

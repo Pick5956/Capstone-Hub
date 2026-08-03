@@ -23,7 +23,24 @@ import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
-type FormState = { id: number | null; category: ExpenseCategory; amount: string; spent_at: string; note: string };
+type FormState = { restaurantId: number | null; id: number | null; category: ExpenseCategory; amount: string; spent_at: string; note: string };
+type ExpensePageData = {
+  restaurantId: number | null;
+  expenses: Expense[];
+  categories: ExpenseCategoryTotal[];
+  total: number;
+  entries: number;
+  hasMore: boolean;
+};
+
+const EMPTY_EXPENSE_DATA: ExpensePageData = {
+  restaurantId: null,
+  expenses: [],
+  categories: [],
+  total: 0,
+  entries: 0,
+  hasMore: false,
+};
 
 const categoryBadgeClass: Record<ExpenseCategory, string> = {
   ingredient: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300",
@@ -34,23 +51,18 @@ const categoryBadgeClass: Record<ExpenseCategory, string> = {
   other: "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300",
 };
 
-function emptyForm(): FormState {
-  return { id: null, category: "ingredient", amount: "", spent_at: toDashboardDate(new Date()), note: "" };
+function emptyForm(restaurantId: number | null): FormState {
+  return { restaurantId, id: null, category: "ingredient", amount: "", spent_at: toDashboardDate(new Date()), note: "" };
 }
 
 export default function ExpensesPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
+  const restaurantId = activeMembership?.restaurant_id ?? null;
   const canEdit = can(activeMembership, "manage_expenses");
   const canView = canEdit || can(activeMembership, "view_reports");
 
-  const [data, setData] = useState<{ expenses: Expense[]; categories: ExpenseCategoryTotal[]; total: number; entries: number; hasMore: boolean }>({
-    expenses: [],
-    categories: [],
-    total: 0,
-    entries: 0,
-    hasMore: false,
-  });
+  const [data, setData] = useState<ExpensePageData>(EMPTY_EXPENSE_DATA);
   const [monthDate, setMonthDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -58,8 +70,10 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState<"all" | ExpenseCategory>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [saving, setSaving] = useState(false);
+  const [storedForm, setForm] = useState<FormState>(() => emptyForm(restaurantId));
+  const form = storedForm.restaurantId === restaurantId ? storedForm : emptyForm(restaurantId);
+  const [savingRestaurantId, setSavingRestaurantId] = useState<number | null>(null);
+  const saving = restaurantId !== null && savingRestaurantId === restaurantId;
   const [refreshTick, setRefreshTick] = useState(0);
   const [expenseRequests] = useState(createRequestGeneration);
 
@@ -140,10 +154,13 @@ export default function ExpensesPage() {
   const monthEnd = toDashboardDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
   const monthLabel = monthDate.toLocaleDateString(locale, { month: "long", year: "numeric" });
   const canGoNextMonth = monthDate.getTime() < new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const scopedData = canView && data.restaurantId === restaurantId ? data : EMPTY_EXPENSE_DATA;
 
   const load = useCallback(async () => {
-    if (!canView) {
+    const requestedRestaurantId = restaurantId;
+    if (!canView || requestedRestaurantId === null) {
       expenseRequests.invalidate();
+      setData(EMPTY_EXPENSE_DATA);
       setLoading(false);
       return;
     }
@@ -158,6 +175,7 @@ export default function ExpensesPage() {
       });
       if (!expenseRequests.isCurrent(requestGeneration)) return;
       setData({
+        restaurantId: requestedRestaurantId,
         expenses: res.data.expenses ?? [],
         categories: res.data.categories ?? [],
         total: res.data.total ?? 0,
@@ -170,7 +188,7 @@ export default function ExpensesPage() {
     } finally {
       if (expenseRequests.isCurrent(requestGeneration)) setLoading(false);
     }
-  }, [canView, categoryFilter, copy.loadError, expenseRequests, monthEnd, monthStart]);
+  }, [canView, categoryFilter, copy.loadError, expenseRequests, monthEnd, monthStart, restaurantId]);
 
   useEffect(() => {
     // Mutations advance this counter so the effect reloads with the filters from
@@ -182,23 +200,25 @@ export default function ExpensesPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const requestedRestaurantId = restaurantId;
+    if (requestedRestaurantId === null) return;
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setError(copy.amountRequired);
       return;
     }
-    setSaving(true);
+    setSavingRestaurantId(requestedRestaurantId);
     setError("");
     try {
       const payload = { category: form.category, amount, spent_at: form.spent_at, note: form.note.trim() };
       if (form.id === null) await createExpense(payload);
       else await updateExpense(form.id, payload);
-      setForm(emptyForm());
+      setForm((current) => current.restaurantId === requestedRestaurantId ? emptyForm(requestedRestaurantId) : current);
       setRefreshTick((tick) => tick + 1);
     } catch (err) {
       setError(apiErrorMessage(err) || copy.saveError);
     } finally {
-      setSaving(false);
+      setSavingRestaurantId((current) => current === requestedRestaurantId ? null : current);
     }
   };
 
@@ -207,7 +227,7 @@ export default function ExpensesPage() {
     setError("");
     try {
       await deleteExpense(expense.ID);
-      if (form.id === expense.ID) setForm(emptyForm());
+      setForm((current) => current.restaurantId === restaurantId && current.id === expense.ID ? emptyForm(restaurantId) : current);
       setRefreshTick((tick) => tick + 1);
     } catch (err) {
       setError(apiErrorMessage(err) || copy.saveError);
@@ -230,14 +250,14 @@ export default function ExpensesPage() {
         </div>
         <div className="text-right">
           <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
-          <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(data.total, language)}</p>
-          <p className="text-[11px] text-gray-400">{data.entries} {copy.entries}</p>
+          <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(scopedData.total, language)}</p>
+          <p className="text-[11px] text-gray-400">{scopedData.entries} {copy.entries}</p>
         </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {(["all", ...expenseCategories] as const).map((value) => {
-          const total = data.categories.find((item) => item.category === value);
+          const total = scopedData.categories.find((item) => item.category === value);
           return (
             <button
               key={value}
@@ -270,27 +290,27 @@ export default function ExpensesPage() {
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.category}</span>
               <ThemedSelect
                 value={form.category}
-                onChange={(value) => setForm((prev) => ({ ...prev, category: value as ExpenseCategory }))}
+                onChange={(value) => setForm({ ...form, category: value as ExpenseCategory })}
                 options={categoryOptions}
                 className="w-full"
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.amount}</span>
-              <input type="number" inputMode="decimal" step="0.01" min="0" required value={form.amount} onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))} className={`${inputClass} font-mono tabular-nums`} />
+              <input type="number" inputMode="decimal" step="0.01" min="0" required value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} className={`${inputClass} font-mono tabular-nums`} />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.date}</span>
-              <input type="date" required value={form.spent_at} onChange={(event) => setForm((prev) => ({ ...prev, spent_at: event.target.value }))} className={`${inputClass} font-mono dark:[color-scheme:dark]`} />
+              <input type="date" required value={form.spent_at} onChange={(event) => setForm({ ...form, spent_at: event.target.value })} className={`${inputClass} font-mono dark:[color-scheme:dark]`} />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.note}</span>
-              <input type="text" maxLength={500} placeholder={copy.notePlaceholder} value={form.note} onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))} className={inputClass} />
+              <input type="text" maxLength={500} placeholder={copy.notePlaceholder} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} className={inputClass} />
             </label>
             <div className="flex gap-2">
               <button type="submit" disabled={saving} className="ui-press h-[42px] rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.save}</button>
               {form.id !== null && (
-                <button type="button" onClick={() => setForm(emptyForm())} className="ui-press h-[42px] rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.cancel}</button>
+                <button type="button" onClick={() => setForm(emptyForm(restaurantId))} className="ui-press h-[42px] rounded-md border border-gray-200 px-4 text-[13px] font-semibold text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.cancel}</button>
               )}
             </div>
           </div>
@@ -312,9 +332,9 @@ export default function ExpensesPage() {
           <div className="space-y-2 p-4">
             {Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-12" />)}
           </div>
-        ) : data.expenses.length ? (
+        ) : scopedData.expenses.length ? (
           <div className="divide-y divide-gray-100 dark:divide-gray-900">
-            {data.expenses.map((expense) => (
+            {scopedData.expenses.map((expense) => (
               <div key={expense.ID} className="grid grid-cols-2 gap-x-3 gap-y-1 px-4 py-3 text-[14px] lg:grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] lg:items-center">
                 <span className="font-mono text-[13px] tabular-nums text-gray-500 dark:text-gray-400">
                   {new Date(expense.spent_at).toLocaleDateString(locale, { day: "2-digit", month: "short" })}
@@ -337,7 +357,7 @@ export default function ExpensesPage() {
                         type="button"
                         aria-label={`${copy.edit}: ${expense.note || copy.categories[expense.category]}`}
                         title={`${copy.edit}: ${expense.note || copy.categories[expense.category]}`}
-                        onClick={() => setForm({ id: expense.ID, category: expense.category, amount: String(expense.amount), spent_at: expense.spent_at.slice(0, 10), note: expense.note })}
+                        onClick={() => setForm({ restaurantId, id: expense.ID, category: expense.category, amount: String(expense.amount), spent_at: expense.spent_at.slice(0, 10), note: expense.note })}
                         className="ui-press shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
                       >✎</button>
                       <button
@@ -356,9 +376,9 @@ export default function ExpensesPage() {
         ) : (
           <div className="px-4 py-14 text-center text-[14px] text-gray-500 dark:text-gray-400">{copy.empty}</div>
         )}
-        {!loading && data.hasMore ? (
+        {!loading && scopedData.hasMore ? (
           <p className="border-t border-gray-100 px-4 py-2.5 text-[11px] text-gray-500 dark:border-gray-900 dark:text-gray-400">
-            {copy.partialList(data.expenses.length, data.entries)}
+            {copy.partialList(scopedData.expenses.length, scopedData.entries)}
           </p>
         ) : null}
       </div>
