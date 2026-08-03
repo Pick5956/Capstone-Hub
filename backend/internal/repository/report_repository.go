@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strconv"
 	"time"
 
 	"Project-M/internal/entity"
@@ -24,6 +25,68 @@ type ReportSalesDay struct {
 	Profit    float64 `json:"profit"`
 }
 
+type ReportSalesHour struct {
+	Hour    int     `json:"hour"`
+	Orders  int64   `json:"orders"`
+	Revenue float64 `json:"revenue"`
+	Cost    float64 `json:"cost"`
+	Profit  float64 `json:"profit"`
+}
+
+// ReportSalesDetailOrder is one bill behind a chart bar. It carries revenue,
+// cost and profit together so a single drill-down answers whichever metric the
+// chart is showing — there is no per-metric variant of this query.
+type ReportSalesDetailOrder struct {
+	OrderID      uint      `json:"order_id"`
+	OrderNumber  string    `json:"order_number"`
+	OrderType    string    `json:"order_type"`
+	TableLabel   string    `json:"table_label"`
+	CustomerName string    `json:"customer_name"`
+	CompletedAt  time.Time `json:"completed_at"`
+	Revenue      float64   `json:"revenue"`
+	Cost         float64   `json:"cost"`
+	Profit       float64   `json:"profit"`
+}
+
+// ReportExpenseDetailItem is one ingredient's share of a cost bar. Grouping by
+// ingredient (not by bill) is what makes this table answer "what did that cost
+// go on", which the per-bill sales table cannot.
+type ReportExpenseDetailItem struct {
+	IngredientID   uint    `json:"ingredient_id"`
+	IngredientName string  `json:"ingredient_name"`
+	Unit           string  `json:"unit"`
+	Quantity       float64 `json:"quantity"`
+	Cost           float64 `json:"cost"`
+}
+
+// salesBucketFormat is a TO_CHAR pattern that gets inlined into SQL. It is an
+// unexported type with only the two constants below, so no request-supplied
+// string can ever reach the query text.
+type salesBucketFormat string
+
+const (
+	bucketByDate salesBucketFormat = "YYYY-MM-DD"
+	bucketByHour salesBucketFormat = "HH24"
+)
+
+// bucketExpr builds the grouping expression. It has to appear in full in both
+// SELECT and GROUP BY: gorm quotes whatever Group() is given, so `Group("1")`
+// emits `GROUP BY "1"`, which Postgres reads as a column name rather than an
+// output-column ordinal and rejects.
+func bucketExpr(column string, format salesBucketFormat) string {
+	return "TO_CHAR(" + column + " AT TIME ZONE 'Asia/Bangkok', '" + string(format) + "')"
+}
+
+// salesBucket is one time slice of paid revenue and its ingredient cost. The
+// bucket label is whatever TO_CHAR pattern the caller grouped by.
+type salesBucket struct {
+	Bucket  string
+	Orders  int64
+	Revenue float64
+	Cost    float64
+	Profit  float64
+}
+
 type ReportMenuMargin struct {
 	MenuID   uint    `json:"menu_id"`
 	MenuName string  `json:"menu_name"`
@@ -34,56 +97,185 @@ type ReportMenuMargin struct {
 	Margin   float64 `json:"margin"`
 }
 
-func (r *ReportRepository) SalesByDay(restaurantID uint, since time.Time) ([]ReportSalesDay, error) {
-	var rows []ReportSalesDay
+// salesBuckets groups paid+completed orders by `bucketFormat` (a TO_CHAR
+// pattern applied in Asia/Bangkok) and pairs each bucket with the ingredient
+// cost of the served items on those orders. `until` is exclusive; pass the
+// zero time for no upper bound. Both queries share one definition of "counts
+// as a sale" so day and hour views can never drift apart.
+func (r *ReportRepository) salesBuckets(restaurantID uint, bucketFormat salesBucketFormat, since, until time.Time) ([]salesBucket, error) {
+	orderBucket := bucketExpr("completed_at", bucketFormat)
+	costBucket := bucketExpr("orders.completed_at", bucketFormat)
+	orderWhere := "restaurant_id = ? AND completed_at >= ? AND status = ? AND payment_status = ?"
+	orderArgs := []any{restaurantID, since, entity.OrderStatusCompleted, entity.PaymentStatusPaid}
+	costWhere := "order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ? AND order_items.status = ?"
+	costArgs := []any{restaurantID, since, entity.OrderStatusCompleted, entity.PaymentStatusPaid, entity.OrderItemStatusServed}
+	if !until.IsZero() {
+		orderWhere += " AND completed_at < ?"
+		orderArgs = append(orderArgs, until)
+		costWhere += " AND orders.completed_at < ?"
+		costArgs = append(costArgs, until)
+	}
+
+	var rows []salesBucket
 	err := r.db.Model(&entity.Order{}).
-		Select("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS order_date, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
-		Where(
-			"restaurant_id = ? AND completed_at >= ? AND status = ? AND payment_status = ?",
-			restaurantID,
-			since,
-			entity.OrderStatusCompleted,
-			entity.PaymentStatusPaid,
-		).
-		Group("TO_CHAR(completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
-		Order("order_date desc").
+		Select(orderBucket+" AS bucket, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where(orderWhere, orderArgs...).
+		Group(orderBucket).
+		Order(orderBucket + " desc").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 
-	type dailyCost struct {
-		OrderDate string
-		Cost      float64
+	var costs []struct {
+		Bucket string
+		Cost   float64
 	}
-	var costs []dailyCost
 	err = r.db.Table("order_inventory_deductions").
-		Select("TO_CHAR(orders.completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS order_date, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
+		Select(costBucket+" AS bucket, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
 		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
 		Joins("JOIN orders ON orders.id = order_items.order_id").
-		Where(
-			"order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ? AND order_items.status = ?",
-			restaurantID,
-			since,
-			entity.OrderStatusCompleted,
-			entity.PaymentStatusPaid,
-			entity.OrderItemStatusServed,
-		).
-		Group("TO_CHAR(orders.completed_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD')").
+		Where(costWhere, costArgs...).
+		Group(costBucket).
 		Scan(&costs).Error
 	if err != nil {
 		return nil, err
 	}
 
-	costByDate := make(map[string]float64, len(costs))
+	costByBucket := make(map[string]float64, len(costs))
 	for _, c := range costs {
-		costByDate[c.OrderDate] = c.Cost
+		costByBucket[c.Bucket] = c.Cost
 	}
 	for i := range rows {
-		rows[i].Cost = costByDate[rows[i].OrderDate]
+		rows[i].Cost = costByBucket[rows[i].Bucket]
 		rows[i].Profit = rows[i].Revenue - rows[i].Cost
 	}
 	return rows, nil
+}
+
+func (r *ReportRepository) SalesByDay(restaurantID uint, since time.Time) ([]ReportSalesDay, error) {
+	buckets, err := r.salesBuckets(restaurantID, bucketByDate, since, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]ReportSalesDay, 0, len(buckets))
+	for _, b := range buckets {
+		rows = append(rows, ReportSalesDay{OrderDate: b.Bucket, Orders: b.Orders, Revenue: b.Revenue, Cost: b.Cost, Profit: b.Profit})
+	}
+	return rows, nil
+}
+
+// SalesByHour breaks a single Bangkok calendar day into hour buckets, using the
+// same "paid and completed" rule as SalesByDay — so the hours of a day sum to
+// that day's bar, which is not true of anything computed from open tickets.
+// Hours with no sales are omitted; the caller fills the gaps.
+func (r *ReportRepository) SalesByHour(restaurantID uint, day time.Time) ([]ReportSalesHour, error) {
+	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location())
+	buckets, err := r.salesBuckets(restaurantID, bucketByHour, dayStart, dayStart.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]ReportSalesHour, 0, len(buckets))
+	for _, b := range buckets {
+		hour, err := strconv.Atoi(b.Bucket)
+		if err != nil {
+			continue
+		}
+		rows = append(rows, ReportSalesHour{Hour: hour, Orders: b.Orders, Revenue: b.Revenue, Cost: b.Cost, Profit: b.Profit})
+	}
+	return rows, nil
+}
+
+// SalesDetail lists the individual bills inside one chart bar's window, using
+// the same paid+completed cohort as salesBuckets so the rows always add up to
+// the bar they were opened from. `until` is exclusive.
+func (r *ReportRepository) SalesDetail(restaurantID uint, since, until time.Time, limit int) ([]ReportSalesDetailOrder, error) {
+	var rows []ReportSalesDetailOrder
+	err := r.db.Model(&entity.Order{}).
+		Select(`orders.id AS order_id, orders.order_number, orders.order_type,
+			COALESCE(NULLIF(restaurant_tables.display_label, ''), restaurant_tables.table_number, '') AS table_label,
+			orders.customer_name, orders.completed_at, orders.grand_total AS revenue`).
+		Joins("LEFT JOIN restaurant_tables ON restaurant_tables.id = orders.table_id").
+		Where(
+			"orders.restaurant_id = ? AND orders.completed_at >= ? AND orders.completed_at < ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			since,
+			until,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Order("orders.completed_at asc, orders.id asc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	orderIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		orderIDs = append(orderIDs, row.OrderID)
+	}
+	var costs []struct {
+		OrderID uint
+		Cost    float64
+	}
+	err = r.db.Table("order_inventory_deductions").
+		Select("order_items.order_id AS order_id, COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost").
+		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
+		Where(
+			"order_inventory_deductions.deleted_at IS NULL AND order_items.deleted_at IS NULL AND order_items.order_id IN ? AND order_items.status = ?",
+			orderIDs,
+			entity.OrderItemStatusServed,
+		).
+		Group("order_items.order_id").
+		Scan(&costs).Error
+	if err != nil {
+		return nil, err
+	}
+
+	costByOrder := make(map[uint]float64, len(costs))
+	for _, c := range costs {
+		costByOrder[c.OrderID] = c.Cost
+	}
+	for i := range rows {
+		rows[i].Cost = costByOrder[rows[i].OrderID]
+		rows[i].Profit = rows[i].Revenue - rows[i].Cost
+	}
+	return rows, nil
+}
+
+// ExpenseDetail breaks one cost bar down by ingredient. It repeats the cost leg
+// of salesBuckets exactly — same joins, same cohort — so the rows sum to the bar
+// they were opened from. `until` is exclusive.
+func (r *ReportRepository) ExpenseDetail(restaurantID uint, since, until time.Time, limit int) ([]ReportExpenseDetailItem, error) {
+	var rows []ReportExpenseDetailItem
+	err := r.db.Table("order_inventory_deductions").
+		Select(`ingredients.id AS ingredient_id, ingredients.name AS ingredient_name, ingredients.unit,
+			COALESCE(SUM(order_inventory_deductions.quantity), 0) AS quantity,
+			COALESCE(SUM(order_inventory_deductions.cost_snapshot), 0) AS cost`).
+		Joins("JOIN order_items ON order_items.id = order_inventory_deductions.order_item_id").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins("JOIN ingredients ON ingredients.id = order_inventory_deductions.ingredient_id").
+		Where(
+			`order_inventory_deductions.restaurant_id = ? AND order_inventory_deductions.deleted_at IS NULL
+				AND order_items.deleted_at IS NULL AND orders.deleted_at IS NULL
+				AND orders.completed_at >= ? AND orders.completed_at < ?
+				AND orders.status = ? AND orders.payment_status = ? AND order_items.status = ?`,
+			restaurantID,
+			since,
+			until,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+			entity.OrderItemStatusServed,
+		).
+		Group("ingredients.id, ingredients.name, ingredients.unit").
+		Order("cost desc, ingredients.name asc").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
 }
 
 func (r *ReportRepository) MenuMargins(restaurantID uint, since time.Time) ([]ReportMenuMargin, error) {

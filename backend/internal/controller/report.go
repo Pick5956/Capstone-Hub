@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
@@ -28,6 +29,76 @@ func (ctrl *ReportController) ManagerReport(c *gin.Context) {
 	report, err := ctrl.reportSvc.ManagerReport(restaurantID, boundedQueryInt(c, "days", 14, 1, 90))
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}
+
+func (ctrl *ReportController) SalesByHour(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "view_reports", "missing view_reports permission")
+	if !ok {
+		return
+	}
+	date := c.Query("date")
+	if date == "" {
+		date = repository.BangkokNow().Format("2006-01-02")
+	}
+	report, err := ctrl.reportSvc.SalesByHour(restaurantID, date)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}
+
+// barQuery reads the date + optional hour that identify a clicked chart bar.
+// No `hour` means a whole-day bar; -1 is the sentinel the service expects.
+func barQuery(c *gin.Context) (string, int, bool) {
+	date := c.Query("date")
+	if date == "" {
+		date = repository.BangkokNow().Format("2006-01-02")
+	}
+	hour := -1
+	if raw := c.Query("hour"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 || parsed > 23 {
+			respondInvalidRequest(c)
+			return "", 0, false
+		}
+		hour = parsed
+	}
+	return date, hour, true
+}
+
+func (ctrl *ReportController) SalesDetail(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "view_reports", "missing view_reports permission")
+	if !ok {
+		return
+	}
+	date, hour, ok := barQuery(c)
+	if !ok {
+		return
+	}
+	report, err := ctrl.reportSvc.SalesDetail(restaurantID, date, hour)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, report)
+}
+
+func (ctrl *ReportController) ExpenseDetail(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "view_reports", "missing view_reports permission")
+	if !ok {
+		return
+	}
+	date, hour, ok := barQuery(c)
+	if !ok {
+		return
+	}
+	report, err := ctrl.reportSvc.ExpenseDetail(restaurantID, date, hour)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
 	c.JSON(http.StatusOK, report)

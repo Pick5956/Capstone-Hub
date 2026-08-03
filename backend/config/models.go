@@ -40,5 +40,6 @@ func SchemaModels() []any {
 		&entity.CustomerOrderSubmission{},
 		&entity.IngredientTransaction{},
 		&entity.Reservation{},
+		&entity.Expense{},
 	}
 }
