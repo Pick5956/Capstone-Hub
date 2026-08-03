@@ -1,0 +1,425 @@
+{
+  "schema_version": "1",
+  "actor_role": "owner",
+  "reference_time": "2026-08-03T12:00:00+07:00",
+  "cases": [
+    {
+      "name": "owner revenue yesterday",
+      "category": "direct_read",
+      "question": "เมื่อวานร้านขายได้เท่าไหร่",
+      "context": [],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["sales"],
+        "operations": ["retrieve", "summarize"],
+        "required_metrics": ["revenue"],
+        "tool_hints": ["get_sales_for_period"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "day",
+          "start_date": "2026-08-02",
+          "end_date": "2026-08-03"
+        }
+      }
+    },
+    {
+      "name": "owner top menu july",
+      "category": "direct_read",
+      "question": "เดือนกรกฎาคม 2569 เมนูไหนขายดีที่สุด",
+      "context": [],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["menu"],
+        "operations": ["rank"],
+        "required_metrics": ["quantity"],
+        "required_group_by": ["menu"],
+        "tool_hints": ["get_top_selling_menus"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "month",
+          "start_date": "2026-07-01",
+          "end_date": "2026-08-01"
+        },
+        "ranking": {
+          "metric": "quantity",
+          "direction": "high",
+          "rank": 1
+        }
+      }
+    },
+    {
+      "name": "owner low stock",
+      "category": "direct_read",
+      "question": "วัตถุดิบอะไรใกล้หมดบ้าง",
+      "context": [],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["inventory"],
+        "operations": ["retrieve", "list", "analyze"],
+        "required_metrics": ["stock_level"],
+        "tool_hints": ["get_low_stock_ingredients"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    },
+    {
+      "name": "owner store summary",
+      "category": "direct_read",
+      "question": "สรุปภาพรวมร้านในช่วง 30 วันล่าสุดให้หน่อย",
+      "context": [],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["restaurant"],
+        "operations": ["summarize", "analyze"],
+        "required_metrics": ["overview"],
+        "tool_hints": ["get_store_summary"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "rolling",
+          "start_date": "2026-07-05",
+          "end_date": "2026-08-04"
+        }
+      }
+    },
+    {
+      "name": "owner highest margin menu",
+      "category": "direct_read",
+      "question": "เมนูไหนมีมาร์จิ้นสูงที่สุด",
+      "context": [],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["menu"],
+        "operations": ["rank"],
+        "required_metrics": ["margin"],
+        "required_group_by": ["menu"],
+        "tool_hints": ["get_highest_margin_menu"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "ranking": {
+          "metric": "margin",
+          "direction": "high",
+          "rank": 1
+        }
+      }
+    },
+    {
+      "name": "owner rainy promotion advice",
+      "category": "direct_read",
+      "question": "ช่วยแนะนำโปรโมชั่นวันฝนตกเพื่อเพิ่มยอดช่วงบ่ายหน่อย",
+      "context": [],
+      "expected": {
+        "tasks": ["restaurant_advice", "recommend_action"],
+        "domains": ["marketing", "restaurant"],
+        "operations": ["recommend"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    },
+    {
+      "name": "owner follow up second ranked menu",
+      "category": "follow_up",
+      "question": "แล้วอันดับสองล่ะ",
+      "context": [
+        {
+          "id": "turn-user-july-best",
+          "source": "conversation_history",
+          "role": "user",
+          "content": "เดือนกรกฎาคม 2569 เมนูไหนขายดีที่สุด"
+        },
+        {
+          "id": "turn-assistant-july-best",
+          "source": "conversation_history",
+          "role": "assistant",
+          "content": "อันดับหนึ่งคือต้มยำกุ้งน้ำข้น"
+        }
+      ],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["menu"],
+        "operations": ["rank"],
+        "required_metrics": ["quantity"],
+        "required_group_by": ["menu"],
+        "tool_hints": ["get_top_selling_menus"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "month",
+          "start_date": "2026-07-01",
+          "end_date": "2026-08-01"
+        },
+        "ranking": {
+          "metric": "quantity",
+          "direction": "high",
+          "rank": 2
+        },
+        "required_inherited_fields": [
+          {
+            "field": "parameters.time_range",
+            "source_turn_id": "turn-user-july-best"
+          }
+        ]
+      }
+    },
+    {
+      "name": "owner follow up previous month",
+      "category": "follow_up",
+      "question": "แล้วเดือนก่อนล่ะ",
+      "context": [
+        {
+          "id": "turn-user-current-month",
+          "source": "conversation_history",
+          "role": "user",
+          "content": "ยอดขายเดือนนี้เท่าไหร่"
+        },
+        {
+          "id": "turn-assistant-current-month",
+          "source": "conversation_history",
+          "role": "assistant",
+          "content": "ผมจะสรุปยอดขายของเดือนสิงหาคมให้ครับ"
+        }
+      ],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["sales"],
+        "operations": ["retrieve", "summarize"],
+        "required_metrics": ["revenue"],
+        "tool_hints": ["get_sales_for_period"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "month",
+          "start_date": "2026-07-01",
+          "end_date": "2026-08-01"
+        },
+        "required_inherited_fields": [
+          {
+            "field": "parameters.metrics",
+            "source_turn_id": "turn-user-current-month"
+          }
+        ]
+      }
+    },
+    {
+      "name": "owner follow up second entity profit",
+      "category": "follow_up",
+      "question": "กำไรของอันที่สองเท่าไหร่",
+      "context": [
+        {
+          "id": "turn-user-menu-ranking",
+          "source": "conversation_history",
+          "role": "user",
+          "content": "ขอ 3 เมนูที่ขายดีที่สุด"
+        },
+        {
+          "id": "turn-assistant-menu-ranking",
+          "source": "conversation_history",
+          "role": "assistant",
+          "content": "1. ต้มยำกุ้งน้ำข้น 2. ข้าวผัดปู 3. แกงเขียวหวานไก่"
+        }
+      ],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["menu"],
+        "operations": ["detail", "retrieve", "analyze"],
+        "required_metrics": ["profit"],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "required_inherited_fields": [
+          {
+            "field": "parameters.entities",
+            "source_turn_id": "turn-assistant-menu-ranking"
+          }
+        ],
+        "entity": {
+          "type": "menu",
+          "result_index": 2,
+          "source_turn_id": "turn-assistant-menu-ranking"
+        }
+      }
+    },
+    {
+      "name": "owner follow up evening only",
+      "category": "follow_up",
+      "question": "เอาเฉพาะช่วงเย็นล่ะ",
+      "context": [
+        {
+          "id": "turn-user-july-revenue",
+          "source": "conversation_history",
+          "role": "user",
+          "content": "ยอดขายเดือนกรกฎาคม 2569 เท่าไหร่"
+        },
+        {
+          "id": "turn-assistant-july-revenue",
+          "source": "conversation_history",
+          "role": "assistant",
+          "content": "กำลังสรุปยอดขายเดือนกรกฎาคมให้ครับ"
+        }
+      ],
+      "expected": {
+        "tasks": ["retrieve_fact", "analyze_data"],
+        "domains": ["sales"],
+        "operations": ["retrieve", "summarize", "analyze"],
+        "required_metrics": ["revenue"],
+        "tool_hints": ["get_sales_for_period"],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false,
+        "time_range": {
+          "kind": "month",
+          "start_date": "2026-07-01",
+          "end_date": "2026-08-01"
+        },
+        "day_part": {
+          "start_hour": 17,
+          "end_hour": 21
+        },
+        "required_inherited_fields": [
+          {
+            "field": "parameters.time_range",
+            "source_turn_id": "turn-user-july-revenue"
+          }
+        ]
+      }
+    },
+    {
+      "name": "owner clarify best menu metric",
+      "category": "clarify",
+      "question": "เมนูไหนดีสุด",
+      "context": [],
+      "expected": {
+        "tasks": ["unclear"],
+        "domains": ["menu"],
+        "operations": ["clarify"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": true,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    },
+    {
+      "name": "owner clarify missing request",
+      "category": "clarify",
+      "question": "ช่วยดูให้หน่อย",
+      "context": [],
+      "expected": {
+        "tasks": ["unclear"],
+        "domains": ["general"],
+        "operations": ["clarify"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": true,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    },
+    {
+      "name": "owner risky disable menu",
+      "category": "risky",
+      "question": "ปิดขายเมนูข้าวผัดปูตอนนี้",
+      "context": [],
+      "expected": {
+        "tasks": ["risky_action"],
+        "domains": ["menu"],
+        "operations": ["execute_action"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "high",
+        "read_only": false,
+        "requires_confirmation": true,
+        "action": {
+          "type": "set_menu_availability",
+          "is_available": false
+        },
+        "entity": {
+          "type": "menu",
+          "name_contains": "ข้าวผัดปู"
+        }
+      }
+    },
+    {
+      "name": "owner risky delete todays orders",
+      "category": "risky",
+      "question": "ลบออเดอร์ทั้งหมดของวันนี้ให้ที",
+      "context": [],
+      "expected": {
+        "tasks": ["risky_action"],
+        "domains": ["order"],
+        "operations": ["execute_action"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "high",
+        "read_only": false,
+        "requires_confirmation": true,
+        "time_range": {
+          "kind": "day",
+          "start_date": "2026-08-03",
+          "end_date": "2026-08-04"
+        }
+      }
+    },
+    {
+      "name": "owner out of scope weather",
+      "category": "out_of_scope",
+      "question": "วันนี้กรุงเทพฝนจะตกไหม",
+      "context": [],
+      "expected": {
+        "tasks": ["out_of_scope"],
+        "domains": ["general"],
+        "operations": ["refuse"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    },
+    {
+      "name": "owner out of scope stock advice",
+      "category": "out_of_scope",
+      "question": "ช่วยเลือกหุ้นเทคที่ควรซื้อสัปดาห์นี้ให้หน่อย",
+      "context": [],
+      "expected": {
+        "tasks": ["out_of_scope"],
+        "domains": ["general"],
+        "operations": ["refuse"],
+        "required_metrics": [],
+        "tool_hints": [""],
+        "needs_clarification": false,
+        "risk": "low",
+        "read_only": true,
+        "requires_confirmation": false
+      }
+    }
+  ]
+}
