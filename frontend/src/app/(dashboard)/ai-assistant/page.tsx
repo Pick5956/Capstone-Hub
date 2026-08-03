@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
-import { askOperationsAI, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { formatAIActionConfirmationMessage, getAIActionErrorMessage } from "@/src/lib/aiActionPreview";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -18,7 +19,8 @@ import {
 } from "@/src/lib/aiChatStorage";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AISnapshot, AIConversationMessage } from "@/src/types/ai";
+import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
+import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
 type Message = {
@@ -131,6 +133,9 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
+  const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [actionConfirming, setActionConfirming] = useState(false);
+  const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -193,15 +198,19 @@ export default function AIAssistantPage() {
     setConversationId(null);
     setError("");
     setPendingAction(null);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
     setMessages([welcomeMessage()]);
   };
 
   const submitQuestion = async (nextQuestion = input) => {
     const trimmed = nextQuestion.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || loading || actionConfirming) return;
     setInput("");
     setError("");
     setPendingAction(null);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
 
     const history = conversationHistory();
     setMessages((prev) => [...prev, { id: `user-${Date.now()}`, role: "user", content: trimmed, createdAt: new Date() }]);
@@ -240,6 +249,7 @@ export default function AIAssistantPage() {
         saveConversationId(storageKey, data.conversation_id);
       }
       if (data.snapshot) setLatestSnapshot(data.snapshot);
+      if (data.action_preview) setPendingActionPreview(data.action_preview);
       const actions =
         data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
@@ -265,6 +275,34 @@ export default function AIAssistantPage() {
       setError(message || copy.error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmActionPreview = async () => {
+    const preview = pendingActionPreview;
+    if (!preview || actionConfirming) return;
+
+    setActionConfirming(true);
+    setActionPreviewError("");
+    try {
+      const response = await confirmAIAction(preview.id, preview.confirmation_token);
+      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `action-${response.data.action_id}`,
+          role: "assistant",
+          content: formatAIActionConfirmationMessage(response.data, language),
+          createdAt: new Date(),
+        },
+      ]);
+      getOperationsSnapshot()
+        .then((snapshotResponse) => snapshotResponse?.data && setLatestSnapshot(snapshotResponse.data))
+        .catch(() => undefined);
+    } catch (actionError: unknown) {
+      setActionPreviewError(getAIActionErrorMessage(actionError, language));
+    } finally {
+      setActionConfirming(false);
     }
   };
 
@@ -395,6 +433,20 @@ export default function AIAssistantPage() {
               </div>
             )}
 
+            {pendingActionPreview && (
+              <AIActionPreviewCard
+                preview={pendingActionPreview}
+                language={language}
+                confirming={actionConfirming}
+                error={actionPreviewError}
+                onConfirm={handleConfirmActionPreview}
+                onCancel={() => {
+                  setPendingActionPreview(null);
+                  setActionPreviewError("");
+                }}
+              />
+            )}
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -439,7 +491,7 @@ export default function AIAssistantPage() {
             />
             <button
               type="submit"
-              disabled={loading || !input.trim()}
+              disabled={loading || actionConfirming || !input.trim()}
               aria-label={copy.ask}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
             >

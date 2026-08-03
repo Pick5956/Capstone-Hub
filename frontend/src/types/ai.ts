@@ -83,11 +83,48 @@ export type AIResolvedPlan = {
   task: string;
   domain: string;
   operation: string;
+  action: {
+    type: "set_menu_availability";
+    arguments: { is_available: boolean };
+  } | null;
   parameters: Record<string, unknown>;
   tool_hint: string;
   resolution: Record<string, unknown>;
   policy: Record<string, unknown>;
   response_style: string;
+};
+
+export type AIActionPreview = {
+  id: string;
+  action_type: "set_menu_availability";
+  status: string;
+  expires_at: string;
+  confirmation_token: string;
+  summary: string;
+  target: {
+    menu_item_id: number;
+    name: string;
+  };
+  current: {
+    is_available: boolean;
+  };
+  requested: {
+    is_available: boolean;
+  };
+  warnings: string[];
+};
+
+export type AIActionConfirmation = {
+  action_id: string;
+  status: string;
+  replayed: boolean;
+  executed_at: string;
+  message: string;
+  result: {
+    menu_item_id: number;
+    name: string;
+    is_available: boolean;
+  };
 };
 
 export type AIAskResponse = {
@@ -100,6 +137,7 @@ export type AIAskResponse = {
   conversation_id?: string;
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;
+  action_preview?: AIActionPreview;
   candidate_tools?: string[];
   planner?: {
     provider: "groq" | "gemini" | "local_clarification_fallback" | string;

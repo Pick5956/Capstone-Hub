@@ -1,5 +1,11 @@
 import { apiClient } from "./apiClient";
-import type { AIAskRequest, AIAskResponse, AIConversationMessage, AISnapshot } from "../types/ai";
+import type {
+  AIActionConfirmation,
+  AIAskRequest,
+  AIAskResponse,
+  AIConversationMessage,
+  AISnapshot,
+} from "../types/ai";
 
 export const askOperationsAI = (
   question: string,
@@ -14,6 +20,12 @@ export const askOperationsAI = (
 
 export const deleteAIConversation = (conversationId: string) =>
   apiClient.delete<void>(`/api/v1/ai/operations/conversations/${encodeURIComponent(conversationId)}`);
+
+export const confirmAIAction = (previewId: string, confirmationToken: string) =>
+  apiClient.post<AIActionConfirmation>(
+    `/api/v1/ai/operations/actions/${encodeURIComponent(previewId)}/confirm`,
+    { confirmation_token: confirmationToken },
+  );
 
 export const getOperationsSnapshot = () =>
   apiClient.get<AISnapshot>("/api/v1/ai/operations/snapshot");

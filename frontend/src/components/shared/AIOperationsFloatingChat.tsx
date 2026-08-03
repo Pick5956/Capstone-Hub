@@ -16,7 +16,8 @@ import {
   Lightbulb,
   RotateCcw
 } from "lucide-react";
-import { askOperationsAI, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { formatAIActionConfirmationMessage, getAIActionErrorMessage } from "@/src/lib/aiActionPreview";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -32,7 +33,8 @@ import {
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import type { AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
+import type { AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
+import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIResponseContent from "@/src/components/shared/AIResponseContent";
 
 type Message = {
@@ -174,6 +176,9 @@ export default function AIOperationsFloatingChat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [actionConfirming, setActionConfirming] = useState(false);
+  const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
 
@@ -194,6 +199,8 @@ export default function AIOperationsFloatingChat() {
   // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
     purgeStaleChats(storageKey);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
     setConversationId(loadStoredConversationId(storageKey));
     const stored = loadStoredMessages<StoredMessage>(storageKey);
     if (stored && stored.length > 0) {
@@ -268,6 +275,8 @@ export default function AIOperationsFloatingChat() {
     clearStoredChat(storageKey);
     setConversationId(null);
     setShowTips(true);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
     setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
   };
 
@@ -301,9 +310,11 @@ export default function AIOperationsFloatingChat() {
 
   const handleSend = async (textToSend = input) => {
     const trimmed = textToSend.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || loading || actionConfirming) return;
 
     setInput("");
+    setPendingActionPreview(null);
+    setActionPreviewError("");
     
     // Add user message
     const userMsgId = `user-${Date.now()}`;
@@ -388,6 +399,10 @@ export default function AIOperationsFloatingChat() {
       };
       
       setMessages(prev => [...prev, assistantMsg]);
+
+      if (data.action_preview) {
+        setPendingActionPreview(data.action_preview);
+      }
       
       if (data.snapshot) {
         setLatestSnapshot(data.snapshot);
@@ -420,6 +435,34 @@ export default function AIOperationsFloatingChat() {
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmActionPreview = async () => {
+    const preview = pendingActionPreview;
+    if (!preview || actionConfirming) return;
+
+    setActionConfirming(true);
+    setActionPreviewError("");
+    try {
+      const response = await confirmAIAction(preview.id, preview.confirmation_token);
+      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `action-${response.data.action_id}`,
+          role: "assistant",
+          content: formatAIActionConfirmationMessage(response.data, language),
+          createdAt: new Date(),
+        },
+      ]);
+      getOperationsSnapshot()
+        .then((snapshotResponse) => snapshotResponse?.data && setLatestSnapshot(snapshotResponse.data))
+        .catch(() => undefined);
+    } catch (actionError: unknown) {
+      setActionPreviewError(getAIActionErrorMessage(actionError, language));
+    } finally {
+      setActionConfirming(false);
     }
   };
 
@@ -738,6 +781,19 @@ export default function AIOperationsFloatingChat() {
                 </div>
               </div>
             )}
+            {pendingActionPreview && (
+              <AIActionPreviewCard
+                preview={pendingActionPreview}
+                language={language}
+                confirming={actionConfirming}
+                error={actionPreviewError}
+                onConfirm={handleConfirmActionPreview}
+                onCancel={() => {
+                  setPendingActionPreview(null);
+                  setActionPreviewError("");
+                }}
+              />
+            )}
             <div ref={messagesEndRef} />
           </div>
 
@@ -796,14 +852,14 @@ export default function AIOperationsFloatingChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={copy.askPlaceholder}
-                disabled={loading}
+                disabled={loading || actionConfirming}
                 aria-label={copy.askPlaceholder}
                 className="min-h-11 flex-1 rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium !text-gray-950 placeholder-gray-500 outline-none transition-[border-color,box-shadow] focus-glow dark:border-gray-800 dark:bg-gray-900 dark:!text-gray-50 dark:placeholder-gray-400"
               />
               <button
                 type="submit"
                 aria-label={copy.send}
-                disabled={loading || !input.trim()}
+                disabled={loading || actionConfirming || !input.trim()}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />
