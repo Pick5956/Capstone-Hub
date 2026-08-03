@@ -1,12 +1,22 @@
 // Shared, session-scoped chat persistence for the AI assistant. Both the
 // floating widget and the full /ai-assistant page use the same key + envelope
-// so their history stays in sync. History is keyed per (restaurant, user) and
-// expires after one shift; nothing is stored server-side.
+// so their history stays in sync. History and the server conversation ID are
+// keyed per (restaurant, user) and expire together after seven days.
 
 const CHAT_KEY_PREFIX = "restaurant_ai_chat";
+const SERVER_CONVERSATION_KEY_SUFFIX = ":server-conversation";
 const CHAT_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type ChatEnvelope<T> = { savedAt?: number; messages?: T[] };
+type ConversationEnvelope = { savedAt?: number; conversationId?: string };
+
+function serverConversationStorageKey(key: string): string {
+  return `${key}${SERVER_CONVERSATION_KEY_SUFFIX}`;
+}
+
+function validConversationId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
 
 export function chatStorageKey(restaurantId?: number | null, userId?: number | null): string | null {
   if (restaurantId == null || userId == null) return null;
@@ -43,10 +53,53 @@ export function saveMessages(key: string | null, messages: unknown[]): void {
   }
 }
 
+export function loadStoredConversationId(key: string | null): string | null {
+  if (typeof window === "undefined" || !key) return null;
+  const conversationKey = serverConversationStorageKey(key);
+  try {
+    const raw = localStorage.getItem(conversationKey);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as ConversationEnvelope;
+    if (
+      !entry.savedAt
+      || Date.now() - entry.savedAt > CHAT_HISTORY_TTL_MS
+      || !validConversationId(entry.conversationId)
+    ) {
+      try {
+        localStorage.removeItem(conversationKey);
+      } catch {
+        // ignore storage implementations that allow reads but reject writes
+      }
+      return null;
+    }
+    return entry.conversationId;
+  } catch {
+    try {
+      localStorage.removeItem(conversationKey);
+    } catch {
+      // ignore storage implementations that are completely unavailable
+    }
+    return null;
+  }
+}
+
+export function saveConversationId(key: string | null, conversationId: string | null | undefined): void {
+  if (typeof window === "undefined" || !key || !validConversationId(conversationId)) return;
+  try {
+    localStorage.setItem(
+      serverConversationStorageKey(key),
+      JSON.stringify({ savedAt: Date.now(), conversationId }),
+    );
+  } catch {
+    // storage may be unavailable (private mode) -- ignore
+  }
+}
+
 export function clearStoredChat(key: string | null): void {
   if (typeof window === "undefined" || !key) return;
   try {
     localStorage.removeItem(key);
+    localStorage.removeItem(serverConversationStorageKey(key));
   } catch {
     // ignore
   }

@@ -65,8 +65,29 @@ export type AISnapshot = {
 };
 
 export type AIConversationMessage = {
+  id?: string;
   role: "user" | "assistant";
   content: string;
+};
+
+export type AIAskRequest = {
+  question: string;
+  history: AIConversationMessage[];
+  conversation_id?: string;
+};
+
+export type AIResolvedPlan = {
+  schema_version: string;
+  original_question: string;
+  resolved_question: string;
+  task: string;
+  domain: string;
+  operation: string;
+  parameters: Record<string, unknown>;
+  tool_hint: string;
+  resolution: Record<string, unknown>;
+  policy: Record<string, unknown>;
+  response_style: string;
 };
 
 export type AIAskResponse = {
@@ -76,4 +97,8 @@ export type AIAskResponse = {
   tool?: "get_lowest_margin_menu" | string;
   model: string;
   snapshot: AISnapshot;
+  conversation_id?: string;
+  turn_id?: string;
+  resolved_plan?: AIResolvedPlan;
+  candidate_tools?: string[];
 };

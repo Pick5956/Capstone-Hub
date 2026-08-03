@@ -3,11 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
-import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
-import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
+import {
+  chatStorageKey,
+  clearStoredChat,
+  loadStoredConversationId,
+  loadStoredMessages,
+  purgeStaleChats,
+  saveConversationId,
+  saveMessages,
+} from "@/src/lib/aiChatStorage";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AISnapshot, AIConversationMessage } from "@/src/types/ai";
@@ -118,6 +126,7 @@ export default function AIAssistantPage() {
   const copy = useMemo(() => buildCopy(language), [language]);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +147,7 @@ export default function AIAssistantPage() {
   // Load shared history (same key as the floating chat) with cleanup + TTL.
   useEffect(() => {
     purgeStaleChats(storageKey);
+    setConversationId(loadStoredConversationId(storageKey));
     const stored = loadStoredMessages<StoredMessage>(storageKey);
     if (stored && stored.length > 0) {
       setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
@@ -172,10 +182,15 @@ export default function AIAssistantPage() {
     messages
       .filter((m): m is Message & { role: "user" | "assistant" } => m.role !== "system")
       .slice(-6)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => ({ id: m.id, role: m.role, content: m.content }));
 
   const handleClearChat = () => {
+    const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
+    if (serverConversationId) {
+      void deleteAIConversation(serverConversationId).catch(() => undefined);
+    }
     clearStoredChat(storageKey);
+    setConversationId(null);
     setError("");
     setPendingAction(null);
     setMessages([welcomeMessage()]);
@@ -218,8 +233,12 @@ export default function AIAssistantPage() {
 
     setLoading(true);
     try {
-      const response = await askOperationsAI(trimmed, history);
+      const response = await askOperationsAI(trimmed, history, conversationId);
       const data = response.data;
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        saveConversationId(storageKey, data.conversation_id);
+      }
       if (data.snapshot) setLatestSnapshot(data.snapshot);
       const actions =
         data.intent === "unclear"
@@ -229,7 +248,14 @@ export default function AIAssistantPage() {
             : [];
       setMessages((prev) => [
         ...prev,
-        { id: `ai-${Date.now()}`, role: "assistant", content: data.answer, createdAt: new Date(), actions, model: data.model },
+        {
+          id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
+          role: "assistant",
+          content: data.answer,
+          createdAt: new Date(),
+          actions,
+          model: data.model,
+        },
       ]);
     } catch (err: unknown) {
       const message =

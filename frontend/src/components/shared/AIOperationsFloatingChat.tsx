@@ -16,11 +16,19 @@ import {
   Lightbulb,
   RotateCcw
 } from "lucide-react";
-import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
-import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
+import {
+  chatStorageKey,
+  clearStoredChat,
+  loadStoredConversationId,
+  loadStoredMessages,
+  purgeStaleChats,
+  saveConversationId,
+  saveMessages,
+} from "@/src/lib/aiChatStorage";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -163,6 +171,7 @@ export default function AIOperationsFloatingChat() {
   const [hasOpenedStats, setHasOpenedStats] = useState(false);
   const [showTips, setShowTips] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
@@ -185,6 +194,7 @@ export default function AIOperationsFloatingChat() {
   // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
     purgeStaleChats(storageKey);
+    setConversationId(loadStoredConversationId(storageKey));
     const stored = loadStoredMessages<StoredMessage>(storageKey);
     if (stored && stored.length > 0) {
       setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
@@ -247,11 +257,16 @@ export default function AIOperationsFloatingChat() {
     messages
       .filter((message): message is Message & { role: "user" | "assistant" } => message.role !== "system")
       .slice(-6)
-      .map((message) => ({ role: message.role, content: message.content }));
+      .map((message) => ({ id: message.id, role: message.role, content: message.content }));
 
   // Start a fresh chat: drop the stored history and reset to the welcome message.
   const handleClearChat = () => {
+    const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
+    if (canAskAI && serverConversationId) {
+      void deleteAIConversation(serverConversationId).catch(() => undefined);
+    }
     clearStoredChat(storageKey);
+    setConversationId(null);
     setShowTips(true);
     setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
   };
@@ -353,11 +368,15 @@ export default function AIOperationsFloatingChat() {
     setLoading(true);
 
     try {
-      const response = await askOperationsAI(trimmed, conversationHistory());
+      const response = await askOperationsAI(trimmed, conversationHistory(), conversationId);
       const data: AIAskResponse = response.data;
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        saveConversationId(storageKey, data.conversation_id);
+      }
       
       const assistantMsg: Message = {
-        id: `ai-${Date.now()}`,
+        id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
         role: "assistant",
         content: data.answer,
         createdAt: new Date(),
