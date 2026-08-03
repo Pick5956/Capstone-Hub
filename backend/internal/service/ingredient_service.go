@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -18,16 +19,16 @@ func ProvideIngredientService(repo *repository.IngredientRepository) *Ingredient
 }
 
 type IngredientRequest struct {
-	Name                    string  `json:"name" binding:"required,max=160"`
-	SKU                     string  `json:"sku" binding:"max=80"`
-	CategoryID              uint    `json:"category_id"`
-	ImageURL                string  `json:"image_url" binding:"max=2048"`
-	Unit                    string  `json:"unit" binding:"required,max=40"`
-	Stock                   float64 `json:"stock"`
-	MinStock                float64 `json:"min_stock"`
-	CostPerUnit             float64 `json:"cost_per_unit"`
-	YieldPercent            float64 `json:"yield_percent"`
-	StorageType             string  `json:"storage_type" binding:"max=40"`
+	Name         string  `json:"name" binding:"required,max=160"`
+	SKU          string  `json:"sku" binding:"max=80"`
+	CategoryID   uint    `json:"category_id"`
+	ImageURL     string  `json:"image_url" binding:"max=2048"`
+	Unit         string  `json:"unit" binding:"required,max=40"`
+	Stock        float64 `json:"stock"`
+	MinStock     float64 `json:"min_stock"`
+	CostPerUnit  float64 `json:"cost_per_unit"`
+	YieldPercent float64 `json:"yield_percent"`
+	StorageType  string  `json:"storage_type" binding:"max=40"`
 }
 
 type IngredientCategoryRequest struct {
@@ -40,6 +41,9 @@ type AdjustStockRequest struct {
 	Type     string  `json:"type" binding:"required"` // "in", "out", "adjust"
 	Quantity float64 `json:"quantity" binding:"required"`
 	Note     string  `json:"note" binding:"max=500"`
+	// Amount is what the restock cost. Only meaningful for "in"; a positive
+	// value also writes the expense-ledger row.
+	Amount float64 `json:"amount"`
 }
 
 const (
@@ -93,17 +97,17 @@ func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientReq
 		return nil, err
 	}
 	ingredient := &entity.Ingredient{
-		RestaurantID:            restaurantID,
-		Name:                    name,
-		SKU:                     strings.TrimSpace(req.SKU),
-		CategoryID:              categoryID,
-		ImageURL:                strings.TrimSpace(req.ImageURL),
-		Unit:                    unit,
-		Stock:                   req.Stock,
-		MinStock:                req.MinStock,
-		CostPerUnit:             req.CostPerUnit,
-		YieldPercent:            sanitizeYieldPercent(req.YieldPercent),
-		StorageType:             storageType,
+		RestaurantID: restaurantID,
+		Name:         name,
+		SKU:          strings.TrimSpace(req.SKU),
+		CategoryID:   categoryID,
+		ImageURL:     strings.TrimSpace(req.ImageURL),
+		Unit:         unit,
+		Stock:        req.Stock,
+		MinStock:     req.MinStock,
+		CostPerUnit:  req.CostPerUnit,
+		YieldPercent: sanitizeYieldPercent(req.YieldPercent),
+		StorageType:  storageType,
 	}
 	if err := s.repo.Transaction(func(tx *repository.IngredientRepository) error {
 		if err := tx.Create(ingredient); err != nil {
@@ -185,7 +189,11 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 	if len([]rune(note)) > 500 {
 		return nil, errors.New("stock note is too long")
 	}
-	err := s.repo.Transaction(func(tx *repository.IngredientRepository) error {
+	amount, err := restockAmount(kind, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+	err = s.repo.Transaction(func(tx *repository.IngredientRepository) error {
 		ingredient, err := tx.FindByIDForUpdate(restaurantID, ingredientID)
 		if err != nil {
 			return errors.New("ingredient not found")
@@ -202,11 +210,32 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 			IngredientID: ingredientID,
 			Type:         kind,
 			Quantity:     req.Quantity,
+			Amount:       amount,
 			Note:         note,
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateTransaction(stockTransaction); err != nil {
 			return err
+		}
+		if amount > 0 {
+			// Same transaction as the stock movement, so the ledger can never
+			// disagree with what actually came into the store room.
+			expenseNote := ingredient.Name
+			if note != "" {
+				expenseNote = ingredient.Name + " · " + note
+			}
+			now := repository.BangkokNow()
+			if err := tx.CreateExpense(&entity.Expense{
+				RestaurantID:            restaurantID,
+				Category:                "ingredient",
+				Amount:                  amount,
+				SpentAt:                 time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+				Note:                    expenseNote,
+				CreatedByID:             userID,
+				IngredientTransactionID: &stockTransaction.ID,
+			}); err != nil {
+				return err
+			}
 		}
 		ingredient.Stock = nextStock
 		updated = ingredient
@@ -315,6 +344,45 @@ func applyStockAdjustment(current float64, kind string, quantity float64) (float
 	default:
 		return 0, errors.New("type must be 'in', 'out', or 'adjust'")
 	}
+}
+
+// restockAmount validates the money side of a stock movement. Only "in" can
+// carry a cost — an "out" or "adjust" with an amount would silently record
+// spending for stock leaving the shelf, so it is rejected rather than ignored.
+func restockAmount(kind string, amount float64) (float64, error) {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) {
+		return 0, errors.New("amount is not a valid number")
+	}
+	if amount < 0 {
+		return 0, errors.New("amount cannot be negative")
+	}
+	rounded := roundMoney(amount)
+	if rounded == 0 {
+		return 0, nil
+	}
+	if kind != "in" {
+		return 0, errors.New("only stock-in can record an amount")
+	}
+	if rounded > maxIngredientCost {
+		return 0, errors.New("amount is too large")
+	}
+	return rounded, nil
+}
+
+// estimateRestockAmount is the fallback when nobody typed what a restock cost:
+// the ingredient's own recorded unit price times the quantity received. It is a
+// derived figure, not an observed one, so the caller marks the ledger entry.
+// A zero result means there is nothing to go on — better no row than a made-up
+// one, since an invented number is worse than a visible gap.
+func estimateRestockAmount(quantity, costPerUnit float64) float64 {
+	if quantity <= 0 || costPerUnit <= 0 {
+		return 0
+	}
+	amount := roundMoney(quantity * costPerUnit)
+	if amount <= 0 || amount > maxIngredientCost {
+		return 0
+	}
+	return amount
 }
 
 func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *entity.IngredientTransaction {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"Project-M/internal/entity"
@@ -100,6 +101,122 @@ func (s *ReportService) ManagerReport(restaurantID uint, days int) (*ManagerRepo
 		StockRisks:  risks,
 		Summary:     summary,
 	}, nil
+}
+
+type SalesByHourResponse struct {
+	Date  string                       `json:"date"`
+	Hours []repository.ReportSalesHour `json:"hours"`
+}
+
+func (s *ReportService) SalesByHour(restaurantID uint, date string) (*SalesByHourResponse, error) {
+	loc := repository.BangkokNow().Location()
+	day, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		return nil, err
+	}
+	hours, err := s.repo.SalesByHour(restaurantID, day)
+	if err != nil {
+		return nil, err
+	}
+	if hours == nil {
+		hours = []repository.ReportSalesHour{}
+	}
+	for i := range hours {
+		hours[i].Cost = roundMoney(hours[i].Cost)
+		hours[i].Profit = roundMoney(hours[i].Profit)
+	}
+	return &SalesByHourResponse{Date: date, Hours: hours}, nil
+}
+
+type SalesDetailResponse struct {
+	Date    string                              `json:"date"`
+	Hour    *int                                `json:"hour"`
+	Orders  []repository.ReportSalesDetailOrder `json:"orders"`
+	Summary repository.ReportSalesDetailOrder   `json:"summary"`
+}
+
+const salesDetailLimit = 300
+
+// barWindow turns a clicked bar into its time range. `hour` < 0 means a
+// whole-day bar (the day and month views both plot days). Both drill-downs go
+// through here so they can never disagree about which window a bar covers.
+func barWindow(date string, hour int) (since, until time.Time, hourFilter *int, err error) {
+	loc := repository.BangkokNow().Location()
+	day, parseErr := time.ParseInLocation("2006-01-02", date, loc)
+	if parseErr != nil {
+		return time.Time{}, time.Time{}, nil, errors.New("date must be YYYY-MM-DD")
+	}
+	if hour > 23 {
+		return time.Time{}, time.Time{}, nil, errors.New("hour must be between 0 and 23")
+	}
+
+	since = time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	until = since.AddDate(0, 0, 1)
+	if hour >= 0 {
+		since = since.Add(time.Duration(hour) * time.Hour)
+		until = since.Add(time.Hour)
+		hourValue := hour
+		hourFilter = &hourValue
+	}
+	return since, until, hourFilter, nil
+}
+
+type ExpenseDetailResponse struct {
+	Date  string                               `json:"date"`
+	Hour  *int                                 `json:"hour"`
+	Items []repository.ReportExpenseDetailItem `json:"items"`
+	Total float64                              `json:"total"`
+}
+
+// ExpenseDetail resolves one cost bar into the ingredients behind it.
+func (s *ReportService) ExpenseDetail(restaurantID uint, date string, hour int) (*ExpenseDetailResponse, error) {
+	since, until, hourFilter, err := barWindow(date, hour)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.repo.ExpenseDetail(restaurantID, since, until, salesDetailLimit)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []repository.ReportExpenseDetailItem{}
+	}
+	response := &ExpenseDetailResponse{Date: date, Hour: hourFilter, Items: items}
+	for i := range items {
+		items[i].Cost = roundMoney(items[i].Cost)
+		response.Total += items[i].Cost
+	}
+	response.Total = roundMoney(response.Total)
+	return response, nil
+}
+
+// SalesDetail resolves one chart bar back to its bills.
+func (s *ReportService) SalesDetail(restaurantID uint, date string, hour int) (*SalesDetailResponse, error) {
+	since, until, hourFilter, err := barWindow(date, hour)
+	if err != nil {
+		return nil, err
+	}
+
+	orders, err := s.repo.SalesDetail(restaurantID, since, until, salesDetailLimit)
+	if err != nil {
+		return nil, err
+	}
+	if orders == nil {
+		orders = []repository.ReportSalesDetailOrder{}
+	}
+
+	summary := repository.ReportSalesDetailOrder{}
+	for i := range orders {
+		orders[i].Cost = roundMoney(orders[i].Cost)
+		orders[i].Profit = roundMoney(orders[i].Profit)
+		summary.Revenue += orders[i].Revenue
+		summary.Cost += orders[i].Cost
+	}
+	summary.Revenue = roundMoney(summary.Revenue)
+	summary.Cost = roundMoney(summary.Cost)
+	summary.Profit = roundMoney(summary.Revenue - summary.Cost)
+
+	return &SalesDetailResponse{Date: date, Hour: hourFilter, Orders: orders, Summary: summary}, nil
 }
 
 type TopMenuItemsResponse struct {

@@ -56,15 +56,15 @@ func (r *IngredientRepository) UpdateMetadata(ingredient *entity.Ingredient) err
 	return r.db.Model(&entity.Ingredient{}).
 		Where("restaurant_id = ? AND id = ?", ingredient.RestaurantID, ingredient.ID).
 		Updates(map[string]any{
-			"name":                      ingredient.Name,
-			"sku":                       ingredient.SKU,
-			"category_id":               ingredient.CategoryID,
-			"image_url":                 ingredient.ImageURL,
-			"unit":                      ingredient.Unit,
-			"min_stock":                 ingredient.MinStock,
-			"cost_per_unit":             ingredient.CostPerUnit,
-			"yield_percent":             ingredient.YieldPercent,
-			"storage_type":              ingredient.StorageType,
+			"name":          ingredient.Name,
+			"sku":           ingredient.SKU,
+			"category_id":   ingredient.CategoryID,
+			"image_url":     ingredient.ImageURL,
+			"unit":          ingredient.Unit,
+			"min_stock":     ingredient.MinStock,
+			"cost_per_unit": ingredient.CostPerUnit,
+			"yield_percent": ingredient.YieldPercent,
+			"storage_type":  ingredient.StorageType,
 		}).Error
 }
 
@@ -88,6 +88,13 @@ func (r *IngredientRepository) IsReferencedByRecipe(restaurantID, ingredientID u
 
 func (r *IngredientRepository) CreateTransaction(tx *entity.IngredientTransaction) error {
 	return r.db.Create(tx).Error
+}
+
+// CreateExpense lives here so a restock and its ledger row commit together. Put
+// through the ExpenseRepository it would land in a second transaction, and a
+// crash between the two would raise stock without recording what it cost.
+func (r *IngredientRepository) CreateExpense(expense *entity.Expense) error {
+	return r.db.Create(expense).Error
 }
 
 func (r *IngredientRepository) ListTransactions(restaurantID, ingredientID uint) ([]entity.IngredientTransaction, error) {

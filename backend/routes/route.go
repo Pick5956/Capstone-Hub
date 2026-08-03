@@ -37,6 +37,7 @@ func SetupRoutes(r *gin.Engine) {
 	SetupRestaurantRoutes(api, v1)
 	SetupMenuTableRoutes(v1)
 	SetupIngredientRoutes(v1)
+	SetupExpenseRoutes(v1)
 	SetupOrderRoutes(v1, orderEvents)
 	SetupReportRoutes(v1)
 	SetupAIRoutes(v1)

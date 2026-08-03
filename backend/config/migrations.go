@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 5
+	CurrentSchemaVersion int64 = 7
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -119,6 +119,37 @@ func schemaMigrationPlan() []SchemaMigration {
 				// (seated / cancelled / no-show) separately from the order archive.
 				if err := ctx.DB.AutoMigrate(&entity.Reservation{}); err != nil {
 					return fmt.Errorf("migrate reservations: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 6,
+			Name:    "add_expenses",
+			Up: func(ctx *MigrationContext) error {
+				// Cash actually paid out (supplies, wages, rent). Kept separate
+				// from order_inventory_deductions, which is the recipe cost of
+				// food already sold.
+				if err := ctx.DB.AutoMigrate(&entity.Expense{}); err != nil {
+					return fmt.Errorf("migrate expenses: %w", err)
+				}
+				// Re-seed so the new manage_expenses permission reaches the
+				// existing system roles (SeedRoles updates permissions on
+				// conflict rather than skipping).
+				if err := seed.SeedRoles(ctx.DB); err != nil {
+					return fmt.Errorf("reseed roles for expenses: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 7,
+			Name:    "link_restock_spend_to_expenses",
+			Up: func(ctx *MigrationContext) error {
+				// Restocks can now carry what they cost, and write the matching
+				// ledger row themselves instead of relying on double entry.
+				if err := ctx.DB.AutoMigrate(&entity.IngredientTransaction{}, &entity.Expense{}); err != nil {
+					return fmt.Errorf("migrate restock spend: %w", err)
 				}
 				return nil
 			},
