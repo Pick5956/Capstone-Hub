@@ -37,6 +37,7 @@ func structuredPlannerTestPlan(question string) ResolvedPlan {
 		Task:             AITaskGeneralChat,
 		Domain:           ResolvedPlanDomainGeneral,
 		Operation:        ResolvedPlanOperationChat,
+		Action:           nil,
 		Parameters: ResolvedPlanParameters{
 			Metrics:  []ResolvedPlanMetric{},
 			GroupBy:  []ResolvedPlanGroupDimension{},
@@ -79,6 +80,27 @@ func TestParseStructuredPlannerResolvedPlanUsesTrustedQuestion(t *testing.T) {
 	}
 }
 
+func TestParseStructuredPlannerResolvedPlanAcceptsTypedMenuAction(t *testing.T) {
+	plan := structuredPlannerTestPlan("make menu 42 unavailable")
+	plan.Task = AITaskRiskyAction
+	plan.Domain = ResolvedPlanDomainMenu
+	plan.Operation = ResolvedPlanOperationExecuteAction
+	plan.Action = &ResolvedPlanAction{
+		Type:      ResolvedPlanActionSetMenuAvailability,
+		Arguments: ResolvedPlanActionArguments{IsAvailable: false},
+	}
+	plan.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityMenu, ID: "42"}}
+	plan.Policy = ResolvedPlanPolicy{Risk: ResolvedPlanRiskHigh, RequiresConfirmation: true}
+
+	parsed, err := ParseStructuredPlannerResolvedPlan(structuredPlannerTestJSON(t, plan), plan.OriginalQuestion)
+	if err != nil {
+		t.Fatalf("ParseStructuredPlannerResolvedPlan: %v", err)
+	}
+	if parsed.Action == nil || parsed.Action.Type != ResolvedPlanActionSetMenuAvailability || parsed.Action.Arguments.IsAvailable {
+		t.Fatalf("parsed action = %#v, want unavailable menu action", parsed.Action)
+	}
+}
+
 func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T) {
 	validJSON := structuredPlannerTestJSON(t, structuredPlannerTestPlan("hello"))
 
@@ -102,9 +124,43 @@ func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T)
 		t.Fatal(err)
 	}
 
+	var missingAction map[string]any
+	if err := json.Unmarshal([]byte(validJSON), &missingAction); err != nil {
+		t.Fatal(err)
+	}
+	delete(missingAction, "action")
+	missingActionJSON, err := json.Marshal(missingAction)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actionPlan := structuredPlannerTestPlan("make menu available")
+	actionPlan.Task = AITaskRiskyAction
+	actionPlan.Domain = ResolvedPlanDomainMenu
+	actionPlan.Operation = ResolvedPlanOperationExecuteAction
+	actionPlan.Action = &ResolvedPlanAction{
+		Type:      ResolvedPlanActionSetMenuAvailability,
+		Arguments: ResolvedPlanActionArguments{IsAvailable: true},
+	}
+	actionPlan.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityMenu, ID: "42"}}
+	actionPlan.Policy = ResolvedPlanPolicy{Risk: ResolvedPlanRiskHigh, RequiresConfirmation: true}
+	actionJSON := structuredPlannerTestJSON(t, actionPlan)
+	var missingActionArgument map[string]any
+	if err := json.Unmarshal([]byte(actionJSON), &missingActionArgument); err != nil {
+		t.Fatal(err)
+	}
+	action := missingActionArgument["action"].(map[string]any)
+	delete(action["arguments"].(map[string]any), "is_available")
+	missingActionArgumentJSON, err := json.Marshal(missingActionArgument)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tests := map[string]string{
 		"markdown fence":       "```json\n" + validJSON + "\n```",
 		"trailing JSON":        validJSON + `{}`,
+		"missing root action":  string(missingActionJSON),
+		"missing action arg":   string(missingActionArgumentJSON),
 		"missing nested field": string(missingNestedJSON),
 		"unknown root field":   string(unknownRootJSON),
 		"null required array":  strings.Replace(validJSON, `"metrics":[]`, `"metrics":null`, 1),

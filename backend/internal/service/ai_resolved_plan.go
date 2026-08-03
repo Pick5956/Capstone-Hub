@@ -11,7 +11,7 @@ import (
 const (
 	// ResolvedPlanSchemaVersion is bumped only when the JSON contract changes in
 	// a backward-incompatible way. Provider adapters should request this version.
-	ResolvedPlanSchemaVersion = "1.0"
+	ResolvedPlanSchemaVersion = "1.1"
 	ResolvedPlanTimezone      = "Asia/Bangkok"
 )
 
@@ -31,6 +31,7 @@ type ResolvedPlan struct {
 	Task             AITask                    `json:"task"`
 	Domain           ResolvedPlanDomain        `json:"domain"`
 	Operation        ResolvedPlanOperation     `json:"operation"`
+	Action           *ResolvedPlanAction       `json:"action"`
 	Parameters       ResolvedPlanParameters    `json:"parameters"`
 	ToolHint         AIToolName                `json:"tool_hint"`
 	Resolution       ResolvedPlanResolution    `json:"resolution"`
@@ -81,6 +82,24 @@ const (
 	ResolvedPlanOperationClarify       ResolvedPlanOperation = "clarify"
 	ResolvedPlanOperationRefuse        ResolvedPlanOperation = "refuse"
 )
+
+// ResolvedPlanActionType is intentionally a very small allowlist. New write
+// capabilities must add a typed contract and backend policy instead of passing
+// arbitrary tool names or argument maps through the model boundary.
+type ResolvedPlanActionType string
+
+const (
+	ResolvedPlanActionSetMenuAvailability ResolvedPlanActionType = "set_menu_availability"
+)
+
+type ResolvedPlanAction struct {
+	Type      ResolvedPlanActionType      `json:"type"`
+	Arguments ResolvedPlanActionArguments `json:"arguments"`
+}
+
+type ResolvedPlanActionArguments struct {
+	IsAvailable bool `json:"is_available"`
+}
 
 type ResolvedPlanMetric string
 
@@ -340,6 +359,9 @@ var (
 		ResolvedPlanOperationNavigate, ResolvedPlanOperationDraftAction, ResolvedPlanOperationExecuteAction,
 		ResolvedPlanOperationClarify, ResolvedPlanOperationRefuse,
 	}
+	resolvedPlanActionTypes = []ResolvedPlanActionType{
+		ResolvedPlanActionSetMenuAvailability,
+	}
 	resolvedPlanMetrics = []ResolvedPlanMetric{
 		ResolvedPlanMetricOverview, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount,
 		ResolvedPlanMetricAverageOrder, ResolvedPlanMetricQuantity, ResolvedPlanMetricPrice,
@@ -411,6 +433,7 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.Task = AITask(normalizeEnum(string(p.Task)))
 	p.Domain = ResolvedPlanDomain(normalizeEnum(string(p.Domain)))
 	p.Operation = ResolvedPlanOperation(normalizeEnum(string(p.Operation)))
+	p.Action = normalizeResolvedPlanAction(p.Action)
 	p.ToolHint = AIToolName(normalizeEnum(string(p.ToolHint)))
 	p.ResponseStyle = ResolvedPlanResponseStyle(normalizeEnum(string(p.ResponseStyle)))
 	p.Policy.Risk = ResolvedPlanRiskLevel(normalizeEnum(string(p.Policy.Risk)))
@@ -468,6 +491,9 @@ func (p ResolvedPlan) Validate() error {
 	if err := p.Parameters.validate(); err != nil {
 		return err
 	}
+	if err := p.validateActionContract(); err != nil {
+		return err
+	}
 	if p.Operation == ResolvedPlanOperationRank {
 		if p.Parameters.Ranking == nil {
 			return errors.New("resolved plan: operation=rank requires parameters.ranking")
@@ -515,6 +541,43 @@ func (p ResolvedPlan) Validate() error {
 		default:
 			return fmt.Errorf("resolved plan: task %q cannot carry a tool_hint", p.Task)
 		}
+	}
+	return nil
+}
+
+func (p ResolvedPlan) validateActionContract() error {
+	isMenuAvailabilityAction := p.Task == AITaskRiskyAction &&
+		p.Domain == ResolvedPlanDomainMenu &&
+		p.Operation == ResolvedPlanOperationExecuteAction
+
+	if !isMenuAvailabilityAction {
+		if p.Action != nil {
+			return errors.New("resolved plan: action is only allowed for risky_action in the menu domain with operation=execute_action")
+		}
+		return nil
+	}
+
+	if p.Action == nil {
+		return errors.New("resolved plan: menu execute_action requires action")
+	}
+	if !containsValue(resolvedPlanActionTypes, p.Action.Type) {
+		return fmt.Errorf("resolved plan: unsupported action type %q", p.Action.Type)
+	}
+	if p.Action.Type != ResolvedPlanActionSetMenuAvailability {
+		return fmt.Errorf("resolved plan: action type %q is not available for menu execution", p.Action.Type)
+	}
+	if len(p.Parameters.Entities) != 1 {
+		return errors.New("resolved plan: set_menu_availability requires exactly one menu entity")
+	}
+	menu := p.Parameters.Entities[0]
+	if menu.Type != ResolvedPlanEntityMenu {
+		return errors.New("resolved plan: set_menu_availability target must be a menu entity")
+	}
+	if menu.ID == "" && menu.Name == "" {
+		return errors.New("resolved plan: set_menu_availability target requires a menu id or exact name")
+	}
+	if menu.ResultIndex != 0 {
+		return errors.New("resolved plan: set_menu_availability target cannot use result_index")
 	}
 	return nil
 }
@@ -848,6 +911,15 @@ func normalizeUniqueEnums[T ~string](values []T) []T {
 		result = append(result, value)
 	}
 	return result
+}
+
+func normalizeResolvedPlanAction(value *ResolvedPlanAction) *ResolvedPlanAction {
+	if value == nil {
+		return nil
+	}
+	result := *value
+	result.Type = ResolvedPlanActionType(normalizeEnum(string(result.Type)))
+	return &result
 }
 
 func normalizeEntities(values []ResolvedPlanEntityRef) []ResolvedPlanEntityRef {

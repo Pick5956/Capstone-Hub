@@ -19,9 +19,13 @@ func ResolvedPlanJSONSchema() map[string]any {
 				resolvedPlanBoundedStringSchema(1, 3000),
 				"Standalone question after applying only context recorded in inherited_fields.",
 			),
-			"task":       resolvedPlanEnumSchema(resolvedPlanTasks),
-			"domain":     resolvedPlanEnumSchema(resolvedPlanDomains),
-			"operation":  resolvedPlanEnumSchema(resolvedPlanOperations),
+			"task":      resolvedPlanEnumSchema(resolvedPlanTasks),
+			"domain":    resolvedPlanEnumSchema(resolvedPlanDomains),
+			"operation": resolvedPlanEnumSchema(resolvedPlanOperations),
+			"action": resolvedPlanDescribedSchema(
+				resolvedPlanNullableSchema(resolvedPlanActionJSONSchema()),
+				"Typed write-action proposal. Must be null for every non-action plan.",
+			),
 			"parameters": resolvedPlanParametersJSONSchema(),
 			"tool_hint": resolvedPlanDescribedSchema(
 				resolvedPlanToolHintJSONSchema(),
@@ -33,15 +37,30 @@ func ResolvedPlanJSONSchema() map[string]any {
 		},
 		[]string{
 			"schema_version", "original_question", "resolved_question", "task",
-			"domain", "operation", "parameters", "tool_hint", "resolution",
+			"domain", "operation", "action", "parameters", "tool_hint", "resolution",
 			"policy", "response_style",
 		},
 	)
 	schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
-	schema["$id"] = "https://project-m.local/schemas/ai/resolved-plan-v1.json"
+	schema["$id"] = "https://project-m.local/schemas/ai/resolved-plan-v1.1.json"
 	schema["title"] = "ResolvedPlan"
 	schema["description"] = "Provider-neutral proposal describing how the backend should answer one restaurant-assistant question."
 	return schema
+}
+
+func resolvedPlanActionJSONSchema() map[string]any {
+	return resolvedPlanObjectSchema(
+		map[string]any{
+			"type": resolvedPlanEnumSchema(resolvedPlanActionTypes),
+			"arguments": resolvedPlanObjectSchema(
+				map[string]any{
+					"is_available": map[string]any{"type": "boolean"},
+				},
+				[]string{"is_available"},
+			),
+		},
+		[]string{"type", "arguments"},
+	)
 }
 
 func resolvedPlanParametersJSONSchema() map[string]any {

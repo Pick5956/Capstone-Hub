@@ -343,6 +343,7 @@ func newStructuredPlannerClarificationFallback(question string) ResolvedPlan {
 		Task:             AITaskUnclear,
 		Domain:           ResolvedPlanDomainGeneral,
 		Operation:        ResolvedPlanOperationClarify,
+		Action:           nil,
 		Parameters: ResolvedPlanParameters{
 			Metrics:  []ResolvedPlanMetric{},
 			GroupBy:  []ResolvedPlanGroupDimension{},

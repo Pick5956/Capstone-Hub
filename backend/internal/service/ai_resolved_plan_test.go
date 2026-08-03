@@ -16,6 +16,7 @@ func validResolvedPlan() ResolvedPlan {
 		Task:             AITaskRetrieveFact,
 		Domain:           ResolvedPlanDomainMenu,
 		Operation:        ResolvedPlanOperationRank,
+		Action:           nil,
 		Parameters: ResolvedPlanParameters{
 			Metrics:  []ResolvedPlanMetric{ResolvedPlanMetricQuantity},
 			GroupBy:  []ResolvedPlanGroupDimension{ResolvedPlanGroupMenu},
@@ -56,7 +57,7 @@ func validResolvedPlan() ResolvedPlan {
 
 func TestResolvedPlanNormalizeIsIdempotentAndDoesNotMutateInput(t *testing.T) {
 	plan := validResolvedPlan()
-	plan.SchemaVersion = " 1.0 "
+	plan.SchemaVersion = " 1.1 "
 	plan.OriginalQuestion = "  Which menu?  "
 	plan.ResolvedQuestion = "  Rank the menus.  "
 	plan.Task = AITask(" RETRIEVE_FACT ")
@@ -179,12 +180,19 @@ func TestResolvedPlanValidateAcceptsRepresentativePlans(t *testing.T) {
 	clarification.Resolution.ClarificationQuestion = "Which menu do you mean?"
 
 	riskyAction := validResolvedPlan()
-	riskyAction.OriginalQuestion = "Delete this menu."
+	riskyAction.OriginalQuestion = "Make menu 42 unavailable."
 	riskyAction.ResolvedQuestion = riskyAction.OriginalQuestion
 	riskyAction.Task = AITaskRiskyAction
 	riskyAction.Domain = ResolvedPlanDomainMenu
 	riskyAction.Operation = ResolvedPlanOperationExecuteAction
 	riskyAction.Parameters = emptyResolvedPlanParameters()
+	riskyAction.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityMenu, ID: "42"}}
+	riskyAction.Action = &ResolvedPlanAction{
+		Type: ResolvedPlanActionSetMenuAvailability,
+		Arguments: ResolvedPlanActionArguments{
+			IsAvailable: false,
+		},
+	}
 	riskyAction.ToolHint = ""
 	riskyAction.Policy = ResolvedPlanPolicy{
 		Risk:                 ResolvedPlanRiskHigh,
@@ -381,6 +389,113 @@ func TestResolvedPlanValidateConfidenceBoundaries(t *testing.T) {
 	}
 }
 
+func TestResolvedPlanValidateActionContract(t *testing.T) {
+	validAction := func() ResolvedPlan {
+		plan := validResolvedPlan()
+		plan.OriginalQuestion = "Make Pad Thai available."
+		plan.ResolvedQuestion = plan.OriginalQuestion
+		plan.Task = AITaskRiskyAction
+		plan.Domain = ResolvedPlanDomainMenu
+		plan.Operation = ResolvedPlanOperationExecuteAction
+		plan.Action = &ResolvedPlanAction{
+			Type: ResolvedPlanActionSetMenuAvailability,
+			Arguments: ResolvedPlanActionArguments{
+				IsAvailable: true,
+			},
+		}
+		plan.Parameters = emptyResolvedPlanParameters()
+		plan.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityMenu, Name: "Pad Thai"}}
+		plan.ToolHint = ""
+		plan.Policy = ResolvedPlanPolicy{
+			Risk:                 ResolvedPlanRiskHigh,
+			ReadOnly:             false,
+			RequiresConfirmation: true,
+		}
+		return plan
+	}
+
+	for name, mutate := range map[string]func(*ResolvedPlan){
+		"missing action": func(p *ResolvedPlan) { p.Action = nil },
+		"unsupported action type": func(p *ResolvedPlan) {
+			p.Action.Type = ResolvedPlanActionType("delete_menu")
+		},
+		"missing target": func(p *ResolvedPlan) { p.Parameters.Entities = []ResolvedPlanEntityRef{} },
+		"multiple targets": func(p *ResolvedPlan) {
+			p.Parameters.Entities = []ResolvedPlanEntityRef{
+				{Type: ResolvedPlanEntityMenu, ID: "1"},
+				{Type: ResolvedPlanEntityMenu, ID: "2"},
+			}
+		},
+		"non-menu target": func(p *ResolvedPlan) {
+			p.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityIngredient, ID: "1"}}
+		},
+		"result index target": func(p *ResolvedPlan) {
+			p.Parameters.Entities = []ResolvedPlanEntityRef{{
+				Type: ResolvedPlanEntityMenu, ResultIndex: 1, SourceTurnID: "turn-1",
+			}}
+			p.Resolution.InheritedFields = []ResolvedPlanInheritedField{{
+				Field: ResolvedPlanFieldEntities, Source: ResolvedPlanSourceConversation, SourceTurnID: "turn-1",
+			}}
+		},
+		"action on read plan": func(p *ResolvedPlan) {
+			readPlan := validResolvedPlan()
+			readPlan.Action = p.Action
+			*p = readPlan
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			plan := validAction()
+			mutate(&plan)
+			if err := plan.Validate(); err == nil {
+				t.Fatal("Validate accepted an invalid action plan")
+			}
+		})
+	}
+
+	for name, entity := range map[string]ResolvedPlanEntityRef{
+		"menu id":     {Type: ResolvedPlanEntityMenu, ID: "42"},
+		"exact name":  {Type: ResolvedPlanEntityMenu, Name: "Pad Thai"},
+		"id and name": {Type: ResolvedPlanEntityMenu, ID: "42", Name: "Pad Thai"},
+	} {
+		t.Run("accepts "+name, func(t *testing.T) {
+			plan := validAction()
+			plan.Parameters.Entities = []ResolvedPlanEntityRef{entity}
+			if _, err := NormalizeAndValidateResolvedPlan(plan); err != nil {
+				t.Fatalf("valid action plan was rejected: %v", err)
+			}
+		})
+	}
+}
+
+func TestResolvedPlanNormalizeActionDoesNotMutateInput(t *testing.T) {
+	plan := validResolvedPlan()
+	plan.Task = AITaskRiskyAction
+	plan.Domain = ResolvedPlanDomainMenu
+	plan.Operation = ResolvedPlanOperationExecuteAction
+	plan.Action = &ResolvedPlanAction{
+		Type:      ResolvedPlanActionType(" SET_MENU_AVAILABILITY "),
+		Arguments: ResolvedPlanActionArguments{IsAvailable: true},
+	}
+	plan.Parameters = emptyResolvedPlanParameters()
+	plan.Parameters.Entities = []ResolvedPlanEntityRef{{Type: ResolvedPlanEntityMenu, ID: "42"}}
+	plan.ToolHint = ""
+	plan.Policy = ResolvedPlanPolicy{Risk: ResolvedPlanRiskHigh, RequiresConfirmation: true}
+
+	normalized := plan.Normalize()
+	if normalized.Action == plan.Action {
+		t.Fatal("Normalize retained the caller's action pointer")
+	}
+	if normalized.Action.Type != ResolvedPlanActionSetMenuAvailability {
+		t.Fatalf("normalized action type = %q", normalized.Action.Type)
+	}
+	if plan.Action.Type != ResolvedPlanActionType(" SET_MENU_AVAILABILITY ") {
+		t.Fatalf("Normalize mutated input action type: %q", plan.Action.Type)
+	}
+	if err := normalized.Validate(); err != nil {
+		t.Fatalf("normalized action plan should be valid: %v", err)
+	}
+}
+
 func TestResolvedPlanJSONRoundTrip(t *testing.T) {
 	plan := validResolvedPlan()
 	plan.Resolution.Confidence = 0
@@ -390,7 +505,7 @@ func TestResolvedPlanJSONRoundTrip(t *testing.T) {
 	}
 	for _, key := range []string{
 		`"schema_version"`, `"original_question"`, `"resolved_question"`,
-		`"compare_time_range"`, `"inherited_fields"`, `"response_style"`,
+		`"action"`, `"compare_time_range"`, `"inherited_fields"`, `"response_style"`,
 	} {
 		if !strings.Contains(string(payload), key) {
 			t.Fatalf("JSON is missing snake_case key %s: %s", key, payload)
@@ -422,6 +537,9 @@ func TestResolvedPlanJSONSchemaIsStrictAndSelfContained(t *testing.T) {
 	if schema["title"] != "ResolvedPlan" || schema["additionalProperties"] != false {
 		t.Fatalf("unexpected root schema: %#v", schema)
 	}
+	if schema["$id"] != "https://project-m.local/schemas/ai/resolved-plan-v1.1.json" {
+		t.Fatalf("unexpected schema id: %#v", schema["$id"])
+	}
 
 	properties, ok := schema["properties"].(map[string]any)
 	if !ok {
@@ -437,8 +555,34 @@ func TestResolvedPlanJSONSchemaIsStrictAndSelfContained(t *testing.T) {
 	}
 
 	required, ok := schema["required"].([]string)
-	if !ok || len(required) != 11 {
-		t.Fatalf("root required = %#v, want all 11 fields", schema["required"])
+	if !ok || len(required) != 12 {
+		t.Fatalf("root required = %#v, want all 12 fields", schema["required"])
+	}
+
+	actionNullable, ok := properties["action"].(map[string]any)
+	if !ok {
+		t.Fatalf("action schema has type %T", properties["action"])
+	}
+	actionVariants, ok := actionNullable["anyOf"].([]any)
+	if !ok || len(actionVariants) != 2 {
+		t.Fatalf("action schema is not nullable: %#v", actionNullable)
+	}
+	actionSchema, ok := actionVariants[0].(map[string]any)
+	if !ok || actionSchema["additionalProperties"] != false {
+		t.Fatalf("action object schema is not strict: %#v", actionVariants[0])
+	}
+	actionProperties := actionSchema["properties"].(map[string]any)
+	actionType := actionProperties["type"].(map[string]any)
+	actionTypes, ok := actionType["enum"].([]string)
+	if !ok || !reflect.DeepEqual(actionTypes, []string{string(ResolvedPlanActionSetMenuAvailability)}) {
+		t.Fatalf("action type allowlist = %#v", actionType["enum"])
+	}
+	actionArguments := actionProperties["arguments"].(map[string]any)
+	if actionArguments["additionalProperties"] != false {
+		t.Fatalf("action arguments schema is not strict: %#v", actionArguments)
+	}
+	if !reflect.DeepEqual(actionArguments["required"], []string{"is_available"}) {
+		t.Fatalf("action arguments required = %#v", actionArguments["required"])
 	}
 
 	toolSchema, ok := properties["tool_hint"].(map[string]any)

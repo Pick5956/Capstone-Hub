@@ -81,8 +81,24 @@ func validateStructuredPlannerWireShape(value any) error {
 	}
 	if err := structuredPlannerRequired(root, "resolved_plan",
 		"schema_version", "original_question", "resolved_question", "task", "domain", "operation",
-		"parameters", "tool_hint", "resolution", "policy", "response_style"); err != nil {
+		"action", "parameters", "tool_hint", "resolution", "policy", "response_style"); err != nil {
 		return err
+	}
+	if root["action"] != nil {
+		action, actionErr := structuredPlannerObject(root["action"], "action")
+		if actionErr != nil {
+			return actionErr
+		}
+		if actionErr = structuredPlannerRequired(action, "action", "type", "arguments"); actionErr != nil {
+			return actionErr
+		}
+		arguments, argumentsErr := structuredPlannerObject(action["arguments"], "action.arguments")
+		if argumentsErr != nil {
+			return argumentsErr
+		}
+		if argumentsErr = structuredPlannerRequired(arguments, "action.arguments", "is_available"); argumentsErr != nil {
+			return argumentsErr
+		}
 	}
 
 	parameters, err := structuredPlannerObject(root["parameters"], "parameters")
@@ -179,6 +195,9 @@ func structuredPlannerRequired(object map[string]any, path string, keys ...strin
 }
 
 func structuredPlannerNullableField(path, key string) bool {
+	if path == "resolved_plan" && key == "action" {
+		return true
+	}
 	if path != "parameters" {
 		return false
 	}
