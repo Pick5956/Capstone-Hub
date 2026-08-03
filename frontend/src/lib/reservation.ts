@@ -35,9 +35,5 @@ export const reserveTable = (id: number, reservationPhone: string, reservationNa
 export const cancelReservation = (id: number) =>
   apiClient.post<RestaurantTable>(`/api/v1/tables/${id}/cancel-reservation`);
 
-// Seat the guests: frees the table so an order can open, marking the record seated.
-export const seatReservation = (id: number) =>
-  apiClient.post<RestaurantTable>(`/api/v1/tables/${id}/seat-reservation`);
-
 export const listReservations = (params: { status?: ReservationStatus; limit?: number; offset?: number } = {}) =>
   apiClient.get<ReservationListResponse>("/api/v1/reservations", { params });

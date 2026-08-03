@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"testing"
 
 	"Project-M/internal/entity"
@@ -15,10 +16,10 @@ func TestValidateIngredientNumbers(t *testing.T) {
 		{
 			name: "accepts valid inventory values",
 			req: IngredientRequest{
-				Stock:                   0,
-				MinStock:                1.25,
-				CostPerUnit:             12.50,
-				YieldPercent:            85,
+				Stock:        0,
+				MinStock:     1.25,
+				CostPerUnit:  12.50,
+				YieldPercent: 85,
 			},
 		},
 		{
@@ -128,5 +129,74 @@ func TestIngredientRecipeUnitChangeBlocked(t *testing.T) {
 	}
 	if ingredientRecipeUnitChangeBlocked("kg", "g", false) {
 		t.Fatal("ingredientRecipeUnitChangeBlocked() = true for unreferenced ingredient")
+	}
+}
+
+// A restock's amount becomes a real ledger row, so anything that survives this
+// check gets summed into the restaurant's expenses forever.
+func TestRestockAmountOnlyAcceptsMoneyOnStockIn(t *testing.T) {
+	rejected := []struct {
+		name   string
+		kind   string
+		amount float64
+	}{
+		// Paying for stock leaving the shelf is nonsense; recording it would
+		// inflate expenses every time someone writes off spoilage.
+		{"out with money", "out", 500},
+		{"adjust with money", "adjust", 500},
+		{"nan", "in", math.NaN()},
+		{"positive infinity", "in", math.Inf(1)},
+		{"negative", "in", -1},
+		{"above cap", "in", maxIngredientCost + 1},
+	}
+	for _, test := range rejected {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := restockAmount(test.kind, test.amount); err == nil {
+				t.Fatalf("restockAmount(%q, %v) unexpectedly succeeded", test.kind, test.amount)
+			}
+		})
+	}
+
+	// No amount is the normal case for every movement type and must stay silent.
+	for _, kind := range []string{"in", "out", "adjust"} {
+		if got, err := restockAmount(kind, 0); err != nil || got != 0 {
+			t.Fatalf("restockAmount(%q, 0) = %v, %v; want 0, nil", kind, got, err)
+		}
+	}
+
+	got, err := restockAmount("in", 1234.567)
+	if err != nil {
+		t.Fatalf("restockAmount() error = %v", err)
+	}
+	if got != 1234.57 {
+		t.Fatalf("restockAmount() = %v, want 1234.57", got)
+	}
+}
+
+// This is the number that lands in the expense ledger when nobody typed a
+// cost, so a wrong formula here silently mis-records every such restock.
+func TestEstimateRestockAmount(t *testing.T) {
+	tests := []struct {
+		name        string
+		quantity    float64
+		costPerUnit float64
+		want        float64
+	}{
+		{"typical restock", 10, 34.5, 345},
+		{"rounds to two decimals", 3, 1.004, 3.01},
+		{"zero quantity", 0, 34.5, 0},
+		{"negative quantity", -5, 34.5, 0},
+		// No recorded price is not "free" — it means there is nothing to
+		// estimate from, so the caller must skip the ledger row entirely.
+		{"zero cost per unit", 10, 0, 0},
+		{"negative cost per unit", 10, -1, 0},
+		{"above cap", 1, maxIngredientCost + 1, 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := estimateRestockAmount(test.quantity, test.costPerUnit); got != test.want {
+				t.Fatalf("estimateRestockAmount(%v, %v) = %v, want %v", test.quantity, test.costPerUnit, got, test.want)
+			}
+		})
 	}
 }

@@ -9,6 +9,9 @@ const CHAT_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type ChatEnvelope<T> = { savedAt?: number; messages?: T[] };
 type ConversationEnvelope = { savedAt?: number; conversationId?: string };
+type ChatClearListener = (key: string) => void;
+
+const chatClearListeners = new Set<ChatClearListener>();
 
 function serverConversationStorageKey(key: string): string {
   return `${key}${SERVER_CONVERSATION_KEY_SUFFIX}`;
@@ -96,13 +99,27 @@ export function saveConversationId(key: string | null, conversationId: string | 
 }
 
 export function clearStoredChat(key: string | null): void {
-  if (typeof window === "undefined" || !key) return;
-  try {
-    localStorage.removeItem(key);
-    localStorage.removeItem(serverConversationStorageKey(key));
-  } catch {
-    // ignore
+  if (!key) return;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(key);
+      // Clearing history must also drop the server conversation ID, otherwise
+      // the next question resumes the old thread the user just cleared.
+      localStorage.removeItem(serverConversationStorageKey(key));
+    } catch {
+      // ignore
+    }
   }
+  // Listeners live in memory, so notify them even where storage is unavailable.
+  chatClearListeners.forEach((listener) => listener(key));
+}
+
+// localStorage's storage event does not fire in the same browser window. Both
+// chat surfaces are mounted together, so use a small same-window notification
+// to invalidate in-flight work and reset their independent React state.
+export function subscribeToChatClear(listener: ChatClearListener): () => void {
+  chatClearListeners.add(listener);
+  return () => chatClearListeners.delete(listener);
 }
 
 // Remove the legacy unscoped key and any expired chats from other users/sessions

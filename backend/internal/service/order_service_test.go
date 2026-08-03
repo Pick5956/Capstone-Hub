@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -206,6 +207,56 @@ func TestCanTransitionItem(t *testing.T) {
 	}
 	if canTransitionItem(entity.OrderItemStatusCancelled, entity.OrderItemStatusCancelled) {
 		t.Fatal("cancelled should be terminal for item status")
+	}
+}
+
+func TestValidateOrderItemStatusActor(t *testing.T) {
+	tests := []struct {
+		name   string
+		actor  OrderItemStatusActor
+		status string
+		want   bool
+	}{
+		{name: "kitchen manager may update cooking", actor: OrderItemStatusActorKitchenManager, status: entity.OrderItemStatusCooking, want: true},
+		{name: "kitchen manager may void", actor: OrderItemStatusActorKitchenManager, status: entity.OrderItemStatusCancelled, want: true},
+		{name: "front of house may serve", actor: OrderItemStatusActorFrontOfHouse, status: entity.OrderItemStatusServed, want: true},
+		{name: "front of house may request a checkout void", actor: OrderItemStatusActorFrontOfHouse, status: entity.OrderItemStatusCancelled, want: true},
+		{name: "front of house may not mark cooking", actor: OrderItemStatusActorFrontOfHouse, status: entity.OrderItemStatusCooking, want: false},
+		{name: "unknown actor is rejected", actor: OrderItemStatusActor("unknown"), status: entity.OrderItemStatusCancelled, want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateOrderItemStatusActor(test.actor, test.status)
+			if test.want && err != nil {
+				t.Fatalf("validateOrderItemStatusActor() error = %v, want nil", err)
+			}
+			if !test.want && !errors.Is(err, ErrOrderItemStatusForbidden) {
+				t.Fatalf("validateOrderItemStatusActor() error = %v, want forbidden", err)
+			}
+		})
+	}
+}
+
+func TestShouldAutoCancelTakeawayOrder(t *testing.T) {
+	takeaway := &entity.Order{OrderType: entity.OrderTypeTakeaway}
+	dineIn := &entity.Order{OrderType: entity.OrderTypeDineIn}
+	allCancelled := []entity.OrderItem{
+		{Status: entity.OrderItemStatusCancelled},
+		{Status: entity.OrderItemStatusCancelled},
+	}
+
+	if !shouldAutoCancelTakeawayOrder(takeaway, allCancelled) {
+		t.Fatal("takeaway should close when every item is cancelled")
+	}
+	if shouldAutoCancelTakeawayOrder(dineIn, allCancelled) {
+		t.Fatal("dine-in order should stay open so its table can use the empty-table close flow")
+	}
+	if shouldAutoCancelTakeawayOrder(takeaway, nil) {
+		t.Fatal("a newly opened takeaway without items should not auto-close")
+	}
+	if shouldAutoCancelTakeawayOrder(takeaway, []entity.OrderItem{{Status: entity.OrderItemStatusReady}, {Status: entity.OrderItemStatusCancelled}}) {
+		t.Fatal("takeaway should stay active while any non-cancelled item remains")
 	}
 }
 

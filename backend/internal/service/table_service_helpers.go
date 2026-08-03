@@ -102,6 +102,16 @@ func tableStatusForMetadataUpdate(current, requested string) string {
 	return requested
 }
 
+func validateMetadataTableStatus(current, requested string) error {
+	if current == entity.TableStatusReserved || current == entity.TableStatusOccupied {
+		return nil
+	}
+	if requested != entity.TableStatusFree && requested != entity.TableStatusInactive {
+		return errors.New("table status must be free or inactive")
+	}
+	return nil
+}
+
 func applyTableMetadataUpdate(table, requested *entity.RestaurantTable) {
 	table.Capacity = requested.Capacity
 	table.Status = tableStatusForMetadataUpdate(table.Status, requested.Status)

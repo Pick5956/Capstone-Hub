@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
@@ -16,7 +16,10 @@ import {
   purgeStaleChats,
   saveConversationId,
   saveMessages,
+  subscribeToChatClear,
 } from "@/src/lib/aiChatStorage";
+import { createRequestGeneration } from "@/src/lib/requestGeneration";
+import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
@@ -137,6 +140,8 @@ export default function AIAssistantPage() {
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
+  const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const snapshotRequestedRef = useRef(false);
@@ -151,20 +156,30 @@ export default function AIAssistantPage() {
 
   // Load shared history (same key as the floating chat) with cleanup + TTL.
   useEffect(() => {
-    purgeStaleChats(storageKey);
-    setConversationId(loadStoredConversationId(storageKey));
-    const stored = loadStoredMessages<StoredMessage>(storageKey);
-    if (stored && stored.length > 0) {
-      setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
-    } else {
-      setMessages([welcomeMessage()]);
-    }
+    conversationRequests.invalidate();
+    // Drop the previous key's server conversation and pending action right away:
+    // a send between this render and the deferred load must not reuse them.
+    setConversationId(null);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
+    const loadTimer = window.setTimeout(() => {
+      purgeStaleChats(storageKey);
+      setConversationId(loadStoredConversationId(storageKey));
+      const stored = loadStoredMessages<StoredMessage>(storageKey);
+      setMessages(stored && stored.length > 0
+        ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
+        : [welcomeMessage()]);
+      setLoading(false);
+      setHydratedStorageKey(storageKey);
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey, copy.welcome]);
 
   useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages);
-  }, [messages, storageKey]);
+  }, [hydratedStorageKey, messages, storageKey]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -189,18 +204,32 @@ export default function AIAssistantPage() {
       .slice(-6)
       .map((m) => ({ id: m.id, role: m.role, content: m.content }));
 
+  const resetConversation = useCallback(() => {
+    conversationRequests.invalidate();
+    setError("");
+    setLoading(false);
+    setPendingAction(null);
+    // Also reached when the floating chat clears: that surface's history is
+    // gone, so this one must drop the shared server thread and pending action.
+    setConversationId(null);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  }, [conversationRequests, copy.welcome]);
+
+  useEffect(() => subscribeToChatClear((clearedKey) => {
+    if (clearedKey === storageKey) resetConversation();
+  }), [resetConversation, storageKey]);
+
   const handleClearChat = () => {
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (serverConversationId) {
       void deleteAIConversation(serverConversationId).catch(() => undefined);
     }
-    clearStoredChat(storageKey);
-    setConversationId(null);
-    setError("");
-    setPendingAction(null);
-    setPendingActionPreview(null);
-    setActionPreviewError("");
-    setMessages([welcomeMessage()]);
+    // clearStoredChat broadcasts, so both surfaces run resetConversation. With no
+    // storage key there is nothing to broadcast — reset this surface directly.
+    if (storageKey) clearStoredChat(storageKey);
+    else resetConversation();
   };
 
   const submitQuestion = async (nextQuestion = input) => {
@@ -240,9 +269,13 @@ export default function AIAssistantPage() {
       return;
     }
 
+    const requestGeneration = conversationRequests.begin();
     setLoading(true);
     try {
       const response = await askOperationsAI(trimmed, history, conversationId);
+      // The chat was cleared or switched restaurants while this was in flight —
+      // drop the answer instead of appending it to a conversation it never joined.
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data = response.data;
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
@@ -268,13 +301,14 @@ export default function AIAssistantPage() {
         },
       ]);
     } catch (err: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const message =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : "";
       setError(message || copy.error);
     } finally {
-      setLoading(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
   };
 

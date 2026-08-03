@@ -10,8 +10,14 @@ import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, Surfac
 import { toFloat, toInt } from '@/src/lib/forms';
 import {
   initialMenuCategoryIds,
+  menuIngredientDrafts,
+  menuIngredientInputs,
+  menuOptionGroupDrafts,
+  menuOptionGroupInputs,
   selectableMenuCategories,
   validateMenuOptionGroups,
+  type MenuIngredientDraft,
+  type MenuOptionGroupDraft,
   type MenuOptionGroupIssueCode,
 } from '@/src/lib/menu-editor';
 import { can } from '@/src/lib/rbac';
@@ -20,9 +26,9 @@ import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Ingredient } from '@/src/types/ingredient';
-import type { Category, MenuIngredientInput, MenuOptionGroupInput } from '@/src/types/menu';
+import type { Category } from '@/src/types/menu';
 
-const emptyGroup = (index: number): MenuOptionGroupInput => ({ name: '', required: false, min_select: 0, max_select: 1, display_order: index + 1, is_active: true, options: [] });
+const emptyGroup = (index: number): MenuOptionGroupDraft => ({ name: '', required: false, min_select: 0, max_select: 1, display_order: index + 1, is_active: true, options: [] });
 
 export default function MenuItemEditorScreen() {
   const { activeMembership } = useAuth();
@@ -37,7 +43,7 @@ export default function MenuItemEditorScreen() {
   const [categories, setCategories] = useState<Category[]>([]); const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
   const [name, setName] = useState(''); const [price, setPrice] = useState(''); const [description, setDescription] = useState(''); const [imageUrl, setImageUrl] = useState(''); const [displayOrder, setDisplayOrder] = useState('1');
   const [available, setAvailable] = useState<'yes' | 'no'>('yes'); const [categoryIds, setCategoryIds] = useState<number[]>([]);
-  const [optionGroups, setOptionGroups] = useState<MenuOptionGroupInput[]>([]); const [ingredients, setIngredients] = useState<MenuIngredientInput[]>([]); const [ingredientCandidate, setIngredientCandidate] = useState('none');
+  const [optionGroups, setOptionGroups] = useState<MenuOptionGroupDraft[]>([]); const [ingredients, setIngredients] = useState<MenuIngredientDraft[]>([]); const [ingredientCandidate, setIngredientCandidate] = useState('none');
   const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
   const [showOptionErrors, setShowOptionErrors] = useState(false);
   const [loading, setLoading] = useState(editing);
@@ -61,8 +67,8 @@ export default function MenuItemEditorScreen() {
       if (item) {
         setName(item.name); setPrice(String(item.price)); setDescription(item.description || ''); setImageUrl(item.image_url || ''); setDisplayOrder(String(item.display_order)); setAvailable(item.is_available ? 'yes' : 'no');
         setCategoryIds(initialMenuCategoryIds(item, categoryResponse.categories || []));
-        setOptionGroups((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active })) })));
-        setIngredients((item.ingredients || []).map((ingredient) => ({ ingredient_id: ingredient.ingredient_id, quantity: ingredient.quantity, unit: ingredient.unit, note: ingredient.note })));
+        setOptionGroups(menuOptionGroupDrafts((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active })) }))));
+        setIngredients(menuIngredientDrafts((item.ingredients || []).map((ingredient) => ({ ingredient_id: ingredient.ingredient_id, quantity: ingredient.quantity, unit: ingredient.unit, note: ingredient.note }))));
         setItemExists(true);
       } else if (!editing) {
         setCategoryIds(initialMenuCategoryIds(undefined, categoryResponse.categories || []));
@@ -75,12 +81,12 @@ export default function MenuItemEditorScreen() {
   }, [canManage, canViewInventory, copy, editing, invalidRoute, itemId]);
 
   const ingredientOptions = useMemo(() => [{ label: copy('เลือกวัตถุดิบ', 'Choose an ingredient'), value: 'none' }, ...allIngredients.filter((item) => !ingredients.some((row) => row.ingredient_id === item.ID)).map((item) => ({ label: item.name, value: String(item.ID) }))], [allIngredients, copy, ingredients]);
-  const optionValidation = useMemo(() => validateMenuOptionGroups(optionGroups), [optionGroups]);
+  const optionValidation = useMemo(() => validateMenuOptionGroups(menuOptionGroupInputs(optionGroups)), [optionGroups]);
   function toggleCategory(categoryId: number) { setCategoryIds((current) => current.includes(categoryId) ? current.filter((value) => value !== categoryId) : [...current, categoryId]); }
-  function updateGroup(index: number, patch: Partial<MenuOptionGroupInput>) { setOptionGroups((current) => current.map((group, currentIndex) => currentIndex === index ? { ...group, ...patch } : group)); }
-  function updateOption(groupIndex: number, optionIndex: number, patch: Partial<MenuOptionGroupInput['options'][number]>) { setOptionGroups((current) => current.map((group, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...group, options: group.options.map((option, currentOptionIndex) => currentOptionIndex === optionIndex ? { ...option, ...patch } : option) } : group)); }
-  function addOption(groupIndex: number) { setOptionGroups((current) => current.map((group, index) => index === groupIndex ? { ...group, options: [...group.options, { name: '', price_delta: 0, is_default: false, display_order: group.options.length + 1, is_active: true }] } : group)); }
-  function addIngredient() { const candidate = Number(ingredientCandidate); if (!candidate) return; const item = allIngredients.find((current) => current.ID === candidate); setIngredients((current) => [...current, { ingredient_id: candidate, quantity: 1, unit: item?.unit || '', note: '' }]); setIngredientCandidate('none'); }
+  function updateGroup(index: number, patch: Partial<MenuOptionGroupDraft>) { setOptionGroups((current) => current.map((group, currentIndex) => currentIndex === index ? { ...group, ...patch } : group)); }
+  function updateOption(groupIndex: number, optionIndex: number, patch: Partial<MenuOptionGroupDraft['options'][number]>) { setOptionGroups((current) => current.map((group, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...group, options: group.options.map((option, currentOptionIndex) => currentOptionIndex === optionIndex ? { ...option, ...patch } : option) } : group)); }
+  function addOption(groupIndex: number) { setOptionGroups((current) => current.map((group, index) => index === groupIndex ? { ...group, options: [...group.options, { name: '', price_delta: '0', is_default: false, display_order: group.options.length + 1, is_active: true }] } : group)); }
+  function addIngredient() { const candidate = Number(ingredientCandidate); if (!candidate) return; const item = allIngredients.find((current) => current.ID === candidate); setIngredients((current) => [...current, { ingredient_id: candidate, quantity: '1', unit: item?.unit || '', note: '' }]); setIngredientCandidate('none'); }
 
   function optionIssueMessage(code: MenuOptionGroupIssueCode) {
     switch (code) {
@@ -122,7 +128,7 @@ export default function MenuItemEditorScreen() {
     if (optionValidation.issues.length) { setError(null); return; }
     setSaving(true); setError(null);
     try {
-      const payload = { category_id: categoryIds[0], category_ids: categoryIds, name: name.trim(), price: toFloat(price, 0), image_url: imageUrl.trim(), description: description.trim(), is_available: available === 'yes', display_order: toInt(displayOrder, 0), option_groups: optionValidation.groups, ingredients };
+      const payload = { category_id: categoryIds[0], category_ids: categoryIds, name: name.trim(), price: toFloat(price, 0), image_url: imageUrl.trim(), description: description.trim(), is_available: available === 'yes', display_order: toInt(displayOrder, 0), option_groups: optionValidation.groups, ingredients: menuIngredientInputs(ingredients) };
       if (editing) {
         if (itemId === null) return;
         await updateMenuItem(itemId, payload);
@@ -296,8 +302,8 @@ export default function MenuItemEditorScreen() {
                     />
                     <TextField
                       label={copy('ราคาเพิ่ม', 'Additional price')}
-                      value={String(option.price_delta)}
-                      onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: toFloat(value, 0) })}
+                      value={option.price_delta}
+                      onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: value })}
                       keyboardType="decimal-pad"
                       error={optionPriceIssue ? optionIssueMessage(optionPriceIssue.code) : undefined}
                     />
@@ -322,7 +328,7 @@ export default function MenuItemEditorScreen() {
 
       <Surface>
         <SectionHeader title={copy('สูตรวัตถุดิบ', 'Ingredient recipe')} detail={copy('ใช้คำนวณต้นทุนและตัดสต็อกเมื่อครัวทำเสร็จ', 'Used to calculate cost and deduct stock when the kitchen finishes an item.')} />
-        {ingredients.map((row, index) => { const item = allIngredients.find((current) => current.ID === row.ingredient_id); return <View key={`${row.ingredient_id}-${index}`} style={{ gap: spacing.sm }}>{index ? <Divider /> : null}<View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}><Text style={[typeScale.cardTitle, { flex: 1 }]}>{item?.name || copy(`วัตถุดิบ #${row.ingredient_id}`, `Ingredient #${row.ingredient_id}`)}</Text><Button compact variant="ghost" label={copy('ลบ', 'Remove')} onPress={() => setIngredients((current) => current.filter((_, currentIndex) => currentIndex !== index))} /></View><View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><TextField label={copy('จำนวนต่อจาน', 'Quantity per serving')} value={String(row.quantity)} onChangeText={(value) => setIngredients((current) => current.map((currentRow, currentIndex) => currentIndex === index ? { ...currentRow, quantity: toFloat(value, 0) } : currentRow))} keyboardType="decimal-pad" /></View><View style={{ flex: 1 }}><TextField label={copy('หน่วย', 'Unit')} value={row.unit || item?.unit || ''} onChangeText={(value) => setIngredients((current) => current.map((currentRow, currentIndex) => currentIndex === index ? { ...currentRow, unit: value } : currentRow))} /></View></View></View>; })}
+        {ingredients.map((row, index) => { const item = allIngredients.find((current) => current.ID === row.ingredient_id); return <View key={`${row.ingredient_id}-${index}`} style={{ gap: spacing.sm }}>{index ? <Divider /> : null}<View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}><Text style={[typeScale.cardTitle, { flex: 1 }]}>{item?.name || copy(`วัตถุดิบ #${row.ingredient_id}`, `Ingredient #${row.ingredient_id}`)}</Text><Button compact variant="ghost" label={copy('ลบ', 'Remove')} onPress={() => setIngredients((current) => current.filter((_, currentIndex) => currentIndex !== index))} /></View><View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><TextField label={copy('จำนวนต่อจาน', 'Quantity per serving')} value={row.quantity} onChangeText={(value) => setIngredients((current) => current.map((currentRow, currentIndex) => currentIndex === index ? { ...currentRow, quantity: value } : currentRow))} keyboardType="decimal-pad" /></View><View style={{ flex: 1 }}><TextField label={copy('หน่วย', 'Unit')} value={row.unit || item?.unit || ''} onChangeText={(value) => setIngredients((current) => current.map((currentRow, currentIndex) => currentIndex === index ? { ...currentRow, unit: value } : currentRow))} /></View></View></View>; })}
         {ingredientOptions.length > 1 ? <><ChipGroup label={copy('เพิ่มวัตถุดิบ', 'Add ingredient')} value={ingredientCandidate} onChange={setIngredientCandidate} options={ingredientOptions} /><Button variant="secondary" label={copy('เพิ่มในสูตร', 'Add to recipe')} onPress={addIngredient} disabled={ingredientCandidate === 'none'} /></> : null}
       </Surface>
 

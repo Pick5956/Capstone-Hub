@@ -74,6 +74,12 @@ const navigationEntries: NavigationEntry[] = [
     aliases: ["inventory", "stock", "ingredients", "warehouse", "คลัง", "คลังวัตถุดิบ", "วัตถุดิบ", "สต๊อก"],
   },
   {
+    href: "/expenses",
+    label: { th: "บันทึกรายจ่าย", en: "Expenses" },
+    permission: ["manage_expenses", "view_reports"],
+    aliases: ["expenses", "expense", "cash out", "spending", "รายจ่าย", "บันทึกรายจ่าย", "ค่าใช้จ่าย"],
+  },
+  {
     href: "/ai-assistant",
     label: { th: "AI ผู้ช่วย", en: "AI assistant" },
     permission: ["view_reports", "manage_inventory"],

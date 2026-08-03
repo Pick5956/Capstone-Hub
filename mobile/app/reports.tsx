@@ -6,6 +6,7 @@ import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
+import { loadFilteredReplacement } from '@/src/lib/filter-reload';
 import { getBangkokReportMonth, shiftReportMonth } from '@/src/lib/report-query';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration } from '@/src/lib/request-generation';
@@ -31,6 +32,8 @@ export default function ReportsScreen() {
   const load = useCallback(async () => {
     if (!canView) {
       requestGenerationRef.current.invalidate();
+      setReport(null);
+      setTopMenus(null);
       setLoading(false);
       return;
     }
@@ -40,19 +43,23 @@ export default function ReportsScreen() {
     };
     setLoading(true);
     setError(null);
-    try {
-      const [managerReport, topMenuReport] = await Promise.all([
+    setReport(null);
+    setTopMenus(null);
+    const result = await loadFilteredReplacement(() => Promise.all([
         getManagerReport(days),
         getTopMenuItemsByMonth(topMenuMonth),
-      ]);
-      if (!requestGenerationRef.current.isCurrent(request)) return;
+      ]));
+    if (!requestGenerationRef.current.isCurrent(request)) return;
+    if (result.ok) {
+      const [managerReport, topMenuReport] = result.data;
       setReport(managerReport);
       setTopMenus(topMenuReport);
+    } else {
+      setReport(null);
+      setTopMenus(null);
+      setError(result.error instanceof Error ? result.error.message : copy('โหลดรายงานไม่สำเร็จ', 'Could not load reports.'));
     }
-    catch (err) { setError(err instanceof Error ? err.message : copy('โหลดรายงานไม่สำเร็จ', 'Could not load reports.')); }
-    finally {
-      if (requestGenerationRef.current.isCurrent(request)) setLoading(false);
-    }
+    setLoading(false);
   }, [canView, copy, days, topMenuMonth]);
   useEffect(() => {
     void load();

@@ -98,14 +98,31 @@ func (r *TableRepository) CreateReservation(reservation *entity.Reservation) err
 	return r.db.Create(reservation).Error
 }
 
-// ResolveActiveReservation marks the table's active reservation with a terminal
-// status (seated / cancelled). It is a no-op when no active reservation exists,
-// so it stays safe for tables reserved before this feature shipped.
-func (r *TableRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
-	now := BangkokNow()
-	return r.db.Model(&entity.Reservation{}).
+// ReconcileActiveReservationsForUpdate runs after the table row is locked and
+// returns the deterministic canonical active lifecycle row.
+func (r *TableRepository) ReconcileActiveReservationsForUpdate(restaurantID, tableID uint) (*entity.Reservation, error) {
+	return reconcileActiveReservationsForUpdate(r.db, restaurantID, tableID)
+}
+
+func (r *TableRepository) UpdateReservation(reservation *entity.Reservation) error {
+	return r.db.Omit(clause.Associations).Save(reservation).Error
+}
+
+func (r *TableRepository) HasActiveReservation(restaurantID, tableID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&entity.Reservation{}).
 		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
-		Updates(map[string]any{"status": status, "resolved_at": now}).Error
+		Limit(1).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// ResolveActiveReservation marks the table's active reservation with a terminal
+// status (seated / cancelled). Requiring exactly one row keeps table and
+// lifecycle state atomic: a caller cannot release a reserved table while the
+// corresponding lifecycle write silently does nothing.
+func (r *TableRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
+	return resolveCanonicalActiveReservation(r.db, restaurantID, tableID, status)
 }
 
 func (r *TableRepository) ReplaceTableTags(table *entity.RestaurantTable, tags []entity.TableTag) error {

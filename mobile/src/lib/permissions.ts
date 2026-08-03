@@ -41,8 +41,6 @@ export function permissionGroupsFor(language: DisplayLanguage = 'th') {
   }));
 }
 
-export const permissionGroups = permissionGroupsFor();
-
 export const allPermissions = permissionDefinitions.flatMap((group) => (
   group.rows.map((row) => row.key)
 ));

@@ -5,6 +5,9 @@ type KitchenTicket = Pick<Order, 'ID' | 'kitchen_batch' | 'kitchen_ticket_id'>;
 type EmptyOrderCandidate = Pick<Order, 'order_type' | 'table_id' | 'status'> & {
   items?: readonly { status?: string }[] | null;
 };
+type CancelOrderCandidate = Pick<Order, 'order_type' | 'payment_status' | 'status'> & {
+  items?: readonly { status?: string }[] | null;
+};
 
 export function canCloseEmptyOrder(order: EmptyOrderCandidate | null | undefined) {
   const activeItemCount = order?.items?.filter((item) => item.status !== 'cancelled').length ?? 0;
@@ -23,6 +26,17 @@ export function canCancelOrderForRole(
 ) {
   if (status === 'completed' || status === 'cancelled') return false;
   return roleName !== 'waiter' || status === 'open';
+}
+
+export function canCancelOrderFromDetail(
+  order: CancelOrderCandidate | null | undefined,
+  roleName: string | null | undefined,
+) {
+  if (!order || order.payment_status === 'paid') return false;
+  const hasActiveItems = order.items?.some((item) => item.status !== 'cancelled') ?? false;
+  const canRecoverEmptyTakeaway = order.order_type === 'takeaway';
+  return (hasActiveItems || canRecoverEmptyTakeaway)
+    && canCancelOrderForRole(roleName, order.status);
 }
 
 export function isKitchenComplete(items: KitchenItem[] | null | undefined) {

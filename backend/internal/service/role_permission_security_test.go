@@ -7,9 +7,9 @@ import (
 )
 
 func TestRolePermissionMutationUsesRestaurantOverrideForSystemRole(t *testing.T) {
-	target, err := rolePermissionMutationTarget(&entity.Role{Name: "waiter", RestaurantID: nil}, 17)
+	target, err := rolePermissionMutationTargetForRole(&entity.Role{Name: "waiter", RestaurantID: nil}, 17)
 	if err != nil {
-		t.Fatalf("rolePermissionMutationTarget() error = %v", err)
+		t.Fatalf("rolePermissionMutationTargetForRole() error = %v", err)
 	}
 	if target != rolePermissionRestaurantOverride {
 		t.Fatalf("mutation target = %v, want restaurant override", target)
@@ -18,11 +18,11 @@ func TestRolePermissionMutationUsesRestaurantOverrideForSystemRole(t *testing.T)
 
 func TestRolePermissionMutationRejectsAnotherRestaurantsCustomRole(t *testing.T) {
 	otherRestaurantID := uint(91)
-	_, err := rolePermissionMutationTarget(&entity.Role{
+	_, err := rolePermissionMutationTargetForRole(&entity.Role{
 		Name:         "custom_91_test",
 		RestaurantID: &otherRestaurantID,
 	}, 17)
 	if err == nil {
-		t.Fatal("rolePermissionMutationTarget() accepted another restaurant's role")
+		t.Fatal("rolePermissionMutationTargetForRole() accepted another restaurant's role")
 	}
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { 
@@ -29,7 +29,10 @@ import {
   purgeStaleChats,
   saveConversationId,
   saveMessages,
+  subscribeToChatClear,
 } from "@/src/lib/aiChatStorage";
+import { createRequestGeneration } from "@/src/lib/requestGeneration";
+import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -181,6 +184,8 @@ export default function AIOperationsFloatingChat() {
   const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
+  const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatDialogRef = useRef<HTMLDivElement>(null);
@@ -198,22 +203,30 @@ export default function AIOperationsFloatingChat() {
 
   // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
-    purgeStaleChats(storageKey);
+    conversationRequests.invalidate();
+    // Drop the previous key's server conversation and pending action right away:
+    // a send between this render and the deferred load must not reuse them.
+    setConversationId(null);
     setPendingActionPreview(null);
     setActionPreviewError("");
-    setConversationId(loadStoredConversationId(storageKey));
-    const stored = loadStoredMessages<StoredMessage>(storageKey);
-    if (stored && stored.length > 0) {
-      setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
-    } else {
-      setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
-    }
-  }, [storageKey, copy.welcome]);
+    const loadTimer = window.setTimeout(() => {
+      purgeStaleChats(storageKey);
+      setConversationId(loadStoredConversationId(storageKey));
+      const stored = loadStoredMessages<StoredMessage>(storageKey);
+      setMessages(stored && stored.length > 0
+        ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
+        : [{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+      setLoading(false);
+      setHydratedStorageKey(storageKey);
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [conversationRequests, storageKey, copy.welcome]);
 
   // Persist to the shared key; a lone welcome message is not persisted.
   useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages);
-  }, [messages, storageKey]);
+  }, [hydratedStorageKey, messages, storageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -266,18 +279,32 @@ export default function AIOperationsFloatingChat() {
       .slice(-6)
       .map((message) => ({ id: message.id, role: message.role, content: message.content }));
 
+  const resetConversation = useCallback(() => {
+    conversationRequests.invalidate();
+    setShowTips(true);
+    setLoading(false);
+    // Also reached when the other chat surface clears: that surface's history is
+    // gone, so this one must drop the shared server thread and any pending action.
+    setConversationId(null);
+    setPendingActionPreview(null);
+    setActionPreviewError("");
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  }, [conversationRequests, copy.welcome]);
+
+  useEffect(() => subscribeToChatClear((clearedKey) => {
+    if (clearedKey === storageKey) resetConversation();
+  }), [resetConversation, storageKey]);
+
   // Start a fresh chat: drop the stored history and reset to the welcome message.
   const handleClearChat = () => {
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (canAskAI && serverConversationId) {
       void deleteAIConversation(serverConversationId).catch(() => undefined);
     }
-    clearStoredChat(storageKey);
-    setConversationId(null);
-    setShowTips(true);
-    setPendingActionPreview(null);
-    setActionPreviewError("");
-    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+    // clearStoredChat broadcasts, so both surfaces run resetConversation. With no
+    // storage key there is nothing to broadcast — reset this surface directly.
+    if (storageKey) clearStoredChat(storageKey);
+    else resetConversation();
   };
 
   const handleAction = (action: AIGuidedAction) => {
@@ -293,7 +320,7 @@ export default function AIOperationsFloatingChat() {
     setMessages((previous) => [
       ...previous,
       {
-        id: `confirm-${Date.now()}`,
+        id: `confirm-${previous.length}`,
         role: "assistant",
         content: action.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing."),
         createdAt: new Date(),
@@ -316,30 +343,25 @@ export default function AIOperationsFloatingChat() {
     setPendingActionPreview(null);
     setActionPreviewError("");
     
-    // Add user message
-    const userMsgId = `user-${Date.now()}`;
-    const userMsg: Message = {
-      id: userMsgId,
-      role: "user",
-      content: trimmed,
-      createdAt: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((previous) => [
+      ...previous,
+      { id: `user-${previous.length}`, role: "user", content: trimmed, createdAt: new Date() },
+    ]);
 
     const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
     if (navigation) {
-      const assistantMsg: Message = {
-        id: `nav-${Date.now()}`,
-        role: "assistant",
-        content: navigation.message,
-        createdAt: new Date(),
-        actions: navigation.kind === "suggest"
-          ? navigation.options.map((option) => ({ id: option.href, ...option }))
-          : undefined,
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `nav-${previous.length}`,
+          role: "assistant",
+          content: navigation.message,
+          createdAt: new Date(),
+          actions: navigation.kind === "suggest"
+            ? navigation.options.map((option) => ({ id: option.href, ...option }))
+            : undefined,
+        },
+      ]);
       if (navigation.kind === "navigate" && !navigation.alreadyThere) {
         router.push(navigation.href);
       }
@@ -351,7 +373,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `clarify-${Date.now()}`,
+          id: `clarify-${previous.length}`,
           role: "assistant",
           content: clarification.message,
           createdAt: new Date(),
@@ -365,7 +387,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `permission-${Date.now()}`,
+          id: `permission-${previous.length}`,
           role: "assistant",
           content: language === "th"
             ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนผู้ช่วย AI สำหรับข้อมูลร้านเปิดให้เจ้าของร้านเท่านั้น"
@@ -376,10 +398,14 @@ export default function AIOperationsFloatingChat() {
       return;
     }
 
+    const requestGeneration = conversationRequests.begin();
     setLoading(true);
 
     try {
       const response = await askOperationsAI(trimmed, conversationHistory(), conversationId);
+      // The chat was cleared or switched restaurants while this was in flight —
+      // drop the answer instead of appending it to a conversation it never joined.
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data: AIAskResponse = response.data;
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
@@ -408,6 +434,7 @@ export default function AIOperationsFloatingChat() {
         setLatestSnapshot(data.snapshot);
       }
     } catch (err: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       console.error(err);
       let errorMessage =
         typeof err === "object" && err !== null && "response" in err
@@ -426,15 +453,17 @@ export default function AIOperationsFloatingChat() {
           : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
       }
           
-      const errorMsg: Message = {
-        id: `err-${Date.now()}`,
-        role: "system",
-        content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
-        createdAt: new Date(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `err-${previous.length}`,
+          role: "system",
+          content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
+          createdAt: new Date(),
+        },
+      ]);
     } finally {
-      setLoading(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
   };
 

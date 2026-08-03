@@ -238,12 +238,6 @@ func (r *MenuRepository) UpdateMenuAggregate(
 	})
 }
 
-func (r *MenuRepository) ReplaceMenuOptions(item *entity.MenuItem, groups []entity.MenuOptionGroup) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		return replaceMenuOptions(tx, item, groups)
-	})
-}
-
 func replaceMenuOptions(tx *gorm.DB, item *entity.MenuItem, groups []entity.MenuOptionGroup) error {
 	var existing []entity.MenuOptionGroup
 	if err := tx.Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Find(&existing).Error; err != nil {
@@ -279,12 +273,6 @@ func replaceMenuOptions(tx *gorm.DB, item *entity.MenuItem, groups []entity.Menu
 	return nil
 }
 
-func (r *MenuRepository) ReplaceMenuIngredients(item *entity.MenuItem, components []entity.MenuItemIngredient) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		return replaceMenuIngredients(tx, item, components)
-	})
-}
-
 func replaceMenuIngredients(tx *gorm.DB, item *entity.MenuItem, components []entity.MenuItemIngredient) error {
 	if err := tx.Unscoped().Where("restaurant_id = ? AND menu_item_id = ?", item.RestaurantID, item.ID).Delete(&entity.MenuItemIngredient{}).Error; err != nil {
 		return err
@@ -299,12 +287,6 @@ func replaceMenuIngredients(tx *gorm.DB, item *entity.MenuItem, components []ent
 		}
 	}
 	return nil
-}
-
-func (r *MenuRepository) ReplaceMenuCategories(item *entity.MenuItem, categories []entity.MenuItemCategory) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		return replaceMenuCategories(tx, item, categories)
-	})
 }
 
 func replaceMenuCategories(tx *gorm.DB, item *entity.MenuItem, categories []entity.MenuItemCategory) error {

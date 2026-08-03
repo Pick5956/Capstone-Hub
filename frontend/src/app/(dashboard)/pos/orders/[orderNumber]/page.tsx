@@ -662,14 +662,14 @@ export default function PosOrderDetailPage() {
     setSubmitting(true);
     setError("");
     try {
-      await addOrderItem(order.ID, {
+      const response = await addOrderItem(order.ID, {
         menu_id: item.ID,
         quantity: 1,
         serve_immediately: true,
         fulfillment_type: order.order_type === "takeaway" ? "takeaway" : "dine_in",
       });
+      setOrder(response.data);
       await reloadBill();
-      void load({ background: true });
       showToast({ title: copy.itemAddedToast });
     } catch (error) {
       setError(apiErrorMessage(error) || copy.saveError);

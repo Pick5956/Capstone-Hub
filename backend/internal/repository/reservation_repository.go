@@ -24,19 +24,6 @@ func (r *ReservationRepository) Create(reservation *entity.Reservation) error {
 	return r.db.Create(reservation).Error
 }
 
-// FindActiveByTable returns the reservation currently holding the given table.
-func (r *ReservationRepository) FindActiveByTable(restaurantID, tableID uint) (*entity.Reservation, error) {
-	var reservation entity.Reservation
-	err := r.db.
-		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
-		Order("id desc").
-		First(&reservation).Error
-	if err != nil {
-		return nil, err
-	}
-	return &reservation, nil
-}
-
 func (r *ReservationRepository) Save(reservation *entity.Reservation) error {
 	return r.db.Save(reservation).Error
 }

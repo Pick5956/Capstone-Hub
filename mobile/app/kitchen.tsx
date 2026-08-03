@@ -20,6 +20,7 @@ import {
 import { itemStatusLabel } from '@/src/lib/format';
 import {
   createKitchenMutationGate,
+  KitchenMutationError,
   kitchenFulfillmentContext,
   kitchenTicketTiming,
   resolveKitchenImageUrl,
@@ -170,15 +171,29 @@ export default function KitchenScreen() {
       }, reconcileQueue);
       setMessage(copy('บันทึกว่าครัวทำเสร็จทั้งรอบแล้ว', 'Marked the entire kitchen batch as done'));
     } catch (err) {
-      const detail = err instanceof Error
-        ? err.message
+      const mutationFailed = !(err instanceof KitchenMutationError) || err.mutationFailed;
+      const mutationError = err instanceof KitchenMutationError ? err.mutationError : err;
+      const reconciliationFailed = err instanceof KitchenMutationError && err.reconciliationFailed;
+      const reconciliationError = err instanceof KitchenMutationError ? err.reconciliationError : null;
+      const detail = mutationError instanceof Error
+        ? mutationError.message
         : copy('อัปเดตทั้งรอบไม่สำเร็จ', 'Could not update the entire batch');
-      setError(updatedCount > 0
-        ? copy(
-          `อัปเดตสำเร็จ ${updatedCount.toLocaleString('th-TH')} จาก ${items.length.toLocaleString('th-TH')} รายการ และตรวจคิวล่าสุดแล้ว · ${detail}`,
-          `Updated ${updatedCount.toLocaleString('en-US')} of ${items.length.toLocaleString('en-US')} items and reconciled the latest queue · ${detail}`,
-        )
-        : detail);
+      if (updatedCount > 0 && reconciliationFailed) {
+        const reconciliationDetail = reconciliationError instanceof Error
+          ? reconciliationError.message
+          : copy('โหลดคิวครัวล่าสุดไม่สำเร็จ', 'Could not load the latest kitchen queue');
+        setError(copy(
+          `อัปเดตสำเร็จ ${updatedCount.toLocaleString('th-TH')} จาก ${items.length.toLocaleString('th-TH')} รายการ แต่ยังตรวจสอบคิวล่าสุดไม่ได้${mutationFailed ? ` · หยุดอัปเดตเพราะ: ${detail}` : ''} · โหลดคิวไม่สำเร็จ: ${reconciliationDetail}`,
+          `Updated ${updatedCount.toLocaleString('en-US')} of ${items.length.toLocaleString('en-US')} items, but the latest queue could not be verified${mutationFailed ? ` · Update stopped: ${detail}` : ''} · Queue load failed: ${reconciliationDetail}`,
+        ));
+      } else {
+        setError(updatedCount > 0
+          ? copy(
+            `อัปเดตสำเร็จ ${updatedCount.toLocaleString('th-TH')} จาก ${items.length.toLocaleString('th-TH')} รายการ และตรวจคิวล่าสุดแล้ว · ${detail}`,
+            `Updated ${updatedCount.toLocaleString('en-US')} of ${items.length.toLocaleString('en-US')} items and reconciled the latest queue · ${detail}`,
+          )
+          : detail);
+      }
     } finally {
       setSubmittingKey(null);
       mutationGateRef.current.release();

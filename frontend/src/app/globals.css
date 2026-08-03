@@ -15,12 +15,10 @@
   --scrollbar-thumb-hover: #94a3b8;
   --scrollbar-corner: #f1f5f9;
   --z-sticky: 20;
-  --z-modal-backdrop: 40;
   --z-chat: 45;
   --z-dropdown: 50;
   --z-modal: 55;
   --z-toast: 60;
-  --z-tooltip: 70;
 }
 
 .dark {
@@ -396,10 +394,6 @@ html[data-font-size="extra-large"] {
   }
 }
 
-.animate-fade-in {
-  animation: modal-fade-in 0.2s ease-out forwards;
-}
-
 .animate-slide-down {
   animation: modal-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -667,7 +661,6 @@ html[data-font-size="extra-large"] {
   .themed-select-menu,
   .themed-select-menu-exit,
   .themed-select-option,
-  .animate-fade-in,
   .animate-slide-down {
     animation: none !important;
   }

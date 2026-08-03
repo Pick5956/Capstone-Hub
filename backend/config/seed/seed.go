@@ -12,7 +12,7 @@ import (
 func SeedRoles(db *gorm.DB) error {
 	roles := []entity.Role{
 		{Name: "owner", DisplayName: "Owner", Permissions: `["*"]`, IsSystem: true},
-		{Name: "manager", DisplayName: "Manager", Permissions: `["view_dashboard","manage_menu","manage_table","manage_staff","manage_inventory","view_reports","take_payment","view_orders","view_kitchen","update_order_status"]`, IsSystem: true},
+		{Name: "manager", DisplayName: "Manager", Permissions: `["view_dashboard","manage_menu","manage_table","manage_staff","manage_inventory","manage_expenses","view_reports","take_payment","view_orders","view_kitchen","update_order_status"]`, IsSystem: true},
 		{Name: "cashier", DisplayName: "Cashier", Permissions: `["view_dashboard","take_payment","view_orders","view_tables"]`, IsSystem: true},
 		{Name: "waiter", DisplayName: "Waiter", Permissions: `["view_dashboard","take_order","take_payment","view_tables","view_orders"]`, IsSystem: true},
 		{Name: "chef", DisplayName: "Chef", Permissions: `["view_kitchen","update_order_status","view_inventory"]`, IsSystem: true},

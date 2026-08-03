@@ -85,3 +85,108 @@ func TestAIRevenueQueriesUseOnlyPaidCompletedOrders(t *testing.T) {
 	}
 	requirePaidCompletedCohort(t, capture.statements)
 }
+
+// The hour view exists so a day's hours sum to that day's bar. That only holds
+// while both go through salesBuckets with the same cohort filter and the hour
+// query is fenced to one Bangkok day.
+func TestSalesByHourMatchesDailyCohortAndStaysWithinOneDay(t *testing.T) {
+	db, capture := dryRunRepositoryDB(t)
+	repo := NewReportRepository(db)
+	bangkok := time.FixedZone("Asia/Bangkok", 7*60*60)
+	day := time.Date(2026, time.July, 1, 13, 45, 0, 0, bangkok)
+
+	if _, err := repo.SalesByHour(7, day); err != nil && !errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("SalesByHour() error = %v", err)
+	}
+
+	requirePaidCompletedCohort(t, capture.statements)
+
+	// DryRun stops a multi-query call at the first Scan, so only the revenue
+	// leg is observable here; the cost leg gets its cohort and bounds from the
+	// same salesBuckets locals.
+	hourly := strings.Join(capture.statements, "\n")
+	if !strings.Contains(hourly, "'hh24'") {
+		t.Fatalf("hourly query does not bucket by hour:\n%s", hourly)
+	}
+	// Without the exclusive upper bound the "hourly" query would silently fold
+	// every later day into the same 24 buckets.
+	if !strings.Contains(hourly, "completed_at < ") {
+		t.Fatalf("hourly query is not bounded to a single day:\n%s", hourly)
+	}
+	// GROUP BY must repeat the whole expression. gorm quotes whatever Group()
+	// receives, so an ordinal like Group("1") ships as GROUP BY "1" — valid SQL
+	// text that Postgres rejects at runtime as an unknown column. DryRun builds
+	// the statement without executing it, so only this assertion catches it.
+	if !strings.Contains(hourly, "group by to_char(") {
+		t.Fatalf("hourly query must group by the bucket expression, not an ordinal:\n%s", hourly)
+	}
+
+	dayDB, dayCapture := dryRunRepositoryDB(t)
+	if _, err := NewReportRepository(dayDB).SalesByDay(7, day); err != nil && !errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("SalesByDay() error = %v", err)
+	}
+	daily := strings.Join(dayCapture.statements, "\n")
+	if strings.Contains(daily, "completed_at < ") {
+		t.Fatalf("the day view must stay open-ended, not inherit the hourly bound:\n%s", daily)
+	}
+	if !strings.Contains(daily, "'yyyy-mm-dd'") {
+		t.Fatalf("day query lost its date bucket:\n%s", daily)
+	}
+}
+
+// The drill-down table is opened from a bar and must sum back to it, so it has
+// to select the same cohort as salesBuckets and stay inside the bar's window.
+func TestSalesDetailUsesSameCohortAsChartBars(t *testing.T) {
+	db, capture := dryRunRepositoryDB(t)
+	repo := NewReportRepository(db)
+	bangkok := time.FixedZone("Asia/Bangkok", 7*60*60)
+	since := time.Date(2026, time.July, 1, 13, 0, 0, 0, bangkok)
+
+	if _, err := repo.SalesDetail(7, since, since.Add(time.Hour), 300); err != nil &&
+		!errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("SalesDetail() error = %v", err)
+	}
+
+	requirePaidCompletedCohort(t, capture.statements)
+
+	joined := strings.Join(capture.statements, "\n")
+	// Both ends are required: without the upper bound a single-hour drill-down
+	// would list every later bill in the restaurant's history.
+	if !strings.Contains(joined, "orders.completed_at >= ") || !strings.Contains(joined, "orders.completed_at < ") {
+		t.Fatalf("detail query is not fenced to the bar's window:\n%s", joined)
+	}
+	if !strings.Contains(joined, "limit 300") {
+		t.Fatalf("detail query must stay bounded by its limit:\n%s", joined)
+	}
+}
+
+// The ingredient table is opened from a cost bar, so it has to repeat the cost
+// leg of salesBuckets exactly. Any drift here shows a total that disagrees with
+// the bar the user just clicked.
+func TestExpenseDetailRepeatsTheCostCohort(t *testing.T) {
+	db, capture := dryRunRepositoryDB(t)
+	repo := NewReportRepository(db)
+	bangkok := time.FixedZone("Asia/Bangkok", 7*60*60)
+	since := time.Date(2026, time.August, 3, 13, 0, 0, 0, bangkok)
+
+	if _, err := repo.ExpenseDetail(7, since, since.Add(time.Hour), 300); err != nil &&
+		!errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("ExpenseDetail() error = %v", err)
+	}
+
+	joined := strings.Join(capture.statements, "\n")
+	for _, fragment := range []string{
+		"orders.status = 'completed'",
+		"orders.payment_status = 'paid'",
+		// Cancelled-after-cooking items are excluded from the bars, so they must
+		// be excluded here too or the rows would overshoot the bar.
+		"order_items.status = 'served'",
+		"orders.completed_at >= ",
+		"orders.completed_at < ",
+		"sum(order_inventory_deductions.cost_snapshot)",
+	} {
+		if !strings.Contains(joined, fragment) {
+			t.Fatalf("ingredient breakdown does not match the cost bar cohort, missing %q:\n%s", fragment, joined)
+		}
+	}
+}

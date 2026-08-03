@@ -26,6 +26,7 @@ import {
   safeQrFileName,
   statusMeta,
   tableAccentClass,
+  tableStatusEditorState,
   tableStatusPillClass,
   tagBadgeClass,
 } from "./tablesPageUtils";
@@ -90,6 +91,7 @@ export default function TablesPage() {
         tags: "Tags",
         capacity: "จำนวนที่นั่ง",
         status: "สถานะ",
+        lifecycleStatusHelp: "สถานะนี้เปลี่ยนจากขั้นตอนการจองหรือออเดอร์เท่านั้น",
         bulkCreate: "สร้างโต๊ะเป็นชุด",
         count: "จำนวนโต๊ะ",
         preview: "ตัวอย่างเลข",
@@ -173,6 +175,7 @@ export default function TablesPage() {
         tags: "Tags",
         capacity: "Seats",
         status: "Status",
+        lifecycleStatusHelp: "This status changes only through the reservation or order workflow.",
         bulkCreate: "Bulk create tables",
         count: "Table count",
         preview: "Number preview",
@@ -278,6 +281,7 @@ export default function TablesPage() {
   }, [tagFilter, tables, zoneFilter]);
   const occupiedCount = tables.filter((table) => table.status === "occupied").length;
   const inactiveCount = tables.filter((table) => table.status === "inactive").length;
+  const tableEditorStatus = tableStatusEditorState(tableForm.status);
   const bulkPreview = useMemo(() => {
     const count = Math.max(1, Number(bulkCount) || 1);
     const zone = activeZones.find((item) => item.ID === tableForm.zone_id);
@@ -775,17 +779,24 @@ export default function TablesPage() {
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.status}</span>
                         <span className="flex h-10 items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-900">
-                          <span className="truncate text-[13px] font-semibold text-gray-800 dark:text-gray-100">
-                            {tableForm.status === "inactive" ? STATUS.inactive.label : copy.active}
+                          <span className={`truncate rounded-md px-2 py-1 text-[12px] font-semibold leading-none ${tableStatusPillClass(tableEditorStatus.status)}`}>
+                            {STATUS[tableEditorStatus.status].label}
                           </span>
-                          <input
-                            type="checkbox"
-                            checked={tableForm.status !== "inactive"}
-                            onChange={(event) => setTableForm((current) => ({ ...current, status: event.target.checked ? "free" : "inactive" }))}
-                            className="h-5 w-9 cursor-pointer appearance-none rounded-full bg-gray-200 transition-[background-color] checked:bg-gray-900 before:block before:h-5 before:w-5 before:rounded-full before:bg-white before:shadow-sm before:transition-transform checked:before:translate-x-4 dark:bg-gray-700 dark:checked:bg-white dark:checked:before:bg-gray-900"
-                            aria-label={copy.status}
-                          />
+                          {!tableEditorStatus.isLifecycleManaged && (
+                            <input
+                              type="checkbox"
+                              checked={tableEditorStatus.isActive}
+                              onChange={(event) => setTableForm((current) => ({ ...current, status: event.target.checked ? "free" : "inactive" }))}
+                              className="h-5 w-9 cursor-pointer appearance-none rounded-full bg-gray-200 transition-[background-color] checked:bg-gray-900 before:block before:h-5 before:w-5 before:rounded-full before:bg-white before:shadow-sm before:transition-transform checked:before:translate-x-4 dark:bg-gray-700 dark:checked:bg-white dark:checked:before:bg-gray-900"
+                              aria-label={copy.status}
+                            />
+                          )}
                         </span>
+                        {tableEditorStatus.isLifecycleManaged && (
+                          <span className="mt-1.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">
+                            {copy.lifecycleStatusHelp}
+                          </span>
+                        )}
                       </label>
                     </div>
                     {!editingTable && (

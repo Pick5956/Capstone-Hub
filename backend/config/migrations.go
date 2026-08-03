@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 7
+	CurrentSchemaVersion int64 = 9
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -124,12 +124,47 @@ func schemaMigrationPlan() []SchemaMigration {
 			},
 		},
 		{
+			// Versions 6 and 7 stay as main numbered them. Every database that
+			// already followed main has these recorded, and the schema ledger
+			// compares version *and* name, so renumbering them would lock those
+			// databases out. The AI migrations that collided move to 8 and 9.
 			Version: 6,
+			Name:    "add_expenses",
+			Up: func(ctx *MigrationContext) error {
+				// Cash actually paid out (supplies, wages, rent). Kept separate
+				// from order_inventory_deductions, which is the recipe cost of
+				// food already sold.
+				if err := ctx.DB.AutoMigrate(&entity.Expense{}); err != nil {
+					return fmt.Errorf("migrate expenses: %w", err)
+				}
+				// Re-seed so the new manage_expenses permission reaches the
+				// existing system roles (SeedRoles updates permissions on
+				// conflict rather than skipping).
+				if err := seed.SeedRoles(ctx.DB); err != nil {
+					return fmt.Errorf("reseed roles for expenses: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 7,
+			Name:    "link_restock_spend_to_expenses",
+			Up: func(ctx *MigrationContext) error {
+				// Restocks can now carry what they cost, and write the matching
+				// ledger row themselves instead of relying on double entry.
+				if err := ctx.DB.AutoMigrate(&entity.IngredientTransaction{}, &entity.Expense{}); err != nil {
+					return fmt.Errorf("migrate restock spend: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 8,
 			Name:    "add_ai_conversation_state",
 			Up: func(ctx *MigrationContext) error {
 				// Additive-only persistence for compact AI conversation state and
 				// bounded turn history. Feature rollback leaves these unused tables in
-				// place instead of destructively dropping user history. A schema-v5
+				// place instead of destructively dropping user history. An older
 				// binary is still rejected by the existing schema-ledger policy.
 				models := []any{
 					&entity.AIConversation{},
@@ -142,13 +177,13 @@ func schemaMigrationPlan() []SchemaMigration {
 			},
 		},
 		{
-			Version: 7,
+			Version: 9,
 			Name:    "add_ai_action_previews",
 			Up: func(ctx *MigrationContext) error {
 				// Additive-only persistence for short-lived, owner-confirmed AI
 				// actions. Disabling AI actions leaves this table unused and is the
-				// supported application rollback. Once version 7 is recorded, the
-				// schema ledger intentionally rejects an older version-6 binary.
+				// supported application rollback. Once version 9 is recorded, the
+				// schema ledger intentionally rejects an older binary.
 				if err := migrateAIActionPreviews(ctx.DB); err != nil {
 					return fmt.Errorf("migrate AI action previews: %w", err)
 				}

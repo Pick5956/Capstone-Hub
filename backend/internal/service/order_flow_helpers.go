@@ -22,6 +22,13 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 	if err != nil {
 		return err
 	}
+	if shouldAutoCancelTakeawayOrder(order, items) {
+		const reason = "all takeaway items cancelled"
+		now := repository.BangkokNow()
+		order.CancelledReason = reason
+		order.ClosedAt = &now
+		return setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, reason)
+	}
 	next := orderStatusFromItems(order.Status, items)
 	if next == order.Status {
 		return nil
@@ -34,6 +41,13 @@ func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.O
 		note = "all remaining items ready"
 	}
 	return setOrderStatus(tx, order, next, userID, note)
+}
+
+func shouldAutoCancelTakeawayOrder(order *entity.Order, items []entity.OrderItem) bool {
+	return order != nil &&
+		order.OrderType == entity.OrderTypeTakeaway &&
+		len(items) > 0 &&
+		allItems(items, entity.OrderItemStatusCancelled)
 }
 
 func effectiveOrderStatus(order *entity.Order) string {

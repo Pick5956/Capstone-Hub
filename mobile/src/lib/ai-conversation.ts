@@ -5,6 +5,23 @@ import type {
 
 const MAX_CONVERSATION_MESSAGES = 6;
 
+export function createAIConversationRequestGuard() {
+  let generation = 0;
+
+  return {
+    beginRequest() {
+      generation += 1;
+      return generation;
+    },
+    clearConversation() {
+      generation += 1;
+    },
+    canApplyResponse(request: number) {
+      return request === generation;
+    },
+  };
+}
+
 export function recentConversationHistory(
   history: AIConversationMessage[],
 ): AIConversationMessage[] {

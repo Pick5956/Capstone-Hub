@@ -2,6 +2,34 @@ import type { OrderType } from '@/src/types/order';
 
 export type KitchenUrgency = 'normal' | 'warning' | 'overdue';
 
+function kitchenErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+export class KitchenMutationError extends Error {
+  mutationError: unknown;
+  reconciliationError: unknown;
+  mutationFailed: boolean;
+  reconciliationFailed: boolean;
+
+  constructor(
+    mutationError: unknown,
+    reconciliationError: unknown,
+    mutationFailed = mutationError !== undefined,
+    reconciliationFailed = reconciliationError !== undefined,
+  ) {
+    super(kitchenErrorMessage(
+      mutationError ?? reconciliationError,
+      'Kitchen update failed',
+    ));
+    this.name = 'KitchenMutationError';
+    this.mutationError = mutationError;
+    this.reconciliationError = reconciliationError;
+    this.mutationFailed = mutationFailed;
+    this.reconciliationFailed = reconciliationFailed;
+  }
+}
+
 type KitchenTimingSource = {
   opened_at?: string | null;
   items?: readonly {
@@ -79,18 +107,30 @@ export async function runKitchenMutation<T>(
 ) {
   let result: T | undefined;
   let mutationError: unknown;
+  let reconciliationError: unknown;
+  let mutationFailed = false;
+  let reconciliationFailed = false;
   try {
     result = await mutate();
   } catch (err) {
+    mutationFailed = true;
     mutationError = err;
   }
 
   try {
     await reconcile();
   } catch (err) {
-    if (!mutationError) throw err;
+    reconciliationFailed = true;
+    reconciliationError = err;
   }
 
-  if (mutationError) throw mutationError;
+  if (mutationFailed || reconciliationFailed) {
+    throw new KitchenMutationError(
+      mutationError,
+      reconciliationError,
+      mutationFailed,
+      reconciliationFailed,
+    );
+  }
   return result as T;
 }
