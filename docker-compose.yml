@@ -31,10 +31,13 @@ x-backend-environment: &backend-environment
   SMTP_USER: ${SMTP_USER:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   AI_PROVIDER: ${AI_PROVIDER:-auto}
+  AI_CONVERSATION_MEMORY_ENABLED: ${AI_CONVERSATION_MEMORY_ENABLED:-false}
   GROQ_API_KEYS: ${GROQ_API_KEYS:-}
   GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+  GROQ_PLANNER_MODEL: ${GROQ_PLANNER_MODEL:-openai/gpt-oss-20b}
   GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+  GEMINI_PLANNER_MODEL: ${GEMINI_PLANNER_MODEL:-gemini-2.5-flash}
 
 services:
   postgres:
