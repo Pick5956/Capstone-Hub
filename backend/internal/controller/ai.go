@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -68,6 +69,14 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		Role:         "owner",
 	}, &req)
 	if err != nil {
+		if errors.Is(err, repository.ErrAIConversationConflict) {
+			respondAPIError(c, http.StatusConflict, err)
+			return
+		}
+		if errors.Is(err, service.ErrAIConversationPersistence) {
+			respondAPIError(c, http.StatusInternalServerError, err)
+			return
+		}
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}

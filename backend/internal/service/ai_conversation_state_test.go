@@ -166,6 +166,38 @@ func TestConversationMemoryFeatureFlagFallsBackToSanitizedClientHistory(t *testi
 	}
 }
 
+func TestConversationMemoryIsOptIn(t *testing.T) {
+	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "")
+	store := &fakeAIConversationStore{}
+	service := &AIService{conversationStore: store}
+
+	session, history, err := service.prepareConversationSession(AIActorContext{}, &AIAskRequest{
+		History: []AIConversationMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("prepare default-disabled memory: %v", err)
+	}
+	if session != nil || len(history) != 1 || store.created != 0 || store.cleanupCalls != 0 {
+		t.Fatalf("default memory result = session %+v, history %+v, store %+v", session, history, store)
+	}
+}
+
+func TestConversationCleanupRunsOnFirstEnabledRequest(t *testing.T) {
+	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "true")
+	store := &fakeAIConversationStore{}
+	service := &AIService{conversationStore: store}
+
+	if _, _, err := service.prepareConversationSession(
+		AIActorContext{RestaurantID: 7, OwnerUserID: 11, Role: "owner"},
+		&AIAskRequest{},
+	); err != nil {
+		t.Fatalf("prepare conversation: %v", err)
+	}
+	if store.cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want 1", store.cleanupCalls)
+	}
+}
+
 func TestDeleteConversationRequiresOwnerContext(t *testing.T) {
 	store := &fakeAIConversationStore{}
 	service := &AIService{conversationStore: store}

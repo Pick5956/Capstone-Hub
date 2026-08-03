@@ -60,7 +60,8 @@ func realAPIRequestRouter(svc AIOperationsService, restaurantID uint) *gin.Engin
 	ctrl := NewAIController(svc)
 	router.Use(func(c *gin.Context) {
 		c.Set("restaurant_id", restaurantID)
-		c.Set("restaurant_member", memberWithRole("manager", `["view_reports"]`))
+		c.Set("user_id", uint(1))
+		c.Set("restaurant_member", memberWithRole("owner", `["*"]`))
 		c.Next()
 	})
 	router.POST("/api/v1/ai/operations/ask", ctrl.AskOperations)
@@ -94,7 +95,6 @@ func createIncompleteAPIScenario(t *testing.T, db *gorm.DB) uint {
 		RestaurantID: restaurant.ID,
 		Name:         "API Ingredient",
 		Unit:         "g",
-		BaseUnit:     "g",
 		Stock:        1000,
 		CostPerUnit:  1,
 		YieldPercent: 100,

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"Project-M/internal/entity"
+	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -175,6 +176,30 @@ func TestAskOperationsReturnsBadRequestForInvalidBodyAndServiceError(t *testing.
 
 		if recorder.Code != http.StatusBadRequest || svc.askCalls != 1 {
 			t.Fatalf("service error status=%d askCalls=%d, want bad request after one service call", recorder.Code, svc.askCalls)
+		}
+	})
+
+	t.Run("conversation conflict", func(t *testing.T) {
+		svc := &fakeAIOperationsService{askErr: repository.ErrAIConversationConflict}
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+		recorder := httptest.NewRecorder()
+
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"ยอดขายวันนี้"}`)))
+
+		if recorder.Code != http.StatusConflict || svc.askCalls != 1 {
+			t.Fatalf("conversation conflict status=%d askCalls=%d, want conflict", recorder.Code, svc.askCalls)
+		}
+	})
+
+	t.Run("conversation persistence failure", func(t *testing.T) {
+		svc := &fakeAIOperationsService{askErr: service.ErrAIConversationPersistence}
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+		recorder := httptest.NewRecorder()
+
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/ai/operations/ask", strings.NewReader(`{"question":"ยอดขายวันนี้"}`)))
+
+		if recorder.Code != http.StatusInternalServerError || svc.askCalls != 1 {
+			t.Fatalf("conversation persistence status=%d askCalls=%d, want internal server error", recorder.Code, svc.askCalls)
 		}
 	})
 }

@@ -17,6 +17,8 @@ const (
 	aiConversationStateVersion     = "1.0"
 )
 
+var ErrAIConversationPersistence = errors.New("AI conversation could not be saved")
+
 // AIConversationStore keeps the orchestration layer independent from GORM and
 // makes memory behavior testable without a database.
 type AIConversationStore interface {
@@ -41,10 +43,10 @@ type aiConversationCompactState struct {
 
 func conversationMemoryEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("AI_CONVERSATION_MEMORY_ENABLED"))) {
-	case "0", "false", "off", "disabled":
-		return false
-	default:
+	case "1", "true", "on", "enabled":
 		return true
+	default:
+		return false
 	}
 }
 
@@ -53,6 +55,7 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 	if !conversationMemoryEnabled() || s.conversationStore == nil {
 		return nil, clientHistory, nil
 	}
+	s.maybeCleanupExpiredConversations()
 
 	conversationID := strings.TrimSpace(req.ConversationID)
 	var conversation *entity.AIConversation
@@ -64,9 +67,8 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 			StateJSON:    `{"schema_version":"` + aiConversationStateVersion + `"}`,
 		}
 		if err = s.conversationStore.CreateConversation(conversation); err != nil {
-			return nil, nil, fmt.Errorf("create AI conversation: %w", err)
+			return nil, nil, fmt.Errorf("%w: create conversation: %w", ErrAIConversationPersistence, err)
 		}
-		s.maybeCleanupExpiredConversations()
 	} else {
 		conversation, err = s.conversationStore.FindActiveConversation(actor.RestaurantID, actor.OwnerUserID, conversationID)
 		if err != nil {
@@ -81,7 +83,7 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 		aiConversationContextTurnLimit,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("load AI conversation turns: %w", err)
+		return nil, nil, fmt.Errorf("%w: load conversation turns: %w", ErrAIConversationPersistence, err)
 	}
 	history := conversationTurnsToMessages(turns)
 	// Transition compatibility: a new backend conversation may be created while
@@ -180,7 +182,7 @@ func (s *AIService) maybeCleanupExpiredConversations() {
 		return
 	}
 	count := atomic.AddUint64(&s.conversationCleanupCounter, 1)
-	if count%aiConversationCleanupEvery != 0 {
+	if count != 1 && count%aiConversationCleanupEvery != 0 {
 		return
 	}
 	if _, err := s.conversationStore.CleanupExpired(500); err != nil {

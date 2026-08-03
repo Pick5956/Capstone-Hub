@@ -143,7 +143,7 @@ func (s *AIService) AskOperationsForOwner(actor AIActorContext, req *AIAskReques
 	}
 	response.ConversationID = session.conversation.ID
 	if err := s.persistConversationTurn(actor, session, request.Question, response); err != nil {
-		aiStage("warn", "conversation turn was not persisted: %v", err)
+		return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 	}
 	return response, nil
 }
