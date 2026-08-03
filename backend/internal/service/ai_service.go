@@ -15,10 +15,12 @@ import (
 var errRateLimit = errors.New("rate limit exceeded")
 
 type AIService struct {
-	repo           *repository.AIRepository
-	httpClient     *http.Client
-	groqKeyIndex   uint32
-	geminiKeyIndex uint32
+	repo                       *repository.AIRepository
+	httpClient                 *http.Client
+	groqKeyIndex               uint32
+	geminiKeyIndex             uint32
+	conversationStore          AIConversationStore
+	conversationCleanupCounter uint64
 	// providerAdapters is nil in production and resolves lazily to Groq then
 	// Gemini. Tests may inject provider-neutral fakes without making live calls.
 	providerAdapters []aiProviderAdapter
@@ -42,6 +44,12 @@ func (s *AIService) getAIProvider() string {
 		return v
 	}
 	return "auto"
+}
+
+func ProvideAIServiceWithConversationStore(repo *repository.AIRepository, store AIConversationStore) *AIService {
+	service := ProvideAIService(repo)
+	service.conversationStore = store
+	return service
 }
 
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
@@ -108,7 +116,39 @@ func mapTaskToIntent(task AITask) AIIntent {
 	}
 }
 
-func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (resp *AIAskResponse, err error) {
+func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskResponse, error) {
+	return s.askOperationsCore(restaurantID, req)
+}
+
+func (s *AIService) AskOperationsForOwner(actor AIActorContext, req *AIAskRequest) (*AIAskResponse, error) {
+	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
+		return nil, errors.New("authenticated restaurant owner context is required")
+	}
+	if req == nil {
+		return nil, errors.New("AI request is required")
+	}
+
+	request := *req
+	session, history, err := s.prepareConversationSession(actor, &request)
+	if err != nil {
+		return nil, err
+	}
+	request.History = history
+	response, err := s.askOperationsCore(actor.RestaurantID, &request)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return response, nil
+	}
+	response.ConversationID = session.conversation.ID
+	if err := s.persistConversationTurn(actor, session, request.Question, response); err != nil {
+		aiStage("warn", "conversation turn was not persisted: %v", err)
+	}
+	return response, nil
+}
+
+func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (resp *AIAskResponse, err error) {
 	question := strings.TrimSpace(req.Question)
 	if question == "" {
 		return nil, errors.New("question is required")

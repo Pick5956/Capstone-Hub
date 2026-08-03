@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"Project-M/internal/repository"
@@ -18,8 +19,9 @@ type AIController struct {
 }
 
 type AIOperationsService interface {
-	AskOperations(restaurantID uint, req *service.AIAskRequest) (*service.AIAskResponse, error)
+	AskOperationsForOwner(actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error)
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
+	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 }
 
 func requireAIOwner(c *gin.Context) bool {
@@ -32,7 +34,10 @@ func requireAIOwner(c *gin.Context) bool {
 }
 
 func ProvideAIController(db *gorm.DB) *AIController {
-	return NewAIController(service.ProvideAIService(repository.NewAIRepository(db)))
+	return NewAIController(service.ProvideAIServiceWithConversationStore(
+		repository.NewAIRepository(db),
+		repository.NewAIConversationRepository(db),
+	))
 }
 
 func NewAIController(svc AIOperationsService) *AIController {
@@ -47,12 +52,21 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	if !requireAIOwner(c) {
 		return
 	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
 	var req service.AIAskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondInvalidRequest(c)
 		return
 	}
-	result, err := ctrl.svc.AskOperations(restaurantID, &req)
+	result, err := ctrl.svc.AskOperationsForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, &req)
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
@@ -94,6 +108,35 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (ctrl *AIController) DeleteConversation(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	conversationID := strings.TrimSpace(c.Param("conversationID"))
+	if conversationID == "" || len(conversationID) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		return
+	}
+	if err := ctrl.svc.DeleteConversationForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, conversationID); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {

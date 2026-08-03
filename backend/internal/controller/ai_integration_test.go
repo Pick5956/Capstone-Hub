@@ -22,12 +22,16 @@ type fakeAIOperationsService struct {
 	askCalls         int
 	snapshotCalls    int
 	restaurantID     uint
+	actor            service.AIActorContext
 	request          *service.AIAskRequest
+	deleteCalls      int
+	deletedID        string
 }
 
-func (f *fakeAIOperationsService) AskOperations(restaurantID uint, req *service.AIAskRequest) (*service.AIAskResponse, error) {
+func (f *fakeAIOperationsService) AskOperationsForOwner(actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
 	f.askCalls++
-	f.restaurantID = restaurantID
+	f.actor = actor
+	f.restaurantID = actor.RestaurantID
 	f.request = req
 	return f.askResponse, f.askErr
 }
@@ -36,6 +40,13 @@ func (f *fakeAIOperationsService) OperationsSnapshot(restaurantID uint) (*servic
 	f.snapshotCalls++
 	f.restaurantID = restaurantID
 	return f.snapshotResponse, f.snapshotErr
+}
+
+func (f *fakeAIOperationsService) DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error {
+	f.deleteCalls++
+	f.actor = actor
+	f.deletedID = conversationID
+	return f.askErr
 }
 
 func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, includeRestaurant bool) *gin.Engine {
@@ -48,11 +59,13 @@ func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, incl
 		}
 		if member != nil {
 			c.Set("restaurant_member", member)
+			c.Set("user_id", uint(99))
 		}
 		c.Next()
 	})
 	router.POST("/ai/operations/ask", ctrl.AskOperations)
 	router.GET("/ai/operations/snapshot", ctrl.OperationsSnapshot)
+	router.DELETE("/ai/operations/conversations/:conversationID", ctrl.DeleteConversation)
 	return router
 }
 
@@ -113,7 +126,7 @@ func TestAskOperationsReturnsServiceResponseSchema(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("AskOperations success status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
-	if svc.restaurantID != 12 || svc.request == nil || svc.request.Question != "rytyt" || len(svc.request.History) != 1 {
+	if svc.restaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" || svc.request == nil || svc.request.Question != "rytyt" || len(svc.request.History) != 1 {
 		t.Fatalf("AskOperations did not forward the scoped request correctly: restaurant=%d request=%+v", svc.restaurantID, svc.request)
 	}
 	var response service.AIAskResponse
@@ -122,6 +135,21 @@ func TestAskOperationsReturnsServiceResponseSchema(t *testing.T) {
 	}
 	if response.Intent != service.AIIntentUnclear || response.Model != "fake-router" || response.Answer == "" {
 		t.Fatalf("AskOperations response = %+v, want unclear response contract", response)
+	}
+}
+
+func TestDeleteAIConversationUsesOwnerAndRestaurantScope(t *testing.T) {
+	svc := &fakeAIOperationsService{}
+	router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/ai/operations/conversations/conversation-123", nil))
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("DeleteConversation status = %d, want %d", recorder.Code, http.StatusNoContent)
+	}
+	if svc.deleteCalls != 1 || svc.deletedID != "conversation-123" || svc.actor.RestaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" {
+		t.Fatalf("DeleteConversation scope = calls %d id %q actor %+v", svc.deleteCalls, svc.deletedID, svc.actor)
 	}
 }
 

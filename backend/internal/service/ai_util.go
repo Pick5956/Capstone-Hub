@@ -21,8 +21,8 @@ func maxFloat(a, b float64) float64 {
 }
 
 func sanitizeConversationHistory(history []AIConversationMessage) []AIConversationMessage {
-	if len(history) > 6 {
-		history = history[len(history)-6:]
+	if len(history) > structuredPlannerMaxContextItems {
+		history = history[len(history)-structuredPlannerMaxContextItems:]
 	}
 	cleaned := make([]AIConversationMessage, 0, len(history))
 	for _, message := range history {
@@ -38,7 +38,11 @@ func sanitizeConversationHistory(history []AIConversationMessage) []AIConversati
 		if len(runes) > 400 {
 			content = string(runes[:400])
 		}
-		cleaned = append(cleaned, AIConversationMessage{Role: role, Content: content})
+		id := strings.TrimSpace(message.ID)
+		if len([]rune(id)) > 128 {
+			id = ""
+		}
+		cleaned = append(cleaned, AIConversationMessage{ID: id, Role: role, Content: content})
 	}
 	return cleaned
 }

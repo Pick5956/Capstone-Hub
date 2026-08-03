@@ -14,22 +14,28 @@ const (
 )
 
 type AIAskRequest struct {
-	Question string                  `json:"question" binding:"required"`
-	History  []AIConversationMessage `json:"history"`
+	Question       string                  `json:"question" binding:"required"`
+	History        []AIConversationMessage `json:"history"`
+	ConversationID string                  `json:"conversation_id,omitempty" binding:"omitempty,max=64"`
 }
 
 type AIConversationMessage struct {
+	ID      string `json:"id,omitempty"`
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
 type AIAskResponse struct {
-	Answer   string     `json:"answer"`
-	Intent   AIIntent   `json:"intent"`
-	Task     AITask     `json:"task,omitempty"`
-	Tool     AIToolName `json:"tool,omitempty"`
-	Model    string     `json:"model"`
-	Snapshot AISnapshot `json:"snapshot"`
+	Answer         string        `json:"answer"`
+	Intent         AIIntent      `json:"intent"`
+	Task           AITask        `json:"task,omitempty"`
+	Tool           AIToolName    `json:"tool,omitempty"`
+	Model          string        `json:"model"`
+	Snapshot       AISnapshot    `json:"snapshot"`
+	ConversationID string        `json:"conversation_id,omitempty"`
+	TurnID         string        `json:"turn_id,omitempty"`
+	ResolvedPlan   *ResolvedPlan `json:"resolved_plan,omitempty"`
+	CandidateTools []AIToolName  `json:"candidate_tools,omitempty"`
 }
 
 type AISnapshot struct {
