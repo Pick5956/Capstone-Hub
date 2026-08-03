@@ -26,16 +26,25 @@ type AIConversationMessage struct {
 }
 
 type AIAskResponse struct {
-	Answer         string        `json:"answer"`
-	Intent         AIIntent      `json:"intent"`
-	Task           AITask        `json:"task,omitempty"`
-	Tool           AIToolName    `json:"tool,omitempty"`
-	Model          string        `json:"model"`
-	Snapshot       AISnapshot    `json:"snapshot"`
-	ConversationID string        `json:"conversation_id,omitempty"`
-	TurnID         string        `json:"turn_id,omitempty"`
-	ResolvedPlan   *ResolvedPlan `json:"resolved_plan,omitempty"`
-	CandidateTools []AIToolName  `json:"candidate_tools,omitempty"`
+	Answer         string             `json:"answer"`
+	Intent         AIIntent           `json:"intent"`
+	Task           AITask             `json:"task,omitempty"`
+	Tool           AIToolName         `json:"tool,omitempty"`
+	Model          string             `json:"model"`
+	Snapshot       AISnapshot         `json:"snapshot"`
+	ConversationID string             `json:"conversation_id,omitempty"`
+	TurnID         string             `json:"turn_id,omitempty"`
+	ResolvedPlan   *ResolvedPlan      `json:"resolved_plan,omitempty"`
+	CandidateTools []AIToolName       `json:"candidate_tools,omitempty"`
+	Planner        *AIPlannerMetadata `json:"planner,omitempty"`
+}
+
+type AIPlannerMetadata struct {
+	Provider         StructuredPlannerProviderName `json:"provider"`
+	Model            string                        `json:"model,omitempty"`
+	ProviderFallback bool                          `json:"provider_fallback"`
+	LocalFallback    bool                          `json:"local_fallback"`
+	AttemptCount     int                           `json:"attempt_count"`
 }
 
 type AISnapshot struct {

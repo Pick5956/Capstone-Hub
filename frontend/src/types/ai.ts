@@ -101,4 +101,11 @@ export type AIAskResponse = {
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;
   candidate_tools?: string[];
+  planner?: {
+    provider: "groq" | "gemini" | "local_clarification_fallback" | string;
+    model?: string;
+    provider_fallback: boolean;
+    local_fallback: boolean;
+    attempt_count: number;
+  };
 };

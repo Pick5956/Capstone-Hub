@@ -32,7 +32,7 @@ func (s *AIService) getGeminiKeys() []string {
 	return keys
 }
 
-func (s *AIService) askGeminiWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool) (string, string, error) {
+func (s *AIService) askGeminiWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool, candidateTools ...[]AIToolName) (string, string, error) {
 	keys := s.getGeminiKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
@@ -51,7 +51,11 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		if isConversation {
 			answer, model, err = s.executeGeminiConversation(question, history, currentKey)
 		} else {
-			answer, model, err = s.executeGemini(question, history, *snapshot, currentKey)
+			var allowed []AIToolName
+			if len(candidateTools) > 0 {
+				allowed = candidateTools[0]
+			}
+			answer, model, err = s.executeGemini(question, history, *snapshot, currentKey, allowed)
 		}
 
 		if err == nil {
@@ -123,7 +127,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	return "", errors.New("gemini returned empty classifier response")
 }
 
-func (s *AIService) executeGemini(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string) (string, string, error) {
+func (s *AIService) executeGemini(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string, candidateTools []AIToolName) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
 		model = "gemini-2.5-flash"
@@ -139,7 +143,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
-		Tools: nil,
+		Tools: s.getGeminiToolsForCandidates(candidateTools),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -171,11 +175,26 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return "", "", err
 	}
+	toolCalls := make([]geminiFunctionCall, 0, 1)
 	for _, candidate := range parsed.Candidates {
 		for _, part := range candidate.Content.Parts {
 			if part.FunctionCall != nil {
-				return fmt.Sprintf("CALL_TOOL:%s", part.FunctionCall.Name), model, nil
+				toolCalls = append(toolCalls, *part.FunctionCall)
 			}
+		}
+	}
+	if len(toolCalls) > 1 {
+		return "", "", errors.New("Gemini returned more than one tool call")
+	}
+	if len(toolCalls) == 1 {
+		toolName, err := validateGeminiReadOnlyToolCall(toolCalls[0])
+		if err != nil {
+			return "", "", err
+		}
+		return fmt.Sprintf("CALL_TOOL:%s", toolName), model, nil
+	}
+	for _, candidate := range parsed.Candidates {
+		for _, part := range candidate.Content.Parts {
 			if text := strings.TrimSpace(part.Text); text != "" {
 				return text, model, nil
 			}
@@ -345,6 +364,41 @@ func (s *AIService) getGeminiTools() []geminiTool {
 			},
 		},
 	}
+}
+
+func validateGeminiReadOnlyToolCall(call geminiFunctionCall) (AIToolName, error) {
+	toolName := AIToolName(strings.TrimSpace(call.Name))
+	if !isSupportedReadOnlyTool(toolName) {
+		return "", errors.New("Gemini requested an unsupported tool")
+	}
+	if len(call.Args) != 0 {
+		return "", errors.New("Gemini supplied arguments to a no-argument tool")
+	}
+	return toolName, nil
+}
+
+func (s *AIService) getGeminiToolsForCandidates(candidates []AIToolName) []geminiTool {
+	if len(candidates) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		allowed[string(candidate)] = struct{}{}
+	}
+	all := s.getGeminiTools()
+	if len(all) == 0 {
+		return nil
+	}
+	declarations := make([]geminiFunctionDeclaration, 0, len(candidates))
+	for _, declaration := range all[0].FunctionDeclarations {
+		if _, ok := allowed[declaration.Name]; ok {
+			declarations = append(declarations, declaration)
+		}
+	}
+	if len(declarations) == 0 {
+		return nil
+	}
+	return []geminiTool{{FunctionDeclarations: declarations}}
 }
 
 func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {

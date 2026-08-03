@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,7 +21,7 @@ type AIController struct {
 }
 
 type AIOperationsService interface {
-	AskOperationsForOwner(actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error)
+	AskOperationsForOwner(ctx context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error)
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 }
@@ -63,7 +64,7 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	result, err := ctrl.svc.AskOperationsForOwner(service.AIActorContext{
+	result, err := ctrl.svc.AskOperationsForOwner(c.Request.Context(), service.AIActorContext{
 		RestaurantID: restaurantID,
 		OwnerUserID:  userID,
 		Role:         "owner",

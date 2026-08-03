@@ -17,10 +17,11 @@ const (
 )
 
 type aiProviderAnswerRequest struct {
-	Question string
-	History  []AIConversationMessage
-	Snapshot *AISnapshot
-	Mode     aiProviderAnswerMode
+	Question       string
+	History        []AIConversationMessage
+	Snapshot       *AISnapshot
+	Mode           aiProviderAnswerMode
+	CandidateTools []AIToolName
 }
 
 type aiProviderAnswer struct {
@@ -85,7 +86,7 @@ func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvide
 	if request.Snapshot == nil {
 		return aiProviderAnswer{}, errors.New("analytical provider request requires a snapshot")
 	}
-	text, model, err := a.service.askGroqWithRotation(request.Question, request.History, request.Snapshot, false)
+	text, model, err := a.service.askGroqWithRotation(request.Question, request.History, request.Snapshot, false, request.CandidateTools)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
@@ -139,7 +140,7 @@ func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 	if request.Snapshot == nil {
 		return aiProviderAnswer{}, errors.New("analytical provider request requires a snapshot")
 	}
-	text, model, err := a.service.askGeminiWithRotation(request.Question, request.History, request.Snapshot, false)
+	text, model, err := a.service.askGeminiWithRotation(request.Question, request.History, request.Snapshot, false, request.CandidateTools)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 

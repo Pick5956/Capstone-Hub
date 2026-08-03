@@ -32,7 +32,7 @@ func (s *AIService) getGroqKeys() []string {
 	return keys
 }
 
-func (s *AIService) askGroqWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool) (string, string, error) {
+func (s *AIService) askGroqWithRotation(question string, history []AIConversationMessage, snapshot *AISnapshot, isConversation bool, candidateTools ...[]AIToolName) (string, string, error) {
 	keys := s.getGroqKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GROQ_API_KEY is not configured")
@@ -51,7 +51,11 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 		if isConversation {
 			answer, model, err = s.executeGroqConversation(question, history, currentKey)
 		} else {
-			answer, model, err = s.executeGroq(question, history, *snapshot, currentKey)
+			var allowed []AIToolName
+			if len(candidateTools) > 0 {
+				allowed = candidateTools[0]
+			}
+			answer, model, err = s.executeGroq(question, history, *snapshot, currentKey, allowed)
 		}
 
 		if err == nil {
@@ -119,7 +123,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 	return "", errors.New("groq returned empty classifier response")
 }
 
-func (s *AIService) executeGroq(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string) (string, string, error) {
+func (s *AIService) executeGroq(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string, candidateTools []AIToolName) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "groq/compound-mini"
@@ -136,7 +140,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Tools: nil,
+		Tools: s.getGroqToolsForCandidates(candidateTools),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -170,7 +174,14 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	if len(parsed.Choices) > 0 {
 		msg := parsed.Choices[0].Message
 		if len(msg.ToolCalls) > 0 {
-			return fmt.Sprintf("CALL_TOOL:%s", msg.ToolCalls[0].Function.Name), model, nil
+			if len(msg.ToolCalls) != 1 {
+				return "", "", errors.New("Groq returned more than one tool call")
+			}
+			toolName, err := validateGroqReadOnlyToolCall(msg.ToolCalls[0])
+			if err != nil {
+				return "", "", err
+			}
+			return fmt.Sprintf("CALL_TOOL:%s", toolName), model, nil
 		}
 		return msg.Content, model, nil
 	}
@@ -390,6 +401,43 @@ func (s *AIService) getGroqTools() []groqTool {
 			},
 		},
 	}
+}
+
+func validateGroqReadOnlyToolCall(call groqToolCall) (AIToolName, error) {
+	toolName := AIToolName(strings.TrimSpace(call.Function.Name))
+	if !isSupportedReadOnlyTool(toolName) {
+		return "", errors.New("Groq requested an unsupported tool")
+	}
+	arguments := strings.TrimSpace(call.Function.Arguments)
+	if arguments == "" {
+		arguments = "{}"
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(arguments), &decoded); err != nil || decoded == nil {
+		return "", errors.New("Groq returned invalid tool arguments")
+	}
+	if len(decoded) != 0 {
+		return "", errors.New("Groq supplied arguments to a no-argument tool")
+	}
+	return toolName, nil
+}
+
+func (s *AIService) getGroqToolsForCandidates(candidates []AIToolName) []groqTool {
+	if len(candidates) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		allowed[string(candidate)] = struct{}{}
+	}
+	all := s.getGroqTools()
+	filtered := make([]groqTool, 0, len(candidates))
+	for _, tool := range all {
+		if _, ok := allowed[tool.Function.Name]; ok {
+			filtered = append(filtered, tool)
+		}
+	}
+	return filtered
 }
 
 func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string, string, error) {

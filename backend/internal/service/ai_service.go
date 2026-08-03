@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,15 +25,23 @@ type AIService struct {
 	// providerAdapters is nil in production and resolves lazily to Groq then
 	// Gemini. Tests may inject provider-neutral fakes without making live calls.
 	providerAdapters []aiProviderAdapter
+	// structuredPlannerProviders are long-lived so key rotation remains fair
+	// across requests. Runtime mode and provider ordering are resolved per ask.
+	structuredPlannerProviders []StructuredPlannerProvider
 }
 
 func ProvideAIService(repo *repository.AIRepository) *AIService {
-	return &AIService{
+	service := &AIService{
 		repo: repo,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+	service.structuredPlannerProviders = []StructuredPlannerProvider{
+		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys()),
+		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys()),
+	}
+	return service
 }
 
 // getAIProvider returns the configured AI provider mode.
@@ -117,10 +126,10 @@ func mapTaskToIntent(task AITask) AIIntent {
 }
 
 func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskResponse, error) {
-	return s.askOperationsCore(restaurantID, req)
+	return s.askOperationsCore(restaurantID, req, nil)
 }
 
-func (s *AIService) AskOperationsForOwner(actor AIActorContext, req *AIAskRequest) (*AIAskResponse, error) {
+func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorContext, req *AIAskRequest) (*AIAskResponse, error) {
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("authenticated restaurant owner context is required")
 	}
@@ -134,7 +143,11 @@ func (s *AIService) AskOperationsForOwner(actor AIActorContext, req *AIAskReques
 		return nil, err
 	}
 	request.History = history
-	response, err := s.askOperationsCore(actor.RestaurantID, &request)
+	prepared, err := s.prepareOwnerOrchestration(ctx, actor, &request)
+	if err != nil {
+		return nil, err
+	}
+	response, err := s.askOperationsCore(actor.RestaurantID, &request, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +161,7 @@ func (s *AIService) AskOperationsForOwner(actor AIActorContext, req *AIAskReques
 	return response, nil
 }
 
-func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (resp *AIAskResponse, err error) {
+func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prepared *aiPreparedOrchestration) (resp *AIAskResponse, err error) {
 	question := strings.TrimSpace(req.Question)
 	if question == "" {
 		return nil, errors.New("question is required")
@@ -161,6 +174,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (res
 	aiStage("input", "user asked: %q (history %d turns)", aiSnippet(question, 160), len(history))
 	// Log how the request was ultimately answered, whichever branch returns.
 	defer func() {
+		if err == nil {
+			if policyErr := validatePreparedResponseTool(resp, prepared); policyErr != nil {
+				resp = nil
+				err = policyErr
+			}
+		}
+		attachPreparedOrchestration(resp, prepared)
 		switch {
 		case err != nil:
 			aiStage("done", "error: %v", err)
@@ -180,29 +200,40 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (res
 	// askedQuestion keeps the user's own wording; a rewrite can drop details the
 	// structured path still needs (an ordinal such as "รองลงมา").
 	askedQuestion := question
-	if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
-		aiStage("route", "context rewrite → %q", aiSnippet(resolved, 120))
-		question = resolved
-	}
-
-	// Step 2: Structured JSON AI Router followed by backend policy enforcement.
-	routerResult, routerErr := s.classifyIntent(question)
-	if routerErr != nil {
-		aiStage("route", "classifier unavailable (%v) → default to analysis", routerErr)
+	var routerResult AIRouterResult
+	if prepared != nil {
+		question = prepared.plan.ResolvedQuestion
+		routerResult = prepared.router
+		aiStage("route", "structured planner task=%s tool=%s conf=%.2f risk=%s candidates=%d",
+			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence,
+			routerResult.Risk, len(prepared.candidateTools))
 	} else {
-		aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
-			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
+		if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
+			aiStage("route", "context rewrite → %q", aiSnippet(resolved, 120))
+			question = resolved
+		}
+
+		// Legacy mode: context rewrite and JSON router remain available as an
+		// immediate rollback path while the structured planner is evaluated.
+		routerResult, err = s.classifyIntent(question)
+		if err != nil {
+			aiStage("route", "classifier unavailable (%v) → default to analysis", err)
+			err = nil
+		} else {
+			aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
+				routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
+		}
 	}
 
 	// A rank follow-up ("อันดับรองลงมา") reads as vague to the router, but the
 	// previous turn pins down exactly what is being ranked, so it is answerable.
-	structuredFollowUp := hasStructuredRankFollowUp(question, askedQuestion, history)
+	structuredFollowUp := prepared == nil && hasStructuredRankFollowUp(question, askedQuestion, history)
 	if structuredFollowUp {
 		aiStage("route", "structured rank follow-up detected → skipping clarify/scope gates")
 	}
 	// "ข้อมูลมีถึงวันไหน" is answerable straight from the database, so it must not be
 	// turned away by the clarify gate.
-	if looksLikeDataCoverageQuestion(question) {
+	if prepared == nil && looksLikeDataCoverageQuestion(question) {
 		aiStage("route", "data-coverage question detected → skipping clarify/scope gates")
 		structuredFollowUp = true
 	}
@@ -210,11 +241,21 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (res
 	// Step 3: Check Confidence Level and Unclear Input
 	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
+		clarification := "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ"
+		model := "local-router-fallback"
+		if prepared != nil {
+			model = "local-planner-clarification"
+			if strings.TrimSpace(prepared.clarification) != "" {
+				clarification = prepared.clarification
+			} else if strings.TrimSpace(prepared.plan.Resolution.ClarificationQuestion) != "" {
+				clarification = prepared.plan.Resolution.ClarificationQuestion
+			}
+		}
 		return &AIAskResponse{
-			Answer:   "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ",
+			Answer:   clarification,
 			Intent:   AIIntentUnclear,
 			Task:     AITaskUnclear,
-			Model:    "local-router-fallback",
+			Model:    model,
 			Snapshot: AISnapshot{},
 		}, nil
 	}
@@ -409,10 +450,11 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (res
 	executeAnalytical := func(adapter aiProviderAdapter) (*AIAskResponse, error) {
 		providerName := adapter.DisplayName()
 		providerAnswer, err := adapter.Answer(aiProviderAnswerRequest{
-			Question: question,
-			History:  history,
-			Snapshot: &snapshot,
-			Mode:     aiProviderAnswerAnalytical,
+			Question:       question,
+			History:        history,
+			Snapshot:       &snapshot,
+			Mode:           aiProviderAnswerAnalytical,
+			CandidateTools: candidateToolsForProvider(prepared),
 		})
 		if err != nil {
 			aiStage("warn", "analytical %s failed: %v", providerName, err)
@@ -421,6 +463,9 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest) (res
 		answer := providerAnswer.Text
 		if strings.HasPrefix(answer, "CALL_TOOL:") {
 			toolName := AIToolName(strings.TrimPrefix(answer, "CALL_TOOL:"))
+			if prepared != nil && !containsAITool(prepared.candidateTools, toolName) {
+				return nil, fmt.Errorf("AI provider requested tool %q outside the authorized candidate set", toolName)
+			}
 			aiStage("flow", "%s requested tool %s → local deterministic answer", providerName, toolName)
 			result, err := executeReadOnlyTool(toolName, snapshot, question)
 			if err != nil {

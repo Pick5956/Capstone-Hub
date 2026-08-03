@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -29,7 +30,7 @@ type fakeAIOperationsService struct {
 	deletedID        string
 }
 
-func (f *fakeAIOperationsService) AskOperationsForOwner(actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
+func (f *fakeAIOperationsService) AskOperationsForOwner(_ context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
 	f.askCalls++
 	f.actor = actor
 	f.restaurantID = actor.RestaurantID
