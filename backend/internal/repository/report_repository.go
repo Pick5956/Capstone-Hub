@@ -48,6 +48,13 @@ type ReportSalesDetailOrder struct {
 	Profit       float64   `json:"profit"`
 }
 
+type ReportSalesDetailSummary struct {
+	Orders  int64   `json:"orders"`
+	Revenue float64 `json:"revenue"`
+	Cost    float64 `json:"cost"`
+	Profit  float64 `json:"profit"`
+}
+
 // ReportExpenseDetailItem is one ingredient's share of a cost bar. Grouping by
 // ingredient (not by bill) is what makes this table answer "what did that cost
 // go on", which the per-bill sales table cannot.
@@ -184,6 +191,21 @@ func (r *ReportRepository) SalesByHour(restaurantID uint, day time.Time) ([]Repo
 		rows = append(rows, ReportSalesHour{Hour: hour, Orders: b.Orders, Revenue: b.Revenue, Cost: b.Cost, Profit: b.Profit})
 	}
 	return rows, nil
+}
+
+func (r *ReportRepository) SalesWindowSummary(restaurantID uint, since, until time.Time) (ReportSalesDetailSummary, error) {
+	buckets, err := r.salesBuckets(restaurantID, bucketByDate, since, until)
+	if err != nil {
+		return ReportSalesDetailSummary{}, err
+	}
+	summary := ReportSalesDetailSummary{}
+	for _, bucket := range buckets {
+		summary.Orders += bucket.Orders
+		summary.Revenue += bucket.Revenue
+		summary.Cost += bucket.Cost
+	}
+	summary.Profit = summary.Revenue - summary.Cost
+	return summary, nil
 }
 
 // SalesDetail lists the individual bills inside one chart bar's window, using

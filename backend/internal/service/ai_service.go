@@ -196,7 +196,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	}
 	history := sanitizeConversationHistory(req.History)
 
-	aiStage("input", "user asked: %q (history %d turns)", aiSnippet(question, 160), len(history))
+	aiStage("input", "question_length=%d history_turns=%d", len([]rune(question)), len(history))
 	// Log how the request was ultimately answered, whichever branch returns.
 	defer func() {
 		if err == nil {
@@ -234,7 +234,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			routerResult.Risk, len(prepared.candidateTools))
 	} else {
 		if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
-			aiStage("route", "context rewrite → %q", aiSnippet(resolved, 120))
+			aiStage("route", "context_rewritten=true resolved_question_length=%d", len([]rune(resolved)))
 			question = resolved
 		}
 

@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
 
@@ -72,5 +73,35 @@ func TestExpenseBlankDateBecomesToday(t *testing.T) {
 	today := repository.BangkokNow()
 	if parsed.Year() != today.Year() || parsed.Month() != today.Month() || parsed.Day() != today.Day() {
 		t.Fatalf("parseExpenseDate(\"\") = %v, want %v", parsed, today)
+	}
+}
+
+func TestLinkedStockExpenseCannotBeEditedOrDeleted(t *testing.T) {
+	transactionID := uint(42)
+	linked := &entity.Expense{IngredientTransactionID: &transactionID}
+
+	if err := ensureExpenseEditable(linked); err == nil {
+		t.Fatal("stock-in expense should be immutable")
+	}
+	if err := ensureExpenseEditable(&entity.Expense{}); err != nil {
+		t.Fatalf("manual expense should stay editable: %v", err)
+	}
+}
+
+func TestBuildExpenseListResponseMarksRowsTruncatedWithoutTruncatingTotals(t *testing.T) {
+	expenses := make([]entity.Expense, expenseListLimit)
+	categories := []repository.ExpenseCategoryTotal{{Category: "ingredient", Amount: 12_345.678, Entries: expenseListLimit + 1}}
+	daily := []repository.ExpenseDayTotal{{Date: "2026-08-03", Amount: 12_345.678, Entries: expenseListLimit + 1}}
+
+	response := buildExpenseListResponse(expenses, categories, daily)
+
+	if response.Total != 12_345.68 || response.Entries != expenseListLimit+1 {
+		t.Fatalf("aggregate totals = (%v, %d), want (12345.68, %d)", response.Total, response.Entries, expenseListLimit+1)
+	}
+	if !response.HasMore {
+		t.Fatal("response should report that ledger rows were truncated")
+	}
+	if len(response.Daily) != 1 || response.Daily[0].Amount != 12_345.68 {
+		t.Fatalf("daily totals = %#v, want rounded unbounded aggregate", response.Daily)
 	}
 }

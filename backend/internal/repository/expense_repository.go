@@ -52,12 +52,29 @@ type ExpenseCategoryTotal struct {
 	Entries  int64   `json:"entries"`
 }
 
+type ExpenseDayTotal struct {
+	Date    string  `json:"date"`
+	Amount  float64 `json:"amount"`
+	Entries int64   `json:"entries"`
+}
+
 func (r *ExpenseRepository) TotalsByCategory(restaurantID uint, filter ExpenseFilter) ([]ExpenseCategoryTotal, error) {
 	var totals []ExpenseCategoryTotal
 	err := r.scope(restaurantID, filter).
 		Select("category, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS entries").
 		Group("category").
 		Order("amount desc").
+		Scan(&totals).Error
+	return totals, err
+}
+
+func (r *ExpenseRepository) TotalsByDay(restaurantID uint, filter ExpenseFilter) ([]ExpenseDayTotal, error) {
+	var totals []ExpenseDayTotal
+	bucket := bucketExpr("spent_at", bucketByDate)
+	err := r.scope(restaurantID, filter).
+		Select(bucket + " AS date, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS entries").
+		Group(bucket).
+		Order(bucket + " asc").
 		Scan(&totals).Error
 	return totals, err
 }

@@ -26,6 +26,7 @@ type AIOperationsService interface {
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
 	ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error)
+	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
 }
 
 const maxAIActionConfirmationBodyBytes int64 = 1024
@@ -212,6 +213,54 @@ func (ctrl *AIController) ConfirmAction(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+func (ctrl *AIController) CancelAction(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, private")
+	c.Header("Pragma", "no-cache")
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	previewID := strings.TrimSpace(c.Param("previewID"))
+	if !validAIActionPreviewID(previewID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid AI action preview id"})
+		return
+	}
+
+	err := ctrl.svc.CancelAIActionForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, previewID)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrAIActionPreviewCancelled):
+			c.Status(http.StatusNoContent)
+		case errors.Is(err, service.ErrAIActionUnavailable):
+			respondAPIError(c, http.StatusServiceUnavailable, err)
+		case errors.Is(err, repository.ErrAIActionPreviewNotFound):
+			respondAPIError(c, http.StatusNotFound, err)
+		case errors.Is(err, repository.ErrAIActionPreviewExpired):
+			respondAPIError(c, http.StatusGone, err)
+		case errors.Is(err, repository.ErrAIActionPreviewStale),
+			errors.Is(err, repository.ErrAIActionPreviewAlreadyExecuted),
+			errors.Is(err, repository.ErrAIActionPreviewInvalidState):
+			respondAPIError(c, http.StatusConflict, err)
+		default:
+			respondAPIError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func validAIActionPreviewID(value string) bool {

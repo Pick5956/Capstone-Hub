@@ -16,8 +16,14 @@ import {
   Lightbulb,
   RotateCcw
 } from "lucide-react";
-import { askOperationsAI, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
-import { formatAIActionConfirmationMessage, getAIActionErrorMessage } from "@/src/lib/aiActionPreview";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import {
+  formatAIActionConfirmationMessage,
+  getAIActionCancellationErrorMessage,
+  getAIActionErrorMessage,
+  isTerminalAIActionCancellationError,
+} from "@/src/lib/aiActionPreview";
+import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -32,7 +38,6 @@ import {
   subscribeToChatClear,
 } from "@/src/lib/aiChatStorage";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
-import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
@@ -181,11 +186,13 @@ export default function AIOperationsFloatingChat() {
   const [loading, setLoading] = useState(false);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   const [actionConfirming, setActionConfirming] = useState(false);
+  const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
   const [conversationRequests] = useState(createRequestGeneration);
+  const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatDialogRef = useRef<HTMLDivElement>(null);
@@ -208,6 +215,8 @@ export default function AIOperationsFloatingChat() {
     // a send between this render and the deferred load must not reuse them.
     setConversationId(null);
     setPendingActionPreview(null);
+    setActionConfirming(false);
+    setActionCancelling(false);
     setActionPreviewError("");
     const loadTimer = window.setTimeout(() => {
       purgeStaleChats(storageKey);
@@ -255,23 +264,35 @@ export default function AIOperationsFloatingChat() {
     };
   }, [isOpen]);
 
-  // Load snapshot in the background when the chat box is first opened
+  useEffect(() => {
+    snapshotRequests.invalidate();
+    snapshotRequestedRef.current = false;
+    setLatestSnapshot(null);
+    setSnapshotLoading(false);
+  }, [canAskAI, snapshotRequests, storageKey]);
+
+  // Load snapshot in the background once per restaurant/user scope when opened.
   useEffect(() => {
     if (!isOpen || !canAskAI || snapshotRequestedRef.current) return;
     snapshotRequestedRef.current = true;
+    const snapshotGeneration = snapshotRequests.begin();
     setSnapshotLoading(true);
     getOperationsSnapshot()
       .then((response) => {
-        if (response?.data) {
-          setLatestSnapshot(response.data);
+        if (snapshotRequests.isCurrent(snapshotGeneration) && response?.data) {
+          setLatestSnapshot((current) => selectOperationsSnapshot(current, response.data));
         }
       })
       .catch((err) => {
-        snapshotRequestedRef.current = false;
-        console.error("Failed to load initial operations snapshot:", err);
+        if (snapshotRequests.isCurrent(snapshotGeneration)) {
+          snapshotRequestedRef.current = false;
+          console.error("Failed to load initial operations snapshot:", err);
+        }
       })
-      .finally(() => setSnapshotLoading(false));
-  }, [canAskAI, isOpen]);
+      .finally(() => {
+        if (snapshotRequests.isCurrent(snapshotGeneration)) setSnapshotLoading(false);
+      });
+  }, [canAskAI, isOpen, snapshotRequests, storageKey]);
 
   const conversationHistory = (): AIConversationMessage[] =>
     messages
@@ -287,6 +308,8 @@ export default function AIOperationsFloatingChat() {
     // gone, so this one must drop the shared server thread and any pending action.
     setConversationId(null);
     setPendingActionPreview(null);
+    setActionConfirming(false);
+    setActionCancelling(false);
     setActionPreviewError("");
     setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
   }, [conversationRequests, copy.welcome]);
@@ -296,7 +319,9 @@ export default function AIOperationsFloatingChat() {
   }), [resetConversation, storageKey]);
 
   // Start a fresh chat: drop the stored history and reset to the welcome message.
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
+    if (loading || actionConfirming || actionCancelling) return;
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (canAskAI && serverConversationId) {
       void deleteAIConversation(serverConversationId).catch(() => undefined);
@@ -337,7 +362,8 @@ export default function AIOperationsFloatingChat() {
 
   const handleSend = async (textToSend = input) => {
     const trimmed = textToSend.trim();
-    if (!trimmed || loading || actionConfirming) return;
+    if (!trimmed || loading || actionConfirming || actionCancelling) return;
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
 
     setInput("");
     setPendingActionPreview(null);
@@ -431,7 +457,9 @@ export default function AIOperationsFloatingChat() {
       }
       
       if (data.snapshot) {
-        setLatestSnapshot(data.snapshot);
+        snapshotRequests.invalidate();
+        setSnapshotLoading(false);
+        setLatestSnapshot((current) => selectOperationsSnapshot(current, data.snapshot));
       }
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
@@ -469,12 +497,14 @@ export default function AIOperationsFloatingChat() {
 
   const handleConfirmActionPreview = async () => {
     const preview = pendingActionPreview;
-    if (!preview || actionConfirming) return;
+    if (!preview || actionConfirming || actionCancelling) return;
 
+    const requestGeneration = conversationRequests.begin();
     setActionConfirming(true);
     setActionPreviewError("");
     try {
       const response = await confirmAIAction(preview.id, preview.confirmation_token);
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       setPendingActionPreview((current) => current?.id === preview.id ? null : current);
       setMessages((previous) => [
         ...previous,
@@ -485,15 +515,67 @@ export default function AIOperationsFloatingChat() {
           createdAt: new Date(),
         },
       ]);
+      const snapshotGeneration = snapshotRequests.begin();
       getOperationsSnapshot()
-        .then((snapshotResponse) => snapshotResponse?.data && setLatestSnapshot(snapshotResponse.data))
+        .then((snapshotResponse) => {
+          if (
+            conversationRequests.isCurrent(requestGeneration)
+            && snapshotRequests.isCurrent(snapshotGeneration)
+            && snapshotResponse?.data
+          ) {
+            setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
+          }
+        })
         .catch(() => undefined);
     } catch (actionError: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       setActionPreviewError(getAIActionErrorMessage(actionError, language));
     } finally {
-      setActionConfirming(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setActionConfirming(false);
     }
   };
+
+  async function discardPendingActionPreview(): Promise<boolean> {
+    const preview = pendingActionPreview;
+    if (!preview) return true;
+    if (actionConfirming || actionCancelling) return false;
+
+    const requestGeneration = conversationRequests.begin();
+    setActionCancelling(true);
+    setActionPreviewError("");
+    try {
+      await cancelAIAction(preview.id);
+      if (!conversationRequests.isCurrent(requestGeneration)) return false;
+      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+      return true;
+    } catch (cancellationError: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return false;
+      if (isTerminalAIActionCancellationError(cancellationError)) {
+        setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+        const snapshotGeneration = snapshotRequests.begin();
+        getOperationsSnapshot()
+          .then((snapshotResponse) => {
+            if (
+              conversationRequests.isCurrent(requestGeneration)
+              && snapshotRequests.isCurrent(snapshotGeneration)
+              && snapshotResponse?.data
+            ) {
+              setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
+            }
+          })
+          .catch(() => undefined);
+        return true;
+      }
+      setActionPreviewError(getAIActionCancellationErrorMessage(language));
+      return false;
+    } finally {
+      if (conversationRequests.isCurrent(requestGeneration)) setActionCancelling(false);
+    }
+  }
+
+  async function handleCancelActionPreview() {
+    await discardPendingActionPreview();
+  }
 
   // Hide the floating widget on the dedicated AI assistant page to avoid two
   // chat surfaces at once (they share the same history).
@@ -704,11 +786,12 @@ export default function AIOperationsFloatingChat() {
                   type="button"
                   aria-label={labels.clearChat}
                   title={labels.clearChat}
+                  disabled={loading || actionConfirming || actionCancelling}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleClearChat();
+                    void handleClearChat();
                   }}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
                 >
                   <RotateCcw className="h-4.5 w-4.5" />
                 </button>
@@ -815,12 +898,10 @@ export default function AIOperationsFloatingChat() {
                 preview={pendingActionPreview}
                 language={language}
                 confirming={actionConfirming}
+                cancelling={actionCancelling}
                 error={actionPreviewError}
                 onConfirm={handleConfirmActionPreview}
-                onCancel={() => {
-                  setPendingActionPreview(null);
-                  setActionPreviewError("");
-                }}
+                onCancel={handleCancelActionPreview}
               />
             )}
             <div ref={messagesEndRef} />
@@ -881,14 +962,14 @@ export default function AIOperationsFloatingChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={copy.askPlaceholder}
-                disabled={loading || actionConfirming}
+                disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
                 className="min-h-11 flex-1 rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium !text-gray-950 placeholder-gray-500 outline-none transition-[border-color,box-shadow] focus-glow dark:border-gray-800 dark:bg-gray-900 dark:!text-gray-50 dark:placeholder-gray-400"
               />
               <button
                 type="submit"
                 aria-label={copy.send}
-                disabled={loading || actionConfirming || !input.trim()}
+                disabled={loading || actionConfirming || actionCancelling || !input.trim()}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Send className="h-4 w-4" />

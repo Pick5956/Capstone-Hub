@@ -10,6 +10,7 @@ import {
   orderRoutePermissions,
   tableManagementAccess,
 } from './permission-parity.ts';
+import { allPermissions, permissionGroupsFor } from './permissions.ts';
 import { can } from './rbac.ts';
 import { parsePositiveRouteId } from './route-id.ts';
 
@@ -59,6 +60,34 @@ test('legacy view_menu permission remains valid for a read-only menu catalog', (
   assert.equal(can(membership, 'view_menu'), true);
   assert.equal(can(membership, 'manage_menu'), false);
   assert.equal(can(membership, 'take_order'), false);
+});
+
+test('expense management stays in the editable mobile permission registry', () => {
+  assert.equal(allPermissions.includes('manage_expenses'), true);
+  assert.equal(
+    permissionGroupsFor('en')
+      .flatMap((group) => group.rows)
+      .some((row) => row.key === 'manage_expenses' && row.label === 'Manage expenses'),
+    true,
+  );
+  assert.equal(
+    permissionGroupsFor('en')
+      .flatMap((group) => group.rows)
+      .find((row) => row.key === 'view_reports')?.label,
+    'View reports',
+  );
+});
+
+test('legacy manager fallback includes the backend expense permission', () => {
+  const membership = {
+    status: 'active',
+    role: {
+      name: 'manager',
+      permissions: '',
+    },
+  };
+
+  assert.equal(can(membership, 'manage_expenses'), true);
 });
 
 test('order navigation stays available for active order recovery without exposing archive queries', () => {

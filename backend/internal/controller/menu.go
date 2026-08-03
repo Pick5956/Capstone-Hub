@@ -94,6 +94,9 @@ func memberCan(c *gin.Context, permission string) bool {
 	if permission == "manage_inventory" {
 		return role == "owner" || role == "manager"
 	}
+	if permission == "manage_expenses" {
+		return role == "owner" || role == "manager"
+	}
 	if permission == "view_inventory" {
 		return role == "owner" || role == "manager" || role == "chef"
 	}

@@ -29,6 +29,8 @@ export default defineConfig({
       "src/lib/__tests__/singleFlight.test.ts",
       "src/app/(dashboard)/orders/ordersPageUtils.test.ts",
       "src/app/(dashboard)/tables/tablesPageUtils.test.ts",
+      "src/app/(dashboard)/inventory/inventoryPageUtils.test.ts",
+      "src/app/(dashboard)/expenses/expensesPage.test.ts",
       "src/components/shared/RealtimeConnectionNotice.test.tsx",
       "src/components/shared/ThemedSelect.test.tsx",
     ],

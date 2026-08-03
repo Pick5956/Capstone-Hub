@@ -160,6 +160,24 @@ func TestSalesDetailUsesSameCohortAsChartBars(t *testing.T) {
 	}
 }
 
+func TestSalesWindowSummaryUsesFullBarCohortWithoutRowLimit(t *testing.T) {
+	db, capture := dryRunRepositoryDB(t)
+	repo := NewReportRepository(db)
+	bangkok := time.FixedZone("Asia/Bangkok", 7*60*60)
+	since := time.Date(2026, time.August, 3, 0, 0, 0, 0, bangkok)
+
+	if _, err := repo.SalesWindowSummary(7, since, since.AddDate(0, 0, 1)); err != nil &&
+		!errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+		t.Fatalf("SalesWindowSummary() error = %v", err)
+	}
+
+	requirePaidCompletedCohort(t, capture.statements)
+	joined := strings.Join(capture.statements, "\n")
+	if strings.Contains(joined, "limit ") {
+		t.Fatalf("sales summary must aggregate the full bar window:\n%s", joined)
+	}
+}
+
 // The ingredient table is opened from a cost bar, so it has to repeat the cost
 // leg of salesBuckets exactly. Any drift here shows a total that disagrees with
 // the bar the user just clicked.

@@ -94,7 +94,6 @@ type StructuredPlannerAttempt struct {
 	RateLimits   int
 	Succeeded    bool
 	FailureStage StructuredPlannerFailureStage
-	Error        string
 }
 
 type StructuredPlannerResult struct {
@@ -193,7 +192,6 @@ func (p *StructuredPlanner) Plan(ctx context.Context, request StructuredPlannerR
 				return StructuredPlannerResult{}, err
 			}
 			attempt.FailureStage = StructuredPlannerFailureCall
-			attempt.Error = structuredPlannerErrorSnippet(callErr)
 			attempts = append(attempts, attempt)
 			continue
 		}
@@ -205,14 +203,12 @@ func (p *StructuredPlanner) Plan(ctx context.Context, request StructuredPlannerR
 			} else {
 				attempt.FailureStage = StructuredPlannerFailureParse
 			}
-			attempt.Error = structuredPlannerErrorSnippet(parseErr)
 			attempts = append(attempts, attempt)
 			continue
 		}
 
 		if provenanceErr := validateStructuredPlannerProvenance(plan, normalized.Context); provenanceErr != nil {
 			attempt.FailureStage = StructuredPlannerFailureProvenance
-			attempt.Error = structuredPlannerErrorSnippet(provenanceErr)
 			attempts = append(attempts, attempt)
 			continue
 		}
@@ -365,18 +361,6 @@ func newStructuredPlannerClarificationFallback(question string) ResolvedPlan {
 		},
 		ResponseStyle: ResolvedPlanResponseNormal,
 	}
-}
-
-func structuredPlannerErrorSnippet(err error) string {
-	if err == nil {
-		return ""
-	}
-	message := strings.Join(strings.Fields(err.Error()), " ")
-	runes := []rune(message)
-	if len(runes) > 300 {
-		message = string(runes[:300]) + "..."
-	}
-	return message
 }
 
 func maxPlannerUsage(value int) int {

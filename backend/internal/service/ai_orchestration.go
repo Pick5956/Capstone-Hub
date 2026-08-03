@@ -85,15 +85,15 @@ func (s *AIService) prepareOwnerOrchestration(ctx context.Context, actor AIActor
 	}
 	s.recordAIPlannerResult(actor.RestaurantID, result)
 
-	// Surface why a provider attempt failed. Without this the planner degrades to
-	// its clarification fallback silently, and the log only shows the symptom
-	// (task=unclear conf=0.00) with no way to tell which provider rejected what.
+	// Keep failure diagnostics content-free. Provider/model output may echo user
+	// or restaurant data, while provider identity and the fixed stage are enough
+	// to distinguish call, parse, validation, and provenance failures.
 	for _, attempt := range result.Attempts {
 		if attempt.Succeeded {
 			continue
 		}
-		aiStage("warn", "planner attempt failed provider=%s model=%s stage=%s: %s",
-			attempt.Provider, attempt.Model, attempt.FailureStage, attempt.Error)
+		aiStage("warn", "planner attempt failed provider=%s stage=%s",
+			attempt.Provider, attempt.FailureStage)
 	}
 	if result.UsedLocalFallback {
 		// Every provider failed, so there is no plan — only a placeholder that

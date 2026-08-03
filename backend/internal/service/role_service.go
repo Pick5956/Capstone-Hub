@@ -48,6 +48,7 @@ var editablePermissionKeys = map[string]bool{
 	"update_order_status": true,
 	"view_inventory":      true,
 	"manage_inventory":    true,
+	"manage_expenses":     true,
 	"view_reports":        true,
 	"manage_staff":        true,
 }

@@ -21,16 +21,19 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxi
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { formatCurrency } from "@/src/lib/format";
+import { can } from "@/src/lib/rbac";
 import {
   activeOrderStatuses,
+  dailyExpenseTotalsByDate,
+  hasPartialDailyExpenseRows,
   shiftDashboardDate,
   toDashboardDate,
   toDashboardFloorTables,
-  totalExpensesByDate,
+  totalDailyExpensesForMonth,
   uniqueOrdersById,
   type DashboardFloorTable,
 } from "@/src/lib/homeDashboard";
-import { listExpenses, type Expense, type ExpenseCategory } from "@/src/lib/expense";
+import { listExpenses, type Expense, type ExpenseCategory, type ExpenseDailyTotal } from "@/src/lib/expense";
 import { listIngredients } from "@/src/lib/ingredient";
 import { kitchenQueue, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
@@ -71,6 +74,11 @@ type Copy = ReturnType<typeof buildCopy>;
 // Collapsed cards start left-to-right in this order; the queue in `Home`
 // reshuffles from here as cards get opened and closed.
 const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
+const collapsibleCardFadeMs = 200;
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
 
 function minutesSince(value: string | null | undefined, now: Date) {
   if (!value) return 0;
@@ -151,7 +159,7 @@ function buildCopy(language: "th" | "en") {
         drillTitle: "บิลในช่วงนี้",
         drillClose: "ปิด",
         drillEmpty: "ไม่มีข้อมูลในช่วงนี้",
-        drillCapped: "แสดง 300 รายการแรกของช่วงนี้",
+        drillCapped: "รายละเอียดที่แสดงเป็นรายการล่าสุดบางส่วน",
         ingredient: "วัตถุดิบ",
         ingredients: "รายการ",
         cost: "ต้นทุน",
@@ -238,7 +246,7 @@ function buildCopy(language: "th" | "en") {
         drillTitle: "Bills in this window",
         drillClose: "Close",
         drillEmpty: "Nothing recorded in this window",
-        drillCapped: "Showing the first 300 rows in this window",
+        drillCapped: "Showing a partial list of the latest entries",
         ingredient: "Ingredient",
         ingredients: "items",
         cost: "Cost",
@@ -402,24 +410,38 @@ function CollapsibleCard({
   const [visible, setVisible] = useState(expanded);
 
   useEffect(() => {
+    let outerRaf = 0;
+    let innerRaf = 0;
+    let unmountTimeout = 0;
+
     if (expanded) {
-      setMounted(true);
-      // Two rAFs: the first lets the browser paint the just-mounted "invisible"
-      // state; only then do we flip to visible, so the transition has a real
-      // starting point to animate from (a single rAF can land in the same
-      // paint as the mount and skip the animation entirely).
-      let innerRaf = 0;
-      const outerRaf = requestAnimationFrame(() => {
+      // Mount in one animation frame and reveal in the next. Keeping both
+      // updates behind the browser scheduler avoids a synchronous effect
+      // cascade while still giving the transition a painted starting point.
+      outerRaf = window.requestAnimationFrame(() => {
+        setMounted(true);
+        if (prefersReducedMotion()) {
+          setVisible(true);
+          return;
+        }
         innerRaf = requestAnimationFrame(() => setVisible(true));
       });
-      return () => {
-        cancelAnimationFrame(outerRaf);
-        cancelAnimationFrame(innerRaf);
-      };
+    } else {
+      outerRaf = window.requestAnimationFrame(() => {
+        setVisible(false);
+        if (prefersReducedMotion()) {
+          setMounted(false);
+          return;
+        }
+        unmountTimeout = window.setTimeout(() => setMounted(false), collapsibleCardFadeMs);
+      });
     }
-    setVisible(false);
-    const timeout = window.setTimeout(() => setMounted(false), 200);
-    return () => window.clearTimeout(timeout);
+
+    return () => {
+      window.cancelAnimationFrame(outerRaf);
+      window.cancelAnimationFrame(innerRaf);
+      window.clearTimeout(unmountTimeout);
+    };
   }, [expanded]);
 
   // Growing back to the full tile (once `dimmed` clears — which the parent
@@ -427,15 +449,19 @@ function CollapsibleCard({
   // should itself fade/scale in smoothly instead of just popping into place.
   const [tileVisible, setTileVisible] = useState(!dimmed);
   useEffect(() => {
-    setTileVisible(false);
-    if (dimmed) return;
     let innerRaf = 0;
-    const outerRaf = requestAnimationFrame(() => {
+    const outerRaf = window.requestAnimationFrame(() => {
+      setTileVisible(false);
+      if (dimmed) return;
+      if (prefersReducedMotion()) {
+        setTileVisible(true);
+        return;
+      }
       innerRaf = requestAnimationFrame(() => setTileVisible(true));
     });
     return () => {
-      cancelAnimationFrame(outerRaf);
-      cancelAnimationFrame(innerRaf);
+      window.cancelAnimationFrame(outerRaf);
+      window.cancelAnimationFrame(innerRaf);
     };
   }, [dimmed]);
 
@@ -523,7 +549,7 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         style={{ order: orderRank }}
-        className={`ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out hover:z-10 hover:-rotate-1 hover:scale-[1.05] hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${
+        className={`ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${
           tileVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
       >
@@ -557,7 +583,7 @@ function CollapsibleCard({
         onToggle();
       }}
       style={{ order: orderRank }}
-      className={`col-span-full cursor-pointer origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 ${
+      className={`col-span-full cursor-pointer origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out motion-reduce:transition-none dark:border-gray-800 dark:bg-gray-950 ${
         visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
       }`}
     >
@@ -613,6 +639,7 @@ function orderStatusClass(status: OrderStatus) {
 export default function Home() {
   const router = useRouter();
   const { activeMembership } = useAuth();
+  const canViewExpenses = can(activeMembership, "manage_expenses") || can(activeMembership, "view_reports");
   const { language } = useLanguage();
   const copy = useMemo(() => buildCopy(language), [language]);
   const now = useNow();
@@ -731,9 +758,11 @@ export default function Home() {
   // expense ledger (a supplier payment, rent, a new fridge) — deliberately not
   // the recipe cost of food sold, which is what ReportSalesDay.cost carries.
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseDaily, setExpenseDaily] = useState<ExpenseDailyTotal[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
   // Revenue and profit share the bills table; only cost gets the ledger one.
-  const detailKind: "sales" | "cost" = chartMetric === "cost" ? "cost" : "sales";
+  const visibleChartMetric: ChartMetric = chartMetric === "cost" && !canViewExpenses ? "revenue" : chartMetric;
+  const detailKind: "sales" | "cost" = visibleChartMetric === "cost" ? "cost" : "sales";
   // Which bar the user drilled into, and the bills behind it. One table covers
   // every metric — it carries revenue, cost and profit columns together.
   const [detailBar, setDetailBar] = useState<ChartPoint | null>(null);
@@ -842,18 +871,35 @@ export default function Home() {
   // One fetch feeds the expense tile, the cost bars and their drill-down.
   const expenseMonth = selectedDate.slice(0, 7);
   useEffect(() => {
-    if (!activeMembership?.restaurant_id) return;
     let cancelled = false;
+    if (!activeMembership?.restaurant_id || !canViewExpenses) {
+      const resetFrame = requestAnimationFrame(() => {
+        if (cancelled) return;
+        setExpenses([]);
+        setExpenseDaily([]);
+        setExpensesLoading(false);
+        setChartMetric((current) => (current === "cost" ? "revenue" : current));
+        setDetailBar(null);
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(resetFrame);
+      };
+    }
     const anchor = new Date(`${expenseMonth}-01T12:00:00`);
     const from = new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
     const until = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
     setExpensesLoading(true);
     listExpenses({ from: toDashboardDate(from), until: toDashboardDate(until) })
       .then((res) => {
-        if (!cancelled) setExpenses(res.data.expenses ?? []);
+        if (cancelled) return;
+        setExpenses(res.data.expenses ?? []);
+        setExpenseDaily(res.data.daily ?? []);
       })
       .catch(() => {
-        if (!cancelled) setExpenses([]);
+        if (cancelled) return;
+        setExpenses([]);
+        setExpenseDaily([]);
       })
       .finally(() => {
         if (!cancelled) setExpensesLoading(false);
@@ -861,7 +907,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [expenseMonth, activeMembership?.restaurant_id, refreshTick]);
+  }, [expenseMonth, activeMembership?.restaurant_id, canViewExpenses, refreshTick]);
 
   // A bar's key is an hour number in hour view and a YYYY-MM-DD date in the day
   // and month views (both of those plot days), so that alone picks the window.
@@ -984,18 +1030,15 @@ export default function Home() {
   const validOrders = orders.filter((order) => order.status !== "cancelled");
   const paidOrders = validOrders.filter((order) => order.payment_status === "paid" || order.status === "completed");
   const paidRevenue = paidOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0);
-  // Ledger totals per Bangkok calendar day. spent_at is a date-only value in
-  // Bangkok time, so its first ten characters are the key the chart plots.
-  const expenseByDate = useMemo(() => totalExpensesByDate(expenses), [expenses]);
+  // Daily totals come from an uncapped server aggregate. The ledger rows below
+  // remain useful for drill-down, but must not be used to calculate chart bars.
+  const expenseByDate = useMemo(() => dailyExpenseTotalsByDate(expenseDaily), [expenseDaily]);
   // What the day's spending tile shows: money paid out, not the recipe cost of
   // the food sold. Profit stays gross (revenue − COGS) — the two never mix.
   // Whole calendar month, not the selected day: a rent transfer or a pork
   // delivery lands on one date, so a per-day figure reads as zero most days.
   // The fetch window carries a week of slack either side — filter it back out.
-  const monthExpense = expenses.reduce(
-    (sum, item) => (item.spent_at.startsWith(expenseMonth) ? sum + item.amount : sum),
-    0,
-  );
+  const monthExpense = totalDailyExpensesForMonth(expenseDaily, expenseMonth);
   const dayProfit = salesHours.reduce((sum, hour) => sum + hour.profit, 0);
   const activeOrders = validOrders.filter((order) => activeOrderStatuses.has(order.status)).length;
 
@@ -1026,15 +1069,15 @@ export default function Home() {
   const hourlyPoints: ChartPoint[] = operatingHours.map((hourNumber) => ({
     key: String(hourNumber),
     label: String(hourNumber).padStart(2, "0"),
-    value: salesByHour.get(hourNumber)?.[chartMetric] ?? 0,
+    value: salesByHour.get(hourNumber)?.[visibleChartMetric] ?? 0,
   }));
 
   const salesByDate = new Map(salesDays.map((day) => [day.order_date, day]));
   const valueForDate = (date: Date) => {
     const key = toDashboardDate(date);
-    if (chartMetric === "cost") return expenseByDate.get(key) ?? 0;
+    if (visibleChartMetric === "cost") return expenseByDate.get(key)?.amount ?? 0;
     const day = salesByDate.get(key);
-    return day ? day[chartMetric] : 0;
+    return day ? day[visibleChartMetric] : 0;
   };
 
   // Day view: the Monday-Sunday week containing the selected date.
@@ -1059,13 +1102,13 @@ export default function Home() {
 
   const metricOptions: { key: ChartMetric; label: string }[] = [
     { key: "revenue", label: copy.metricRevenue },
-    { key: "cost", label: copy.metricCost },
+    ...(canViewExpenses ? [{ key: "cost" as const, label: copy.metricCost }] : []),
     { key: "profit", label: copy.metricProfit },
   ];
   // The ledger records the day money was spent, never the hour, so hourly
   // expense bars would be a row of zeros. Day and month only for that metric.
   const chartModeOptions: { key: ChartMode; label: string }[] = [
-    ...(chartMetric === "cost" ? [] : [{ key: "hour" as const, label: copy.chartHour }]),
+    ...(visibleChartMetric === "cost" ? [] : [{ key: "hour" as const, label: copy.chartHour }]),
     { key: "day", label: copy.chartDay },
     { key: "month", label: copy.chartMonth },
   ];
@@ -1074,19 +1117,19 @@ export default function Home() {
     cost: { hour: copy.chartTitleCostDay, day: copy.chartTitleCostDay, month: copy.chartTitleCostMonth },
     profit: { hour: copy.chartTitleProfitHour, day: copy.chartTitleProfitDay, month: copy.chartTitleProfitMonth },
   };
-  const activeChartTitle = chartTitles[chartMetric][chartMode];
+  const activeChartTitle = chartTitles[visibleChartMetric][chartMode];
   const activeChartData = chartMode === "hour" ? hourlyPoints : chartMode === "day" ? dailyPoints : monthlyPoints;
   // Only block on the very first load. A background refresh keeps the current
   // bars on screen instead of blinking the chart to a spinner every minute —
   // the header already shows that a refresh is in flight.
   const activeChartLoading =
-    chartMetric === "cost"
-      ? expensesLoading && expenses.length === 0
+    visibleChartMetric === "cost"
+      ? expensesLoading && expenseDaily.length === 0
       : chartMode === "hour"
         ? salesHoursLoading && salesHours.length === 0
         : salesDaysLoading;
   const activeChartHasData =
-    chartMetric === "cost"
+    visibleChartMetric === "cost"
       ? activeChartData.some((point) => point.value > 0)
       : chartMode === "hour"
         ? salesHours.length > 0
@@ -1103,7 +1146,10 @@ export default function Home() {
     detailKind === "cost" && activeDetailBar
       ? expenses.filter((item) => item.spent_at.slice(0, 10) === activeDetailBar.key)
       : [];
-  const shownExpensesTotal = shownExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const shownExpenseAggregate = activeDetailBar ? expenseByDate.get(activeDetailBar.key) : undefined;
+  const shownExpensesTotal = shownExpenseAggregate?.amount ?? 0;
+  const shownExpensesEntries = shownExpenseAggregate?.entries ?? 0;
+  const shownExpensesHaveMore = hasPartialDailyExpenseRows(shownExpenses.length, shownExpensesEntries);
 
   // The bar's own label is an axis tick ("จ", "3", "13") and never states which
   // day it is. Spell the window out instead, from the same key the request used.
@@ -1154,7 +1200,9 @@ export default function Home() {
             : "text-gray-950 dark:text-white",
       tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
     },
-    { key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), helper: copy.expenseHint, tone: "cost" as const, href: "/expenses" },
+    ...(canViewExpenses
+      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), helper: copy.expenseHint, tone: "cost" as const, href: "/expenses" }]
+      : []),
   ];
 
   const liveWorkSummary: CardSummaryItem[] = [
@@ -1245,7 +1293,7 @@ export default function Home() {
                           type="button"
                           onClick={() => selectChartMetric(metric)}
                           className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
-                            chartMetric === metric
+                            visibleChartMetric === metric
                               ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
                               : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
                           }`}
@@ -1273,7 +1321,7 @@ export default function Home() {
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{activeChartTitle}</h3>
-                    {chartMetric === "cost" ? (
+                    {visibleChartMetric === "cost" ? (
                       <button
                         type="button"
                         onClick={() => router.push("/expenses")}
@@ -1294,7 +1342,7 @@ export default function Home() {
                       data={activeChartData}
                       title={activeChartTitle}
                       language={language}
-                      lossColoring={chartMetric === "profit"}
+                      lossColoring={visibleChartMetric === "profit"}
                       selectedKey={activeDetailBar?.key ?? null}
                       onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
                     />
@@ -1319,7 +1367,7 @@ export default function Home() {
                             </p>
                           ) : detailKind === "cost" ? (
                             <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
-                              {copy.metricCost} {formatCurrency(shownExpensesTotal, language)} · {shownExpenses.length}{" "}
+                              {copy.metricCost} {formatCurrency(shownExpensesTotal, language)} · {shownExpensesEntries}{" "}
                               {copy.ingredients}
                             </p>
                           ) : null}
@@ -1354,6 +1402,9 @@ export default function Home() {
                               </div>
                             ))}
                           </div>
+                          {shownExpensesHaveMore ? (
+                            <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                          ) : null}
                         </div>
                       ) : shownSales?.orders.length ? (
                         <div className="max-h-64 overflow-y-auto">
@@ -1388,10 +1439,12 @@ export default function Home() {
                               </button>
                             ))}
                           </div>
-                          {shownSales.orders.length >= 300 ? (
+                          {shownSales.has_more ? (
                             <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
                           ) : null}
                         </div>
+                      ) : detailKind === "cost" && shownExpensesEntries > 0 && shownExpensesHaveMore ? (
+                        <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.drillCapped}</p>
                       ) : (
                         <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
                           {detailFailed && detailKind === "sales" ? copy.loadError : copy.drillEmpty}

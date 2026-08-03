@@ -53,7 +53,7 @@ func actionPreviewScenarioDBOrSkip(t *testing.T) *gorm.DB {
 func TestPostgresAIActionPreviewConfirmReplayStaleExpiryAndCleanup(t *testing.T) {
 	database := actionPreviewScenarioDBOrSkip(t)
 	if !database.Migrator().HasTable(&entity.AIActionPreview{}) {
-		t.Fatal("ai_action_previews is missing; run schema migration v7 before the scenario")
+		t.Fatal("ai_action_previews is missing; run schema migration v9 before the scenario")
 	}
 	if !database.Migrator().HasIndex(&entity.AIActionPreview{}, "idx_ai_action_previews_completed_at") {
 		t.Fatal("ai_action_previews completed_at retention index is missing")

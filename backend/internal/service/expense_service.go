@@ -34,7 +34,10 @@ type ExpenseRequest struct {
 type ExpenseListResponse struct {
 	Expenses   []entity.Expense                  `json:"expenses"`
 	Categories []repository.ExpenseCategoryTotal `json:"categories"`
+	Daily      []repository.ExpenseDayTotal      `json:"daily"`
 	Total      float64                           `json:"total"`
+	Entries    int64                             `json:"entries"`
+	HasMore    bool                              `json:"has_more"`
 }
 
 // parseExpenseDate keeps the ledger on Bangkok calendar days so an entry made
@@ -106,20 +109,40 @@ func (s *ExpenseService) List(restaurantID uint, from, until, category string) (
 	if err != nil {
 		return nil, err
 	}
+	daily, err := s.repo.TotalsByDay(restaurantID, filter)
+	if err != nil {
+		return nil, err
+	}
 	if expenses == nil {
 		expenses = []entity.Expense{}
 	}
 	if totals == nil {
 		totals = []repository.ExpenseCategoryTotal{}
 	}
+	if daily == nil {
+		daily = []repository.ExpenseDayTotal{}
+	}
 
-	response := &ExpenseListResponse{Expenses: expenses, Categories: totals}
+	return buildExpenseListResponse(expenses, totals, daily), nil
+}
+
+func buildExpenseListResponse(
+	expenses []entity.Expense,
+	totals []repository.ExpenseCategoryTotal,
+	daily []repository.ExpenseDayTotal,
+) *ExpenseListResponse {
+	response := &ExpenseListResponse{Expenses: expenses, Categories: totals, Daily: daily}
 	for i := range totals {
 		totals[i].Amount = roundMoney(totals[i].Amount)
 		response.Total += totals[i].Amount
+		response.Entries += totals[i].Entries
+	}
+	for i := range daily {
+		daily[i].Amount = roundMoney(daily[i].Amount)
 	}
 	response.Total = roundMoney(response.Total)
-	return response, nil
+	response.HasMore = response.Entries > int64(len(expenses))
+	return response
 }
 
 func (s *ExpenseService) Create(restaurantID, userID uint, req *ExpenseRequest) (*entity.Expense, error) {
@@ -150,6 +173,9 @@ func (s *ExpenseService) Update(restaurantID, expenseID uint, req *ExpenseReques
 	if err != nil {
 		return nil, errors.New("expense not found")
 	}
+	if err := ensureExpenseEditable(expense); err != nil {
+		return nil, err
+	}
 	expense.Category = category
 	expense.Amount = amount
 	expense.SpentAt = spentAt
@@ -161,8 +187,19 @@ func (s *ExpenseService) Update(restaurantID, expenseID uint, req *ExpenseReques
 }
 
 func (s *ExpenseService) Delete(restaurantID, expenseID uint) error {
-	if _, err := s.repo.FindByID(restaurantID, expenseID); err != nil {
+	expense, err := s.repo.FindByID(restaurantID, expenseID)
+	if err != nil {
 		return errors.New("expense not found")
 	}
+	if err := ensureExpenseEditable(expense); err != nil {
+		return err
+	}
 	return s.repo.Delete(restaurantID, expenseID)
+}
+
+func ensureExpenseEditable(expense *entity.Expense) error {
+	if expense != nil && expense.IngredientTransactionID != nil {
+		return errors.New("stock-in expenses cannot be edited or deleted")
+	}
+	return nil
 }

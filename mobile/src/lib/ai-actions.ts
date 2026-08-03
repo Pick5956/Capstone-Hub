@@ -15,6 +15,7 @@ type NavigationEntry = {
   href: string;
   label: Record<DisplayLanguage, string>;
   permissions?: readonly string[];
+  ownerOnly?: boolean;
   aliases: string[];
 };
 
@@ -41,7 +42,7 @@ const navigationEntries: NavigationEntry[] = [
   { href: '/table-management', label: { th: 'ผังโต๊ะ', en: 'Table layout' }, permissions: ['manage_table', 'view_tables'], aliases: ['tables', 'table layout', 'floor plan', 'ผังโต๊ะ', 'จัดการโต๊ะ'] },
   { href: '/orders', label: { th: 'ออเดอร์', en: 'Orders' }, permissions: ['view_orders', 'take_order'], aliases: ['orders', 'active orders', 'order archive', 'ออเดอร์', 'ออเดอร์ที่กำลังทำ', 'รายการออเดอร์', 'คลังออเดอร์'] },
   { href: '/inventory', label: { th: 'คลังวัตถุดิบ', en: 'Inventory' }, permissions: ['manage_inventory', 'view_inventory'], aliases: ['inventory', 'stock', 'ingredients', 'คลัง', 'คลังวัตถุดิบ', 'วัตถุดิบ', 'สต๊อก', 'สต็อก'] },
-  { href: '/ai-assistant', label: { th: 'AI ผู้ช่วย', en: 'AI assistant' }, permissions: ['view_reports', 'manage_inventory'], aliases: ['ai', 'assistant', 'ai assistant', 'ผู้ช่วย ai', 'ai ผู้ช่วย'] },
+  { href: '/ai-assistant', label: { th: 'AI ผู้ช่วย', en: 'AI assistant' }, ownerOnly: true, aliases: ['ai', 'assistant', 'ai assistant', 'ผู้ช่วย ai', 'ai ผู้ช่วย'] },
   { href: '/staff', label: { th: 'พนักงาน', en: 'Staff' }, permissions: ['manage_staff'], aliases: ['staff', 'team', 'employees', 'พนักงาน', 'ทีม', 'ทีมงาน', 'จัดการคน'] },
   { href: '/reports', label: { th: 'รายงาน', en: 'Reports' }, permissions: ['view_reports'], aliases: ['reports', 'report', 'analytics', 'revenue', 'sales report', 'รายงาน', 'ยอดขาย', 'รายได้', 'วิเคราะห์'] },
   { href: '/settings/account', label: { th: 'ตั้งค่าบัญชี', en: 'Account settings' }, aliases: ['account', 'profile', 'my account', 'บัญชี', 'โปรไฟล์', 'บัญชีของฉัน', 'ข้อมูลส่วนตัว'] },
@@ -75,7 +76,16 @@ function normalize(text: string): string {
     .trim();
 }
 
-function hasAnyPermission(entry: NavigationEntry, hasPermission: HasPermission): boolean {
+export function canUseAIAssistant(roleName?: string): boolean {
+  return roleName === 'owner';
+}
+
+function canAccessNavigationEntry(
+  entry: NavigationEntry,
+  hasPermission: HasPermission,
+  isOwner: boolean,
+): boolean {
+  if (entry.ownerOnly && !isOwner) return false;
   return !entry.permissions?.length || entry.permissions.some(hasPermission);
 }
 
@@ -100,6 +110,7 @@ export function resolveAINavigationRequest(
   hasPermission: HasPermission,
   currentPathname?: string,
   language: DisplayLanguage = 'th',
+  isOwner = false,
 ): AINavigationResolution {
   const normalized = normalize(input);
   if (!normalized || !navigationPhrases.some((phrase) => normalized.includes(phrase))) {
@@ -107,7 +118,7 @@ export function resolveAINavigationRequest(
   }
 
   const matches = navigationEntries
-    .filter((entry) => hasAnyPermission(entry, hasPermission))
+    .filter((entry) => canAccessNavigationEntry(entry, hasPermission, isOwner))
     .map((entry) => ({ ...entry, score: scoreEntry(normalized, entry) }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) => right.score - left.score);
@@ -139,15 +150,17 @@ export function resolveAINavigationRequest(
   };
 }
 
-function canAnalyze(hasPermission: HasPermission): boolean {
-  return hasPermission('view_reports') || hasPermission('manage_inventory');
+function canAnalyze(isOwner: boolean): boolean {
+  return isOwner;
 }
 
 export function resolveAIClarificationRequest(
   input: string,
   hasPermission: HasPermission,
   language: DisplayLanguage = 'th',
+  isOwner = false,
 ): { message: string; actions: AIGuidedAction[] } | null {
+  if (!isOwner) return null;
   const text = normalize(input);
 
   if (text === 'เมนู' || text === 'menu') {
@@ -155,7 +168,7 @@ export function resolveAIClarificationRequest(
     if (hasPermission('view_menu') || hasPermission('manage_menu')) {
       actions.push({ id: 'menu-page', href: '/menu', label: language === 'th' ? 'เปิดหน้าจัดการเมนู' : 'Open menu' });
     }
-    if (canAnalyze(hasPermission)) {
+    if (canAnalyze(isOwner)) {
       actions.push({ id: 'menu-top', prompt: language === 'th' ? 'เมนูไหนขายดีที่สุดในช่วง 14 วันล่าสุด?' : 'Which menu items sold best in the last 14 days?', label: language === 'th' ? 'ดูเมนูขายดี' : 'View top sellers' });
       actions.push({ id: 'menu-margin', prompt: language === 'th' ? 'เมนูไหนมี margin ต่ำและควรตรวจสอบ?' : 'Which menu items have a low margin and need review?', label: language === 'th' ? 'ตรวจเมนูกำไรต่ำ' : 'Review low-margin items' });
     }
@@ -169,7 +182,7 @@ export function resolveAIClarificationRequest(
     if (hasPermission('view_inventory') || hasPermission('manage_inventory')) {
       actions.push({ id: 'inventory-page', href: '/inventory', label: language === 'th' ? 'เปิดหน้าคลังวัตถุดิบ' : 'Open inventory' });
     }
-    if (canAnalyze(hasPermission)) {
+    if (canAnalyze(isOwner)) {
       actions.push({ id: 'inventory-risk', prompt: language === 'th' ? 'วัตถุดิบอะไรใกล้หมดและควรเติมก่อน?' : 'Which ingredients are running low and should be restocked first?', label: language === 'th' ? 'ดูของใกล้หมด' : 'Review low stock' });
     }
     return actions.length
@@ -216,7 +229,9 @@ export function getGuidedAIActions(
   answer: string,
   hasPermission: HasPermission,
   language: DisplayLanguage = 'th',
+  isOwner = false,
 ): AIGuidedAction[] {
+  if (!isOwner) return [];
   const text = `${question} ${answer}`.toLowerCase();
   const actions: AIGuidedAction[] = [];
   const add = (action: AIGuidedAction) => {
@@ -263,9 +278,14 @@ export function getGuidedAIActions(
   return actions.slice(0, 2);
 }
 
-export function getUnclearAIActions(hasPermission: HasPermission, language: DisplayLanguage = 'th'): AIGuidedAction[] {
+export function getUnclearAIActions(
+  hasPermission: HasPermission,
+  language: DisplayLanguage = 'th',
+  isOwner = false,
+): AIGuidedAction[] {
+  if (!isOwner) return [];
   const actions: AIGuidedAction[] = [];
-  if (canAnalyze(hasPermission)) {
+  if (canAnalyze(isOwner)) {
     actions.push({
       id: 'unclear-stock-risk',
       prompt: language === 'th' ? 'วัตถุดิบอะไรใกล้หมดและควรเติมก่อน?' : 'Which ingredients are running low and should be restocked first?',

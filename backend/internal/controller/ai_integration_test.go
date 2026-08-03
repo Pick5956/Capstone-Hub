@@ -35,6 +35,9 @@ type fakeAIOperationsService struct {
 	confirmCalls      int
 	previewID         string
 	confirmationToken string
+	cancelErr         error
+	cancelCalls       int
+	cancelledID       string
 }
 
 func (f *fakeAIOperationsService) AskOperationsForOwner(_ context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
@@ -72,6 +75,13 @@ func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorC
 	return f.confirmResponse, f.confirmErr
 }
 
+func (f *fakeAIOperationsService) CancelAIActionForOwner(actor service.AIActorContext, previewID string) error {
+	f.cancelCalls++
+	f.actor = actor
+	f.cancelledID = previewID
+	return f.cancelErr
+}
+
 func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, includeRestaurant bool) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -90,8 +100,62 @@ func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, incl
 	router.GET("/ai/operations/snapshot", ctrl.OperationsSnapshot)
 	router.GET("/ai/operations/metrics", ctrl.UsageMetrics)
 	router.POST("/ai/operations/actions/:previewID/confirm", ctrl.ConfirmAction)
+	router.DELETE("/ai/operations/actions/:previewID", ctrl.CancelAction)
 	router.DELETE("/ai/operations/conversations/:conversationID", ctrl.DeleteConversation)
 	return router
+}
+
+func TestCancelAIActionUsesOwnerScopeWithoutAConfirmationToken(t *testing.T) {
+	svc := &fakeAIOperationsService{}
+	router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/ai/operations/actions/preview-123", nil))
+
+	if recorder.Code != http.StatusNoContent || recorder.Body.Len() != 0 {
+		t.Fatalf("CancelAction status=%d body=%q", recorder.Code, recorder.Body.String())
+	}
+	if svc.cancelCalls != 1 || svc.cancelledID != "preview-123" || svc.actor.RestaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" {
+		t.Fatalf("CancelAction scope = calls %d id %q actor %+v", svc.cancelCalls, svc.cancelledID, svc.actor)
+	}
+	if recorder.Header().Get("Cache-Control") != "no-store, private" {
+		t.Fatalf("CancelAction cache policy = %q", recorder.Header().Get("Cache-Control"))
+	}
+}
+
+func TestCancelAIActionRejectsNonOwnerAndMapsSafeErrors(t *testing.T) {
+	t.Run("non-owner", func(t *testing.T) {
+		svc := &fakeAIOperationsService{}
+		router := testAIRouter(svc, memberWithRole("manager", `["view_reports"]`), true)
+		recorder := httptest.NewRecorder()
+
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/ai/operations/actions/preview-1", nil))
+
+		if recorder.Code != http.StatusForbidden || svc.cancelCalls != 0 {
+			t.Fatalf("non-owner cancel status=%d calls=%d", recorder.Code, svc.cancelCalls)
+		}
+	})
+
+	for name, testCase := range map[string]struct {
+		err    error
+		status int
+	}{
+		"missing":  {err: repository.ErrAIActionPreviewNotFound, status: http.StatusNotFound},
+		"expired":  {err: repository.ErrAIActionPreviewExpired, status: http.StatusGone},
+		"executed": {err: repository.ErrAIActionPreviewAlreadyExecuted, status: http.StatusConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := &fakeAIOperationsService{cancelErr: testCase.err}
+			router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+			recorder := httptest.NewRecorder()
+
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/ai/operations/actions/preview-1", nil))
+
+			if recorder.Code != testCase.status || svc.cancelCalls != 1 {
+				t.Fatalf("cancel status=%d want=%d calls=%d", recorder.Code, testCase.status, svc.cancelCalls)
+			}
+		})
+	}
 }
 
 func memberWithRole(name, permissions string) *entity.RestaurantMember {

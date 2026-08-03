@@ -7,6 +7,7 @@ import { can } from "@/src/lib/rbac";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { formatCurrency } from "@/src/lib/format";
 import { toDashboardDate } from "@/src/lib/homeDashboard";
+import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import {
   createExpense,
   deleteExpense,
@@ -20,6 +21,7 @@ import {
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
+import ThemedSelect from "@/src/components/shared/ThemedSelect";
 
 type FormState = { id: number | null; category: ExpenseCategory; amount: string; spent_at: string; note: string };
 
@@ -42,10 +44,12 @@ export default function ExpensesPage() {
   const canEdit = can(activeMembership, "manage_expenses");
   const canView = canEdit || can(activeMembership, "view_reports");
 
-  const [data, setData] = useState<{ expenses: Expense[]; categories: ExpenseCategoryTotal[]; total: number }>({
+  const [data, setData] = useState<{ expenses: Expense[]; categories: ExpenseCategoryTotal[]; total: number; entries: number; hasMore: boolean }>({
     expenses: [],
     categories: [],
     total: 0,
+    entries: 0,
+    hasMore: false,
   });
   const [monthDate, setMonthDate] = useState(() => {
     const now = new Date();
@@ -56,6 +60,8 @@ export default function ExpensesPage() {
   const [error, setError] = useState("");
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [expenseRequests] = useState(createRequestGeneration);
 
   const copy = useMemo(
     () =>
@@ -83,6 +89,8 @@ export default function ExpensesPage() {
             deleteAction: "ลบ",
             confirmDelete: "ลบรายการนี้?",
             recordedBy: "บันทึกโดย",
+            generatedStockIn: "สร้างอัตโนมัติจากการรับวัตถุดิบ",
+            partialList: (shown: number, total: number) => `แสดงรายการล่าสุด ${shown} จากทั้งหมด ${total} รายการ`,
             empty: "ยังไม่มีรายจ่ายในเดือนนี้",
             loadError: "โหลดรายจ่ายไม่สำเร็จ",
             saveError: "บันทึกไม่สำเร็จ",
@@ -112,6 +120,8 @@ export default function ExpensesPage() {
             deleteAction: "Delete",
             confirmDelete: "Delete this entry?",
             recordedBy: "Recorded by",
+            generatedStockIn: "Generated from stock-in",
+            partialList: (shown: number, total: number) => `Showing the latest ${shown} of ${total} entries.`,
             empty: "No expenses recorded this month.",
             loadError: "Could not load expenses.",
             saveError: "Could not save.",
@@ -119,6 +129,10 @@ export default function ExpensesPage() {
             readOnly: "You have read-only access to expenses.",
           },
     [language],
+  );
+  const categoryOptions = useMemo(
+    () => expenseCategories.map((value) => ({ value, label: copy.categories[value] })),
+    [copy],
   );
 
   const locale = language === "th" ? "th-TH" : "en-US";
@@ -128,7 +142,12 @@ export default function ExpensesPage() {
   const canGoNextMonth = monthDate.getTime() < new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
 
   const load = useCallback(async () => {
-    if (!canView) return;
+    if (!canView) {
+      expenseRequests.invalidate();
+      setLoading(false);
+      return;
+    }
+    const requestGeneration = expenseRequests.begin();
     setLoading(true);
     setError("");
     try {
@@ -137,18 +156,29 @@ export default function ExpensesPage() {
         until: monthEnd,
         ...(categoryFilter === "all" ? {} : { category: categoryFilter }),
       });
-      setData({ expenses: res.data.expenses ?? [], categories: res.data.categories ?? [], total: res.data.total ?? 0 });
+      if (!expenseRequests.isCurrent(requestGeneration)) return;
+      setData({
+        expenses: res.data.expenses ?? [],
+        categories: res.data.categories ?? [],
+        total: res.data.total ?? 0,
+        entries: res.data.entries ?? 0,
+        hasMore: res.data.has_more ?? false,
+      });
     } catch (err) {
+      if (!expenseRequests.isCurrent(requestGeneration)) return;
       setError(apiErrorMessage(err) || copy.loadError);
     } finally {
-      setLoading(false);
+      if (expenseRequests.isCurrent(requestGeneration)) setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, monthStart, monthEnd, categoryFilter]);
+  }, [canView, categoryFilter, copy.loadError, expenseRequests, monthEnd, monthStart]);
 
   useEffect(() => {
+    // Mutations advance this counter so the effect reloads with the filters from
+    // the latest render instead of calling an async handler's stale load closure.
+    void refreshTick;
     void load();
-  }, [load]);
+    return () => expenseRequests.invalidate();
+  }, [expenseRequests, load, refreshTick]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -164,7 +194,7 @@ export default function ExpensesPage() {
       if (form.id === null) await createExpense(payload);
       else await updateExpense(form.id, payload);
       setForm(emptyForm());
-      await load();
+      setRefreshTick((tick) => tick + 1);
     } catch (err) {
       setError(apiErrorMessage(err) || copy.saveError);
     } finally {
@@ -178,7 +208,7 @@ export default function ExpensesPage() {
     try {
       await deleteExpense(expense.ID);
       if (form.id === expense.ID) setForm(emptyForm());
-      await load();
+      setRefreshTick((tick) => tick + 1);
     } catch (err) {
       setError(apiErrorMessage(err) || copy.saveError);
     }
@@ -187,7 +217,6 @@ export default function ExpensesPage() {
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
   const shiftMonth = (delta: number) => setMonthDate((date) => new Date(date.getFullYear(), date.getMonth() + delta, 1));
-  const totalEntries = data.categories.reduce((sum, item) => sum + item.entries, 0);
   const inputClass =
     "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:focus:border-white";
 
@@ -202,7 +231,7 @@ export default function ExpensesPage() {
         <div className="text-right">
           <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
           <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(data.total, language)}</p>
-          <p className="text-[11px] text-gray-400">{totalEntries} {copy.entries}</p>
+          <p className="text-[11px] text-gray-400">{data.entries} {copy.entries}</p>
         </div>
       </div>
 
@@ -239,11 +268,12 @@ export default function ExpensesPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[160px_160px_170px_minmax(0,1fr)_auto] lg:items-end">
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.category}</span>
-              <select value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value as ExpenseCategory }))} className={inputClass}>
-                {expenseCategories.map((value) => (
-                  <option key={value} value={value}>{copy.categories[value]}</option>
-                ))}
-              </select>
+              <ThemedSelect
+                value={form.category}
+                onChange={(value) => setForm((prev) => ({ ...prev, category: value as ExpenseCategory }))}
+                options={categoryOptions}
+                className="w-full"
+              />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-gray-500 dark:text-gray-400">{copy.amount}</span>
@@ -292,14 +322,31 @@ export default function ExpensesPage() {
                 <span>
                   <span className={`inline-flex rounded-md border px-2 py-1 text-[12px] font-semibold ${categoryBadgeClass[expense.category]}`}>{copy.categories[expense.category]}</span>
                 </span>
-                <span className="truncate text-gray-700 dark:text-gray-200">{expense.note || "-"}</span>
+                <span className="min-w-0 text-gray-700 dark:text-gray-200">
+                  <span className="block truncate">{expense.note || "-"}</span>
+                  {expense.ingredient_transaction_id != null ? (
+                    <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">{copy.generatedStockIn}</span>
+                  ) : null}
+                </span>
                 <span className="font-mono font-semibold tabular-nums text-gray-950 dark:text-white lg:text-right">{formatCurrency(expense.amount, language)}</span>
                 <span className="flex items-center justify-end gap-2 text-[12px] text-gray-400">
                   <span className="truncate">{expense.created_by ? `${expense.created_by.first_name} ${expense.created_by.last_name}`.trim() : "-"}</span>
-                  {canEdit && (
+                  {canEdit && expense.ingredient_transaction_id == null && (
                     <>
-                      <button type="button" onClick={() => setForm({ id: expense.ID, category: expense.category, amount: String(expense.amount), spent_at: expense.spent_at.slice(0, 10), note: expense.note })} className="ui-press shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">✎</button>
-                      <button type="button" onClick={() => void remove(expense)} className="ui-press shrink-0 rounded border border-red-200 px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30">✕</button>
+                      <button
+                        type="button"
+                        aria-label={`${copy.edit}: ${expense.note || copy.categories[expense.category]}`}
+                        title={`${copy.edit}: ${expense.note || copy.categories[expense.category]}`}
+                        onClick={() => setForm({ id: expense.ID, category: expense.category, amount: String(expense.amount), spent_at: expense.spent_at.slice(0, 10), note: expense.note })}
+                        className="ui-press shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                      >✎</button>
+                      <button
+                        type="button"
+                        aria-label={`${copy.deleteAction}: ${expense.note || copy.categories[expense.category]}`}
+                        title={`${copy.deleteAction}: ${expense.note || copy.categories[expense.category]}`}
+                        onClick={() => void remove(expense)}
+                        className="ui-press shrink-0 rounded border border-red-200 px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-950/30"
+                      >✕</button>
                     </>
                   )}
                 </span>
@@ -309,6 +356,11 @@ export default function ExpensesPage() {
         ) : (
           <div className="px-4 py-14 text-center text-[14px] text-gray-500 dark:text-gray-400">{copy.empty}</div>
         )}
+        {!loading && data.hasMore ? (
+          <p className="border-t border-gray-100 px-4 py-2.5 text-[11px] text-gray-500 dark:border-gray-900 dark:text-gray-400">
+            {copy.partialList(data.expenses.length, data.entries)}
+          </p>
+        ) : null}
       </div>
     </OperationalPageShell>
   );

@@ -11,6 +11,7 @@ export type Expense = {
   spent_at: string;
   note: string;
   created_by_id: number;
+  ingredient_transaction_id?: number | null;
   created_by?: { ID: number; first_name: string; last_name: string } | null;
 };
 
@@ -20,10 +21,15 @@ export type ExpenseCategoryTotal = {
   entries: number;
 };
 
+export type ExpenseDailyTotal = { date: string; amount: number; entries: number };
+
 export type ExpenseListResponse = {
   expenses: Expense[];
   categories: ExpenseCategoryTotal[];
+  daily: ExpenseDailyTotal[];
   total: number;
+  entries: number;
+  has_more: boolean;
 };
 
 export type ExpenseInput = {

@@ -78,7 +78,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	aiStage("call", "Groq classifier model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq classifier model=%s", model)
 
 	prompt := fmt.Sprintf(routerClassifierTemplate, question)
 
@@ -110,7 +110,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 		if resp.StatusCode == 429 {
 			return "", errRateLimit
 		}
-		return "", fmt.Errorf("groq classifier failed: %s", strings.TrimSpace(string(respBody)))
+		return "", newAIProviderHTTPError("Groq", "classifier", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -128,7 +128,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	aiStage("call", "Groq analytical model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq analytical model=%s", model)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -164,7 +164,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Groq", "analytical request", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -193,7 +193,7 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	aiStage("call", "Groq conversation model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq conversation model=%s", model)
 
 	prompt := fmt.Sprintf(conversationPersonaTemplate, question, conversationPrompt(history))
 
@@ -225,7 +225,7 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Groq", "conversation request", resp.StatusCode)
 	}
 
 	var parsed groqResponse
@@ -445,7 +445,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	if model == "" {
 		model = "groq/compound-mini"
 	}
-	aiStage("call", "Groq second-round model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Groq second-round model=%s", model)
 	payload := groqRequest{
 		Model: model,
 		Messages: []groqMessage{
@@ -473,7 +473,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("groq second round failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Groq", "second-round request", resp.StatusCode)
 	}
 	var parsed groqResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {

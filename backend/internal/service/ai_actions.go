@@ -28,6 +28,7 @@ var (
 type AIActionStore interface {
 	CreateSetMenuAvailabilityPreview(repository.CreateSetMenuAvailabilityPreviewParams) (*entity.AIActionPreview, string, error)
 	ConfirmSetMenuAvailability(restaurantID, ownerUserID uint, previewID, confirmationToken string) (*entity.AIActionPreview, bool, error)
+	CancelPreview(restaurantID, ownerUserID uint, previewID string) (*entity.AIActionPreview, error)
 	CleanupActionPreviews(limit int) (int64, error)
 }
 
@@ -320,4 +321,23 @@ func (s *AIService) ConfirmAIActionForOwner(actor AIActorContext, previewID, con
 			IsAvailable: preview.DesiredAvailability,
 		},
 	}, nil
+}
+
+func (s *AIService) CancelAIActionForOwner(actor AIActorContext, previewID string) error {
+	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
+		return errors.New("AI action cancellation requires an authenticated restaurant owner")
+	}
+	if s.actionStore == nil {
+		return ErrAIActionUnavailable
+	}
+
+	_, err := s.actionStore.CancelPreview(
+		actor.RestaurantID,
+		actor.OwnerUserID,
+		strings.TrimSpace(previewID),
+	)
+	if errors.Is(err, repository.ErrAIActionPreviewCancelled) {
+		return nil
+	}
+	return err
 }

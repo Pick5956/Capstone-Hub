@@ -205,25 +205,19 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		if err := tx.UpdateStock(restaurantID, ingredientID, nextStock); err != nil {
 			return err
 		}
-		// Nobody typed a cost — fall back to what this ingredient is already
-		// priced at rather than leaving the restock out of the ledger.
-		finalAmount := amount
-		if kind == "in" && finalAmount == 0 {
-			finalAmount = estimateRestockAmount(req.Quantity, ingredient.CostPerUnit)
-		}
 		stockTransaction := &entity.IngredientTransaction{
 			RestaurantID: restaurantID,
 			IngredientID: ingredientID,
 			Type:         kind,
 			Quantity:     req.Quantity,
-			Amount:       finalAmount,
+			Amount:       amount,
 			Note:         note,
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateTransaction(stockTransaction); err != nil {
 			return err
 		}
-		if finalAmount > 0 {
+		if amount > 0 {
 			// Same transaction as the stock movement, so the ledger can never
 			// disagree with what actually came into the store room.
 			expenseNote := ingredient.Name
@@ -234,7 +228,7 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 			if err := tx.CreateExpense(&entity.Expense{
 				RestaurantID:            restaurantID,
 				Category:                "ingredient",
-				Amount:                  finalAmount,
+				Amount:                  amount,
 				SpentAt:                 time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
 				Note:                    expenseNote,
 				CreatedByID:             userID,
@@ -373,22 +367,6 @@ func restockAmount(kind string, amount float64) (float64, error) {
 		return 0, errors.New("amount is too large")
 	}
 	return rounded, nil
-}
-
-// estimateRestockAmount is the fallback when nobody typed what a restock cost:
-// the ingredient's own recorded unit price times the quantity received. It is a
-// derived figure, not an observed one, so the caller marks the ledger entry.
-// A zero result means there is nothing to go on — better no row than a made-up
-// one, since an invented number is worse than a visible gap.
-func estimateRestockAmount(quantity, costPerUnit float64) float64 {
-	if quantity <= 0 || costPerUnit <= 0 {
-		return 0
-	}
-	amount := roundMoney(quantity * costPerUnit)
-	if amount <= 0 || amount > maxIngredientCost {
-		return 0
-	}
-	return amount
 }
 
 func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *entity.IngredientTransaction {

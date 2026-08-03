@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
-import { formatAIActionConfirmationMessage } from "@/src/lib/aiActionPreview";
+import {
+  formatAIActionConfirmationMessage,
+  getAIActionCancellationErrorMessage,
+  isTerminalAIActionCancellationError,
+} from "@/src/lib/aiActionPreview";
 import type { AIActionConfirmation, AIActionPreview } from "@/src/types/ai";
 
 const preview: AIActionPreview = {
@@ -10,11 +16,11 @@ const preview: AIActionPreview = {
   status: "pending",
   expires_at: "2026-08-03T12:30:00Z",
   confirmation_token: "must-not-appear-in-markup",
-  summary: "Temporarily stop selling this item.",
+  summary: "ข้อความสรุปจากเซิร์ฟเวอร์ที่ไม่ควรแสดง",
   target: { menu_item_id: 42, name: "Pad Thai" },
   current: { is_available: true },
   requested: { is_available: false },
-  warnings: ["Customers will still see the item as unavailable."],
+  warnings: ["คำเตือนจากเซิร์ฟเวอร์ที่ไม่ควรแสดง"],
 };
 
 describe("AIActionPreviewCard", () => {
@@ -33,6 +39,10 @@ describe("AIActionPreviewCard", () => {
     expect(markup).toContain("Available");
     expect(markup).toContain("Unavailable");
     expect(markup).toContain("Confirm change");
+    expect(markup).toContain("Change “Pad Thai” from available to unavailable.");
+    expect(markup).toContain("Customers cannot order it after confirmation.");
+    expect(markup).not.toContain(preview.summary);
+    expect(markup).not.toContain(preview.warnings[0]);
     expect(markup).not.toContain(preview.confirmation_token);
   });
 
@@ -65,5 +75,35 @@ describe("formatAIActionConfirmationMessage", () => {
   it("formats a localized assistant result after confirmation", () => {
     expect(formatAIActionConfirmationMessage(confirmation, "th")).toContain("ปิดขาย");
     expect(formatAIActionConfirmationMessage(confirmation, "en")).toContain("unavailable");
+  });
+});
+
+describe("getAIActionCancellationErrorMessage", () => {
+  it("does not claim an unknown server-side preview state", () => {
+    expect(getAIActionCancellationErrorMessage("en")).toBe(
+      "The server could not confirm cancellation. Check the preview status and try again.",
+    );
+    expect(isTerminalAIActionCancellationError({ response: { status: 404 } })).toBe(true);
+    expect(isTerminalAIActionCancellationError({ response: { status: 409 } })).toBe(true);
+    expect(isTerminalAIActionCancellationError({ response: { status: 410 } })).toBe(true);
+    expect(isTerminalAIActionCancellationError({ response: { status: 500 } })).toBe(false);
+  });
+});
+
+describe("AI action request invalidation", () => {
+  it("clears both mutation busy states when either chat resets its request generation", () => {
+    const chatSources = [
+      new URL("../../app/(dashboard)/ai-assistant/page.tsx", import.meta.url),
+      new URL("../../components/shared/AIOperationsFloatingChat.tsx", import.meta.url),
+    ].map((url) => readFileSync(fileURLToPath(url), "utf8"));
+
+    for (const source of chatSources) {
+      expect(source.match(/conversationRequests\.invalidate\(\);/g)).toHaveLength(2);
+      expect(source.match(
+        /conversationRequests\.invalidate\(\);[\s\S]{0,500}?setActionConfirming\(false\);[\s\S]{0,160}?setActionCancelling\(false\);/g,
+      )).toHaveLength(2);
+      expect(source).toContain("async function discardPendingActionPreview(): Promise<boolean>");
+      expect(source.match(/await discardPendingActionPreview\(\)/g)).toHaveLength(3);
+    }
   });
 });

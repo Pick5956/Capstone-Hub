@@ -132,7 +132,8 @@ type SalesDetailResponse struct {
 	Date    string                              `json:"date"`
 	Hour    *int                                `json:"hour"`
 	Orders  []repository.ReportSalesDetailOrder `json:"orders"`
-	Summary repository.ReportSalesDetailOrder   `json:"summary"`
+	Summary repository.ReportSalesDetailSummary `json:"summary"`
+	HasMore bool                                `json:"has_more"`
 }
 
 const salesDetailLimit = 300
@@ -162,10 +163,11 @@ func barWindow(date string, hour int) (since, until time.Time, hourFilter *int, 
 }
 
 type ExpenseDetailResponse struct {
-	Date  string                               `json:"date"`
-	Hour  *int                                 `json:"hour"`
-	Items []repository.ReportExpenseDetailItem `json:"items"`
-	Total float64                              `json:"total"`
+	Date    string                               `json:"date"`
+	Hour    *int                                 `json:"hour"`
+	Items   []repository.ReportExpenseDetailItem `json:"items"`
+	Total   float64                              `json:"total"`
+	HasMore bool                                 `json:"has_more"`
 }
 
 // ExpenseDetail resolves one cost bar into the ingredients behind it.
@@ -174,19 +176,23 @@ func (s *ReportService) ExpenseDetail(restaurantID uint, date string, hour int) 
 	if err != nil {
 		return nil, err
 	}
-	items, err := s.repo.ExpenseDetail(restaurantID, since, until, salesDetailLimit)
+	items, err := s.repo.ExpenseDetail(restaurantID, since, until, salesDetailLimit+1)
 	if err != nil {
 		return nil, err
 	}
 	if items == nil {
 		items = []repository.ReportExpenseDetailItem{}
 	}
-	response := &ExpenseDetailResponse{Date: date, Hour: hourFilter, Items: items}
+	items, hasMore := truncateReportRows(items, salesDetailLimit)
+	summary, err := s.repo.SalesWindowSummary(restaurantID, since, until)
+	if err != nil {
+		return nil, err
+	}
+	response := &ExpenseDetailResponse{Date: date, Hour: hourFilter, Items: items, HasMore: hasMore}
 	for i := range items {
 		items[i].Cost = roundMoney(items[i].Cost)
-		response.Total += items[i].Cost
 	}
-	response.Total = roundMoney(response.Total)
+	response.Total = roundMoney(summary.Cost)
 	return response, nil
 }
 
@@ -197,26 +203,35 @@ func (s *ReportService) SalesDetail(restaurantID uint, date string, hour int) (*
 		return nil, err
 	}
 
-	orders, err := s.repo.SalesDetail(restaurantID, since, until, salesDetailLimit)
+	orders, err := s.repo.SalesDetail(restaurantID, since, until, salesDetailLimit+1)
 	if err != nil {
 		return nil, err
 	}
 	if orders == nil {
 		orders = []repository.ReportSalesDetailOrder{}
 	}
+	orders, hasMore := truncateReportRows(orders, salesDetailLimit)
 
-	summary := repository.ReportSalesDetailOrder{}
 	for i := range orders {
 		orders[i].Cost = roundMoney(orders[i].Cost)
 		orders[i].Profit = roundMoney(orders[i].Profit)
-		summary.Revenue += orders[i].Revenue
-		summary.Cost += orders[i].Cost
+	}
+	summary, err := s.repo.SalesWindowSummary(restaurantID, since, until)
+	if err != nil {
+		return nil, err
 	}
 	summary.Revenue = roundMoney(summary.Revenue)
 	summary.Cost = roundMoney(summary.Cost)
 	summary.Profit = roundMoney(summary.Revenue - summary.Cost)
 
-	return &SalesDetailResponse{Date: date, Hour: hourFilter, Orders: orders, Summary: summary}, nil
+	return &SalesDetailResponse{Date: date, Hour: hourFilter, Orders: orders, Summary: summary, HasMore: hasMore}, nil
+}
+
+func truncateReportRows[T any](rows []T, limit int) ([]T, bool) {
+	if limit < 0 || len(rows) <= limit {
+		return rows, false
+	}
+	return rows[:limit], true
 }
 
 type TopMenuItemsResponse struct {

@@ -26,6 +26,11 @@ type fakeAIActionStore struct {
 	confirmedScope  [2]uint
 	confirmedID     string
 	confirmedToken  string
+	cancelled       *entity.AIActionPreview
+	cancelErr       error
+	cancelCalls     int
+	cancelledScope  [2]uint
+	cancelledID     string
 	cleanupCalls    int
 }
 
@@ -41,6 +46,13 @@ func (f *fakeAIActionStore) ConfirmSetMenuAvailability(restaurantID, ownerUserID
 	f.confirmedID = previewID
 	f.confirmedToken = token
 	return f.confirmed, f.confirmReplayed, f.confirmErr
+}
+
+func (f *fakeAIActionStore) CancelPreview(restaurantID, ownerUserID uint, previewID string) (*entity.AIActionPreview, error) {
+	f.cancelCalls++
+	f.cancelledScope = [2]uint{restaurantID, ownerUserID}
+	f.cancelledID = previewID
+	return f.cancelled, f.cancelErr
 }
 
 func (f *fakeAIActionStore) CleanupActionPreviews(_ int) (int64, error) {
@@ -296,6 +308,33 @@ func TestConfirmAIActionForOwnerEnforcesFlagScopeAndReturnsIdempotentResult(t *t
 	_, err = service.ConfirmAIActionForOwner(ownerActor(), "preview-1", "token")
 	if !errors.Is(err, ErrAIActionsDisabled) || store.confirmCalls != 1 {
 		t.Fatal("non-allowlisted restaurant reached the action store")
+	}
+}
+
+func TestCancelAIActionForOwnerScopesThePreviewAndTreatsRepeatedCancelAsSuccess(t *testing.T) {
+	store := &fakeAIActionStore{
+		cancelled: &entity.AIActionPreview{ID: "preview-1", Status: entity.AIActionPreviewStatusCancelled},
+	}
+	service := &AIService{actionStore: store}
+	actor := AIActorContext{RestaurantID: 7, OwnerUserID: 11, Role: "owner"}
+
+	if err := service.CancelAIActionForOwner(actor, " preview-1 "); err != nil {
+		t.Fatalf("CancelAIActionForOwner() error = %v", err)
+	}
+	if store.cancelCalls != 1 || store.cancelledScope != [2]uint{7, 11} || store.cancelledID != "preview-1" {
+		t.Fatalf("cancel scope = %+v id=%q calls=%d", store.cancelledScope, store.cancelledID, store.cancelCalls)
+	}
+
+	store.cancelErr = repository.ErrAIActionPreviewCancelled
+	if err := service.CancelAIActionForOwner(actor, "preview-1"); err != nil {
+		t.Fatalf("repeated CancelAIActionForOwner() error = %v", err)
+	}
+
+	if err := service.CancelAIActionForOwner(AIActorContext{RestaurantID: 7, OwnerUserID: 11, Role: "manager"}, "preview-1"); err == nil {
+		t.Fatal("non-owner cancellation succeeded")
+	}
+	if store.cancelCalls != 2 {
+		t.Fatalf("non-owner reached cancel store: calls=%d", store.cancelCalls)
 	}
 }
 
