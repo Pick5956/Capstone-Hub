@@ -263,6 +263,76 @@ func resolveNamedMonthYear(month int, ref time.Time) int {
 	return year
 }
 
+// earliestAlias returns the start and end byte offsets of the alias that begins
+// at the earliest position; on a tie it prefers the longest match, so a trailing
+// year is read past the full name ("กรกฎาคม" rather than its prefix "กรกฎา").
+func earliestAlias(haystack string, aliases []string) (start, end int) {
+	start, end = -1, -1
+	for _, a := range aliases {
+		idx := strings.Index(haystack, a)
+		if idx < 0 {
+			continue
+		}
+		if start == -1 || idx < start || (idx == start && idx+len(a) > end) {
+			start, end = idx, idx+len(a)
+		}
+	}
+	return start, end
+}
+
+// yearAfter reads a calendar year written right after byte offset `from`,
+// allowing leading spaces and an optional พ.ศ./ค.ศ./ปี marker ("กรกฎาคม 2568",
+// "july 2025", "กรกฎาคม 68"). A bare two-digit number is only taken as a year
+// when it cannot be a day (>31) or a marker made it explicit, so a day written
+// after a month name is never mistaken for a year.
+func yearAfter(n string, from int) (int, bool) {
+	if from < 0 || from > len(n) {
+		return 0, false
+	}
+	rest := strings.TrimLeft(n[from:], " \t")
+	marker := false
+	for _, m := range []string{"พ.ศ.", "ค.ศ.", "ปี"} {
+		if strings.HasPrefix(rest, m) {
+			rest = strings.TrimLeft(rest[len(m):], " \t")
+			marker = true
+			break
+		}
+	}
+	i := 0
+	for i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	value, err := strconv.Atoi(rest[:i])
+	if err != nil {
+		return 0, false
+	}
+	return normalizeYear(value, i, marker)
+}
+
+// normalizeYear converts a written year to a Gregorian year. Four-digit values
+// above 2400 and any accepted two-digit value are read as Buddhist era; a
+// two-digit value that could be a day (1-31) is rejected unless a ปี/พ.ศ. marker
+// made it unambiguous.
+func normalizeYear(value, digits int, marker bool) (int, bool) {
+	switch {
+	case digits >= 4:
+		if value > 2400 {
+			return value - 543, true
+		}
+		return value, true
+	case digits == 2:
+		if !marker && value <= 31 {
+			return 0, false
+		}
+		return 2500 + value - 543, true
+	default:
+		return 0, false
+	}
+}
+
 type periodHit struct {
 	pos    int
 	yearMo int // year*100 + month, for de-duplication
@@ -290,19 +360,26 @@ func extractPeriods(question string, ref time.Time) []AIPeriod {
 		addPeriod(pos, previousMonthPeriod(ref))
 	}
 
-	// Named Thai months.
+	// Named Thai months, honoring a year written after the name ("กรกฎาคม 2568",
+	// "กรกฎาคม 68"). Without one, the most recent past occurrence is assumed.
 	for month, aliases := range thaiMonthAliases {
-		if pos := earliestIndex(n, aliases...); pos >= 0 {
-			year := resolveNamedMonthYear(month, ref)
+		if pos, end := earliestAlias(n, aliases); pos >= 0 {
+			year, ok := yearAfter(n, end)
+			if !ok {
+				year = resolveNamedMonthYear(month, ref)
+			}
 			addPeriod(pos, monthPeriod(year, time.Month(month), loc))
 		}
 	}
 
-	// Named English months.
+	// Named English months, with the same optional trailing year ("July 2025").
 	for _, m := range englishMonthPattern.FindAllStringSubmatchIndex(n, -1) {
 		alias := n[m[2]:m[3]]
 		if month, ok := englishMonthAliases[strings.ToLower(alias)]; ok {
-			year := resolveNamedMonthYear(month, ref)
+			year, hasYear := yearAfter(n, m[3])
+			if !hasYear {
+				year = resolveNamedMonthYear(month, ref)
+			}
 			addPeriod(m[0], monthPeriod(year, time.Month(month), loc))
 		}
 	}
@@ -343,6 +420,35 @@ func mentionsComparison(question string) bool {
 	return false
 }
 
+var reBareYear = regexp.MustCompile(`ปี\s*(\d{2,4})`)
+
+// extractBareYear finds a year mentioned without a month ("ปี 2568", "ปี 68",
+// "ปีที่แล้ว"). It resolves a year-over-year comparison where one side names only
+// a year. Returns a Gregorian year.
+func extractBareYear(question string, ref time.Time) (int, bool) {
+	n := strings.ToLower(question)
+	switch {
+	case containsAny(n, "ปีที่แล้ว", "ปีก่อน", "ปีที่ผ่านมา", "last year"):
+		return ref.Year() - 1, true
+	case containsAny(n, "ปีนี้", "this year"):
+		return ref.Year(), true
+	}
+	if m := reBareYear.FindStringSubmatch(n); m != nil {
+		value, _ := strconv.Atoi(m[1])
+		if year, ok := normalizeYear(value, len(m[1]), true); ok {
+			return year, true
+		}
+	}
+	return 0, false
+}
+
+// hasSecondOperand is true when a comparison explicitly names something to
+// compare against ("...กับ...", "vs"), as opposed to a lone period that defaults
+// to the month before it.
+func hasSecondOperand(n string) bool {
+	return containsAny(strings.ToLower(n), "กับ", " vs ", "versus", "เทียบกับ")
+}
+
 // datedSalesExcluded is true when a question names a period but is really about a
 // menu, ingredient, breakdown, or per-order average — those have their own tools
 // and must not be hijacked by the total-sales flow.
@@ -373,6 +479,7 @@ func mentionsSalesTotal(n string) bool {
 type datedSalesRequest struct {
 	comparison bool
 	periods    []AIPeriod
+	clarify    string // when set, ask this instead of guessing a comparison window
 }
 
 // resolveDatedSalesRequest decides whether a question is a dated total-sales
@@ -394,11 +501,24 @@ func resolveDatedSalesRequest(question string, ref time.Time) (datedSalesRequest
 	}
 
 	if mentionsComparison(question) {
-		if len(periods) == 1 {
-			periods = append(periods, previousMonthPeriod(periods[0].Start))
-		} else if len(periods) > 2 {
-			periods = periods[:2]
+		if len(periods) >= 2 {
+			return datedSalesRequest{comparison: true, periods: periods[:2]}, true
 		}
+		// One period named. A year on the other side ("...กับ ปี 68", "...กับ
+		// ปีที่แล้ว") means a year-over-year comparison of the same month.
+		if y, ok := extractBareYear(question, ref); ok && y != periods[0].Start.Year() {
+			second := monthPeriod(y, periods[0].Start.Month(), bangkokLocation())
+			return datedSalesRequest{comparison: true, periods: []AIPeriod{periods[0], second}}, true
+		}
+		// An explicit second operand we could not parse: ask, rather than
+		// silently substituting the previous month (a confidently wrong answer).
+		if hasSecondOperand(n) {
+			return datedSalesRequest{
+				clarify: `อยากเทียบกับช่วงไหนครับ ลองระบุให้ชัดขึ้น เช่น "เทียบยอดขายเดือนกรกฎาคม 2569 กับ กรกฎาคม 2568" ครับ`,
+			}, true
+		}
+		// A lone period ("เทียบยอดเดือนนี้") compares with the month before it.
+		periods = append(periods, previousMonthPeriod(periods[0].Start))
 		return datedSalesRequest{comparison: true, periods: periods}, true
 	}
 

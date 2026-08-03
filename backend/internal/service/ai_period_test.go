@@ -99,6 +99,70 @@ func TestResolveDatedSalesRequestComparisonSinglePeriodPairsPrevious(t *testing.
 	}
 }
 
+// A year written after a month name is honored rather than defaulted to the
+// reference year: "กรกฎาคม 68" must resolve to 2568, not the current 2569.
+func TestExtractPeriodsHonorsYearAfterMonth(t *testing.T) {
+	cases := []struct {
+		q    string
+		want string
+	}{
+		{"ยอดขายเดือนกรกฎาคม 68", "เดือนกรกฎาคม 2568"},
+		{"ยอดขายเดือนกรกฎาคม 2568", "เดือนกรกฎาคม 2568"},
+		{"ยอดขายกรกฎาคม 69", "เดือนกรกฎาคม 2569"},
+		{"sales in july 2025", "เดือนกรกฎาคม 2568"},
+	}
+	for _, c := range cases {
+		periods := extractPeriods(c.q, refJuly(t))
+		if len(periods) != 1 || periods[0].Label != c.want {
+			t.Fatalf("%q => %+v, want single %q", c.q, periods, c.want)
+		}
+	}
+}
+
+// A bare day after a month ("2 กรกฎาคม" reversed as "กรกฎาคม 2") must not be
+// swallowed as a year; the month keeps its resolved year.
+func TestExtractPeriodsDoesNotReadDayAsYear(t *testing.T) {
+	periods := extractPeriods("ยอดขายมีนาคม 12", refJuly(t))
+	if len(periods) != 1 || periods[0].Label != "เดือนมีนาคม 2569" {
+		t.Fatalf("day-after-month mistaken for year: %+v", periods)
+	}
+}
+
+// The reported bug: "เทียบ...เดือนกรกฎาคม 69 กับ ปี 68" must compare the same
+// month across the two years, not July 2569 against June 2569.
+func TestResolveDatedSalesRequestYearOverYear(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนกรกฎาคม 69 กับ ปี 68 ให้หน่อย", refJuly(t))
+	if !ok || !req.comparison || len(req.periods) != 2 {
+		t.Fatalf("year-over-year comparison wrong: ok=%v %+v", ok, req)
+	}
+	if req.periods[0].Label != "เดือนกรกฎาคม 2569" || req.periods[1].Label != "เดือนกรกฎาคม 2568" {
+		t.Fatalf("year-over-year pairing wrong: %+v", req.periods)
+	}
+}
+
+// "เทียบเดือนนี้กับปีที่แล้ว" compares this month against the same month a year ago.
+func TestResolveDatedSalesRequestRelativeYearOverYear(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนนี้กับปีที่แล้ว", refJuly(t))
+	if !ok || !req.comparison || len(req.periods) != 2 {
+		t.Fatalf("relative year-over-year wrong: ok=%v %+v", ok, req)
+	}
+	if req.periods[0].Label != "เดือนกรกฎาคม 2569" || req.periods[1].Label != "เดือนกรกฎาคม 2568" {
+		t.Fatalf("relative year-over-year pairing wrong: %+v", req.periods)
+	}
+}
+
+// A comparison whose second operand cannot be parsed asks for clarification
+// instead of silently substituting the previous month.
+func TestResolveDatedSalesRequestUnparseableSecondOperandAsksToClarify(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนกรกฎาคม 69 กับ ตอนนั้น", refJuly(t))
+	if !ok {
+		t.Fatal("comparison with an unparseable operand should still be claimed (to clarify)")
+	}
+	if req.clarify == "" || len(req.periods) != 0 {
+		t.Fatalf("expected a clarification, got %+v", req)
+	}
+}
+
 func TestResolveDatedSalesRequestExcludesMenuAndAverage(t *testing.T) {
 	for _, q := range []string{
 		"เมนูไหนขายดีเดือนมีนาคม",
