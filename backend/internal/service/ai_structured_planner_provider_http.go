@@ -289,18 +289,30 @@ func (p *geminiStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Conte
 	}
 
 	model := structuredPlannerModelChain("GEMINI_PLANNER_MODEL", "GEMINI_MODEL", defaultGeminiPlannerModel)
+
+	// Gemini rejects this schema outright: its constrained decoder reports
+	// "the specified schema produces a constraint that has too many states for
+	// serving" — the plan has ~20 tool enum values, nested arrays and numeric
+	// bounds, which blows up its state machine regardless of byte size. Asking
+	// for JSON and describing the shape in the prompt is accepted, and the
+	// backend still normalises and validates every plan.
+	schemaJSON, marshalErr := json.Marshal(request.JSONSchema)
+	if marshalErr != nil {
+		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner schema could not be encoded")
+	}
+	systemPrompt := strings.TrimSpace(request.SystemPrompt) + "\n" + fmt.Sprintf(jsonObjectPlannerInstruction, schemaJSON)
+
 	payload, err := json.Marshal(geminiStructuredPlannerRequest{
 		SystemInstruction: geminiStructuredPlannerContent{
-			Parts: []geminiStructuredPlannerPart{{Text: request.SystemPrompt}},
+			Parts: []geminiStructuredPlannerPart{{Text: systemPrompt}},
 		},
 		Contents: []geminiStructuredPlannerContent{{
 			Role:  "user",
 			Parts: []geminiStructuredPlannerPart{{Text: request.UserPrompt}},
 		}},
 		GenerationConfig: geminiStructuredPlannerGenerationConfig{
-			ResponseMIMEType:   "application/json",
-			ResponseJSONSchema: geminiCompatibleJSONSchema(request.JSONSchema),
-			MaxOutputTokens:    structuredPlannerMaxOutputTokens,
+			ResponseMIMEType: "application/json",
+			MaxOutputTokens:  structuredPlannerMaxOutputTokens,
 		},
 	})
 	if err != nil {
@@ -401,8 +413,11 @@ type geminiStructuredPlannerRequest struct {
 }
 
 type geminiStructuredPlannerGenerationConfig struct {
-	ResponseMIMEType   string         `json:"responseMimeType"`
-	ResponseJSONSchema map[string]any `json:"responseJsonSchema"`
+	ResponseMIMEType string `json:"responseMimeType"`
+	// responseJsonSchema is deliberately omitted: Gemini rejects the plan schema
+	// as having "too many states for serving". The shape is described in the
+	// system prompt instead.
+	ResponseJSONSchema map[string]any `json:"responseJsonSchema,omitempty"`
 	MaxOutputTokens    int            `json:"maxOutputTokens"`
 }
 

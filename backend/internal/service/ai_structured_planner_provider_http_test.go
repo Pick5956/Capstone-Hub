@@ -216,8 +216,14 @@ func TestGeminiStructuredPlannerProviderUsesResponseJSONSchema(t *testing.T) {
 		t.Fatalf("GenerateResolvedPlan: %v", err)
 	}
 
-	if len(received.SystemInstruction.Parts) != 1 || received.SystemInstruction.Parts[0].Text != "system instructions" {
+	// Gemini rejects the plan schema ("too many states for serving"), so the
+	// shape travels in the system prompt instead of generationConfig.
+	if len(received.SystemInstruction.Parts) != 1 {
 		t.Fatalf("systemInstruction = %#v", received.SystemInstruction)
+	}
+	systemText := received.SystemInstruction.Parts[0].Text
+	if !strings.HasPrefix(systemText, "system instructions") || !strings.Contains(systemText, "JSON Schema") {
+		t.Fatalf("system prompt must keep the instructions and carry the schema: %q", systemText)
 	}
 	if len(received.Contents) != 1 || received.Contents[0].Role != "user" || received.Contents[0].Parts[0].Text != `{"current_question":"hello"}` {
 		t.Fatalf("contents = %#v", received.Contents)
@@ -228,8 +234,8 @@ func TestGeminiStructuredPlannerProviderUsesResponseJSONSchema(t *testing.T) {
 	if received.GenerationConfig.MaxOutputTokens != structuredPlannerMaxOutputTokens {
 		t.Fatalf("maxOutputTokens = %d, want %d", received.GenerationConfig.MaxOutputTokens, structuredPlannerMaxOutputTokens)
 	}
-	if additional, ok := received.GenerationConfig.ResponseJSONSchema["additionalProperties"].(bool); !ok || additional {
-		t.Fatalf("responseJsonSchema was not forwarded: %#v", received.GenerationConfig.ResponseJSONSchema)
+	if len(received.GenerationConfig.ResponseJSONSchema) != 0 {
+		t.Fatalf("responseJsonSchema must be omitted; Gemini rejects it: %#v", received.GenerationConfig.ResponseJSONSchema)
 	}
 	if response.RawJSON != `{"answer":"ok"}` || response.Model != defaultGeminiPlannerModel {
 		t.Fatalf("response = %+v", response)

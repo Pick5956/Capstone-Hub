@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -87,7 +88,11 @@ func TestPlannerModeSkipsLegacyRewriteAndRouter(t *testing.T) {
 	}
 }
 
-func TestPlannerModeFailsClosedToLocalClarification(t *testing.T) {
+// When every planner provider is down there is no plan to act on — only a
+// placeholder that apologises. Answering from the legacy flow keeps the
+// assistant useful during a provider outage instead of dead-ending the owner,
+// and legacy applies its own guards, so nothing is bypassed.
+func TestPlannerModeFallsBackToLegacyWhenAllProvidersFail(t *testing.T) {
 	t.Setenv("AI_ORCHESTRATOR_MODE", "planner")
 	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "false")
 	groq := &structuredPlannerMockProvider{name: StructuredPlannerProviderGroq, err: errors.New("groq unavailable")}
@@ -98,21 +103,21 @@ func TestPlannerModeFailsClosedToLocalClarification(t *testing.T) {
 		structuredPlannerProviders: []StructuredPlannerProvider{groq, gemini},
 	}
 
-	response, err := service.AskOperationsForOwner(context.Background(), ownerActor(), &AIAskRequest{
+	_, err := service.AskOperationsForOwner(context.Background(), ownerActor(), &AIAskRequest{
 		Question: "แล้วอันดับสองล่ะ",
 		History:  []AIConversationMessage{{Role: "user", Content: "เมนูไหนขายดี"}},
 	})
-	if err != nil {
-		t.Fatalf("AskOperationsForOwner: %v", err)
+	// The legacy flow runs; with no repository wired in this fixture it stops at
+	// the snapshot, which is proof the request left the planner path rather than
+	// returning the canned apology.
+	if err == nil {
+		t.Fatal("expected the legacy flow to run and report its own error")
 	}
-	if response.Task != AITaskUnclear || response.Model != "local-planner-clarification" {
-		t.Fatalf("fallback response = %+v", response)
+	if !strings.Contains(err.Error(), "repository") {
+		t.Fatalf("error = %v, want the legacy snapshot path", err)
 	}
-	if response.Planner == nil || !response.Planner.LocalFallback || response.Planner.AttemptCount != 2 {
-		t.Fatalf("fallback metadata = %+v", response.Planner)
-	}
-	if answerProvider.classifyCalls != 0 || answerProvider.answerCalls != 0 {
-		t.Fatalf("fail-closed called legacy provider: classify=%d answer=%d", answerProvider.classifyCalls, answerProvider.answerCalls)
+	if answerProvider.classifyCalls == 0 {
+		t.Fatal("legacy router was never reached, so the planner did not fall back")
 	}
 }
 

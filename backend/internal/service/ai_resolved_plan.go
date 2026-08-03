@@ -448,6 +448,10 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.Parameters.Ranking = normalizeRanking(p.Parameters.Ranking)
 	p.Resolution.InheritedFields = normalizeInheritedFields(p.Resolution.InheritedFields)
 	p.Resolution.MissingFields = normalizeUniqueEnums(p.Resolution.MissingFields)
+	// A field cannot be both carried over from an earlier turn and still missing.
+	// Models sometimes list the same field in both; the inherited entry carries a
+	// value, so it wins and the contradictory "missing" entry is dropped.
+	p.Resolution.MissingFields = dropInheritedFromMissing(p.Resolution.InheritedFields, p.Resolution.MissingFields)
 	p.Resolution.ClarificationQuestion = strings.TrimSpace(p.Resolution.ClarificationQuestion)
 	return p
 }
@@ -932,6 +936,13 @@ func normalizeEntities(values []ResolvedPlanEntityRef) []ResolvedPlanEntityRef {
 		value.ID = strings.TrimSpace(value.ID)
 		value.Name = strings.TrimSpace(value.Name)
 		value.SourceTurnID = strings.TrimSpace(value.SourceTurnID)
+		// Models commonly emit a placeholder entity such as {} or {"type":"menu"}
+		// when the question names nothing in particular. An entity that
+		// identifies nothing carries no meaning, so drop it rather than failing
+		// the whole plan on it.
+		if value.ID == "" && value.Name == "" && value.ResultIndex == 0 {
+			continue
+		}
 		result = append(result, value)
 	}
 	return result
@@ -978,6 +989,27 @@ func normalizeRanking(value *ResolvedPlanRanking) *ResolvedPlanRanking {
 	result.Metric = ResolvedPlanMetric(normalizeEnum(string(result.Metric)))
 	result.Direction = ResolvedPlanRankDirection(normalizeEnum(string(result.Direction)))
 	return &result
+}
+
+// dropInheritedFromMissing removes fields that are already inherited from the
+// missing list, resolving a contradiction the model can emit without changing
+// the meaning of the plan.
+func dropInheritedFromMissing(inherited []ResolvedPlanInheritedField, missing []ResolvedPlanField) []ResolvedPlanField {
+	if len(inherited) == 0 || len(missing) == 0 {
+		return missing
+	}
+	carried := make(map[ResolvedPlanField]struct{}, len(inherited))
+	for _, field := range inherited {
+		carried[field.Field] = struct{}{}
+	}
+	result := make([]ResolvedPlanField, 0, len(missing))
+	for _, field := range missing {
+		if _, exists := carried[field]; exists {
+			continue
+		}
+		result = append(result, field)
+	}
+	return result
 }
 
 func normalizeInheritedFields(values []ResolvedPlanInheritedField) []ResolvedPlanInheritedField {

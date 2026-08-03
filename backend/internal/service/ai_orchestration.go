@@ -85,6 +85,24 @@ func (s *AIService) prepareOwnerOrchestration(ctx context.Context, actor AIActor
 	}
 	s.recordAIPlannerResult(actor.RestaurantID, result)
 
+	// Surface why a provider attempt failed. Without this the planner degrades to
+	// its clarification fallback silently, and the log only shows the symptom
+	// (task=unclear conf=0.00) with no way to tell which provider rejected what.
+	for _, attempt := range result.Attempts {
+		if attempt.Succeeded {
+			continue
+		}
+		aiStage("warn", "planner attempt failed provider=%s model=%s stage=%s: %s",
+			attempt.Provider, attempt.Model, attempt.FailureStage, attempt.Error)
+	}
+	if result.UsedLocalFallback {
+		// Every provider failed, so there is no plan — only a placeholder that
+		// apologises. Falling through to the legacy flow answers the question
+		// properly instead of dead-ending the user on a provider outage.
+		aiStage("warn", "planner unavailable (%s) → falling back to legacy flow", result.FallbackReason)
+		return nil, nil
+	}
+
 	prepared, err := prepareAuthorizedPlannerResult(result, actor)
 	if mode == aiOrchestratorShadow {
 		if err != nil {
