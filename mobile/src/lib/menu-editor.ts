@@ -1,9 +1,11 @@
 import type {
   Category,
   CategoryInput,
+  MenuIngredientInput,
   MenuItem,
   MenuItemCategory,
   MenuOptionGroupInput,
+  MenuOptionInput,
 } from '@/src/types/menu';
 
 type CategoryChoice = Pick<Category, 'ID' | 'display_order' | 'is_active' | 'name'>;
@@ -39,6 +41,18 @@ export interface MenuOptionGroupValidation {
   issues: MenuOptionGroupIssue[];
 }
 
+export type MenuOptionDraft = Omit<MenuOptionInput, 'price_delta'> & {
+  price_delta: string;
+};
+
+export type MenuOptionGroupDraft = Omit<MenuOptionGroupInput, 'options'> & {
+  options: MenuOptionDraft[];
+};
+
+export type MenuIngredientDraft = Omit<MenuIngredientInput, 'quantity'> & {
+  quantity: string;
+};
+
 const MAX_OPTION_GROUPS = 20;
 const MAX_OPTIONS_PER_GROUP = 50;
 const MAX_OPTION_NAME_LENGTH = 120;
@@ -50,6 +64,53 @@ function finiteNumber(value: number, fallback: number) {
 
 function normalizedInteger(value: number, fallback: number) {
   return Math.trunc(finiteNumber(value, fallback));
+}
+
+function decimalInput(value: string) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function menuOptionGroupDrafts(
+  groups: readonly MenuOptionGroupInput[],
+): MenuOptionGroupDraft[] {
+  return groups.map((group) => ({
+    ...group,
+    options: group.options.map((option) => ({
+      ...option,
+      price_delta: String(option.price_delta),
+    })),
+  }));
+}
+
+export function menuOptionGroupInputs(
+  groups: readonly MenuOptionGroupDraft[],
+): MenuOptionGroupInput[] {
+  return groups.map((group) => ({
+    ...group,
+    options: group.options.map((option) => ({
+      ...option,
+      price_delta: decimalInput(option.price_delta),
+    })),
+  }));
+}
+
+export function menuIngredientDrafts(
+  ingredients: readonly MenuIngredientInput[],
+): MenuIngredientDraft[] {
+  return ingredients.map((ingredient) => ({
+    ...ingredient,
+    quantity: String(ingredient.quantity),
+  }));
+}
+
+export function menuIngredientInputs(
+  ingredients: readonly MenuIngredientDraft[],
+): MenuIngredientInput[] {
+  return ingredients.map((ingredient) => ({
+    ...ingredient,
+    quantity: decimalInput(ingredient.quantity),
+  }));
 }
 
 export function validateMenuOptionGroups(

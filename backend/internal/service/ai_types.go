@@ -6,7 +6,6 @@ type AIIntent string
 
 const (
 	AIIntentAnalysis   AIIntent = "analysis"
-	AIIntentGreeting   AIIntent = "greeting"
 	AIIntentCapability AIIntent = "capabilities"
 	AIIntentChat       AIIntent = "conversation"
 	AIIntentUnclear    AIIntent = "unclear"
@@ -33,24 +32,24 @@ type AIAskResponse struct {
 }
 
 type AISnapshot struct {
-	GeneratedAt       string                           `json:"generated_at"`
-	SalesDays          []repository.AISalesSummary       `json:"sales_days"`
-	TopMenuItems       []repository.AIMenuSummary        `json:"top_menu_items"`
-	TopMenusByRevenue  []repository.AIMenuSummary        `json:"top_menus_by_revenue"`
-	MostExpensiveMenus []repository.AIMenuPrice          `json:"most_expensive_menus"`
-	OrderTypeBreakdown []repository.AIOrderTypeSummary   `json:"order_type_breakdown"`
-	MenuMargins       []repository.AIMenuMarginSummary `json:"menu_margins"`
-	LowMarginMenus    []repository.AIMenuMarginSummary `json:"low_margin_menus"`
-	HighMarginMenus   []repository.AIMenuMarginSummary `json:"high_margin_menus"`
-	LowestCostMenus   []repository.AIMenuMarginSummary `json:"lowest_cost_menus"`
-	AllMenuMargins    []repository.AIMenuMarginSummary `json:"all_menu_margins"`
-	SlowMovingMenus   []repository.AIMenuSummary       `json:"slow_moving_menus"`
-	PeakWeekdays      []repository.AIPeriodSummary     `json:"peak_weekdays"`
-	PeakHours         []repository.AIPeriodSummary     `json:"peak_hours"`
-	IngredientUsage   []repository.AIIngredientUsage   `json:"ingredient_usage"`
-	AnalysisReadiness AIAnalysisReadiness              `json:"analysis_readiness"`
-	InventorySummary  AIInventorySummary               `json:"inventory_summary"`
-	StockRisks        []AIStockRisk                    `json:"stock_risks"`
+	GeneratedAt        string                           `json:"generated_at"`
+	SalesDays          []repository.AISalesSummary      `json:"sales_days"`
+	TopMenuItems       []repository.AIMenuSummary       `json:"top_menu_items"`
+	TopMenusByRevenue  []repository.AIMenuSummary       `json:"top_menus_by_revenue"`
+	MostExpensiveMenus []repository.AIMenuPrice         `json:"most_expensive_menus"`
+	OrderTypeBreakdown []repository.AIOrderTypeSummary  `json:"order_type_breakdown"`
+	MenuMargins        []repository.AIMenuMarginSummary `json:"menu_margins"`
+	LowMarginMenus     []repository.AIMenuMarginSummary `json:"low_margin_menus"`
+	HighMarginMenus    []repository.AIMenuMarginSummary `json:"high_margin_menus"`
+	LowestCostMenus    []repository.AIMenuMarginSummary `json:"lowest_cost_menus"`
+	AllMenuMargins     []repository.AIMenuMarginSummary `json:"all_menu_margins"`
+	SlowMovingMenus    []repository.AIMenuSummary       `json:"slow_moving_menus"`
+	PeakWeekdays       []repository.AIPeriodSummary     `json:"peak_weekdays"`
+	PeakHours          []repository.AIPeriodSummary     `json:"peak_hours"`
+	IngredientUsage    []repository.AIIngredientUsage   `json:"ingredient_usage"`
+	AnalysisReadiness  AIAnalysisReadiness              `json:"analysis_readiness"`
+	InventorySummary   AIInventorySummary               `json:"inventory_summary"`
+	StockRisks         []AIStockRisk                    `json:"stock_risks"`
 }
 
 type AIAnalysisReadiness struct {
@@ -87,44 +86,8 @@ type AIStockRisk struct {
 	Status          string  `json:"status"`
 }
 
-type AIVerifyPayload struct {
-	LowestMarginMenuName string  `json:"lowest_margin_menu_name,omitempty"`
-	Quantity             int     `json:"quantity,omitempty"`
-	Revenue              float64 `json:"revenue,omitempty"`
-	Cost                 float64 `json:"cost,omitempty"`
-	Profit               float64 `json:"profit,omitempty"`
-	Margin               float64 `json:"margin,omitempty"`
-	LowStockCount        int     `json:"low_stock_count,omitempty"`
-	OutOfStockCount      int     `json:"out_of_stock_count,omitempty"`
-	TopMenuName          string  `json:"top_menu_name,omitempty"`
-	TopMenuQuantity      int     `json:"top_menu_quantity,omitempty"`
-	TotalItems           int     `json:"total_items,omitempty"`
-	TotalValue           float64 `json:"total_value,omitempty"`
-}
-
-type AIFinalJSONResponse struct {
-	Answer string          `json:"answer"`
-	Verify AIVerifyPayload `json:"verify"`
-}
-
 type geminiGenerateRequest struct {
 	Contents []geminiContent `json:"contents"`
-	Tools    []geminiTool    `json:"tools,omitempty"`
-}
-
-type geminiTool struct {
-	FunctionDeclarations []geminiFunctionDeclaration `json:"functionDeclarations"`
-}
-
-type geminiFunctionDeclaration struct {
-	Name        string           `json:"name"`
-	Description string           `json:"description"`
-	Parameters  geminiParameters `json:"parameters"`
-}
-
-type geminiParameters struct {
-	Type       string                 `json:"type"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
 type geminiContent struct {
@@ -167,35 +130,17 @@ type groqToolFunc struct {
 type groqRequest struct {
 	Model    string        `json:"model"`
 	Messages []groqMessage `json:"messages"`
-	Tools    []groqTool    `json:"tools,omitempty"`
 }
 
 type ollamaRequest struct {
 	Model    string        `json:"model"`
 	Messages []groqMessage `json:"messages"`
-	Tools    []groqTool    `json:"tools,omitempty"`
 	Think    bool          `json:"think"`
 	Options  ollamaOptions `json:"options"`
 }
 
 type ollamaOptions struct {
 	NumCtx int `json:"num_ctx"`
-}
-
-type groqTool struct {
-	Type     string               `json:"type"`
-	Function groqFunctionShortcut `json:"function"`
-}
-
-type groqFunctionShortcut struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  groqParameters `json:"parameters"`
-}
-
-type groqParameters struct {
-	Type       string                 `json:"type"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
 type groqResponse struct {

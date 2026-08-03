@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   appendConversationTurn,
+  createAIConversationRequestGuard,
   recentConversationHistory,
   selectOperationsSnapshot,
 } from './ai-conversation.ts';
@@ -81,4 +82,15 @@ test('preserves the latest real snapshot when a conversational reply contains an
 
   assert.equal(selectOperationsSnapshot(snapshot, emptySnapshot), snapshot);
   assert.equal(selectOperationsSnapshot(snapshot, { ...snapshot, generated_at: '2026-07-29T11:00:00+07:00' })?.generated_at, '2026-07-29T11:00:00+07:00');
+});
+
+test('clearing a conversation invalidates an in-flight AI response', () => {
+  const requests = createAIConversationRequestGuard();
+  const oldRequest = requests.beginRequest();
+
+  requests.clearConversation();
+
+  assert.equal(requests.canApplyResponse(oldRequest), false);
+  const newRequest = requests.beginRequest();
+  assert.equal(requests.canApplyResponse(newRequest), true);
 });

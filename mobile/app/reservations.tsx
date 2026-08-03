@@ -14,6 +14,7 @@ import {
   StatusBadge,
   Surface,
 } from '@/src/components/ui';
+import { loadFilteredReplacement } from '@/src/lib/filter-reload';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration } from '@/src/lib/request-generation';
 import { canViewReservationHistory } from '@/src/lib/table-workflow';
@@ -61,6 +62,11 @@ export default function ReservationsScreen() {
 
   const load = useCallback(async () => {
     if (!canView) {
+      requestGenerationRef.current.invalidate();
+      setReservations([]);
+      setCounts({});
+      setHasMore(false);
+      setNextOffset(0);
       setLoading(false);
       return;
     }
@@ -68,24 +74,31 @@ export default function ReservationsScreen() {
     setLoading(true);
     setLoadingMore(false);
     setError(null);
-    try {
-      const response = await listReservations({
+    setReservations([]);
+    setCounts({});
+    setHasMore(false);
+    setNextOffset(0);
+    const result = await loadFilteredReplacement(() => listReservations({
         status: filter === 'all' ? '' : filter,
         limit: pageSize,
-      });
-      if (!requestGenerationRef.current.isCurrent(request)) return;
+      }));
+    if (!requestGenerationRef.current.isCurrent(request)) return;
+    if (result.ok) {
+      const response = result.data;
       setReservations(response.reservations || []);
       setCounts(response.counts || {});
       setHasMore(Boolean(response.has_more));
       setNextOffset(response.next_offset || 0);
-    } catch (err) {
-      if (!requestGenerationRef.current.isCurrent(request)) return;
-      setError(err instanceof Error
-        ? err.message
+    } else {
+      setReservations([]);
+      setCounts({});
+      setHasMore(false);
+      setNextOffset(0);
+      setError(result.error instanceof Error
+        ? result.error.message
         : copy('โหลดประวัติการจองไม่สำเร็จ', 'Could not load reservation history'));
-    } finally {
-      if (requestGenerationRef.current.isCurrent(request)) setLoading(false);
     }
+    setLoading(false);
   }, [canView, copy, filter]);
 
   useFocusEffect(useCallback(() => {

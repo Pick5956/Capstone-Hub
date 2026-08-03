@@ -60,6 +60,9 @@ func (s *TableService) CreateTable(restaurantID uint, req *TableRequest) (*entit
 		if err != nil {
 			return err
 		}
+		if err := validateMetadataTableStatus(entity.TableStatusFree, table.Status); err != nil {
+			return err
+		}
 		if err := tx.CreateTable(table); err != nil {
 			return err
 		}
@@ -86,6 +89,9 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 		if err != nil {
 			return err
 		}
+		if err := validateMetadataTableStatus(table.Status, next.Status); err != nil {
+			return err
+		}
 		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
 		if err != nil {
 			return err
@@ -109,7 +115,7 @@ func (s *TableService) UpdateTable(restaurantID, tableID uint, req *TableRequest
 	return s.repo.FindTable(restaurantID, updatedID)
 }
 
-func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status string, reservationPhone string, reservationName string) (*entity.RestaurantTable, error) {
+func (s *TableService) UpdateTableStatus(restaurantID, userID, tableID uint, status string, reservationPhone string, reservationName string) (*entity.RestaurantTable, error) {
 	status = strings.TrimSpace(status)
 	if !isValidTableStatus(status) {
 		return nil, errors.New("invalid table status")
@@ -131,6 +137,42 @@ func (s *TableService) UpdateTableStatus(restaurantID, tableID uint, status stri
 		}
 		if hasOpenOrder && status != entity.TableStatusOccupied {
 			return errors.New("table has an open order")
+		}
+		wasReserved := table.Status == entity.TableStatusReserved
+		activeReservation, err := findActiveReservation(tx, restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if status == entity.TableStatusOccupied {
+			if wasReserved || activeReservation != nil {
+				return errors.New("reservation seating requires opening an order")
+			}
+			if !hasOpenOrder {
+				return errors.New("table occupation requires opening an order")
+			}
+		}
+		if status == entity.TableStatusReserved {
+			if activeReservation == nil {
+				activeReservation = reservationForTable(table, userID, reservationPhone, reservationName)
+				if err := tx.CreateReservation(activeReservation); err != nil {
+					return err
+				}
+			}
+			activeReservation.Name = reservationName
+			activeReservation.Phone = reservationPhone
+			if err := tx.UpdateReservation(activeReservation); err != nil {
+				return err
+			}
+		} else if wasReserved || activeReservation != nil {
+			if activeReservation == nil {
+				activeReservation = reservationForTable(table, userID, table.ReservationPhone, table.ReservationName)
+				if err := tx.CreateReservation(activeReservation); err != nil {
+					return err
+				}
+			}
+			if err := tx.ResolveActiveReservation(restaurantID, tableID, entity.ReservationStatusCancelled); err != nil {
+				return err
+			}
 		}
 		table.Status = status
 		if status == entity.TableStatusReserved {
@@ -168,6 +210,10 @@ func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, n
 		if err := validateTableCanBeReserved(table.Status); err != nil {
 			return err
 		}
+		activeReservation, err := findActiveReservation(tx, restaurantID, tableID)
+		if err != nil {
+			return err
+		}
 		hasOpenOrder, err := tx.HasOpenOrderForTable(restaurantID, tableID)
 		if err != nil {
 			return err
@@ -181,21 +227,20 @@ func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, n
 		if err := tx.UpdateTable(table); err != nil {
 			return err
 		}
-		label := table.DisplayLabel
-		if strings.TrimSpace(label) == "" {
-			label = table.TableNumber
-		}
-		reservation := &entity.Reservation{
-			RestaurantID:     restaurantID,
-			TableID:          tableID,
-			TableLabel:       label,
-			Name:             name,
-			Phone:            phone,
-			Status:           entity.ReservationStatusActive,
-			ReservedByUserID: userID,
-		}
-		if err := tx.CreateReservation(reservation); err != nil {
-			return err
+		reservation := reservationForTable(table, userID, phone, name)
+		if activeReservation == nil {
+			if err := tx.CreateReservation(reservation); err != nil {
+				return err
+			}
+		} else {
+			activeReservation.TableLabel = reservation.TableLabel
+			activeReservation.Name = reservation.Name
+			activeReservation.Phone = reservation.Phone
+			activeReservation.ReservedByUserID = reservation.ReservedByUserID
+			activeReservation.ResolvedAt = nil
+			if err := tx.UpdateReservation(activeReservation); err != nil {
+				return err
+			}
 		}
 		updatedID = table.ID
 		return nil
@@ -207,17 +252,11 @@ func (s *TableService) ReserveTable(restaurantID, userID, tableID uint, phone, n
 }
 
 // CancelReservation frees a reserved table and marks its reservation cancelled.
-func (s *TableService) CancelReservation(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
-	return s.releaseReservedTable(restaurantID, tableID, entity.ReservationStatusCancelled)
+func (s *TableService) CancelReservation(restaurantID, userID, tableID uint) (*entity.RestaurantTable, error) {
+	return s.releaseReservedTable(restaurantID, userID, tableID, entity.ReservationStatusCancelled)
 }
 
-// SeatReservation frees a reserved table so an order can be opened, marking its
-// reservation as seated (the guests arrived).
-func (s *TableService) SeatReservation(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
-	return s.releaseReservedTable(restaurantID, tableID, entity.ReservationStatusSeated)
-}
-
-func (s *TableService) releaseReservedTable(restaurantID, tableID uint, outcome string) (*entity.RestaurantTable, error) {
+func (s *TableService) releaseReservedTable(restaurantID, userID, tableID uint, outcome string) (*entity.RestaurantTable, error) {
 	var updatedID uint
 	err := s.repo.Transaction(func(tx *repository.TableRepository) error {
 		table, err := tx.FindTableForUpdate(restaurantID, tableID)
@@ -228,8 +267,27 @@ func (s *TableService) releaseReservedTable(restaurantID, tableID uint, outcome 
 		if err != nil {
 			return err
 		}
-		if err := validateReservedTableRelease(table.Status, hasOpenOrder); err != nil {
+		activeReservation, err := findActiveReservation(tx, restaurantID, tableID)
+		if err != nil {
 			return err
+		}
+		if table.Status == entity.TableStatusReserved {
+			if err := validateReservedTableRelease(table.Status, hasOpenOrder); err != nil {
+				return err
+			}
+		} else {
+			if hasOpenOrder {
+				return errors.New("table has an open order")
+			}
+			if activeReservation == nil {
+				return errors.New("table is not reserved")
+			}
+		}
+		if activeReservation == nil {
+			activeReservation = reservationForTable(table, userID, table.ReservationPhone, table.ReservationName)
+			if err := tx.CreateReservation(activeReservation); err != nil {
+				return err
+			}
 		}
 		table.Status = entity.TableStatusFree
 		table.ReservationName = ""
@@ -276,6 +334,13 @@ func (s *TableService) DeleteTable(restaurantID, tableID uint) error {
 		if err != nil {
 			return err
 		}
+		hasActiveReservation, err := tx.HasActiveReservation(restaurantID, tableID)
+		if err != nil {
+			return err
+		}
+		if table.Status == entity.TableStatusReserved || hasActiveReservation {
+			return errors.New("table has an active reservation; cancel it first")
+		}
 		referenced, err := tx.HasAnyOrderForTable(restaurantID, tableID)
 		if err != nil {
 			return err
@@ -285,6 +350,26 @@ func (s *TableService) DeleteTable(restaurantID, tableID uint) error {
 		}
 		return tx.DeleteTable(table)
 	})
+}
+
+func findActiveReservation(tx *repository.TableRepository, restaurantID, tableID uint) (*entity.Reservation, error) {
+	return tx.ReconcileActiveReservationsForUpdate(restaurantID, tableID)
+}
+
+func reservationForTable(table *entity.RestaurantTable, userID uint, phone, name string) *entity.Reservation {
+	label := table.DisplayLabel
+	if strings.TrimSpace(label) == "" {
+		label = table.TableNumber
+	}
+	return &entity.Reservation{
+		RestaurantID:     table.RestaurantID,
+		TableID:          table.ID,
+		TableLabel:       label,
+		Name:             name,
+		Phone:            phone,
+		Status:           entity.ReservationStatusActive,
+		ReservedByUserID: userID,
+	}
 }
 
 func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTablesRequest) ([]entity.RestaurantTable, error) {
@@ -302,6 +387,9 @@ func (s *TableService) BulkCreateTables(restaurantID uint, req *BulkCreateTables
 	}
 	if !isValidTableStatus(status) {
 		return nil, errors.New("invalid table status")
+	}
+	if err := validateMetadataTableStatus(entity.TableStatusFree, status); err != nil {
+		return nil, err
 	}
 	var created []entity.RestaurantTable
 	err = s.repo.Transaction(func(tx *repository.TableRepository) error {

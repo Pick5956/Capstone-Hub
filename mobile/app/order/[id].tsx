@@ -12,7 +12,7 @@ import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import { createOrderDetailRequestGuard } from '@/src/lib/order-detail-runtime';
 import {
   activeOrderItems,
-  canCancelOrderForRole,
+  canCancelOrderFromDetail,
   canCloseEmptyOrder,
   canOpenOrderBill,
   validateKitchenCancelReason,
@@ -127,13 +127,8 @@ export default function OrderDetailScreen() {
   }, [categoryId, menuItems, search]);
   const locked = order?.status === 'completed' || order?.status === 'cancelled';
   const canCloseEmpty = canTakeOrder && canCloseEmptyOrder(order);
-  const canCancelCurrent = Boolean(
-    canTakeOrder
-    && order
-    && order.payment_status !== 'paid'
-    && activeItems.length
-    && canCancelOrderForRole(activeMembership?.role?.name, order.status),
-  );
+  const canCancelCurrent = canTakeOrder
+    && canCancelOrderFromDetail(order, activeMembership?.role?.name);
 
   async function mutate(action: () => Promise<Order>, success?: string): Promise<boolean> {
     if (!requestGuardRef.current.beginMutation()) return false;

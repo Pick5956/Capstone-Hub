@@ -92,6 +92,38 @@ func TestTableStatusForMetadataUpdateAllowsAvailabilityChanges(t *testing.T) {
 	}
 }
 
+func TestValidateMetadataTableStatusRejectsLifecycleTransitionsFromAvailability(t *testing.T) {
+	for _, current := range []string{entity.TableStatusFree, entity.TableStatusInactive} {
+		for _, requested := range []string{entity.TableStatusReserved, entity.TableStatusOccupied} {
+			if err := validateMetadataTableStatus(current, requested); err == nil || err.Error() != "table status must be free or inactive" {
+				t.Fatalf("validateMetadataTableStatus(%q, %q) error = %v, want availability-only error", current, requested, err)
+			}
+		}
+	}
+}
+
+func TestValidateMetadataTableStatusAllowsAvailabilityAndPreservesLifecycle(t *testing.T) {
+	for _, current := range []string{entity.TableStatusFree, entity.TableStatusInactive} {
+		for _, requested := range []string{entity.TableStatusFree, entity.TableStatusInactive} {
+			if err := validateMetadataTableStatus(current, requested); err != nil {
+				t.Fatalf("availability transition %q -> %q rejected: %v", current, requested, err)
+			}
+		}
+	}
+	for _, current := range []string{entity.TableStatusReserved, entity.TableStatusOccupied} {
+		for _, requested := range []string{
+			entity.TableStatusFree,
+			entity.TableStatusInactive,
+			entity.TableStatusReserved,
+			entity.TableStatusOccupied,
+		} {
+			if err := validateMetadataTableStatus(current, requested); err != nil {
+				t.Fatalf("lifecycle metadata update %q with requested %q rejected: %v", current, requested, err)
+			}
+		}
+	}
+}
+
 func TestApplyTableMetadataUpdateKeepsReservationWhileChangingCapacity(t *testing.T) {
 	table := &entity.RestaurantTable{
 		Capacity:         2,

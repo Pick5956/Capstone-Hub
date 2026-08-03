@@ -29,6 +29,14 @@ export function tableStatusPillClass(status: TableStatus) {
   return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:ring-emerald-900/70";
 }
 
+export function tableStatusEditorState(status: TableStatus) {
+  return {
+    status,
+    isLifecycleManaged: status === "reserved" || status === "occupied",
+    isActive: status !== "inactive",
+  };
+}
+
 export function safeQrFileName(label: string) {
   const safeLabel = label.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-") || "table";
   return `qr-${safeLabel}.png`;

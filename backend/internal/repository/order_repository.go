@@ -96,14 +96,11 @@ func (r *OrderRepository) SaveOrder(order *entity.Order) error {
 	return r.db.Omit(clause.Associations).Save(order).Error
 }
 
-// ResolveActiveReservation completes a reservation inside the same transaction
-// that opens its dine-in order. It remains a no-op for legacy reserved tables
-// that predate reservation history.
+// ResolveActiveReservation completes exactly one reservation inside the same
+// transaction that opens its dine-in order. A missing lifecycle row is an
+// error so order creation and table occupation roll back together.
 func (r *OrderRepository) ResolveActiveReservation(restaurantID, tableID uint, status string) error {
-	now := BangkokNow()
-	return r.db.Model(&entity.Reservation{}).
-		Where("restaurant_id = ? AND table_id = ? AND status = ?", restaurantID, tableID, entity.ReservationStatusActive).
-		Updates(map[string]any{"status": status, "resolved_at": now}).Error
+	return resolveCanonicalActiveReservation(r.db, restaurantID, tableID, status)
 }
 
 func (r *OrderRepository) FindOrder(restaurantID, orderID uint) (*entity.Order, error) {
@@ -323,15 +320,6 @@ func (r *OrderRepository) DeleteItem(item *entity.OrderItem) error {
 	return r.db.Delete(item).Error
 }
 
-func (r *OrderRepository) FindItem(restaurantID, orderID, itemID uint) (*entity.OrderItem, error) {
-	var item entity.OrderItem
-	err := r.db.Where("restaurant_id = ? AND order_id = ? AND id = ?", restaurantID, orderID, itemID).First(&item).Error
-	if err != nil {
-		return nil, err
-	}
-	return &item, nil
-}
-
 func (r *OrderRepository) FindItemForUpdate(restaurantID, orderID, itemID uint) (*entity.OrderItem, error) {
 	var item entity.OrderItem
 	err := r.db.
@@ -399,6 +387,18 @@ func (r *OrderRepository) ListItems(orderID uint) ([]entity.OrderItem, error) {
 	var items []entity.OrderItem
 	err := r.db.Where("order_id = ?", orderID).Order("created_at asc, id asc").Find(&items).Error
 	return items, err
+}
+
+// HasPendingItems is used for authorization after the caller locks the parent
+// order. All item mutation paths take that same lock, keeping this check stable
+// until the surrounding transaction commits.
+func (r *OrderRepository) HasPendingItems(restaurantID, orderID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&entity.OrderItem{}).
+		Where("restaurant_id = ? AND order_id = ? AND status = ?", restaurantID, orderID, entity.OrderItemStatusPending).
+		Limit(1).
+		Count(&count).Error
+	return count > 0, err
 }
 
 func (r *OrderRepository) MaxKitchenBatch(orderID uint) (uint, error) {

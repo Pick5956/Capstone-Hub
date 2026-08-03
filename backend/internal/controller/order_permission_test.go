@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"Project-M/internal/entity"
+	"Project-M/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -110,53 +111,48 @@ func TestOrderReadAccessRejectsUnrelatedPermission(t *testing.T) {
 func TestFrontOfHouseCanServeOrVoidCheckoutItems(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	checkoutOrder := &entity.Order{Items: []entity.OrderItem{
-		{Status: entity.OrderItemStatusCooking},
-		{Status: entity.OrderItemStatusReady},
-	}}
 	context, recorder := orderPermissionContext("take_order")
-	if !requireOrderItemStatusAccess(context, entity.OrderItemStatusServed, checkoutOrder) {
+	actor, ok := requireOrderItemStatusAccess(context, entity.OrderItemStatusServed)
+	if !ok {
 		t.Fatalf("take_order should allow serving; status=%d", recorder.Code)
+	}
+	if actor != service.OrderItemStatusActorFrontOfHouse {
+		t.Fatalf("serve actor = %q, want front of house", actor)
 	}
 
 	context, recorder = orderPermissionContext("take_order")
-	if !requireOrderItemStatusAccess(context, entity.OrderItemStatusCancelled, checkoutOrder) {
-		t.Fatalf("take_order should allow voiding after every item is sent; status=%d", recorder.Code)
+	actor, ok = requireOrderItemStatusAccess(context, entity.OrderItemStatusCancelled)
+	if !ok {
+		t.Fatalf("take_order should provisionally allow voiding; status=%d", recorder.Code)
+	}
+	if actor != service.OrderItemStatusActorFrontOfHouse {
+		t.Fatalf("void actor = %q, want front of house", actor)
 	}
 }
 
 func TestFrontOfHouseCannotPerformKitchenOnlyTransitions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	checkoutOrder := &entity.Order{Items: []entity.OrderItem{
-		{Status: entity.OrderItemStatusCooking},
-	}}
 
 	for _, status := range []string{entity.OrderItemStatusCooking, entity.OrderItemStatusReady} {
 		context, _ := orderPermissionContext("take_order")
-		if requireOrderItemStatusAccess(context, status, checkoutOrder) {
+		if _, ok := requireOrderItemStatusAccess(context, status); ok {
 			t.Fatalf("take_order must not allow kitchen-only transition to %s", status)
 		}
 	}
 }
 
-func TestFrontOfHouseCannotVoidBeforeCheckout(t *testing.T) {
+func TestFrontOfHouseVoidDefersPendingItemCheckToLockedServiceTransaction(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	orderWithUnsentItems := &entity.Order{Items: []entity.OrderItem{
-		{Status: entity.OrderItemStatusPending},
-		{Status: entity.OrderItemStatusCooking},
-	}}
 	context, _ := orderPermissionContext("take_order")
-	if requireOrderItemStatusAccess(context, entity.OrderItemStatusCancelled, orderWithUnsentItems) {
-		t.Fatal("take_order must not void a sent item while the order still has unsent items")
+	actor, ok := requireOrderItemStatusAccess(context, entity.OrderItemStatusCancelled)
+	if !ok || actor != service.OrderItemStatusActorFrontOfHouse {
+		t.Fatal("controller must pass front-of-house void authorization to the service without inspecting a stale order snapshot")
 	}
 }
 
 func TestKitchenUpdatePermissionStillAllowsEveryStatusTransition(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	orderWithUnsentItems := &entity.Order{Items: []entity.OrderItem{
-		{Status: entity.OrderItemStatusPending},
-	}}
 
 	for _, status := range []string{
 		entity.OrderItemStatusCooking,
@@ -165,8 +161,12 @@ func TestKitchenUpdatePermissionStillAllowsEveryStatusTransition(t *testing.T) {
 		entity.OrderItemStatusCancelled,
 	} {
 		context, recorder := orderPermissionContext("update_order_status")
-		if !requireOrderItemStatusAccess(context, status, orderWithUnsentItems) {
+		actor, ok := requireOrderItemStatusAccess(context, status)
+		if !ok {
 			t.Fatalf("update_order_status should allow %s; status=%d", status, recorder.Code)
+		}
+		if actor != service.OrderItemStatusActorKitchenManager {
+			t.Fatalf("%s actor = %q, want kitchen manager", status, actor)
 		}
 	}
 }

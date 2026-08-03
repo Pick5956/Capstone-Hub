@@ -20,10 +20,6 @@ func ProvideRoleService(roleRepo *repository.RoleRepository) *RoleService {
 	return &RoleService{roleRepo: roleRepo}
 }
 
-func (s *RoleService) GetAllRoles() ([]entity.Role, error) {
-	return s.roleRepo.FindAll()
-}
-
 func (s *RoleService) GetAssignableRoles(restaurantID uint) ([]entity.Role, error) {
 	return s.roleRepo.FindAssignableByRestaurant(restaurantID)
 }
@@ -113,12 +109,6 @@ func rolePermissionMutationTargetForRole(role *entity.Role, restaurantID uint) (
 		return rolePermissionDirect, errors.New("role does not belong to this restaurant")
 	}
 	return rolePermissionDirect, nil
-}
-
-// Kept as a small pure seam so tenant-isolation behavior is regression tested
-// independently of persistence.
-func rolePermissionMutationTarget(role *entity.Role, restaurantID uint) (rolePermissionMutationKind, error) {
-	return rolePermissionMutationTargetForRole(role, restaurantID)
 }
 
 func (s *RoleService) CreateCustomRole(restaurantID uint, actorRoleName string, req *RoleRequest) (*entity.Role, error) {

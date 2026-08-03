@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   createKitchenMutationGate,
+  KitchenMutationError,
   kitchenFulfillmentContext,
   kitchenTicketTiming,
   resolveKitchenImageUrl,
@@ -16,6 +17,7 @@ import {
   activeOrderItems,
   billExitRoute,
   billPaymentStage,
+  canCancelOrderFromDetail,
   canCancelOrderForRole,
   canCloseEmptyOrder,
   canOpenOrderBill,
@@ -53,6 +55,33 @@ test('waiters can cancel only before the order is sent while other take-order ro
   assert.equal(canCancelOrderForRole('waiter', 'sent_to_kitchen'), false);
   assert.equal(canCancelOrderForRole('manager', 'sent_to_kitchen'), true);
   assert.equal(canCancelOrderForRole('manager', 'completed'), false);
+});
+
+test('an active takeaway can still be cancelled after every item was cancelled', () => {
+  assert.equal(canCancelOrderFromDetail({
+    order_type: 'takeaway',
+    status: 'open',
+    payment_status: 'unpaid',
+    items: [{ status: 'cancelled' }],
+  }, 'waiter'), true);
+  assert.equal(canCancelOrderFromDetail({
+    order_type: 'takeaway',
+    status: 'open',
+    payment_status: 'unpaid',
+    items: [],
+  }, 'manager'), true);
+  assert.equal(canCancelOrderFromDetail({
+    order_type: 'dine_in',
+    status: 'open',
+    payment_status: 'unpaid',
+    items: [{ status: 'cancelled' }],
+  }, 'manager'), false);
+  assert.equal(canCancelOrderFromDetail({
+    order_type: 'takeaway',
+    status: 'cancelled',
+    payment_status: 'unpaid',
+    items: [{ status: 'cancelled' }],
+  }, 'manager'), false);
 });
 
 test('an order becomes billable when every active item is done by the kitchen', () => {
@@ -199,6 +228,27 @@ test('kitchen mutations always reconcile after a partial batch failure', async (
     /second item failed/,
   );
   assert.deepEqual(events, ['updated:1', 'failed:2', 'reconciled']);
+});
+
+test('kitchen mutations preserve both the partial-batch and queue-refresh failures', async () => {
+  const mutationError = new Error('second item failed');
+  const reconciliationError = new Error('queue refresh failed');
+  let failure;
+
+  try {
+    await runKitchenMutation(
+      async () => { throw mutationError; },
+      async () => { throw reconciliationError; },
+    );
+  } catch (err) {
+    failure = err;
+  }
+
+  assert.ok(failure instanceof KitchenMutationError);
+  assert.equal(failure.mutationFailed, true);
+  assert.equal(failure.reconciliationFailed, true);
+  assert.equal(failure.mutationError, mutationError);
+  assert.equal(failure.reconciliationError, reconciliationError);
 });
 
 test('kitchen mutation gate blocks competing actions until reconciliation releases it', () => {

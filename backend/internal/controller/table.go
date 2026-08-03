@@ -116,7 +116,8 @@ func (ctrl *TableController) UpdateTableStatus(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "take_order can only mark tables free or reserved"})
 		return
 	}
-	table, err := ctrl.tableSvc.UpdateTableStatus(restaurantID, tableID, req.Status, req.ReservationPhone, req.ReservationName)
+	userID, _ := contextUserID(c)
+	table, err := ctrl.tableSvc.UpdateTableStatus(restaurantID, userID, tableID, req.Status, req.ReservationPhone, req.ReservationName)
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
@@ -161,7 +162,8 @@ func (ctrl *TableController) CancelReservation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	table, err := ctrl.tableSvc.CancelReservation(restaurantID, tableID)
+	userID, _ := contextUserID(c)
+	table, err := ctrl.tableSvc.CancelReservation(restaurantID, userID, tableID)
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
@@ -171,20 +173,17 @@ func (ctrl *TableController) CancelReservation(c *gin.Context) {
 
 // POST /api/v1/tables/:id/seat-reservation
 func (ctrl *TableController) SeatReservation(c *gin.Context) {
-	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
+	_, ok := requireRestaurantWithAnyPermission(c, "missing table status permission", "manage_table", "take_order")
 	if !ok {
 		return
 	}
-	tableID, ok := parseUintParam(c, "id")
-	if !ok {
+	if _, ok := parseUintParam(c, "id"); !ok {
 		return
 	}
-	table, err := ctrl.tableSvc.SeatReservation(restaurantID, tableID)
-	if err != nil {
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
-	c.JSON(http.StatusOK, table)
+	c.JSON(http.StatusGone, gin.H{
+		"code":  "legacy_seat_reservation_retired",
+		"error": "seat reservations by opening an order with seat_reservation enabled",
+	})
 }
 
 func (ctrl *TableController) RegenerateCustomerToken(c *gin.Context) {

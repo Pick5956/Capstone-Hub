@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
-import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
+import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages, subscribeToChatClear } from "@/src/lib/aiChatStorage";
+import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -124,6 +125,8 @@ export default function AIAssistantPage() {
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
+  const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const snapshotRequestedRef = useRef(false);
@@ -138,19 +141,24 @@ export default function AIAssistantPage() {
 
   // Load shared history (same key as the floating chat) with cleanup + TTL.
   useEffect(() => {
-    purgeStaleChats(storageKey);
-    const stored = loadStoredMessages<StoredMessage>(storageKey);
-    if (stored && stored.length > 0) {
-      setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
-    } else {
-      setMessages([welcomeMessage()]);
-    }
+    conversationRequests.invalidate();
+    const loadTimer = window.setTimeout(() => {
+      purgeStaleChats(storageKey);
+      const stored = loadStoredMessages<StoredMessage>(storageKey);
+      setMessages(stored && stored.length > 0
+        ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
+        : [welcomeMessage()]);
+      setLoading(false);
+      setHydratedStorageKey(storageKey);
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey, copy.welcome]);
 
   useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages);
-  }, [messages, storageKey]);
+  }, [hydratedStorageKey, messages, storageKey]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -175,11 +183,21 @@ export default function AIAssistantPage() {
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.content }));
 
-  const handleClearChat = () => {
-    clearStoredChat(storageKey);
+  const resetConversation = useCallback(() => {
+    conversationRequests.invalidate();
     setError("");
+    setLoading(false);
     setPendingAction(null);
-    setMessages([welcomeMessage()]);
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  }, [conversationRequests, copy.welcome]);
+
+  useEffect(() => subscribeToChatClear((clearedKey) => {
+    if (clearedKey === storageKey) resetConversation();
+  }), [resetConversation, storageKey]);
+
+  const handleClearChat = () => {
+    if (storageKey) clearStoredChat(storageKey);
+    else resetConversation();
   };
 
   const submitQuestion = async (nextQuestion = input) => {
@@ -217,9 +235,11 @@ export default function AIAssistantPage() {
       return;
     }
 
+    const requestGeneration = conversationRequests.begin();
     setLoading(true);
     try {
       const response = await askOperationsAI(trimmed, history);
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data = response.data;
       if (data.snapshot) setLatestSnapshot(data.snapshot);
       const actions =
@@ -233,13 +253,14 @@ export default function AIAssistantPage() {
         { id: `ai-${Date.now()}`, role: "assistant", content: data.answer, createdAt: new Date(), actions, model: data.model },
       ]);
     } catch (err: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const message =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : "";
       setError(message || copy.error);
     } finally {
-      setLoading(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
   };
 

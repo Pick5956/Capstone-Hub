@@ -14,13 +14,6 @@ export function listTables() {
   return apiRequest<{ tables: RestaurantTable[] }>('/api/v1/tables');
 }
 
-export function createTable(data: RestaurantTableInput) {
-  return apiRequest<RestaurantTable>('/api/v1/tables', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
 export function bulkCreateTables(data: BulkCreateTablesInput) {
   return apiRequest<{ tables: RestaurantTable[] }>('/api/v1/tables/bulk-create', {
     method: 'POST',
@@ -38,13 +31,6 @@ export function updateTable(id: number, data: RestaurantTableInput) {
 export function deleteTable(id: number) {
   return apiRequest<{ status: string }>(`/api/v1/tables/${id}`, {
     method: 'DELETE',
-  });
-}
-
-export function updateTableStatus(id: number, status: RestaurantTable['status'], reservationPhone?: string, reservationName?: string) {
-  return apiRequest<RestaurantTable>(`/api/v1/tables/${id}/status`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status, reservation_phone: reservationPhone || '', reservation_name: reservationName || '' }),
   });
 }
 

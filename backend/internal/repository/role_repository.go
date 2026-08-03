@@ -16,12 +16,6 @@ func NewRoleRepository(db *gorm.DB) *RoleRepository {
 	return &RoleRepository{db: db}
 }
 
-func (r *RoleRepository) FindAll() ([]entity.Role, error) {
-	var roles []entity.Role
-	err := r.db.Find(&roles).Error
-	return roles, err
-}
-
 func (r *RoleRepository) FindAssignableByRestaurant(restaurantID uint) ([]entity.Role, error) {
 	var roles []entity.Role
 	hiddenRoleIDs := r.db.

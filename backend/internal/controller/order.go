@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -80,30 +81,16 @@ func requireOrderReadAccess(c *gin.Context) bool {
 	)
 }
 
-func orderHasNoPendingItems(order *entity.Order) bool {
-	if order == nil {
-		return false
-	}
-	for _, item := range order.Items {
-		if item.Status == entity.OrderItemStatusPending {
-			return false
-		}
-	}
-	return true
-}
-
-func requireOrderItemStatusAccess(c *gin.Context, status string, order *entity.Order) bool {
+func requireOrderItemStatusAccess(c *gin.Context, status string) (service.OrderItemStatusActor, bool) {
 	if memberCan(c, "update_order_status") {
-		return true
+		return service.OrderItemStatusActorKitchenManager, true
 	}
-	if status == entity.OrderItemStatusServed && memberCan(c, "take_order") {
-		return true
-	}
-	if status == entity.OrderItemStatusCancelled && memberCan(c, "take_order") && orderHasNoPendingItems(order) {
-		return true
+	if memberCan(c, "take_order") &&
+		(status == entity.OrderItemStatusServed || status == entity.OrderItemStatusCancelled) {
+		return service.OrderItemStatusActorFrontOfHouse, true
 	}
 	c.JSON(http.StatusForbidden, gin.H{"error": "missing permission for this order item status transition"})
-	return false
+	return "", false
 }
 
 func (ctrl *OrderController) CreateOrder(c *gin.Context) {
@@ -491,15 +478,20 @@ func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
 	// Serving and voiding at checkout are front-of-house steps, so take_order is
 	// accepted for those transitions. Cooking/ready changes remain kitchen-only.
 	status := strings.TrimSpace(req.Status)
+	actor, ok := requireOrderItemStatusAccess(c, status)
+	if !ok {
+		return
+	}
 	resolved, ok := ctrl.resolveOrder(c, restaurantID)
 	if !ok {
 		return
 	}
-	if !requireOrderItemStatusAccess(c, status, resolved) {
-		return
-	}
-	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, resolved.ID, itemID, status, req.Reason)
+	order, err := ctrl.orderSvc.UpdateItemStatus(restaurantID, userID, resolved.ID, itemID, status, req.Reason, actor)
 	if err != nil {
+		if errors.Is(err, service.ErrOrderItemStatusForbidden) {
+			respondAPIError(c, http.StatusForbidden, err)
+			return
+		}
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}

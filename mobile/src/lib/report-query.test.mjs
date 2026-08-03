@@ -7,6 +7,7 @@ import {
   getBangkokReportMonth,
   shiftReportMonth,
 } from './report-query.ts';
+import { loadFilteredReplacement } from './filter-reload.ts';
 
 test('builds bounded report API queries', () => {
   assert.equal(buildManagerReportPath(14), '/api/v1/reports/manager?days=14');
@@ -33,4 +34,19 @@ test('shifts report months across year boundaries', () => {
     year: 2027,
     month: 1,
   });
+});
+
+test('failed report and reservation filter reloads resolve with no stale rows', async () => {
+  const reportFailure = new Error('report unavailable');
+  const reportResult = await loadFilteredReplacement(async () => {
+    throw reportFailure;
+  });
+  const reservationResult = await loadFilteredReplacement(async () => {
+    throw new Error('reservation unavailable');
+  });
+
+  assert.equal(reportResult.data, null);
+  assert.equal(reportResult.error, reportFailure);
+  assert.equal(reservationResult.data, null);
+  assert.match(reservationResult.error.message, /reservation unavailable/);
 });

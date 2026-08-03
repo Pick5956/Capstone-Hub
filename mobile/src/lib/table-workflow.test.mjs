@@ -50,7 +50,6 @@ test('reservation API paths preserve the backend list and lifecycle contract', (
   );
   assert.equal(buildReservationActionPath(42, 'reserve'), '/api/v1/tables/42/reserve');
   assert.equal(buildReservationActionPath(42, 'cancel'), '/api/v1/tables/42/cancel-reservation');
-  assert.equal(buildReservationActionPath(42, 'seat'), '/api/v1/tables/42/seat-reservation');
 });
 
 test('reservation history follows the same OR permission contract as web', () => {

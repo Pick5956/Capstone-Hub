@@ -38,12 +38,6 @@ export const getOrder = (id: string | number) =>
 export const createOrder = (data: OpenOrderInput) =>
   apiClient.post<Order>("/api/v1/orders", data);
 
-export const updateOrder = (id: number, data: { customer_count: number; note?: string }) =>
-  apiClient.patch<Order>(`/api/v1/orders/${id}`, data);
-
-export const cancelOrder = (id: number, reason: string) =>
-  apiClient.post<Order>(`/api/v1/orders/${id}/cancel`, { reason });
-
 export const closeEmptyTableOrder = (id: number) =>
   apiClient.post<Order>(`/api/v1/orders/${id}/close-empty-table`);
 

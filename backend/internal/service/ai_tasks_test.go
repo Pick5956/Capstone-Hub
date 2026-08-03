@@ -159,85 +159,6 @@ func TestOllamaRequestsDisableThinkingAndLimitContext(t *testing.T) {
 	}
 }
 
-func TestGetGeminiToolsSchema(t *testing.T) {
-	svc := &AIService{}
-	tools := svc.getGeminiTools()
-	if len(tools) == 0 || len(tools[0].FunctionDeclarations) != 20 {
-		t.Fatalf("getGeminiTools returned invalid schema: %+v", tools)
-	}
-	expectedNames := map[string]bool{
-		"get_lowest_margin_menu":          true,
-		"get_highest_margin_menu":         true,
-		"get_lowest_cost_menu":            true,
-		"get_sales_trend":                 true,
-		"get_average_order_value":         true,
-		"get_order_type_breakdown":        true,
-		"get_menu_revenue_ranking":        true,
-		"get_peak_periods":                true,
-		"get_slow_moving_menus":           true,
-		"get_menu_engineering":            true,
-		"get_ingredient_reorder_forecast": true,
-		"get_dead_stock":                  true,
-		"get_top_cost_ingredients":        true,
-		"get_store_summary":               true,
-		"get_sales_for_period":            true,
-		"get_most_expensive_menu":         true,
-		"get_low_stock_ingredients":       true,
-		"get_top_selling_menus":     true,
-		"get_inventory_valuation":   true,
-		"get_sales_summary":         true,
-	}
-	for _, decl := range tools[0].FunctionDeclarations {
-		if !expectedNames[decl.Name] {
-			t.Errorf("Unexpected tool name in Gemini schema: %s", decl.Name)
-		}
-		if decl.Parameters.Type != "OBJECT" {
-			t.Errorf("Expected OBJECT type parameters in Gemini schema, got %s", decl.Parameters.Type)
-		}
-	}
-}
-
-func TestGetGroqToolsSchema(t *testing.T) {
-	svc := &AIService{}
-	tools := svc.getGroqTools()
-	if len(tools) != 20 {
-		t.Fatalf("getGroqTools returned invalid schema: %+v", tools)
-	}
-	expectedNames := map[string]bool{
-		"get_lowest_margin_menu":          true,
-		"get_highest_margin_menu":         true,
-		"get_lowest_cost_menu":            true,
-		"get_sales_trend":                 true,
-		"get_average_order_value":         true,
-		"get_order_type_breakdown":        true,
-		"get_menu_revenue_ranking":        true,
-		"get_peak_periods":                true,
-		"get_slow_moving_menus":           true,
-		"get_menu_engineering":            true,
-		"get_ingredient_reorder_forecast": true,
-		"get_dead_stock":                  true,
-		"get_top_cost_ingredients":        true,
-		"get_store_summary":               true,
-		"get_sales_for_period":            true,
-		"get_most_expensive_menu":         true,
-		"get_low_stock_ingredients":       true,
-		"get_top_selling_menus":     true,
-		"get_inventory_valuation":   true,
-		"get_sales_summary":         true,
-	}
-	for _, tool := range tools {
-		if tool.Type != "function" {
-			t.Errorf("Expected tool type to be function, got %s", tool.Type)
-		}
-		if !expectedNames[tool.Function.Name] {
-			t.Errorf("Unexpected tool name in Groq schema: %s", tool.Function.Name)
-		}
-		if tool.Function.Parameters.Type != "object" {
-			t.Errorf("Expected object type parameters in Groq schema, got %s", tool.Function.Parameters.Type)
-		}
-	}
-}
-
 func TestLowestMarginToolFormatsValidatedAggregateAndAverageValues(t *testing.T) {
 	snapshot := AISnapshot{
 		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
@@ -532,7 +453,7 @@ func TestReorderForecastToolRanksBySoonestOut(t *testing.T) {
 		IngredientUsage: []repository.AIIngredientUsage{
 			{Name: "กุ้ง", Unit: "กก.", Stock: 7, CostPerUnit: 200, Used: 14}, // 1/day -> 7 days
 			{Name: "ข้าว", Unit: "กก.", Stock: 28, CostPerUnit: 20, Used: 14}, // 1/day -> 28 days
-			{Name: "เกลือ", Unit: "กก.", Stock: 5, CostPerUnit: 10, Used: 0},   // no usage -> excluded
+			{Name: "เกลือ", Unit: "กก.", Stock: 5, CostPerUnit: 10, Used: 0},  // no usage -> excluded
 		},
 	}
 	result, err := executeReadOnlyTool(AIToolGetIngredientReorderForecast, snapshot)
@@ -556,8 +477,8 @@ func TestDeadStockToolFlagsUnusedStock(t *testing.T) {
 	snapshot := AISnapshot{
 		IngredientUsage: []repository.AIIngredientUsage{
 			{Name: "ผงกะหรี่", Unit: "กก.", Stock: 10, CostPerUnit: 50, Used: 0}, // dead: value 500
-			{Name: "หมู", Unit: "กก.", Stock: 5, CostPerUnit: 100, Used: 20},      // used -> not dead
-			{Name: "พริกแห้ง", Unit: "กก.", Stock: 0, CostPerUnit: 30, Used: 0},   // no stock -> not dead
+			{Name: "หมู", Unit: "กก.", Stock: 5, CostPerUnit: 100, Used: 20},     // used -> not dead
+			{Name: "พริกแห้ง", Unit: "กก.", Stock: 0, CostPerUnit: 30, Used: 0},  // no stock -> not dead
 		},
 	}
 	result, err := executeReadOnlyTool(AIToolGetDeadStock, snapshot)
@@ -815,167 +736,6 @@ func TestSalesSummaryToolFormatsVerifiedTotal(t *testing.T) {
 		if !strings.Contains(answer, expected) {
 			t.Fatalf("sales summary answer is missing %q: %s", expected, answer)
 		}
-	}
-}
-
-func TestCleanAndParseJSONResponse(t *testing.T) {
-	rawMarkdown := "```json\n{\n  \"answer\": \"ทดสอบ\",\n  \"verify\": {\n    \"lowest_margin_menu_name\": \"ข้าวผัดปู\"\n  }\n}\n```"
-	res, err := cleanAndParseJSONResponse(rawMarkdown)
-	if err != nil {
-		t.Fatalf("Failed to parse markdown wrapped JSON: %v", err)
-	}
-	if res.Answer != "ทดสอบ" || res.Verify.LowestMarginMenuName != "ข้าวผัดปู" {
-		t.Fatalf("Incorrect parsed values: %+v", res)
-	}
-
-	rawClean := "{\n  \"answer\": \"ทดสอบที่สอง\",\n  \"verify\": {\n    \"quantity\": 12\n  }\n}"
-	res2, err := cleanAndParseJSONResponse(rawClean)
-	if err != nil {
-		t.Fatalf("Failed to parse clean JSON: %v", err)
-	}
-	if res2.Answer != "ทดสอบที่สอง" || res2.Verify.Quantity != 12 {
-		t.Fatalf("Incorrect parsed values: %+v", res2)
-	}
-}
-
-func TestValidationInterceptorCorrectsLowestMarginHallucinations(t *testing.T) {
-	svc := &AIService{}
-	snapshot := AISnapshot{
-		LowMarginMenus: []repository.AIMenuMarginSummary{{
-			MenuName: "ข้าวผัดปู",
-			Quantity: 20,
-			Revenue:  1900.0,
-			Cost:     1250.0,
-			Profit:   650.0,
-			Margin:   34.21,
-		}},
-	}
-	lowest := snapshot.LowMarginMenus[0]
-	result := AIToolResult{
-		Tool:             AIToolGetLowestMarginMenu,
-		LowestMarginMenu: &lowest,
-	}
-
-	// Even a matching model explanation is replaced by the authoritative
-	// backend rendering for a fact tool.
-	responseExact := AIFinalJSONResponse{
-		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 34.21% มีต้นทุน 1250.00 บาท",
-		Verify: AIVerifyPayload{
-			LowestMarginMenuName: "ข้าวผัดปู",
-			Quantity:             20,
-			Revenue:              1900.0,
-			Cost:                 1250.0,
-			Profit:               650.0,
-			Margin:               34.21,
-		},
-	}
-	finalAnswer := svc.validateAndIntercept(responseExact, result, snapshot)
-	if !strings.Contains(finalAnswer, "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท") {
-		t.Fatalf("Expected deterministic backend rendering for exact result, got: %s", finalAnswer)
-	}
-
-	// Hallucinated numbers never reach the user; backend tool facts replace them.
-	responseHallucinated := AIFinalJSONResponse{
-		Answer: "เมนูข้าวผัดปูขายดีที่สุดและมีมาร์จิ้นต่ำที่สุดที่ 45% มีต้นทุน 1500 บาท",
-		Verify: AIVerifyPayload{
-			LowestMarginMenuName: "ข้าวผัดปู",
-			Quantity:             20,
-			Revenue:              1900.0,
-			Cost:                 1500.0, // Hallucinated cost
-			Profit:               650.0,
-			Margin:               45.0, // Hallucinated margin
-		},
-	}
-	finalAnswer2 := svc.validateAndIntercept(responseHallucinated, result, snapshot)
-	if strings.Contains(finalAnswer2, "1500") || strings.Contains(finalAnswer2, "45%") {
-		t.Fatalf("Hallucinated numbers leaked into final tool answer: %s", finalAnswer2)
-	}
-	for _, expected := range []string{"ข้าวผัดปู", "ต้นทุนรวม 1250.00", "Margin 34.21%"} {
-		if !strings.Contains(finalAnswer2, expected) {
-			t.Errorf("Expected authoritative answer to mention %q: %s", expected, finalAnswer2)
-		}
-	}
-}
-
-func TestValidationInterceptorCorrectsLowStockHallucinations(t *testing.T) {
-	svc := &AIService{}
-	snapshot := AISnapshot{
-		InventorySummary: AIInventorySummary{
-			OutItems: 3,
-			LowItems: 5,
-		},
-		StockRisks: []AIStockRisk{{
-			Name: "ไข่ไก่", Status: "low", Stock: 2, MinStock: 10, Unit: "ฟอง", RestockEstimate: 8,
-		}},
-	}
-	result := AIToolResult{
-		Tool:                AIToolGetLowStockIngredients,
-		LowStockIngredients: snapshot.StockRisks,
-	}
-
-	// Mismatched count -> deterministic tool rendering.
-	response := AIFinalJSONResponse{
-		Answer: "มีสินค้าใกล้หมด 2 รายการ และหมดสต็อก 1 รายการ",
-		Verify: AIVerifyPayload{
-			LowStockCount:   2,
-			OutOfStockCount: 1,
-		},
-	}
-	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if strings.Contains(finalAnswer, "มีสินค้าใกล้หมด 2 รายการ") || !strings.Contains(finalAnswer, "ไข่ไก่") {
-		t.Fatalf("Hallucinated low-stock answer was not replaced: %s", finalAnswer)
-	}
-}
-
-func TestValidationInterceptorCorrectsTopSellingHallucinations(t *testing.T) {
-	svc := &AIService{}
-	snapshot := AISnapshot{
-		TopMenuItems: []repository.AIMenuSummary{{
-			MenuName: "ต้มยำกุ้ง",
-			Quantity: 45,
-		}},
-	}
-	result := AIToolResult{
-		Tool:            AIToolGetTopSellingMenus,
-		TopSellingMenus: snapshot.TopMenuItems,
-	}
-
-	response := AIFinalJSONResponse{
-		Answer: "เมนูขายดีอันดับหนึ่งคือ ข้าวผัดปู ขายได้ 50 จาน",
-		Verify: AIVerifyPayload{
-			TopMenuName:     "ข้าวผัดปู",
-			TopMenuQuantity: 50,
-		},
-	}
-	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if strings.Contains(finalAnswer, "ข้าวผัดปู") || !strings.Contains(finalAnswer, "ต้มยำกุ้ง") || !strings.Contains(finalAnswer, "45 จาน") {
-		t.Fatalf("Hallucinated top seller was not replaced: %s", finalAnswer)
-	}
-}
-
-func TestValidationInterceptorCorrectsInventoryValuationHallucinations(t *testing.T) {
-	svc := &AIService{}
-	snapshot := AISnapshot{
-		InventorySummary: AIInventorySummary{
-			TotalItems: 42,
-			Value:      15450.50,
-		},
-	}
-	result := AIToolResult{
-		Tool:               AIToolGetInventoryValuation,
-		InventoryValuation: &snapshot.InventorySummary,
-	}
-
-	response := AIFinalJSONResponse{
-		Answer: "มูลค่าคลังสินค้ารวม 12000 บาท มีวัตถุดิบ 35 รายการ",
-		Verify: AIVerifyPayload{
-			TotalItems: 35,
-			TotalValue: 12000.0,
-		},
-	}
-	finalAnswer := svc.validateAndIntercept(response, result, snapshot)
-	if strings.Contains(finalAnswer, "12000") || !strings.Contains(finalAnswer, "42 รายการ") || !strings.Contains(finalAnswer, "15450.50") {
-		t.Fatalf("Hallucinated valuation was not replaced: %s", finalAnswer)
 	}
 }
 

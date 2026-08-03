@@ -60,6 +60,27 @@ type StatusRequest struct {
 	Note   string `json:"note" binding:"max=500"`
 }
 
+type OrderItemStatusActor string
+
+const (
+	OrderItemStatusActorKitchenManager OrderItemStatusActor = "kitchen_manager"
+	OrderItemStatusActorFrontOfHouse   OrderItemStatusActor = "front_of_house"
+)
+
+var ErrOrderItemStatusForbidden = errors.New("order item status transition is forbidden")
+
+func validateOrderItemStatusActor(actor OrderItemStatusActor, status string) error {
+	switch actor {
+	case OrderItemStatusActorKitchenManager:
+		return nil
+	case OrderItemStatusActorFrontOfHouse:
+		if status == entity.OrderItemStatusServed || status == entity.OrderItemStatusCancelled {
+			return nil
+		}
+	}
+	return ErrOrderItemStatusForbidden
+}
+
 func normalizeItemCancellationReason(status, reason string) (string, error) {
 	if status != entity.OrderItemStatusCancelled {
 		return "", nil
@@ -540,7 +561,15 @@ func (s *OrderService) SendToKitchen(restaurantID, userID, orderID uint) (*entit
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
-func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID uint, status, reason string) (*entity.Order, error) {
+func (s *OrderService) UpdateItemStatus(
+	restaurantID, userID, orderID, itemID uint,
+	status, reason string,
+	actor OrderItemStatusActor,
+) (*entity.Order, error) {
+	next := strings.TrimSpace(status)
+	if err := validateOrderItemStatusActor(actor, next); err != nil {
+		return nil, err
+	}
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
@@ -550,11 +579,21 @@ func (s *OrderService) UpdateItemStatus(restaurantID, userID, orderID, itemID ui
 		if isTerminalOrder(order.Status) {
 			return errors.New("cannot update item status on closed order")
 		}
+		if actor == OrderItemStatusActorFrontOfHouse && next == entity.OrderItemStatusCancelled {
+			// AddItem and customer submissions lock the same parent order before
+			// inserting, so this authorization check cannot race an unsent item.
+			hasPending, err := tx.HasPendingItems(restaurantID, order.ID)
+			if err != nil {
+				return err
+			}
+			if hasPending {
+				return fmt.Errorf("front-of-house void requires every item to be sent: %w", ErrOrderItemStatusForbidden)
+			}
+		}
 		item, err := tx.FindItemForUpdate(restaurantID, order.ID, itemID)
 		if err != nil {
 			return err
 		}
-		next := strings.TrimSpace(status)
 		if !canTransitionItem(item.Status, next) {
 			return fmt.Errorf("invalid item status transition from %s to %s", item.Status, next)
 		}

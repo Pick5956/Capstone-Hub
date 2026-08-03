@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -41,30 +40,4 @@ func sanitizeConversationHistory(history []AIConversationMessage) []AIConversati
 		cleaned = append(cleaned, AIConversationMessage{Role: role, Content: content})
 	}
 	return cleaned
-}
-
-func cleanAndParseJSONResponse(raw string) (AIFinalJSONResponse, error) {
-	cleaned := strings.TrimSpace(raw)
-	if strings.HasPrefix(cleaned, "```json") {
-		cleaned = strings.TrimPrefix(cleaned, "```json")
-		cleaned = strings.TrimSuffix(cleaned, "```")
-	} else if strings.HasPrefix(cleaned, "```") {
-		cleaned = strings.TrimPrefix(cleaned, "```")
-		cleaned = strings.TrimSuffix(cleaned, "```")
-	}
-	cleaned = strings.TrimSpace(cleaned)
-	var res AIFinalJSONResponse
-	err := json.Unmarshal([]byte(cleaned), &res)
-	if err != nil {
-		return AIFinalJSONResponse{}, err
-	}
-	return res, nil
-}
-
-func almostEqual(a, b float64) bool {
-	diff := a - b
-	if diff < 0 {
-		diff = -diff
-	}
-	return diff < 0.05
 }

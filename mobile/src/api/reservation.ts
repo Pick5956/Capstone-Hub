@@ -26,9 +26,3 @@ export function cancelReservation(tableId: number) {
     method: 'POST',
   });
 }
-
-export function seatReservation(tableId: number) {
-  return apiRequest<RestaurantTable>(buildReservationActionPath(tableId, 'seat'), {
-    method: 'POST',
-  });
-}

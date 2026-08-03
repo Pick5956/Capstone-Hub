@@ -7,6 +7,9 @@ const CHAT_KEY_PREFIX = "restaurant_ai_chat";
 const CHAT_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 type ChatEnvelope<T> = { savedAt?: number; messages?: T[] };
+type ChatClearListener = (key: string) => void;
+
+const chatClearListeners = new Set<ChatClearListener>();
 
 export function chatStorageKey(restaurantId?: number | null, userId?: number | null): string | null {
   if (restaurantId == null || userId == null) return null;
@@ -44,12 +47,23 @@ export function saveMessages(key: string | null, messages: unknown[]): void {
 }
 
 export function clearStoredChat(key: string | null): void {
-  if (typeof window === "undefined" || !key) return;
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // ignore
+  if (!key) return;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
   }
+  chatClearListeners.forEach((listener) => listener(key));
+}
+
+// localStorage's storage event does not fire in the same browser window. Both
+// chat surfaces are mounted together, so use a small same-window notification
+// to invalidate in-flight work and reset their independent React state.
+export function subscribeToChatClear(listener: ChatClearListener): () => void {
+  chatClearListeners.add(listener);
+  return () => chatClearListeners.delete(listener);
 }
 
 // Remove the legacy unscoped key and any expired chats from other users/sessions

@@ -8,8 +8,6 @@ export type ReservationListQuery = {
   offset?: number;
 };
 
-export type ReservationAction = 'reserve' | 'cancel' | 'seat';
-
 export function buildReservationListPath(params: ReservationListQuery = {}) {
   const query = new URLSearchParams();
   if (params.status) query.set('status', params.status);
@@ -25,7 +23,7 @@ export function buildReservationListPath(params: ReservationListQuery = {}) {
   return `/api/v1/reservations${suffix ? `?${suffix}` : ''}`;
 }
 
-export function buildReservationActionPath(tableId: number, action: ReservationAction) {
-  const suffix = action === 'cancel' ? 'cancel-reservation' : action === 'seat' ? 'seat-reservation' : 'reserve';
+export function buildReservationActionPath(tableId: number, action: 'reserve' | 'cancel') {
+  const suffix = action === 'cancel' ? 'cancel-reservation' : 'reserve';
   return `/api/v1/tables/${tableId}/${suffix}`;
 }

@@ -1,5 +1,5 @@
 import { router, usePathname } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
 
 import { askOperationsAI, getOperationsSnapshot } from '@/src/api/ai';
@@ -16,6 +16,7 @@ import {
 } from '@/src/lib/ai-actions';
 import {
   appendConversationTurn,
+  createAIConversationRequestGuard,
   recentConversationHistory,
   selectOperationsSnapshot,
 } from '@/src/lib/ai-conversation';
@@ -82,6 +83,7 @@ export default function AIAssistantScreen() {
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const conversationRequestsRef = useRef(createAIConversationRequestGuard());
   useEffect(() => {
     if (!canUseAI) return;
     getOperationsSnapshot()
@@ -127,9 +129,11 @@ export default function AIAssistantScreen() {
       ...history,
       { role: 'user' as const, content: trimmed },
     ]);
+    const request = conversationRequestsRef.current.beginRequest();
     setHistory(nextHistory); setQuestion(''); setLoading(true); setError(null);
     try {
       const response = await askOperationsAI(trimmed, recentConversationHistory(history));
+      if (!conversationRequestsRef.current.canApplyResponse(request)) return;
       setHistory(appendConversationTurn(history, trimmed, response.answer));
       setSnapshot((current) => selectOperationsSnapshot(current, response.snapshot));
       setActions(response.intent === 'unclear'
@@ -137,8 +141,14 @@ export default function AIAssistantScreen() {
         : response.intent === 'analysis'
           ? getGuidedAIActions(trimmed, response.answer, hasPermission, language)
           : []);
-    } catch (err) { setError(err instanceof Error ? err.message : copy('ผู้ช่วยวิเคราะห์ตอบไม่ได้ในขณะนี้', 'The analytics assistant cannot respond right now.')); }
-    finally { setLoading(false); }
+    } catch (err) {
+      if (conversationRequestsRef.current.canApplyResponse(request)) {
+        setError(err instanceof Error ? err.message : copy('ผู้ช่วยวิเคราะห์ตอบไม่ได้ในขณะนี้', 'The analytics assistant cannot respond right now.'));
+      }
+    }
+    finally {
+      if (conversationRequestsRef.current.canApplyResponse(request)) setLoading(false);
+    }
   }
 
   function handleAction(action: AIGuidedAction) {
@@ -240,10 +250,13 @@ export default function AIAssistantScreen() {
                 variant="secondary"
                 label={copy('ล้างบทสนทนา', 'Clear')}
                 onPress={() => {
+                  conversationRequestsRef.current.clearConversation();
                   setHistory([]);
                   setActions([]);
                   setPendingAction(null);
                   setNotice(null);
+                  setLoading(false);
+                  setError(null);
                 }}
               />
             )}

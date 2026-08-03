@@ -33,16 +33,6 @@ func ProvideRoleController(db *gorm.DB) *RoleController {
 	}
 }
 
-func (ctrl *RoleController) GetRoles(c *gin.Context) {
-	roles, err := ctrl.roleService.GetAllRoles()
-	if err != nil {
-		respondAPIError(c, http.StatusInternalServerError, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": roles})
-}
-
 func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

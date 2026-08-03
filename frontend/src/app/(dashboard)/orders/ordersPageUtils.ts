@@ -25,12 +25,6 @@ export function itemFulfillmentType(item: OrderItem) {
   return item.fulfillment_type === "takeaway" ? "takeaway" : "dine_in";
 }
 
-export function itemFulfillmentLabel(item: OrderItem, language: Language = "en") {
-  return itemFulfillmentType(item) === "takeaway"
-    ? language === "th" ? "กลับบ้าน" : "Takeaway"
-    : language === "th" ? "ทานที่ร้าน" : "Dine-in";
-}
-
 export function tableName(order: Order, language: Language = "en") {
   if (isTakeawayOrder(order)) return takeawayLabel(order, language);
   const table = order.table;

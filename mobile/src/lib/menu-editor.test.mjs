@@ -4,6 +4,10 @@ import test from 'node:test';
 import {
   categoryActiveToggleInput,
   initialMenuCategoryIds,
+  menuIngredientDrafts,
+  menuIngredientInputs,
+  menuOptionGroupDrafts,
+  menuOptionGroupInputs,
   validateMenuOptionGroups,
   selectableMenuCategories,
 } from './menu-editor.ts';
@@ -104,6 +108,25 @@ test('normalizes option selection bounds and payload text without mutating the e
   ]);
   assert.equal(groups[0].name, '  Size  ');
   assert.equal(groups[0].min_select, -3);
+});
+
+test('menu decimal drafts preserve intermediate typing until payload conversion', () => {
+  const groupDrafts = menuOptionGroupDrafts([
+    optionGroup({ options: [option({ price_delta: 12.5 })] }),
+  ]);
+  const ingredientDrafts = menuIngredientDrafts([
+    { ingredient_id: 9, quantity: 1.25, unit: 'kg', note: '' },
+  ]);
+
+  groupDrafts[0].options[0].price_delta = '12.';
+  ingredientDrafts[0].quantity = '0.';
+
+  assert.equal(groupDrafts[0].options[0].price_delta, '12.');
+  assert.equal(ingredientDrafts[0].quantity, '0.');
+  assert.equal(menuOptionGroupInputs(groupDrafts)[0].options[0].price_delta, 12);
+  assert.equal(menuIngredientInputs(ingredientDrafts)[0].quantity, 0);
+  assert.equal(groupDrafts[0].options[0].price_delta, '12.');
+  assert.equal(ingredientDrafts[0].quantity, '0.');
 });
 
 test('rejects invalid min, max, active-option, and default-option constraints', () => {

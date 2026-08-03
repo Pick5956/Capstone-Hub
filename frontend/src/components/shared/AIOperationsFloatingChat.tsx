@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { 
@@ -20,7 +20,8 @@ import { askOperationsAI, getOperationsSnapshot } from "@/src/lib/ai";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
-import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages } from "@/src/lib/aiChatStorage";
+import { chatStorageKey, clearStoredChat, loadStoredMessages, purgeStaleChats, saveMessages, subscribeToChatClear } from "@/src/lib/aiChatStorage";
+import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -168,6 +169,8 @@ export default function AIOperationsFloatingChat() {
   const [loading, setLoading] = useState(false);
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
+  const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatDialogRef = useRef<HTMLDivElement>(null);
@@ -185,19 +188,24 @@ export default function AIOperationsFloatingChat() {
 
   // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
-    purgeStaleChats(storageKey);
-    const stored = loadStoredMessages<StoredMessage>(storageKey);
-    if (stored && stored.length > 0) {
-      setMessages(stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() })));
-    } else {
-      setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
-    }
-  }, [storageKey, copy.welcome]);
+    conversationRequests.invalidate();
+    const loadTimer = window.setTimeout(() => {
+      purgeStaleChats(storageKey);
+      const stored = loadStoredMessages<StoredMessage>(storageKey);
+      setMessages(stored && stored.length > 0
+        ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
+        : [{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+      setLoading(false);
+      setHydratedStorageKey(storageKey);
+    }, 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [conversationRequests, storageKey, copy.welcome]);
 
   // Persist to the shared key; a lone welcome message is not persisted.
   useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages);
-  }, [messages, storageKey]);
+  }, [hydratedStorageKey, messages, storageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -250,11 +258,21 @@ export default function AIOperationsFloatingChat() {
       .slice(-6)
       .map((message) => ({ role: message.role, content: message.content }));
 
+  const resetConversation = useCallback(() => {
+    conversationRequests.invalidate();
+    setShowTips(true);
+    setLoading(false);
+    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+  }, [conversationRequests, copy.welcome]);
+
+  useEffect(() => subscribeToChatClear((clearedKey) => {
+    if (clearedKey === storageKey) resetConversation();
+  }), [resetConversation, storageKey]);
+
   // Start a fresh chat: drop the stored history and reset to the welcome message.
   const handleClearChat = () => {
-    clearStoredChat(storageKey);
-    setShowTips(true);
-    setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+    if (storageKey) clearStoredChat(storageKey);
+    else resetConversation();
   };
 
   const handleAction = (action: AIGuidedAction) => {
@@ -270,7 +288,7 @@ export default function AIOperationsFloatingChat() {
     setMessages((previous) => [
       ...previous,
       {
-        id: `confirm-${Date.now()}`,
+        id: `confirm-${previous.length}`,
         role: "assistant",
         content: action.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing."),
         createdAt: new Date(),
@@ -291,30 +309,25 @@ export default function AIOperationsFloatingChat() {
 
     setInput("");
     
-    // Add user message
-    const userMsgId = `user-${Date.now()}`;
-    const userMsg: Message = {
-      id: userMsgId,
-      role: "user",
-      content: trimmed,
-      createdAt: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((previous) => [
+      ...previous,
+      { id: `user-${previous.length}`, role: "user", content: trimmed, createdAt: new Date() },
+    ]);
 
     const navigation = resolveNavigationRequest(trimmed, activeMembership, language, pathname);
     if (navigation) {
-      const assistantMsg: Message = {
-        id: `nav-${Date.now()}`,
-        role: "assistant",
-        content: navigation.message,
-        createdAt: new Date(),
-        actions: navigation.kind === "suggest"
-          ? navigation.options.map((option) => ({ id: option.href, ...option }))
-          : undefined,
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `nav-${previous.length}`,
+          role: "assistant",
+          content: navigation.message,
+          createdAt: new Date(),
+          actions: navigation.kind === "suggest"
+            ? navigation.options.map((option) => ({ id: option.href, ...option }))
+            : undefined,
+        },
+      ]);
       if (navigation.kind === "navigate" && !navigation.alreadyThere) {
         router.push(navigation.href);
       }
@@ -326,7 +339,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `clarify-${Date.now()}`,
+          id: `clarify-${previous.length}`,
           role: "assistant",
           content: clarification.message,
           createdAt: new Date(),
@@ -340,7 +353,7 @@ export default function AIOperationsFloatingChat() {
       setMessages((previous) => [
         ...previous,
         {
-          id: `permission-${Date.now()}`,
+          id: `permission-${previous.length}`,
           role: "assistant",
           content: language === "th"
             ? "ผมช่วยพาไปหน้าเมนูที่คุณเข้าถึงได้ครับ ส่วนการวิเคราะห์ยอดขายและคลังต้องใช้สิทธิ์ผู้จัดการหรือเจ้าของร้าน"
@@ -351,30 +364,34 @@ export default function AIOperationsFloatingChat() {
       return;
     }
 
+    const requestGeneration = conversationRequests.begin();
     setLoading(true);
 
     try {
       const response = await askOperationsAI(trimmed, conversationHistory());
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data: AIAskResponse = response.data;
-      
-      const assistantMsg: Message = {
-        id: `ai-${Date.now()}`,
-        role: "assistant",
-        content: data.answer,
-        createdAt: new Date(),
-        actions: data.intent === "unclear"
-          ? getUnclearRequestActions(activeMembership, language)
-          : data.intent === "analysis"
-            ? getGuidedActions(trimmed, data.answer, activeMembership, language)
-            : undefined,
-      };
-      
-      setMessages(prev => [...prev, assistantMsg]);
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `ai-${previous.length}`,
+          role: "assistant",
+          content: data.answer,
+          createdAt: new Date(),
+          actions: data.intent === "unclear"
+            ? getUnclearRequestActions(activeMembership, language)
+            : data.intent === "analysis"
+              ? getGuidedActions(trimmed, data.answer, activeMembership, language)
+              : undefined,
+        },
+      ]);
       
       if (data.snapshot) {
         setLatestSnapshot(data.snapshot);
       }
     } catch (err: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       console.error(err);
       let errorMessage =
         typeof err === "object" && err !== null && "response" in err
@@ -393,15 +410,17 @@ export default function AIOperationsFloatingChat() {
           : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
       }
           
-      const errorMsg: Message = {
-        id: `err-${Date.now()}`,
-        role: "system",
-        content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
-        createdAt: new Date(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: `err-${previous.length}`,
+          role: "system",
+          content: errorMessage || copy.thinking.replace("กำลังวิเคราะห์...", "เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง"),
+          createdAt: new Date(),
+        },
+      ]);
     } finally {
-      setLoading(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
   };
 

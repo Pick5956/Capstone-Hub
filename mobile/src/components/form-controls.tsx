@@ -1,8 +1,8 @@
-import { Pressable, Switch, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
-import { colors, inputStyles, layout, typeScale } from '@/src/theme';
+import { colors, inputStyles, layout } from '@/src/theme';
 
 export function FormField({
   label,
@@ -35,23 +35,6 @@ export function FormField({
         style={[inputStyles.input, multiline && { minHeight: 92, paddingTop: 12, textAlignVertical: 'top' }]}
         value={value}
       />
-    </View>
-  );
-}
-
-export function ToggleRow({
-  label,
-  value,
-  onValueChange,
-}: {
-  label: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
-}) {
-  return (
-    <View style={{ minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      <Text selectable style={[typeScale.cardTitle, { flex: 1 }]}>{label}</Text>
-      <Switch value={value} onValueChange={onValueChange} />
     </View>
   );
 }

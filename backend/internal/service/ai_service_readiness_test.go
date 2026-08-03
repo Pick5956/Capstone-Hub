@@ -97,41 +97,6 @@ func TestAnalyticalPromptMakesReadinessGuardrailsMandatory(t *testing.T) {
 	}
 }
 
-func TestLocalLowestMarginFactAnswerKeepsTotalsAndPerItemValuesSeparate(t *testing.T) {
-	snapshot := AISnapshot{
-		AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
-			SalesItems:           20,
-			MarginItems:          20,
-			CostedMarginItems:    20,
-			SoldMenus:            1,
-			SoldMenusWithRecipes: 1,
-		}),
-		LowMarginMenus: []repository.AIMenuMarginSummary{{
-			MenuName: "ข้าวผัดปู",
-			Quantity: 20,
-			Revenue:  1900,
-			Cost:     1250,
-			Profit:   650,
-			Margin:   34.21,
-		}},
-	}
-
-	answer, ok := localLowestMarginFactAnswer("เมนูไหนมี Margin ต่ำที่สุด", snapshot)
-	if !ok {
-		t.Fatal("lowest margin fact should use a deterministic local answer when margin data is ready")
-	}
-	for _, expected := range []string{"ต้นทุนรวม 1250.00 บาท", "ต้นทุนเฉลี่ยต่อจาน 62.50 บาท", "กำไรเฉลี่ยต่อจาน 32.50 บาท"} {
-		if !strings.Contains(answer, expected) {
-			t.Fatalf("lowest margin answer is missing %q: %s", expected, answer)
-		}
-	}
-	for _, unsolicited := range []string{"เพิ่มราคา", "โปรโมชั่น", "KPI", "วัตถุดิบทดแทน"} {
-		if strings.Contains(answer, unsolicited) {
-			t.Fatalf("lowest margin fact answer contains unsolicited decision %q: %s", unsolicited, answer)
-		}
-	}
-}
-
 func TestLocalAnalyticalGuardrailBlocksBusinessDecisionUntilDataComplete(t *testing.T) {
 	partial := AISnapshot{AnalysisReadiness: analysisReadinessFromCoverage(repository.AIAnalysisCoverage{
 		SalesItems:           10,

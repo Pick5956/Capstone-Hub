@@ -116,7 +116,6 @@ func (s *AIService) executeOllama(question string, history []AIConversationMessa
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Tools:   nil,
 		Think:   false,
 		Options: ollamaOptions{NumCtx: s.getOllamaContextLength()},
 	}
