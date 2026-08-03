@@ -442,6 +442,10 @@ func TestResolvedPlanValidateActionContract(t *testing.T) {
 			readPlan.Action = p.Action
 			*p = readPlan
 		},
+		"execute action outside canary domain": func(p *ResolvedPlan) {
+			p.Domain = ResolvedPlanDomainInventory
+			p.Action = nil
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			plan := validAction()
@@ -450,6 +454,20 @@ func TestResolvedPlanValidateActionContract(t *testing.T) {
 				t.Fatal("Validate accepted an invalid action plan")
 			}
 		})
+	}
+
+	unsupportedWrite := validAction()
+	unsupportedWrite.Domain = ResolvedPlanDomainOrder
+	unsupportedWrite.Operation = ResolvedPlanOperationRefuse
+	unsupportedWrite.Action = nil
+	unsupportedWrite.Parameters = emptyResolvedPlanParameters()
+	unsupportedWrite.Policy = ResolvedPlanPolicy{
+		Risk:                 ResolvedPlanRiskHigh,
+		ReadOnly:             true,
+		RequiresConfirmation: false,
+	}
+	if _, err := NormalizeAndValidateResolvedPlan(unsupportedWrite); err != nil {
+		t.Fatalf("safe refusal for unsupported write was rejected: %v", err)
 	}
 
 	for name, entity := range map[string]ResolvedPlanEntityRef{

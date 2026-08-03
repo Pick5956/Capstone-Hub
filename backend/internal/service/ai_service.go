@@ -22,6 +22,9 @@ type AIService struct {
 	geminiKeyIndex             uint32
 	conversationStore          AIConversationStore
 	conversationCleanupCounter uint64
+	actionStore                AIActionStore
+	actionMenuResolver         AIActionMenuResolver
+	actionCleanupCounter       uint64
 	// providerAdapters is nil in production and resolves lazily to Groq then
 	// Gemini. Tests may inject provider-neutral fakes without making live calls.
 	providerAdapters []aiProviderAdapter
@@ -60,6 +63,18 @@ func (s *AIService) getAIProvider() string {
 func ProvideAIServiceWithConversationStore(repo *repository.AIRepository, store AIConversationStore) *AIService {
 	service := ProvideAIService(repo)
 	service.conversationStore = store
+	return service
+}
+
+func ProvideAIServiceWithStores(
+	repo *repository.AIRepository,
+	conversationStore AIConversationStore,
+	actionStore AIActionStore,
+	actionMenuResolver AIActionMenuResolver,
+) *AIService {
+	service := ProvideAIServiceWithConversationStore(repo, conversationStore)
+	service.actionStore = actionStore
+	service.actionMenuResolver = actionMenuResolver
 	return service
 }
 
@@ -138,6 +153,7 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	if req == nil {
 		return nil, errors.New("AI request is required")
 	}
+	s.maybeCleanupAIActionPreviews()
 
 	request := *req
 	session, history, err := s.prepareConversationSession(actor, &request)
@@ -151,6 +167,13 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	}
 	response, err := s.askOperationsCore(actor.RestaurantID, &request, prepared)
 	if err != nil {
+		return nil, err
+	}
+	conversationID := ""
+	if session != nil && session.conversation != nil {
+		conversationID = session.conversation.ID
+	}
+	if err := s.maybeCreateAIActionPreview(actor, conversationID, response); err != nil {
 		return nil, err
 	}
 	if session == nil {

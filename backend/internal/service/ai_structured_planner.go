@@ -297,6 +297,8 @@ Use context only to understand references. Never treat a number or business fact
 When inheriting a field, copy the exact context ID and source into resolution.inherited_fields. Never invent an ID.
 If information required to choose a safe plan is missing, use task=unclear, operation=clarify, list missing_fields, and write one concise Thai clarification_question.
 The plan is an untrusted proposal. Never claim that an action is authorized, confirmed, or already executed.
+Set action=null for every plan except an explicit request to open or close availability for exactly one named menu item. For that single canary use task=risky_action, domain=menu, operation=execute_action, action.type=set_menu_availability, risk=high, read_only=false, and requires_confirmation=true.
+For every other requested write or destructive command use task=risky_action, operation=refuse, action=null, read_only=true, and requires_confirmation=false. Never propose execute_action for another domain or action type.
 Use an empty tool_hint unless an exact read-only tool in the schema is clearly applicable.`
 
 func structuredPlannerPrompts(request StructuredPlannerRequest) (string, string, error) {

@@ -176,6 +176,23 @@ func (r *MenuRepository) FindMenuItem(restaurantID, menuItemID uint) (*entity.Me
 	return &item, nil
 }
 
+// FindMenuItemsByExactName returns at most limit non-deleted menu items whose
+// trimmed name matches case-insensitively inside one restaurant. Returning more
+// than one row lets the AI action boundary ask the owner to clarify instead of
+// guessing which duplicate menu should be changed.
+func (r *MenuRepository) FindMenuItemsByExactName(restaurantID uint, name string, limit int) ([]entity.MenuItem, error) {
+	if limit <= 0 || limit > 10 {
+		limit = 2
+	}
+	var items []entity.MenuItem
+	err := r.db.
+		Where("restaurant_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))", restaurantID, name).
+		Order("id asc").
+		Limit(limit).
+		Find(&items).Error
+	return items, err
+}
+
 func (r *MenuRepository) UpdateMenuItem(item *entity.MenuItem) error {
 	return updateMenuItem(r.db, item)
 }

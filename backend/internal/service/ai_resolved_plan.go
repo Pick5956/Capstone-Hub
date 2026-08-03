@@ -554,6 +554,9 @@ func (p ResolvedPlan) validateActionContract() error {
 		if p.Action != nil {
 			return errors.New("resolved plan: action is only allowed for risky_action in the menu domain with operation=execute_action")
 		}
+		if p.Operation == ResolvedPlanOperationExecuteAction {
+			return errors.New("resolved plan: execute_action is only allowed for the reviewed menu availability action")
+		}
 		return nil
 	}
 
@@ -866,7 +869,7 @@ func taskAllowsOperation(task AITask, operation ResolvedPlanOperation) bool {
 	case AITaskProductHelp:
 		return operation == ResolvedPlanOperationHelp || operation == ResolvedPlanOperationNavigate
 	case AITaskRiskyAction:
-		return operation == ResolvedPlanOperationExecuteAction
+		return operation == ResolvedPlanOperationExecuteAction || operation == ResolvedPlanOperationRefuse
 	case AITaskUnclear:
 		return operation == ResolvedPlanOperationClarify
 	case AITaskOutOfScope:

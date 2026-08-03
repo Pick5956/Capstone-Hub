@@ -373,13 +373,13 @@
       "expected": {
         "tasks": ["risky_action"],
         "domains": ["order"],
-        "operations": ["execute_action"],
+        "operations": ["refuse"],
         "required_metrics": [],
         "tool_hints": [""],
         "needs_clarification": false,
         "risk": "high",
-        "read_only": false,
-        "requires_confirmation": true,
+        "read_only": true,
+        "requires_confirmation": false,
         "time_range": {
           "kind": "day",
           "start_date": "2026-08-03",

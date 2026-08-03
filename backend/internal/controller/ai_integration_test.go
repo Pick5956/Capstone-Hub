@@ -17,19 +17,24 @@ import (
 )
 
 type fakeAIOperationsService struct {
-	askResponse      *service.AIAskResponse
-	askErr           error
-	snapshotResponse *service.AISnapshot
-	snapshotErr      error
-	askCalls         int
-	snapshotCalls    int
-	restaurantID     uint
-	actor            service.AIActorContext
-	request          *service.AIAskRequest
-	deleteCalls      int
-	deletedID        string
-	usageResponse    *service.AIUsageSnapshot
-	usageCalls       int
+	askResponse       *service.AIAskResponse
+	askErr            error
+	snapshotResponse  *service.AISnapshot
+	snapshotErr       error
+	askCalls          int
+	snapshotCalls     int
+	restaurantID      uint
+	actor             service.AIActorContext
+	request           *service.AIAskRequest
+	deleteCalls       int
+	deletedID         string
+	usageResponse     *service.AIUsageSnapshot
+	usageCalls        int
+	confirmResponse   *service.AIActionConfirmationResponse
+	confirmErr        error
+	confirmCalls      int
+	previewID         string
+	confirmationToken string
 }
 
 func (f *fakeAIOperationsService) AskOperationsForOwner(_ context.Context, actor service.AIActorContext, req *service.AIAskRequest) (*service.AIAskResponse, error) {
@@ -59,6 +64,14 @@ func (f *fakeAIOperationsService) AIUsageForOwner(actor service.AIActorContext) 
 	return f.usageResponse, f.askErr
 }
 
+func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error) {
+	f.confirmCalls++
+	f.actor = actor
+	f.previewID = previewID
+	f.confirmationToken = confirmationToken
+	return f.confirmResponse, f.confirmErr
+}
+
 func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, includeRestaurant bool) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -76,6 +89,7 @@ func testAIRouter(svc AIOperationsService, member *entity.RestaurantMember, incl
 	router.POST("/ai/operations/ask", ctrl.AskOperations)
 	router.GET("/ai/operations/snapshot", ctrl.OperationsSnapshot)
 	router.GET("/ai/operations/metrics", ctrl.UsageMetrics)
+	router.POST("/ai/operations/actions/:previewID/confirm", ctrl.ConfirmAction)
 	router.DELETE("/ai/operations/conversations/:conversationID", ctrl.DeleteConversation)
 	return router
 }
@@ -137,6 +151,9 @@ func TestAskOperationsReturnsServiceResponseSchema(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("AskOperations success status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
+	if cacheControl := recorder.Header().Get("Cache-Control"); !strings.Contains(cacheControl, "no-store") {
+		t.Fatalf("AskOperations Cache-Control = %q, want no-store", cacheControl)
+	}
 	if svc.restaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" || svc.request == nil || svc.request.Question != "rytyt" || len(svc.request.History) != 1 {
 		t.Fatalf("AskOperations did not forward the scoped request correctly: restaurant=%d request=%+v", svc.restaurantID, svc.request)
 	}
@@ -176,6 +193,106 @@ func TestAIUsageMetricsUsesOwnerAndRestaurantScope(t *testing.T) {
 	}
 	if svc.actor.RestaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" {
 		t.Fatalf("UsageMetrics actor = %+v", svc.actor)
+	}
+}
+
+func TestConfirmAIActionUsesOwnerScopeAndDoesNotEchoToken(t *testing.T) {
+	svc := &fakeAIOperationsService{confirmResponse: &service.AIActionConfirmationResponse{
+		ActionID: "preview-123",
+		Status:   entity.AIActionPreviewStatusExecuted,
+		Result: service.AIActionConfirmationResult{
+			MenuItemID:  42,
+			Name:        "Pad Thai",
+			IsAvailable: false,
+		},
+	}}
+	router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, httptest.NewRequest(
+		http.MethodPost,
+		"/ai/operations/actions/preview-123/confirm",
+		strings.NewReader(`{"confirmation_token":"one-time-secret"}`),
+	))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("ConfirmAction status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if svc.confirmCalls != 1 || svc.previewID != "preview-123" || svc.confirmationToken != "one-time-secret" {
+		t.Fatalf("ConfirmAction forwarding = calls %d id %q token %q", svc.confirmCalls, svc.previewID, svc.confirmationToken)
+	}
+	if svc.actor.RestaurantID != 12 || svc.actor.OwnerUserID != 99 || svc.actor.Role != "owner" {
+		t.Fatalf("ConfirmAction actor = %+v", svc.actor)
+	}
+	if strings.Contains(recorder.Body.String(), "one-time-secret") {
+		t.Fatal("confirmation response echoed the one-time token")
+	}
+}
+
+func TestConfirmAIActionRejectsNonOwnerAndMapsSafeErrors(t *testing.T) {
+	t.Run("non-owner", func(t *testing.T) {
+		svc := &fakeAIOperationsService{}
+		router := testAIRouter(svc, memberWithRole("manager", `[]`), true)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(
+			http.MethodPost,
+			"/ai/operations/actions/preview-1/confirm",
+			strings.NewReader(`{"confirmation_token":"token"}`),
+		))
+		if recorder.Code != http.StatusForbidden || svc.confirmCalls != 0 {
+			t.Fatalf("non-owner confirm status=%d calls=%d", recorder.Code, svc.confirmCalls)
+		}
+	})
+	t.Run("unknown body field", func(t *testing.T) {
+		svc := &fakeAIOperationsService{}
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(
+			http.MethodPost,
+			"/ai/operations/actions/preview-1/confirm",
+			strings.NewReader(`{"confirmation_token":"token","is_available":true}`),
+		))
+		if recorder.Code != http.StatusBadRequest || svc.confirmCalls != 0 {
+			t.Fatalf("unknown confirm field status=%d calls=%d", recorder.Code, svc.confirmCalls)
+		}
+	})
+	t.Run("invalid preview id", func(t *testing.T) {
+		svc := &fakeAIOperationsService{}
+		router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(
+			http.MethodPost,
+			"/ai/operations/actions/bad.id/confirm",
+			strings.NewReader(`{"confirmation_token":"token"}`),
+		))
+		if recorder.Code != http.StatusBadRequest || svc.confirmCalls != 0 {
+			t.Fatalf("invalid preview id status=%d calls=%d", recorder.Code, svc.confirmCalls)
+		}
+	})
+
+	for name, testCase := range map[string]struct {
+		err    error
+		status int
+	}{
+		"disabled":      {service.ErrAIActionsDisabled, http.StatusForbidden},
+		"invalid token": {repository.ErrAIActionPreviewInvalidToken, http.StatusForbidden},
+		"not found":     {repository.ErrAIActionPreviewNotFound, http.StatusNotFound},
+		"expired":       {repository.ErrAIActionPreviewExpired, http.StatusGone},
+		"stale":         {repository.ErrAIActionPreviewStale, http.StatusConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := &fakeAIOperationsService{confirmErr: testCase.err}
+			router := testAIRouter(svc, memberWithRole("owner", `["*"]`), true)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(
+				http.MethodPost,
+				"/ai/operations/actions/preview-1/confirm",
+				strings.NewReader(`{"confirmation_token":"token"}`),
+			))
+			if recorder.Code != testCase.status {
+				t.Fatalf("ConfirmAction status=%d want=%d body=%s", recorder.Code, testCase.status, recorder.Body.String())
+			}
+		})
 	}
 }
 

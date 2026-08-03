@@ -25,7 +25,10 @@ type AIOperationsService interface {
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
+	ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error)
 }
+
+const maxAIActionConfirmationBodyBytes int64 = 1024
 
 func requireAIOwner(c *gin.Context) bool {
 	member, ok := contextMember(c)
@@ -37,9 +40,11 @@ func requireAIOwner(c *gin.Context) bool {
 }
 
 func ProvideAIController(db *gorm.DB) *AIController {
-	return NewAIController(service.ProvideAIServiceWithConversationStore(
+	return NewAIController(service.ProvideAIServiceWithStores(
 		repository.NewAIRepository(db),
 		repository.NewAIConversationRepository(db),
+		repository.NewAIActionPreviewRepository(db),
+		repository.NewMenuRepository(db),
 	))
 }
 
@@ -86,11 +91,15 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
+	// Ask responses can contain a one-time action confirmation token and always
+	// contain private restaurant data. Do not let browsers or intermediary
+	// caches retain either the JSON response or SSE metadata.
+	c.Header("Cache-Control", "no-store, private")
+	c.Header("Pragma", "no-cache")
 
 	isStream := c.Query("stream") == "true"
 	if isStream {
 		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 		c.Header("Transfer-Encoding", "chunked")
 
@@ -148,6 +157,95 @@ func (ctrl *AIController) UsageMetrics(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+func (ctrl *AIController) ConfirmAction(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, private")
+	c.Header("Pragma", "no-cache")
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	previewID := strings.TrimSpace(c.Param("previewID"))
+	if !validAIActionPreviewID(previewID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid AI action preview id"})
+		return
+	}
+	var req service.AIActionConfirmationRequest
+	if err := decodeAIActionConfirmationRequest(c, &req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	result, err := ctrl.svc.ConfirmAIActionForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, previewID, req.ConfirmationToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrAIActionsDisabled):
+			respondAPIError(c, http.StatusForbidden, err)
+		case errors.Is(err, service.ErrAIActionUnavailable):
+			respondAPIError(c, http.StatusServiceUnavailable, err)
+		case errors.Is(err, repository.ErrAIActionPreviewNotFound):
+			respondAPIError(c, http.StatusNotFound, err)
+		case errors.Is(err, repository.ErrAIActionPreviewInvalidToken):
+			respondAPIError(c, http.StatusForbidden, err)
+		case errors.Is(err, repository.ErrAIActionPreviewExpired):
+			respondAPIError(c, http.StatusGone, err)
+		case errors.Is(err, repository.ErrAIActionPreviewStale),
+			errors.Is(err, repository.ErrAIActionPreviewCancelled),
+			errors.Is(err, repository.ErrAIActionPreviewAlreadyExecuted),
+			errors.Is(err, repository.ErrAIActionPreviewInvalidState):
+			respondAPIError(c, http.StatusConflict, err)
+		default:
+			respondAPIError(c, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func validAIActionPreviewID(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') && char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func decodeAIActionConfirmationRequest(c *gin.Context, request *service.AIActionConfirmationRequest) error {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAIActionConfirmationBodyBytes)
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(request); err != nil {
+		return err
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple JSON values are not allowed")
+		}
+		return err
+	}
+	request.ConfirmationToken = strings.TrimSpace(request.ConfirmationToken)
+	if request.ConfirmationToken == "" || len(request.ConfirmationToken) > 256 {
+		return errors.New("invalid confirmation token")
+	}
+	return nil
 }
 
 func (ctrl *AIController) DeleteConversation(c *gin.Context) {
