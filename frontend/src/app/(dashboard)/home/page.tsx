@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Download,
   Loader2,
   ReceiptText,
 } from "lucide-react";
@@ -35,7 +36,7 @@ import {
 } from "@/src/lib/homeDashboard";
 import { listExpenses, type Expense, type ExpenseCategory, type ExpenseDailyTotal } from "@/src/lib/expense";
 import { listIngredients } from "@/src/lib/ingredient";
-import { kitchenQueue, listOrders } from "@/src/lib/order";
+import { getOrderBill, kitchenQueue, listOrders } from "@/src/lib/order";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import {
   getManagerReport,
@@ -44,6 +45,7 @@ import {
   getTopMenuItemsByMonth,
 } from "@/src/lib/report";
 import { listTables } from "@/src/lib/table";
+import { printA4 } from "@/src/lib/thermalReceiptPrint";
 import type { Ingredient } from "@/src/types/ingredient";
 import type {
   ReportSalesDay,
@@ -51,10 +53,11 @@ import type {
   ReportTopMenuItem,
   SalesDetailReport,
 } from "@/src/types/report";
+import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
-import type { Order, OrderItem, OrderStatus } from "@/src/types/order";
+import type { Bill, Order, OrderItem, OrderStatus } from "@/src/types/order";
 
 type LaneStatus = "delayed" | "cooking" | "ready";
 type KitchenTicket = {
@@ -67,7 +70,7 @@ type KitchenTicket = {
   status: LaneStatus;
 };
 type ChartPoint = { key: string; label: string; value: number };
-type ChartMode = "hour" | "day" | "month";
+type ChartMode = "day" | "month";
 type ChartMetric = "revenue" | "cost" | "profit";
 type ExpenseLedgerState = {
   restaurantId: number | null;
@@ -140,10 +143,10 @@ function buildCopy(language: "th" | "en") {
         paidRevenue: "ยอดรับชำระ",
         activeOrders: "กำลังดำเนินการ",
         liveWork: "งานที่ต้องจัดการตอนนี้",
-        lateKitchen: "คิวครัวเกินเวลา",
-        readyToServe: "ครัวทำเสร็จแล้ว",
+        lateKitchen: "ครัวเกินเวลา",
+        readyToServe: "พร้อมเสิร์ฟ",
         occupiedTables: "โต๊ะใช้งาน",
-        lowStock: "วัตถุดิบควรเติม",
+        lowStock: "ควรเติมสต็อก",
         kitchenQueue: "คิวครัว",
         viewKitchen: "เปิดหน้าครัว",
         delayed: "เกินเวลา",
@@ -151,36 +154,24 @@ function buildCopy(language: "th" | "en") {
         ready: "เสร็จแล้ว",
         tickets: "ใบ",
         minutes: "นาที",
-        noKitchen: "ไม่มีงานค้างในครัว",
+        noKitchen: "ครัวว่าง",
         salesOverview: "ยอดขาย",
         metricRevenue: "รายได้ทั้งหมด",
         metricCost: "รายจ่าย",
-        viewExpenseLedger: "ดูบันทึกรายจ่าย",
         metricProfit: "กำไร/ขาดทุน",
-        chartTitleRevenueHour: "รายได้รายชั่วโมง",
-        chartTitleRevenueDay: "รายได้รายวัน",
-        chartTitleRevenueMonth: "รายได้รายเดือน",
-        chartTitleCostDay: "รายจ่ายรายวัน",
-        chartTitleCostMonth: "รายจ่ายรายเดือน",
         expenseMonthly: "รายจ่ายเดือนนี้",
-        monthlySales: "ยอดขายรายเดือน",
         thisMonth: "ทั้งเดือน",
         thisDay: "ทั้งวัน",
         resizeSplit: "ปรับสัดส่วนรายวัน/รายเดือน",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
-        chartTitleProfitHour: "กำไร/ขาดทุนรายชั่วโมง",
-        chartTitleProfitDay: "กำไร/ขาดทุนรายวัน",
-        chartTitleProfitMonth: "กำไร/ขาดทุนรายเดือน",
-        chartHour: "รายชั่วโมง",
         chartDay: "รายวัน",
         chartMonth: "รายเดือน",
-        drillHint: "กดที่แท่งกราฟเพื่อดูบิลที่อยู่เบื้องหลัง",
-        drillTitle: "บิลในช่วงนี้",
+        drillHint: "กดแท่งกราฟเพื่อดูบิล",
+        drillTitle: "บิล",
         drillClose: "ปิด",
-        drillEmpty: "ไม่มีข้อมูลในช่วงนี้",
-        drillCapped: "รายละเอียดที่แสดงเป็นรายการล่าสุดบางส่วน",
-        ingredient: "วัตถุดิบ",
+        drillEmpty: "ไม่มีข้อมูล",
+        drillCapped: "แสดงบางส่วน",
         ingredients: "รายการ",
         cost: "ต้นทุน",
         profit: "กำไร",
@@ -190,12 +181,17 @@ function buildCopy(language: "th" | "en") {
         previousMonth: "เดือนก่อน",
         nextMonth: "เดือนถัดไป",
         chooseMonth: "เลือกเดือน",
-        noSales: "ยังไม่มีข้อมูลยอดขายในวันนี้",
-        noSalesMonth: "ยังไม่มีข้อมูลยอดขายในเดือนนี้",
+        noSales: "ยังไม่มียอดขาย",
+        noSalesMonth: "ยังไม่มียอดขาย",
+        peakHours: "ช่วงเวลาที่ขายดีที่สุด",
+        peakHoursEmpty: "ยังไม่มียอดขาย",
+        bills: "บิล",
+        exportPdf: "บันทึกเป็น PDF",
+        grandTotal: "รวมทั้งสิ้น",
         dishes: "จาน",
         dailyOrders: "รายการออเดอร์",
         viewAllOrders: "ดูออเดอร์ทั้งหมด",
-        noOrders: "ไม่มีออเดอร์ในวันที่เลือก",
+        noOrders: "ไม่มีออเดอร์",
         floorStatus: "สถานะโต๊ะ",
         openOrderTaking: "รับออเดอร์",
         occupied: "ใช้งาน",
@@ -203,10 +199,10 @@ function buildCopy(language: "th" | "en") {
         reserved: "จอง",
         inactive: "ปิดใช้",
         people: "คน",
-        historyNotice: "กำลังดูข้อมูลย้อนหลัง สถานะครัวและโต๊ะสดจะแสดงเฉพาะวันนี้",
+        historyNotice: "ข้อมูลย้อนหลัง — สถานะครัวและโต๊ะมีเฉพาะวันนี้",
         loadError: "โหลดข้อมูลภาพรวมไม่สำเร็จ",
         order: "ออเดอร์",
-        location: "โต๊ะ / ช่องทาง",
+        location: "โต๊ะ",
         status: "สถานะ",
         total: "ยอดรวม",
         time: "เวลา",
@@ -228,10 +224,10 @@ function buildCopy(language: "th" | "en") {
         paidRevenue: "Paid revenue",
         activeOrders: "Active",
         liveWork: "Needs attention now",
-        lateKitchen: "Late kitchen queue",
-        readyToServe: "Kitchen completed",
+        lateKitchen: "Late in kitchen",
+        readyToServe: "Ready to serve",
         occupiedTables: "Occupied tables",
-        lowStock: "Ingredients to refill",
+        lowStock: "Low stock",
         kitchenQueue: "Kitchen queue",
         viewKitchen: "Open kitchen",
         delayed: "Overdue",
@@ -239,36 +235,24 @@ function buildCopy(language: "th" | "en") {
         ready: "Done",
         tickets: "tickets",
         minutes: "mins",
-        noKitchen: "No kitchen work waiting",
+        noKitchen: "Kitchen is clear",
         salesOverview: "Sales",
         metricRevenue: "Total revenue",
         metricCost: "Expenses",
-        viewExpenseLedger: "View expense ledger",
         metricProfit: "Profit / loss",
-        chartTitleRevenueHour: "Revenue by hour",
-        chartTitleRevenueDay: "Revenue by day",
-        chartTitleRevenueMonth: "Revenue by month",
-        chartTitleCostDay: "Expenses by day",
-        chartTitleCostMonth: "Expenses by month",
         expenseMonthly: "Expenses this month",
-        monthlySales: "Monthly sales",
         thisMonth: "This month",
         thisDay: "This day",
         resizeSplit: "Resize the day and month panes",
         expenseCategory: "Category",
         expenseNote: "Details",
-        chartTitleProfitHour: "Profit/loss by hour",
-        chartTitleProfitDay: "Profit/loss by day",
-        chartTitleProfitMonth: "Profit/loss by month",
-        chartHour: "Hourly",
         chartDay: "Daily",
         chartMonth: "Monthly",
-        drillHint: "Click a bar to see the bills behind it",
-        drillTitle: "Bills in this window",
+        drillHint: "Click a bar to see its bills",
+        drillTitle: "Bills",
         drillClose: "Close",
-        drillEmpty: "Nothing recorded in this window",
-        drillCapped: "Showing a partial list of the latest entries",
-        ingredient: "Ingredient",
+        drillEmpty: "Nothing recorded",
+        drillCapped: "Partial list",
         ingredients: "items",
         cost: "Cost",
         profit: "Profit",
@@ -278,12 +262,17 @@ function buildCopy(language: "th" | "en") {
         previousMonth: "Previous month",
         nextMonth: "Next month",
         chooseMonth: "Choose month",
-        noSales: "No sales data for this day",
-        noSalesMonth: "No sales data for this month",
+        noSales: "No sales yet",
+        noSalesMonth: "No sales yet",
+        peakHours: "Busiest hours",
+        peakHoursEmpty: "No sales yet",
+        bills: "bills",
+        exportPdf: "Export PDF",
+        grandTotal: "Grand total",
         dishes: "items",
         dailyOrders: "Orders",
         viewAllOrders: "View all orders",
-        noOrders: "No orders on the selected date",
+        noOrders: "No orders",
         floorStatus: "Floor status",
         openOrderTaking: "Take orders",
         occupied: "Occupied",
@@ -291,10 +280,10 @@ function buildCopy(language: "th" | "en") {
         reserved: "Reserved",
         inactive: "Inactive",
         people: "people",
-        historyNotice: "Viewing historical data. Live kitchen and floor status are available for today only.",
+        historyNotice: "Past date — live kitchen and floor are today only",
         loadError: "Could not load the overview",
         order: "Order",
-        location: "Table / channel",
+        location: "Table",
         status: "Status",
         total: "Total",
         time: "Time",
@@ -789,12 +778,26 @@ export default function Home() {
       pendingSwitchRef.current = null;
     }, 210);
   };
-  const [chartMode, setChartMode] = useState<ChartMode>("hour");
+  const [chartMode, setChartMode] = useState<ChartMode>("day");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
-  // Expenses have no hour to plot; land on the day view instead of a blank one.
-  const selectChartMetric = (metric: ChartMetric) => {
-    setChartMetric(metric);
-    if (metric === "cost" && chartMode === "hour") setChartMode("day");
+  // The total-orders tile opens the day's full order sheet under the tiles.
+  const [dayOrdersOpen, setDayOrdersOpen] = useState(false);
+  // Picking a row in that sheet opens the order's bill over the dashboard.
+  const [orderBill, setOrderBill] = useState<Bill | null>(null);
+  const [orderBillLoadingId, setOrderBillLoadingId] = useState<number | null>(null);
+  const [orderBillError, setOrderBillError] = useState("");
+
+  const openOrderBill = async (orderId: number) => {
+    setOrderBillLoadingId(orderId);
+    setOrderBillError("");
+    try {
+      const res = await getOrderBill(orderId);
+      setOrderBill(res.data);
+    } catch {
+      setOrderBillError(copy.loadError);
+    } finally {
+      setOrderBillLoadingId(null);
+    }
   };
   const [salesDays, setSalesDays] = useState<ReportSalesDay[]>([]);
   const [salesDaysLoading, setSalesDaysLoading] = useState(false);
@@ -966,16 +969,13 @@ export default function Home() {
     };
   }, [expenseMonth, restaurantId, canViewExpenses, refreshTick]);
 
-  // A bar's key is an hour number in hour view and a YYYY-MM-DD date in the day
-  // and month views (both of those plot days), so that alone picks the window.
+  // Both views plot days, so a bar's key is the YYYY-MM-DD it stands for.
   useEffect(() => {
     // A cost bar drills into the ledger rows already in `expenses` — no request.
     if (!detailBar || detailKind !== "sales" || !activeMembership?.restaurant_id) return;
     let cancelled = false;
     setDetailLoading(true);
-    const [date, hour] =
-      chartMode === "hour" ? [selectedDate, Number(detailBar.key)] : [detailBar.key, undefined];
-    getSalesDetail(date, hour)
+    getSalesDetail(detailBar.key)
       .then((res) => ({ key: detailBar.key, kind: "sales" as const, data: res.data }))
       .then((next) => {
         if (cancelled) return;
@@ -993,7 +993,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [detailBar, detailKind, chartMode, selectedDate, activeMembership?.restaurant_id, refreshTick]);
+  }, [detailBar, detailKind, activeMembership?.restaurant_id, refreshTick]);
 
 
   const loadOperations = useCallback(async (background = false) => {
@@ -1111,23 +1111,15 @@ export default function Home() {
 
   const selectedDateAtNoon = new Date(`${selectedDate}T12:00:00`);
 
-  // Hour view: only the hours the restaurant is actually open, taken from restaurant settings.
-  const parseHour = (time: string | undefined, fallback: number) => {
-    const hour = Number.parseInt((time ?? "").split(":")[0] ?? "", 10);
-    return Number.isFinite(hour) ? hour : fallback;
-  };
-  const openHour = parseHour(activeMembership?.restaurant?.open_time, 0);
-  let closeHourRaw = parseHour(activeMembership?.restaurant?.close_time, 24);
-  if (closeHourRaw <= openHour) closeHourRaw += 24;
-  const operatingHourCount = Math.min(24, Math.max(1, closeHourRaw - openHour));
-  const operatingHours = Array.from({ length: operatingHourCount }, (_, index) => (openHour + index) % 24);
-
-  const salesByHour = new Map(salesHours.map((entry) => [entry.hour, entry]));
-  const hourlyPoints: ChartPoint[] = operatingHours.map((hourNumber) => ({
-    key: String(hourNumber),
-    label: String(hourNumber).padStart(2, "0"),
-    value: salesByHour.get(hourNumber)?.[visibleChartMetric] ?? 0,
-  }));
+  // The hours of the selected day that took the most money, best first. Hours
+  // with no sales are dropped rather than ranked last — a quiet hour is not a
+  // "busiest hour" no matter how short the list gets.
+  const peakHours = salesHours
+    .filter((entry) => entry.revenue > 0)
+    .sort((first, second) => second.revenue - first.revenue || first.hour - second.hour)
+    .slice(0, 3);
+  const peakHourTop = peakHours[0]?.revenue ?? 0;
+  const hourRangeLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00 - ${String((hour + 1) % 24).padStart(2, "0")}:00`;
 
   const salesByDate = new Map(salesDays.map((day) => [day.order_date, day]));
   const valueForDate = (date: Date) => {
@@ -1162,38 +1154,26 @@ export default function Home() {
     ...(canViewExpenses ? [{ key: "cost" as const, label: copy.metricCost }] : []),
     { key: "profit", label: copy.metricProfit },
   ];
-  // The ledger records the day money was spent, never the hour, so hourly
-  // expense bars would be a row of zeros. Day and month only for that metric.
   const chartModeOptions: { key: ChartMode; label: string }[] = [
-    ...(visibleChartMetric === "cost" ? [] : [{ key: "hour" as const, label: copy.chartHour }]),
     { key: "day", label: copy.chartDay },
     { key: "month", label: copy.chartMonth },
   ];
-  const chartTitles: Record<ChartMetric, Record<ChartMode, string>> = {
-    revenue: { hour: copy.chartTitleRevenueHour, day: copy.chartTitleRevenueDay, month: copy.chartTitleRevenueMonth },
-    cost: { hour: copy.chartTitleCostDay, day: copy.chartTitleCostDay, month: copy.chartTitleCostMonth },
-    profit: { hour: copy.chartTitleProfitHour, day: copy.chartTitleProfitDay, month: copy.chartTitleProfitMonth },
-  };
-  const activeChartTitle = chartTitles[visibleChartMetric][chartMode];
-  const activeChartData = chartMode === "hour" ? hourlyPoints : chartMode === "day" ? dailyPoints : monthlyPoints;
+  // Only the tooltip needs this now: the two toggles above the chart already
+  // name the metric and the window, so a heading would just repeat them.
+  const activeChartTitle = metricOptions.find((option) => option.key === visibleChartMetric)?.label ?? "";
+  const activeChartData = chartMode === "day" ? dailyPoints : monthlyPoints;
   // Only block on the very first load. A background refresh keeps the current
   // bars on screen instead of blinking the chart to a spinner every minute —
   // the header already shows that a refresh is in flight.
   const activeChartLoading =
-    visibleChartMetric === "cost"
-      ? expensesLoading && expenseDaily.length === 0
-      : chartMode === "hour"
-        ? salesHoursLoading && salesHours.length === 0
-        : salesDaysLoading;
+    visibleChartMetric === "cost" ? expensesLoading && expenseDaily.length === 0 : salesDaysLoading;
   const activeChartHasData =
     visibleChartMetric === "cost"
       ? activeChartData.some((point) => point.value > 0)
-      : chartMode === "hour"
-        ? salesHours.length > 0
-        : activeChartData.some((point) => salesByDate.has(point.key));
-  // Switching view drops the drilled-into bar by itself: an hour key stops
-  // existing once the chart plots dates. Switching metric keeps it, which is
-  // right — the table already carries revenue, cost and profit columns.
+      : activeChartData.some((point) => salesByDate.has(point.key));
+  // Switching view keeps the drilled-into bar when the same date is plotted in
+  // both. Switching metric keeps it too, which is right — the table already
+  // carries revenue, cost and profit columns.
   const activeDetailBar = detailBar && activeChartData.some((point) => point.key === detailBar.key) ? detailBar : null;
   const matchedDetail = activeDetailBar && detail?.key === activeDetailBar.key ? detail : null;
   const shownSales = detailKind === "sales" ? (matchedDetail?.data ?? null) : null;
@@ -1212,17 +1192,12 @@ export default function Home() {
   // day it is. Spell the window out instead, from the same key the request used.
   const detailWindowLabel = (() => {
     if (!activeDetailBar) return "";
-    const dateKey = chartMode === "hour" ? selectedDate : activeDetailBar.key;
-    const dayLabel = new Date(`${dateKey}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+    return new Date(`${activeDetailBar.key}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
       weekday: "short",
       day: "numeric",
       month: "short",
       year: "numeric",
     });
-    if (chartMode !== "hour") return dayLabel;
-    const startHour = Number(activeDetailBar.key);
-    const pad = (value: number) => String(value).padStart(2, "0");
-    return `${dayLabel} · ${pad(startHour)}:00–${pad((startHour + 1) % 24)}:00`;
   })();
 
   const lowStockCount = ingredients.filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5).length;
@@ -1241,9 +1216,19 @@ export default function Home() {
     { key: "ready" as const, icon: CheckCircle2, title: copy.ready, items: ready, color: "text-emerald-600 dark:text-emerald-300" },
   ];
 
+  const dayOrdersTotal = validOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0);
+
+  // Revenue, expenses, profit, then order count — the same running order as the
+  // month tiles. Every figure here is the selected day's except expenses, which
+  // is the month's, so its label says so. The collapsed card is the only place
+  // this renders: opening the card shows the month pane, which carries the same
+  // monthly expense figure, and a second copy of it in the day pane would only
+  // invite reading it as that day's spend.
   const summary = [
-    { key: "orders", label: copy.ordersTotal, value: validOrders.length.toLocaleString(), helper: `${copy.activeOrders} ${activeOrders}` },
     { key: "revenue", label: copy.paidRevenue, value: formatCurrency(paidRevenue, language), helper: `${paidOrders.length} ${copy.order}`, tone: "revenue" as const },
+    ...(canViewExpenses
+      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), tone: "cost" as CardTone }]
+      : []),
     // A loss on a green tile would read as good news, so it borrows the cost
     // tone, and the signed figure is coloured to match.
     {
@@ -1258,6 +1243,7 @@ export default function Home() {
             : "text-gray-950 dark:text-white",
       tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
     },
+    { key: "orders", label: copy.ordersTotal, value: validOrders.length.toLocaleString(), helper: `${copy.activeOrders} ${activeOrders}` },
   ];
 
   const liveWorkSummary: CardSummaryItem[] = [
@@ -1299,7 +1285,8 @@ export default function Home() {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
+            <div className="inline-flex max-w-full overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -1309,7 +1296,10 @@ export default function Home() {
               <label className="relative inline-flex h-10 min-w-0 cursor-pointer items-center gap-2 px-3 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
                 <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
                 <span className="sr-only">{copy.chooseDate}</span>
-                <span aria-hidden="true" className="whitespace-nowrap text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                {/* Fixed width: the label is a long weekday and month name, so
+                    letting it size to its content shifts the arrows either side
+                    of it every time the day changes. */}
+                <span aria-hidden="true" className="w-56 min-w-0 truncate text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100">
                   {selectedDateLabel}
                 </span>
                 <input
@@ -1325,7 +1315,6 @@ export default function Home() {
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-            {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
           </div>
         </div>
       </header>
@@ -1360,182 +1349,143 @@ export default function Home() {
                     <h3 className="text-[17px] font-bold uppercase tracking-wide text-gray-950 dark:text-white">{copy.thisDay}</h3>
                   </div>
                   <div className="mb-3 mt-3 grid grid-cols-3 gap-2">
-                    {summary.map((item) => (
-                      <div key={item.key} className={`rounded-md border px-3 py-2 ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}>
-                        <p className="truncate text-[12px] font-bold uppercase tracking-wide">{item.label}</p>
-                        <p className={`mt-0.5 truncate font-mono text-[19px] font-bold tabular-nums sm:text-[22px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-                      {metricOptions.map(({ key: metric, label }) => (
+                    {summary.filter((item) => item.key !== "cost").map((item) => {
+                      const tileClass = `rounded-md border px-3 py-2 text-left ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`;
+                      // Only the orders tile does anything, so only it gets the
+                      // chevron — an affordance on a dead tile is a worse lie
+                      // than no affordance at all.
+                      const body = (interactive: boolean) => (
+                        <>
+                          <p className="flex items-center gap-1 truncate text-[12px] font-bold uppercase tracking-wide">
+                            {item.label}
+                            {interactive ? (
+                              <span className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-current/15">
+                                <ChevronDown className={`h-3 w-3 transition-transform ${dayOrdersOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className={`mt-0.5 truncate font-mono text-[19px] font-bold tabular-nums sm:text-[22px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                        </>
+                      );
+                      return item.key === "orders" ? (
                         <button
-                          key={metric}
+                          key={item.key}
                           type="button"
-                          onClick={() => selectChartMetric(metric)}
-                          className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
-                            visibleChartMetric === metric
-                              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                              : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
-                          }`}
+                          onClick={() => setDayOrdersOpen((open) => !open)}
+                          aria-expanded={dayOrdersOpen}
+                          className={`ui-press w-full cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125 ${tileClass} ${dayOrdersOpen ? "ring-2 ring-gray-900 dark:ring-white" : ""}`}
                         >
-                          {label}
+                          {body(true)}
                         </button>
-                      ))}
-                    </div>
-                    <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-                      {chartModeOptions.map((option) => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          onClick={() => setChartMode(option.key)}
-                          className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
-                            chartMode === option.key
-                              ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                              : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{activeChartTitle}</h3>
-                    {visibleChartMetric === "cost" ? (
-                      <button
-                        type="button"
-                        onClick={() => router.push("/expenses")}
-                        className="ui-press inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
-                      >
-                        {copy.viewExpenseLedger}
-                        <ArrowRight className="h-3 w-3" />
-                      </button>
-                    ) : null}
-                  </div>
-                  {activeChartLoading ? (
-                    <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {copy.loading}
-                    </div>
-                  ) : activeChartHasData ? (
-                    <ChartBox
-                      data={activeChartData}
-                      title={activeChartTitle}
-                      language={language}
-                      lossColoring={visibleChartMetric === "profit"}
-                      selectedKey={activeDetailBar?.key ?? null}
-                      onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
-                    />
-                  ) : (
-                    <div className={`flex h-56 items-center justify-center px-3 text-center text-[12px] ${chartMode === "hour" && salesHoursFailed ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
-                      {chartMode === "hour" && salesHoursFailed ? copy.loadError : copy.noSales}
-                    </div>
-                  )}
-
-                  {activeDetailBar ? (
-                    <div className="mt-3 rounded-md border border-gray-200 dark:border-gray-800">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
-                        <div className="min-w-0">
-                          <h4 className="text-[12px] font-semibold text-gray-950 dark:text-white">
-                            {detailKind === "cost" ? copy.metricCost : copy.drillTitle} · {detailWindowLabel}
-                          </h4>
-                          {shownSales ? (
-                            <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
-                              {copy.revenue} {formatCurrency(shownSales.summary.revenue, language)} · {copy.cost}{" "}
-                              {formatCurrency(shownSales.summary.cost, language)} · {copy.profit}{" "}
-                              {formatCurrency(shownSales.summary.profit, language)}
-                            </p>
-                          ) : detailKind === "cost" ? (
-                            <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
-                              {copy.metricCost} {formatCurrency(shownExpensesTotal, language)} · {shownExpensesEntries}{" "}
-                              {copy.ingredients}
-                            </p>
-                          ) : null}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setDetailBar(null)}
-                          className="ui-press shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                        >
-                          {copy.drillClose}
-                        </button>
-                      </div>
-
-                      {detailLoading && !matchedDetail ? (
-                        <div className="flex items-center justify-center px-3 py-8 text-[12px] text-gray-400">
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          {copy.loading}
-                        </div>
-                      ) : shownExpenses.length ? (
-                        <div className="max-h-64 overflow-y-auto">
-                          <div className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
-                            <span>{copy.expenseCategory}</span>
-                            <span>{copy.expenseNote}</span>
-                            <span className="text-right">{copy.metricCost}</span>
-                          </div>
-                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {shownExpenses.map((item) => (
-                              <div key={item.ID} className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] items-center gap-2 px-3 py-2">
-                                <span className="truncate text-[11px] text-gray-700 dark:text-gray-200">{expenseCategoryLabels[language][item.category] ?? item.category}</span>
-                                <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{item.note || "-"}</span>
-                                <span className="text-right font-mono text-[11px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(item.amount, language)}</span>
-                              </div>
-                            ))}
-                          </div>
-                          {shownExpensesHaveMore ? (
-                            <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
-                          ) : null}
-                        </div>
-                      ) : shownSales?.orders.length ? (
-                        <div className="max-h-64 overflow-y-auto">
-                          <div className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
-                            <span>{copy.order}</span>
-                            <span>{copy.location}</span>
-                            <span className="text-right">{copy.time}</span>
-                            <span className="text-right">{copy.revenue}</span>
-                            <span className="text-right">{copy.cost}</span>
-                            <span className="text-right">{copy.profit}</span>
-                          </div>
-                          <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {shownSales.orders.map((row) => (
-                              <button
-                                key={row.order_id}
-                                type="button"
-                                onClick={() => router.push(orderPosHref({ ID: row.order_id, order_number: row.order_number }))}
-                                className="ui-press grid w-full grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
-                              >
-                                <span className="font-mono text-[11px] font-semibold text-gray-950 dark:text-white">#{row.order_number}</span>
-                                <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
-                                  {row.table_label || row.customer_name || (row.order_type === "takeaway" ? (language === "th" ? "กลับบ้าน" : "Takeaway") : "-")}
-                                </span>
-                                <span className="text-right font-mono text-[10px] text-gray-400">
-                                  {new Date(row.completed_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-                                </span>
-                                <span className="text-right font-mono text-[11px] tabular-nums text-gray-700 dark:text-gray-200">{formatCurrency(row.revenue, language)}</span>
-                                <span className="text-right font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{formatCurrency(row.cost, language)}</span>
-                                <span className={`text-right font-mono text-[11px] font-semibold tabular-nums ${row.profit < 0 ? "text-red-600 dark:text-red-400" : "text-gray-950 dark:text-white"}`}>
-                                  {formatCurrency(row.profit, language)}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                          {shownSales.has_more ? (
-                            <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
-                          ) : null}
-                        </div>
-                      ) : detailKind === "cost" && shownExpensesEntries > 0 && shownExpensesHaveMore ? (
-                        <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.drillCapped}</p>
                       ) : (
-                        <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
-                          {detailFailed && detailKind === "sales" ? copy.loadError : copy.drillEmpty}
-                        </p>
-                      )}
+                        <div key={item.key} className={tileClass}>{body(false)}</div>
+                      );
+                    })}
+                  </div>
+
+                  {dayOrdersOpen ? (
+                    <div className="mb-3 rounded-md border border-gray-200 dark:border-gray-800">
+                      <div id="day-orders-sheet">
+                        <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                          <div className="min-w-0">
+                            <h4 className="text-[12px] font-semibold text-gray-950 dark:text-white">{copy.dailyOrders}</h4>
+                            {/* The count is on the tile that opened this, but
+                                the date is not — and the sheet prints. */}
+                            <p className="mt-0.5 font-mono text-[10px] tabular-nums text-gray-500 dark:text-gray-400">{selectedDateLabel}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => printA4("day-orders-sheet")}
+                            disabled={!validOrders.length}
+                            className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden"
+                          >
+                            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                            {copy.exportPdf}
+                          </button>
+                        </div>
+                        {orderBillError ? <p className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-[11px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 print:hidden">{orderBillError}</p> : null}
+                        {validOrders.length ? (
+                          <div className="max-h-72 overflow-y-auto print:max-h-none print:overflow-visible">
+                            {/* border-separate so the rows can cast a shadow on
+                                hover — a collapsed table never paints one. The
+                                row dividers move onto the cells to suit. */}
+                            <table className="w-full border-separate border-spacing-0 text-left text-[11px] [&_tbody_td]:border-b [&_tbody_td]:border-gray-100 dark:[&_tbody_td]:border-gray-800">
+                              <thead className="bg-gray-50 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                                <tr>
+                                  <th className="px-3 py-1.5 font-medium">{copy.order}</th>
+                                  <th className="px-3 py-1.5 font-medium">{copy.location}</th>
+                                  <th className="px-3 py-1.5 font-medium">{copy.status}</th>
+                                  <th className="px-3 py-1.5 text-right font-medium">{copy.time}</th>
+                                  <th className="px-3 py-1.5 text-right font-medium">{copy.total}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {validOrders.map((order) => (
+                                  <tr
+                                    key={order.ID}
+                                    onClick={() => void openOrderBill(order.ID)}
+                                    aria-haspopup="dialog"
+                                    aria-busy={orderBillLoadingId === order.ID}
+                                    className={`ui-row-lift cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 ${orderBillLoadingId === order.ID ? "opacity-50" : ""}`}
+                                  >
+                                    <td className="px-3 py-1.5 font-mono font-semibold text-gray-950 dark:text-white">#{order.order_number}</td>
+                                    <td className="px-3 py-1.5 truncate text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</td>
+                                    <td className="px-3 py-1.5 text-gray-600 dark:text-gray-300">{orderStatusLabel(order.status, copy)}</td>
+                                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">
+                                      {new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums text-gray-950 dark:text-white">
+                                      {formatCurrency(order.grand_total || order.total_amount, language)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="border-t-2 border-gray-300 dark:border-gray-700">
+                                <tr>
+                                  <td colSpan={4} className="px-3 py-2 text-[11px] font-semibold text-gray-950 dark:text-white">{copy.grandTotal}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-[12px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(dayOrdersTotal, language)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.noOrders}</p>
+                        )}
+                      </div>
                     </div>
-                  ) : activeChartHasData ? (
-                    <p className="mt-2 text-center text-[10px] text-gray-400 dark:text-gray-500">{copy.drillHint}</p>
                   ) : null}
+
+                  <h3 className="mt-4 border-t border-gray-200 pt-4 text-[12px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.peakHours}</h3>
+                  {salesHoursLoading && !salesHours.length ? (
+                    <div className="flex h-20 items-center justify-center text-[12px] text-gray-400">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    </div>
+                  ) : peakHours.length ? (
+                    <ol className="mt-2 space-y-1.5">
+                      {peakHours.map((entry) => (
+                        <li key={entry.hour} className="rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-mono text-[12px] font-semibold text-gray-950 dark:text-white">
+                              {hourRangeLabel(entry.hour)}
+                            </span>
+                            <span className="font-mono text-[13px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(entry.revenue, language)}</span>
+                          </div>
+                          {/* Bar is read against the best hour, so the top row is
+                              always full and the rest read as "share of peak". */}
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                              <div className="h-full rounded-full bg-orange-500" style={{ width: `${peakHourTop > 0 ? (entry.revenue / peakHourTop) * 100 : 0}%` }} />
+                            </div>
+                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-gray-400">{entry.orders.toLocaleString()} {copy.bills}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className={`py-6 text-center text-[12px] ${salesHoursFailed ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                      {salesHoursFailed ? copy.loadError : copy.peakHoursEmpty}
+                    </p>
+                  )}
                 </div>
                 <div
                   role="separator"
@@ -1617,129 +1567,294 @@ export default function Home() {
                     })}
                   </div>
 
-                  <h3 className="mt-4 border-t border-gray-200 pt-4 text-[12px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.topItems}</h3>
+                  <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800 xl:flex xl:items-start xl:gap-5">
+                    <div className="min-w-0 xl:flex-1">
+                      <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{copy.topItems}</h3>
 
-                  <div className="mt-2 flex justify-center">
-                    {topItemsLoading ? (
-                      <div className="flex h-36 w-36 items-center justify-center text-[12px] text-gray-400">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <div className="mt-2 flex justify-center">
+                        {topItemsLoading ? (
+                          <div className="flex h-36 w-36 items-center justify-center text-[12px] text-gray-400">
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          </div>
+                        ) : topItemsPie.length ? (
+                          <div className="relative h-36 w-36 shrink-0">
+                            <PieChart width={144} height={144}>
+                              <Pie data={topItemsPie} dataKey="sold" nameKey="name" innerRadius={46} outerRadius={68} paddingAngle={2} stroke="none">
+                                {topItemsPie.map((entry, index) => (
+                                  <Cell key={entry.name} fill={topItemColors[index % topItemColors.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
+                            </PieChart>
+                            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
+                              <span className="text-[9px] text-gray-400">{copy.dishes}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex h-36 items-center justify-center text-[12px] text-gray-400">{copy.noSalesMonth}</div>
+                        )}
                       </div>
-                    ) : topItemsPie.length ? (
-                      <div className="relative h-36 w-36 shrink-0">
-                        <PieChart width={144} height={144}>
-                          <Pie data={topItemsPie} dataKey="sold" nameKey="name" innerRadius={46} outerRadius={68} paddingAngle={2} stroke="none">
-                            {topItemsPie.map((entry, index) => (
-                              <Cell key={entry.name} fill={topItemColors[index % topItemColors.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
-                        </PieChart>
-                        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
-                          <span className="text-[9px] text-gray-400">{copy.dishes}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex h-36 items-center justify-center text-[12px] text-gray-400">{copy.noSalesMonth}</div>
-                    )}
-                  </div>
 
-                  <div ref={monthPickerRef} className="relative mt-3 flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => shiftTopItemsMonth(-1)}
-                      aria-label={copy.previousMonth}
-                      title={copy.previousMonth}
-                      className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPickerYear(topItemsMonthDate.getFullYear());
-                        setMonthPickerOpen((open) => !open);
-                      }}
-                      aria-label={copy.chooseMonth}
-                      title={copy.chooseMonth}
-                      className="ui-press min-w-[112px] rounded-md border border-gray-200 px-2 py-1 text-center font-mono text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
-                    >
-                      {topItemsMonthLabel}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!canGoNextTopItemsMonth}
-                      onClick={() => shiftTopItemsMonth(1)}
-                      aria-label={copy.nextMonth}
-                      title={copy.nextMonth}
-                      className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
+                      <div ref={monthPickerRef} className="relative mt-3 flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => shiftTopItemsMonth(-1)}
+                          aria-label={copy.previousMonth}
+                          title={copy.previousMonth}
+                          className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPickerYear(topItemsMonthDate.getFullYear());
+                            setMonthPickerOpen((open) => !open);
+                          }}
+                          aria-label={copy.chooseMonth}
+                          title={copy.chooseMonth}
+                          className="ui-press min-w-[112px] rounded-md border border-gray-200 px-2 py-1 text-center font-mono text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+                        >
+                          {topItemsMonthLabel}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!canGoNextTopItemsMonth}
+                          onClick={() => shiftTopItemsMonth(1)}
+                          aria-label={copy.nextMonth}
+                          title={copy.nextMonth}
+                          className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
 
-                    {monthPickerOpen ? (
-                      <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-                        <div className="flex items-center justify-between px-1 pb-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPickerYear((year) => year - 1)}
-                            className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-                          >
-                            <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
-                          <span className="font-mono text-[12px] font-semibold text-gray-800 dark:text-gray-100">{pickerYear}</span>
-                          <button
-                            type="button"
-                            disabled={pickerYear >= now.getFullYear()}
-                            onClick={() => setPickerYear((year) => year + 1)}
-                            className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-400 dark:hover:bg-gray-800"
-                          >
-                            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-4 gap-1">
-                          {monthShortLabels.map((label, index) => {
-                            const isFuture = pickerYear > now.getFullYear() || (pickerYear === now.getFullYear() && index > now.getMonth());
-                            const isSelected = pickerYear === topItemsMonthDate.getFullYear() && index === topItemsMonthDate.getMonth();
-                            const isCurrentRealMonth = pickerYear === now.getFullYear() && index === now.getMonth();
-                            return (
+                        {monthPickerOpen ? (
+                          <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-900">
+                            <div className="flex items-center justify-between px-1 pb-1.5">
                               <button
-                                key={label}
                                 type="button"
-                                disabled={isFuture}
-                                onClick={() => {
-                                  setTopItemsMonthDate(new Date(pickerYear, index, 1));
-                                  setMonthPickerOpen(false);
-                                }}
-                                className={`rounded px-1.5 py-1.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-30 ${
-                                  isSelected
-                                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                                    : isCurrentRealMonth
-                                    ? "text-sky-700 ring-1 ring-inset ring-sky-500 dark:text-sky-300"
-                                    : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                                }`}
+                                onClick={() => setPickerYear((year) => year - 1)}
+                                className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                               >
-                                {label}
+                                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
                               </button>
-                            );
-                          })}
+                              <span className="font-mono text-[12px] font-semibold text-gray-800 dark:text-gray-100">{pickerYear}</span>
+                              <button
+                                type="button"
+                                disabled={pickerYear >= now.getFullYear()}
+                                onClick={() => setPickerYear((year) => year + 1)}
+                                className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-400 dark:hover:bg-gray-800"
+                              >
+                                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1">
+                              {monthShortLabels.map((label, index) => {
+                                const isFuture = pickerYear > now.getFullYear() || (pickerYear === now.getFullYear() && index > now.getMonth());
+                                const isSelected = pickerYear === topItemsMonthDate.getFullYear() && index === topItemsMonthDate.getMonth();
+                                const isCurrentRealMonth = pickerYear === now.getFullYear() && index === now.getMonth();
+                                return (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    disabled={isFuture}
+                                    onClick={() => {
+                                      setTopItemsMonthDate(new Date(pickerYear, index, 1));
+                                      setMonthPickerOpen(false);
+                                    }}
+                                    className={`rounded px-1.5 py-1.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-30 ${
+                                      isSelected
+                                        ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                                        : isCurrentRealMonth
+                                        ? "text-sky-700 ring-1 ring-inset ring-sky-500 dark:text-sky-300"
+                                        : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {topItemsPie.length ? (
+                        <ul className="mt-3 w-full min-w-0 space-y-1.5">
+                          {topItemsPie.map((item, index) => (
+                            <li key={item.name} className="flex items-center gap-2 text-[12px]">
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: topItemColors[index % topItemColors.length] }} aria-hidden="true" />
+                              <span className="min-w-0 flex-1 truncate font-medium text-gray-700 dark:text-gray-300">{item.name}</span>
+                              <span className="shrink-0 font-mono text-gray-500 dark:text-gray-400">{item.sold} {copy.dishes}</span>
+                              <span className="w-9 shrink-0 text-right font-mono text-[10px] text-gray-400">{totalItemsSold ? Math.round((item.sold / totalItemsSold) * 100) : 0}%</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+
+                    <div className="min-w-0 flex-1 max-xl:mt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
+                          {metricOptions.map(({ key: metric, label }) => (
+                            <button
+                              key={metric}
+                              type="button"
+                              onClick={() => setChartMetric(metric)}
+                              className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
+                                visibleChartMetric === metric
+                                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
+                          {chartModeOptions.map((option) => (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => setChartMode(option.key)}
+                              className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
+                                chartMode === option.key
+                                  ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    ) : null}
-                  </div>
+                      <div className="mt-2">
+                      {activeChartLoading ? (
+                        <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {copy.loading}
+                        </div>
+                      ) : activeChartHasData ? (
+                        <ChartBox
+                          data={activeChartData}
+                          title={activeChartTitle}
+                          language={language}
+                          lossColoring={visibleChartMetric === "profit"}
+                          selectedKey={activeDetailBar?.key ?? null}
+                          onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
+                        />
+                      ) : (
+                        <div className="flex h-56 items-center justify-center px-3 text-center text-[12px] text-gray-400">
+                          {copy.noSales}
+                        </div>
+                      )}
+                      </div>
 
-                  {topItemsPie.length ? (
-                    <ul className="mt-3 w-full min-w-0 space-y-1.5">
-                      {topItemsPie.map((item, index) => (
-                        <li key={item.name} className="flex items-center gap-2 text-[12px]">
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: topItemColors[index % topItemColors.length] }} aria-hidden="true" />
-                          <span className="min-w-0 flex-1 truncate font-medium text-gray-700 dark:text-gray-300">{item.name}</span>
-                          <span className="shrink-0 font-mono text-gray-500 dark:text-gray-400">{item.sold} {copy.dishes}</span>
-                          <span className="w-9 shrink-0 text-right font-mono text-[10px] text-gray-400">{totalItemsSold ? Math.round((item.sold / totalItemsSold) * 100) : 0}%</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                      {activeDetailBar ? (
+                        <div className="mt-3 rounded-md border border-gray-200 dark:border-gray-800">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
+                            <div className="min-w-0">
+                              <h4 className="text-[12px] font-semibold text-gray-950 dark:text-white">
+                                {detailKind === "cost" ? copy.metricCost : copy.drillTitle} · {detailWindowLabel}
+                              </h4>
+                              {shownSales ? (
+                                <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                                  {copy.revenue} {formatCurrency(shownSales.summary.revenue, language)} · {copy.cost}{" "}
+                                  {formatCurrency(shownSales.summary.cost, language)} · {copy.profit}{" "}
+                                  {formatCurrency(shownSales.summary.profit, language)}
+                                </p>
+                              ) : detailKind === "cost" ? (
+                                <p className="mt-0.5 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                                  {copy.metricCost} {formatCurrency(shownExpensesTotal, language)} · {shownExpensesEntries}{" "}
+                                  {copy.ingredients}
+                                </p>
+                              ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDetailBar(null)}
+                              className="ui-press shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                            >
+                              {copy.drillClose}
+                            </button>
+                          </div>
+
+                          {detailLoading && !matchedDetail ? (
+                            <div className="flex items-center justify-center px-3 py-8 text-[12px] text-gray-400">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              {copy.loading}
+                            </div>
+                          ) : shownExpenses.length ? (
+                            <div className="max-h-64 overflow-y-auto">
+                              <div className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                                <span>{copy.expenseCategory}</span>
+                                <span>{copy.expenseNote}</span>
+                                <span className="text-right">{copy.metricCost}</span>
+                              </div>
+                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {shownExpenses.map((item) => (
+                                  <div key={item.ID} className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] items-center gap-2 px-3 py-2">
+                                    <span className="truncate text-[11px] text-gray-700 dark:text-gray-200">{expenseCategoryLabels[language][item.category] ?? item.category}</span>
+                                    <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{item.note || "-"}</span>
+                                    <span className="text-right font-mono text-[11px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(item.amount, language)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {shownExpensesHaveMore ? (
+                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                              ) : null}
+                            </div>
+                          ) : shownSales?.orders.length ? (
+                            <div className="max-h-64 overflow-y-auto">
+                              <div className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                                <span>{copy.order}</span>
+                                <span>{copy.location}</span>
+                                <span className="text-right">{copy.time}</span>
+                                <span className="text-right">{copy.revenue}</span>
+                                <span className="text-right">{copy.cost}</span>
+                                <span className="text-right">{copy.profit}</span>
+                              </div>
+                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {shownSales.orders.map((row) => (
+                                  <button
+                                    key={row.order_id}
+                                    type="button"
+                                    onClick={() => router.push(orderPosHref({ ID: row.order_id, order_number: row.order_number }))}
+                                    className="ui-press grid w-full grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
+                                  >
+                                    <span className="font-mono text-[11px] font-semibold text-gray-950 dark:text-white">#{row.order_number}</span>
+                                    <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
+                                      {row.table_label || row.customer_name || (row.order_type === "takeaway" ? (language === "th" ? "กลับบ้าน" : "Takeaway") : "-")}
+                                    </span>
+                                    <span className="text-right font-mono text-[10px] text-gray-400">
+                                      {new Date(row.completed_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                    <span className="text-right font-mono text-[11px] tabular-nums text-gray-700 dark:text-gray-200">{formatCurrency(row.revenue, language)}</span>
+                                    <span className="text-right font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">{formatCurrency(row.cost, language)}</span>
+                                    <span className={`text-right font-mono text-[11px] font-semibold tabular-nums ${row.profit < 0 ? "text-red-600 dark:text-red-400" : "text-gray-950 dark:text-white"}`}>
+                                      {formatCurrency(row.profit, language)}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                              {shownSales.has_more ? (
+                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                              ) : null}
+                            </div>
+                          ) : detailKind === "cost" && shownExpensesEntries > 0 && shownExpensesHaveMore ? (
+                            <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.drillCapped}</p>
+                          ) : (
+                            <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                              {detailFailed && detailKind === "sales" ? copy.loadError : copy.drillEmpty}
+                            </p>
+                          )}
+                        </div>
+                      ) : activeChartHasData ? (
+                        <p className="mt-2 text-center text-[10px] text-gray-400 dark:text-gray-500">{copy.drillHint}</p>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
             </CollapsibleCard>
@@ -1867,6 +1982,17 @@ export default function Home() {
 
         {lastUpdated ? <p className="pb-1 text-right text-[10px] text-gray-400 dark:text-gray-500">{copy.updated} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</p> : null}
       </div>
+
+      {orderBill ? (
+        <PaidReceiptDialog
+          bill={orderBill}
+          language={language === "th" ? "th" : "en"}
+          locationLabel={orderLocationLabel(orderBill.order, language)}
+          restaurant={activeMembership?.restaurant}
+          paper="a4"
+          onClose={() => setOrderBill(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -111,7 +111,8 @@ function buildCopy(language: "th" | "en") {
         adjustTitle: "ปรับสต็อก",
         adjustIn: "รับเข้า",
         spentAmount: "ยอดที่จ่ายจริง (ไม่บังคับ)",
-        spentAmountHint: "กรอกเมื่อชำระเงินจริง ระบบจะบันทึกยอดนี้ในรายจ่าย",
+        spentAmountHint: "เว้นว่างไว้ ระบบจะคิดจากต้นทุนต่อหน่วยให้",
+        spentAmountFallback: (value: string) => `เว้นว่าง = บันทึกรายจ่าย ${value}`,
         adjustOut: "จ่ายออก",
         adjustSet: "ตั้งค่าใหม่",
         quantity: "จำนวน",
@@ -203,7 +204,8 @@ function buildCopy(language: "th" | "en") {
         adjustTitle: "Adjust stock",
         adjustIn: "Stock in",
         spentAmount: "Actual amount paid (optional)",
-        spentAmountHint: "Enter only when money was paid; this amount will be added to expenses.",
+        spentAmountHint: "Leave blank and the cost per unit is used instead.",
+        spentAmountFallback: (value: string) => `Blank records ${value} as the expense`,
         adjustOut: "Stock out",
         adjustSet: "Set value",
         quantity: "Quantity",
@@ -344,6 +346,14 @@ export default function InventoryPage() {
   const [adjustNote, setAdjustNote] = useState("");
   const [adjustError, setAdjustError] = useState("");
   const [adjusting, setAdjusting] = useState(false);
+  // Mirrors the server's fallback: an unpriced stock-in is booked at the
+  // ingredient's own cost per unit.
+  const referenceAdjustAmount = (() => {
+    const quantity = Number(adjustQty);
+    const rate = adjustTarget?.cost_per_unit ?? 0;
+    if (!Number.isFinite(quantity) || quantity <= 0 || rate <= 0) return 0;
+    return Math.round(rate * quantity * 100) / 100;
+  })();
 
   const [txTarget, setTxTarget] = useState<Ingredient | null>(null);
   const [txClosing, setTxClosing] = useState(false);
@@ -1408,7 +1418,13 @@ export default function InventoryPage() {
                     onChange={(event) => setAdjustPaidAmount(event.target.value)}
                     className={inputCls}
                   />
-                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">{copy.spentAmountHint}</p>
+                  {/* What the server will book if this field stays empty, so the
+                      fallback is visible before it happens rather than after. */}
+                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                    {adjustPaidAmount.trim() === "" && referenceAdjustAmount > 0
+                      ? copy.spentAmountFallback(formatCurrency(referenceAdjustAmount, lang))
+                      : copy.spentAmountHint}
+                  </p>
                 </div>
               )}
               <div>
