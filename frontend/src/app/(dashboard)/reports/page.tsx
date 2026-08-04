@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, TrendingUp, Wallet } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle, ArrowLeft, BarChart3, ChevronRight, TrendingUp, Wallet } from "lucide-react";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { formatCurrency, formatNumber } from "@/src/lib/format";
 import { can } from "@/src/lib/rbac";
-import { getManagerReport } from "@/src/lib/report";
+import { getManagerReport, getSalesDetail } from "@/src/lib/report";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { ManagerReport } from "@/src/types/report";
+import type { ManagerReport, SalesDetailReport } from "@/src/types/report";
 
 export default function ReportsPage() {
   const { activeMembership } = useAuth();
@@ -23,6 +24,7 @@ export default function ReportsPage() {
   const copy = useMemo(() => language === "th"
     ? {
         denied: "ไม่มีสิทธิ์ดูรายงาน",
+        back: "กลับหน้าแดชบอร์ด",
         eyebrow: "Reports",
         title: "รายงานผู้จัดการ",
         subtitle: "ยอดขาย ต้นทุนเมนู และวัตถุดิบเสี่ยงจากข้อมูลขายจริง",
@@ -40,9 +42,16 @@ export default function ReportsPage() {
         cost: "ต้นทุน",
         noData: "ยังไม่มีข้อมูลในช่วงนี้",
         restock: "ควรเติม",
+        date: "วันที่",
+        time: "เวลา",
+        table: "โต๊ะ",
+        order: "ออเดอร์",
+        loadingDay: "กำลังโหลดรายการของวันนี้...",
+        dayCapped: "แสดงเฉพาะรายการแรกของวันนี้",
       }
     : {
         denied: "You do not have permission to view reports.",
+        back: "Back to dashboard",
         eyebrow: "Reports",
         title: "Manager report",
         subtitle: "Sales, menu food cost, and stock risks from real order data.",
@@ -60,7 +69,42 @@ export default function ReportsPage() {
         cost: "Cost",
         noData: "No data in this period yet.",
         restock: "Top up",
+        date: "Date",
+        time: "Time",
+        table: "Table",
+        order: "Order",
+        loadingDay: "Loading this day's orders...",
+        dayCapped: "Showing the first orders of this day only.",
       }, [language]);
+
+  // Day rows expand in place. Only one is open at a time, so a single slot for
+  // the fetched day is enough — reopening a day refetches it.
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  const [dayDetail, setDayDetail] = useState<SalesDetailReport | null>(null);
+  const [dayDetailLoading, setDayDetailLoading] = useState(false);
+  const [dayDetailFailed, setDayDetailFailed] = useState(false);
+  const toggleDay = (date: string) => setOpenDay((current) => (current === date ? null : date));
+
+  useEffect(() => {
+    if (!openDay) return;
+    let cancelled = false;
+    setDayDetailLoading(true);
+    setDayDetailFailed(false);
+    setDayDetail(null);
+    getSalesDetail(openDay)
+      .then((res) => {
+        if (!cancelled) setDayDetail(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setDayDetailFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setDayDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openDay]);
 
   const load = async () => {
     if (!canView) {
@@ -95,6 +139,10 @@ export default function ReportsPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
         </div>
+        <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          {copy.back}
+        </Link>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
@@ -130,15 +178,91 @@ export default function ReportsPage() {
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.salesDays}</h2>
               </div>
-              <div className="divide-y divide-slate-100 dark:divide-gray-800">
-                {report.sales_days.length ? report.sales_days.map((day) => (
-                  <div key={day.order_date} className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 text-sm">
-                    <span className="font-medium">{day.order_date}</span>
-                    <span className="text-slate-500">{formatNumber(day.orders, lang)} {copy.orders}</span>
-                    <span className="font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</span>
-                  </div>
-                )) : <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}
-              </div>
+              {report.sales_days.length ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[420px] text-left text-sm">
+                    <thead className="text-xs text-slate-400">
+                      <tr className="border-b border-slate-200 dark:border-gray-800">
+                        <th className="px-4 py-2 font-medium">{copy.date}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.orders}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.revenue}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.profit}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
+                      {report.sales_days.map((day) => {
+                        const open = openDay === day.order_date;
+                        return (
+                          <Fragment key={day.order_date}>
+                            <tr
+                              onClick={() => toggleDay(day.order_date)}
+                              aria-expanded={open}
+                              className={`cursor-pointer ${open ? "bg-slate-100 dark:bg-gray-900" : "hover:bg-slate-50 dark:hover:bg-gray-900/60"}`}
+                            >
+                              <td className="px-4 py-2.5 font-medium">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true" />
+                                  {day.order_date}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{formatNumber(day.orders, lang)}</td>
+                              <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</td>
+                              <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${day.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                                {formatCurrency(day.profit, lang)}
+                              </td>
+                            </tr>
+                            {open ? (
+                              <tr>
+                                <td colSpan={4} className="bg-slate-50 px-4 py-3 dark:bg-gray-900/40">
+                                  {dayDetailLoading ? (
+                                    <p className="py-4 text-center text-xs text-slate-400">{copy.loadingDay}</p>
+                                  ) : dayDetail?.orders.length ? (
+                                    <>
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="text-slate-400">
+                                          <tr>
+                                            <th className="py-1 font-medium">{copy.order}</th>
+                                            <th className="py-1 font-medium">{copy.table}</th>
+                                            <th className="py-1 text-right font-medium">{copy.time}</th>
+                                            <th className="py-1 text-right font-medium">{copy.revenue}</th>
+                                            <th className="py-1 text-right font-medium">{copy.cost}</th>
+                                            <th className="py-1 text-right font-medium">{copy.profit}</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                          {dayDetail.orders.map((order) => (
+                                            <tr key={order.order_id}>
+                                              <td className="py-1.5 font-mono">{order.order_number}</td>
+                                              <td className="py-1.5 truncate">{order.table_label || order.customer_name || "-"}</td>
+                                              <td className="py-1.5 text-right font-mono text-slate-400">
+                                                {new Date(order.completed_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                                              </td>
+                                              <td className="py-1.5 text-right tabular-nums">{formatCurrency(order.revenue, lang)}</td>
+                                              <td className="py-1.5 text-right tabular-nums text-slate-500">{formatCurrency(order.cost, lang)}</td>
+                                              <td className={`py-1.5 text-right font-semibold tabular-nums ${order.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                                                {formatCurrency(order.profit, lang)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                      {dayDetail.has_more ? <p className="pt-2 text-center text-[11px] text-slate-400">{copy.dayCapped}</p> : null}
+                                    </>
+                                  ) : (
+                                    <p className="py-4 text-center text-xs text-slate-400">{dayDetailFailed ? copy.loadError : copy.noData}</p>
+                                  )}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>
+              )}
             </section>
 
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">

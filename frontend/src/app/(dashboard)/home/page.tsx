@@ -85,6 +85,14 @@ const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
 // Collapsed cards start left-to-right in this order; the queue in `Home`
 // reshuffles from here as cards get opened and closed.
 const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
+const expandedCardStorageKey = "home:expandedCard";
+// Day/month split of the sales card, as a percentage of the card width. Kept in
+// localStorage, not session: it is a layout preference, not where you were.
+const cardSplitStorageKey = "home:salesSplit";
+const cardSplitDefault = 58;
+const cardSplitMin = 30;
+const cardSplitMax = 78;
+const clampSplit = (pct: number) => Math.min(cardSplitMax, Math.max(cardSplitMin, pct));
 const collapsibleCardFadeMs = 200;
 
 function prefersReducedMotion() {
@@ -122,8 +130,6 @@ function buildCopy(language: "th" | "en") {
   return language === "th"
     ? {
         title: "ภาพรวมร้าน",
-        todayMode: "สถานะการทำงานวันนี้",
-        historyMode: "สรุปผลการดำเนินงานย้อนหลัง",
         today: "วันนี้",
         previousDay: "วันก่อน",
         nextDay: "วันถัดไป",
@@ -146,7 +152,7 @@ function buildCopy(language: "th" | "en") {
         tickets: "ใบ",
         minutes: "นาที",
         noKitchen: "ไม่มีงานค้างในครัว",
-        salesOverview: "สรุปยอดขาย",
+        salesOverview: "ยอดขาย",
         metricRevenue: "รายได้ทั้งหมด",
         metricCost: "รายจ่าย",
         viewExpenseLedger: "ดูบันทึกรายจ่าย",
@@ -157,6 +163,10 @@ function buildCopy(language: "th" | "en") {
         chartTitleCostDay: "รายจ่ายรายวัน",
         chartTitleCostMonth: "รายจ่ายรายเดือน",
         expenseMonthly: "รายจ่ายเดือนนี้",
+        monthlySales: "ยอดขายรายเดือน",
+        thisMonth: "ทั้งเดือน",
+        thisDay: "ทั้งวัน",
+        resizeSplit: "ปรับสัดส่วนรายวัน/รายเดือน",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
         chartTitleProfitHour: "กำไร/ขาดทุนรายชั่วโมง",
@@ -208,8 +218,6 @@ function buildCopy(language: "th" | "en") {
       }
     : {
         title: "Restaurant overview",
-        todayMode: "Today's live operations",
-        historyMode: "Historical daily summary",
         today: "Today",
         previousDay: "Previous day",
         nextDay: "Next day",
@@ -232,7 +240,7 @@ function buildCopy(language: "th" | "en") {
         tickets: "tickets",
         minutes: "mins",
         noKitchen: "No kitchen work waiting",
-        salesOverview: "Daily sales",
+        salesOverview: "Sales",
         metricRevenue: "Total revenue",
         metricCost: "Expenses",
         viewExpenseLedger: "View expense ledger",
@@ -243,6 +251,10 @@ function buildCopy(language: "th" | "en") {
         chartTitleCostDay: "Expenses by day",
         chartTitleCostMonth: "Expenses by month",
         expenseMonthly: "Expenses this month",
+        monthlySales: "Monthly sales",
+        thisMonth: "This month",
+        thisDay: "This day",
+        resizeSplit: "Resize the day and month panes",
         expenseCategory: "Category",
         expenseNote: "Details",
         chartTitleProfitHour: "Profit/loss by hour",
@@ -380,23 +392,25 @@ function ChartBox({
 type CardTone = "revenue" | "profit" | "cost";
 type CardSummaryItem = { key: string; label: string; value: string; valueClass?: string; helper?: string; tone?: CardTone; href?: string };
 
-// Money tiles are colour-coded so the three read as a set at a glance. Tints
-// only — the value keeps its normal text colour so it stays legible either way.
+// Money tiles are colour-coded so the three read as a set at a glance. Each
+// tone sets the surface, the border and the *inherited* text colour, so labels
+// pick the hue up on their own — the kitchen board's convention. The value
+// keeps an explicit colour of its own so it stays the loudest thing in the tile.
 const cardToneTile: Record<CardTone, string> = {
-  revenue: "bg-sky-50 dark:bg-sky-950/40",
-  profit: "bg-emerald-50 dark:bg-emerald-950/40",
-  cost: "bg-rose-50 dark:bg-rose-950/40",
+  revenue: "border-sky-400 bg-sky-200 text-sky-900 dark:border-sky-600 dark:bg-sky-900/70 dark:text-sky-100",
+  profit: "border-emerald-400 bg-emerald-200 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-900/70 dark:text-emerald-100",
+  cost: "border-rose-400 bg-rose-200 text-rose-900 dark:border-rose-600 dark:bg-rose-900/70 dark:text-rose-100",
 };
-const cardToneRow: Record<CardTone, string> = {
-  revenue: "bg-sky-50 dark:bg-sky-950/30",
-  profit: "bg-emerald-50 dark:bg-emerald-950/30",
-  cost: "bg-rose-50 dark:bg-rose-950/30",
-};
+const cardToneRow = cardToneTile;
+const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";
 
 function CollapsibleCard({
   title,
   subtitle,
   summary,
+  // Off when the expanded body already shows the same figures in a section of
+  // its own — the collapsed tile and row still need `summary` either way.
+  showSummaryWhenExpanded = true,
   expanded,
   dimmed,
   collapsedRank,
@@ -406,6 +420,7 @@ function CollapsibleCard({
   title: string;
   subtitle?: string;
   summary?: CardSummaryItem[];
+  showSummaryWhenExpanded?: boolean;
   expanded: boolean;
   dimmed?: boolean;
   collapsedRank: number;
@@ -569,9 +584,9 @@ function CollapsibleCard({
         {summary?.length ? (
           <div className="grid flex-1 grid-cols-2 gap-3">
             {summary.map((item) => (
-              <div key={item.key} className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md p-2 text-center ${item.tone ? cardToneTile[item.tone] : "bg-gray-50 dark:bg-gray-900"}`}>
-                <p className="truncate text-[14px] font-medium leading-tight text-gray-500 dark:text-gray-400">{item.label}</p>
-                <p className={`truncate font-mono text-[24px] font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+              <div key={item.key} className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}>
+                <p className="truncate text-[16px] font-bold uppercase tracking-wide leading-tight">{item.label}</p>
+                <p className={`truncate font-mono text-[28px] font-bold leading-tight tabular-nums sm:text-[32px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
               </div>
             ))}
           </div>
@@ -588,7 +603,7 @@ function CollapsibleCard({
         // counts as a control too: its bars are plain SVG paths, so without it a
         // click that drills into a bar would collapse the whole card underneath.
         const target = event.target as HTMLElement;
-        if (target.closest("button, a, input, select, textarea, [role='button'], .recharts-wrapper")) return;
+        if (target.closest("button, a, input, select, textarea, [role='button'], [role='separator'], .recharts-wrapper")) return;
         onToggle();
       }}
       style={{ order: orderRank }}
@@ -607,16 +622,16 @@ function CollapsibleCard({
         </div>
         <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
       </button>
-      {summary?.length ? (
+      {summary?.length && showSummaryWhenExpanded ? (
         <div className="grid grid-cols-2 gap-px border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4">
           {summary.map((item) => {
             // A tile with an `href` drills into its own page; the section's
             // click-to-collapse handler already skips anchors.
-            const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white dark:bg-gray-950"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
+            const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-950 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
             const content = (
               <>
-                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{item.label}</p>
-                <p className={`mt-1 font-mono text-[20px] font-semibold tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                <p className="text-[13px] font-bold uppercase tracking-wide">{item.label}</p>
+                <p className={`mt-1 truncate font-mono text-[24px] font-bold tabular-nums sm:text-[28px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
                 {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
               </>
             );
@@ -650,6 +665,7 @@ export default function Home() {
   const { activeMembership } = useAuth();
   const restaurantId = activeMembership?.restaurant_id ?? null;
   const canViewExpenses = can(activeMembership, "manage_expenses") || can(activeMembership, "view_reports");
+  const canViewReports = can(activeMembership, "view_reports");
   const { language } = useLanguage();
   const copy = useMemo(() => buildCopy(language), [language]);
   const now = useNow();
@@ -705,7 +721,32 @@ export default function Home() {
       if (pendingSwitchRef.current) window.clearTimeout(pendingSwitchRef.current);
     };
   }, []);
+  // Leaving for /reports or /expenses unmounts this page, so the open card is
+  // remembered for the tab and reopened on the way back. Restored after mount
+  // rather than as the initial state, which would not match the server render.
+  useEffect(() => {
+    const saved = sessionStorage.getItem(expandedCardStorageKey);
+    if (saved) setExpandedKey(saved);
+  }, []);
+
+  const [splitPct, setSplitPct] = useState(cardSplitDefault);
+  const [splitDragging, setSplitDragging] = useState(false);
+  const splitRowRef = useRef<HTMLDivElement | null>(null);
+  // Read after mount for the same reason as the open card: the server has no
+  // localStorage, so seeding the initial state from it would not hydrate.
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(cardSplitStorageKey));
+    if (Number.isFinite(saved) && saved > 0) setSplitPct(clampSplit(saved));
+  }, []);
+  const moveSplitTo = (pct: number) => setSplitPct(clampSplit(pct));
+  // Written on release and on each keypress rather than on every pointermove —
+  // a drag would otherwise hit localStorage a few hundred times.
+  const persistSplit = () => localStorage.setItem(cardSplitStorageKey, String(Math.round(splitPct)));
   const toggleCard = (key: string) => {
+    // Both branches below land on `key` open, or nothing open — record that now
+    // so it survives navigating away to a monthly page and back.
+    if (expandedKey === key) sessionStorage.removeItem(expandedCardStorageKey);
+    else sessionStorage.setItem(expandedCardStorageKey, key);
     bumpCardToEnd(key);
     if (pendingSwitchRef.current) {
       window.clearTimeout(pendingSwitchRef.current);
@@ -838,8 +879,9 @@ export default function Home() {
     new Date(2000, index, 1).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short" }),
   );
 
+  // Loaded on mount, not on first day/month chart view: the month section reads
+  // its revenue and profit off this, and that shows while the card is collapsed.
   useEffect(() => {
-    if (chartMode === "hour") return;
     if (salesDaysLoadedRef.current || !activeMembership?.restaurant_id) return;
     salesDaysLoadedRef.current = true;
     setSalesDaysLoading(true);
@@ -1048,12 +1090,12 @@ export default function Home() {
   // Daily totals come from an uncapped server aggregate. The ledger rows below
   // remain useful for drill-down, but must not be used to calculate chart bars.
   const expenseByDate = useMemo(() => dailyExpenseTotalsByDate(expenseDaily), [expenseDaily]);
-  // What the day's spending tile shows: money paid out, not the recipe cost of
-  // the food sold. Profit stays gross (revenue − COGS) — the two never mix.
-  // Whole calendar month, not the selected day: a rent transfer or a pork
-  // delivery lands on one date, so a per-day figure reads as zero most days.
-  // The fetch window carries a week of slack either side — filter it back out.
+  // The month containing the selected day. Expenses are whole-month by nature —
+  // one rent transfer lands on one date — so revenue is summed the same way.
   const monthExpense = totalDailyExpensesForMonth(expenseDaily, expenseMonth);
+  const monthSales = salesDays.filter((day) => day.order_date.startsWith(expenseMonth));
+  const monthRevenue = monthSales.reduce((sum, day) => sum + day.revenue, 0);
+  const monthProfit = monthSales.reduce((sum, day) => sum + day.profit, 0);
   const dayProfit = salesHours.reduce((sum, hour) => sum + hour.profit, 0);
   const activeOrders = validOrders.filter((order) => activeOrderStatuses.has(order.status)).length;
 
@@ -1185,6 +1227,7 @@ export default function Home() {
 
   const lowStockCount = ingredients.filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5).length;
 
+  const selectedMonthLabel = selectedDateAtNoon.toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "long", year: "numeric" });
   const selectedDateLabel = selectedDateAtNoon.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
     weekday: "long",
     day: "numeric",
@@ -1215,9 +1258,6 @@ export default function Home() {
             : "text-gray-950 dark:text-white",
       tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
     },
-    ...(canViewExpenses
-      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), tone: "cost" as const, href: "/expenses" }]
-      : []),
   ];
 
   const liveWorkSummary: CardSummaryItem[] = [
@@ -1253,10 +1293,9 @@ export default function Home() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-[22px] font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" aria-label={copy.loading} /> : null}
+              <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">{copy.title}</h1>
+              {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-400" aria-label={copy.loading} /> : null}
             </div>
-            <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{isToday ? copy.todayMode : copy.historyMode} · {selectedDateLabel}</p>
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1264,10 +1303,23 @@ export default function Home() {
               <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </button>
-              <label className="relative inline-flex h-10 min-w-0 items-center gap-2 px-3 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+              {/* The native input drives the value but renders the browser's own
+                  numeric format, so it sits transparent on top and the readable
+                  weekday/date is drawn underneath it. */}
+              <label className="relative inline-flex h-10 min-w-0 cursor-pointer items-center gap-2 px-3 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
                 <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
                 <span className="sr-only">{copy.chooseDate}</span>
-                <input type="date" value={selectedDate} max={today} onChange={(event) => selectDate(event.target.value)} className="min-w-0 bg-transparent font-mono text-[12px] outline-none dark:[color-scheme:dark]" />
+                <span aria-hidden="true" className="whitespace-nowrap text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+                  {selectedDateLabel}
+                </span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={today}
+                  onChange={(event) => selectDate(event.target.value)}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
               </label>
               <button type="button" disabled={selectedDate >= today} onClick={() => selectDate(shiftDashboardDate(selectedDate, 1))} aria-label={copy.nextDay} title={copy.nextDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -1293,13 +1345,28 @@ export default function Home() {
             <CollapsibleCard
               title={copy.salesOverview}
               summary={summary}
+              showSummaryWhenExpanded={false}
               expanded={expandedKey === "sales"}
               dimmed={isCardDimmed("sales")}
               collapsedRank={collapsedRank("sales")}
               onToggle={() => toggleCard("sales")}
             >
-              <div className="grid overflow-visible lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.55fr)]">
-                <div className="min-w-0 border-b border-gray-200 p-4 dark:border-gray-800 lg:border-b-0 lg:border-r">
+              <div ref={splitRowRef} className="overflow-visible lg:flex lg:items-stretch">
+                <div
+                  style={{ width: `${splitPct}%` }}
+                  className="min-w-0 border-b border-gray-200 p-4 dark:border-gray-800 max-lg:!w-full lg:shrink-0 lg:border-b-0"
+                >
+                  <div className="border-b-2 border-gray-900 pb-1.5 dark:border-white">
+                    <h3 className="text-[17px] font-bold uppercase tracking-wide text-gray-950 dark:text-white">{copy.thisDay}</h3>
+                  </div>
+                  <div className="mb-3 mt-3 grid grid-cols-3 gap-2">
+                    {summary.map((item) => (
+                      <div key={item.key} className={`rounded-md border px-3 py-2 ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}>
+                        <p className="truncate text-[12px] font-bold uppercase tracking-wide">{item.label}</p>
+                        <p className={`mt-0.5 truncate font-mono text-[19px] font-bold tabular-nums sm:text-[22px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
                       {metricOptions.map(({ key: metric, label }) => (
@@ -1470,8 +1537,87 @@ export default function Home() {
                     <p className="mt-2 text-center text-[10px] text-gray-400 dark:text-gray-500">{copy.drillHint}</p>
                   ) : null}
                 </div>
-                <div className="p-4">
-                  <h3 className="text-[12px] font-medium text-gray-600 dark:text-gray-300">{copy.topItems}</h3>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={copy.resizeSplit}
+                  aria-valuenow={Math.round(splitPct)}
+                  aria-valuemin={cardSplitMin}
+                  aria-valuemax={cardSplitMax}
+                  tabIndex={0}
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setSplitDragging(true);
+                  }}
+                  onPointerMove={(event) => {
+                    if (!splitDragging || !splitRowRef.current) return;
+                    const rect = splitRowRef.current.getBoundingClientRect();
+                    moveSplitTo(((event.clientX - rect.left) / rect.width) * 100);
+                  }}
+                  onPointerUp={(event) => {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                    setSplitDragging(false);
+                    persistSplit();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                    event.preventDefault();
+                    moveSplitTo(splitPct + (event.key === "ArrowLeft" ? -2 : 2));
+                    persistSplit();
+                  }}
+                  onDoubleClick={() => {
+                    moveSplitTo(cardSplitDefault);
+                    localStorage.setItem(cardSplitStorageKey, String(cardSplitDefault));
+                  }}
+                  className={`group relative hidden w-1.5 shrink-0 cursor-col-resize touch-none border-x border-gray-200 bg-gray-100 transition-colors hover:bg-orange-400 focus-visible:outline-none focus-visible:bg-orange-500 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-orange-500 lg:block ${
+                    splitDragging ? "bg-orange-500 dark:bg-orange-500" : ""
+                  }`}
+                >
+                  <span className="absolute left-1/2 top-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-400 group-hover:bg-white dark:bg-gray-600" aria-hidden="true" />
+                </div>
+
+                {/* Left pane is the selected day; this one is the month it falls
+                    in. The revenue and expense figures are themselves the links
+                    to their full monthly pages. */}
+                <div className="min-w-0 flex-1 bg-slate-100/70 p-4 dark:bg-gray-900/50">
+                  <div className="flex flex-wrap items-baseline gap-x-2 border-b-2 border-orange-500 pb-1.5 dark:border-orange-400">
+                    <h3 className="text-[17px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400">{copy.thisMonth}</h3>
+                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{selectedMonthLabel}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[
+                      { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language), tone: "revenue" as CardTone, href: canViewReports ? "/reports" : undefined },
+                      ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(monthExpense, language), tone: "cost" as CardTone, href: "/expenses" }] : []),
+                      { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), tone: (monthProfit < 0 ? "cost" : "profit") as CardTone, valueClass: monthProfit < 0 ? "text-red-600 dark:text-red-400" : "text-gray-950 dark:text-white" },
+                      { key: "orders", label: copy.ordersTotal, value: monthSales.reduce((sum, day) => sum + day.orders, 0).toLocaleString() },
+                    ].map((stat) => {
+                      const tileClass = `block rounded-md border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
+                        stat.href ? "ui-press cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
+                      }`;
+                      const body = (
+                        <>
+                          <p className="flex items-center gap-1 truncate text-[12px] font-bold uppercase tracking-wide">
+                            {stat.label}
+                            {stat.href ? (
+                              <span className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-current/15">
+                                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className={`mt-0.5 truncate font-mono text-[22px] font-bold tabular-nums sm:text-[26px] ${stat.valueClass ?? "text-gray-950 dark:text-white"}`}>
+                            {salesDaysLoading && !salesDays.length ? "—" : stat.value}
+                          </p>
+                        </>
+                      );
+                      return stat.href ? (
+                        <Link key={stat.key} href={stat.href} className={tileClass}>{body}</Link>
+                      ) : (
+                        <div key={stat.key} className={tileClass}>{body}</div>
+                      );
+                    })}
+                  </div>
+
+                  <h3 className="mt-4 border-t border-gray-200 pt-4 text-[12px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.topItems}</h3>
 
                   <div className="mt-2 flex justify-center">
                     {topItemsLoading ? (
