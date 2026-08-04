@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -82,6 +84,7 @@ export default function ExpensesPage() {
       language === "th"
         ? {
             eyebrow: "Expenses",
+            back: "กลับหน้าแดชบอร์ด",
             title: "บันทึกรายจ่าย",
             subtitle: "เงินที่จ่ายออกจริง — คนละตัวกับต้นทุนอาหารที่ขายไปแล้วในหน้าสรุปยอดขาย",
             denied: "ไม่มีสิทธิ์ดูรายจ่าย",
@@ -113,6 +116,7 @@ export default function ExpensesPage() {
           }
         : {
             eyebrow: "Expenses",
+            back: "Back to dashboard",
             title: "Expense ledger",
             subtitle: "Cash that actually left the restaurant — not the same as the food cost shown on the sales card.",
             denied: "You do not have permission to view expenses.",
@@ -241,7 +245,17 @@ export default function ExpensesPage() {
     "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:focus:border-white";
 
   return (
-    <OperationalPageShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle}>
+    <OperationalPageShell
+      eyebrow={copy.eyebrow}
+      title={copy.title}
+      subtitle={copy.subtitle}
+      actions={
+        <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          {copy.back}
+        </Link>
+      }
+    >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
           <button type="button" onClick={() => shiftMonth(-1)} aria-label={copy.previousMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900">‹</button>
