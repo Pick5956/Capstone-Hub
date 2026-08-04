@@ -114,9 +114,43 @@ func TestBuildInitialStockTransaction(t *testing.T) {
 		t.Fatalf("buildInitialStockTransaction() values = %#v", tx)
 	}
 
+	if tx.Amount != 0 {
+		t.Fatalf("buildInitialStockTransaction() amount = %v, want 0 without a cost per unit", tx.Amount)
+	}
+
+	// Opening stock priced at the ingredient's own rate: 12.5 * 8.4 = 105.
+	ingredient.CostPerUnit = 8.4
+	priced := buildInitialStockTransaction(ingredient, 41)
+	if priced == nil || priced.Amount != 105 {
+		t.Fatalf("buildInitialStockTransaction() amount = %#v, want 105", priced)
+	}
+
 	ingredient.Stock = 0
 	if got := buildInitialStockTransaction(ingredient, 41); got != nil {
 		t.Fatalf("buildInitialStockTransaction() = %#v, want nil for zero stock", got)
+	}
+}
+
+func TestReferenceRestockAmount(t *testing.T) {
+	if got := referenceRestockAmount(12.345, 3); got != 37.04 {
+		t.Fatalf("referenceRestockAmount(12.345, 3) = %v, want 37.04", got)
+	}
+	// No rate, no quantity, or nonsense numbers must not invent an expense.
+	for _, testCase := range []struct{ cost, quantity float64 }{
+		{0, 5},
+		{-2, 5},
+		{10, 0},
+		{10, -5},
+		{math.NaN(), 5},
+		{math.Inf(1), 5},
+		{10, math.NaN()},
+	} {
+		if got := referenceRestockAmount(testCase.cost, testCase.quantity); got != 0 {
+			t.Fatalf("referenceRestockAmount(%v, %v) = %v, want 0", testCase.cost, testCase.quantity, got)
+		}
+	}
+	if got := referenceRestockAmount(maxIngredientCost, 10); got != maxIngredientCost {
+		t.Fatalf("referenceRestockAmount() = %v, want clamp to %v", got, float64(maxIngredientCost))
 	}
 }
 

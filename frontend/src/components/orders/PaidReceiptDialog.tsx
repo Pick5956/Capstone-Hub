@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Printer } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { Download, Printer } from "lucide-react";
 import { groupOrderItems } from "@/src/lib/orderItemGroups";
 import type { Bill, OrderItem } from "@/src/types/order";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
-import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
+import { printA4, printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import ThermalReceipt from "@/src/components/orders/ThermalReceipt";
 import type { Restaurant } from "@/src/types/restaurant";
 
@@ -18,17 +18,27 @@ export default function PaidReceiptDialog({
   language,
   locationLabel,
   restaurant,
+  paper = "thermal",
   onClose,
 }: {
   bill: Bill;
   language: "th" | "en";
   locationLabel: string;
   restaurant?: Restaurant;
+  // "thermal" prints the 48mm strip for the POS printer; "a4" prints the
+  // on-screen receipt on a sheet, for archiving and exporting.
+  paper?: "thermal" | "a4";
   onClose: () => void;
 }) {
   const [closing, setClosing] = useState(false);
   const locale = language === "th" ? "th-TH" : "en-US";
   const payment = bill.payments.at(-1) ?? null;
+  // When the bill was settled. Unpaid or legacy rows fall back to when the
+  // order closed, then to when it was created, so a receipt is never undated.
+  const receiptAt = payment?.paid_at || bill.order.closed_at || bill.order.CreatedAt;
+  const receiptAtLabel = receiptAt
+    ? new Date(receiptAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
+    : "";
   const groups = groupOrderItems(bill.items.filter((item) => item.status !== "cancelled"));
   const sections = (["dine_in", "takeaway"] as const)
     .map((key) => ({ key, groups: groups.filter((group) => fulfillmentType(group.firstItem) === key) }))
@@ -49,6 +59,11 @@ export default function PaidReceiptDialog({
         cash: "เงินสด",
         qr: "QR PromptPay",
         print: "พิมพ์ใบเสร็จอีกครั้ง",
+        savePdf: "บันทึกเป็น PDF",
+        item: "รายการ",
+        qty: "จำนวน",
+        unitPrice: "ราคา/หน่วย",
+        amount: "รวม",
       }
     : {
         title: "Payment receipt",
@@ -65,6 +80,11 @@ export default function PaidReceiptDialog({
         cash: "Cash",
         qr: "QR PromptPay",
         print: "Print receipt again",
+        savePdf: "Save as PDF",
+        item: "Item",
+        qty: "Qty",
+        unitPrice: "Unit price",
+        amount: "Amount",
       };
   const money = (value: number) => `฿${value.toLocaleString(locale, { maximumFractionDigits: 2 })}`;
 
@@ -87,12 +107,14 @@ export default function PaidReceiptDialog({
     <div data-reprint-overlay {...backdrop} className={`${closing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
       <style jsx global>{`
         @media print {
-          #archive-print-receipt { position: static !important; display: block !important; width: 48mm !important; height: auto !important; max-height: none !important; margin: 0 auto !important; padding: 3mm 0 !important; overflow: visible !important; transform: none !important; color: #111827 !important; background: #fff !important; }
+          #archive-print-receipt { position: static !important; display: block !important; ${paper === "a4" ? "" : "width: 48mm !important; padding: 3mm 0 !important;"} height: auto !important; max-height: none !important; margin: 0 auto !important; overflow: visible !important; transform: none !important; color: #111827 !important; background: #fff !important; }
           #archive-print-receipt [data-receipt-scroll] { overflow: visible !important; }
           #archive-print-receipt [data-screen-only] { display: none !important; }
-          #archive-print-receipt [data-screen-receipt] { display: none !important; }
           #archive-print-receipt [data-print-only] { display: block !important; }
+          ${paper === "a4" ? "" : `
+          #archive-print-receipt [data-screen-receipt] { display: none !important; }
           #archive-print-receipt [data-receipt-item] { border: 0 !important; border-bottom: 1px solid #e5e7eb !important; border-radius: 0 !important; padding: 2mm 0 !important; }
+          `}
           #archive-print-receipt .dark\\:text-white, #archive-print-receipt .dark\\:text-gray-200, #archive-print-receipt .dark\\:text-gray-300, #archive-print-receipt .dark\\:text-gray-400 { color: #111827 !important; }
           #archive-print-receipt .dark\\:bg-gray-950 { background: #fff !important; }
           #archive-print-receipt .dark\\:border-gray-800 { border-color: #d1d5db !important; }
@@ -104,11 +126,12 @@ export default function PaidReceiptDialog({
             <div data-screen-only className="min-w-0">
               <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{locationLabel} · {bill.order.order_number}</p>
               <h2 id="archive-receipt-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
+              {receiptAtLabel ? <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{receiptAtLabel}</p> : null}
             </div>
             <div data-print-only className="hidden">
               <h2 className="text-[16px] font-semibold text-gray-900">{copy.title} #{bill.order.order_number}</h2>
               <p className="mt-0.5 text-[12px] text-gray-600">{locationLabel}</p>
-              {payment?.paid_at ? <p className="mt-0.5 text-[11px] text-gray-600">{new Date(payment.paid_at).toLocaleString(locale)}</p> : null}
+              {receiptAtLabel ? <p className="mt-0.5 text-[11px] text-gray-600">{receiptAtLabel}</p> : null}
             </div>
             <button data-screen-only type="button" onClick={requestClose} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.close}</button>
           </div>
@@ -116,6 +139,45 @@ export default function PaidReceiptDialog({
           <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 sm:px-5">
             <section aria-labelledby="archive-receipt-items-title">
               <h3 id="archive-receipt-items-title" className="border-b border-gray-200 py-3 text-[13px] font-semibold text-gray-900 dark:border-gray-800 dark:text-white">{copy.items}</h3>
+              {paper === "a4" ? (
+                <table className="w-full text-left text-[13px]">
+                  <thead className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <tr className="border-b border-gray-200 dark:border-gray-800">
+                      <th className="py-2 font-medium">{copy.item}</th>
+                      <th className="py-2 text-right font-medium">{copy.qty}</th>
+                      <th className="py-2 text-right font-medium">{copy.unitPrice}</th>
+                      <th className="py-2 text-right font-medium">{copy.amount}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {sections.map((section) => (
+                      <Fragment key={section.key}>
+                        {sections.length > 1 || section.key === "takeaway" || bill.order.order_type === "takeaway" ? (
+                          <tr><td colSpan={4} className="pt-3 pb-1 text-[12px] font-semibold text-gray-600 dark:text-gray-300">{section.key === "takeaway" ? copy.takeaway : copy.dineIn}</td></tr>
+                        ) : null}
+                        {section.groups.map((group) => {
+                          const item = group.firstItem;
+                          const detail = [
+                            item.selected_options?.map((option) => `${option.group_name}: ${option.option_name}`).join(" · "),
+                            item.note,
+                          ].filter(Boolean).join(" · ");
+                          return (
+                            <tr key={group.key}>
+                              <td className="py-2 align-top text-gray-900 dark:text-white">
+                                {item.menu_name}
+                                {detail ? <span className="block text-[11px] text-gray-500 dark:text-gray-400">{detail}</span> : null}
+                              </td>
+                              <td className="py-2 text-right align-top font-mono tabular-nums text-gray-900 dark:text-white">{group.quantity}</td>
+                              <td className="py-2 text-right align-top font-mono tabular-nums text-gray-600 dark:text-gray-300">{money(group.subtotal / group.quantity)}</td>
+                              <td className="py-2 text-right align-top font-mono tabular-nums text-gray-900 dark:text-white">{money(group.subtotal)}</td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
               <div>
                 {sections.map((section) => (
                   <div key={section.key}>
@@ -149,6 +211,7 @@ export default function PaidReceiptDialog({
                   </div>
                 ))}
               </div>
+              )}
             </section>
           </div>
 
@@ -164,11 +227,11 @@ export default function PaidReceiptDialog({
               </div>
             ) : null}
           </div>
-          <ThermalReceipt bill={bill} language={language} locationLabel={locationLabel} restaurant={restaurant} />
+          {paper === "thermal" ? <ThermalReceipt bill={bill} language={language} locationLabel={locationLabel} restaurant={restaurant} /> : null}
         </div>
 
         <div className="flex shrink-0 justify-end border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
-          <button type="button" onClick={() => printThermalReceipt("archive-print-receipt")} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"><Printer className="h-4 w-4" aria-hidden="true" />{copy.print}</button>
+          <button type="button" onClick={() => (paper === "a4" ? printA4 : printThermalReceipt)("archive-print-receipt")} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">{paper === "a4" ? <Download className="h-4 w-4" aria-hidden="true" /> : <Printer className="h-4 w-4" aria-hidden="true" />}{paper === "a4" ? copy.savePdf : copy.print}</button>
         </div>
       </div>
     </div>

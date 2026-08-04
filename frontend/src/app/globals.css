@@ -565,6 +565,22 @@ html[data-font-size="extra-large"] {
   transform: translateY(1px) scale(0.99);
 }
 
+/* A ledger row that lifts and tilts under the cursor, like a card being picked
+   up. On a <table> row the shadow only paints when the table is
+   border-separate — a collapsed table drops it silently. */
+.ui-row-lift {
+  transition-property: transform, box-shadow, background-color;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ui-row-lift:hover {
+  position: relative;
+  z-index: 10;
+  transform: translateY(-2px) rotate(1.5deg);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
 .themed-select-menu {
   animation: select-menu-enter 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
   contain: paint;
@@ -677,9 +693,14 @@ html[data-font-size="extra-large"] {
   }
 
   .ui-press,
+  .ui-row-lift,
   .themed-select-menu,
   .themed-select-option {
     transition: none !important;
+  }
+
+  .ui-row-lift:hover {
+    transform: none;
   }
 
   ::view-transition-group(*),
