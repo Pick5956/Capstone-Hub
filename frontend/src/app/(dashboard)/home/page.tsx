@@ -157,7 +157,6 @@ function buildCopy(language: "th" | "en") {
         chartTitleCostDay: "รายจ่ายรายวัน",
         chartTitleCostMonth: "รายจ่ายรายเดือน",
         expenseMonthly: "รายจ่ายเดือนนี้",
-        expenseHint: "เงินที่จ่ายซื้อของจริง ไม่ใช่ต้นทุนวัตถุดิบของอาหารที่ขาย",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
         chartTitleProfitHour: "กำไร/ขาดทุนรายชั่วโมง",
@@ -244,7 +243,6 @@ function buildCopy(language: "th" | "en") {
         chartTitleCostDay: "Expenses by day",
         chartTitleCostMonth: "Expenses by month",
         expenseMonthly: "Expenses this month",
-        expenseHint: "Money actually paid out, not the ingredient cost of food sold",
         expenseCategory: "Category",
         expenseNote: "Details",
         chartTitleProfitHour: "Profit/loss by hour",
@@ -1218,7 +1216,7 @@ export default function Home() {
       tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
     },
     ...(canViewExpenses
-      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), helper: copy.expenseHint, tone: "cost" as const, href: "/expenses" }]
+      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), tone: "cost" as const, href: "/expenses" }]
       : []),
   ];
 

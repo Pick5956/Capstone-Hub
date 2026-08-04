@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -85,8 +85,8 @@ export default function ExpensesPage() {
         ? {
             eyebrow: "Expenses",
             back: "กลับหน้าแดชบอร์ด",
+            exportPdf: "บันทึกเป็น PDF",
             title: "บันทึกรายจ่าย",
-            subtitle: "เงินที่จ่ายออกจริง — คนละตัวกับต้นทุนอาหารที่ขายไปแล้วในหน้าสรุปยอดขาย",
             denied: "ไม่มีสิทธิ์ดูรายจ่าย",
             categories: { ingredient: "วัตถุดิบ", labor: "ค่าแรง", rent: "ค่าเช่า", utilities: "ค่าน้ำ/ไฟ", equipment: "อุปกรณ์", other: "อื่นๆ" } as Record<ExpenseCategory, string>,
             all: "ทั้งหมด",
@@ -117,8 +117,8 @@ export default function ExpensesPage() {
         : {
             eyebrow: "Expenses",
             back: "Back to dashboard",
+            exportPdf: "Export PDF",
             title: "Expense ledger",
-            subtitle: "Cash that actually left the restaurant — not the same as the food cost shown on the sales card.",
             denied: "You do not have permission to view expenses.",
             categories: { ingredient: "Supplies", labor: "Wages", rent: "Rent", utilities: "Utilities", equipment: "Equipment", other: "Other" } as Record<ExpenseCategory, string>,
             all: "All",
@@ -248,19 +248,50 @@ export default function ExpensesPage() {
     <OperationalPageShell
       eyebrow={copy.eyebrow}
       title={copy.title}
-      subtitle={copy.subtitle}
       actions={
-        <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          {copy.back}
-        </Link>
+        <>
+          <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            {copy.back}
+          </Link>
+          <button type="button" onClick={() => window.print()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+            <Printer className="h-4 w-4" aria-hidden="true" />
+            {copy.exportPdf}
+          </button>
+        </>
       }
     >
+      {/* Print = the browser's own "Save as PDF". No PDF library. */}
+      <style>{`@media print {
+        @page { size: A4 portrait; margin: 10mm; }
+        html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+        /* display, not visibility: an invisible box still reserves its height and prints as a blank page. */
+        body *:not(:has(#expense-print)):not(#expense-print):not(#expense-print *) { display: none !important; }
+        body :has(#expense-print) {
+          display: block !important; height: auto !important; min-height: 0 !important; max-height: none !important;
+          margin: 0 !important; padding: 0 !important; overflow: visible !important; background: none !important;
+        }
+        #expense-print { color: #000 !important; }
+        #expense-print > *:last-child { margin-bottom: 0 !important; }
+        #expense-print table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        #expense-print th, #expense-print td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
+        #expense-print thead { display: table-header-group; }
+        #expense-print thead th {
+          background: #dfe3e6 !important; font-size: 10px; text-align: left;
+          text-transform: uppercase; letter-spacing: .04em;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        #expense-print tfoot td { background: #eef1f3 !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        #expense-print tr { break-inside: avoid; }
+        #expense-print .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      }`}</style>
+
+      <div id="expense-print">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-          <button type="button" onClick={() => shiftMonth(-1)} aria-label={copy.previousMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900">‹</button>
-          <span className="min-w-[150px] px-3 py-2 text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100">{monthLabel}</span>
-          <button type="button" disabled={!canGoNextMonth} onClick={() => shiftMonth(1)} aria-label={copy.nextMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900">›</button>
+        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 print:border-0">
+          <button type="button" onClick={() => shiftMonth(-1)} aria-label={copy.previousMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">‹</button>
+          <span className="min-w-[150px] px-3 py-2 text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100 print:px-0 print:text-left print:text-[16px]">{monthLabel}</span>
+          <button type="button" disabled={!canGoNextMonth} onClick={() => shiftMonth(1)} aria-label={copy.nextMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">›</button>
         </div>
         <div className="text-right">
           <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
@@ -269,7 +300,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
         {(["all", ...expenseCategories] as const).map((value) => {
           const total = scopedData.categories.find((item) => item.category === value);
           return (
@@ -294,10 +325,10 @@ export default function ExpensesPage() {
         })}
       </div>
 
-      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300 print:hidden">{error}</div>}
 
       {canEdit ? (
-        <form onSubmit={submit} className="mb-4 rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+        <form onSubmit={submit} className="mb-4 rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950 print:hidden">
           <h2 className="mb-3 text-[14px] font-semibold text-gray-950 dark:text-white">{form.id === null ? copy.add : copy.edit}</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[160px_160px_170px_minmax(0,1fr)_auto] lg:items-end">
             <label className="block">
@@ -330,10 +361,46 @@ export default function ExpensesPage() {
           </div>
         </form>
       ) : (
-        <p className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">{copy.readOnly}</p>
+        <p className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
       )}
 
-      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+      {/* Print-only ledger. A real <table> so the browser repeats <thead> on every page. */}
+      <table className="hidden print:table">
+        <thead>
+          <tr>
+            <th style={{ width: "3%" }}>#</th>
+            <th style={{ width: "12%" }}>{copy.date}</th>
+            <th style={{ width: "15%" }}>{copy.category}</th>
+            <th>{copy.note}</th>
+            <th style={{ width: "15%" }} className="num">{copy.amount}</th>
+            <th style={{ width: "18%" }}>{copy.recordedBy}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scopedData.expenses.map((expense, index) => (
+            <tr key={expense.ID}>
+              <td className="num">{index + 1}</td>
+              <td>{expense.spent_at.slice(0, 10)}</td>
+              <td>{copy.categories[expense.category]}</td>
+              <td>{expense.note || (expense.ingredient_transaction_id != null ? copy.generatedStockIn : "-")}</td>
+              <td className="num">{formatCurrency(expense.amount, language)}</td>
+              <td>{expense.created_by ? `${expense.created_by.first_name} ${expense.created_by.last_name}`.trim() : "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={4}>{copy.monthTotal}</td>
+            <td className="num">{formatCurrency(scopedData.total, language)}</td>
+            <td>{scopedData.entries} {copy.entries}</td>
+          </tr>
+          {scopedData.hasMore ? (
+            <tr><td colSpan={6}>{copy.partialList(scopedData.expenses.length, scopedData.entries)}</td></tr>
+          ) : null}
+        </tfoot>
+      </table>
+
+      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 print:hidden">
         <div className="hidden grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-800 lg:grid">
           <span>{copy.date}</span>
           <span>{copy.category}</span>
@@ -395,6 +462,7 @@ export default function ExpensesPage() {
             {copy.partialList(scopedData.expenses.length, scopedData.entries)}
           </p>
         ) : null}
+      </div>
       </div>
     </OperationalPageShell>
   );
