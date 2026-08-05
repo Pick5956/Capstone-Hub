@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -85,8 +85,8 @@ const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
   daily: [],
 };
 
-// Collapsed cards start left-to-right in this order; the queue in `Home`
-// reshuffles from here as cards get opened and closed.
+// Collapsed cards always sit left-to-right in this order — opening or closing
+// one never reshuffles the rest, it only drops the open one below them.
 const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
 const expandedCardStorageKey = "home:expandedCard";
 // Day/month split of the sales card, as a percentage of the card width. Kept in
@@ -96,11 +96,9 @@ const cardSplitDefault = 58;
 const cardSplitMin = 30;
 const cardSplitMax = 78;
 const clampSplit = (pct: number) => Math.min(cardSplitMax, Math.max(cardSplitMin, pct));
-const collapsibleCardFadeMs = 200;
-
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+// Shared by both halves of the swipe: the page springing back under the
+// pointer, and the newly picked day sliding in.
+const swipeSettle: KeyframeAnimationOptions = { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" };
 
 function minutesSince(value: string | null | undefined, now: Date) {
   if (!value) return 0;
@@ -393,6 +391,18 @@ const cardToneTile: Record<CardTone, string> = {
 const cardToneRow = cardToneTile;
 const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";
 
+// Folder tab: sized to its own title so several sit side by side in one strip,
+// rounded on top only, square along the bottom where the open card's body meets it.
+const cardTabShape = "ui-press inline-flex max-w-full items-center gap-2.5 rounded-t-md border px-4 py-2 text-left";
+
+// Font size for a collapsed-tile line, so the whole string fits on one line
+// instead of truncating: cap it relative to the tile (`cqi` = 1% of the tile's
+// content width), then shrink further for long strings. `perChar` is the glyph
+// width as a fraction of the font size — ~0.6em for the mono figures, a touch
+// more for the bold uppercase labels with their letter-spacing.
+const fitTileText = (text: string, capCqi: number, perChar: number) =>
+  `min(${capCqi}cqi, ${(100 / Math.max(text.length * perChar, 1)).toFixed(2)}cqi)`;
+
 function CollapsibleCard({
   title,
   subtitle,
@@ -416,155 +426,32 @@ function CollapsibleCard({
   onToggle: () => void;
   children: ReactNode;
 }) {
-  // Fades both ways now: opening fades in, closing fades out before actually
-  // unmounting the section (the parent also delays opening the next card
-  // until this one has fully closed, so switches read as close-then-open).
-  const [mounted, setMounted] = useState(expanded);
-  const [visible, setVisible] = useState(expanded);
-
-  useEffect(() => {
-    let outerRaf = 0;
-    let innerRaf = 0;
-    let unmountTimeout = 0;
-
-    if (expanded) {
-      // Mount in one animation frame and reveal in the next. Keeping both
-      // updates behind the browser scheduler avoids a synchronous effect
-      // cascade while still giving the transition a painted starting point.
-      outerRaf = window.requestAnimationFrame(() => {
-        setMounted(true);
-        if (prefersReducedMotion()) {
-          setVisible(true);
-          return;
-        }
-        innerRaf = requestAnimationFrame(() => setVisible(true));
-      });
-    } else {
-      outerRaf = window.requestAnimationFrame(() => {
-        setVisible(false);
-        if (prefersReducedMotion()) {
-          setMounted(false);
-          return;
-        }
-        unmountTimeout = window.setTimeout(() => setMounted(false), collapsibleCardFadeMs);
-      });
-    }
-
-    return () => {
-      window.cancelAnimationFrame(outerRaf);
-      window.cancelAnimationFrame(innerRaf);
-      window.clearTimeout(unmountTimeout);
-    };
-  }, [expanded]);
-
-  // Growing back to the full tile (once `dimmed` clears — which the parent
-  // already delays until the closing card has actually finished fading out)
-  // should itself fade/scale in smoothly instead of just popping into place.
-  const [tileVisible, setTileVisible] = useState(!dimmed);
-  useEffect(() => {
-    let innerRaf = 0;
-    const outerRaf = window.requestAnimationFrame(() => {
-      setTileVisible(false);
-      if (dimmed) return;
-      if (prefersReducedMotion()) {
-        setTileVisible(true);
-        return;
-      }
-      innerRaf = requestAnimationFrame(() => setTileVisible(true));
-    });
-    return () => {
-      window.cancelAnimationFrame(outerRaf);
-      window.cancelAnimationFrame(innerRaf);
-    };
-  }, [dimmed]);
-
-  // Collapsed cards stack on top, ordered by `collapsedRank` (untouched
-  // siblings keep their relative order; whichever card was just opened or
-  // closed gets bumped to the end); the open one falls below all of them.
-  // Keyed off `mounted` (the shape actually on screen) rather than the raw
-  // `expanded` prop, so a click doesn't jump the tile to its new slot first
-  // and only grow into the section afterwards — position and shape change
-  // together, in the same render, on both open and close.
-  const orderRank = mounted ? 100 : collapsedRank;
-
-  // FLIP: while collapsed (tile or dimmed row), a sibling opening/closing can
-  // shove this card to a different grid slot via `order` or by changing how
-  // many other collapsed cards share the row — both snap instantly by
-  // default. On every render, compare this card's last measured position to
-  // its new one and, if it moved, jump it back with no transition, then
-  // animate the native `translate` back to zero on the next frame.
-  const collapsedRef = useRef<HTMLButtonElement | null>(null);
-  const prevCollapsedRectRef = useRef<DOMRect | null>(null);
-
-  useLayoutEffect(() => {
-    const node = collapsedRef.current;
-    if (mounted || !node) {
-      prevCollapsedRectRef.current = null;
-      return;
-    }
-    const newRect = node.getBoundingClientRect();
-    const prevRect = prevCollapsedRectRef.current;
-    if (prevRect) {
-      const deltaX = prevRect.left - newRect.left;
-      const deltaY = prevRect.top - newRect.top;
-      if (deltaX || deltaY) {
-        // Drive this transition entirely via inline style rather than
-        // depending on the button's own className — the dimmed row and tile
-        // have different (and differently-timed) transitions for hover/press
-        // feedback, and this shouldn't borrow or override those.
-        node.style.setProperty("transition", "none", "important");
-        node.style.translate = `${deltaX}px ${deltaY}px`;
-        // Force a reflow so the jump above is committed before animating away from it.
-        void node.getBoundingClientRect();
-        requestAnimationFrame(() => {
-          node.style.setProperty("transition", "translate 320ms cubic-bezier(0.2, 0, 0, 1)", "important");
-          node.style.translate = "0px 0px";
-          window.setTimeout(() => {
-            node.style.removeProperty("transition");
-            node.style.translate = "";
-          }, 320);
-        });
-      }
-    }
-    prevCollapsedRectRef.current = newRect;
-  });
-
-  if (!mounted) {
-    // A sibling card is expanded and this one isn't — shrink way down, but
-    // keep showing the summary numbers (just in a much more compact row).
+  // Opening, closing and switching cards all happen in one render — no fades,
+  // no deferred unmount, no FLIP on the tabs that shuffle around them. Every
+  // tab keeps its fixed slot via `collapsedRank`; only the open card's body
+  // drops below the strip, on its own full-width line (order 100).
+  if (!expanded) {
+    // A sibling card is open — this one becomes a closed folder's tab, sitting
+    // in the same strip as the open card's own tab, in its fixed slot.
     if (dimmed) {
       return (
         <button
-          ref={collapsedRef}
           type="button"
           onClick={onToggle}
-          className="ui-press flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1.5 rounded-md border border-gray-200 bg-white px-3.5 py-2 text-left hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900"
-          style={{ order: orderRank }}
+          className={`${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-gray-600 hover:bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-950`}
+          style={{ order: collapsedRank }}
         >
-          <span className="shrink-0 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{title}</span>
-          {summary?.length ? (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
-              {summary.map((item) => (
-                <div key={item.key} className="flex items-baseline gap-1">
-                  <span className="text-[9px] text-gray-400 dark:text-gray-500">{item.label}</span>
-                  <span className="font-mono text-[11px] font-semibold tabular-nums text-gray-950 dark:text-white">{item.value}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-700" aria-hidden="true" />
+          <span className="truncate text-[12px] font-semibold">{title}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
         </button>
       );
     }
     return (
       <button
-        ref={collapsedRef}
         type="button"
         onClick={onToggle}
-        style={{ order: orderRank }}
-        className={`ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${
-          tileVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        }`}
+        style={{ order: collapsedRank }}
+        className="ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950"
       >
         <div className="text-center">
           <h2 className="text-[20px] font-bold leading-snug text-gray-950 dark:text-white">{title}</h2>
@@ -573,9 +460,15 @@ function CollapsibleCard({
         {summary?.length ? (
           <div className="grid flex-1 grid-cols-2 gap-3">
             {summary.map((item) => (
-              <div key={item.key} className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}>
-                <p className="truncate text-[16px] font-bold uppercase tracking-wide leading-tight">{item.label}</p>
-                <p className={`truncate font-mono text-[28px] font-bold leading-tight tabular-nums sm:text-[32px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+              <div
+                key={item.key}
+                // Container query context so the two lines below can size
+                // themselves against this tile rather than the viewport.
+                style={{ containerType: "inline-size" }}
+                className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}
+              >
+                <p style={{ fontSize: fitTileText(item.label, 13, 0.68) }} className="truncate font-bold uppercase tracking-wide leading-tight">{item.label}</p>
+                <p style={{ fontSize: fitTileText(item.value, 26, 0.62) }} className={`truncate font-mono font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
               </div>
             ))}
           </div>
@@ -585,55 +478,57 @@ function CollapsibleCard({
     );
   }
   return (
-    <section
-      onClick={(event) => {
-        // Clicking anywhere in the card that isn't an actual control (button,
-        // link, form field, ...) collapses it back to a tile. `.recharts-wrapper`
-        // counts as a control too: its bars are plain SVG paths, so without it a
-        // click that drills into a bar would collapse the whole card underneath.
-        const target = event.target as HTMLElement;
-        if (target.closest("button, a, input, select, textarea, [role='button'], [role='separator'], .recharts-wrapper")) return;
-        onToggle();
-      }}
-      style={{ order: orderRank }}
-      className={`col-span-full cursor-pointer origin-top overflow-visible rounded-md border border-gray-200 bg-white transition-all duration-200 ease-out motion-reduce:transition-none dark:border-gray-800 dark:bg-gray-950 ${
-        visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
-      }`}
-    >
+    // Tab and body are siblings, not nested: that puts the open card's tab in
+    // the same flex line as the closed cards' tabs, with the body on the line
+    // below spanning the full width. The tab keeps its own slot in that strip,
+    // has no bottom border, and is pulled a pixel down over the body's top
+    // edge, so the two read as one folder rather than a header on a box.
+    <>
       <button
         type="button"
         onClick={onToggle}
-        className="ui-press flex w-full items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+        style={{ order: collapsedRank }}
+        className={`${cardTabShape} relative z-10 -mb-px border-b-0 border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900`}
       >
-        <div className="min-w-0">
-          <h2 className="text-[14px] font-semibold text-gray-950 dark:text-white">{title}</h2>
-          {subtitle ? <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</p> : null}
-        </div>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-semibold text-gray-950 dark:text-white">{title}</span>
+          {subtitle ? <span className="mt-0.5 block truncate text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</span> : null}
+        </span>
         <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
       </button>
-      {summary?.length && showSummaryWhenExpanded ? (
-        <div className="grid grid-cols-2 gap-px border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4">
-          {summary.map((item) => {
-            // A tile with an `href` drills into its own page; the section's
-            // click-to-collapse handler already skips anchors.
-            const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-950 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
-            const content = (
-              <>
-                <p className="text-[13px] font-bold uppercase tracking-wide">{item.label}</p>
-                <p className={`mt-1 truncate font-mono text-[24px] font-bold tabular-nums sm:text-[28px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
-                {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
-              </>
-            );
-            return item.href ? (
-              <Link key={item.key} href={item.href} className={className}>{content}</Link>
-            ) : (
-              <div key={item.key} className={className}>{content}</div>
-            );
-          })}
-        </div>
-      ) : null}
-      {children}
-    </section>
+      {/* Only the corner the tab actually lands on is squared off — the
+          leftmost tab gives the folder its L, any other tab notches the top
+          edge and the corners stay round. */}
+      <section
+        style={{ order: 100 }}
+        className={`col-span-full w-full overflow-visible border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 ${
+          collapsedRank === 0 ? "rounded-b-md rounded-tr-md" : "rounded-md"
+        }`}
+      >
+        {summary?.length && showSummaryWhenExpanded ? (
+          // Sits flush in the body's top corners, so it has to match them.
+          <div className={`grid grid-cols-2 gap-px overflow-hidden border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4 ${collapsedRank === 0 ? "rounded-tr-md" : "rounded-t-md"}`}>
+            {summary.map((item) => {
+              // A tile with an `href` drills into its own page.
+              const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-950 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
+              const content = (
+                <>
+                  <p className="text-[13px] font-bold uppercase tracking-wide">{item.label}</p>
+                  <p className={`mt-1 truncate font-mono text-[24px] font-bold tabular-nums sm:text-[28px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                  {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
+                </>
+              );
+              return item.href ? (
+                <Link key={item.key} href={item.href} className={className}>{content}</Link>
+              ) : (
+                <div key={item.key} className={className}>{content}</div>
+              );
+            })}
+          </div>
+        ) : null}
+        {children}
+      </section>
+    </>
   );
 }
 
@@ -677,39 +572,9 @@ export default function Home() {
   // open would never reach the chart. Only background refreshes bump it — the
   // first load already fetches them once on its own.
   const [refreshTick, setRefreshTick] = useState(0);
-  // Only one card open at a time. Switching to a different card closes the
-  // current one first and only opens the new one once that close has
-  // actually finished fading out, instead of opening on top of it.
+  // Only one card open at a time. Switching goes straight from one to the
+  // other in a single render — no close-then-open sequencing.
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [switchingCard, setSwitchingCard] = useState(false);
-  // The card that's currently mid-close (fading out) — excluded from
-  // `isCardDimmed` so it goes straight from "expanded section" to "full
-  // tile" once it unmounts, instead of flashing as a dimmed row for the
-  // last few ms of the `switchingCard` window (it's not a *sibling*, it's
-  // the one that just closed).
-  const [closingKey, setClosingKey] = useState<string | null>(null);
-  // Order the collapsed cards are shown in — whichever card was most
-  // recently interacted with (opened OR just closed) gets bumped to the end,
-  // so the other, untouched cards keep their same relative order and just
-  // slide over to make room, instead of the whole group reshuffling.
-  const [cardOrderQueue, setCardOrderQueue] = useState<string[]>(defaultCardOrder);
-  const bumpCardToEnd = (key: string) => {
-    setCardOrderQueue((queue) => (queue[queue.length - 1] === key ? queue : [...queue.filter((k) => k !== key), key]));
-  };
-  // Back to every card showing as a full tile (nothing open, nothing mid
-  // close/switch) — reset back to the default left-to-right order instead of
-  // leaving them wherever the last few opens/closes happened to shuffle them.
-  useEffect(() => {
-    if (expandedKey === null && !switchingCard && closingKey === null) {
-      setCardOrderQueue((queue) => (queue.join() === defaultCardOrder.join() ? queue : defaultCardOrder));
-    }
-  }, [expandedKey, switchingCard, closingKey]);
-  const pendingSwitchRef = useRef<number | null>(null);
-  useEffect(() => {
-    return () => {
-      if (pendingSwitchRef.current) window.clearTimeout(pendingSwitchRef.current);
-    };
-  }, []);
   // Leaving for /reports or /expenses unmounts this page, so the open card is
   // remembered for the tab and reopened on the way back. Restored after mount
   // rather than as the initial state, which would not match the server render.
@@ -732,51 +597,12 @@ export default function Home() {
   // a drag would otherwise hit localStorage a few hundred times.
   const persistSplit = () => localStorage.setItem(cardSplitStorageKey, String(Math.round(splitPct)));
   const toggleCard = (key: string) => {
-    // Both branches below land on `key` open, or nothing open — record that now
-    // so it survives navigating away to a monthly page and back.
-    if (expandedKey === key) sessionStorage.removeItem(expandedCardStorageKey);
-    else sessionStorage.setItem(expandedCardStorageKey, key);
-    bumpCardToEnd(key);
-    if (pendingSwitchRef.current) {
-      window.clearTimeout(pendingSwitchRef.current);
-      pendingSwitchRef.current = null;
-    }
-    if (expandedKey === key) {
-      // Plain close — keep the other cards dimmed until this one has
-      // actually finished fading out, instead of snapping them back to full
-      // size the instant the close starts.
-      setSwitchingCard(true);
-      setClosingKey(key);
-      setExpandedKey(null);
-      pendingSwitchRef.current = window.setTimeout(() => {
-        setSwitchingCard(false);
-        setClosingKey(null);
-        pendingSwitchRef.current = null;
-      }, 210);
-      return;
-    }
-    if (expandedKey === null && !switchingCard) {
-      // Nothing was open (and no switch already in flight) — open immediately.
-      setExpandedKey(key);
-      return;
-    }
-    // Something is open, or a previous switch is still closing out — close
-    // (or keep closing) first, then open the new one once that's done. Also
-    // covers re-clicking a third card mid-switch: the stale pending timeout
-    // was already cleared above, so this just restarts the sequence aimed
-    // at the newly clicked key instead. `closingKey` may already be set (if
-    // we're interrupting a still-in-flight close) — keep pointing at that
-    // real card rather than overwriting it with `expandedKey`, which is
-    // already null at this point during an interruption.
-    setSwitchingCard(true);
-    setClosingKey((current) => current ?? expandedKey);
-    setExpandedKey(null);
-    pendingSwitchRef.current = window.setTimeout(() => {
-      setExpandedKey(key);
-      setSwitchingCard(false);
-      setClosingKey(null);
-      pendingSwitchRef.current = null;
-    }, 210);
+    const next = expandedKey === key ? null : key;
+    // Remembered so the open card survives navigating away to a monthly page
+    // and back.
+    if (next) sessionStorage.setItem(expandedCardStorageKey, next);
+    else sessionStorage.removeItem(expandedCardStorageKey);
+    setExpandedKey(next);
   };
   const [chartMode, setChartMode] = useState<ChartMode>("day");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
@@ -1060,6 +886,127 @@ export default function Home() {
     setSelectedDate(nextDate);
   };
 
+  // Kitchen and floor are live-only, so a past date has the sales card alone.
+  const visibleCards = isToday ? defaultCardOrder : defaultCardOrder.slice(0, 1);
+  // What's actually on screen: a card remembered from today (or from before
+  // the page was left) is treated as closed on a date that doesn't show it.
+  const openCard = expandedKey && visibleCards.includes(expandedKey) ? expandedKey : null;
+
+  // Swipe steps through the folder tabs first — left for the next one, right
+  // for the previous — and changes the day only once there's no tab left that
+  // way, or when no card is open at all. `selectDate` already refuses anything
+  // past today, so swiping forward on today does nothing.
+  // Pointer events rather than touch ones, so a mouse drag works the same as a
+  // finger; the content is moved by writing to its node directly, since a
+  // state update per pointermove would re-render the whole dashboard.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const swipeRef = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
+
+  // One step forward (+1) or back (-1), whatever gesture asked for it.
+  const swipeStep = (step: 1 | -1) => {
+    const nextCard = openCard ? visibleCards[visibleCards.indexOf(openCard) + step] : undefined;
+    if (nextCard) toggleCard(nextCard);
+    else selectDate(shiftDashboardDate(selectedDate, step));
+  };
+
+  // True when the pointer is over something that scrolls in its own right —
+  // an order sheet, a drill-down list. Those own the gesture: scrolling one
+  // shouldn't also step the day out from under it.
+  const overScroller = (target: EventTarget | null) => {
+    for (let node = target as HTMLElement | null; node && node !== document.body; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (/auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight) return true;
+      if (/auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth) return true;
+    }
+    return false;
+  };
+
+  const startSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    // Controls that own the horizontal drag themselves — the day/month split
+    // handle, the chart, native inputs — keep it. Buttons and links don't:
+    // a swipe may start on one, and a plain tap still clicks through.
+    if ((event.target as HTMLElement).closest("[role='separator'], .recharts-wrapper, input, select, textarea")) return;
+    if (overScroller(event.target)) return;
+    swipeRef.current = { x: event.clientX, y: event.clientY, dragging: false };
+  };
+
+  const moveSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = swipeRef.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    if (!start.dragging) {
+      // Mostly-horizontal and past a small deadzone before this counts as a
+      // swipe at all — anything else is a scroll or a click that wobbled.
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(event.clientY - start.y) * 2) return;
+      start.dragging = true;
+      // A mouse drag across the page would otherwise select every label it crosses.
+      document.body.style.userSelect = "none";
+    }
+    // Damped and capped: the page hints at the swipe, it doesn't ride away with it.
+    if (contentRef.current) contentRef.current.style.translate = `${Math.sign(dx) * Math.min(Math.abs(dx) * 0.35, 56)}px`;
+  };
+
+  const endSwipe = (event: ReactPointerEvent<HTMLDivElement>, commit: boolean) => {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    document.body.style.userSelect = "";
+    const node = contentRef.current;
+    if (!start || !node) return;
+    const held = node.style.translate;
+    node.style.translate = "";
+    if (start.dragging) node.animate([{ translate: held }, { translate: "0px" }], swipeSettle);
+    const dx = event.clientX - start.x;
+    if (!commit || !start.dragging || Math.abs(dx) < 60) return;
+    swipeStep(dx < 0 ? 1 : -1);
+  };
+
+  // Same step from the wheel. Sideways (a trackpad's two-finger swipe, or
+  // shift+wheel — Chrome reports that as deltaY, Firefox as deltaX) counts
+  // anywhere. A plain scroll still scrolls the page and only steps once
+  // there's nothing left to scroll that way, which on a page that doesn't
+  // scroll at all is every tick.
+  const wheelRef = useRef({ total: 0, locked: false, timer: 0 });
+  const wheelSwipe = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (overScroller(event.target)) return;
+    const sideways = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+    const atEdge =
+      event.deltaY > 0
+        ? window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1
+        : window.scrollY <= 0;
+    // Firefox reports ticks in lines (deltaMode 1) or pages (2) rather than
+    // pixels, so the threshold below has to compare like with like.
+    const delta = (sideways || (atEdge ? event.deltaY : 0)) * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1);
+    if (!delta) return;
+    const wheel = wheelRef.current;
+    // A trackpad flick keeps sending deltas as it coasts, and one gesture
+    // should move one step — so once it fires, stay locked until the wheel
+    // has been quiet for a moment.
+    window.clearTimeout(wheel.timer);
+    wheel.timer = window.setTimeout(() => {
+      wheel.total = 0;
+      wheel.locked = false;
+    }, 250);
+    if (wheel.locked) return;
+    wheel.total += delta;
+    if (Math.abs(wheel.total) < 90) return;
+    wheel.locked = true;
+    swipeStep(wheel.total > 0 ? 1 : -1);
+  };
+
+  // The new day slides in from the side it came from, however the date was
+  // changed — swipe, arrows or the picker.
+  const prevDateRef = useRef(selectedDate);
+  useEffect(() => {
+    const previous = prevDateRef.current;
+    prevDateRef.current = selectedDate;
+    if (previous === selectedDate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    contentRef.current?.animate(
+      [{ opacity: 0, translate: `${selectedDate > previous ? 28 : -28}px` }, { opacity: 1, translate: "0px" }],
+      swipeSettle,
+    );
+  }, [selectedDate]);
+
   const tickets = useMemo<KitchenTicket[]>(() => kitchenOrders.map((order) => {
     const oldestSent = order.items?.reduce<string | null>((oldest, item) => {
       if (!item.sent_at) return oldest;
@@ -1261,20 +1208,37 @@ export default function Home() {
     { key: "reserved", label: copy.reserved, value: reservedTables.toLocaleString() },
   ];
 
-  // While a card is expanded (or the switch to a different one is still in
-  // its close-then-open sequence), every other card shrinks down to a
-  // compact summary row instead of staying a full tile. The card that's
-  // itself mid-close is excluded so it goes straight back to a full tile
-  // once it finishes collapsing, rather than flashing as a dimmed row first.
-  const isCardDimmed = (key: string) => (expandedKey !== null || switchingCard) && expandedKey !== key && closingKey !== key;
+  // While a card is open, every other card shrinks from a full tile down to
+  // just its folder tab.
+  const isCardDimmed = (key: string) => openCard !== null && openCard !== key;
 
-  // Position among the collapsed cards, per `cardOrderQueue`.
-  const collapsedRank = (key: string) => cardOrderQueue.indexOf(key);
+  // Position among the collapsed cards — fixed, never reshuffled.
+  const collapsedRank = (key: string) => defaultCardOrder.indexOf(key);
 
   const dateLoading = loading && loadedDate !== selectedDate;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div
+      // `touch-pan-y` is what makes the gesture usable on a phone: it hands
+      // vertical scrolling to the browser and keeps the horizontal axis for
+      // us, so a sideways drag isn't taken over as a scroll and cancelled
+      // halfway through. Anything inside that needs to pan sideways itself
+      // has to opt back out (the split handle already sets `touch-none`).
+      // Tall enough to carry the page's own background to the bottom of the
+      // window, but no taller: a flat `min-h-screen` here would sit *below*
+      // the shell's top bar (`pt-14` on mobile, the 62px spacer row on
+      // desktop) and push the page past the viewport, so an empty dashboard
+      // still scrolled.
+      className="min-h-[calc(100vh-3.5rem)] touch-pan-y bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 lg:min-h-[calc(100vh-var(--dashboard-shell-row))]"
+      onWheel={wheelSwipe}
+      onPointerDown={startSwipe}
+      onPointerMove={moveSwipe}
+      onPointerUp={(event) => endSwipe(event, true)}
+      // Cancel fires when the browser takes the gesture over (a touch that
+      // turned into a scroll); leaving the page mid-drag is a miss too.
+      onPointerCancel={(event) => endSwipe(event, false)}
+      onPointerLeave={(event) => endSwipe(event, false)}
+    >
       <header className="sticky top-14 z-20 border-b border-gray-200 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:px-6 lg:top-0 lg:px-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
@@ -1319,7 +1283,9 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+      {/* The swiped surface: the header above it holds the date control, which
+          shouldn't slide out from under the thumb that's changing it. */}
+      <div ref={contentRef} className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
         <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
@@ -1330,12 +1296,17 @@ export default function Home() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {/* Closed: a grid of tiles, wrapping onto more rows on narrow
+                screens rather than being squeezed into one — a legible tile
+                beats a complete row. Open: a folder rack, every tab side by
+                side on one line (no row gap, so the open card's body below
+                meets its tab) and wrapping only when the line runs out. */}
+            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
             <CollapsibleCard
               title={copy.salesOverview}
               summary={summary}
               showSummaryWhenExpanded={false}
-              expanded={expandedKey === "sales"}
+              expanded={openCard === "sales"}
               dimmed={isCardDimmed("sales")}
               collapsedRank={collapsedRank("sales")}
               onToggle={() => toggleCard("sales")}
@@ -1373,7 +1344,7 @@ export default function Home() {
                           type="button"
                           onClick={() => setDayOrdersOpen((open) => !open)}
                           aria-expanded={dayOrdersOpen}
-                          className={`ui-press w-full cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125 ${tileClass} ${dayOrdersOpen ? "ring-2 ring-gray-900 dark:ring-white" : ""}`}
+                          className={`ui-press ui-shake w-full cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125 ${tileClass} ${dayOrdersOpen ? "ring-2 ring-gray-900 dark:ring-white" : ""}`}
                         >
                           {body(true)}
                         </button>
@@ -1405,11 +1376,21 @@ export default function Home() {
                         </div>
                         {orderBillError ? <p className="border-b border-red-200 bg-red-50 px-3 py-1.5 text-[11px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 print:hidden">{orderBillError}</p> : null}
                         {validOrders.length ? (
-                          <div className="max-h-72 overflow-y-auto print:max-h-none print:overflow-visible">
+                          // Clipped on X because the rows tilt on hover
+                          // (`.ui-row-lift`): a rotated row and its shadow poke
+                          // a pixel or two past the sheet, and with the other
+                          // axis scrolling that was enough to flash a
+                          // horizontal scrollbar under the cursor.
+                          <div className="max-h-72 overflow-x-clip overflow-y-auto print:max-h-none print:overflow-visible">
                             {/* border-separate so the rows can cast a shadow on
                                 hover — a collapsed table never paints one. The
                                 row dividers move onto the cells to suit. */}
-                            <table className="w-full border-separate border-spacing-0 text-left text-[11px] [&_tbody_td]:border-b [&_tbody_td]:border-gray-100 dark:[&_tbody_td]:border-gray-800">
+                            {/* `table-fixed` so the columns size to the sheet
+                                instead of to their longest cell — an auto
+                                table grows past the container and, since the
+                                wrapper scrolls on Y, that turns into a
+                                horizontal scrollbar. */}
+                            <table className="w-full table-fixed border-separate border-spacing-0 text-left text-[11px] [&_tbody_td]:border-b [&_tbody_td]:border-gray-100 dark:[&_tbody_td]:border-gray-800">
                               <thead className="bg-gray-50 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
                                 <tr>
                                   <th className="px-3 py-1.5 font-medium">{copy.order}</th>
@@ -1542,7 +1523,7 @@ export default function Home() {
                       { key: "orders", label: copy.ordersTotal, value: monthSales.reduce((sum, day) => sum + day.orders, 0).toLocaleString() },
                     ].map((stat) => {
                       const tileClass = `block rounded-md border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
-                        stat.href ? "ui-press cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
+                        stat.href ? "ui-press ui-shake cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
                       }`;
                       const body = (
                         <>
@@ -1787,14 +1768,14 @@ export default function Home() {
                             </div>
                           ) : shownExpenses.length ? (
                             <div className="max-h-64 overflow-y-auto">
-                              <div className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                              <div className="grid grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
                                 <span>{copy.expenseCategory}</span>
                                 <span>{copy.expenseNote}</span>
                                 <span className="text-right">{copy.metricCost}</span>
                               </div>
                               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                                 {shownExpenses.map((item) => (
-                                  <div key={item.ID} className="grid grid-cols-[minmax(90px,0.6fr)_minmax(0,1fr)_minmax(80px,0.6fr)] items-center gap-2 px-3 py-2">
+                                  <div key={item.ID} className="grid grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,0.6fr)] items-center gap-2 px-3 py-2">
                                     <span className="truncate text-[11px] text-gray-700 dark:text-gray-200">{expenseCategoryLabels[language][item.category] ?? item.category}</span>
                                     <span className="truncate text-[11px] text-gray-500 dark:text-gray-400">{item.note || "-"}</span>
                                     <span className="text-right font-mono text-[11px] font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(item.amount, language)}</span>
@@ -1807,7 +1788,7 @@ export default function Home() {
                             </div>
                           ) : shownSales?.orders.length ? (
                             <div className="max-h-64 overflow-y-auto">
-                              <div className="grid grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                              <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
                                 <span>{copy.order}</span>
                                 <span>{copy.location}</span>
                                 <span className="text-right">{copy.time}</span>
@@ -1821,7 +1802,7 @@ export default function Home() {
                                     key={row.order_id}
                                     type="button"
                                     onClick={() => router.push(orderPosHref({ ID: row.order_id, order_number: row.order_number }))}
-                                    className="ui-press grid w-full grid-cols-[minmax(90px,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(72px,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
+                                    className="ui-press grid w-full grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
                                   >
                                     <span className="font-mono text-[11px] font-semibold text-gray-950 dark:text-white">#{row.order_number}</span>
                                     <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
@@ -1859,15 +1840,32 @@ export default function Home() {
               </div>
             </CollapsibleCard>
 
+            {/* Why the live cards are missing, said where they would have been:
+                beside the sales tab (or its tile), rather than as a banner at
+                the bottom of the page. `order` puts it straight after sales in
+                the tab strip; `self-start` keeps it its own height next to a
+                full-size tile. */}
+            {!isToday ? (
+              <div
+                style={{ order: collapsedRank("sales") }}
+                className="flex items-start gap-2 self-start rounded-md border border-gray-200 bg-white px-3 py-2.5 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
+              >
+                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <span>{copy.historyNotice}</span>
+              </div>
+            ) : null}
+
+              {/* Kitchen queue and floor are live-only, so both cards are
+                  today-only — on a past date neither has anything to say. */}
+              {isToday ? (
               <CollapsibleCard
                 title={copy.liveWork}
                 summary={liveWorkSummary}
-                expanded={expandedKey === "liveWork"}
+                expanded={openCard === "liveWork"}
                 dimmed={isCardDimmed("liveWork")}
                 collapsedRank={collapsedRank("liveWork")}
                 onToggle={() => toggleCard("liveWork")}
               >
-                {isToday ? (
                   <div className="border-b border-gray-200 dark:border-gray-800">
                     <div className="flex items-center justify-between px-4 py-3">
                       <div>
@@ -1910,9 +1908,6 @@ export default function Home() {
                       </div>
                     ) : <p className="px-4 py-10 text-center text-[12px] text-gray-400">{copy.noKitchen}</p>}
                   </div>
-                ) : (
-                  <div className="border-b border-gray-200 px-4 py-6 text-center text-[12px] text-gray-400 dark:border-gray-800">{copy.historyNotice}</div>
-                )}
 
                 <div>
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -1940,12 +1935,13 @@ export default function Home() {
                   ) : <div className="flex flex-col items-center justify-center px-4 py-12 text-center"><ReceiptText className="h-5 w-5 text-gray-300" /><p className="mt-2 text-[12px] text-gray-400">{copy.noOrders}</p></div>}
                 </div>
               </CollapsibleCard>
+              ) : null}
 
               {isToday ? (
                 <CollapsibleCard
                   title={copy.floorStatus}
                   summary={floorStatusSummary}
-                  expanded={expandedKey === "floorStatus"}
+                  expanded={openCard === "floorStatus"}
                   dimmed={isCardDimmed("floorStatus")}
                   collapsedRank={collapsedRank("floorStatus")}
                   onToggle={() => toggleCard("floorStatus")}
@@ -1969,13 +1965,6 @@ export default function Home() {
                 </CollapsibleCard>
               ) : null}
             </div>
-
-            {!isToday ? (
-              <div className="flex items-start gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
-                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-                <span>{copy.historyNotice}</span>
-              </div>
-            ) : null}
 
           </>
         )}
