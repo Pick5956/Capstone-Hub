@@ -41,12 +41,10 @@ export default function ReportsPage() {
         margin: "มาร์จิน",
         salesDays: "ยอดขายรายวัน",
         menuMargins: "เมนูและกำไร",
-        stockRisks: "วัตถุดิบที่ต้องดู",
         menu: "เมนู",
         qty: "จำนวน",
         cost: "ต้นทุน",
         noData: "ยังไม่มีข้อมูลในช่วงนี้",
-        restock: "ควรเติม",
         date: "วันที่",
         time: "เวลา",
         table: "โต๊ะ",
@@ -70,12 +68,10 @@ export default function ReportsPage() {
         margin: "Margin",
         salesDays: "Daily sales",
         menuMargins: "Menu margin",
-        stockRisks: "Stock risks",
         menu: "Menu",
         qty: "Qty",
         cost: "Cost",
         noData: "No data in this period yet.",
-        restock: "Top up",
         date: "Date",
         time: "Time",
         table: "Table",
@@ -295,29 +291,6 @@ export default function ReportsPage() {
             </section>
           </div>
 
-          <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-sm font-semibold">{copy.stockRisks}</h2>
-            </div>
-            <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
-              {report.stock_risks.length ? report.stock_risks.map((risk) => (
-                <div key={risk.id} className="rounded-md border border-slate-200 px-3 py-3 dark:border-gray-800">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{risk.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">{risk.category || "-"}</p>
-                    </div>
-                    <span className={`rounded px-2 py-1 text-xs font-semibold ${risk.status === "out" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}>
-                      {risk.status}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    {formatNumber(risk.stock, lang)} / {formatNumber(risk.min_stock, lang)} {risk.unit} · {copy.restock} {formatNumber(risk.restock_estimate, lang)} {risk.unit}
-                  </p>
-                </div>
-              )) : <p className="col-span-full px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}
-            </div>
-          </section>
         </div>
       ) : null}
 

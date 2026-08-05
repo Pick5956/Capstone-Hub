@@ -395,6 +395,21 @@ export default function InventoryPage() {
     };
   }, [canView]);
 
+  // `/inventory?adjust=<id>` — the dashboard's stock-risk cards link straight
+  // to the adjustment for the ingredient they warned about. Read off the URL
+  // rather than `useSearchParams`, which would drag a Suspense boundary in
+  // with it, and fired once so closing the dialog does not reopen it when the
+  // list refreshes.
+  const adjustDeepLinkDone = useRef(false);
+  useEffect(() => {
+    if (adjustDeepLinkDone.current || !ingredients.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("adjust");
+    const item = wanted ? ingredients.find((entry) => String(entry.ID) === wanted) : undefined;
+    if (!item) return;
+    adjustDeepLinkDone.current = true;
+    openAdjust(item);
+  }, [ingredients]);
+
   const totalItems = ingredients.length;
   const lowCount = ingredients.filter((item) => getStatus(item) === "low").length;
   const outCount = ingredients.filter((item) => getStatus(item) === "out").length;
