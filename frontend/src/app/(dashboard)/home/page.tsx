@@ -21,7 +21,7 @@ import {
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import { formatCurrency } from "@/src/lib/format";
+import { formatCurrency, formatNumber } from "@/src/lib/format";
 import { can } from "@/src/lib/rbac";
 import {
   activeOrderStatuses,
@@ -50,6 +50,7 @@ import type { Ingredient } from "@/src/types/ingredient";
 import type {
   ReportSalesDay,
   ReportSalesHour,
+  ReportStockRisk,
   ReportTopMenuItem,
   SalesDetailReport,
 } from "@/src/types/report";
@@ -87,7 +88,7 @@ const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
 
 // Collapsed cards always sit left-to-right in this order — opening or closing
 // one never reshuffles the rest, it only drops the open one below them.
-const defaultCardOrder = ["sales", "liveWork", "floorStatus"];
+const defaultCardOrder = ["sales", "liveWork", "floorStatus", "monthReview"];
 const expandedCardStorageKey = "home:expandedCard";
 // Day/month split of the sales card, as a percentage of the card width. Kept in
 // localStorage, not session: it is a layout preference, not where you were.
@@ -145,6 +146,11 @@ function buildCopy(language: "th" | "en") {
         readyToServe: "พร้อมเสิร์ฟ",
         occupiedTables: "โต๊ะใช้งาน",
         lowStock: "ควรเติมสต็อก",
+        stockRisks: "วัตถุดิบที่ต้องดู",
+        noStockRisks: "ไม่มีวัตถุดิบที่ต้องดู",
+        nothingHere: "ไม่มีรายการ",
+        restock: "ควรเติม",
+        viewInventory: "ดูคลัง",
         kitchenQueue: "คิวครัว",
         viewKitchen: "เปิดหน้าครัว",
         delayed: "เกินเวลา",
@@ -156,8 +162,10 @@ function buildCopy(language: "th" | "en") {
         salesOverview: "ยอดขาย",
         metricRevenue: "รายได้ทั้งหมด",
         metricCost: "รายจ่าย",
-        metricProfit: "กำไร/ขาดทุน",
-        expenseMonthly: "รายจ่ายเดือนนี้",
+        metricProfit: "กำไร",
+        // Wrapped on purpose: the tile sizes its type to the longest line, so
+        // breaking a long label lets the whole tile read bigger.
+        expenseMonthly: "รายจ่าย\nเดือนนี้",
         thisMonth: "ทั้งเดือน",
         thisDay: "ทั้งวัน",
         resizeSplit: "ปรับสัดส่วนรายวัน/รายเดือน",
@@ -185,6 +193,16 @@ function buildCopy(language: "th" | "en") {
         peakHoursEmpty: "ยังไม่มียอดขาย",
         bills: "บิล",
         exportPdf: "บันทึกเป็น PDF",
+        monthReview: "สรุปเดือนนี้",
+        keyFigures: "ตัวเลขสำคัญ",
+        avgTicket: "เฉลี่ยต่อบิล",
+        profitMargin: "อัตรากำไร",
+        bestDay: "วันที่ขายดีที่สุด",
+        tradingDays: "จำนวนวันที่ขาย",
+        slowestDay: "วันที่ขายน้อยที่สุด",
+        expenseByCategory: "รายจ่ายตามประเภท",
+        generatedAt: "ออกรายงานเมื่อ",
+        share: "สัดส่วน",
         grandTotal: "รวมทั้งสิ้น",
         dishes: "จาน",
         dailyOrders: "รายการออเดอร์",
@@ -226,6 +244,11 @@ function buildCopy(language: "th" | "en") {
         readyToServe: "Ready to serve",
         occupiedTables: "Occupied tables",
         lowStock: "Low stock",
+        stockRisks: "Stock risks",
+        noStockRisks: "No stock risks",
+        nothingHere: "Nothing here",
+        restock: "Top up",
+        viewInventory: "View inventory",
         kitchenQueue: "Kitchen queue",
         viewKitchen: "Open kitchen",
         delayed: "Overdue",
@@ -237,8 +260,8 @@ function buildCopy(language: "th" | "en") {
         salesOverview: "Sales",
         metricRevenue: "Total revenue",
         metricCost: "Expenses",
-        metricProfit: "Profit / loss",
-        expenseMonthly: "Expenses this month",
+        metricProfit: "Profit",
+        expenseMonthly: "Expenses\nthis month",
         thisMonth: "This month",
         thisDay: "This day",
         resizeSplit: "Resize the day and month panes",
@@ -266,6 +289,16 @@ function buildCopy(language: "th" | "en") {
         peakHoursEmpty: "No sales yet",
         bills: "bills",
         exportPdf: "Export PDF",
+        monthReview: "Month summary",
+        keyFigures: "Key figures",
+        avgTicket: "Average ticket",
+        profitMargin: "Profit margin",
+        bestDay: "Best day",
+        tradingDays: "Trading days",
+        slowestDay: "Slowest day",
+        expenseByCategory: "Expenses by category",
+        generatedAt: "Generated",
+        share: "Share",
         grandTotal: "Grand total",
         dishes: "items",
         dailyOrders: "Orders",
@@ -378,6 +411,20 @@ function ChartBox({
 
 type CardTone = "revenue" | "profit" | "cost";
 type CardSummaryItem = { key: string; label: string; value: string; valueClass?: string; helper?: string; tone?: CardTone; href?: string };
+// A collapsed-face detail row. `heading` turns it into the lane title above
+// the rows it covers, with its count on the right, and `tint` paints the
+// partition it opens in that lane's colour.
+type CardRow = CardSummaryItem & { heading?: boolean; tint?: string };
+
+// Border and wash for a topic's partition, keyed by what the topic means:
+// late is red, in progress amber, finished green, stock orange, booked blue.
+const rowTint = {
+  red: "border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/30",
+  amber: "border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30",
+  emerald: "border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/30",
+  orange: "border-orange-200 bg-orange-50 dark:border-orange-900/60 dark:bg-orange-950/30",
+  sky: "border-sky-200 bg-sky-50 dark:border-sky-900/60 dark:bg-sky-950/30",
+};
 
 // Money tiles are colour-coded so the three read as a set at a glance. Each
 // tone sets the surface, the border and the *inherited* text colour, so labels
@@ -391,6 +438,11 @@ const cardToneTile: Record<CardTone, string> = {
 const cardToneRow = cardToneTile;
 const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";
 
+// Money out is red, money in is green — a loss is money out. Same rule in the
+// day pane and the month pane, so the two never disagree about a colour.
+const costValueClass = "text-red-600 dark:text-red-400";
+const profitValueClass = (value: number) => (value < 0 ? costValueClass : "text-emerald-600 dark:text-emerald-400");
+
 // Folder tab: sized to its own title so several sit side by side in one strip,
 // rounded on top only, square along the bottom where the open card's body meets it.
 const cardTabShape = "ui-press inline-flex max-w-full items-center gap-2.5 rounded-t-md border px-4 py-2 text-left";
@@ -403,10 +455,43 @@ const cardTabShape = "ui-press inline-flex max-w-full items-center gap-2.5 round
 const fitTileText = (text: string, capCqi: number, perChar: number) =>
   `min(${capCqi}cqi, ${(100 / Math.max(text.length * perChar, 1)).toFixed(2)}cqi)`;
 
+// Detail-row type, sized against its own tile like the figures above — same
+// `cqi` scale, capped so a wide tile does not blow the rows up. The topic
+// line is the second voice on the tile: clearly louder than the detail under
+// it, and just short of the card title above it.
+const rowTopicText = "min(22px, 6cqi)";
+const rowText = "min(16px, 5.5cqi)";
+const rowSmallText = "min(14px, 4.6cqi)";
+
+// A topic row opens a partition; the rows after it are its detail, until the
+// next topic. Flat in, grouped out — the callers keep building one list.
+const groupCardRows = (rows: CardRow[]) => {
+  const blocks = rows.reduce<{ head: CardRow; items: CardRow[] }[]>((grouped, row) => {
+    if (row.heading || !grouped.length) grouped.push({ head: row, items: [] });
+    else grouped[grouped.length - 1].items.push(row);
+    return grouped;
+  }, []);
+  // Every partition gets the same number of detail lines — a lane with
+  // nothing in it holds blank ones. An empty table beats a short cell: the
+  // rows line up across the card and the cells keep one height.
+  // `\u00a0`, not a plain space: a space collapses and the blank line would
+  // have no height to hold the row open.
+  const lines = Math.max(0, ...blocks.map((block) => block.items.length));
+  blocks.forEach((block, index) => {
+    while (block.items.length < lines) block.items.push({ key: `blank-${index}-${block.items.length}`, label: "\u00a0", value: "" });
+  });
+  return blocks;
+};
+
 function CollapsibleCard({
   title,
   subtitle,
   summary,
+  // Named rows for the collapsed face, in place of the count tiles: a card
+  // whose whole point is *what* needs doing says so on its cover. Reuses
+  // `CardSummaryItem` — label is the row, `helper` the middle column, `value`
+  // the right one. Collapsed face only; the open card has the real lists.
+  rows,
   // Off when the expanded body already shows the same figures in a section of
   // its own — the collapsed tile and row still need `summary` either way.
   showSummaryWhenExpanded = true,
@@ -419,6 +504,7 @@ function CollapsibleCard({
   title: string;
   subtitle?: string;
   summary?: CardSummaryItem[];
+  rows?: CardRow[];
   showSummaryWhenExpanded?: boolean;
   expanded: boolean;
   dimmed?: boolean;
@@ -426,6 +512,9 @@ function CollapsibleCard({
   onToggle: () => void;
   children: ReactNode;
 }) {
+  // A face with figures on it needs its title marked off as a header band; a
+  // face that is only a name does not — the name is the whole tile.
+  const hasFaceTable = Boolean(rows?.length || summary?.length);
   // Opening, closing and switching cards all happen in one render — no fades,
   // no deferred unmount, no FLIP on the tabs that shuffle around them. Every
   // tab keeps its fixed slot via `collapsedRank`; only the open card's body
@@ -451,26 +540,80 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         style={{ order: collapsedRank }}
-        className="ui-press group relative flex aspect-[4/3] w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950"
+        className="ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left sm:aspect-[4/5] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950"
       >
-        <div className="text-center">
-          <h2 className="text-[20px] font-bold leading-snug text-gray-950 dark:text-white">{title}</h2>
+        {/* The card's own name is the loudest thing on it: bigger than
+            anything below and on a tinted band of its own, so the tile reads
+            title-first and everything under it is detail. With nothing below —
+            a card that is only worth opening — the name takes the middle of
+            the tile instead of sitting on top of empty space. */}
+        <div className={`text-center ${hasFaceTable ? "" : "my-auto"}`}>
+          <h2 className={`text-[22px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-900" : ""}`}>{title}</h2>
           {subtitle ? <p className="mt-1 text-[13px] text-gray-400 dark:text-gray-500">{subtitle}</p> : null}
         </div>
-        {summary?.length ? (
-          <div className="grid flex-1 grid-cols-2 gap-3">
-            {summary.map((item) => (
+        {rows?.length ? (
+          // Partitioned like the money card's tiles: one little table per
+          // topic, two to a line, a lone last one taking the whole line rather
+          // than leaving a hole. Each is drawn as a table — ruled header, ruled
+          // rows — so blank lines still read as an empty table and not as a
+          // gap. `min-h-0` + `overflow-hidden` stop a long list from stretching
+          // the tile past its neighbours.
+          <div
+            style={{ containerType: "inline-size" }}
+            className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2 overflow-hidden"
+          >
+            {groupCardRows(rows).map((block) => (
               <div
-                key={item.key}
-                // Container query context so the two lines below can size
-                // themselves against this tile rather than the viewport.
-                style={{ containerType: "inline-size" }}
-                className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}
+                key={block.head.key}
+                className="flex min-w-0 flex-col border border-gray-200 last:odd:col-span-2 dark:border-gray-800"
               >
-                <p style={{ fontSize: fitTileText(item.label, 13, 0.68) }} className="truncate font-bold uppercase tracking-wide leading-tight">{item.label}</p>
-                <p style={{ fontSize: fitTileText(item.value, 26, 0.62) }} className={`truncate font-mono font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                <div
+                  style={{ fontSize: rowTopicText }}
+                  className={`flex items-baseline gap-1.5 border-b border-gray-200 bg-gray-50 px-2 py-0.5 leading-tight dark:border-gray-800 dark:bg-gray-900 ${block.head.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
+                >
+                  <span className="truncate font-bold uppercase tracking-wide">{block.head.label}</span>
+                  <span className="ml-auto shrink-0 font-mono font-bold tabular-nums">{block.head.value}</span>
+                </div>
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {block.items.map((item) => (
+                    <div key={item.key} style={{ fontSize: rowText }} className="flex items-baseline gap-1.5 px-2 py-0.5 leading-tight">
+                      {/* A row with no figure is not data, it is the "nothing
+                          here" line — muted so it never reads as an entry. */}
+                      <span className={`truncate ${item.value ? "text-gray-600 dark:text-gray-300" : "text-gray-400"}`}>
+                        {item.label}
+                        {item.helper ? <span style={{ fontSize: rowSmallText }} className="ml-1 font-mono text-gray-400">{item.helper}</span> : null}
+                      </span>
+                      <span className={`ml-auto shrink-0 font-mono tabular-nums ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
+          </div>
+        ) : summary?.length ? (
+          // Two by two filling whatever height is left, the same way the
+          // partitioned cards do it — a square tile would set its own height
+          // and leave this card taller than the ones beside it.
+          <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-3">
+            {summary.map((item) => {
+              // Label and figure share one size, set by the longest line of
+              // the two — a label carrying a `\n` is measured per line, so
+              // breaking a long one buys the whole tile bigger type.
+              const longest = [...item.label.split("\n"), item.value].reduce((a, b) => (a.length >= b.length ? a : b));
+              const textSize = fitTileText(longest, 15, 0.66);
+              return (
+                <div
+                  key={item.key}
+                  // Container query context so the two lines below can size
+                  // themselves against this tile rather than the viewport.
+                  style={{ containerType: "inline-size" }}
+                  className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-1 border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}
+                >
+                  <p style={{ fontSize: textSize }} className="whitespace-pre-line font-bold uppercase tracking-wide leading-tight">{item.label}</p>
+                  <p style={{ fontSize: textSize }} className={`truncate font-mono font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
+                </div>
+              );
+            })}
           </div>
         ) : null}
         <ChevronDown className="mx-auto h-5 w-5 shrink-0 text-gray-300 transition-transform group-hover:translate-y-0.5 dark:text-gray-700" aria-hidden="true" />
@@ -626,6 +769,7 @@ export default function Home() {
     }
   };
   const [salesDays, setSalesDays] = useState<ReportSalesDay[]>([]);
+  const [stockRisks, setStockRisks] = useState<ReportStockRisk[]>([]);
   const [salesDaysLoading, setSalesDaysLoading] = useState(false);
   const salesDaysLoadedRef = useRef(false);
   const [salesHours, setSalesHours] = useState<ReportSalesHour[]>([]);
@@ -715,7 +859,13 @@ export default function Home() {
     salesDaysLoadedRef.current = true;
     setSalesDaysLoading(true);
     getManagerReport(90)
-      .then((res) => setSalesDays(res.data.sales_days ?? []))
+      .then((res) => {
+        setSalesDays(res.data.sales_days ?? []);
+        // Same response the reports page used to draw its stock-risk grid
+        // from — the risks live on the live-work card now, so they ride along
+        // on this call rather than earning one of their own.
+        setStockRisks(res.data.stock_risks ?? []);
+      })
       .catch(() => {
         salesDaysLoadedRef.current = false;
       })
@@ -886,8 +1036,9 @@ export default function Home() {
     setSelectedDate(nextDate);
   };
 
-  // Kitchen and floor are live-only, so a past date has the sales card alone.
-  const visibleCards = isToday ? defaultCardOrder : defaultCardOrder.slice(0, 1);
+  // Kitchen and floor are live-only. The month summary is not — it reads a
+  // whole month off the reports, so it stands on a past date next to sales.
+  const visibleCards = isToday ? defaultCardOrder : ["sales", "monthReview"];
   // What's actually on screen: a card remembered from today (or from before
   // the page was left) is treated as closed on a date that doesn't show it.
   const openCard = expandedKey && visibleCards.includes(expandedKey) ? expandedKey : null;
@@ -1147,7 +1298,12 @@ export default function Home() {
     });
   })();
 
-  const lowStockCount = ingredients.filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5).length;
+  // Thinnest first — how far under its own minimum an ingredient is, not how
+  // few units are left, so a spice at 40g outranks a sack of rice at 5kg.
+  const lowStockItems = ingredients
+    .filter((item) => item.min_stock > 0 && item.stock <= item.min_stock * 1.5)
+    .sort((a, b) => a.stock / a.min_stock - b.stock / b.min_stock);
+  const lowStockCount = lowStockItems.length;
 
   const selectedMonthLabel = selectedDateAtNoon.toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "long", year: "numeric" });
   const selectedDateLabel = selectedDateAtNoon.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
@@ -1158,9 +1314,9 @@ export default function Home() {
   });
 
   const lanes = [
-    { key: "delayed" as const, icon: AlertTriangle, title: copy.delayed, items: delayed, color: "text-red-600 dark:text-red-300" },
-    { key: "cooking" as const, icon: ChefHat, title: copy.cooking, items: cooking, color: "text-amber-600 dark:text-amber-300" },
-    { key: "ready" as const, icon: CheckCircle2, title: copy.ready, items: ready, color: "text-emerald-600 dark:text-emerald-300" },
+    { key: "delayed" as const, icon: AlertTriangle, title: copy.delayed, items: delayed, color: "text-red-600 dark:text-red-300", tint: rowTint.red },
+    { key: "cooking" as const, icon: ChefHat, title: copy.cooking, items: cooking, color: "text-amber-600 dark:text-amber-300", tint: rowTint.amber },
+    { key: "ready" as const, icon: CheckCircle2, title: copy.ready, items: ready, color: "text-emerald-600 dark:text-emerald-300", tint: rowTint.emerald },
   ];
 
   const dayOrdersTotal = validOrders.reduce((sum, order) => sum + (order.grand_total || order.total_amount), 0);
@@ -1174,7 +1330,7 @@ export default function Home() {
   const summary = [
     { key: "revenue", label: copy.paidRevenue, value: formatCurrency(paidRevenue, language), helper: `${paidOrders.length} ${copy.order}`, tone: "revenue" as const },
     ...(canViewExpenses
-      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(monthExpense, language), tone: "cost" as CardTone }]
+      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(-monthExpense, language), valueClass: costValueClass, tone: "cost" as CardTone }]
       : []),
     // A loss on a green tile would read as good news, so it borrows the cost
     // tone, and the signed figure is coloured to match.
@@ -1182,16 +1338,76 @@ export default function Home() {
       key: "profit",
       label: copy.metricProfit,
       value: formatCurrency(dayProfit, language, 0, "exceptZero"),
-      valueClass:
-        dayProfit < 0
-          ? "text-red-600 dark:text-red-400"
-          : dayProfit > 0
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-gray-950 dark:text-white",
+      valueClass: profitValueClass(dayProfit),
       tone: (dayProfit < 0 ? "cost" : "profit") as CardTone,
     },
     { key: "orders", label: copy.ordersTotal, value: validOrders.length.toLocaleString(), helper: `${copy.activeOrders} ${activeOrders}` },
   ];
+
+  // The closed card is the whole kitchen at a glance: every lane, always, with
+  // its ticket count — a clear kitchen is three zeroes and the day's order
+  // count, which says more than the words "kitchen is clear". Under each lane
+  // sit its two longest-waiting tickets, the ones someone should walk to
+  // first. Two is the cap and there is no "+n more" line: the lane count above
+  // already says how many are behind them, and the card has to stay the same
+  // height as its neighbours no matter how bad service gets.
+  // An empty lane says so in words: a table of blank lines leaves you
+  // wondering whether it is empty or still loading.
+  const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-400" });
+  const attentionRows: CardRow[] = [
+    ...lanes.flatMap((lane) => {
+      const worst = [...lane.items].sort((a, b) => b.waited - a.waited).slice(0, 2);
+      return [
+        { key: `${lane.key}-head`, label: lane.title, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
+        ...(worst.length
+          ? worst.map((ticket) => ({
+              key: `${lane.key}-${ticket.id}`,
+              label: ticket.table,
+              helper: `#${ticket.orderNumber}`,
+              value: `${ticket.waited} ${copy.minutes}`,
+              valueClass: lane.color,
+            }))
+          : [emptyRow(lane.key)]),
+      ];
+    }),
+    // The fourth cell is the store cupboard: what is running out and how much
+    // of it is left, since that is the other thing that stops a kitchen.
+    { key: "stock", label: copy.lowStock, value: lowStockCount.toLocaleString(), valueClass: "text-orange-600 dark:text-orange-300", tint: rowTint.orange, heading: true },
+    ...(lowStockItems.length
+      ? lowStockItems.slice(0, 2).map((item) => ({
+          key: `stock-${item.ID}`,
+          label: item.name,
+          value: `${formatNumber(item.stock, language)} ${item.unit}`,
+          valueClass: "text-orange-600 dark:text-orange-300",
+        }))
+      : [emptyRow("stock")]),
+  ];
+
+  const monthOrders = monthSales.reduce((sum, day) => sum + day.orders, 0);
+
+  // Everything the month summary card and its printed sheet need, off figures
+  // this page already holds: the sales report for revenue/profit/orders, the
+  // expense ledger for what was spent and on what.
+  const monthMargin = monthRevenue ? (monthProfit / monthRevenue) * 100 : 0;
+  const monthAvgTicket = monthOrders ? monthRevenue / monthOrders : 0;
+  const monthDaysTraded = monthSales.filter((day) => day.orders > 0).length;
+  const monthBestDay = monthSales.reduce<ReportSalesDay | null>((best, day) => (!best || day.revenue > best.revenue ? day : best), null);
+  const monthSlowestDay = monthSales.reduce<ReportSalesDay | null>(
+    (worst, day) => (day.orders > 0 && (!worst || day.revenue < worst.revenue) ? day : worst),
+    null,
+  );
+  // The ledger rows are already scoped to this month by the fetch above.
+  const monthExpenseByCategory = Object.entries(
+    expenses.reduce<Record<string, number>>((totals, item) => {
+      totals[item.category] = (totals[item.category] ?? 0) + item.amount;
+      return totals;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
+  // The top-items list follows its own month picker in the sales card, so it
+  // only belongs on this sheet when that picker happens to agree.
+  const monthTopItems = toDashboardDate(topItemsMonthDate).slice(0, 7) === expenseMonth ? topItemsData : [];
+  const shortDayLabel = (date: string) =>
+    new Date(`${date}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { day: "numeric", month: "short" });
 
   const liveWorkSummary: CardSummaryItem[] = [
     { key: "late", label: copy.lateKitchen, value: delayed.length.toLocaleString() },
@@ -1200,13 +1416,40 @@ export default function Home() {
     { key: "stock", label: copy.lowStock, value: lowStockCount.toLocaleString() },
   ];
 
-  const availableTables = tables.filter((table) => table.status === "available").length;
-  const reservedTables = tables.filter((table) => table.status === "reserved").length;
+  const availableTables = tables.filter((table) => table.status === "available");
+  const reservedTables = tables.filter((table) => table.status === "reserved");
   const floorStatusSummary: CardSummaryItem[] = [
     { key: "occupied", label: copy.occupiedTables, value: occupied.length.toLocaleString() },
-    { key: "available", label: copy.available, value: availableTables.toLocaleString() },
-    { key: "reserved", label: copy.reserved, value: reservedTables.toLocaleString() },
+    { key: "available", label: copy.available, value: availableTables.length.toLocaleString() },
+    { key: "reserved", label: copy.reserved, value: reservedTables.length.toLocaleString() },
   ];
+
+  // Same face as the kitchen card: every state, always, with its count, and
+  // under a state that has a clock running, the table that has been sitting
+  // longest — the one a host should look at first. States with nothing timed
+  // stay a single line.
+  const floorRows: CardRow[] = [
+    { key: "occupied", label: copy.occupied, items: occupied, color: "text-amber-600 dark:text-amber-300", tint: rowTint.amber },
+    { key: "reserved", label: copy.reserved, items: reservedTables, color: "text-sky-600 dark:text-sky-300", tint: rowTint.sky },
+    { key: "available", label: copy.available, items: availableTables, color: "text-emerald-600 dark:text-emerald-300", tint: rowTint.emerald },
+  ].flatMap((lane) => {
+    const longest = lane.items.reduce<DashboardFloorTable | null>(
+      (worst, table) => ((table.minutes ?? -1) > (worst?.minutes ?? -1) ? table : worst),
+      null,
+    );
+    return [
+      { key: `${lane.key}-head`, label: lane.label, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
+      longest
+        ? {
+            key: `${lane.key}-${longest.key}`,
+            label: longest.label,
+            helper: longest.guests ? `${longest.guests} ${copy.people}` : longest.zone,
+            value: `${longest.minutes} ${copy.minutes}`,
+            valueClass: lane.color,
+          }
+        : emptyRow(lane.key),
+    ];
+  });
 
   // While a card is open, every other card shrinks from a full tile down to
   // just its folder tab.
@@ -1301,7 +1544,17 @@ export default function Home() {
                 beats a complete row. Open: a folder rack, every tab side by
                 side on one line (no row gap, so the open card's body below
                 meets its tab) and wrapping only when the line runs out. */}
-            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5" : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
+            {/* `auto-rows-fr`: every row takes the height of the tallest card
+                in the whole grid, not just its own row, so a card that wraps
+                to the second column still matches the ones beside it. Only
+                from `sm` up — in one column there is nothing to line up with,
+                and forcing every card to the tallest one's height just leaves
+                dead space under the short ones. Narrow cards read better than
+                fat ones, but the column count has to count the sidebar too: it
+                turns permanent at `lg` and takes 264px, so a tablet in
+                landscape leaves about 744px for the cards — two columns' worth.
+                Three from `xl`, four only at `2xl`. */}
+            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5" : "grid grid-cols-1 gap-3 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"}>
             <CollapsibleCard
               title={copy.salesOverview}
               summary={summary}
@@ -1518,9 +1771,9 @@ export default function Home() {
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {[
                       { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language), tone: "revenue" as CardTone, href: canViewReports ? "/reports" : undefined },
-                      ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(monthExpense, language), tone: "cost" as CardTone, href: "/expenses" }] : []),
-                      { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), tone: (monthProfit < 0 ? "cost" : "profit") as CardTone, valueClass: monthProfit < 0 ? "text-red-600 dark:text-red-400" : "text-gray-950 dark:text-white" },
-                      { key: "orders", label: copy.ordersTotal, value: monthSales.reduce((sum, day) => sum + day.orders, 0).toLocaleString() },
+                      ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(-monthExpense, language), valueClass: costValueClass, tone: "cost" as CardTone, href: "/expenses" }] : []),
+                      { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), tone: (monthProfit < 0 ? "cost" : "profit") as CardTone, valueClass: profitValueClass(monthProfit) },
+                      { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
                     ].map((stat) => {
                       const tileClass = `block rounded-md border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
                         stat.href ? "ui-press ui-shake cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
@@ -1840,18 +2093,151 @@ export default function Home() {
               </div>
             </CollapsibleCard>
 
+            {/* The manager's month, and the one card built to leave the screen:
+                everything inside `month-summary-sheet` is what prints, so the
+                sheet is the card body rather than a separate hidden copy that
+                could drift from it. */}
+            <CollapsibleCard
+              title={copy.monthReview}
+              subtitle={selectedMonthLabel}
+              expanded={openCard === "monthReview"}
+              dimmed={isCardDimmed("monthReview")}
+              collapsedRank={collapsedRank("monthReview")}
+              onToggle={() => toggleCard("monthReview")}
+            >
+              <div id="month-summary-sheet" className="p-4">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-200 pb-3 dark:border-gray-800">
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-bold text-gray-950 dark:text-white">{copy.monthReview} · {selectedMonthLabel}</h3>
+                    <p className="mt-0.5 font-mono text-[10px] tabular-nums text-gray-500 dark:text-gray-400">
+                      {copy.generatedAt} {new Date().toLocaleString(language === "th" ? "th-TH" : "en-US")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => printA4("month-summary-sheet")}
+                    className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden"
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    {copy.exportPdf}
+                  </button>
+                </div>
+
+                <div className="grid gap-4 pt-3 lg:grid-cols-2">
+                  <section>
+                    <h4 className="mb-1.5 text-[12px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{copy.keyFigures}</h4>
+                    <table className="w-full text-left text-[12px]">
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {[
+                          { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language) },
+                          ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(-monthExpense, language), valueClass: costValueClass }] : []),
+                          { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), valueClass: profitValueClass(monthProfit) },
+                          { key: "margin", label: copy.profitMargin, value: `${formatNumber(monthMargin, language, 1)}%` },
+                          { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
+                          { key: "avg", label: copy.avgTicket, value: formatCurrency(monthAvgTicket, language) },
+                          { key: "days", label: copy.tradingDays, value: monthDaysTraded.toLocaleString() },
+                          { key: "best", label: copy.bestDay, value: monthBestDay ? `${shortDayLabel(monthBestDay.order_date)} · ${formatCurrency(monthBestDay.revenue, language)}` : "-" },
+                          { key: "slow", label: copy.slowestDay, value: monthSlowestDay ? `${shortDayLabel(monthSlowestDay.order_date)} · ${formatCurrency(monthSlowestDay.revenue, language)}` : "-" },
+                        ].map((row) => (
+                          <tr key={row.key}>
+                            <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{row.label}</td>
+                            <td className={`py-1.5 text-right font-mono font-semibold tabular-nums ${row.valueClass ?? "text-gray-950 dark:text-white"}`}>{row.value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+
+                  {canViewExpenses ? (
+                  <section>
+                    <h4 className="mb-1.5 text-[12px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{copy.expenseByCategory}</h4>
+                    {monthExpenseByCategory.length ? (
+                      <table className="w-full text-left text-[12px]">
+                        <thead className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                          <tr>
+                            <th className="pb-1 font-medium">{copy.expenseCategory}</th>
+                            <th className="pb-1 text-right font-medium">{copy.metricCost}</th>
+                            <th className="pb-1 text-right font-medium">{copy.share}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {monthExpenseByCategory.map(([category, amount]) => (
+                            <tr key={category}>
+                              <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{expenseCategoryLabels[language][category as ExpenseCategory] ?? category}</td>
+                              <td className="py-1.5 text-right font-mono font-semibold tabular-nums text-gray-950 dark:text-white">{formatCurrency(amount, language)}</td>
+                              <td className="py-1.5 pl-3 text-right font-mono tabular-nums text-gray-500 dark:text-gray-400">
+                                {monthExpense ? formatNumber((amount / monthExpense) * 100, language, 0) : 0}%
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : <p className="py-6 text-center text-[12px] text-gray-400">{copy.noSalesMonth}</p>}
+                  </section>
+                  ) : null}
+
+                  {monthTopItems.length ? (
+                    <section>
+                      <h4 className="mb-1.5 text-[12px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{copy.topItems}</h4>
+                      <table className="w-full text-left text-[12px]">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {monthTopItems.slice(0, 8).map((item, index) => (
+                            <tr key={item.menu_id}>
+                              <td className="py-1.5 pr-3 font-mono text-gray-400">{index + 1}</td>
+                              <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{item.menu_name}</td>
+                              <td className="py-1.5 pl-3 text-right font-mono font-semibold tabular-nums text-gray-950 dark:text-white">{formatNumber(item.quantity, language, 0)} {copy.dishes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </section>
+                  ) : null}
+
+                  {stockRisks.length ? (
+                    <section>
+                      <h4 className="mb-1.5 text-[12px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{copy.stockRisks}</h4>
+                      <table className="w-full text-left text-[12px]">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {stockRisks.slice(0, 8).map((risk) => (
+                            <tr key={risk.id}>
+                              <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{risk.name}</td>
+                              <td className="py-1.5 text-right font-mono tabular-nums text-gray-500 dark:text-gray-400">
+                                {formatNumber(risk.stock, language)} / {formatNumber(risk.min_stock, language)} {risk.unit}
+                              </td>
+                              <td className="py-1.5 pl-3 text-right font-mono font-semibold tabular-nums text-orange-600 dark:text-orange-300">
+                                {copy.restock} {formatNumber(risk.restock_estimate, language)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </section>
+                  ) : null}
+                </div>
+              </div>
+            </CollapsibleCard>
+
             {/* Why the live cards are missing, said where they would have been:
                 beside the sales tab (or its tile), rather than as a banner at
-                the bottom of the page. `order` puts it straight after sales in
-                the tab strip; `self-start` keeps it its own height next to a
-                full-size tile. */}
+                the bottom of the page. `order` puts it straight after sales.
+                It takes the shape of whatever its neighbours are wearing — a
+                closed folder's tab while a card is open, a full tile in the
+                grid — so the row never looks like it lost two cards. It stays
+                a plain div: nothing to click, so no tab press or tile hover. */}
             {!isToday ? (
               <div
                 style={{ order: collapsedRank("sales") }}
-                className="flex items-start gap-2 self-start rounded-md border border-gray-200 bg-white px-3 py-2.5 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300"
+                className={
+                  openCard !== null
+                    ? `${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300`
+                    : "flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-md border border-gray-200 bg-white p-5 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400"
+                }
               >
-                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-                <span>{copy.historyNotice}</span>
+                <CalendarDays
+                  className={`shrink-0 text-gray-400 ${openCard !== null ? "h-3.5 w-3.5" : "h-8 w-8 text-gray-300 dark:text-gray-700"}`}
+                  aria-hidden="true"
+                />
+                <span className={openCard !== null ? "truncate" : ""}>{copy.historyNotice}</span>
               </div>
             ) : null}
 
@@ -1861,6 +2247,7 @@ export default function Home() {
               <CollapsibleCard
                 title={copy.liveWork}
                 summary={liveWorkSummary}
+                rows={attentionRows}
                 expanded={openCard === "liveWork"}
                 dimmed={isCardDimmed("liveWork")}
                 collapsedRank={collapsedRank("liveWork")}
@@ -1880,12 +2267,15 @@ export default function Home() {
                           const Icon = lane.icon;
                           return (
                             <div key={lane.key} className="bg-white dark:bg-gray-950">
-                              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 dark:border-gray-800">
-                                <div className="flex items-center gap-2">
-                                  <Icon className={`h-4 w-4 ${lane.color}`} aria-hidden="true" />
-                                  <h4 className="text-[12px] font-semibold text-gray-900 dark:text-white">{lane.title}</h4>
+                              {/* Each lane's header wears the lane's colour, so
+                                  a glance down the open card tells overdue from
+                                  cooking from done without reading a word. */}
+                              <div className={`flex items-center justify-between border-b px-4 py-2.5 ${lane.tint}`}>
+                                <div className={`flex items-center gap-2 ${lane.color}`}>
+                                  <Icon className="h-4 w-4" aria-hidden="true" />
+                                  <h4 className="text-[12px] font-semibold">{lane.title}</h4>
                                 </div>
-                                <span className="font-mono text-[11px] text-gray-400">{lane.items.length}</span>
+                                <span className={`font-mono text-[11px] font-semibold ${lane.color}`}>{lane.items.length}</span>
                               </div>
                               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                                 {lane.items.length ? lane.items.slice(0, 5).map((ticket) => (
@@ -1909,7 +2299,13 @@ export default function Home() {
                     ) : <p className="px-4 py-10 text-center text-[12px] text-gray-400">{copy.noKitchen}</p>}
                   </div>
 
-                <div>
+                {/* Orders and stock risks sit side by side on a wide screen —
+                    two things to work through, not one list after another.
+                    `xl`, not `lg`: on a tablet the orders pane would be about
+                    530px and the order row needs every bit of that, so the two
+                    stack instead of squeezing. */}
+                <div className="xl:flex xl:items-stretch">
+                <div className="min-w-0 xl:flex-1 xl:border-r xl:border-gray-200 xl:dark:border-gray-800">
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <div>
                       <h3 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.dailyOrders}</h3>
@@ -1919,20 +2315,64 @@ export default function Home() {
                   </div>
                   {orders.length ? (
                     <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 sm:grid">
+                      {/* Five columns need ~580px including gaps. That is more
+                          than a phone-width card has at `sm`, so the row only
+                          becomes a table from `md` and stacks below it. */}
+                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 md:grid">
                         <span>{copy.order}</span><span>{copy.location}</span><span>{copy.status}</span><span className="text-right">{copy.total}</span><span className="text-right">{copy.time}</span>
                       </div>
                       {orders.slice(0, 10).map((order) => (
-                        <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 sm:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] sm:items-center sm:gap-3">
+                        <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 md:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] md:items-center md:gap-3">
                           <span className="font-mono text-[12px] font-semibold text-gray-950 dark:text-white">#{order.order_number}</span>
                           <span className="truncate text-[12px] text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</span>
                           <span><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-semibold ${orderStatusClass(order.status)}`}>{orderStatusLabel(order.status, copy)}</span></span>
-                          <span className="font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white sm:text-right">{formatCurrency(order.grand_total || order.total_amount, language)}</span>
-                          <span className="font-mono text-[11px] text-gray-400 sm:text-right">{new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white md:text-right">{formatCurrency(order.grand_total || order.total_amount, language)}</span>
+                          <span className="font-mono text-[11px] text-gray-400 md:text-right">{new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span>
                         </button>
                       ))}
                     </div>
                   ) : <div className="flex flex-col items-center justify-center px-4 py-12 text-center"><ReceiptText className="h-5 w-5 text-gray-300" /><p className="mt-2 text-[12px] text-gray-400">{copy.noOrders}</p></div>}
+                </div>
+
+                {/* Moved off the reports page: an ingredient about to run out
+                    is something to act on now, not something to read about in
+                    a monthly report. Same figures, same restock estimate — and
+                    each card now opens that ingredient's adjust dialog, so the
+                    fix is one click from the warning. */}
+                <div className="border-t border-gray-200 dark:border-gray-800 xl:w-2/5 xl:border-t-0">
+                  <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${rowTint.orange}`}>
+                    <div className="text-orange-700 dark:text-orange-300">
+                      <h3 className="text-[13px] font-semibold">{copy.stockRisks}</h3>
+                      <p className="mt-0.5 text-[11px] opacity-80">{stockRisks.length} {copy.ingredients}</p>
+                    </div>
+                    <button type="button" onClick={() => router.push("/inventory")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewInventory}<ArrowRight className="h-3.5 w-3.5" /></button>
+                  </div>
+                  {stockRisks.length ? (
+                    <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 xl:grid-cols-1">
+                      {stockRisks.map((risk) => (
+                        <button
+                          key={risk.id}
+                          type="button"
+                          onClick={() => router.push(`/inventory?adjust=${risk.id}`)}
+                          className="ui-press w-full rounded-md border border-gray-200 px-3 py-2.5 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-[13px] font-semibold text-gray-950 dark:text-white">{risk.name}</p>
+                              <p className="mt-0.5 text-[11px] text-gray-400">{risk.category || "-"}</p>
+                            </div>
+                            <span className={`shrink-0 rounded px-2 py-1 text-[10px] font-semibold ${risk.status === "out" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}>
+                              {risk.status}
+                            </span>
+                          </div>
+                          <p className="mt-2 font-mono text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+                            {formatNumber(risk.stock, language)} / {formatNumber(risk.min_stock, language)} {risk.unit} · {copy.restock} {formatNumber(risk.restock_estimate, language)} {risk.unit}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <p className="px-4 pb-10 pt-2 text-center text-[12px] text-gray-400">{copy.noStockRisks}</p>}
+                </div>
                 </div>
               </CollapsibleCard>
               ) : null}
@@ -1941,13 +2381,14 @@ export default function Home() {
                 <CollapsibleCard
                   title={copy.floorStatus}
                   summary={floorStatusSummary}
+                  rows={floorRows}
                   expanded={openCard === "floorStatus"}
                   dimmed={isCardDimmed("floorStatus")}
                   collapsedRank={collapsedRank("floorStatus")}
                   onToggle={() => toggleCard("floorStatus")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {availableTables} · {copy.reserved} {reservedTables}</p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {availableTables.length} · {copy.reserved} {reservedTables.length}</p>
                     <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
