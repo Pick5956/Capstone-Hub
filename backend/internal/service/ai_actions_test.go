@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,6 +219,54 @@ func TestPlannerAskFlowReturnsPreviewWithoutExecutingTheAction(t *testing.T) {
 	}
 	if response.ResolvedPlan == nil || response.ResolvedPlan.Action == nil || response.Planner == nil {
 		t.Fatalf("planner metadata/action contract missing: %+v", response)
+	}
+}
+
+func TestMixedMenuActionAndDocsKeepsPreviewConfirmBoundary(t *testing.T) {
+	enableAIActionsForTest(t, "7")
+	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "false")
+	plan := aiActionTestPlan()
+	plannerProvider := &structuredPlannerMockProvider{
+		name: StructuredPlannerProviderGroq,
+		response: StructuredPlannerProviderResponse{
+			RawJSON: structuredPlannerTestJSON(t, plan),
+			Model:   "planner-model",
+		},
+	}
+	menu := &entity.MenuItem{Name: "Pad Thai", IsAvailable: true}
+	menu.ID = 42
+	store := &fakeAIActionStore{
+		created: &entity.AIActionPreview{
+			ID: "preview-mixed", ActionType: entity.AIActionTypeSetMenuAvailability,
+			Status: entity.AIActionPreviewStatusPending, TargetMenuItemID: 42,
+			TargetMenuItemName: "Pad Thai", ExpectedAvailability: true,
+			DesiredAvailability: false, ExpiresAt: time.Now().Add(repository.AIActionPreviewTTL),
+		},
+		createdToken: "one-time-token",
+	}
+	service := &AIService{
+		structuredPlannerProviders: []StructuredPlannerProvider{plannerProvider},
+		actionStore:                store,
+		actionMenuResolver:         &fakeAIActionMenuResolver{item: menu},
+	}
+
+	response, err := service.AskOperationsForOwner(context.Background(), ownerActor(), &AIAskRequest{
+		Question: "ปิดขายเมนู Pad Thai และ PromptPay ยืนยันอัตโนมัติหรือไม่",
+	})
+	if err != nil {
+		t.Fatalf("AskOperationsForOwner() error = %v", err)
+	}
+	if response.ActionPreview == nil || store.createCalls != 1 || store.confirmCalls != 0 {
+		t.Fatalf("mixed action bypassed preview/confirm: response=%+v create=%d confirm=%d", response, store.createCalls, store.confirmCalls)
+	}
+	if response.ResolvedPlan == nil || response.ResolvedPlan.Action == nil || response.Planner == nil {
+		t.Fatalf("mixed action lost trusted planner metadata: %+v", response)
+	}
+	if len(response.DocSources) != 1 || response.DocSources[0].URL != "/docs/billing-and-payments#payment-methods" {
+		t.Fatalf("mixed docs provenance = %+v", response.DocSources)
+	}
+	if !strings.Contains(response.Answer, "/docs/billing-and-payments#payment-methods") {
+		t.Fatalf("mixed answer has no clickable docs citation: %q", response.Answer)
 	}
 }
 

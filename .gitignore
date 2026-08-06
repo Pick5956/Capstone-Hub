@@ -30,7 +30,7 @@ db-dumps/
 backups/
 data/
 database/
-docs/
+/docs/
 
 
 # Personal AI/agent workspace files - local only

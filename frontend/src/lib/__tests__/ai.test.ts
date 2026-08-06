@@ -8,12 +8,19 @@ const apiClient = vi.hoisted(() => ({
 
 vi.mock("../apiClient", () => ({ apiClient }));
 
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, normalizeAIAnswer } from "@/src/lib/ai";
 
 describe("AI conversation API", () => {
   beforeEach(() => {
     apiClient.delete.mockReset();
     apiClient.post.mockReset();
+  });
+
+  it("accepts a non-empty string answer and rejects malformed payload values", () => {
+    expect(normalizeAIAnswer("  Safe answer  ")).toBe("Safe answer");
+    expect(normalizeAIAnswer("")).toBeNull();
+    expect(normalizeAIAnswer(null)).toBeNull();
+    expect(normalizeAIAnswer({ answer: "nested" })).toBeNull();
   });
 
   it("passes a normalized conversation ID with the ask request", () => {

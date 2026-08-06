@@ -8,6 +8,12 @@ describe("pageTitle", () => {
     expect(pageTitle("/expenses", "en")).toBe("Expenses · Dishy");
   });
 
+  it("labels the public documentation in the selected language", () => {
+    expect(pageTitle("/docs", "th")).toBe("คู่มือการใช้งาน · Dishy");
+    expect(pageTitle("/docs", "en")).toBe("User guide · Dishy");
+    expect(pageTitle("/docs/kitchen", "th")).toBe("คู่มือการใช้งาน · Dishy");
+  });
+
   it("includes the current order number on POS order tabs", () => {
     expect(pageTitle("/pos/orders/A001", "th", "ครัวบ้านเรา")).toBe("ออเดอร์ A001 · ครัวบ้านเรา");
     expect(pageTitle("/pos/orders/42", "th", "ครัวบ้านเรา", "A001")).toBe("ออเดอร์ A001 · ครัวบ้านเรา");

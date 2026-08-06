@@ -405,7 +405,7 @@ func (s *AIService) getGroqTools() []groqTool {
 
 func validateGroqReadOnlyToolCall(call groqToolCall) (AIToolName, error) {
 	toolName := AIToolName(strings.TrimSpace(call.Function.Name))
-	if !isSupportedReadOnlyTool(toolName) {
+	if !isProviderSnapshotTool(toolName) {
 		return "", errors.New("Groq requested an unsupported tool")
 	}
 	arguments := strings.TrimSpace(call.Function.Arguments)

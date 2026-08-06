@@ -127,10 +127,19 @@ export type AIActionConfirmation = {
   };
 };
 
+export type AISystemDocSource = {
+  article_slug: string;
+  section_id: string;
+  article_title: string;
+  section_title: string;
+  relevant_content?: string;
+  url: `/docs#${string}` | `/docs/${string}#${string}`;
+};
+
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
-  task?: "explain_concept" | "retrieve_fact" | "analyze_data" | "recommend_action" | string;
+  task?: "explain_concept" | "retrieve_fact" | "analyze_data" | "recommend_action" | "product_help" | string;
   tool?: "get_lowest_margin_menu" | string;
   model: string;
   snapshot: AISnapshot;
@@ -139,6 +148,8 @@ export type AIAskResponse = {
   resolved_plan?: AIResolvedPlan;
   action_preview?: AIActionPreview;
   candidate_tools?: string[];
+  tools_used?: string[];
+  doc_sources?: AISystemDocSource[];
   planner?: {
     provider: "groq" | "gemini" | "local_clarification_fallback" | string;
     model?: string;

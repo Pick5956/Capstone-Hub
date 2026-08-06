@@ -3,7 +3,7 @@ import Sidebar from "@/src/components/shared/Sidebar";
 import MobileTopBar from "@/src/components/shared/MobileTopBar";
 import ContentWrapper from "@/src/components/shared/ContentWrapper";
 import DashboardRestaurantGuard from "@/src/components/shared/DashboardRestaurantGuard";
-import AIOperationsFloatingChat from "@/src/components/shared/AIOperationsFloatingChat";
+import AIOperationsFloatingChatGate from "@/src/components/shared/AIOperationsFloatingChatGate";
 import DashboardTopBar from "@/src/components/shared/DashboardTopBar";
 
 export default function DashboardLayout({
@@ -20,7 +20,7 @@ export default function DashboardLayout({
           <DashboardTopBar />
           <main className="min-w-0 max-w-full overflow-x-clip pt-14 lg:pt-0">{children}</main>
         </ContentWrapper>
-        <AIOperationsFloatingChat />
+        <AIOperationsFloatingChatGate />
       </SidebarProvider>
     </DashboardRestaurantGuard>
   );

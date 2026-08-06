@@ -16,7 +16,7 @@ import {
   Lightbulb,
   RotateCcw
 } from "lucide-react";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -45,7 +45,7 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import type { AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
-import AIResponseContent from "@/src/components/shared/AIResponseContent";
+import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
   id: string;
@@ -448,6 +448,8 @@ export default function AIOperationsFloatingChat() {
       // drop the answer instead of appending it to a conversation it never joined.
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data: AIAskResponse = response.data;
+      const answer = normalizeAIAnswer(data?.answer);
+      if (!answer) throw new Error("AI response did not contain a valid answer");
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
         saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
@@ -456,12 +458,12 @@ export default function AIOperationsFloatingChat() {
       const assistantMsg: Message = {
         id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
         role: "assistant",
-        content: formatAIActionPreviewAnswer(data.answer, data.action_preview, language),
+        content: formatAIActionPreviewAnswer(answer, data.action_preview, language),
         createdAt: new Date(),
         actions: data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, data.answer, activeMembership, language, data.tool)
+            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool)
             : undefined,
       };
       
@@ -867,7 +869,7 @@ export default function AIOperationsFloatingChat() {
                   </div>
                   {/* AI Message Bubble (Rounded on all sides) */}
                   <div className="max-w-full break-words rounded-md bg-gray-100 px-4 py-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-800 dark:text-gray-100 sm:text-[13px]">
-                    <AIResponseContent content={msg.content} compact />
+                    <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {msg.actions.map((action) => (

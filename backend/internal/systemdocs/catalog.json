@@ -1,0 +1,2103 @@
+{
+  "groups": [
+    {
+      "id": "start",
+      "title": {
+        "th": "เริ่มต้นใช้งาน",
+        "en": "Get started"
+      }
+    },
+    {
+      "id": "setup",
+      "title": {
+        "th": "ตั้งค่าร้าน",
+        "en": "Set up your restaurant"
+      }
+    },
+    {
+      "id": "service",
+      "title": {
+        "th": "รอบการให้บริการ",
+        "en": "Run service"
+      }
+    },
+    {
+      "id": "monitor",
+      "title": {
+        "th": "ติดตามและบริหารร้าน",
+        "en": "Monitor and manage"
+      }
+    },
+    {
+      "id": "help",
+      "title": {
+        "th": "ช่วยเหลือ",
+        "en": "Help"
+      }
+    }
+  ],
+  "articles": [
+    {
+      "slug": "overview",
+      "groupId": "start",
+      "title": {
+        "th": "ภาพรวม Dishy",
+        "en": "Dishy overview"
+      },
+      "summary": {
+        "th": "รู้จักส่วนหลักของระบบและลำดับงานตั้งแต่เปิดโต๊ะจนปิดบิล",
+        "en": "Understand the main areas of Dishy and the flow from opening a table to closing a bill."
+      },
+      "audience": {
+        "th": "สำหรับสมาชิกทุกคนในร้าน",
+        "en": "For every restaurant team member"
+      },
+      "keywords": {
+        "th": [
+          "ภาพรวม",
+          "ระบบร้านอาหาร",
+          "เริ่มต้น",
+          "ขั้นตอน",
+          "งานประจำวัน"
+        ],
+        "en": [
+          "overview",
+          "restaurant system",
+          "getting started",
+          "workflow",
+          "daily operations"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/restaurants",
+          "label": {
+            "th": "เลือกร้านหรือเข้าใช้งาน",
+            "en": "Choose a restaurant or open the app"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "what-is-dishy",
+          "title": {
+            "th": "Dishy คืออะไร",
+            "en": "What Dishy is"
+          },
+          "paragraphs": [
+            {
+              "th": "Dishy เป็นระบบจัดการงานร้านอาหารที่เชื่อมงานหน้าร้าน ครัว การรับเงิน สต็อก ทีม และรายงานไว้ในพื้นที่ทำงานเดียวกัน สมาชิกแต่ละคนจะเห็นเมนูตามสิทธิ์ที่ได้รับในร้านนั้น",
+              "en": "Dishy is a restaurant operations system that connects front-of-house, kitchen, payments, inventory, team management, and reporting in one workspace. Each member sees the areas allowed by their permissions in that restaurant."
+            }
+          ],
+          "bullets": [
+            {
+              "th": "เจ้าของและผู้จัดการติดตามภาพรวมร้านและตั้งค่าการทำงาน",
+              "en": "Owners and managers monitor the restaurant and configure operations."
+            },
+            {
+              "th": "พนักงานหน้าร้านเปิดโต๊ะ รับออเดอร์ และส่งรายการเข้าครัว",
+              "en": "Front-of-house staff open tables, take orders, and send items to the kitchen."
+            },
+            {
+              "th": "ครัวอัปเดตสถานะอาหารเพื่อให้หน้าร้านรู้ว่ารายการใดเสร็จแล้ว",
+              "en": "Kitchen staff update food status so the service team knows what is ready."
+            },
+            {
+              "th": "ผู้มีสิทธิ์รับเงินออกบิล บันทึกการชำระ และพิมพ์ใบเสร็จ",
+              "en": "Staff with payment access create bills, record payment, and print receipts."
+            }
+          ]
+        },
+        {
+          "id": "service-flow",
+          "title": {
+            "th": "ลำดับงานหลัก",
+            "en": "Core service flow"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "เปิดโต๊ะหรือออเดอร์กลับบ้าน",
+                "en": "Open a table or takeaway order"
+              },
+              "body": {
+                "th": "เลือกโต๊ะว่าง หรือสร้างออเดอร์กลับบ้านจากหน้ารับออเดอร์",
+                "en": "Choose an available table or create a takeaway order from order taking."
+              }
+            },
+            {
+              "title": {
+                "th": "เพิ่มรายการและส่งครัว",
+                "en": "Add items and send to kitchen"
+              },
+              "body": {
+                "th": "เลือกเมนู ตัวเลือก จำนวน และหมายเหตุ แล้วตรวจรอบปัจจุบันก่อนส่ง",
+                "en": "Choose menu items, options, quantities, and notes, then review the current round before sending it."
+              }
+            },
+            {
+              "title": {
+                "th": "ครัวทำรายการให้เสร็จ",
+                "en": "Complete items in the kitchen"
+              },
+              "body": {
+                "th": "จอครัวแสดงรายการที่กำลังทำและรายการที่เสร็จแล้วตามสิทธิ์ของผู้ใช้",
+                "en": "The kitchen display separates cooking and completed items based on the user's permissions."
+              }
+            },
+            {
+              "title": {
+                "th": "ออกบิลและรับเงิน",
+                "en": "Bill and take payment"
+              },
+              "body": {
+                "th": "เมื่อรายการที่ใช้งานทั้งหมดเสร็จแล้ว ให้รับเงินสดยอดพอดีหรือยืนยัน QR PromptPay แบบคงที่",
+                "en": "When all active items are complete, record exact cash payment or manually confirm a static PromptPay QR payment."
+              }
+            },
+            {
+              "title": {
+                "th": "ส่งมอบใบเสร็จ",
+                "en": "Hand off the receipt"
+              },
+              "body": {
+                "th": "พิมพ์ใบเสร็จหลังรับเงิน หรือกลับมาพิมพ์ซ้ำจากคลังออเดอร์",
+                "en": "Print the receipt after payment or reprint it later from the order archive."
+              }
+            }
+          ]
+        },
+        {
+          "id": "guide-scope",
+          "title": {
+            "th": "คู่มือนี้ครอบคลุมอะไร",
+            "en": "What this guide covers"
+          },
+          "paragraphs": [
+            {
+              "th": "คู่มือนี้อธิบายการใช้งานทั่วไปของเว็บ Dishy ตามระบบปัจจุบัน รายละเอียดที่เห็นจริงอาจต่างกันตามสิทธิ์ การตั้งค่าร้าน และฟีเจอร์ที่ผู้ดูแลระบบเปิดใช้",
+              "en": "This guide explains general use of the current Dishy web app. What you see can vary by permission, restaurant configuration, and features enabled by the system operator."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ยึดหน้าจอจริงเป็นหลัก",
+              "en": "Use the live screen as the source of truth"
+            },
+            "body": {
+              "th": "ถ้าชื่อปุ่มหรือขั้นตอนต่างจากคู่มือ ให้ทำตามข้อความและสิทธิ์ที่แสดงในระบบก่อน แล้วแจ้งผู้ดูแลร้าน",
+              "en": "If a label or step differs from this guide, follow the current screen and permissions first, then contact your restaurant administrator."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "account-and-restaurant",
+      "groupId": "start",
+      "title": {
+        "th": "บัญชีและพื้นที่ร้าน",
+        "en": "Accounts and restaurant workspaces"
+      },
+      "summary": {
+        "th": "สมัคร เข้าสู่ระบบ สร้างร้าน รับคำเชิญ และสลับพื้นที่ทำงาน",
+        "en": "Sign in, create a restaurant, accept invitations, and switch workspaces."
+      },
+      "audience": {
+        "th": "สำหรับผู้ใช้ใหม่และสมาชิกหลายร้าน",
+        "en": "For new users and members of multiple restaurants"
+      },
+      "keywords": {
+        "th": [
+          "สมัคร",
+          "เข้าสู่ระบบ",
+          "Google",
+          "ลืมรหัสผ่าน",
+          "สร้างร้าน",
+          "คำเชิญ",
+          "สลับร้าน"
+        ],
+        "en": [
+          "sign up",
+          "login",
+          "Google",
+          "forgot password",
+          "create restaurant",
+          "invitation",
+          "switch restaurant"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/restaurants",
+          "label": {
+            "th": "พื้นที่ร้าน",
+            "en": "Restaurant workspaces"
+          }
+        },
+        {
+          "href": "/restaurants/new",
+          "label": {
+            "th": "สร้างร้านใหม่",
+            "en": "Create a restaurant"
+          }
+        },
+        {
+          "href": "/restaurants/join",
+          "label": {
+            "th": "เข้าร่วมร้าน",
+            "en": "Join a restaurant"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "sign-in",
+          "title": {
+            "th": "สมัครและเข้าสู่ระบบ",
+            "en": "Sign up and sign in"
+          },
+          "bullets": [
+            {
+              "th": "ใช้อีเมลและรหัสผ่าน หรือเลือกเข้าสู่ระบบด้วย Google",
+              "en": "Use email and password, or choose Google sign-in."
+            },
+            {
+              "th": "หากลืมรหัสผ่าน ให้เริ่มขั้นตอนรีเซ็ตจากหน้าต่างเข้าสู่ระบบและเปิดลิงก์ที่ได้รับทางอีเมล",
+              "en": "If you forget your password, start password reset from the sign-in dialog and open the link sent by email."
+            },
+            {
+              "th": "บัญชีหนึ่งสามารถเป็นสมาชิกหลายร้านได้ โดยสิทธิ์อาจต่างกันในแต่ละร้าน",
+              "en": "One account can belong to multiple restaurants, with different permissions in each."
+            }
+          ]
+        },
+        {
+          "id": "create-restaurant",
+          "title": {
+            "th": "สร้างร้านใหม่",
+            "en": "Create a restaurant"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "กรอกข้อมูลร้าน",
+                "en": "Enter restaurant details"
+              },
+              "body": {
+                "th": "ระบุชื่อ ประเภทร้าน และข้อมูลพื้นฐานที่ใช้แสดงในระบบ",
+                "en": "Provide the name, restaurant type, and basic information shown in the app."
+              }
+            },
+            {
+              "title": {
+                "th": "กำหนดเวลาและโต๊ะ",
+                "en": "Set hours and tables"
+              },
+              "body": {
+                "th": "ตั้งเวลาทำการและโครงสร้างโต๊ะเริ่มต้นตามรูปแบบร้าน",
+                "en": "Set operating hours and the initial table structure for the restaurant."
+              }
+            },
+            {
+              "title": {
+                "th": "กรอกข้อมูลใบเสร็จ",
+                "en": "Add receipt information"
+              },
+              "body": {
+                "th": "เพิ่มข้อมูลสาขา ที่อยู่ หรือเบอร์โทรที่ต้องการแสดงบนใบเสร็จ",
+                "en": "Add branch, address, or phone details to appear on receipts."
+              }
+            },
+            {
+              "title": {
+                "th": "ตรวจสอบและสร้าง",
+                "en": "Review and create"
+              },
+              "body": {
+                "th": "ระบบสร้างพื้นที่ร้าน สิทธิ์เจ้าของ และข้อมูลเริ่มต้นให้ในครั้งเดียว",
+                "en": "Dishy creates the workspace, owner access, and starter data together."
+              }
+            }
+          ]
+        },
+        {
+          "id": "join-restaurant",
+          "title": {
+            "th": "เข้าร่วมร้านด้วยคำเชิญ",
+            "en": "Join with an invitation"
+          },
+          "paragraphs": [
+            {
+              "th": "เปิดลิงก์คำเชิญจากผู้ดูแลร้าน เข้าสู่ระบบด้วยบัญชีที่ต้องการใช้ แล้วตรวจชื่อร้านและบทบาทก่อนกดยอมรับ คำเชิญอาจมีวันหมดอายุหรือถูกยกเลิกได้",
+              "en": "Open the invitation link from the restaurant administrator, sign in with the account you want to use, and review the restaurant and role before accepting. An invitation can expire or be revoked."
+            },
+            {
+              "th": "หลังเข้าร่วมแล้ว เลือกร้านจากหน้าพื้นที่ร้าน ระบบจะเปิดหน้าทำงานที่เหมาะกับบทบาทและสิทธิ์ของคุณ",
+              "en": "After joining, choose the restaurant from the workspace page. Dishy opens the work area that best matches your role and permissions."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "first-shift",
+      "groupId": "start",
+      "title": {
+        "th": "เตรียมร้านก่อนเริ่มกะ",
+        "en": "Prepare for the first shift"
+      },
+      "summary": {
+        "th": "เช็กลิสต์สั้น ๆ เพื่อให้เมนู โต๊ะ ทีม และการรับเงินพร้อมใช้งาน",
+        "en": "A practical checklist to make menu, tables, team access, and payments ready."
+      },
+      "audience": {
+        "th": "สำหรับเจ้าของร้านและผู้ดูแลการตั้งค่า",
+        "en": "For owners and setup administrators"
+      },
+      "keywords": {
+        "th": [
+          "ก่อนเปิดร้าน",
+          "เช็กลิสต์",
+          "ตั้งค่าร้าน",
+          "เริ่มกะ",
+          "พร้อมใช้งาน"
+        ],
+        "en": [
+          "opening checklist",
+          "setup",
+          "first shift",
+          "ready for service"
+        ]
+      },
+      "sections": [
+        {
+          "id": "opening-checklist",
+          "title": {
+            "th": "เช็กก่อนรับออเดอร์จริง",
+            "en": "Check before taking live orders"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "ตรวจข้อมูลร้านและใบเสร็จ",
+                "en": "Review restaurant and receipt details"
+              },
+              "body": {
+                "th": "ยืนยันชื่อร้าน ที่อยู่ เบอร์โทร ภาษี ค่าบริการ และ PromptPay ตามที่ร้านใช้งานจริง",
+                "en": "Confirm the restaurant name, address, phone, tax, service charge, and PromptPay configuration used by the restaurant."
+              }
+            },
+            {
+              "title": {
+                "th": "ตรวจเมนูและราคา",
+                "en": "Review menu and prices"
+              },
+              "body": {
+                "th": "จัดหมวดหมู่ ตรวจรายการพร้อมขาย ตัวเลือกบังคับ ราคาเพิ่ม และรูปเมนู",
+                "en": "Organize categories and verify availability, required options, price adjustments, and menu images."
+              }
+            },
+            {
+              "title": {
+                "th": "ตรวจโต๊ะและโซน",
+                "en": "Review tables and zones"
+              },
+              "body": {
+                "th": "ตรวจเลขโต๊ะ ความจุ โซน สถานะ และ QR ลูกค้าให้ตรงกับพื้นที่จริง",
+                "en": "Verify table numbers, capacity, zones, status, and customer QR codes against the physical floor."
+              }
+            },
+            {
+              "title": {
+                "th": "เชิญทีมและทดสอบสิทธิ์",
+                "en": "Invite the team and test access"
+              },
+              "body": {
+                "th": "ให้แต่ละคนเปิดหน้าที่ต้องใช้จริง เช่น รับออเดอร์ จอครัว หรือคลังออเดอร์",
+                "en": "Have each person open the actual area they need, such as order taking, kitchen, or the order archive."
+              }
+            },
+            {
+              "title": {
+                "th": "ทดลองหนึ่งออเดอร์ให้จบ",
+                "en": "Run one complete test order"
+              },
+              "body": {
+                "th": "เปิดโต๊ะ ส่งรายการเข้าครัว ทำให้เสร็จ รับเงิน และพิมพ์ใบเสร็จก่อนเริ่มใช้งานจริง",
+                "en": "Open a table, send an item, complete it in the kitchen, record payment, and print a receipt before going live."
+              }
+            }
+          ]
+        },
+        {
+          "id": "test-data",
+          "title": {
+            "th": "ใช้ข้อมูลทดสอบอย่างระมัดระวัง",
+            "en": "Use test data carefully"
+          },
+          "paragraphs": [
+            {
+              "th": "แยกออเดอร์ทดลองออกจากงานจริงให้ชัด และตรวจยอดขาย สต็อก กับรายจ่ายหลังทดสอบ เพราะการทำอาหารเสร็จและการรับเข้าสต็อกอาจสร้างข้อมูลต้นทุนหรือรายจ่ายจริงในระบบ",
+              "en": "Keep test orders clearly separate from real service and review sales, inventory, and expenses afterward. Completing food or receiving stock can create real cost or expense records in the workspace."
+            }
+          ],
+          "note": {
+            "tone": "warning",
+            "title": {
+              "th": "อย่าทดสอบในร้านจริงโดยไม่แจ้งทีม",
+              "en": "Do not test silently in a live restaurant"
+            },
+            "body": {
+              "th": "ออเดอร์ทดลองสามารถขึ้นจอครัว หักสต็อก และรวมในรายงานได้",
+              "en": "Test orders can appear in the kitchen, deduct stock, and be included in reports."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "menu",
+      "groupId": "setup",
+      "title": {
+        "th": "เมนู หมวดหมู่ และสูตร",
+        "en": "Menu, categories, and recipes"
+      },
+      "summary": {
+        "th": "จัดรายการขาย ตัวเลือก ราคา รูป และสูตรวัตถุดิบของแต่ละเมนู",
+        "en": "Manage sellable items, options, prices, images, and ingredient recipes."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์จัดการเมนู",
+        "en": "Requires menu management permission"
+      },
+      "keywords": {
+        "th": [
+          "เมนู",
+          "หมวดหมู่",
+          "ราคา",
+          "รูปอาหาร",
+          "ตัวเลือก",
+          "สูตร",
+          "พร้อมขาย"
+        ],
+        "en": [
+          "menu",
+          "category",
+          "price",
+          "image",
+          "options",
+          "recipe",
+          "availability"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/menu",
+          "label": {
+            "th": "จัดการเมนู",
+            "en": "Manage menu"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "organize-menu",
+          "title": {
+            "th": "สร้างและจัดหมวดเมนู",
+            "en": "Create and organize menu items"
+          },
+          "bullets": [
+            {
+              "th": "สร้างหมวดหมู่ แล้วกำหนดให้เมนูอยู่ได้มากกว่าหนึ่งหมวดเมื่อจำเป็น",
+              "en": "Create categories and assign an item to more than one category when needed."
+            },
+            {
+              "th": "กำหนดชื่อ รายละเอียด ราคา รูป และสถานะพร้อมขาย",
+              "en": "Set the name, description, price, image, and availability."
+            },
+            {
+              "th": "ปิดสถานะพร้อมขายเมื่อของหมด เมนูจะยังอยู่ในระบบแต่ลูกค้าและพนักงานสั่งไม่ได้",
+              "en": "Turn availability off when sold out. The item remains in the system but cannot be ordered."
+            }
+          ]
+        },
+        {
+          "id": "option-groups",
+          "title": {
+            "th": "ตัวเลือกของเมนู",
+            "en": "Menu option groups"
+          },
+          "paragraphs": [
+            {
+              "th": "ใช้ชุดตัวเลือกสำหรับสิ่งที่ลูกค้าต้องเลือก เช่น ระดับความหวาน ขนาด หรือท็อปปิง กำหนดขั้นต่ำ จำนวนสูงสุด ค่าเริ่มต้น และราคาเพิ่มของแต่ละตัวเลือกได้",
+              "en": "Use option groups for choices such as sweetness, size, or toppings. You can set minimum and maximum selections, defaults, and price adjustments."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ตัวเลือกบังคับ",
+              "en": "Required options"
+            },
+            "body": {
+              "th": "พนักงานและลูกค้าต้องเลือกตัวเลือกที่บังคับให้ครบก่อนเพิ่มเมนูลงออเดอร์",
+              "en": "Staff and customers must complete required option groups before adding the item."
+            }
+          }
+        },
+        {
+          "id": "recipes-and-cost",
+          "title": {
+            "th": "สูตรและต้นทุนวัตถุดิบ",
+            "en": "Recipes and ingredient cost"
+          },
+          "paragraphs": [
+            {
+              "th": "ผูกเมนูกับวัตถุดิบและปริมาณที่ใช้ เพื่อให้ระบบคำนวณต้นทุนและหักสต็อกจากสูตรที่บันทึกไว้ตอนรับออเดอร์ การหักเกิดเมื่อครัวทำรายการเสร็จ",
+              "en": "Link menu items to ingredients and usage quantities so Dishy can calculate cost and deduct stock from the recipe snapshot captured at order time. Deduction happens when the kitchen completes the item."
+            }
+          ],
+          "bullets": [
+            {
+              "th": "หน่วยในสูตรต้องตรงกับหน่วยสต็อก ระบบยังไม่แปลงหน่วยให้อัตโนมัติ",
+              "en": "Recipe units must match inventory units; automatic unit conversion is not currently available."
+            },
+            {
+              "th": "การแก้สูตรภายหลังไม่ย้อนกลับไปเปลี่ยนต้นทุนของรายการที่สั่งไปแล้ว",
+              "en": "Editing a recipe later does not rewrite the cost of items already ordered."
+            },
+            {
+              "th": "ตัวเลือกเมนูยังไม่เพิ่มหรือลดสูตรวัตถุดิบแยกจากเมนูหลัก",
+              "en": "Menu options do not yet add or subtract separate recipe quantities."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "tables-and-reservations",
+      "groupId": "setup",
+      "title": {
+        "th": "โต๊ะ โซน และการจองไว้",
+        "en": "Tables, zones, and reservations"
+      },
+      "summary": {
+        "th": "จัดผังโต๊ะแบบโซน ดูสถานะ และจองโต๊ะไว้ให้ลูกค้าที่กำลังมา",
+        "en": "Organize tables by zone, track status, and hold tables for arriving guests."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์ดูหรือจัดการโต๊ะ",
+        "en": "Requires table view or management permission"
+      },
+      "keywords": {
+        "th": [
+          "โต๊ะ",
+          "โซน",
+          "ผังโต๊ะ",
+          "จองโต๊ะ",
+          "รับลูกค้า",
+          "QR โต๊ะ"
+        ],
+        "en": [
+          "tables",
+          "zones",
+          "floor plan",
+          "reservation",
+          "seat guest",
+          "table QR"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/tables",
+          "label": {
+            "th": "จัดการโต๊ะ",
+            "en": "Manage tables"
+          }
+        },
+        {
+          "href": "/reservations",
+          "label": {
+            "th": "ประวัติการจอง",
+            "en": "Reservation history"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "table-layout",
+          "title": {
+            "th": "จัดโครงสร้างโต๊ะ",
+            "en": "Set up the table layout"
+          },
+          "bullets": [
+            {
+              "th": "สร้างโซน เช่น ห้องแอร์ หน้าร้าน หรือชั้นสอง แล้วเพิ่มโต๊ะเข้าแต่ละโซน",
+              "en": "Create zones such as indoor, storefront, or upstairs, then add tables to each zone."
+            },
+            {
+              "th": "กำหนดป้ายโต๊ะ ความจุ และแท็กเพื่อให้ทีมค้นหาโต๊ะได้ง่าย",
+              "en": "Set table labels, capacity, and tags so the team can find tables quickly."
+            },
+            {
+              "th": "ผังปัจจุบันเป็นตารางแบ่งโซน ไม่ใช่ผังลากวางตามตำแหน่งจริง",
+              "en": "The current layout is a zone-based grid, not a drag-and-drop physical floor plan."
+            }
+          ]
+        },
+        {
+          "id": "hold-a-table",
+          "title": {
+            "th": "จองโต๊ะไว้และรับลูกค้า",
+            "en": "Hold and seat a table"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "เลือกโต๊ะว่าง",
+                "en": "Choose an available table"
+              },
+              "body": {
+                "th": "จากหน้ารับออเดอร์ เลือกจองโต๊ะไว้แทนการเปิดออเดอร์ทันที",
+                "en": "From order taking, choose to hold the table instead of opening an order immediately."
+              }
+            },
+            {
+              "title": {
+                "th": "กรอกชื่อและเบอร์โทร",
+                "en": "Enter guest details"
+              },
+              "body": {
+                "th": "บันทึกชื่อเรียกและเบอร์โทรเพื่อให้ทีมระบุการจองได้",
+                "en": "Save a guest name and phone number so the team can identify the hold."
+              }
+            },
+            {
+              "title": {
+                "th": "รับลูกค้าหรือยกเลิก",
+                "en": "Seat or cancel"
+              },
+              "body": {
+                "th": "เมื่อลูกค้ามาถึง ให้เลือกรับลูกค้าเพื่อเปิดออเดอร์ หรือยกเลิกหากไม่มา",
+                "en": "When the guest arrives, seat them to open an order, or cancel the hold if needed."
+              }
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ไม่ใช่ปฏิทินจองล่วงหน้า",
+              "en": "Not an advance booking calendar"
+            },
+            "body": {
+              "th": "การจองปัจจุบันเป็นการจองโต๊ะไว้พร้อมชื่อและเบอร์โทร ไม่มีช่องกำหนดวันหรือเวลานัดหมาย หน้า “ประวัติการจอง” ใช้ดูรายการที่รับลูกค้าแล้วหรือยกเลิก",
+              "en": "Reservations currently hold a table with a name and phone number. There is no appointment date or time field. Reservation history shows seated and cancelled records."
+            }
+          }
+        },
+        {
+          "id": "table-qr",
+          "title": {
+            "th": "QR สำหรับลูกค้าสั่งอาหาร",
+            "en": "Customer ordering QR"
+          },
+          "paragraphs": [
+            {
+              "th": "แต่ละโต๊ะมี QR และลิงก์เฉพาะ สามารถดาวน์โหลดเป็น PNG คัดลอกลิงก์ หรือสร้าง QR ใหม่ได้ การสร้างใหม่จะทำให้ QR เก่าใช้ไม่ได้ทันที",
+              "en": "Each table has its own QR and link. You can download it as PNG, copy the link, or regenerate it. Regeneration immediately invalidates the old QR."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-and-permissions",
+      "groupId": "setup",
+      "title": {
+        "th": "ทีม บทบาท และสิทธิ์",
+        "en": "Team, roles, and permissions"
+      },
+      "summary": {
+        "th": "เชิญทีม กำหนดบทบาท และควบคุมว่าแต่ละคนเข้าถึงงานใดได้",
+        "en": "Invite staff, assign roles, and control which work areas each person can access."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์จัดการทีม",
+        "en": "Requires team management permission"
+      },
+      "keywords": {
+        "th": [
+          "พนักงาน",
+          "ทีม",
+          "บทบาท",
+          "สิทธิ์",
+          "คำเชิญ",
+          "ระงับ",
+          "เจ้าของร้าน"
+        ],
+        "en": [
+          "staff",
+          "team",
+          "role",
+          "permission",
+          "invitation",
+          "suspend",
+          "owner"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/staff",
+          "label": {
+            "th": "จัดการทีม",
+            "en": "Manage team"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "invite-staff",
+          "keywords": {
+            "th": [
+              "เชิญพนักงาน",
+              "เชิญสมาชิก"
+            ],
+            "en": [
+              "invite staff",
+              "invite team member"
+            ]
+          },
+          "title": {
+            "th": "เชิญสมาชิก",
+            "en": "Invite a team member"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "เลือกบทบาท",
+                "en": "Choose a role"
+              },
+              "body": {
+                "th": "เลือกบทบาทมาตรฐานหรือบทบาทที่ร้านสร้างเอง",
+                "en": "Choose a standard role or a custom role created by the restaurant."
+              }
+            },
+            {
+              "title": {
+                "th": "สร้างลิงก์คำเชิญ",
+                "en": "Create an invitation link"
+              },
+              "body": {
+                "th": "อีเมลเป็นข้อมูลเสริม ลิงก์คำเชิญเป็นสิ่งที่สมาชิกใช้เปิดและยอมรับ",
+                "en": "Email is optional; the invitation link is what the member opens and accepts."
+              }
+            },
+            {
+              "title": {
+                "th": "ติดตามสถานะ",
+                "en": "Track invitation status"
+              },
+              "body": {
+                "th": "ดูคำเชิญที่รอรับ ยกเลิกลิงก์เดิม หรือสร้างใหม่เมื่อหมดอายุ",
+                "en": "View pending invitations, revoke an old link, or create a new one when it expires."
+              }
+            }
+          ]
+        },
+        {
+          "id": "permission-model",
+          "title": {
+            "th": "สิทธิ์เป็นตัวกำหนดการเข้าถึง",
+            "en": "Permissions determine access"
+          },
+          "paragraphs": [
+            {
+              "th": "Dishy มีบทบาทมาตรฐาน ได้แก่ เจ้าของร้าน ผู้จัดการ แคชเชียร์ พนักงานเสิร์ฟ และครัว แต่ร้านสามารถสร้างบทบาทเอง ปรับสิทธิ์ของบทบาท หรือกำหนดสิทธิ์เฉพาะรายคนได้",
+              "en": "Dishy includes standard owner, manager, cashier, waiter, and chef roles. A restaurant can also create custom roles, edit role permissions, or override permissions for an individual member."
+            },
+            {
+              "th": "อย่ายึดชื่อบทบาทเพียงอย่างเดียว หากเข้าเมนูไม่ได้ให้ตรวจสิทธิ์ของสมาชิกในร้านนั้น",
+              "en": "Do not rely on the role name alone. If an area is unavailable, check that member's effective permissions in the current restaurant."
+            }
+          ],
+          "bullets": [
+            {
+              "th": "งานหน้าร้าน: รับออเดอร์ รับเงิน ดูโต๊ะ และดูคลังออเดอร์",
+              "en": "Service floor: take orders, take payments, view tables, and view the order archive."
+            },
+            {
+              "th": "งานครัว: ดูจอครัวและอัปเดตสถานะอาหาร",
+              "en": "Kitchen: view the kitchen display and update item status."
+            },
+            {
+              "th": "งานบริหาร: เมนู โต๊ะ สต็อก รายจ่าย รายงาน และทีม",
+              "en": "Management: menu, tables, inventory, expenses, reports, and team."
+            }
+          ]
+        },
+        {
+          "id": "member-lifecycle",
+          "title": {
+            "th": "จัดการสมาชิกที่เข้าร่วมแล้ว",
+            "en": "Manage existing members"
+          },
+          "bullets": [
+            {
+              "th": "เปลี่ยนบทบาทหรือสิทธิ์เฉพาะบุคคลเมื่อหน้าที่เปลี่ยน",
+              "en": "Change roles or individual permissions as responsibilities change."
+            },
+            {
+              "th": "ระงับ นำออก หรือเปิดใช้งานสมาชิกอีกครั้งตามนโยบายร้าน",
+              "en": "Suspend, remove, or reactivate members according to restaurant policy."
+            },
+            {
+              "th": "ตรวจบันทึกกิจกรรมทีมเพื่อดูว่าใครเปลี่ยนสถานะ บทบาท หรือคำเชิญ",
+              "en": "Review the team audit log to see invitation, role, and status changes."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "inventory",
+      "groupId": "setup",
+      "title": {
+        "th": "คลังวัตถุดิบ",
+        "en": "Ingredient inventory"
+      },
+      "summary": {
+        "th": "บันทึกคงเหลือ ต้นทุนขั้นต่ำ การเคลื่อนไหว และการรับเข้าที่เชื่อมรายจ่าย",
+        "en": "Track stock, cost, minimum levels, movements, and paid restocks linked to expenses."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์ดูหรือจัดการสต็อก",
+        "en": "Requires inventory view or management permission"
+      },
+      "keywords": {
+        "th": [
+          "สต็อก",
+          "วัตถุดิบ",
+          "รับเข้า",
+          "จ่ายออก",
+          "ขั้นต่ำ",
+          "ต้นทุน",
+          "yield"
+        ],
+        "en": [
+          "inventory",
+          "ingredient",
+          "stock in",
+          "stock out",
+          "minimum",
+          "cost",
+          "yield"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/inventory",
+          "label": {
+            "th": "เปิดคลังวัตถุดิบ",
+            "en": "Open inventory"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "ingredient-records",
+          "title": {
+            "th": "ข้อมูลวัตถุดิบ",
+            "en": "Ingredient records"
+          },
+          "bullets": [
+            {
+              "th": "จัดหมวดหมู่ ชื่อ หน่วย ปริมาณคงเหลือ และระดับขั้นต่ำ",
+              "en": "Set category, name, unit, current quantity, and minimum level."
+            },
+            {
+              "th": "บันทึกราคาต่อหน่วย อัตราใช้ได้จริง และตำแหน่งจัดเก็บเพื่อช่วยคำนวณต้นทุน",
+              "en": "Record unit cost, usable yield, and storage location to support costing."
+            },
+            {
+              "th": "ดูสถานะใกล้หมดหรือหมดจากข้อมูลคงเหลือเทียบกับขั้นต่ำ",
+              "en": "Identify low or out-of-stock items from quantity compared with the minimum level."
+            }
+          ]
+        },
+        {
+          "id": "stock-movements",
+          "title": {
+            "th": "รับเข้า จ่ายออก และปรับยอด",
+            "en": "Receive, issue, and adjust stock"
+          },
+          "paragraphs": [
+            {
+              "th": "ทุกการเคลื่อนไหวเก็บเป็นประวัติพร้อมเหตุผล ใช้รับวัตถุดิบเข้า จ่ายออก หรือกำหนดยอดใหม่เมื่อปรับนับ",
+              "en": "Every movement is recorded with a reason. Use it to receive stock, issue stock, or set a new quantity after an adjustment count."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "รับเข้าพร้อมยอดจ่าย",
+              "en": "Paid stock receipt"
+            },
+            "body": {
+              "th": "หากกรอกจำนวนเงินที่จ่ายจริงและมีสิทธิ์รายจ่าย ระบบจะสร้างรายการรายจ่ายที่เชื่อมกับการรับเข้านั้น รายการที่เชื่อมแล้วแก้หรือลบจากหน้ารายจ่ายทั่วไปไม่ได้",
+              "en": "If you enter an amount actually paid and have expense permission, Dishy creates an expense linked to that stock receipt. Linked entries cannot be edited or deleted from the general expense page."
+            }
+          }
+        },
+        {
+          "id": "inventory-limits",
+          "title": {
+            "th": "ขอบเขตปัจจุบัน",
+            "en": "Current inventory scope"
+          },
+          "bullets": [
+            {
+              "th": "ยังไม่มีใบสั่งซื้อและฐานข้อมูลผู้ขาย",
+              "en": "Purchase orders and supplier management are not yet available."
+            },
+            {
+              "th": "ยังไม่มีล็อต วันหมดอายุ หรือการนับสต็อกแบบรอบตรวจ",
+              "en": "Batch, expiry, and formal physical-count workflows are not yet available."
+            },
+            {
+              "th": "ระบบไม่แปลงหน่วยสูตรกับหน่วยสต็อกโดยอัตโนมัติ",
+              "en": "Dishy does not automatically convert recipe units to stock units."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "take-orders",
+      "groupId": "service",
+      "title": {
+        "th": "รับออเดอร์",
+        "en": "Take orders"
+      },
+      "summary": {
+        "th": "เปิดโต๊ะหรือออเดอร์กลับบ้าน เพิ่มรายการเป็นรอบ และส่งเข้าครัว",
+        "en": "Open table or takeaway orders, build rounds, and send them to the kitchen."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์รับออเดอร์",
+        "en": "Requires order-taking permission"
+      },
+      "keywords": {
+        "th": [
+          "รับออเดอร์",
+          "เปิดโต๊ะ",
+          "กลับบ้าน",
+          "เพิ่มเมนู",
+          "ส่งครัว",
+          "ส่งอาหารเข้าครัว",
+          "รอบนี้",
+          "หมายเหตุ"
+        ],
+        "en": [
+          "POS",
+          "take order",
+          "open table",
+          "takeaway",
+          "add menu",
+          "send kitchen",
+          "send food to kitchen",
+          "round",
+          "note"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/pos/tables",
+          "label": {
+            "th": "เริ่มรับออเดอร์",
+            "en": "Start taking orders"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "open-order",
+          "title": {
+            "th": "เปิดออเดอร์",
+            "en": "Open an order"
+          },
+          "bullets": [
+            {
+              "th": "เลือกโต๊ะว่าง ระบุจำนวนลูกค้าและหมายเหตุถ้าต้องการ แล้วเปิดโต๊ะ",
+              "en": "Choose an available table, optionally enter guest count and a note, then open it."
+            },
+            {
+              "th": "แตะโต๊ะที่กำลังใช้งานเพื่อกลับไปทำออเดอร์เดิมต่อ",
+              "en": "Tap an occupied table to continue its active order."
+            },
+            {
+              "th": "สำหรับกลับบ้าน ให้สร้างออเดอร์กลับบ้านและเพิ่มชื่อหรือเบอร์โทรลูกค้าได้โดยไม่บังคับ",
+              "en": "For takeaway, create a takeaway order and optionally add the customer's name or phone."
+            }
+          ]
+        },
+        {
+          "id": "build-round",
+          "keywords": {
+            "th": [
+              "ส่งอาหารเข้าครัว",
+              "ส่งเข้าครัว"
+            ],
+            "en": [
+              "send food to kitchen",
+              "send to kitchen"
+            ]
+          },
+          "title": {
+            "th": "เพิ่มรายการในรอบปัจจุบัน",
+            "en": "Build the current round"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "ค้นหาหรือเลือกหมวด",
+                "en": "Search or choose a category"
+              },
+              "body": {
+                "th": "กรองรายการเพื่อหาเมนูที่ต้องการได้เร็วขึ้น",
+                "en": "Filter the menu to find the right item quickly."
+              }
+            },
+            {
+              "title": {
+                "th": "กำหนดรายละเอียด",
+                "en": "Configure the item"
+              },
+              "body": {
+                "th": "เลือกตัวเลือกที่บังคับ จำนวน หมายเหตุ และระบุว่ารายการนั้นทานที่ร้านหรือกลับบ้าน",
+                "en": "Choose required options, quantity, notes, and whether the item is dine-in or takeaway."
+              }
+            },
+            {
+              "title": {
+                "th": "ตรวจรายการรอบนี้",
+                "en": "Review the current round"
+              },
+              "body": {
+                "th": "ปรับจำนวนหรือลบรายการที่ยังรอส่งครัวได้",
+                "en": "Adjust quantities or remove items that have not yet been sent."
+              }
+            },
+            {
+              "title": {
+                "th": "ส่งเข้าครัว",
+                "en": "Send to kitchen"
+              },
+              "body": {
+                "th": "เมื่อยืนยันแล้ว รายการรอบนั้นจะเข้าจอครัวและแยกจากรอบถัดไป",
+                "en": "After confirmation, that round appears in the kitchen and remains separate from the next round."
+              }
+            }
+          ]
+        },
+        {
+          "id": "order-safety",
+          "title": {
+            "th": "ข้อควรรู้ระหว่างรับออเดอร์",
+            "en": "Ordering safeguards"
+          },
+          "bullets": [
+            {
+              "th": "รายการที่ส่งครัวแล้วใช้ขั้นตอนยกเลิกพร้อมเหตุผล ไม่ใช่ลบเงียบ ๆ",
+              "en": "Sent items use a reasoned void flow rather than silent deletion."
+            },
+            {
+              "th": "โต๊ะที่เปิดผิดแต่ยังไม่มีรายการสามารถปิดกลับเป็นว่างได้",
+              "en": "A table opened by mistake can be closed while it still has no items."
+            },
+            {
+              "th": "เมนูที่ปิดพร้อมขายจะแสดงเป็นหมดและเพิ่มไม่ได้",
+              "en": "Unavailable menu items are shown as sold out and cannot be added."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "kitchen",
+      "groupId": "service",
+      "title": {
+        "th": "จอครัว",
+        "en": "Kitchen display"
+      },
+      "summary": {
+        "th": "ติดตามรายการที่กำลังทำ ทำเสร็จ ย้อนสถานะ หรือยกเลิกอย่างมีเหตุผล",
+        "en": "Track cooking and completed items, reverse status, or void with a reason."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์ดูจอครัว; การแก้สถานะต้องมีสิทธิ์เพิ่ม",
+        "en": "Requires kitchen view permission; status updates require additional permission"
+      },
+      "keywords": {
+        "th": [
+          "จอครัว",
+          "ครัวกำลังทำ",
+          "เสร็จแล้ว",
+          "ทำเสร็จทั้งหมด",
+          "ยกเลิกอาหาร"
+        ],
+        "en": [
+          "KDS",
+          "kitchen",
+          "cooking",
+          "ready",
+          "mark all ready",
+          "void item"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/kitchen",
+          "label": {
+            "th": "เปิดจอครัว",
+            "en": "Open kitchen display"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "kitchen-zones",
+          "title": {
+            "th": "อ่านคิวครัว",
+            "en": "Read the kitchen queue"
+          },
+          "paragraphs": [
+            {
+              "th": "จอครัวแบ่งรายการที่กำลังทำออกจากรายการที่เสร็จแล้ว แต่ละรายการแสดงออเดอร์ โต๊ะหรือกลับบ้าน เมนู จำนวน ตัวเลือก หมายเหตุ และเวลาที่เกี่ยวข้อง",
+              "en": "The kitchen display separates cooking items from completed items. Each item shows its order, table or takeaway context, menu, quantity, options, notes, and relevant time."
+            }
+          ]
+        },
+        {
+          "id": "update-kitchen-status",
+          "title": {
+            "th": "อัปเดตสถานะอาหาร",
+            "en": "Update food status"
+          },
+          "bullets": [
+            {
+              "th": "กดทำเสร็จเมื่อรายการพร้อมส่งมอบหน้าร้าน",
+              "en": "Mark an item complete when it is ready for front-of-house handoff."
+            },
+            {
+              "th": "ใช้ทำเสร็จทั้งหมดเมื่อรายการที่กำลังทำในออเดอร์นั้นพร้อมพร้อมกัน",
+              "en": "Use mark all complete when all cooking items in that order are ready together."
+            },
+            {
+              "th": "ย้อนรายการกลับไปกำลังทำได้เมื่อกดผิดหรือยังต้องแก้ไข",
+              "en": "Move an item back to cooking if it was completed by mistake or needs more work."
+            },
+            {
+              "th": "ยกเลิกรายการพร้อมระบุเหตุผลเมื่อไม่สามารถทำได้",
+              "en": "Void an item with a reason when it cannot be fulfilled."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ดูอย่างเดียวกับจัดการต่างกัน",
+              "en": "Viewing and managing are separate"
+            },
+            "body": {
+              "th": "ผู้ใช้ที่มีเพียงสิทธิ์ดูจอครัวจะเห็นคิว แต่จะอัปเดตสถานะไม่ได้",
+              "en": "A user with view-only kitchen access can see the queue but cannot change item status."
+            }
+          }
+        },
+        {
+          "id": "stock-deduction",
+          "title": {
+            "th": "ผลต่อสต็อก",
+            "en": "Inventory effect"
+          },
+          "paragraphs": [
+            {
+              "th": "เมื่อครัวทำรายการเสร็จ ระบบจะหักวัตถุดิบจากสูตรที่บันทึกไว้สำหรับรายการนั้นหนึ่งครั้ง การย้อนสถานะไม่ได้ทำให้หักซ้ำ",
+              "en": "When the kitchen completes an item, Dishy deducts ingredients once using the recipe snapshot for that item. Reversing status does not cause a second deduction."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "billing-and-payments",
+      "groupId": "service",
+      "title": {
+        "th": "บิล การรับเงิน และใบเสร็จ",
+        "en": "Billing, payments, and receipts"
+      },
+      "summary": {
+        "th": "ตรวจยอด รับเงินสดหรือ PromptPay และพิมพ์ใบเสร็จ 58 มม.",
+        "en": "Review totals, record cash or PromptPay, and print a 58 mm receipt."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์รับเงิน; การแก้รายการอาจต้องมีสิทธิ์รับออเดอร์",
+        "en": "Requires payment permission; item edits may also require order-taking permission"
+      },
+      "keywords": {
+        "th": [
+          "บิล",
+          "รับเงิน",
+          "เงินสด",
+          "PromptPay",
+          "พร้อมเพย์",
+          "ใบเสร็จ",
+          "VAT",
+          "ค่าบริการ"
+        ],
+        "en": [
+          "bill",
+          "payment",
+          "cash",
+          "PromptPay",
+          "receipt",
+          "VAT",
+          "service charge"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/orders",
+          "label": {
+            "th": "คลังออเดอร์และพิมพ์ซ้ำ",
+            "en": "Order archive and reprints"
+          }
+        },
+        {
+          "href": "/settings/restaurant",
+          "label": {
+            "th": "ตั้งค่าบิลและ PromptPay",
+            "en": "Configure billing and PromptPay"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "bill-ready",
+          "title": {
+            "th": "เมื่อใดจึงออกบิลได้",
+            "en": "When an order is billable"
+          },
+          "paragraphs": [
+            {
+              "th": "เมื่อรายการที่ใช้งานทั้งหมดในออเดอร์ทำเสร็จแล้ว ปุ่มออกบิล / รับเงินจะเปิดให้ตรวจรายการ ยอดอาหาร ค่าบริการ VAT และยอดสุทธิ",
+              "en": "When every active item in an order is complete, Bill / Pay opens a review of items, food total, service charge, VAT, and grand total."
+            }
+          ]
+        },
+        {
+          "id": "payment-methods",
+          "keywords": {
+            "th": [
+              "PromptPay ยืนยันอัตโนมัติ",
+              "พร้อมเพย์ยืนยันอัตโนมัติ"
+            ],
+            "en": [
+              "automatic PromptPay confirmation",
+              "confirm PromptPay transfers"
+            ]
+          },
+          "title": {
+            "th": "วิธีรับเงินที่รองรับ",
+            "en": "Supported payment methods"
+          },
+          "bullets": [
+            {
+              "th": "เงินสด: ระบบบันทึกเป็นยอดพอดีกับยอดสุทธิ ไม่มีช่องกรอกเงินรับหรือคำนวณเงินทอนในขั้นตอนปัจจุบัน",
+              "en": "Cash: Dishy records exact tender equal to the grand total. The current flow has no received-cash or change calculation field."
+            },
+            {
+              "th": "QR PromptPay: แสดงรูป QR คงที่ที่ร้านตั้งไว้ พนักงานตรวจและกดยืนยันการรับเงินเอง",
+              "en": "PromptPay QR: Dishy displays the restaurant's configured static QR image. Staff verify and confirm payment manually."
+            },
+            {
+              "th": "การยืนยันสำเร็จจะปิดออเดอร์ บันทึกการชำระ และคืนโต๊ะเป็นว่างเมื่อไม่มีออเดอร์อื่นค้างอยู่",
+              "en": "Successful confirmation closes the order, records payment, and frees the table when no other active order remains."
+            }
+          ],
+          "note": {
+            "tone": "warning",
+            "title": {
+              "th": "PromptPay ยังไม่ยืนยันอัตโนมัติ",
+              "en": "PromptPay is not automatically confirmed"
+            },
+            "body": {
+              "th": "Dishy ยังไม่ได้เชื่อม payment gateway หรืออ่านสถานะการโอน พนักงานต้องตรวจยอดก่อนยืนยันทุกครั้ง",
+              "en": "Dishy is not connected to a payment gateway and does not detect transfers. Staff must verify payment before confirming it."
+            }
+          }
+        },
+        {
+          "id": "receipts",
+          "title": {
+            "th": "พิมพ์และพิมพ์ซ้ำ",
+            "en": "Print and reprint receipts"
+          },
+          "paragraphs": [
+            {
+              "th": "หลังรับเงิน หน้าบิลจะคงอยู่เพื่อให้พิมพ์ใบเสร็จส่งลูกค้า ใบเสร็จออกแบบสำหรับกระดาษ 58 มม. และใช้หน้าต่างพิมพ์ของเบราว์เซอร์ หากปิดไปแล้วให้เปิดออเดอร์ที่ชำระแล้วจากคลังออเดอร์เพื่อพิมพ์ซ้ำ",
+              "en": "After payment, the bill stays open for receipt handoff. The receipt is designed for 58 mm paper and uses the browser print dialog. If it was closed, open the paid order from the archive to reprint."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ไม่ใช่ใบกำกับภาษีเต็มรูปแบบ",
+              "en": "Not a full tax invoice"
+            },
+            "body": {
+              "th": "เลขออเดอร์บนเอกสารเป็นเลขอ้างอิง ระบบยังไม่มีเลขใบกำกับภาษีหรือใบเสร็จตามลำดับกฎหมายแบบเต็มรูปแบบ",
+              "en": "The order number is a reference. Full legal tax-invoice or receipt numbering is not yet available."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "customer-qr-ordering",
+      "groupId": "service",
+      "title": {
+        "th": "ลูกค้าสั่งอาหารผ่าน QR",
+        "en": "Customer QR ordering"
+      },
+      "summary": {
+        "th": "ให้ลูกค้าสแกน QR โต๊ะ เพิ่มรายการ และส่งรอบใหม่เข้าครัวโดยไม่ต้องมีบัญชี",
+        "en": "Let guests scan a table QR, add items, and send new rounds to the kitchen without an account."
+      },
+      "audience": {
+        "th": "สำหรับลูกค้าที่นั่งโต๊ะซึ่งพนักงานเปิดออเดอร์แล้ว",
+        "en": "For guests at a table whose order has already been opened by staff"
+      },
+      "keywords": {
+        "th": [
+          "ลูกค้า",
+          "QR",
+          "สแกน",
+          "สั่งอาหารเอง",
+          "ตะกร้า",
+          "สถานะอาหาร",
+          "ตำแหน่ง"
+        ],
+        "en": [
+          "customer",
+          "guest",
+          "QR",
+          "scan",
+          "self order",
+          "cart",
+          "food status",
+          "location"
+        ]
+      },
+      "sections": [
+        {
+          "id": "before-scanning",
+          "title": {
+            "th": "ก่อนให้ลูกค้าสแกน",
+            "en": "Before the guest scans"
+          },
+          "bullets": [
+            {
+              "th": "พนักงานต้องเปิดออเดอร์ของโต๊ะนั้นในหน้ารับออเดอร์ก่อน",
+              "en": "Staff must open an order for that table in order taking first."
+            },
+            {
+              "th": "ใช้ QR ปัจจุบันของโต๊ะ การสร้าง QR ใหม่ทำให้ลิงก์เดิมใช้ไม่ได้",
+              "en": "Use the table's current QR. Regenerating it invalidates the old link."
+            },
+            {
+              "th": "หากร้านเปิดการตรวจตำแหน่ง ลูกค้าที่อยู่นอกพื้นที่ที่ยืนยันได้จะส่งรายการไม่ได้; หากตรวจตำแหน่งไม่ได้ ระบบอาจรอพนักงานยืนยัน",
+              "en": "If location checks are enabled, guests verified outside the allowed area cannot submit. If location cannot be verified, staff confirmation may be required."
+            }
+          ]
+        },
+        {
+          "id": "guest-flow",
+          "title": {
+            "th": "ขั้นตอนของลูกค้า",
+            "en": "Guest flow"
+          },
+          "steps": [
+            {
+              "title": {
+                "th": "สแกนและเลือกเมนู",
+                "en": "Scan and choose items"
+              },
+              "body": {
+                "th": "ลูกค้าเปิดหน้าเมนูสาธารณะ เลือกหมวด เมนู ตัวเลือก จำนวน และหมายเหตุรายรายการ",
+                "en": "The guest opens the public menu and chooses categories, items, options, quantities, and item notes."
+              }
+            },
+            {
+              "title": {
+                "th": "ตรวจตะกร้ารอบนี้",
+                "en": "Review the current cart"
+              },
+              "body": {
+                "th": "ตะกร้าจะแสดงเมื่อมีรายการ ลูกค้าปรับจำนวนหรือลบก่อนส่งได้",
+                "en": "The cart appears after an item is added. Guests can adjust quantities or remove items before submission."
+              }
+            },
+            {
+              "title": {
+                "th": "ส่งรายการเข้าครัว",
+                "en": "Send items to kitchen"
+              },
+              "body": {
+                "th": "รายการที่ยืนยันจะเข้าเป็นรอบใหม่ในออเดอร์โต๊ะและส่งเข้าจอครัวทันที",
+                "en": "Confirmed items become a new round on the table order and are sent directly to the kitchen display."
+              }
+            },
+            {
+              "title": {
+                "th": "ดูสถานะรายการ",
+                "en": "View item status"
+              },
+              "body": {
+                "th": "ลูกค้าเปิดหน้ารายการที่สั่งเพื่อดูเมนู ตัวเลือก ยอดอาหาร และสถานะที่เข้าใจง่าย",
+                "en": "Guests can open their ordered-items page to view items, options, food total, and guest-friendly status labels."
+              }
+            }
+          ]
+        },
+        {
+          "id": "staff-boundary",
+          "keywords": {
+            "th": [
+              "ลูกค้าชำระเงินผ่าน QR โต๊ะ",
+              "ลูกค้าจ่ายผ่าน QR"
+            ],
+            "en": [
+              "customers pay through table QR",
+              "guest QR payment"
+            ]
+          },
+          "title": {
+            "th": "สิ่งที่ยังเป็นหน้าที่พนักงาน",
+            "en": "What remains staff-controlled"
+          },
+          "bullets": [
+            {
+              "th": "ลูกค้าเปิดโต๊ะเองไม่ได้",
+              "en": "Guests cannot open the table themselves."
+            },
+            {
+              "th": "ลูกค้าแก้หรือยกเลิกรายการที่ส่งแล้วเองไม่ได้",
+              "en": "Guests cannot edit or void submitted items themselves."
+            },
+            {
+              "th": "ลูกค้าออกบิลหรือชำระเงินผ่านหน้า QR ไม่ได้",
+              "en": "Guests cannot create a bill or pay through the QR page."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-operations-and-orders",
+      "groupId": "monitor",
+      "title": {
+        "th": "ภาพรวมร้านและคลังออเดอร์",
+        "en": "Live operations and order archive"
+      },
+      "summary": {
+        "th": "ดูสถานการณ์ปัจจุบัน ย้อนดูออเดอร์ และเปิดใบเสร็จที่ชำระแล้ว",
+        "en": "Monitor current operations, review orders, and reopen paid receipts."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์ภาพรวมร้านหรือดูออเดอร์ตามหน้าที่เปิด",
+        "en": "Requires dashboard or order-view access for the relevant area"
+      },
+      "keywords": {
+        "th": [
+          "ภาพรวมร้าน",
+          "ออเดอร์วันนี้",
+          "คลังออเดอร์",
+          "ประวัติ",
+          "พิมพ์ซ้ำ",
+          "สถานะร้าน"
+        ],
+        "en": [
+          "dashboard",
+          "live operations",
+          "today orders",
+          "order archive",
+          "history",
+          "reprint"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/home",
+          "label": {
+            "th": "ภาพรวมร้าน",
+            "en": "Restaurant overview"
+          }
+        },
+        {
+          "href": "/orders",
+          "label": {
+            "th": "คลังออเดอร์",
+            "en": "Order archive"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "live-overview",
+          "title": {
+            "th": "ติดตามงานในกะ",
+            "en": "Monitor the current shift"
+          },
+          "paragraphs": [
+            {
+              "th": "หน้า “ภาพรวมร้าน” เน้นสถานะงานที่ต้องจัดการในวันนี้ เช่น โต๊ะ ออเดอร์ คิวครัว และบิล สำหรับวันที่ผ่านมา หน้าจอจะแสดงสรุปรายวันแทนข้อมูลสด",
+              "en": "Restaurant overview focuses on today's actionable state such as tables, orders, kitchen queue, and bills. For past dates, it shows a trustworthy daily summary instead of live state."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ข้อมูลอัปเดตอัตโนมัติ",
+              "en": "Automatic updates"
+            },
+            "body": {
+              "th": "เว็บอัปเดตงานปฏิบัติการผ่านการเชื่อมต่อสดพร้อมการดึงข้อมูลสำรองในระบบปัจจุบัน ไม่จำเป็นต้องมีปุ่มรีเฟรชด้วยตนเอง",
+              "en": "The web app updates operational data through a live connection with recovery fetching in the current deployment. A manual refresh control is not required."
+            }
+          }
+        },
+        {
+          "id": "order-archive",
+          "title": {
+            "th": "ค้นและตรวจออเดอร์ย้อนหลัง",
+            "en": "Find and review past orders"
+          },
+          "bullets": [
+            {
+              "th": "ดูออเดอร์เปิดอยู่ เสร็จแล้ว หรือยกเลิก พร้อมรายละเอียดรายการและยอดบิล",
+              "en": "View open, completed, or cancelled orders with item and bill details."
+            },
+            {
+              "th": "ใช้ข้อมูลอ้างอิง โต๊ะ ประเภทออเดอร์ และสถานะเพื่อหาออเดอร์ที่ต้องการ",
+              "en": "Use order reference, table, order type, and status to identify the correct order."
+            },
+            {
+              "th": "ออเดอร์ที่ชำระแล้วสามารถเปิดใบเสร็จและพิมพ์ซ้ำได้โดยไม่รับเงินซ้ำ",
+              "en": "Paid orders can reopen their receipt for reprinting without recording another payment."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "expenses-and-reports",
+      "groupId": "monitor",
+      "title": {
+        "th": "รายจ่ายและรายงาน",
+        "en": "Expenses and reports"
+      },
+      "summary": {
+        "th": "บันทึกเงินที่จ่ายออกและดูยอดขาย ต้นทุน กำไร และความเสี่ยงสต็อกช่วง 14 วัน",
+        "en": "Record cash paid out and review 14-day sales, cost, profit, and stock-risk reporting."
+      },
+      "audience": {
+        "th": "ต้องมีสิทธิ์รายจ่ายหรือดูรายงานตามหน้าที่เปิด",
+        "en": "Requires expense or report access for the relevant area"
+      },
+      "keywords": {
+        "th": [
+          "รายจ่าย",
+          "ยอดขาย",
+          "รายงาน",
+          "ต้นทุนอาหาร",
+          "กำไรขั้นต้น",
+          "margin",
+          "14 วัน"
+        ],
+        "en": [
+          "expense",
+          "sales",
+          "report",
+          "food cost",
+          "gross profit",
+          "margin",
+          "14 days"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/expenses",
+          "label": {
+            "th": "บันทึกรายจ่าย",
+            "en": "Manage expenses"
+          }
+        },
+        {
+          "href": "/reports",
+          "label": {
+            "th": "ดูรายงาน",
+            "en": "View reports"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "expense-ledger",
+          "title": {
+            "th": "บันทึกรายจ่ายจริง",
+            "en": "Record actual expenses"
+          },
+          "paragraphs": [
+            {
+              "th": "หน้ารายจ่ายใช้บันทึกเงินที่ร้านจ่ายออกจริง แยกจากต้นทุนสูตรอาหาร เลือกเดือนและประเภทเพื่อดูรายการ เพิ่ม แก้ไข หรือลบรายการทั่วไปได้ตามสิทธิ์",
+              "en": "The expense page records money actually paid out by the restaurant, separately from recipe food cost. Filter by month and category, and add, edit, or delete general entries according to permission."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "รายจ่ายจากการรับสต็อก",
+              "en": "Expenses created by stock receipt"
+            },
+            "body": {
+              "th": "รายการที่เชื่อมกับการรับวัตถุดิบเป็นหลักฐานของเหตุการณ์เดียวกัน จึงต้องแก้จากขั้นตอนที่เกี่ยวข้องและไม่สามารถแก้หรือลบเหมือนรายการทั่วไป",
+              "en": "An entry linked to a stock receipt represents the same business event, so it is protected from ordinary expense editing and deletion."
+            }
+          }
+        },
+        {
+          "id": "fourteen-day-report",
+          "keywords": {
+            "th": [
+              "รายงานย้อนหลัง",
+              "ข้อจำกัดรายงาน"
+            ],
+            "en": [
+              "historical reports",
+              "report limitations"
+            ]
+          },
+          "title": {
+            "th": "รายงาน 14 วัน",
+            "en": "The 14-day report"
+          },
+          "bullets": [
+            {
+              "th": "ยอดขาย จำนวนออเดอร์ ต้นทุนอาหาร กำไรขั้นต้น และอัตรากำไร",
+              "en": "Sales, order count, food cost, gross profit, and margin."
+            },
+            {
+              "th": "แนวโน้มยอดขายรายวันและ margin ของแต่ละเมนู",
+              "en": "Daily sales trends and margin by menu item."
+            },
+            {
+              "th": "ความเสี่ยงวัตถุดิบใกล้หมดหรือหมด",
+              "en": "Low-stock and out-of-stock risk."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "ช่วงรายงานยังคงที่",
+              "en": "The reporting range is fixed"
+            },
+            "body": {
+              "th": "หน้ารายงานปัจจุบันใช้ข้อมูล 14 วัน ยังเลือกช่วงเองหรือส่งออก CSV ไม่ได้",
+              "en": "The current report uses a fixed 14-day window. Custom date ranges and CSV export are not yet available."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "ai-assistant",
+      "groupId": "monitor",
+      "title": {
+        "th": "ผู้ช่วย AI สำหรับเจ้าของร้าน",
+        "en": "AI assistant for restaurant owners"
+      },
+      "summary": {
+        "th": "ถามเรื่องข้อมูลร้านหรือวิธีใช้ Dishy โดยอ้างอิงข้อมูลสดและคู่มือสาธารณะตามประเภทคำถาม",
+        "en": "Ask about restaurant data or how to use Dishy, grounded in live scoped data or public documentation as appropriate."
+      },
+      "audience": {
+        "th": "เฉพาะสมาชิกที่มีบทบาทเจ้าของร้าน และต้องเปิดใช้จากระบบหลังบ้าน",
+        "en": "Only members whose role is Owner, and only when enabled by backend configuration"
+      },
+      "keywords": {
+        "th": [
+          "AI",
+          "ผู้ช่วยร้าน",
+          "วิเคราะห์ยอดขาย",
+          "เมนูขายดี",
+          "margin",
+          "สต็อกต่ำ",
+          "เจ้าของร้าน",
+          "วิธีใช้ Dishy",
+          "คู่มือระบบ"
+        ],
+        "en": [
+          "AI",
+          "assistant",
+          "sales analysis",
+          "best seller",
+          "margin",
+          "low stock",
+          "owner",
+          "how to use Dishy",
+          "system documentation"
+        ]
+      },
+      "routes": [
+        {
+          "href": "/ai-assistant",
+          "label": {
+            "th": "เปิดผู้ช่วย AI",
+            "en": "Open AI assistant"
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "ai-can-answer",
+          "title": {
+            "th": "ถามเรื่องอะไรได้บ้าง",
+            "en": "What you can ask"
+          },
+          "bullets": [
+            {
+              "th": "ยอดขาย แนวโน้ม ช่วงเวลา ประเภทออเดอร์ และช่วงที่ร้านหนาแน่น",
+              "en": "Sales totals, trends, periods, order types, and peak periods."
+            },
+            {
+              "th": "เมนูขายดี รายได้ ราคา ความครอบคลุมของสูตร ต้นทุน และ margin",
+              "en": "Menu quantity and revenue rankings, pricing, recipe coverage, cost, and margin."
+            },
+            {
+              "th": "การใช้วัตถุดิบ มูลค่าสต็อก ของใกล้หมด การคาดการณ์สั่งเพิ่ม และของไม่เคลื่อนไหว",
+              "en": "Ingredient usage, inventory value, low stock, reorder forecasts, and dead stock."
+            },
+            {
+              "th": "วิธีใช้ ความสามารถ ข้อจำกัด และการแก้ปัญหาใน Dishy จากคู่มือสาธารณะ พร้อมลิงก์ให้อ่านต่อ",
+              "en": "How to use Dishy, its capabilities, current limitations, and troubleshooting from public documentation with links to read more."
+            }
+          ],
+          "note": {
+            "tone": "note",
+            "title": {
+              "th": "คำตอบอ้างอิงข้อมูลร้านที่จำกัดขอบเขต",
+              "en": "Answers use bounded restaurant data"
+            },
+            "body": {
+              "th": "โมเดลไม่ได้เปิดฐานข้อมูลโดยตรง ระบบเตรียมข้อมูลเฉพาะร้านและคำนวณตัวเลขที่ตรวจสอบได้ก่อนส่งให้ผู้ช่วย",
+              "en": "The model does not access the database directly. Dishy prepares restaurant-scoped data and uses deterministic calculations for verifiable numbers."
+            }
+          }
+        },
+        {
+          "id": "ai-actions",
+          "keywords": {
+            "th": [
+              "AI แก้ข้อมูลอะไรได้บ้าง",
+              "AI เปลี่ยนข้อมูล"
+            ],
+            "en": [
+              "what can AI edit",
+              "AI write actions"
+            ]
+          },
+          "title": {
+            "th": "การเปลี่ยนข้อมูลผ่าน AI",
+            "en": "AI-assisted changes"
+          },
+          "paragraphs": [
+            {
+              "th": "ความสามารถเปลี่ยนข้อมูลอาจถูกปิดไว้ตามการตั้งค่าระบบ หากเปิดใช้ การเปลี่ยนแปลงที่รองรับตอนนี้มีเพียงสถานะพร้อมขายของเมนู ผู้ช่วยจะแสดงตัวอย่างการเปลี่ยนแปลงและรอเจ้าของยืนยันก่อนบันทึก",
+              "en": "Data-changing capability may be disabled by system configuration. When enabled, the only current write action is menu availability. The assistant presents a preview and waits for the owner to confirm before saving."
+            }
+          ],
+          "bullets": [
+            {
+              "th": "ไม่สั่งซื้อวัตถุดิบหรือแก้สต็อก",
+              "en": "It does not place purchase orders or modify inventory."
+            },
+            {
+              "th": "ไม่รับเงินหรือทำธุรกรรมแทนพนักงาน",
+              "en": "It does not take payments or perform transactions for staff."
+            },
+            {
+              "th": "ไม่มีสิทธิ์เขียนฐานข้อมูลทั่วไป",
+              "en": "It has no generic database write access."
+            }
+          ]
+        },
+        {
+          "id": "ask-well",
+          "title": {
+            "th": "วิธีถามให้ได้คำตอบที่ใช้ต่อได้",
+            "en": "How to ask useful questions"
+          },
+          "bullets": [
+            {
+              "th": "ระบุช่วงเวลา เช่น วันนี้ 7 วันล่าสุด หรือเดือนนี้",
+              "en": "Specify a time period, such as today, the last 7 days, or this month."
+            },
+            {
+              "th": "บอกเป้าหมาย เช่น ลดของเสีย เพิ่ม margin หรือเตรียมวัตถุดิบ",
+              "en": "State the goal, such as reducing waste, improving margin, or preparing stock."
+            },
+            {
+              "th": "ขอให้เปรียบเทียบหรือจัดอันดับเมื่ออยากตัดสินใจระหว่างหลายเมนู",
+              "en": "Ask for comparisons or rankings when deciding between multiple menu items."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "troubleshooting",
+      "groupId": "help",
+      "title": {
+        "th": "แก้ปัญหาการใช้งาน",
+        "en": "Troubleshooting"
+      },
+      "summary": {
+        "th": "ตรวจสาเหตุทั่วไปเมื่อเข้าเมนูไม่ได้ QR ใช้ไม่ได้ หรือขั้นตอนงานไปต่อไม่ได้",
+        "en": "Resolve common access, QR, payment, inventory, invitation, and printing issues."
+      },
+      "audience": {
+        "th": "สำหรับสมาชิกทุกคนและผู้ดูแลร้าน",
+        "en": "For all team members and restaurant administrators"
+      },
+      "keywords": {
+        "th": [
+          "แก้ปัญหา",
+          "เข้าไม่ได้",
+          "ไม่มีสิทธิ์",
+          "QR ใช้ไม่ได้",
+          "พิมพ์ไม่ได้",
+          "คำเชิญหมดอายุ",
+          "ไม่มี PromptPay"
+        ],
+        "en": [
+          "troubleshooting",
+          "access denied",
+          "QR not working",
+          "cannot print",
+          "expired invite",
+          "missing PromptPay"
+        ]
+      },
+      "sections": [
+        {
+          "id": "access-problems",
+          "title": {
+            "th": "เข้าเมนูหรือร้านไม่ได้",
+            "en": "Cannot access an area or restaurant"
+          },
+          "bullets": [
+            {
+              "th": "ตรวจว่าเข้าสู่ระบบด้วยบัญชีที่รับคำเชิญและเลือกร้านที่ถูกต้อง",
+              "en": "Confirm you signed in with the invited account and selected the correct restaurant."
+            },
+            {
+              "th": "หากเห็นข้อความไม่มีสิทธิ์ ให้ผู้ดูแลตรวจบทบาทและสิทธิ์เฉพาะรายคน ไม่ใช่ดูชื่อบทบาทอย่างเดียว",
+              "en": "If access is denied, ask an administrator to review the role and individual override, not only the role name."
+            },
+            {
+              "th": "หากคำเชิญหมดอายุหรือถูกยกเลิก ให้ผู้ดูแลสร้างลิงก์ใหม่",
+              "en": "If an invitation expired or was revoked, ask an administrator to create a new link."
+            }
+          ]
+        },
+        {
+          "id": "qr-problems",
+          "title": {
+            "th": "ลูกค้าสั่งผ่าน QR ไม่ได้",
+            "en": "Customer QR ordering does not work"
+          },
+          "bullets": [
+            {
+              "th": "ตรวจว่าพนักงานเปิดออเดอร์โต๊ะนั้นแล้ว",
+              "en": "Confirm staff opened an active order for that table."
+            },
+            {
+              "th": "ตรวจว่าใช้ QR ล่าสุด หากเคยสร้างใหม่ QR เดิมจะใช้ไม่ได้",
+              "en": "Confirm it is the latest QR; an old code stops working after regeneration."
+            },
+            {
+              "th": "หากมีการตรวจตำแหน่ง ให้ลูกค้าอนุญาตตำแหน่งและทำตามข้อความบนหน้าจอ",
+              "en": "If location checks are enabled, allow location access and follow the on-screen message."
+            }
+          ]
+        },
+        {
+          "id": "payment-and-print-problems",
+          "title": {
+            "th": "รับเงินหรือพิมพ์ใบเสร็จไม่ได้",
+            "en": "Cannot take payment or print"
+          },
+          "bullets": [
+            {
+              "th": "ตรวจว่ารายการที่ใช้งานทั้งหมดทำเสร็จแล้วและผู้ใช้มีสิทธิ์รับเงิน",
+              "en": "Confirm all active items are complete and the user has payment permission."
+            },
+            {
+              "th": "หากไม่มี QR PromptPay ให้ผู้ดูแลเพิ่มรูป QR และชื่อบัญชีในข้อมูลร้าน",
+              "en": "If PromptPay QR is missing, ask an administrator to add the QR image and account name in restaurant settings."
+            },
+            {
+              "th": "การพิมพ์ใช้หน้าต่างของเบราว์เซอร์ ตรวจว่าเลือกเครื่องพิมพ์และขนาดกระดาษ 58 มม. ถูกต้อง",
+              "en": "Printing uses the browser dialog. Confirm the correct printer and 58 mm paper size are selected."
+            },
+            {
+              "th": "ถ้าปิดใบเสร็จไปแล้ว ให้เปิดออเดอร์ที่ชำระแล้วจากคลังออเดอร์และพิมพ์ซ้ำ",
+              "en": "If the receipt was closed, reopen the paid order from the archive and reprint it."
+            }
+          ]
+        },
+        {
+          "id": "inventory-problems",
+          "title": {
+            "th": "ยอดสต็อกหรือต้นทุนไม่ตรง",
+            "en": "Inventory or cost looks wrong"
+          },
+          "bullets": [
+            {
+              "th": "ตรวจสูตรของเมนู หน่วยวัตถุดิบ และราคาต่อหน่วย",
+              "en": "Check the menu recipe, ingredient unit, and unit cost."
+            },
+            {
+              "th": "ดูประวัติการเคลื่อนไหวว่ามีรับเข้า จ่ายออก ปรับยอด หรือการหักจากครัวเมื่อใด",
+              "en": "Review movement history for receipts, issues, adjustments, or kitchen deductions."
+            },
+            {
+              "th": "จำไว้ว่าระบบใช้สูตร snapshot ตอนสั่ง การแก้สูตรใหม่ไม่เปลี่ยนออเดอร์เก่า",
+              "en": "Remember that Dishy uses the recipe snapshot captured at order time; later recipe edits do not change old orders."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "current-limitations",
+      "groupId": "help",
+      "title": {
+        "th": "ฟีเจอร์ที่ยังไม่รองรับ",
+        "en": "Features not yet supported"
+      },
+      "summary": {
+        "th": "ขอบเขตปัจจุบันที่ควรรู้ก่อนออกแบบขั้นตอนทำงานของร้าน",
+        "en": "Current boundaries to understand before designing restaurant workflows."
+      },
+      "audience": {
+        "th": "สำหรับเจ้าของร้านและผู้วางขั้นตอนการทำงาน",
+        "en": "For owners and workflow planners"
+      },
+      "keywords": {
+        "th": [
+          "ยังไม่รองรับ",
+          "ข้อจำกัด",
+          "payment gateway",
+          "แยกบิล",
+          "คืนเงิน",
+          "ใบกำกับภาษี",
+          "supplier",
+          "export"
+        ],
+        "en": [
+          "limitations",
+          "not supported",
+          "payment gateway",
+          "split bill",
+          "refund",
+          "tax invoice",
+          "supplier",
+          "export"
+        ]
+      },
+      "sections": [
+        {
+          "id": "payment-limits",
+          "title": {
+            "th": "การเงินและการชำระเงิน",
+            "en": "Billing and payments"
+          },
+          "bullets": [
+            {
+              "th": "ยังไม่มี payment gateway หรือการยืนยัน PromptPay อัตโนมัติ",
+              "en": "No payment gateway or automatic PromptPay confirmation."
+            },
+            {
+              "th": "ยังไม่มีแยกบิล คืนเงิน และเลขใบกำกับภาษีเต็มรูปแบบ",
+              "en": "No split bills, refunds, or full tax-invoice numbering."
+            },
+            {
+              "th": "ยังไม่มีส่วนลดและโปรโมชันแบบครบวงจรในหน้าขาย",
+              "en": "No complete discount and promotion workflow in the sales interface."
+            },
+            {
+              "th": "ยังไม่มี silent printing หรือระบบเชื่อมเครื่องพิมพ์เฉพาะ; ใช้หน้าต่างพิมพ์ของเบราว์เซอร์",
+              "en": "No silent printing or dedicated printer bridge; printing uses the browser dialog."
+            }
+          ]
+        },
+        {
+          "id": "inventory-report-limits",
+          "title": {
+            "th": "สต็อกและรายงาน",
+            "en": "Inventory and reporting"
+          },
+          "bullets": [
+            {
+              "th": "ยังไม่มีผู้ขาย ใบสั่งซื้อ ล็อต วันหมดอายุ และการแปลงหน่วยอัตโนมัติ",
+              "en": "No supplier, purchase order, batch, expiry, or automatic unit-conversion workflow."
+            },
+            {
+              "th": "รายงานยังเป็นช่วง 14 วันคงที่และไม่มีส่งออก CSV",
+              "en": "Reports use a fixed 14-day period and do not export CSV."
+            },
+            {
+              "th": "ผังโต๊ะเป็นตารางแบ่งโซน ยังลากวางโต๊ะตามแปลนจริงไม่ได้",
+              "en": "The table layout is a zone-based grid, not a drag-and-drop floor plan."
+            }
+          ]
+        },
+        {
+          "id": "platform-limits",
+          "title": {
+            "th": "ระบบสดและ AI",
+            "en": "Realtime and AI"
+          },
+          "bullets": [
+            {
+              "th": "การอัปเดตสดบนเว็บออกแบบสำหรับ backend process เดียวในระบบปัจจุบัน ยังไม่มีการกระจายเหตุการณ์ข้ามหลาย instance",
+              "en": "Web realtime updates currently target a single backend process and do not yet fan events out across multiple instances."
+            },
+            {
+              "th": "AI เปิดใช้ได้เฉพาะเจ้าของร้านตามการตั้งค่าหลังบ้าน และไม่ใช่ระบบเขียนข้อมูลทั่วไป",
+              "en": "AI is available only to owners when enabled by backend configuration and is not a generic data-writing system."
+            },
+            {
+              "th": "การทำงานบนมือถือบางส่วนใช้การดึงข้อมูลทดแทน ไม่ได้รับ SSE ทุกหน้าจอเหมือนเว็บ",
+              "en": "Some mobile flows use recovery fetching rather than receiving SSE on every screen like the web app."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
