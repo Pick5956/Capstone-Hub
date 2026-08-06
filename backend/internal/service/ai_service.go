@@ -609,6 +609,20 @@ func (s *AIService) answerDatedSalesQuery(restaurantID uint, question string) (*
 		return nil, false, nil
 	}
 
+	// A comparison whose second window could not be parsed asks for the missing
+	// period instead of guessing one, so we never answer a different comparison
+	// than the one that was asked.
+	if req.clarify != "" {
+		aiStage("flow", "dated-sales — comparison target unclear → asking to specify")
+		return &AIAskResponse{
+			Answer:   req.clarify,
+			Intent:   AIIntentUnclear,
+			Task:     AITaskUnclear,
+			Model:    "local-period-clarify",
+			Snapshot: AISnapshot{},
+		}, true, nil
+	}
+
 	if req.comparison && len(req.periods) >= 2 {
 		a, b := req.periods[0], req.periods[1]
 		da, err := s.repo.SalesForRange(restaurantID, a.Start, a.End)

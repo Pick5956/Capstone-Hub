@@ -29,11 +29,14 @@ describe("expenses page integration guards", () => {
       "const form = storedForm.restaurantId === restaurantId ? storedForm : emptyForm(restaurantId);",
     );
     expect(pageSource).toContain("const saving = restaurantId !== null && savingRestaurantId === restaurantId;");
-    expect(pageSource).toContain("setForm({ restaurantId, id: expense.ID,");
+    // Formatting-tolerant: the guard is that the edit prefill still stamps the
+    // row's restaurantId, wherever the call is laid out.
+    expect(pageSource).toMatch(/setForm\(\{\s*restaurantId,\s*id: expense\.ID,/);
   });
 
-  it("gives the icon-only ledger actions meaningful accessible names", () => {
-    expect(pageSource).toContain('aria-label={`${copy.edit}: ${expense.note || copy.categories[expense.category]}`}');
+  it("gives the ledger row and its delete action meaningful accessible names", () => {
+    // Edit is the row itself now, so the row carries the name a button used to.
+    expect(pageSource).toContain('"aria-label": `${copy.edit}: ${expense.note || copy.categories[expense.category]}`');
     expect(pageSource).toContain('aria-label={`${copy.deleteAction}: ${expense.note || copy.categories[expense.category]}`}');
   });
 });
