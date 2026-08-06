@@ -52,7 +52,7 @@ Rules:
    - "get_ingredient_reorder_forecast": when the query asks which ingredients will run out soon or when to reorder, based on usage rate (e.g. "วัตถุดิบไหนจะหมดก่อน", "ควรสั่งของเมื่อไหร่", "วัตถุดิบพอใช้อีกกี่วัน", "reorder forecast", "when to restock").
    - "get_dead_stock": when the query asks which ingredients sit unused, are overstocked, or tie up cash (e.g. "วัตถุดิบไหนซื้อมาแต่ไม่ได้ใช้", "ของค้างสต๊อก", "เงินจมวัตถุดิบ", "dead stock", "unused ingredients").
    - "get_top_cost_ingredients": when the query asks which ingredients cost the most or eat the biggest budget (e.g. "วัตถุดิบอะไรกินต้นทุนเยอะสุด", "ต้นทุนวัตถุดิบสูงสุด", "top cost ingredients", "biggest ingredient spend").
-   - "get_store_summary": when the query asks for an overall summary/overview of how the store is doing, without naming one specific metric (e.g. "สรุปสถานการณ์ร้าน", "สรุปร้านวันนี้", "ภาพรวมร้านเป็นไง", "วันนี้เป็นยังไงบ้าง", "summarize the store", "overall how are we doing"). Prefer this over a free-form analysis for broad summary requests.
+   - "get_store_summary": when the query asks for an overall summary/overview of how the store is doing, without naming one specific metric (e.g. "สรุปสถานการณ์ร้าน", "สรุปภาพรวมให้หน่อย", "ภาพรวมร้านเป็นไง", "ร้านเป็นยังไงบ้าง", "summarize the store", "overall how are we doing"). This is still the right tool when the summary is scoped to a day (e.g. "สรุปร้านวันนี้"); the day scope is applied downstream.
    - "get_sales_for_period": when the query asks about sales for a specific time frame such as today, yesterday, this week, last week, a named month, or a month-to-month comparison (e.g. "วันนี้ขายได้เท่าไหร่", "เมื่อวานขายดีไหม", "ยอด 7 วันนี้", "ยอดขายเดือนมีนาคม", "ยอดเดือนนี้เท่าไหร่", "เทียบยอดเดือนนี้กับเดือนก่อน", "sales today", "yesterday's sales", "sales in March", "compare this month vs last month"). Any question about a total sales/revenue figure scoped to a named period is "restaurant_data" and needs this tool.
    - "get_most_expensive_menu": when the query asks which menu has the highest PRICE / is the most expensive item on the menu (about the menu price per dish, NOT total revenue) (e.g. "เมนูไหนแพงที่สุด", "เมนูราคาสูงสุด", "เมนูที่ขายแพงสุด", "most expensive menu", "highest priced item"). Do not confuse this with revenue.
 3. If "needs_tool" is true, provide the matching tool name in "suggested_tool". Otherwise set it to "".
@@ -126,7 +126,7 @@ Format for a narrow chat panel: use short headings and bullet lists.
 Do not use Markdown tables or horizontal-rule separators; express tabular comparisons as bullet points.
 Accuracy and wording rules (follow strictly):
 - Begin directly with the facts. Do NOT open with a flowery, weather, or greeting phrase; never write words like "สภาพอากาศ".
-- The snapshot covers the recent 14-day analysis window. Do NOT call it "today" or "วันนี้", "yesterday", or any other specific period unless the user explicitly asked for that period; refer to it as the last 14 days.
+- The snapshot covers the recent %.0f-day analysis window. Do NOT call it "today" or "วันนี้", "yesterday", or any other specific period unless the user explicitly asked for that period; refer to it as the last %.0f days.
 - Do NOT compare metrics of different kinds (for example, never compare an order count against a number of menus).
 - Never place the same menu into two contradictory groups (e.g. both best-selling and worst-selling, or both highest and lowest margin).
 - If the user asks WHY something happened, present only the relevant facts you can see (trend, weak menus, low stock) and clearly state that you can show the data but will not guess the cause.
@@ -138,7 +138,7 @@ Recent conversation context:
 %s
 
 User question:
-%s`, string(snapshotJSON), conversationPrompt(history), question), nil
+%s`, analysisWindowDays, analysisWindowDays, string(snapshotJSON), conversationPrompt(history), question), nil
 }
 
 func conversationPrompt(history []AIConversationMessage) string {

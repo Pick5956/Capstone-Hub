@@ -204,6 +204,31 @@ func extractSpecificDate(question string, ref time.Time) (AIPeriod, bool) {
 	return dayPeriod(year, time.Month(month), day, loc), true
 }
 
+// summaryDayScope resolves a single day named in a store-summary question
+// ("วันนี้", "เมื่อวาน", or an explicit date), so a day-scoped summary can lead
+// with that day's real total instead of the rolling-window figure. Returns
+// ok=false for an unscoped "สรุปร้าน", which keeps the normal window summary.
+func summaryDayScope(question string, ref time.Time) (AIPeriod, bool) {
+	if day, ok := extractSpecificDate(question, ref); ok {
+		return day, true
+	}
+	loc := bangkokLocation()
+	ref = ref.In(loc)
+	n := strings.ToLower(question)
+	today := dayPeriod(ref.Year(), ref.Month(), ref.Day(), loc)
+	switch {
+	case containsAny(n, "เมื่อวาน", "yesterday"):
+		y := ref.AddDate(0, 0, -1)
+		p := dayPeriod(y.Year(), y.Month(), y.Day(), loc)
+		p.Label = "เมื่อวาน"
+		return p, true
+	case containsAny(n, "วันนี้", "today"):
+		today.Label = "วันนี้"
+		return today, true
+	}
+	return AIPeriod{}, false
+}
+
 // trailingDayNumber reads a 1-2 digit day at the end of the text preceding a
 // month name, allowing an optional "เดือน" between them.
 func trailingDayNumber(prefix string) (int, bool) {

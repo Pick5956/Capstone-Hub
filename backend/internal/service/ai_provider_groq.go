@@ -284,7 +284,7 @@ func (s *AIService) getGroqTools() []groqTool {
 			Type: "function",
 			Function: groqFunctionShortcut{
 				Name:        "get_sales_summary",
-				Description: "Get the verified total revenue and order count in the recent 14-day analysis period.",
+				Description: fmt.Sprintf("Get the verified total revenue and order count in the recent %.0f-day analysis period.", analysisWindowDays),
 				Parameters:  groqParameters{Type: "object"},
 			},
 		},

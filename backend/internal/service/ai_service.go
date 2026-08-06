@@ -448,6 +448,18 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}, nil
 	}
 
+	// A store summary scoped to a specific day ("สรุปวันนี้") answers that day's
+	// real sales first, then the rolling-window overview — so the day the user
+	// named is not silently folded into the window figure.
+	if toolToRun == AIToolGetStoreSummary {
+		if resp, handled, err := s.answerDatedStoreSummary(restaurantID, question, snapshot, intent); err != nil {
+			return nil, err
+		} else if handled {
+			aiStage("flow", "store-summary scoped to a specific day → leading with that day's sales")
+			return resp, nil
+		}
+	}
+
 	// Deterministic-first: a fact lookup that maps to a supported tool is answered
 	// straight from the snapshot data, skipping the free-form LLM. The LLM already
 	// did its real job (understanding the question) in the router; letting it also
@@ -560,6 +572,45 @@ func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
 // range-scoped repository queries that reach beyond the 14-day snapshot. It
 // returns handled=false when the question is not a dated total-sales request, so
 // the caller continues with the normal analytical flow.
+// answerDatedStoreSummary enriches a store summary that names a single day with
+// that day's verified sales, placed before the rolling-window overview. It
+// returns handled=false when the summary is not day-scoped (keep the plain
+// window summary) or when the day's data is not ready (let the normal flow
+// explain the limitation).
+func (s *AIService) answerDatedStoreSummary(restaurantID uint, question string, snapshot AISnapshot, intent AIIntent) (*AIAskResponse, bool, error) {
+	if s.repo == nil {
+		return nil, false, nil
+	}
+	day, ok := summaryDayScope(question, repository.BangkokNow())
+	if !ok {
+		return nil, false, nil
+	}
+	result, err := executeReadOnlyTool(AIToolGetStoreSummary, snapshot, question)
+	if err != nil {
+		return nil, false, err
+	}
+	summary, ok := localToolAnswer(result)
+	if !ok {
+		return nil, false, nil
+	}
+	d, err := s.repo.SalesForRange(restaurantID, day.Start, day.End)
+	if err != nil {
+		return nil, false, err
+	}
+	lead := fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ที่ปิดบิลครับ\n\n", day.Label)
+	if d.Orders > 0 {
+		lead = fmt.Sprintf("ยอดขาย%s คือ %s บาท จาก %d ออเดอร์ครับ\n\n", day.Label, formatMoney(d.Revenue), d.Orders)
+	}
+	return &AIAskResponse{
+		Answer:   lead + summary,
+		Intent:   intent,
+		Task:     AITaskRetrieveFact,
+		Tool:     AIToolGetStoreSummary,
+		Model:    "local-store-summary-dated",
+		Snapshot: snapshot,
+	}, true, nil
+}
+
 func (s *AIService) answerDatedSalesQuery(restaurantID uint, question string) (*AIAskResponse, bool, error) {
 	if s.repo == nil {
 		return nil, false, nil

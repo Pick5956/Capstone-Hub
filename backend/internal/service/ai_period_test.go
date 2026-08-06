@@ -163,6 +163,29 @@ func TestResolveDatedSalesRequestUnparseableSecondOperandAsksToClarify(t *testin
 	}
 }
 
+// A store summary that names a day resolves that single day; an unscoped summary
+// does not, so it keeps the rolling-window overview.
+func TestSummaryDayScope(t *testing.T) {
+	if _, ok := summaryDayScope("สรุปสถานการณ์ร้าน", refJuly(t)); ok {
+		t.Fatal("an unscoped summary must not resolve a day")
+	}
+	today, ok := summaryDayScope("สรุปร้านวันนี้", refJuly(t))
+	if !ok || today.Label != "วันนี้" {
+		t.Fatalf("today scope wrong: ok=%v %+v", ok, today)
+	}
+	if today.End.Sub(today.Start) != 24*time.Hour {
+		t.Fatalf("today window is not exactly one day: %v..%v", today.Start, today.End)
+	}
+	y, ok := summaryDayScope("สรุปเมื่อวานให้หน่อย", refJuly(t))
+	if !ok || y.Label != "เมื่อวาน" {
+		t.Fatalf("yesterday scope wrong: ok=%v %+v", ok, y)
+	}
+	named, ok := summaryDayScope("สรุปร้านวันที่ 2 กรกฎาคม", refJuly(t))
+	if !ok || named.Label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("named-date scope wrong: ok=%v %+v", ok, named)
+	}
+}
+
 func TestResolveDatedSalesRequestExcludesMenuAndAverage(t *testing.T) {
 	for _, q := range []string{
 		"เมนูไหนขายดีเดือนมีนาคม",
