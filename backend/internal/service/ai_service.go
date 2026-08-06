@@ -197,6 +197,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	history := sanitizeConversationHistory(req.History)
 
 	aiStage("input", "question_length=%d history_turns=%d", len([]rune(question)), len(history))
+	aiDebug("Q: %q (history_turns=%d)", question, len(history))
 	// Log how the request was ultimately answered, whichever branch returns.
 	defer func() {
 		if err == nil {
@@ -211,6 +212,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("done", "error: %v", err)
 		case resp != nil:
 			aiStage("done", "model=%s task=%s tool=%s intent=%s", resp.Model, resp.Task, aiToolOrDash(resp.Tool), resp.Intent)
+			aiDebug("A: %q", resp.Answer)
 		}
 	}()
 
@@ -233,7 +235,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence,
 			routerResult.Risk, len(prepared.candidateTools))
 	} else {
-		if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
+		// A bare "กับ <period>" reply to a comparison clarification is rebuilt
+		// deterministically from history before falling back to the LLM rewrite.
+		if resolved, ok := resolveComparisonContinuation(question, history, repository.BangkokNow()); ok {
+			aiStage("route", "comparison continuation resolved from history")
+			aiDebug("continuation → %q", resolved)
+			question = resolved
+		} else if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
 			aiStage("route", "context_rewritten=true resolved_question_length=%d", len([]rune(resolved)))
 			question = resolved
 		}
