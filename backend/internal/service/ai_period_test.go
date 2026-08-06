@@ -186,6 +186,26 @@ func TestSummaryDayScope(t *testing.T) {
 	}
 }
 
+// A day that does not exist for its month must be flagged, not answered as the
+// whole month ("31 กุมภาพันธ์" used to return all of February).
+func TestResolveDatedSalesRequestRejectsImpossibleDate(t *testing.T) {
+	for _, q := range []string{
+		"ยอดขายวันที่ 31 กุมภาพันธ์",
+		"ยอดขาย 31 กุมภาพันธ์",
+		"ยอดขายวันที่ 31 เมษายน",
+	} {
+		req, ok := resolveDatedSalesRequest(q, refJuly(t))
+		if !ok || req.clarify == "" || len(req.periods) != 0 {
+			t.Fatalf("%q should ask to clarify an impossible date, got ok=%v %+v", q, ok, req)
+		}
+	}
+	// A valid day must still resolve to that single day.
+	req, ok := resolveDatedSalesRequest("ยอดขายวันที่ 28 กุมภาพันธ์", refJuly(t))
+	if !ok || req.clarify != "" || len(req.periods) != 1 {
+		t.Fatalf("valid date must resolve to one day, got ok=%v %+v", ok, req)
+	}
+}
+
 func TestResolveDatedSalesRequestExcludesMenuAndAverage(t *testing.T) {
 	for _, q := range []string{
 		"เมนูไหนขายดีเดือนมีนาคม",
