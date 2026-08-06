@@ -113,8 +113,15 @@ func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientReq
 		if err := tx.Create(ingredient); err != nil {
 			return err
 		}
-		if initialTx := buildInitialStockTransaction(ingredient, userID); initialTx != nil {
-			return tx.CreateTransaction(initialTx)
+		initialTx := buildInitialStockTransaction(ingredient, userID)
+		if initialTx == nil {
+			return nil
+		}
+		if err := tx.CreateTransaction(initialTx); err != nil {
+			return err
+		}
+		if initialTx.Amount > 0 {
+			return tx.CreateExpense(buildRestockExpense(ingredient, userID, initialTx.Note, initialTx.Amount, initialTx.ID))
 		}
 		return nil
 	}); err != nil {
@@ -205,41 +212,25 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		if err := tx.UpdateStock(restaurantID, ingredientID, nextStock); err != nil {
 			return err
 		}
-		// Nobody typed a cost — fall back to what this ingredient is already
-		// priced at rather than leaving the restock out of the ledger.
-		finalAmount := amount
-		if kind == "in" && finalAmount == 0 {
-			finalAmount = estimateRestockAmount(req.Quantity, ingredient.CostPerUnit)
+		// Nobody said what this restock cost, so value it at the ingredient's
+		// cost per unit. Only inside the transaction is that rate known.
+		if amount == 0 && kind == "in" {
+			amount = referenceRestockAmount(ingredient.CostPerUnit, req.Quantity)
 		}
 		stockTransaction := &entity.IngredientTransaction{
 			RestaurantID: restaurantID,
 			IngredientID: ingredientID,
 			Type:         kind,
 			Quantity:     req.Quantity,
-			Amount:       finalAmount,
+			Amount:       amount,
 			Note:         note,
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateTransaction(stockTransaction); err != nil {
 			return err
 		}
-		if finalAmount > 0 {
-			// Same transaction as the stock movement, so the ledger can never
-			// disagree with what actually came into the store room.
-			expenseNote := ingredient.Name
-			if note != "" {
-				expenseNote = ingredient.Name + " · " + note
-			}
-			now := repository.BangkokNow()
-			if err := tx.CreateExpense(&entity.Expense{
-				RestaurantID:            restaurantID,
-				Category:                "ingredient",
-				Amount:                  finalAmount,
-				SpentAt:                 time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
-				Note:                    expenseNote,
-				CreatedByID:             userID,
-				IngredientTransactionID: &stockTransaction.ID,
-			}); err != nil {
+		if amount > 0 {
+			if err := tx.CreateExpense(buildRestockExpense(ingredient, userID, note, amount, stockTransaction.ID)); err != nil {
 				return err
 			}
 		}
@@ -375,20 +366,41 @@ func restockAmount(kind string, amount float64) (float64, error) {
 	return rounded, nil
 }
 
-// estimateRestockAmount is the fallback when nobody typed what a restock cost:
-// the ingredient's own recorded unit price times the quantity received. It is a
-// derived figure, not an observed one, so the caller marks the ledger entry.
-// A zero result means there is nothing to go on — better no row than a made-up
-// one, since an invented number is worse than a visible gap.
-func estimateRestockAmount(quantity, costPerUnit float64) float64 {
-	if quantity <= 0 || costPerUnit <= 0 {
+// referenceRestockAmount values a restock at the ingredient's own cost per unit.
+// It stands in when nobody typed what was actually paid, so a purchase still
+// reaches the expense ledger instead of silently costing nothing.
+func referenceRestockAmount(costPerUnit, quantity float64) float64 {
+	if !isFiniteIngredientNumber(costPerUnit) || !isFiniteIngredientNumber(quantity) {
 		return 0
 	}
-	amount := roundMoney(quantity * costPerUnit)
-	if amount <= 0 || amount > maxIngredientCost {
+	if costPerUnit <= 0 || quantity <= 0 {
 		return 0
 	}
-	return amount
+	rounded := roundMoney(costPerUnit * quantity)
+	if rounded > maxIngredientCost {
+		return maxIngredientCost
+	}
+	return rounded
+}
+
+// buildRestockExpense mirrors a stock-in into the expense ledger. Callers must
+// write it in the same transaction as the stock movement so the two can never
+// disagree about what came into the store room.
+func buildRestockExpense(ingredient *entity.Ingredient, userID uint, note string, amount float64, transactionID uint) *entity.Expense {
+	expenseNote := ingredient.Name
+	if note != "" {
+		expenseNote = ingredient.Name + " · " + note
+	}
+	now := repository.BangkokNow()
+	return &entity.Expense{
+		RestaurantID:            ingredient.RestaurantID,
+		Category:                "ingredient",
+		Amount:                  amount,
+		SpentAt:                 time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+		Note:                    expenseNote,
+		CreatedByID:             userID,
+		IngredientTransactionID: &transactionID,
+	}
 }
 
 func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *entity.IngredientTransaction {
@@ -400,8 +412,11 @@ func buildInitialStockTransaction(ingredient *entity.Ingredient, userID uint) *e
 		IngredientID: ingredient.ID,
 		Type:         "adjust",
 		Quantity:     ingredient.Stock,
-		Note:         "initial stock",
-		CreatedByID:  userID,
+		// Opening stock is bought stock: value it the same way a restock with no
+		// typed amount is valued.
+		Amount:      referenceRestockAmount(ingredient.CostPerUnit, ingredient.Stock),
+		Note:        "initial stock",
+		CreatedByID: userID,
 	}
 }
 

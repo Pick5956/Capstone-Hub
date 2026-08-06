@@ -98,7 +98,7 @@ func TestGroqStructuredPlannerProviderRotatesKeyAfter429(t *testing.T) {
 		mu.Unlock()
 		if call == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":"gsk-secret-must-not-leak"}`))
+			_, _ = w.Write([]byte(`{"error":"provider rejected request"}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"answer\":\"fallback-key\"}"}}]}`))

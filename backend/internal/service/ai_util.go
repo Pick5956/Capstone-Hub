@@ -2,16 +2,8 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
-
-func maskAPIKey(key string) string {
-	if len(key) <= 10 {
-		return "***"
-	}
-	return fmt.Sprintf("%s...%s", key[:6], key[len(key)-4:])
-}
 
 func maxFloat(a, b float64) float64 {
 	if a > b {

@@ -140,6 +140,9 @@ func (ctrl *IngredientController) AdjustStock(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
+	if !requireStockExpensePermission(c, req.Amount) {
+		return
+	}
 	userID, _ := contextUserID(c)
 	ingredient, err := ctrl.svc.AdjustStock(restaurantID, ingredientID, userID, &req)
 	if err != nil {
@@ -147,6 +150,13 @@ func (ctrl *IngredientController) AdjustStock(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, ingredient)
+}
+
+func requireStockExpensePermission(c *gin.Context, amount float64) bool {
+	if amount <= 0 {
+		return true
+	}
+	return requirePermission(c, "manage_expenses", "missing manage_expenses permission")
 }
 
 func (ctrl *IngredientController) ListTransactions(c *gin.Context) {

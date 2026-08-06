@@ -51,6 +51,14 @@ func TestPublicAPIError(t *testing.T) {
 			wantCode:    "internal_error",
 		},
 		{
+			name:        "hides sanitized upstream HTTP failures",
+			status:      http.StatusBadRequest,
+			err:         errors.New("Groq analytical request returned HTTP status 502"),
+			wantStatus:  http.StatusInternalServerError,
+			wantMessage: "internal server error",
+			wantCode:    "internal_error",
+		},
+		{
 			name:        "maps dependency timeout",
 			status:      http.StatusInternalServerError,
 			err:         context.DeadlineExceeded,

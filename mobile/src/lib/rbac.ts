@@ -9,6 +9,7 @@ const fallbackRolePermissions: Record<string, Permission[]> = {
     'manage_table',
     'manage_staff',
     'manage_inventory',
+    'manage_expenses',
     'view_reports',
     'take_order',
     'take_payment',

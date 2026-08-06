@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
-import { askOperationsAI, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
-import { formatAIActionConfirmationMessage, getAIActionErrorMessage } from "@/src/lib/aiActionPreview";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import {
+  formatAIActionPreviewAnswer,
+  formatAIActionConfirmationMessage,
+  getAIActionCancellationErrorMessage,
+  getAIActionErrorMessage,
+  isTerminalAIActionCancellationError,
+} from "@/src/lib/aiActionPreview";
+import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -17,9 +24,9 @@ import {
   saveConversationId,
   saveMessages,
   subscribeToChatClear,
+  subscribeToChatWrites,
 } from "@/src/lib/aiChatStorage";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
-import { can } from "@/src/lib/rbac";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
@@ -138,13 +145,16 @@ export default function AIAssistantPage() {
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   const [actionConfirming, setActionConfirming] = useState(false);
+  const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
   const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
   const [conversationRequests] = useState(createRequestGeneration);
+  const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const snapshotRequestedRef = useRef(false);
+  const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
 
   const storageKey = useMemo(
@@ -161,6 +171,8 @@ export default function AIAssistantPage() {
     // a send between this render and the deferred load must not reuse them.
     setConversationId(null);
     setPendingActionPreview(null);
+    setActionConfirming(false);
+    setActionCancelling(false);
     setActionPreviewError("");
     const loadTimer = window.setTimeout(() => {
       purgeStaleChats(storageKey);
@@ -178,8 +190,20 @@ export default function AIAssistantPage() {
 
   useEffect(() => {
     if (hydratedStorageKey !== storageKey) return;
-    saveMessages(storageKey, messages);
+    saveMessages(storageKey, messages, chatWriteSourceRef.current);
   }, [hydratedStorageKey, messages, storageKey]);
+
+  useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
+    if (write.kind === "conversation") {
+      setConversationId(write.conversationId);
+      return;
+    }
+    const stored = write.messages as StoredMessage[];
+    setMessages(stored.map((message) => ({
+      ...message,
+      createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
+    })));
+  }), [storageKey]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -187,16 +211,27 @@ export default function AIAssistantPage() {
     }
   }, [messages, loading]);
 
-  // Populate the sidebar snapshot on first load.
+  useEffect(() => {
+    snapshotRequests.invalidate();
+    snapshotRequestedRef.current = false;
+    setLatestSnapshot(null);
+  }, [canUseAI, snapshotRequests, storageKey]);
+
+  // Populate the sidebar snapshot once for each restaurant/user scope.
   useEffect(() => {
     if (!canUseAI || snapshotRequestedRef.current) return;
     snapshotRequestedRef.current = true;
+    const snapshotGeneration = snapshotRequests.begin();
     getOperationsSnapshot()
-      .then((response) => response?.data && setLatestSnapshot(response.data))
+      .then((response) => {
+        if (snapshotRequests.isCurrent(snapshotGeneration) && response?.data) {
+          setLatestSnapshot((current) => selectOperationsSnapshot(current, response.data));
+        }
+      })
       .catch(() => {
-        snapshotRequestedRef.current = false;
+        if (snapshotRequests.isCurrent(snapshotGeneration)) snapshotRequestedRef.current = false;
       });
-  }, [canUseAI]);
+  }, [canUseAI, snapshotRequests, storageKey]);
 
   const conversationHistory = (): AIConversationMessage[] =>
     messages
@@ -213,6 +248,8 @@ export default function AIAssistantPage() {
     // gone, so this one must drop the shared server thread and pending action.
     setConversationId(null);
     setPendingActionPreview(null);
+    setActionConfirming(false);
+    setActionCancelling(false);
     setActionPreviewError("");
     setMessages([{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
   }, [conversationRequests, copy.welcome]);
@@ -221,7 +258,9 @@ export default function AIAssistantPage() {
     if (clearedKey === storageKey) resetConversation();
   }), [resetConversation, storageKey]);
 
-  const handleClearChat = () => {
+  const handleClearChat = async () => {
+    if (loading || actionConfirming || actionCancelling) return;
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (serverConversationId) {
       void deleteAIConversation(serverConversationId).catch(() => undefined);
@@ -234,7 +273,8 @@ export default function AIAssistantPage() {
 
   const submitQuestion = async (nextQuestion = input) => {
     const trimmed = nextQuestion.trim();
-    if (!trimmed || loading || actionConfirming) return;
+    if (!trimmed || loading || actionConfirming || actionCancelling) return;
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     setInput("");
     setError("");
     setPendingAction(null);
@@ -279,9 +319,12 @@ export default function AIAssistantPage() {
       const data = response.data;
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
-        saveConversationId(storageKey, data.conversation_id);
+        saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
       }
-      if (data.snapshot) setLatestSnapshot(data.snapshot);
+      if (data.snapshot) {
+        snapshotRequests.invalidate();
+        setLatestSnapshot((current) => selectOperationsSnapshot(current, data.snapshot));
+      }
       if (data.action_preview) setPendingActionPreview(data.action_preview);
       const actions =
         data.intent === "unclear"
@@ -294,7 +337,7 @@ export default function AIAssistantPage() {
         {
           id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
           role: "assistant",
-          content: data.answer,
+          content: formatAIActionPreviewAnswer(data.answer, data.action_preview, language),
           createdAt: new Date(),
           actions,
           model: data.model,
@@ -314,12 +357,14 @@ export default function AIAssistantPage() {
 
   const handleConfirmActionPreview = async () => {
     const preview = pendingActionPreview;
-    if (!preview || actionConfirming) return;
+    if (!preview || actionConfirming || actionCancelling) return;
 
+    const requestGeneration = conversationRequests.begin();
     setActionConfirming(true);
     setActionPreviewError("");
     try {
       const response = await confirmAIAction(preview.id, preview.confirmation_token);
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       setPendingActionPreview((current) => current?.id === preview.id ? null : current);
       setMessages((previous) => [
         ...previous,
@@ -330,15 +375,67 @@ export default function AIAssistantPage() {
           createdAt: new Date(),
         },
       ]);
+      const snapshotGeneration = snapshotRequests.begin();
       getOperationsSnapshot()
-        .then((snapshotResponse) => snapshotResponse?.data && setLatestSnapshot(snapshotResponse.data))
+        .then((snapshotResponse) => {
+          if (
+            conversationRequests.isCurrent(requestGeneration)
+            && snapshotRequests.isCurrent(snapshotGeneration)
+            && snapshotResponse?.data
+          ) {
+            setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
+          }
+        })
         .catch(() => undefined);
     } catch (actionError: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return;
       setActionPreviewError(getAIActionErrorMessage(actionError, language));
     } finally {
-      setActionConfirming(false);
+      if (conversationRequests.isCurrent(requestGeneration)) setActionConfirming(false);
     }
   };
+
+  async function discardPendingActionPreview(): Promise<boolean> {
+    const preview = pendingActionPreview;
+    if (!preview) return true;
+    if (actionConfirming || actionCancelling) return false;
+
+    const requestGeneration = conversationRequests.begin();
+    setActionCancelling(true);
+    setActionPreviewError("");
+    try {
+      await cancelAIAction(preview.id);
+      if (!conversationRequests.isCurrent(requestGeneration)) return false;
+      setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+      return true;
+    } catch (cancellationError: unknown) {
+      if (!conversationRequests.isCurrent(requestGeneration)) return false;
+      if (isTerminalAIActionCancellationError(cancellationError)) {
+        setPendingActionPreview((current) => current?.id === preview.id ? null : current);
+        const snapshotGeneration = snapshotRequests.begin();
+        getOperationsSnapshot()
+          .then((snapshotResponse) => {
+            if (
+              conversationRequests.isCurrent(requestGeneration)
+              && snapshotRequests.isCurrent(snapshotGeneration)
+              && snapshotResponse?.data
+            ) {
+              setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
+            }
+          })
+          .catch(() => undefined);
+        return true;
+      }
+      setActionPreviewError(getAIActionCancellationErrorMessage(language));
+      return false;
+    } finally {
+      if (conversationRequests.isCurrent(requestGeneration)) setActionCancelling(false);
+    }
+  }
+
+  async function handleCancelActionPreview() {
+    await discardPendingActionPreview();
+  }
 
   const handleGuidedAction = (action: AIGuidedAction) => {
     if (action.prompt) {
@@ -387,8 +484,9 @@ export default function AIAssistantPage() {
             </div>
             <button
               type="button"
-              onClick={handleClearChat}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
+              onClick={() => void handleClearChat()}
+              disabled={loading || actionConfirming || actionCancelling}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{copy.newChat}</span>
@@ -472,12 +570,10 @@ export default function AIAssistantPage() {
                 preview={pendingActionPreview}
                 language={language}
                 confirming={actionConfirming}
+                cancelling={actionCancelling}
                 error={actionPreviewError}
                 onConfirm={handleConfirmActionPreview}
-                onCancel={() => {
-                  setPendingActionPreview(null);
-                  setActionPreviewError("");
-                }}
+                onCancel={handleCancelActionPreview}
               />
             )}
 
@@ -525,7 +621,7 @@ export default function AIAssistantPage() {
             />
             <button
               type="submit"
-              disabled={loading || actionConfirming || !input.trim()}
+              disabled={loading || actionConfirming || actionCancelling || !input.trim()}
               aria-label={copy.ask}
               className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
             >

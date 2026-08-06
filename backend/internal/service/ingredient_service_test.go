@@ -114,9 +114,43 @@ func TestBuildInitialStockTransaction(t *testing.T) {
 		t.Fatalf("buildInitialStockTransaction() values = %#v", tx)
 	}
 
+	if tx.Amount != 0 {
+		t.Fatalf("buildInitialStockTransaction() amount = %v, want 0 without a cost per unit", tx.Amount)
+	}
+
+	// Opening stock priced at the ingredient's own rate: 12.5 * 8.4 = 105.
+	ingredient.CostPerUnit = 8.4
+	priced := buildInitialStockTransaction(ingredient, 41)
+	if priced == nil || priced.Amount != 105 {
+		t.Fatalf("buildInitialStockTransaction() amount = %#v, want 105", priced)
+	}
+
 	ingredient.Stock = 0
 	if got := buildInitialStockTransaction(ingredient, 41); got != nil {
 		t.Fatalf("buildInitialStockTransaction() = %#v, want nil for zero stock", got)
+	}
+}
+
+func TestReferenceRestockAmount(t *testing.T) {
+	if got := referenceRestockAmount(12.345, 3); got != 37.04 {
+		t.Fatalf("referenceRestockAmount(12.345, 3) = %v, want 37.04", got)
+	}
+	// No rate, no quantity, or nonsense numbers must not invent an expense.
+	for _, testCase := range []struct{ cost, quantity float64 }{
+		{0, 5},
+		{-2, 5},
+		{10, 0},
+		{10, -5},
+		{math.NaN(), 5},
+		{math.Inf(1), 5},
+		{10, math.NaN()},
+	} {
+		if got := referenceRestockAmount(testCase.cost, testCase.quantity); got != 0 {
+			t.Fatalf("referenceRestockAmount(%v, %v) = %v, want 0", testCase.cost, testCase.quantity, got)
+		}
+	}
+	if got := referenceRestockAmount(maxIngredientCost, 10); got != maxIngredientCost {
+		t.Fatalf("referenceRestockAmount() = %v, want clamp to %v", got, float64(maxIngredientCost))
 	}
 }
 
@@ -170,33 +204,5 @@ func TestRestockAmountOnlyAcceptsMoneyOnStockIn(t *testing.T) {
 	}
 	if got != 1234.57 {
 		t.Fatalf("restockAmount() = %v, want 1234.57", got)
-	}
-}
-
-// This is the number that lands in the expense ledger when nobody typed a
-// cost, so a wrong formula here silently mis-records every such restock.
-func TestEstimateRestockAmount(t *testing.T) {
-	tests := []struct {
-		name        string
-		quantity    float64
-		costPerUnit float64
-		want        float64
-	}{
-		{"typical restock", 10, 34.5, 345},
-		{"rounds to two decimals", 3, 1.004, 3.01},
-		{"zero quantity", 0, 34.5, 0},
-		{"negative quantity", -5, 34.5, 0},
-		// No recorded price is not "free" — it means there is nothing to
-		// estimate from, so the caller must skip the ledger row entirely.
-		{"zero cost per unit", 10, 0, 0},
-		{"negative cost per unit", 10, -1, 0},
-		{"above cap", 1, maxIngredientCost + 1, 0},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := estimateRestockAmount(test.quantity, test.costPerUnit); got != test.want {
-				t.Fatalf("estimateRestockAmount(%v, %v) = %v, want %v", test.quantity, test.costPerUnit, got, test.want)
-			}
-		})
 	}
 }

@@ -36,6 +36,7 @@ export type SalesDetailReport = {
   hour: number | null;
   orders: ReportSalesDetailOrder[];
   summary: { revenue: number; cost: number; profit: number };
+  has_more: boolean;
 };
 
 export type ReportExpenseDetailItem = {
@@ -51,6 +52,7 @@ export type ExpenseDetailReport = {
   hour: number | null;
   items: ReportExpenseDetailItem[];
   total: number;
+  has_more: boolean;
 };
 
 export type ReportMenuMargin = {

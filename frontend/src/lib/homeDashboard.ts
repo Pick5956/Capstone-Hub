@@ -25,16 +25,28 @@ export function shiftDashboardDate(value: string, days: number) {
   return toDashboardDate(next);
 }
 
-// Ledger spending per Bangkok calendar day. `spent_at` is a date-only value
-// already anchored to Bangkok, so the leading YYYY-MM-DD is the day it belongs
-// to — parsing it into a Date would drag it across midnight in other zones.
-export function totalExpensesByDate(expenses: { spent_at: string; amount: number }[]) {
-  const totals = new Map<string, number>();
-  for (const expense of expenses) {
-    const key = expense.spent_at.slice(0, 10);
-    totals.set(key, (totals.get(key) ?? 0) + expense.amount);
+// The API groups ledger spending by its Bangkok date before applying any row
+// cap, so charts and totals stay complete even when drill-down rows are partial.
+export type DailyExpenseAggregate = { date: string; amount: number; entries: number };
+
+export function dailyExpenseTotalsByDate(daily: DailyExpenseAggregate[]) {
+  const totals = new Map<string, { amount: number; entries: number }>();
+  for (const item of daily) {
+    const previous = totals.get(item.date);
+    totals.set(item.date, {
+      amount: (previous?.amount ?? 0) + item.amount,
+      entries: (previous?.entries ?? 0) + item.entries,
+    });
   }
   return totals;
+}
+
+export function totalDailyExpensesForMonth(daily: DailyExpenseAggregate[], month: string) {
+  return daily.reduce((sum, item) => (item.date.startsWith(month) ? sum + item.amount : sum), 0);
+}
+
+export function hasPartialDailyExpenseRows(shownRows: number, totalEntries: number) {
+  return shownRows < totalEntries;
 }
 
 export function uniqueOrdersById(orders: Order[]) {

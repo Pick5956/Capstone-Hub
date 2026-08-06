@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // หน้าที่ต้อง login ก่อนถึงจะเข้าได้
-const protectedRoutes = ['/restaurants', '/home', '/orders', '/pos', '/kitchen', '/tables', '/menu', '/inventory', '/ai-assistant', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
-const dashboardRoutes = ['/home', '/orders', '/pos', '/kitchen', '/tables', '/menu', '/inventory', '/ai-assistant', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
+const protectedRoutes = ['/restaurants', '/home', '/orders', '/pos', '/kitchen', '/tables', '/menu', '/inventory', '/expenses', '/ai-assistant', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
+const dashboardRoutes = ['/home', '/orders', '/pos', '/kitchen', '/tables', '/menu', '/inventory', '/expenses', '/ai-assistant', '/staff', '/reports', '/settings', '/dashboard', '/profile'];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

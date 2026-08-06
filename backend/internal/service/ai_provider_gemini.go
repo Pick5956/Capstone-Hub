@@ -78,7 +78,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	aiStage("call", "Gemini classifier model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini classifier model=%s", model)
 
 	prompt := fmt.Sprintf(routerClassifierTemplate, question)
 
@@ -110,7 +110,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 		if resp.StatusCode == 429 {
 			return "", errRateLimit
 		}
-		return "", fmt.Errorf("gemini classifier failed: %s", strings.TrimSpace(string(respBody)))
+		return "", newAIProviderHTTPError("Gemini", "classifier", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -132,7 +132,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	aiStage("call", "Gemini analytical model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini analytical model=%s", model)
 
 	prompt, err := analyticalPrompt(question, history, snapshot)
 	if err != nil {
@@ -168,7 +168,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Gemini", "analytical request", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -208,7 +208,7 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	aiStage("call", "Gemini conversation model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini conversation model=%s", model)
 
 	prompt := fmt.Sprintf(conversationPersonaTemplate, question, conversationPrompt(history))
 
@@ -240,7 +240,7 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini request failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Gemini", "conversation request", resp.StatusCode)
 	}
 
 	var parsed geminiGenerateResponse
@@ -406,7 +406,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	if model == "" {
 		model = "gemini-2.5-flash"
 	}
-	aiStage("call", "Gemini second-round model=%s key=%s", model, maskAPIKey(apiKey))
+	aiStage("call", "Gemini second-round model=%s", model)
 	payload := geminiGenerateRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -434,7 +434,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 		if resp.StatusCode == 429 {
 			return "", "", errRateLimit
 		}
-		return "", "", fmt.Errorf("gemini second round failed: %s", strings.TrimSpace(string(respBody)))
+		return "", "", newAIProviderHTTPError("Gemini", "second-round request", resp.StatusCode)
 	}
 	var parsed geminiGenerateResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {

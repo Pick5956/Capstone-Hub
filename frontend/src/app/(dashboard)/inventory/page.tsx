@@ -37,6 +37,7 @@ import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
   emptyForm,
+  buildAdjustStockPayload,
   formatDateTime,
   getInventoryValue,
   getRestockAmount,
@@ -109,8 +110,9 @@ function buildCopy(language: "th" | "en") {
         deleteMsg: (name: string) => `ลบ "${name}" ออกจากคลังวัตถุดิบ?`,
         adjustTitle: "ปรับสต็อก",
         adjustIn: "รับเข้า",
-        spentAmount: "บันทึกเป็นรายจ่าย",
-        spentAmountHint: "คำนวณจากต้นทุนต่อหน่วยที่ตั้งไว้",
+        spentAmount: "ยอดที่จ่ายจริง (ไม่บังคับ)",
+        spentAmountHint: "เว้นว่างไว้ ระบบจะคิดจากต้นทุนต่อหน่วยให้",
+        spentAmountFallback: (value: string) => `เว้นว่าง = บันทึกรายจ่าย ${value}`,
         adjustOut: "จ่ายออก",
         adjustSet: "ตั้งค่าใหม่",
         quantity: "จำนวน",
@@ -201,8 +203,9 @@ function buildCopy(language: "th" | "en") {
         deleteMsg: (name: string) => `Remove "${name}" from inventory?`,
         adjustTitle: "Adjust stock",
         adjustIn: "Stock in",
-        spentAmount: "Recorded as expense",
-        spentAmountHint: "Calculated from the saved cost per unit",
+        spentAmount: "Actual amount paid (optional)",
+        spentAmountHint: "Leave blank and the cost per unit is used instead.",
+        spentAmountFallback: (value: string) => `Blank records ${value} as the expense`,
         adjustOut: "Stock out",
         adjustSet: "Set value",
         quantity: "Quantity",
@@ -301,6 +304,7 @@ export default function InventoryPage() {
   const confirm = useConfirm();
   const lang = language as "th" | "en";
   const canManage = can(activeMembership, "manage_inventory");
+  const canManageExpenses = can(activeMembership, "manage_expenses");
   const canView = canManage || can(activeMembership, "view_inventory");
   const copy = useMemo(() => buildCopy(lang), [lang]);
   const unitOptions = useMemo(() => UNITS.map((unit) => ({ value: unit, label: unit })), []);
@@ -338,9 +342,18 @@ export default function InventoryPage() {
   const [adjustClosing, setAdjustClosing] = useState(false);
   const [adjustType, setAdjustType] = useState<"in" | "out" | "adjust">("in");
   const [adjustQty, setAdjustQty] = useState("");
+  const [adjustPaidAmount, setAdjustPaidAmount] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [adjustError, setAdjustError] = useState("");
   const [adjusting, setAdjusting] = useState(false);
+  // Mirrors the server's fallback: an unpriced stock-in is booked at the
+  // ingredient's own cost per unit.
+  const referenceAdjustAmount = (() => {
+    const quantity = Number(adjustQty);
+    const rate = adjustTarget?.cost_per_unit ?? 0;
+    if (!Number.isFinite(quantity) || quantity <= 0 || rate <= 0) return 0;
+    return Math.round(rate * quantity * 100) / 100;
+  })();
 
   const [txTarget, setTxTarget] = useState<Ingredient | null>(null);
   const [txClosing, setTxClosing] = useState(false);
@@ -381,6 +394,21 @@ export default function InventoryPage() {
       window.clearTimeout(loadTimer);
     };
   }, [canView]);
+
+  // `/inventory?adjust=<id>` — the dashboard's stock-risk cards link straight
+  // to the adjustment for the ingredient they warned about. Read off the URL
+  // rather than `useSearchParams`, which would drag a Suspense boundary in
+  // with it, and fired once so closing the dialog does not reopen it when the
+  // list refreshes.
+  const adjustDeepLinkDone = useRef(false);
+  useEffect(() => {
+    if (adjustDeepLinkDone.current || !ingredients.length) return;
+    const wanted = new URLSearchParams(window.location.search).get("adjust");
+    const item = wanted ? ingredients.find((entry) => String(entry.ID) === wanted) : undefined;
+    if (!item) return;
+    adjustDeepLinkDone.current = true;
+    openAdjust(item);
+  }, [ingredients]);
 
   const totalItems = ingredients.length;
   const lowCount = ingredients.filter((item) => getStatus(item) === "low").length;
@@ -526,6 +554,7 @@ export default function InventoryPage() {
     setAdjustTarget(item);
     setAdjustType("in");
     setAdjustQty("");
+    setAdjustPaidAmount("");
     setAdjustNote("");
     setAdjustError("");
   }
@@ -535,6 +564,16 @@ export default function InventoryPage() {
     const qty = parseFloat(adjustQty);
     if (!adjustQty || Number.isNaN(qty) || qty <= 0) {
       setAdjustError(lang === "th" ? "กรุณาระบุจำนวนที่ถูกต้อง" : "Enter a valid quantity");
+      return;
+    }
+    const paidAmount = Number(adjustPaidAmount);
+    if (
+      adjustType === "in" &&
+      canManageExpenses &&
+      adjustPaidAmount.trim() !== "" &&
+      (!Number.isFinite(paidAmount) || paidAmount < 0)
+    ) {
+      setAdjustError(lang === "th" ? "กรุณาระบุยอดที่จ่ายให้ถูกต้อง" : "Enter a valid amount paid");
       return;
     }
     if (adjustType !== "in") {
@@ -551,12 +590,13 @@ export default function InventoryPage() {
     await adjustOnce.current(async () => {
       setAdjusting(true);
       try {
-        // Stock-in expenses are priced by the backend from cost_per_unit.
-        const response = await adjustStock(adjustTarget.ID, {
+        const response = await adjustStock(adjustTarget.ID, buildAdjustStockPayload({
           type: adjustType,
           quantity: qty,
           note: adjustNote,
-        });
+          paidAmount: adjustPaidAmount,
+          canManageExpenses,
+        }));
         setIngredients((prev) => prev.map((item) => (item.ID === adjustTarget.ID ? response.data : item)));
         closeAdjustModal();
         showToast({ title: copy.stockAdjusted });
@@ -1347,7 +1387,10 @@ export default function InventoryPage() {
                 {(["in", "out", "adjust"] as const).map((type) => (
                   <button
                     key={type}
-                    onClick={() => setAdjustType(type)}
+                    onClick={() => {
+                      setAdjustType(type);
+                      if (type !== "in") setAdjustPaidAmount("");
+                    }}
                     className={`rounded-md border py-2 text-xs font-semibold transition ${
                       adjustType === type
                         ? type === "in"
@@ -1375,15 +1418,28 @@ export default function InventoryPage() {
                   autoFocus
                 />
               </div>
-              {adjustType === "in" && adjustTarget.cost_per_unit > 0 && (
-                <div className="rounded-md bg-slate-50 px-3 py-2 dark:bg-gray-900">
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    <span>{copy.spentAmount}</span>
-                    <span className="text-sm text-slate-900 dark:text-white">
-                      {formatCurrency((parseFloat(adjustQty) || 0) * adjustTarget.cost_per_unit, lang)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">{copy.spentAmountHint}</p>
+              {adjustType === "in" && canManageExpenses && (
+                <div>
+                  <label htmlFor="adjust-paid-amount" className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {copy.spentAmount}
+                  </label>
+                  <input
+                    id="adjust-paid-amount"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={adjustPaidAmount}
+                    onChange={(event) => setAdjustPaidAmount(event.target.value)}
+                    className={inputCls}
+                  />
+                  {/* What the server will book if this field stays empty, so the
+                      fallback is visible before it happens rather than after. */}
+                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                    {adjustPaidAmount.trim() === "" && referenceAdjustAmount > 0
+                      ? copy.spentAmountFallback(formatCurrency(referenceAdjustAmount, lang))
+                      : copy.spentAmountHint}
+                  </p>
                 </div>
               )}
               <div>

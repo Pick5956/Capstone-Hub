@@ -8,7 +8,7 @@ const apiClient = vi.hoisted(() => ({
 
 vi.mock("../apiClient", () => ({ apiClient }));
 
-import { askOperationsAI, confirmAIAction, deleteAIConversation } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation } from "@/src/lib/ai";
 
 describe("AI conversation API", () => {
   beforeEach(() => {
@@ -53,6 +53,14 @@ describe("AI conversation API", () => {
     expect(apiClient.post).toHaveBeenCalledWith(
       "/api/v1/ai/operations/actions/preview%2F123/confirm",
       { confirmation_token: "one-time-secret" },
+    );
+  });
+
+  it("cancels an action preview without sending its confirmation token", () => {
+    cancelAIAction("preview/123");
+
+    expect(apiClient.delete).toHaveBeenCalledWith(
+      "/api/v1/ai/operations/actions/preview%2F123",
     );
   });
 });

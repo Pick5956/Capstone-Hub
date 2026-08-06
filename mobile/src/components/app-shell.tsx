@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText as Text } from '@/src/components/app-text';
+import { canUseAIAssistant } from '@/src/lib/ai-actions';
 import { shouldOpenSettings } from '@/src/lib/navigation-runtime';
 import { orderRoutePermissions } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
@@ -22,6 +23,7 @@ type NavItem = {
   fallbackPermission?: string;
   permissions?: readonly string[];
   roles?: string[];
+  ownerOnly?: boolean;
 };
 
 const primaryNavigation: NavItem[] = [
@@ -39,11 +41,12 @@ const managementNavigation: NavItem[] = [
   { key: 'reservations', label: 'ประวัติการจอง', labelEn: 'Reservations', shortLabel: 'การจอง', shortLabelEn: 'Bookings', href: '/reservations', mark: 'จ', permissions: ['view_tables', 'manage_table', 'take_order'] },
   { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', mark: 'ท', permission: 'manage_staff', roles: ['owner', 'manager'] },
   { key: 'reports', label: 'รายงาน', labelEn: 'Reports', shortLabel: 'รายงาน', shortLabelEn: 'Reports', href: '/reports', mark: 'ร', permission: 'view_reports' },
-  { key: 'ai', label: 'ผู้ช่วยวิเคราะห์', labelEn: 'AI assistant', shortLabel: 'AI', shortLabelEn: 'AI', href: '/ai-assistant', mark: 'AI', permission: 'view_reports', fallbackPermission: 'manage_inventory' },
+  { key: 'ai', label: 'ผู้ช่วยวิเคราะห์', labelEn: 'AI assistant', shortLabel: 'AI', shortLabelEn: 'AI', href: '/ai-assistant', mark: 'AI', ownerOnly: true },
   { key: 'settings', label: 'ตั้งค่า', labelEn: 'Settings', shortLabel: 'ตั้งค่า', shortLabelEn: 'Settings', href: '/settings', mark: 'ต' },
 ];
 
 function isAllowed(item: NavItem, membership: ReturnType<typeof useAuth>['activeMembership']) {
+  if (item.ownerOnly && !canUseAIAssistant(membership?.role?.name)) return false;
   if (item.roles && !item.roles.includes(membership?.role?.name || '')) return false;
   if (item.permissions?.length) {
     return item.permissions.some((permission) => can(membership, permission));

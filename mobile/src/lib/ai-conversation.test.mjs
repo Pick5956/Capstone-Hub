@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -7,6 +8,15 @@ import {
   recentConversationHistory,
   selectOperationsSnapshot,
 } from './ai-conversation.ts';
+import {
+  buildAIActionConfirmationPath,
+  buildAIActionConfirmationRequest,
+  buildAIActionCancellationPath,
+  buildAIAskRequest,
+  buildAIConversationDeletePath,
+  canClearAIConversation,
+  selectAIConversationId,
+} from './ai-contract.ts';
 
 const snapshot = {
   generated_at: '2026-07-29T10:00:00+07:00',
@@ -93,4 +103,62 @@ test('clearing a conversation invalidates an in-flight AI response', () => {
   assert.equal(requests.canApplyResponse(oldRequest), false);
   const newRequest = requests.beginRequest();
   assert.equal(requests.canApplyResponse(newRequest), true);
+});
+
+test('an older initial snapshot cannot replace a newer ask snapshot', () => {
+  const newer = { ...snapshot, generated_at: '2026-08-03T10:05:00+07:00' };
+  const older = { ...snapshot, generated_at: '2026-08-03T10:00:00+07:00' };
+
+  assert.equal(selectOperationsSnapshot(newer, older), newer);
+  assert.equal(selectOperationsSnapshot(older, newer), newer);
+  assert.equal(selectOperationsSnapshot(newer, { ...older, generated_at: 'invalid' }), newer);
+});
+
+test('AI asks reuse a normalized server conversation without changing local history', () => {
+  const history = [{ id: 'turn-1-assistant', role: 'assistant', content: 'ยอดขายวันนี้คือ...' }];
+
+  assert.deepEqual(buildAIAskRequest('แล้วเมื่อวานล่ะ', history, ' conversation-123 '), {
+    question: 'แล้วเมื่อวานล่ะ',
+    history,
+    conversation_id: 'conversation-123',
+  });
+  assert.deepEqual(buildAIAskRequest('สรุปยอดขาย', history, '  '), {
+    question: 'สรุปยอดขาย',
+    history,
+  });
+  assert.equal(selectAIConversationId(null, 'conversation-123'), 'conversation-123');
+  assert.equal(selectAIConversationId('conversation-123', undefined), 'conversation-123');
+  assert.equal(selectAIConversationId('conversation-123', 'not/a/server/id'), 'conversation-123');
+});
+
+test('AI mutation and reset paths encode identifiers and confirmation sends only its token', () => {
+  assert.equal(
+    buildAIConversationDeletePath('conversation/123'),
+    '/api/v1/ai/operations/conversations/conversation%2F123',
+  );
+  assert.equal(
+    buildAIActionConfirmationPath('preview/123'),
+    '/api/v1/ai/operations/actions/preview%2F123/confirm',
+  );
+  assert.deepEqual(buildAIActionConfirmationRequest('one-time-token'), {
+    confirmation_token: 'one-time-token',
+  });
+  assert.equal(
+    buildAIActionCancellationPath('preview/123'),
+    '/api/v1/ai/operations/actions/preview%2F123',
+  );
+});
+
+test('conversation clear is blocked while the first ask or an action mutation is in flight', () => {
+  assert.equal(canClearAIConversation({ loading: true }), false);
+  assert.equal(canClearAIConversation({ actionConfirming: true }), false);
+  assert.equal(canClearAIConversation({ actionCancelling: true }), false);
+  assert.equal(canClearAIConversation({ clearingConversation: true }), false);
+  assert.equal(canClearAIConversation({}), true);
+});
+
+test('manual cancel, asking again, and clearing chat share the server cancellation path', () => {
+  const screenSource = readFileSync(new URL('../../app/ai-assistant.tsx', import.meta.url), 'utf8');
+  assert.match(screenSource, /async function discardPendingActionPreview\(\): Promise<boolean>/);
+  assert.equal((screenSource.match(/await discardPendingActionPreview\(\)/g) ?? []).length, 3);
 });

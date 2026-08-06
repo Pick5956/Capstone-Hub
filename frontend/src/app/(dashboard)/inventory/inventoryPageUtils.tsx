@@ -1,4 +1,4 @@
-import type { Ingredient, IngredientInput } from "@/src/types/ingredient";
+import type { AdjustStockInput, Ingredient, IngredientInput } from "@/src/types/ingredient";
 import { localeForLanguage } from "@/src/lib/format";
 
 export const UNITS = ["กรัม", "กก.", "มิลลิลิตร", "ลิตร", "ชิ้น", "ลูก", "ฟอง", "ใบ", "แผ่น", "ขวด", "แพ็ก", "ถุง", "กล่อง"];
@@ -42,6 +42,27 @@ export function getRestockAmount(item: Ingredient) {
 
 export function getInventoryValue(item: Ingredient) {
   return item.stock * item.cost_per_unit;
+}
+
+export function buildAdjustStockPayload({
+  type,
+  quantity,
+  note,
+  paidAmount,
+  canManageExpenses,
+}: {
+  type: AdjustStockInput["type"];
+  quantity: number;
+  note: string;
+  paidAmount: string;
+  canManageExpenses: boolean;
+}): AdjustStockInput {
+  const payload: AdjustStockInput = { type, quantity, note };
+  const amount = Number(paidAmount);
+  if (type === "in" && canManageExpenses && paidAmount.trim() !== "" && Number.isFinite(amount) && amount > 0) {
+    payload.amount = amount;
+  }
+  return payload;
 }
 
 export function formatDateTime(value: string | undefined, language: "th" | "en") {

@@ -5,6 +5,7 @@ describe("pageTitle", () => {
   it("labels operational routes in the selected language", () => {
     expect(pageTitle("/kitchen", "th")).toBe("จอครัว · Dishy");
     expect(pageTitle("/orders", "en")).toBe("Order archive · Dishy");
+    expect(pageTitle("/expenses", "en")).toBe("Expenses · Dishy");
   });
 
   it("includes the current order number on POS order tabs", () => {

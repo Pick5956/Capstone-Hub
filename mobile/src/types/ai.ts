@@ -1,4 +1,30 @@
-export type AIConversationMessage = { role: 'user' | 'assistant'; content: string };
+export type AIConversationMessage = { id?: string; role: 'user' | 'assistant'; content: string };
+export type AIAskRequest = {
+  question: string;
+  history: AIConversationMessage[];
+  conversation_id?: string;
+};
+export type AIActionPreview = {
+  id: string;
+  action_type: 'set_menu_availability';
+  status: string;
+  expires_at: string;
+  confirmation_token: string;
+  summary: string;
+  target: { menu_item_id: number; name: string };
+  current: { is_available: boolean };
+  requested: { is_available: boolean };
+  warnings: string[];
+};
+export type AIActionConfirmationRequest = { confirmation_token: string };
+export type AIActionConfirmation = {
+  action_id: string;
+  status: string;
+  replayed: boolean;
+  executed_at: string;
+  message: string;
+  result: { menu_item_id: number; name: string; is_available: boolean };
+};
 export type AISnapshot = {
   generated_at: string;
   analysis_readiness: {
@@ -39,4 +65,7 @@ export type AIAskResponse = {
   tool?: 'get_lowest_margin_menu' | string;
   model: string;
   snapshot: AISnapshot;
+  conversation_id?: string;
+  turn_id?: string;
+  action_preview?: AIActionPreview;
 };

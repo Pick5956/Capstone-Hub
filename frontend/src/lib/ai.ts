@@ -27,5 +27,8 @@ export const confirmAIAction = (previewId: string, confirmationToken: string) =>
     { confirmation_token: confirmationToken },
   );
 
+export const cancelAIAction = (previewId: string) =>
+  apiClient.delete<void>(`/api/v1/ai/operations/actions/${encodeURIComponent(previewId)}`);
+
 export const getOperationsSnapshot = () =>
   apiClient.get<AISnapshot>("/api/v1/ai/operations/snapshot");

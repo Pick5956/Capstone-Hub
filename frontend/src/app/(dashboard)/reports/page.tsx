@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, TrendingUp, Wallet } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowLeft, BarChart3, ChevronRight, TrendingUp, Wallet } from "lucide-react";
+import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
+import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { formatCurrency, formatNumber } from "@/src/lib/format";
+import { getOrderBill } from "@/src/lib/order";
 import { can } from "@/src/lib/rbac";
-import { getManagerReport } from "@/src/lib/report";
+import { getManagerReport, getSalesDetail } from "@/src/lib/report";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { ManagerReport } from "@/src/types/report";
+import { tableName } from "@/src/app/(dashboard)/orders/ordersPageUtils";
+import type { Bill } from "@/src/types/order";
+import type { ManagerReport, SalesDetailReport } from "@/src/types/report";
 
 export default function ReportsPage() {
   const { activeMembership } = useAuth();
@@ -23,6 +29,7 @@ export default function ReportsPage() {
   const copy = useMemo(() => language === "th"
     ? {
         denied: "ไม่มีสิทธิ์ดูรายงาน",
+        back: "กลับหน้าแดชบอร์ด",
         eyebrow: "Reports",
         title: "รายงานผู้จัดการ",
         subtitle: "ยอดขาย ต้นทุนเมนู และวัตถุดิบเสี่ยงจากข้อมูลขายจริง",
@@ -34,15 +41,22 @@ export default function ReportsPage() {
         margin: "มาร์จิน",
         salesDays: "ยอดขายรายวัน",
         menuMargins: "เมนูและกำไร",
-        stockRisks: "วัตถุดิบที่ต้องดู",
         menu: "เมนู",
         qty: "จำนวน",
         cost: "ต้นทุน",
         noData: "ยังไม่มีข้อมูลในช่วงนี้",
-        restock: "ควรเติม",
+        date: "วันที่",
+        time: "เวลา",
+        table: "โต๊ะ",
+        order: "ออเดอร์",
+        loadingDay: "กำลังโหลดรายการของวันนี้...",
+        dayCapped: "แสดงเฉพาะรายการแรกของวันนี้",
+        close: "ปิด",
+        receiptError: "เปิดใบเสร็จไม่สำเร็จ",
       }
     : {
         denied: "You do not have permission to view reports.",
+        back: "Back to dashboard",
         eyebrow: "Reports",
         title: "Manager report",
         subtitle: "Sales, menu food cost, and stock risks from real order data.",
@@ -54,13 +68,77 @@ export default function ReportsPage() {
         margin: "Margin",
         salesDays: "Daily sales",
         menuMargins: "Menu margin",
-        stockRisks: "Stock risks",
         menu: "Menu",
         qty: "Qty",
         cost: "Cost",
         noData: "No data in this period yet.",
-        restock: "Top up",
+        date: "Date",
+        time: "Time",
+        table: "Table",
+        order: "Order",
+        loadingDay: "Loading this day's orders...",
+        dayCapped: "Showing the first orders of this day only.",
+        close: "Close",
+        receiptError: "Could not open that receipt.",
       }, [language]);
+
+  // A day opens in a dialog. Only one is open at a time, so a single slot for
+  // the fetched day is enough — reopening a day refetches it.
+  const [openDay, setOpenDay] = useState<string | null>(null);
+  const [dayDetail, setDayDetail] = useState<SalesDetailReport | null>(null);
+  const [dayDetailLoading, setDayDetailLoading] = useState(false);
+  const [dayDetailFailed, setDayDetailFailed] = useState(false);
+  const toggleDay = (date: string) => setOpenDay((current) => (current === date ? null : date));
+  const dayBackdrop = useBackdropClose(() => setOpenDay(null));
+
+  // The receipt dialog stacks on top of the day dialog, so the day stays open
+  // underneath and closing the receipt lands back on the same order list.
+  const [receiptBill, setReceiptBill] = useState<Bill | null>(null);
+  const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
+  const [receiptError, setReceiptError] = useState("");
+
+  const openReceipt = async (orderId: number) => {
+    setReceiptLoadingId(orderId);
+    setReceiptError("");
+    try {
+      const res = await getOrderBill(orderId);
+      setReceiptBill(res.data);
+    } catch {
+      setReceiptError(copy.receiptError);
+    } finally {
+      setReceiptLoadingId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!openDay) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [openDay]);
+
+  useEffect(() => {
+    if (!openDay) return;
+    let cancelled = false;
+    setDayDetailLoading(true);
+    setDayDetailFailed(false);
+    setDayDetail(null);
+    getSalesDetail(openDay)
+      .then((res) => {
+        if (!cancelled) setDayDetail(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setDayDetailFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setDayDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openDay]);
 
   const load = async () => {
     if (!canView) {
@@ -95,6 +173,10 @@ export default function ReportsPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
         </div>
+        <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          {copy.back}
+        </Link>
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{error}</div>}
@@ -126,19 +208,56 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
-            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.salesDays}</h2>
               </div>
-              <div className="divide-y divide-slate-100 dark:divide-gray-800">
-                {report.sales_days.length ? report.sales_days.map((day) => (
-                  <div key={day.order_date} className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 text-sm">
-                    <span className="font-medium">{day.order_date}</span>
-                    <span className="text-slate-500">{formatNumber(day.orders, lang)} {copy.orders}</span>
-                    <span className="font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</span>
-                  </div>
-                )) : <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}
-              </div>
+              {report.sales_days.length ? (
+                // overflow-y-hidden: a hovered row's lift and tilt push past the
+                // table box, and a scroll container counts that as content to
+                // scroll to. Clip it instead of growing a stray scrollbar.
+                <div className="overflow-x-auto overflow-y-hidden">
+                  {/* border-separate so a hovered row can cast a shadow; the
+                      dividers move onto the cells to survive it. */}
+                  <table className="w-full min-w-[420px] border-separate border-spacing-0 text-left text-sm [&_tbody_td]:border-b [&_tbody_td]:border-slate-100 dark:[&_tbody_td]:border-gray-800">
+                    <thead className="text-xs text-slate-400">
+                      <tr className="[&_th]:border-b [&_th]:border-slate-200 dark:[&_th]:border-gray-800">
+                        <th className="px-4 py-2 font-medium">{copy.date}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.orders}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.revenue}</th>
+                        <th className="px-4 py-2 text-right font-medium">{copy.profit}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.sales_days.map((day) => {
+                        const open = openDay === day.order_date;
+                        return (
+                          <tr
+                            key={day.order_date}
+                            onClick={() => toggleDay(day.order_date)}
+                            aria-haspopup="dialog"
+                            className={`ui-row-lift cursor-pointer ${open ? "bg-slate-100 dark:bg-gray-900" : "bg-white hover:bg-slate-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
+                          >
+                            <td className="px-4 py-2.5 font-medium">
+                              <span className="inline-flex items-center gap-1.5">
+                                <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true" />
+                                {day.order_date}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{formatNumber(day.orders, lang)}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</td>
+                            <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${day.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                              {formatCurrency(day.profit, lang)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>
+              )}
             </section>
 
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
@@ -172,30 +291,81 @@ export default function ReportsPage() {
             </section>
           </div>
 
-          <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-              <h2 className="text-sm font-semibold">{copy.stockRisks}</h2>
-            </div>
-            <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
-              {report.stock_risks.length ? report.stock_risks.map((risk) => (
-                <div key={risk.id} className="rounded-md border border-slate-200 px-3 py-3 dark:border-gray-800">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{risk.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">{risk.category || "-"}</p>
-                    </div>
-                    <span className={`rounded px-2 py-1 text-xs font-semibold ${risk.status === "out" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}>
-                      {risk.status}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    {formatNumber(risk.stock, lang)} / {formatNumber(risk.min_stock, lang)} {risk.unit} · {copy.restock} {formatNumber(risk.restock_estimate, lang)} {risk.unit}
-                  </p>
-                </div>
-              )) : <p className="col-span-full px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>}
-            </div>
-          </section>
         </div>
+      ) : null}
+
+      {openDay ? (
+        <div {...dayBackdrop} className="motion-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="sales-day-title" className="motion-dialog flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.salesDays}</p>
+                <h2 id="sales-day-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{openDay}</h2>
+              </div>
+              <button type="button" onClick={() => setOpenDay(null)} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.close}</button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
+              {receiptError ? <p className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{receiptError}</p> : null}
+              {dayDetailLoading ? (
+                <p className="py-8 text-center text-xs text-slate-400">{copy.loadingDay}</p>
+              ) : dayDetail?.orders.length ? (
+                <>
+                  <div className="overflow-x-auto overflow-y-hidden">
+                  <table className="w-full min-w-[520px] border-separate border-spacing-0 text-left text-xs [&_tbody_td]:border-b [&_tbody_td]:border-slate-200 dark:[&_tbody_td]:border-gray-800">
+                    <thead className="text-slate-400">
+                      <tr>
+                        <th className="py-1 font-medium">{copy.order}</th>
+                        <th className="py-1 font-medium">{copy.table}</th>
+                        <th className="py-1 text-right font-medium">{copy.time}</th>
+                        <th className="py-1 text-right font-medium">{copy.revenue}</th>
+                        <th className="py-1 text-right font-medium">{copy.cost}</th>
+                        <th className="py-1 text-right font-medium">{copy.profit}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dayDetail.orders.map((order) => (
+                        <tr
+                          key={order.order_id}
+                          onClick={() => void openReceipt(order.order_id)}
+                          aria-haspopup="dialog"
+                          aria-busy={receiptLoadingId === order.order_id}
+                          className={`ui-row-lift cursor-pointer bg-white hover:bg-slate-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
+                        >
+                          <td className="py-1.5 font-mono">{order.order_number}</td>
+                          <td className="py-1.5 truncate">{order.table_label || order.customer_name || "-"}</td>
+                          <td className="py-1.5 text-right font-mono text-slate-400">
+                            {new Date(order.completed_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </td>
+                          <td className="py-1.5 text-right tabular-nums">{formatCurrency(order.revenue, lang)}</td>
+                          <td className="py-1.5 text-right tabular-nums text-slate-500">{formatCurrency(order.cost, lang)}</td>
+                          <td className={`py-1.5 text-right font-semibold tabular-nums ${order.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                            {formatCurrency(order.profit, lang)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  </div>
+                  {dayDetail.has_more ? <p className="pt-2 text-center text-[11px] text-slate-400">{copy.dayCapped}</p> : null}
+                </>
+              ) : (
+                <p className="py-8 text-center text-xs text-slate-400">{dayDetailFailed ? copy.loadError : copy.noData}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {receiptBill ? (
+        <PaidReceiptDialog
+          bill={receiptBill}
+          language={lang}
+          locationLabel={tableName(receiptBill.order, lang)}
+          restaurant={activeMembership?.restaurant}
+          paper="a4"
+          onClose={() => setReceiptBill(null)}
+        />
       ) : null}
     </div>
   );

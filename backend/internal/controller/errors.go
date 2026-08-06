@@ -72,6 +72,7 @@ func likelyInternalError(lower string) bool {
 		"api keys",
 		"is not configured",
 		"request failed with status",
+		"returned http status",
 		"returned empty",
 		"repository is not initialized",
 	}
