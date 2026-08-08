@@ -20,16 +20,21 @@ import {
   type DocArticle,
   type DocSection,
 } from "@/src/lib/docsContent";
+import { docTutorialFor } from "@/src/lib/docsTutorials";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
+import DocsTutorialFigure from "./DocsTutorialFigure";
 
 function ArticleSection({
+  articleSlug,
   section,
   language,
 }: {
+  articleSlug: string;
   section: DocSection;
   language: Language;
 }) {
   const anchor = docSectionAnchor(section);
+  const tutorial = docTutorialFor(articleSlug, section.id);
 
   return (
     <section
@@ -55,7 +60,9 @@ function ArticleSection({
         </p>
       ))}
 
-      {section.steps ? (
+      {tutorial ? <DocsTutorialFigure tutorial={tutorial} language={language} /> : null}
+
+      {!tutorial && section.steps ? (
         <ol className="mt-6 space-y-5">
           {section.steps.map((step, index) => (
             <li key={`${anchor}-step-${index}`} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
@@ -79,13 +86,29 @@ function ArticleSection({
       ) : null}
 
       {section.bullets ? (
-        <ul className="mt-5 max-w-[72ch] list-disc space-y-2.5 pl-5 text-[15px] leading-7 text-gray-700 marker:text-gray-400 dark:text-gray-300 dark:marker:text-gray-600">
-          {section.bullets.map((bullet, index) => (
-            <li key={`${anchor}-bullet-${index}`} className="pl-1">
-              {localized(bullet, language)}
-            </li>
-          ))}
-        </ul>
+        tutorial ? (
+          <details className="group mt-5 max-w-[72ch] rounded-md border border-gray-200 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/60">
+            <summary className="flex min-h-11 list-none items-center gap-3 px-4 text-[13px] font-semibold text-gray-800 marker:content-none dark:text-gray-200">
+              {language === "th" ? "ข้อควรรู้เพิ่มเติม" : "Additional notes"}
+              <ChevronDown className="ml-auto h-4 w-4 text-gray-500 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <ul className="border-t border-gray-200 px-4 py-3 pl-9 text-[14px] leading-7 text-gray-700 dark:border-gray-800 dark:text-gray-300">
+              {section.bullets.map((bullet, index) => (
+                <li key={`${anchor}-bullet-${index}`} className="list-disc pl-1 marker:text-gray-400 dark:marker:text-gray-600">
+                  {localized(bullet, language)}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : (
+          <ul className="mt-5 max-w-[72ch] list-disc space-y-2.5 pl-5 text-[15px] leading-7 text-gray-700 marker:text-gray-400 dark:text-gray-300 dark:marker:text-gray-600">
+            {section.bullets.map((bullet, index) => (
+              <li key={`${anchor}-bullet-${index}`} className="pl-1">
+                {localized(bullet, language)}
+              </li>
+            ))}
+          </ul>
+        )
       ) : null}
 
       {section.note ? (
@@ -197,7 +220,7 @@ export function DocsArticleContent({ article, language }: { article: DocArticle;
         ) : null}
       </header>
 
-      <details className="group mt-6 rounded-md border border-gray-200 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/60 xl:hidden">
+      <details className="group mt-6 rounded-md border border-gray-200 bg-slate-50 dark:border-gray-800 dark:bg-gray-900/60 lg:hidden">
         <summary className="flex min-h-11 list-none items-center gap-3 px-4 text-[13px] font-semibold text-gray-800 marker:content-none dark:text-gray-200">
           {copy.onThisPage}
           <ChevronDown className="ml-auto h-4 w-4 text-gray-500 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
@@ -218,7 +241,12 @@ export function DocsArticleContent({ article, language }: { article: DocArticle;
 
       <div className="mt-10 space-y-12 sm:mt-12 sm:space-y-14">
         {article.sections.map((section) => (
-          <ArticleSection key={section.id} section={section} language={language} />
+          <ArticleSection
+            key={section.id}
+            articleSlug={article.slug}
+            section={section}
+            language={language}
+          />
         ))}
       </div>
 

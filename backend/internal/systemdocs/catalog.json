@@ -532,8 +532,8 @@
           },
           "paragraphs": [
             {
-              "th": "ใช้ชุดตัวเลือกสำหรับสิ่งที่ลูกค้าต้องเลือก เช่น ระดับความหวาน ขนาด หรือท็อปปิง กำหนดขั้นต่ำ จำนวนสูงสุด ค่าเริ่มต้น และราคาเพิ่มของแต่ละตัวเลือกได้",
-              "en": "Use option groups for choices such as sweetness, size, or toppings. You can set minimum and maximum selections, defaults, and price adjustments."
+              "th": "ใช้ชุดตัวเลือกสำหรับสิ่งที่ลูกค้าต้องเลือก เช่น ระดับความหวาน ขนาด หรือท็อปปิง กำหนดว่าต้องเลือกหรือไม่ จำนวนสูงสุด และราคาเพิ่มของแต่ละตัวเลือกได้",
+              "en": "Use option groups for choices such as sweetness, size, or toppings. Set whether a choice is required, the maximum selections, and each choice's price adjustment."
             }
           ],
           "note": {
@@ -639,8 +639,8 @@
               "en": "Create zones such as indoor, storefront, or upstairs, then add tables to each zone."
             },
             {
-              "th": "กำหนดป้ายโต๊ะ ความจุ และแท็กเพื่อให้ทีมค้นหาโต๊ะได้ง่าย",
-              "en": "Set table labels, capacity, and tags so the team can find tables quickly."
+              "th": "ให้ระบบสร้างเลขโต๊ะจากโซนและตัวอักษรนำหน้า แล้วกำหนดจำนวนที่นั่งและแท็กเพื่อให้ทีมค้นหาโต๊ะได้ง่าย",
+              "en": "Let Dishy generate table numbers from the zone and optional prefix, then set seats and tags so the team can find tables quickly."
             },
             {
               "th": "ผังปัจจุบันเป็นตารางแบ่งโซน ไม่ใช่ผังลากวางตามตำแหน่งจริง",
@@ -935,8 +935,8 @@
           },
           "paragraphs": [
             {
-              "th": "ทุกการเคลื่อนไหวเก็บเป็นประวัติพร้อมเหตุผล ใช้รับวัตถุดิบเข้า จ่ายออก หรือกำหนดยอดใหม่เมื่อปรับนับ",
-              "en": "Every movement is recorded with a reason. Use it to receive stock, issue stock, or set a new quantity after an adjustment count."
+              "th": "ทุกการเคลื่อนไหวเก็บเป็นประวัติ ใช้รับวัตถุดิบเข้า จ่ายออก หรือตั้งยอดใหม่ และใส่หมายเหตุเมื่อต้องการเก็บเหตุผลให้ทีมย้อนดู",
+              "en": "Every movement is kept in history. Use it to receive stock, issue stock, or set a new quantity, and add an optional note when the team needs the reason on record."
             }
           ],
           "note": {
@@ -946,8 +946,8 @@
               "en": "Paid stock receipt"
             },
             "body": {
-              "th": "หากกรอกจำนวนเงินที่จ่ายจริงและมีสิทธิ์รายจ่าย ระบบจะสร้างรายการรายจ่ายที่เชื่อมกับการรับเข้านั้น รายการที่เชื่อมแล้วแก้หรือลบจากหน้ารายจ่ายทั่วไปไม่ได้",
-              "en": "If you enter an amount actually paid and have expense permission, Dishy creates an expense linked to that stock receipt. Linked entries cannot be edited or deleted from the general expense page."
+              "th": "การรับเข้าที่มียอดมากกว่า 0 จะสร้างรายจ่ายที่เชื่อมกัน ผู้มีสิทธิ์รายจ่ายกรอกยอดที่จ่ายจริงได้ หากเว้นว่างหรือไม่เห็นช่อง ระบบใช้ต้นทุนต่อหน่วยคูณจำนวนเป็นยอด รายการที่เชื่อมแล้วแก้หรือลบจากหน้ารายจ่ายทั่วไปไม่ได้",
+              "en": "Stock in creates a linked expense when the resulting amount is above 0. Users with expense permission can enter the actual amount; if it is blank or the field is hidden, Dishy uses unit cost multiplied by quantity. Linked entries cannot be edited or deleted from the general expense page."
             }
           }
         },
@@ -1188,20 +1188,20 @@
           },
           "bullets": [
             {
-              "th": "กดทำเสร็จเมื่อรายการพร้อมส่งมอบหน้าร้าน",
-              "en": "Mark an item complete when it is ready for front-of-house handoff."
+              "th": "กด “เสร็จแล้ว” เมื่อรายการพร้อมส่งมอบหน้าร้าน",
+              "en": "Select “Done” when an item is ready for front-of-house handoff."
             },
             {
-              "th": "ใช้ทำเสร็จทั้งหมดเมื่อรายการที่กำลังทำในออเดอร์นั้นพร้อมพร้อมกัน",
-              "en": "Use mark all complete when all cooking items in that order are ready together."
+              "th": "ใช้ “เสร็จทั้งหมด” เมื่อรายการที่กำลังทำทั้งหมดในใบงานนั้นเสร็จพร้อมกัน",
+              "en": "Use “Mark all done” when all cooking items on that ticket are ready together."
             },
             {
-              "th": "ย้อนรายการกลับไปกำลังทำได้เมื่อกดผิดหรือยังต้องแก้ไข",
-              "en": "Move an item back to cooking if it was completed by mistake or needs more work."
+              "th": "ใช้ “ย้ายไปกำลังทำ” เมื่อกดเสร็จผิดหรือรายการยังต้องแก้ไข",
+              "en": "Use “Undo” when an item was completed by mistake or needs more work."
             },
             {
-              "th": "ยกเลิกรายการพร้อมระบุเหตุผลเมื่อไม่สามารถทำได้",
-              "en": "Void an item with a reason when it cannot be fulfilled."
+              "th": "กด “ยกเลิก” และระบุเหตุผลเมื่อไม่สามารถทำรายการนั้นได้",
+              "en": "Select “Cancel” and provide a reason when an item cannot be fulfilled."
             }
           ],
           "note": {
@@ -1292,8 +1292,8 @@
           },
           "paragraphs": [
             {
-              "th": "เมื่อรายการที่ใช้งานทั้งหมดในออเดอร์ทำเสร็จแล้ว ปุ่มออกบิล / รับเงินจะเปิดให้ตรวจรายการ ยอดอาหาร ค่าบริการ VAT และยอดสุทธิ",
-              "en": "When every active item in an order is complete, Bill / Pay opens a review of items, food total, service charge, VAT, and grand total."
+              "th": "เมื่อออเดอร์มีรายการอย่างน้อยหนึ่งรายการและไม่มีรายการรอส่งครัว ปุ่มออกบิล / รับเงินจะเปิดให้ตรวจรายการและยอดต่าง ๆ หากยังมีรายการกำลังทำ สามารถเปิดดูบิลได้ แต่ต้องทำรายการนั้นให้เสร็จหรือยกเลิกก่อนยืนยันรับเงิน",
+              "en": "When an order has at least one active item and none is waiting to be sent to the kitchen, Bill / Pay opens the item and total review. If any item is still cooking, you can inspect the bill but must complete or cancel that item before confirming payment."
             }
           ]
         },
@@ -1347,8 +1347,8 @@
           },
           "paragraphs": [
             {
-              "th": "หลังรับเงิน หน้าบิลจะคงอยู่เพื่อให้พิมพ์ใบเสร็จส่งลูกค้า ใบเสร็จออกแบบสำหรับกระดาษ 58 มม. และใช้หน้าต่างพิมพ์ของเบราว์เซอร์ หากปิดไปแล้วให้เปิดออเดอร์ที่ชำระแล้วจากคลังออเดอร์เพื่อพิมพ์ซ้ำ",
-              "en": "After payment, the bill stays open for receipt handoff. The receipt is designed for 58 mm paper and uses the browser print dialog. If it was closed, open the paid order from the archive to reprint."
+              "th": "หลังยืนยันรับเงิน ระบบจะกลับไปหน้าเลือกโต๊ะ ใบเสร็จออกแบบสำหรับกระดาษ 58 มม. และใช้หน้าต่างพิมพ์ของเบราว์เซอร์ เมื่อต้องการพิมพ์ให้เปิดออเดอร์ที่ชำระแล้วจากคลังออเดอร์แล้วเลือกพิมพ์ซ้ำ",
+              "en": "After payment is confirmed, Dishy returns to the table picker. The receipt is designed for 58 mm paper and uses the browser print dialog. To print it, open the paid order from the order archive and choose reprint."
             }
           ],
           "note": {

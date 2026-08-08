@@ -201,16 +201,6 @@ export default function DocsShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const firstSectionAnchor = activeArticle.sections[0]
-    ? docSectionAnchor(activeArticle.sections[0])
-    : "";
-  const [activeSectionState, setActiveSectionState] = useState(() => ({
-    articleSlug: activeArticle.slug,
-    anchor: firstSectionAnchor,
-  }));
-  const activeSection = activeSectionState.articleSlug === activeArticle.slug
-    ? activeSectionState.anchor
-    : firstSectionAnchor;
   const mobilePanelRef = useRef<HTMLElement>(null);
   const mobileCloseRef = useRef<HTMLButtonElement>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
@@ -228,7 +218,6 @@ export default function DocsShell({ children }: { children: ReactNode }) {
     ? {
         docs: "คู่มือ",
         nav: "สารบัญคู่มือ",
-        inThisArticle: "ในหน้านี้",
         search: "ค้นหาคู่มือ",
         searchHint: "ค้นหาเมนู ขั้นตอน หรือปัญหา",
         searchDialog: "ค้นหาในคู่มือ Dishy",
@@ -242,7 +231,6 @@ export default function DocsShell({ children }: { children: ReactNode }) {
     : {
         docs: "Docs",
         nav: "Guide navigation",
-        inThisArticle: "On this page",
         search: "Search docs",
         searchHint: "Search features, steps, or problems",
         searchDialog: "Search Dishy documentation",
@@ -287,41 +275,6 @@ export default function DocsShell({ children }: { children: ReactNode }) {
     frame = window.requestAnimationFrame(focusDestination);
     return () => window.cancelAnimationFrame(frame);
   }, [pathname, searchOpen]);
-
-  useEffect(() => {
-    const firstSection = activeArticle.sections[0];
-    if (!firstSection) return;
-    const anchors = activeArticle.sections.map(docSectionAnchor);
-    let frame = 0;
-
-    const updateActiveSection = () => {
-      frame = 0;
-      let current = anchors[0];
-      for (const anchor of anchors) {
-        const element = document.getElementById(anchor);
-        if (!element || element.getBoundingClientRect().top > 120) break;
-        current = anchor;
-      }
-      setActiveSectionState((previous) => (
-        previous.articleSlug === activeArticle.slug && previous.anchor === current
-          ? previous
-          : { articleSlug: activeArticle.slug, anchor: current }
-      ));
-    };
-    const handleScroll = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    frame = window.requestAnimationFrame(updateActiveSection);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("hashchange", handleScroll);
-    return () => {
-      if (frame) window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("hashchange", handleScroll);
-    };
-  }, [activeArticle]);
 
   useEffect(() => {
     const open = searchOpen || mobileNavOpen;
@@ -454,39 +407,11 @@ export default function DocsShell({ children }: { children: ReactNode }) {
           <SidebarNavigation activeSlug={activeArticle.slug} language={language} label={copy.nav} />
         </aside>
 
-        <div className="pt-16 lg:pl-72 xl:pr-64">
+        <div className="pt-16 lg:pl-72">
           <main id="docs-content" className="mx-auto min-h-[calc(100dvh-4rem)] max-w-[860px] scroll-mt-20 px-5 sm:px-8 lg:px-10">
             {children}
           </main>
         </div>
-
-        <aside className="fixed bottom-0 right-0 top-16 z-30 hidden w-64 overflow-y-auto border-l border-gray-200 bg-white px-5 py-7 dark:border-gray-800 dark:bg-gray-950 xl:block">
-        <nav aria-label={`${copy.inThisArticle}: ${localized(activeArticle.title, language)}`}>
-          <p className="text-[12px] font-semibold text-gray-950 dark:text-white">{copy.inThisArticle}</p>
-          <ul className="mt-3 space-y-0.5">
-            {activeArticle.sections.map((section) => {
-              const anchor = docSectionAnchor(section);
-              const active = activeSection === anchor;
-              return (
-                <li key={section.id}>
-                  <a
-                    href={`#${anchor}`}
-                    aria-current={active ? "location" : undefined}
-                    className={`flex min-h-9 items-start gap-2 py-2 text-[12px] leading-5 transition-colors ${
-                      active
-                        ? "font-medium text-orange-800 dark:text-orange-300"
-                        : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-                    }`}
-                  >
-                    <span className={`mt-[0.43rem] h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-orange-500" : "bg-transparent"}`} aria-hidden="true" />
-                    <span>{localized(section.title, language)}</span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-        </aside>
       </div>
 
       {searchOpen ? (
