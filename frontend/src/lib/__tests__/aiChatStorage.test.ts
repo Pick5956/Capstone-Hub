@@ -141,6 +141,120 @@ describe("AI chat conversation storage", () => {
     unsubscribe();
   });
 
+  it("drops malformed messages from a syntactically valid stored envelope", () => {
+    const key = chatStorageKey(44, 88);
+    storage.setItem(key!, JSON.stringify({
+      savedAt: Date.now(),
+      messages: [
+        null,
+        { id: "missing-content", role: "assistant" },
+        { id: "numeric-content", role: "assistant", content: 3 },
+        { id: "valid", role: "assistant", content: "Safe answer" },
+      ],
+    }));
+
+    expect(loadStoredMessages(key)).toEqual([
+      { id: "valid", role: "assistant", content: "Safe answer" },
+    ]);
+  });
+
+  it("does not echo forever when storage reads fail but writes still succeed", () => {
+    const key = chatStorageKey(77, 99);
+    const pageSource = Symbol("page-split-storage");
+    const floatingSource = Symbol("floating-split-storage");
+    const messages = [{ id: "answer-1", role: "assistant", content: "Safe answer" }];
+    let pageWrites = 0;
+    let floatingWrites = 0;
+    const writeOnlyStorage = new Proxy(storage, {
+      get(target, property, receiver) {
+        if (property === "getItem") {
+          return () => {
+            throw new Error("reads unavailable");
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const unsubscribePage = subscribeToChatWrites(key, pageSource, (write) => {
+      if (write.kind !== "messages") return;
+      pageWrites += 1;
+      if (pageWrites > 5) throw new Error("message synchronization looped");
+      saveMessages(key, write.messages, pageSource);
+    });
+    const unsubscribeFloating = subscribeToChatWrites(key, floatingSource, (write) => {
+      if (write.kind !== "messages") return;
+      floatingWrites += 1;
+      if (floatingWrites > 5) throw new Error("message synchronization looped");
+      saveMessages(key, write.messages, floatingSource);
+    });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: writeOnlyStorage });
+
+    try {
+      expect(() => saveMessages(key, messages, pageSource)).not.toThrow();
+      expect(pageWrites).toBe(0);
+      expect(floatingWrites).toBe(1);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+      unsubscribePage();
+      unsubscribeFloating();
+    }
+  });
+
+  it("does not echo forever when storage reads succeed but writes fail", () => {
+    const key = chatStorageKey(78, 100);
+    const pageSource = Symbol("page-read-only-storage");
+    const floatingSource = Symbol("floating-read-only-storage");
+    const messages = [{ id: "answer-read-only", role: "assistant", content: "Safe answer" }];
+    let pageWrites = 0;
+    let floatingWrites = 0;
+    const readOnlyStorage = new Proxy(storage, {
+      get(target, property, receiver) {
+        if (property === "setItem") {
+          return () => {
+            throw new Error("writes unavailable");
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const unsubscribePage = subscribeToChatWrites(key, pageSource, (write) => {
+      if (write.kind === "messages") pageWrites += 1;
+      if (pageWrites > 5) throw new Error("message synchronization looped");
+      if (write.kind === "messages") saveMessages(key, write.messages, pageSource);
+      if (write.kind === "conversation") saveConversationId(key, write.conversationId, pageSource);
+    });
+    const unsubscribeFloating = subscribeToChatWrites(key, floatingSource, (write) => {
+      if (write.kind === "messages") floatingWrites += 1;
+      if (floatingWrites > 5) throw new Error("message synchronization looped");
+      if (write.kind === "messages") saveMessages(key, write.messages, floatingSource);
+      if (write.kind === "conversation") saveConversationId(key, write.conversationId, floatingSource);
+    });
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: readOnlyStorage });
+
+    try {
+      expect(() => saveMessages(key, messages, pageSource)).not.toThrow();
+      expect(() => saveConversationId(key, "conversation-read-only", pageSource)).not.toThrow();
+      expect(pageWrites).toBe(0);
+      expect(floatingWrites).toBe(1);
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+      unsubscribePage();
+      unsubscribeFloating();
+    }
+  });
+
+  it("does not throw when an unserializable message reaches persistence", () => {
+    const key = chatStorageKey(90, 91);
+    const circular: Record<string, unknown> = {
+      id: "circular",
+      role: "assistant",
+      content: "Safe answer",
+    };
+    circular.self = circular;
+
+    expect(() => saveMessages(key, [circular])).not.toThrow();
+  });
+
   it("keeps same-window synchronization loop-free when localStorage is unavailable", () => {
     const key = chatStorageKey(55, 66);
     const pageSource = Symbol("page-private-mode");

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -31,7 +31,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
-import AIResponseContent from "@/src/components/shared/AIResponseContent";
+import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
   id: string;
@@ -317,6 +317,8 @@ export default function AIAssistantPage() {
       // drop the answer instead of appending it to a conversation it never joined.
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       const data = response.data;
+      const answer = normalizeAIAnswer(data?.answer);
+      if (!answer) throw new Error("AI response did not contain a valid answer");
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
         saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
@@ -330,14 +332,14 @@ export default function AIAssistantPage() {
         data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, data.answer, activeMembership, language, data.tool)
+            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool)
             : [];
       setMessages((prev) => [
         ...prev,
         {
           id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
           role: "assistant",
-          content: formatAIActionPreviewAnswer(data.answer, data.action_preview, language),
+          content: formatAIActionPreviewAnswer(answer, data.action_preview, language),
           createdAt: new Date(),
           actions,
           model: data.model,
@@ -510,7 +512,7 @@ export default function AIAssistantPage() {
                     <Bot className="h-4.5 w-4.5" />
                   </span>
                   <div className="min-w-0 rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-2.5 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-100">
-                    <AIResponseContent content={msg.content} compact />
+                    <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {msg.actions.map((action) => (

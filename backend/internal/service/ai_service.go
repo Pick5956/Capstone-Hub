@@ -156,11 +156,39 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	s.maybeCleanupAIActionPreviews()
 
 	request := *req
+	originalQuestion := request.Question
 	session, history, err := s.prepareConversationSession(actor, &request)
 	if err != nil {
 		return nil, err
 	}
 	request.History = history
+
+	questionParts := splitSystemDocsAndLiveQuestion(originalQuestion)
+	var docsResponse *AIAskResponse
+	if questionParts.DocsQuestion != "" {
+		var handled bool
+		docsResponse, handled, err = answerSystemDocsQuestion(questionParts.DocsQuestion)
+		if err != nil {
+			return nil, err
+		}
+		if handled && questionParts.LiveQuestion == "" {
+			if session == nil {
+				return docsResponse, nil
+			}
+			docsResponse.ConversationID = session.conversation.ID
+			if err := s.persistConversationTurn(actor, session, originalQuestion, docsResponse); err != nil {
+				return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
+			}
+			return docsResponse, nil
+		}
+		if !handled {
+			docsResponse = nil
+		}
+	}
+	if questionParts.Mixed {
+		request.Question = questionParts.LiveQuestion
+	}
+
 	prepared, err := s.prepareOwnerOrchestration(ctx, actor, &request)
 	if err != nil {
 		return nil, err
@@ -176,11 +204,12 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	if err := s.maybeCreateAIActionPreview(actor, conversationID, response); err != nil {
 		return nil, err
 	}
+	response = combineLiveAndSystemDocsResponse(response, docsResponse)
 	if session == nil {
 		return response, nil
 	}
 	response.ConversationID = session.conversation.ID
-	if err := s.persistConversationTurn(actor, session, request.Question, response); err != nil {
+	if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
 		return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 	}
 	return response, nil
@@ -256,6 +285,17 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
 				routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
 		}
+	}
+
+	// Product help is always grounded in the embedded public documentation.
+	// The router/planner classification is enough to invoke retrieval here even
+	// when the fast local docs detector did not recognize the wording.
+	if routerResult.Task == AITaskProductHelp {
+		docsResponse, _, docsErr := answerKnownSystemDocsQuestion(question)
+		if docsErr != nil {
+			return nil, docsErr
+		}
+		return docsResponse, nil
 	}
 
 	// A rank follow-up ("อันดับรองลงมา") reads as vague to the router, but the

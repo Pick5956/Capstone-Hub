@@ -489,6 +489,16 @@ func (p ResolvedPlan) Validate() error {
 	if !taskAllowsOperation(p.Task, p.Operation) {
 		return fmt.Errorf("resolved plan: task %q does not allow operation %q", p.Task, p.Operation)
 	}
+	if p.Task == AITaskProductHelp {
+		if p.Domain != ResolvedPlanDomainProduct {
+			return fmt.Errorf("resolved plan: product_help requires domain %q", ResolvedPlanDomainProduct)
+		}
+		if !isSystemDocsTool(p.ToolHint) {
+			return errors.New("resolved plan: product_help requires a system documentation tool_hint")
+		}
+	} else if isSystemDocsTool(p.ToolHint) {
+		return errors.New("resolved plan: system documentation tools are only allowed for product_help")
+	}
 	if !containsValue(resolvedPlanResponseStyles, p.ResponseStyle) {
 		return fmt.Errorf("resolved plan: unsupported response_style %q", p.ResponseStyle)
 	}
@@ -541,7 +551,7 @@ func (p ResolvedPlan) Validate() error {
 			return fmt.Errorf("resolved plan: tool_hint %q does not support domain %q", p.ToolHint, p.Domain)
 		}
 		switch p.Task {
-		case AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction:
+		case AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction, AITaskProductHelp:
 		default:
 			return fmt.Errorf("resolved plan: task %q cannot carry a tool_hint", p.Task)
 		}
@@ -897,6 +907,8 @@ func toolSupportsResolvedPlanDomain(tool AIToolName, domain ResolvedPlanDomain) 
 		return domain == ResolvedPlanDomainSales
 	case AIToolGetStoreSummary:
 		return domain == ResolvedPlanDomainRestaurant
+	case AIToolSearchSystemDocs, AIToolReadSystemDoc:
+		return domain == ResolvedPlanDomainProduct
 	default:
 		return false
 	}

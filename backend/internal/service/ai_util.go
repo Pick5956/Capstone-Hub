@@ -13,6 +13,10 @@ func maxFloat(a, b float64) float64 {
 }
 
 func sanitizeConversationHistory(history []AIConversationMessage) []AIConversationMessage {
+	return sanitizeConversationHistoryInternal(history, false)
+}
+
+func sanitizeConversationHistoryInternal(history []AIConversationMessage, trustReducedDocsContext bool) []AIConversationMessage {
 	if len(history) > structuredPlannerMaxContextItems {
 		history = history[len(history)-structuredPlannerMaxContextItems:]
 	}
@@ -25,6 +29,11 @@ func sanitizeConversationHistory(history []AIConversationMessage) []AIConversati
 		content := strings.TrimSpace(message.Content)
 		if content == "" {
 			continue
+		}
+		if role == "assistant" && !trustReducedDocsContext {
+			if docURLs := safeSystemDocURLsFromText(content); len(docURLs) > 0 {
+				content = reduceSystemDocsAnswerForProvider(content, docURLs)
+			}
 		}
 		runes := []rune(content)
 		if len(runes) > 400 {

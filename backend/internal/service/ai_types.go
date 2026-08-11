@@ -38,6 +38,8 @@ type AIAskResponse struct {
 	ActionPreview  *AIActionPreviewResponse `json:"action_preview,omitempty"`
 	CandidateTools []AIToolName             `json:"candidate_tools,omitempty"`
 	Planner        *AIPlannerMetadata       `json:"planner,omitempty"`
+	ToolsUsed      []AIToolName             `json:"tools_used,omitempty"`
+	DocSources     []AISystemDocSource      `json:"doc_sources,omitempty"`
 }
 
 type AIPlannerMetadata struct {
@@ -49,24 +51,24 @@ type AIPlannerMetadata struct {
 }
 
 type AISnapshot struct {
-	GeneratedAt       string                           `json:"generated_at"`
-	SalesDays          []repository.AISalesSummary       `json:"sales_days"`
-	TopMenuItems       []repository.AIMenuSummary        `json:"top_menu_items"`
-	TopMenusByRevenue  []repository.AIMenuSummary        `json:"top_menus_by_revenue"`
-	MostExpensiveMenus []repository.AIMenuPrice          `json:"most_expensive_menus"`
-	OrderTypeBreakdown []repository.AIOrderTypeSummary   `json:"order_type_breakdown"`
-	MenuMargins       []repository.AIMenuMarginSummary `json:"menu_margins"`
-	LowMarginMenus    []repository.AIMenuMarginSummary `json:"low_margin_menus"`
-	HighMarginMenus   []repository.AIMenuMarginSummary `json:"high_margin_menus"`
-	LowestCostMenus   []repository.AIMenuMarginSummary `json:"lowest_cost_menus"`
-	AllMenuMargins    []repository.AIMenuMarginSummary `json:"all_menu_margins"`
-	SlowMovingMenus   []repository.AIMenuSummary       `json:"slow_moving_menus"`
-	PeakWeekdays      []repository.AIPeriodSummary     `json:"peak_weekdays"`
-	PeakHours         []repository.AIPeriodSummary     `json:"peak_hours"`
-	IngredientUsage   []repository.AIIngredientUsage   `json:"ingredient_usage"`
-	AnalysisReadiness AIAnalysisReadiness              `json:"analysis_readiness"`
-	InventorySummary  AIInventorySummary               `json:"inventory_summary"`
-	StockRisks        []AIStockRisk                    `json:"stock_risks"`
+	GeneratedAt        string                           `json:"generated_at"`
+	SalesDays          []repository.AISalesSummary      `json:"sales_days"`
+	TopMenuItems       []repository.AIMenuSummary       `json:"top_menu_items"`
+	TopMenusByRevenue  []repository.AIMenuSummary       `json:"top_menus_by_revenue"`
+	MostExpensiveMenus []repository.AIMenuPrice         `json:"most_expensive_menus"`
+	OrderTypeBreakdown []repository.AIOrderTypeSummary  `json:"order_type_breakdown"`
+	MenuMargins        []repository.AIMenuMarginSummary `json:"menu_margins"`
+	LowMarginMenus     []repository.AIMenuMarginSummary `json:"low_margin_menus"`
+	HighMarginMenus    []repository.AIMenuMarginSummary `json:"high_margin_menus"`
+	LowestCostMenus    []repository.AIMenuMarginSummary `json:"lowest_cost_menus"`
+	AllMenuMargins     []repository.AIMenuMarginSummary `json:"all_menu_margins"`
+	SlowMovingMenus    []repository.AIMenuSummary       `json:"slow_moving_menus"`
+	PeakWeekdays       []repository.AIPeriodSummary     `json:"peak_weekdays"`
+	PeakHours          []repository.AIPeriodSummary     `json:"peak_hours"`
+	IngredientUsage    []repository.AIIngredientUsage   `json:"ingredient_usage"`
+	AnalysisReadiness  AIAnalysisReadiness              `json:"analysis_readiness"`
+	InventorySummary   AIInventorySummary               `json:"inventory_summary"`
+	StockRisks         []AIStockRisk                    `json:"stock_risks"`
 }
 
 type AIAnalysisReadiness struct {

@@ -6,6 +6,15 @@ type AIResponseContentProps = {
   compact?: boolean;
 };
 
+const DOCS_CITATION_HREF = String.raw`/docs(?:/[a-z0-9]+(?:-[a-z0-9]+)*)?#[a-z0-9]+(?:-[a-z0-9]+)*`;
+const DOCS_CITATION_TOKEN = new RegExp(
+  String.raw`^\[([^\]\n]+)\]\((${DOCS_CITATION_HREF})\)$`,
+);
+const INLINE_TOKEN = new RegExp(
+  String.raw`(\[[^\]\n]+\]\(${DOCS_CITATION_HREF}\)|\*\*.*?\*\*|\x60[^\x60]+\x60|\\\(.+?\\\))`,
+  "g",
+);
+
 function mathMarkup(expression: string, displayMode: boolean) {
   return katex.renderToString(expression, {
     displayMode,
@@ -17,9 +26,21 @@ function mathMarkup(expression: string, displayMode: boolean) {
 }
 
 function inlineContent(text: string) {
-  const parts = text.split(/(\*\*.*?\*\*|`[^`]+`|\\\(.+?\\\))/g).filter(Boolean);
+  const parts = text.split(INLINE_TOKEN).filter(Boolean);
 
   return parts.map((part, index) => {
+    const docsCitation = part.match(DOCS_CITATION_TOKEN);
+    if (docsCitation) {
+      return (
+        <a
+          key={index}
+          href={docsCitation[2]}
+          className="font-semibold text-orange-700 underline decoration-orange-300 underline-offset-2 hover:text-orange-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 dark:text-orange-300 dark:decoration-orange-700 dark:hover:text-orange-200"
+        >
+          {docsCitation[1]}
+        </a>
+      );
+    }
     if (part.startsWith("**") && part.endsWith("**")) {
       return (
         <strong key={index} className="font-semibold text-orange-600 dark:text-orange-400">
@@ -62,7 +83,8 @@ function isTableSeparator(line: string) {
 }
 
 export default function AIResponseContent({ content, compact = false }: AIResponseContentProps) {
-  const lines = content
+  const safeContent = typeof content === "string" ? content : "";
+  const lines = safeContent
     .replace(/\u00a0|\u202f|\u2007/g, " ")
     .replace(/\r\n/g, "\n")
     .split("\n");
@@ -166,7 +188,7 @@ export default function AIResponseContent({ content, compact = false }: AIRespon
       while (index + 1 < lines.length) {
         const next = lines[index + 1].trim().match(/^\d+\.\s+(.+)$/);
         if (!next) break;
-        items.push(next[2]);
+        items.push(next[1]);
         index += 1;
       }
       blocks.push(

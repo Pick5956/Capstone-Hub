@@ -122,7 +122,8 @@ describe("AI action request invalidation", () => {
       expect(source).toContain("async function discardPendingActionPreview(): Promise<boolean>");
       expect(source.match(/await discardPendingActionPreview\(\)/g)).toHaveLength(3);
       expect(source).toContain("subscribeToChatWrites(");
-      expect(source).toContain("formatAIActionPreviewAnswer(data.answer, data.action_preview, language)");
+      expect(source).toContain("normalizeAIAnswer(data?.answer)");
+      expect(source).toContain("formatAIActionPreviewAnswer(answer, data.action_preview, language)");
     }
   });
 });

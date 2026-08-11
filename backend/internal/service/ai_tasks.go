@@ -55,9 +55,12 @@ const (
 	AIToolGetDeadStock                 AIToolName = "get_dead_stock"
 	AIToolGetTopCostIngredients        AIToolName = "get_top_cost_ingredients"
 
-	AIToolGetStoreSummary     AIToolName = "get_store_summary"
-	AIToolGetSalesForPeriod   AIToolName = "get_sales_for_period"
+	AIToolGetStoreSummary      AIToolName = "get_store_summary"
+	AIToolGetSalesForPeriod    AIToolName = "get_sales_for_period"
 	AIToolGetMostExpensiveMenu AIToolName = "get_most_expensive_menu"
+
+	AIToolSearchSystemDocs AIToolName = "search_system_docs"
+	AIToolReadSystemDoc    AIToolName = "read_system_doc"
 )
 
 type AITaskRoute struct {
@@ -147,7 +150,7 @@ type AICostIngredient struct {
 }
 
 type AIPeakPeriods struct {
-	TopWeekday       int   // 0..6 (Sun..Sat)
+	TopWeekday       int // 0..6 (Sun..Sat)
 	TopWeekdayOrders int64
 	TopHour          int // 0..23
 	TopHourOrders    int64
@@ -186,8 +189,8 @@ type AISalesTrend struct {
 	HasPrior         bool    // false when there is no prior-period data to compare against
 }
 
-func supportedReadOnlyToolNames() [20]AIToolName {
-	return [20]AIToolName{
+func supportedReadOnlyToolNames() [22]AIToolName {
+	return [22]AIToolName{
 		AIToolGetLowestMarginMenu,
 		AIToolGetHighestMarginMenu,
 		AIToolGetLowStockIngredients,
@@ -208,7 +211,17 @@ func supportedReadOnlyToolNames() [20]AIToolName {
 		AIToolGetStoreSummary,
 		AIToolGetSalesForPeriod,
 		AIToolGetMostExpensiveMenu,
+		AIToolSearchSystemDocs,
+		AIToolReadSystemDoc,
 	}
+}
+
+func isSystemDocsTool(tool AIToolName) bool {
+	return tool == AIToolSearchSystemDocs || tool == AIToolReadSystemDoc
+}
+
+func isProviderSnapshotTool(tool AIToolName) bool {
+	return isSupportedReadOnlyTool(tool) && !isSystemDocsTool(tool)
 }
 
 func isSupportedReadOnlyTool(tool AIToolName) bool {
@@ -245,6 +258,9 @@ func enforceRouterPolicy(result AIRouterResult) (AIRouterResult, error) {
 			if !isSupportedReadOnlyTool(result.SuggestedTool) {
 				return AIRouterResult{}, errors.New("AI router returned unsupported read-only tool")
 			}
+			if isSystemDocsTool(result.SuggestedTool) {
+				return AIRouterResult{}, errors.New("AI router returned a system docs tool for restaurant data")
+			}
 			result.NeedsTool = true
 			if result.Task == AITask("restaurant_data") || result.Task == AITaskAnalyzeData {
 				result.Task = AITaskRetrieveFact
@@ -259,13 +275,24 @@ func enforceRouterPolicy(result AIRouterResult) (AIRouterResult, error) {
 		}
 		result.NeedsTool = false
 		return result, nil
+	case AITaskProductHelp:
+		result.Risk = "low"
+		result.NeedsRestaurantData = false
+		if result.SuggestedTool == "" {
+			result.SuggestedTool = AIToolSearchSystemDocs
+		}
+		if !isSystemDocsTool(result.SuggestedTool) {
+			return AIRouterResult{}, errors.New("AI router returned a non-documentation tool for product help")
+		}
+		result.NeedsTool = true
+		return result, nil
 	case AITaskRiskyAction:
 		result.NeedsRestaurantData = false
 		result.NeedsTool = false
 		result.SuggestedTool = ""
 		return result, nil
 	case AITaskExplainConcept, AITaskScopeQuestion, AITaskGeneralChat, AITaskRestaurantAdvice,
-		AITaskRestaurantContent, AITaskProductHelp, AITaskUnclear, AITaskOutOfScope:
+		AITaskRestaurantContent, AITaskUnclear, AITaskOutOfScope:
 		result.NeedsRestaurantData = false
 		result.NeedsTool = false
 		result.SuggestedTool = ""

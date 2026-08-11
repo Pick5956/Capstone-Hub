@@ -368,7 +368,7 @@ func (s *AIService) getGeminiTools() []geminiTool {
 
 func validateGeminiReadOnlyToolCall(call geminiFunctionCall) (AIToolName, error) {
 	toolName := AIToolName(strings.TrimSpace(call.Name))
-	if !isSupportedReadOnlyTool(toolName) {
+	if !isProviderSnapshotTool(toolName) {
 		return "", errors.New("Gemini requested an unsupported tool")
 	}
 	if len(call.Args) != 0 {

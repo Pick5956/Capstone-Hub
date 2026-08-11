@@ -27,6 +27,50 @@ const chatWriteSubscriptions = new Set<ChatWriteSubscription>();
 const messageFingerprints = new Map<string, string>();
 const conversationFingerprints = new Map<string, string>();
 
+function sanitizeStoredAction(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const action = value as Record<string, unknown>;
+  if (typeof action.id !== "string" || !action.id.trim()) return null;
+  if (typeof action.label !== "string" || !action.label.trim()) return null;
+  for (const key of ["href", "prompt", "description"] as const) {
+    if (action[key] !== undefined && typeof action[key] !== "string") return null;
+  }
+  if (
+    action.requiresConfirmation !== undefined
+    && typeof action.requiresConfirmation !== "boolean"
+  ) return null;
+  return { ...action };
+}
+
+function sanitizeStoredMessages<T>(value: unknown): T[] {
+  if (!Array.isArray(value)) return [];
+  const messages: T[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const message = item as Record<string, unknown>;
+    if (typeof message.id !== "string" || !message.id.trim()) continue;
+    if (!(["user", "assistant", "system"] as unknown[]).includes(message.role)) continue;
+    if (typeof message.content !== "string" || message.content.length > 100_000) continue;
+
+    const sanitized: Record<string, unknown> = { ...message };
+    if (sanitized.createdAt !== undefined && typeof sanitized.createdAt !== "string") {
+      delete sanitized.createdAt;
+    }
+    if (sanitized.model !== undefined && typeof sanitized.model !== "string") {
+      delete sanitized.model;
+    }
+    if (sanitized.actions !== undefined) {
+      const actions = Array.isArray(sanitized.actions)
+        ? sanitized.actions.map(sanitizeStoredAction).filter(Boolean)
+        : [];
+      if (actions.length > 0) sanitized.actions = actions;
+      else delete sanitized.actions;
+    }
+    messages.push(sanitized as T);
+  }
+  return messages;
+}
+
 function serverConversationStorageKey(key: string): string {
   return `${key}${SERVER_CONVERSATION_KEY_SUFFIX}`;
 }
@@ -52,7 +96,8 @@ export function loadStoredMessages<T = unknown>(key: string | null): T[] | null 
       localStorage.removeItem(key);
       return null;
     }
-    return Array.isArray(entry.messages) && entry.messages.length > 0 ? entry.messages : null;
+    const messages = sanitizeStoredMessages<T>(entry.messages);
+    return messages.length > 0 ? messages : null;
   } catch {
     return null;
   }
@@ -67,8 +112,16 @@ export function saveMessages(
   if (typeof window === "undefined" || !key || messages.length === 0) return;
   const lone = messages.length === 1 ? (messages[0] as { id?: string }) : null;
   if (lone && lone.id === "welcome") return;
-  const fingerprint = JSON.stringify(messages);
+  let fingerprint: string;
+  try {
+    fingerprint = JSON.stringify(messages);
+  } catch {
+    return;
+  }
+  const previousFingerprint = messageFingerprints.get(key);
   let unchangedInStorage = false;
+  let storageReadFailed = false;
+  let storageWriteFailed = false;
   try {
     const raw = localStorage.getItem(key);
     if (raw) {
@@ -81,16 +134,17 @@ export function saveMessages(
       }
     }
   } catch {
+    storageReadFailed = true;
     // storage may be unavailable (private mode) — ignore
   }
-  let stored = false;
   try {
     localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), messages }));
-    stored = true;
   } catch {
+    storageWriteFailed = true;
     // Keep same-window synchronization available when persistence is blocked.
   }
-  const unchanged = stored ? unchangedInStorage : messageFingerprints.get(key) === fingerprint;
+  const unchanged = unchangedInStorage
+    || ((storageReadFailed || storageWriteFailed) && previousFingerprint === fingerprint);
   messageFingerprints.set(key, fingerprint);
   if (unchanged) return;
   notifyChatWrite({ key, kind: "messages", messages }, source);
@@ -132,7 +186,10 @@ export function saveConversationId(
   source?: ChatWriteSource,
 ): void {
   if (typeof window === "undefined" || !key || !validConversationId(conversationId)) return;
+  const previousFingerprint = conversationFingerprints.get(key);
   let unchangedInStorage = false;
+  let storageReadFailed = false;
+  let storageWriteFailed = false;
   try {
     const raw = localStorage.getItem(serverConversationStorageKey(key));
     if (raw) {
@@ -145,21 +202,20 @@ export function saveConversationId(
       }
     }
   } catch {
+    storageReadFailed = true;
     // Reads can be unavailable even while the same-window channel still works.
   }
-  let stored = false;
   try {
     localStorage.setItem(
       serverConversationStorageKey(key),
       JSON.stringify({ savedAt: Date.now(), conversationId }),
     );
-    stored = true;
   } catch {
+    storageWriteFailed = true;
     // Keep same-window synchronization available when persistence is blocked.
   }
-  const unchanged = stored
-    ? unchangedInStorage
-    : conversationFingerprints.get(key) === conversationId;
+  const unchanged = unchangedInStorage
+    || ((storageReadFailed || storageWriteFailed) && previousFingerprint === conversationId);
   conversationFingerprints.set(key, conversationId);
   if (unchanged) return;
   notifyChatWrite({ key, kind: "conversation", conversationId }, source);

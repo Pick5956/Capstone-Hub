@@ -41,6 +41,12 @@ type aiConversationCompactState struct {
 	LastResolvedPlan json.RawMessage `json:"last_resolved_plan,omitempty"`
 }
 
+type aiConversationContextDelta struct {
+	Task       AITask     `json:"task,omitempty"`
+	Tool       AIToolName `json:"tool,omitempty"`
+	DocSources []string   `json:"doc_sources,omitempty"`
+}
+
 func conversationMemoryEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("AI_CONVERSATION_MEMORY_ENABLED"))) {
 	case "1", "true", "on", "enabled":
@@ -101,10 +107,48 @@ func conversationTurnsToMessages(turns []entity.AIConversationTurn) []AIConversa
 		turnID := strings.TrimSpace(turn.ID)
 		messages = append(messages,
 			AIConversationMessage{ID: turnID + "-user", Role: "user", Content: turn.Question},
-			AIConversationMessage{ID: turnID + "-assistant", Role: "assistant", Content: turn.Answer},
+			AIConversationMessage{ID: turnID + "-assistant", Role: "assistant", Content: providerSafeConversationAnswer(turn)},
 		)
 	}
-	return sanitizeConversationHistory(messages)
+	return sanitizeConversationHistoryInternal(messages, true)
+}
+
+func providerSafeConversationAnswer(turn entity.AIConversationTurn) string {
+	var delta aiConversationContextDelta
+	_ = json.Unmarshal([]byte(strings.TrimSpace(turn.ContextDeltaJSON)), &delta)
+	docURLs := deduplicateSafeSystemDocURLs(delta.DocSources)
+	hasSystemDocs := AITask(turn.Task) == AITaskProductHelp ||
+		isSystemDocsTool(AIToolName(turn.Tool)) || len(docURLs) > 0
+	if !hasSystemDocs {
+		docURLs = safeSystemDocURLsFromText(turn.Answer)
+		hasSystemDocs = len(docURLs) > 0
+	}
+	if !hasSystemDocs {
+		return turn.Answer
+	}
+	return reduceSystemDocsAnswerForProvider(turn.Answer, docURLs)
+}
+
+func reduceSystemDocsAnswerForProvider(answer string, docURLs []string) string {
+	liveAnswer := ""
+	for _, heading := range []string{
+		"\n\nข้อมูลวิธีใช้จากเอกสาร Dishy:",
+		"\n\nDishy system documentation:",
+	} {
+		if index := strings.Index(answer, heading); index >= 0 {
+			liveAnswer = strings.TrimSpace(answer[:index])
+			break
+		}
+	}
+
+	notice := "Public Dishy documentation was referenced; its untrusted body is omitted from model context."
+	if docURLs = deduplicateSafeSystemDocURLs(docURLs); len(docURLs) > 0 {
+		notice += " Sources: " + strings.Join(docURLs, ", ")
+	}
+	if liveAnswer == "" {
+		return notice
+	}
+	return liveAnswer + "\n\n" + notice
 }
 
 func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiConversationSession, question string, response *AIAskResponse) error {
@@ -136,9 +180,14 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 	if err != nil {
 		return fmt.Errorf("encode conversation state: %w", err)
 	}
-	contextDeltaJSON, err := json.Marshal(map[string]interface{}{
-		"task": response.Task,
-		"tool": response.Tool,
+	docURLs := make([]string, 0, len(response.DocSources))
+	for _, source := range response.DocSources {
+		docURLs = append(docURLs, source.URL)
+	}
+	contextDeltaJSON, err := json.Marshal(aiConversationContextDelta{
+		Task:       response.Task,
+		Tool:       response.Tool,
+		DocSources: deduplicateSafeSystemDocURLs(docURLs),
 	})
 	if err != nil {
 		return fmt.Errorf("encode conversation context delta: %w", err)

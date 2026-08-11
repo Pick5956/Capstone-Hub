@@ -1,6 +1,7 @@
 import type { Language } from "@/src/providers/LanguageProvider";
 
 const routeTitles: Array<{ match: (pathname: string) => boolean; th: string; en: string }> = [
+  { match: (path) => path === "/docs" || path.startsWith("/docs/"), th: "คู่มือการใช้งาน", en: "User guide" },
   { match: (path) => path === "/home", th: "ภาพรวมร้าน", en: "Restaurant overview" },
   { match: (path) => path === "/pos/tables", th: "รับออเดอร์", en: "Take orders" },
   { match: (path) => path === "/kitchen", th: "จอครัว", en: "Kitchen" },
