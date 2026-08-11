@@ -477,7 +477,7 @@ export default function AIAssistantPage() {
           {/* Card header */}
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
                 <Bot className="h-4 w-4" />
               </span>
               <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -501,7 +501,7 @@ export default function AIAssistantPage() {
               if (msg.role === "user") {
                 return (
                   <div key={msg.id} className="ml-auto flex max-w-[85%] items-end justify-end gap-2.5">
-                    <div className="break-words rounded-2xl rounded-br-sm bg-gray-900 px-4 py-2.5 text-sm leading-relaxed text-white dark:bg-white dark:text-gray-900">
+                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
                       {msg.content}
                     </div>
                   </div>
@@ -509,7 +509,7 @@ export default function AIAssistantPage() {
               }
               return (
                 <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
+                  <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
                     <Bot className="h-4.5 w-4.5" />
                   </span>
                   <div className="min-w-0 rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-2.5 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-100">
@@ -535,7 +535,7 @@ export default function AIAssistantPage() {
 
             {loading && (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
                   <Bot className="h-4.5 w-4.5" />
                 </span>
                 <div className="flex items-center rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3 dark:bg-gray-800" role="status" aria-label={copy.thinking}>
@@ -592,7 +592,7 @@ export default function AIAssistantPage() {
                     key={item}
                     type="button"
                     onClick={() => submitQuestion(item)}
-                    className="rounded-md border border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-gray-900 dark:hover:text-orange-300"
+                    className="rounded-xl border border-gray-200 bg-white/60 px-3.5 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
                   >
                     {item}
                   </button>
@@ -626,7 +626,7 @@ export default function AIAssistantPage() {
               type="submit"
               disabled={loading || actionConfirming || actionCancelling || !input.trim()}
               aria-label={copy.ask}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:-translate-y-0.5 hover:shadow-md hover:shadow-orange-500/40 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
