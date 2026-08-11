@@ -33,6 +33,7 @@ import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/t
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
   id: string;
@@ -477,9 +478,7 @@ export default function AIAssistantPage() {
           {/* Card header */}
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
-                <Bot className="h-4 w-4" />
-              </span>
+              <SiriOrb size="28px" className="shrink-0" />
               <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                 {language === "th" ? "ผู้ช่วยพร้อมวิเคราะห์" : "Assistant ready"}
@@ -497,7 +496,18 @@ export default function AIAssistantPage() {
           </div>
           {/* Messages */}
           <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
-            {messages.map((msg) => {
+            {isEmpty && !loading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
+                <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
+                  <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    {copy.welcome}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              messages.map((msg) => {
               if (msg.role === "user") {
                 return (
                   <div key={msg.id} className="ml-auto flex max-w-[85%] items-end justify-end gap-2.5">
@@ -509,10 +519,8 @@ export default function AIAssistantPage() {
               }
               return (
                 <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
-                    <Bot className="h-4.5 w-4.5" />
-                  </span>
-                  <div className="min-w-0 rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-2.5 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                  <SiriOrb size="30px" className="mt-0.5 shrink-0" />
+                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -521,7 +529,7 @@ export default function AIAssistantPage() {
                             key={`${msg.id}-${action.id}`}
                             type="button"
                             onClick={() => handleGuidedAction(action)}
-                            className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 transition-colors hover:bg-gray-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-gray-900"
+                            className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
                           >
                             {action.label}
                           </button>
@@ -531,19 +539,18 @@ export default function AIAssistantPage() {
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
 
             {loading && (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm shadow-orange-500/20">
-                  <Bot className="h-4.5 w-4.5" />
-                </span>
-                <div className="flex items-center rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3 dark:bg-gray-800" role="status" aria-label={copy.thinking}>
-                  <span className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                  </span>
+                <SiriOrb size="30px" className="shrink-0" />
+                <div
+                  className="flex items-center gap-2 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 dark:bg-gray-800/80"
+                  role="status"
+                  aria-label={copy.thinking}
+                >
+                  <span className="ai-shimmer-text text-sm font-medium">{copy.thinking}</span>
                 </div>
               </div>
             )}
@@ -583,16 +590,16 @@ export default function AIAssistantPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick questions (only before the conversation starts) */}
+          {/* Quick questions (only before the conversation starts) — rounded pills */}
           {isEmpty && !loading && (
-            <div className="border-t border-gray-200 p-3 dark:border-gray-800">
-              <div className="flex flex-wrap gap-2">
+            <div className="px-3 pb-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 {copy.quickQuestions.map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => submitQuestion(item)}
-                    className="rounded-xl border border-gray-200 bg-white/60 px-3.5 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
+                    className="rounded-full border border-gray-200 bg-white/60 px-4 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
                   >
                     {item}
                   </button>
@@ -601,35 +608,44 @@ export default function AIAssistantPage() {
             </div>
           )}
 
-          {/* Input at the bottom */}
+          {/* Input at the bottom — rounded pill */}
           <form
-            className="flex items-end gap-2.5 border-t border-gray-200 p-3 dark:border-gray-800"
+            className="p-3"
             onSubmit={(event) => {
               event.preventDefault();
               submitQuestion();
             }}
           >
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  submitQuestion();
-                }
-              }}
-              placeholder={copy.askPlaceholder}
-              rows={1}
-              className="max-h-40 min-h-11 flex-1 resize-none rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-800 dark:bg-gray-900 dark:text-white dark:focus:border-orange-600 dark:focus:ring-orange-900/30"
-            />
-            <button
-              type="submit"
-              disabled={loading || actionConfirming || actionCancelling || !input.trim()}
-              aria-label={copy.ask}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:-translate-y-0.5 hover:shadow-md hover:shadow-orange-500/40 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            <div className="flex items-end gap-2 rounded-[1.75rem] border border-gray-200 bg-white p-2 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    submitQuestion();
+                  }
+                }}
+                placeholder={copy.askPlaceholder}
+                rows={1}
+                className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+              />
+              <button
+                type="submit"
+                disabled={loading || actionConfirming || actionCancelling || !input.trim()}
+                aria-label={copy.ask}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    <span className="hidden sm:inline">{copy.ask}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </div>
 
