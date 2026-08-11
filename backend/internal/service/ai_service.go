@@ -287,6 +287,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// Keyword backstop: if the classifier failed to hand back a usable, confident
+	// tool, rescue an unambiguous question with a deterministic keyword route so it
+	// never dead-ends at "please rephrase" and routes the same way on every
+	// provider. Never overrides a confident classification or a risky/out-of-scope
+	// decision (see backstopShouldApply).
+	if rescued, ok := applyKeywordBackstop(routerResult, question); ok {
+		aiStage("route", "keyword backstop → %s (classifier gave weak result)", aiToolOrDash(rescued.SuggestedTool))
+		routerResult = rescued
+	}
+
 	// Product help is always grounded in the embedded public documentation.
 	// The router/planner classification is enough to invoke retrieval here even
 	// when the fast local docs detector did not recognize the wording.
