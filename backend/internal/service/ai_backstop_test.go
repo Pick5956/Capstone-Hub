@@ -23,6 +23,21 @@ func TestKeywordBackstopTool(t *testing.T) {
 	}
 }
 
+// F-1: reorder questions must be recognised regardless of "ควร" phrasing, but a
+// plain price-advice question must not be mistaken for one.
+func TestIsReorderForecastQuestion(t *testing.T) {
+	for _, q := range []string{"ควรสั่งวัตถุดิบอะไรเพิ่ม", "ควรเติมของอะไรบ้าง", "ต้องสั่งอะไรเพิ่มไหม", "what should I reorder"} {
+		if !isReorderForecastQuestion(q) {
+			t.Errorf("expected reorder question: %q", q)
+		}
+	}
+	for _, q := range []string{"ควรขึ้นราคาเมนูนี้ไหม", "เมนูไหนขายดี", "ยอดขายเดือนนี้"} {
+		if isReorderForecastQuestion(q) {
+			t.Errorf("not a reorder question: %q", q)
+		}
+	}
+}
+
 func TestBackstopShouldApply(t *testing.T) {
 	// Fires: unclear / low confidence / analytical-with-no-usable-tool.
 	if !backstopShouldApply(AIRouterResult{Task: AITaskUnclear}) {

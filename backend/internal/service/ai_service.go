@@ -476,6 +476,27 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	if err != nil {
 		return nil, err
 	}
+
+	// A reorder-forecast question is answered from the deterministic tool no
+	// matter how the router classified it: "ควร" makes it look like a
+	// recommendation, so it otherwise falls to a free-form answer that can leak
+	// raw snapshot field names.
+	if isReorderForecastQuestion(question) {
+		if result, rErr := executeReadOnlyTool(AIToolGetIngredientReorderForecast, snapshot, question); rErr == nil {
+			if answer, ok := localToolAnswer(result); ok {
+				aiStage("flow", "reorder-forecast question → deterministic tool")
+				return &AIAskResponse{
+					Answer:   answer,
+					Intent:   intent,
+					Task:     AITaskRetrieveFact,
+					Tool:     AIToolGetIngredientReorderForecast,
+					Model:    "local-tool-first",
+					Snapshot: snapshot,
+				}, nil
+			}
+		}
+	}
+
 	if answer, guarded := localAnalyticalGuardrailAnswer(question, snapshot); guarded {
 		aiStage("flow", "readiness guardrail (local) — data not ready for a business decision")
 		return &AIAskResponse{

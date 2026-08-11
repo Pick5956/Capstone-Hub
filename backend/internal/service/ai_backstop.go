@@ -52,6 +52,15 @@ func keywordBackstopTool(question string) (AIToolName, bool) {
 	return "", false
 }
 
+// isReorderForecastQuestion recognises "which ingredients should I reorder"
+// questions. The word "ควร" makes the router classify them as a recommendation
+// and sometimes pick the wrong tool, so they are intercepted and answered from
+// the deterministic reorder-forecast tool regardless of the router's guess.
+func isReorderForecastQuestion(question string) bool {
+	n := strings.ToLower(question)
+	return containsAny(n, "ควรสั่ง", "ควรเติม", "สั่งเพิ่ม", "สั่งของเพิ่ม", "ต้องสั่งอะไร", "เติมสต๊อก", "เติมสต็อก", "reorder", "restock")
+}
+
 // backstopShouldApply is true only when a data-retrieval classification failed
 // to hand back a usable, confident tool. Safety (risky_action), scope
 // (out_of_scope), advice (recommend_action), chat, and docs decisions are NEVER
