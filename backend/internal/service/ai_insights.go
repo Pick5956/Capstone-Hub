@@ -11,11 +11,14 @@ import (
 // from an LLM), so the figures are exact and never hallucinated. This is the step
 // from a reactive Q&A box to an assistant that watches the shop for you.
 
-// AIInsight is one proactive card.
+// AIInsight is one proactive card. Metric is a short, punchy value ("พออีก 1 วัน",
+// "-50%") shown prominently so the card is scannable at a glance; Detail is the
+// fuller one-line explanation shown smaller beneath it.
 type AIInsight struct {
 	Kind     string `json:"kind"`     // ingredient_low | sales_drop | sales_up | plowhorse | dead_stock
 	Severity string `json:"severity"` // critical | warning | info
 	Title    string `json:"title"`
+	Metric   string `json:"metric"`
 	Detail   string `json:"detail"`
 }
 
@@ -46,12 +49,17 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 		if it.DaysLeft <= 1 {
 			severity = "critical"
 		}
+		metric := fmt.Sprintf("พออีก %.0f วัน", it.DaysLeft)
+		if it.DaysLeft < 1 {
+			metric = "พออีกไม่ถึงวัน"
+		}
 		insights = append(insights, AIInsight{
 			Kind:     "ingredient_low",
 			Severity: severity,
 			Title:    fmt.Sprintf("%s ใกล้หมด", it.Name),
-			Detail: fmt.Sprintf("เหลือ %.2f %s ใช้เฉลี่ย %.2f %s/วัน → พออีกประมาณ %.0f วัน ควรสั่งเพิ่มครับ",
-				it.Stock, it.Unit, it.DailyUse, it.Unit, it.DaysLeft),
+			Metric:   metric,
+			Detail: fmt.Sprintf("เหลือ %.2f %s ใช้เฉลี่ย %.2f %s/วัน ควรสั่งเพิ่มครับ",
+				it.Stock, it.Unit, it.DailyUse, it.Unit),
 		})
 	}
 
@@ -64,16 +72,18 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 				insights = append(insights, AIInsight{
 					Kind:     "sales_drop",
 					Severity: "warning",
-					Title:    fmt.Sprintf("ยอดขาย 7 วันล่าสุดตก %.1f%%", -trend.RevenueChangePct),
-					Detail: fmt.Sprintf("7 วันล่าสุด %s บาท เทียบ 7 วันก่อนหน้า %s บาท — ลองดูว่าวันไหนหายไป",
+					Title:    "ยอดขายตก (7 วัน)",
+					Metric:   fmt.Sprintf("-%.0f%%", -trend.RevenueChangePct),
+					Detail: fmt.Sprintf("7 วันล่าสุด %s บาท เทียบ 7 วันก่อนหน้า %s บาท",
 						formatMoney(trend.RecentRevenue), formatMoney(trend.PriorRevenue)),
 				})
 			case trend.RevenueChangePct >= insightSalesChangePct:
 				insights = append(insights, AIInsight{
 					Kind:     "sales_up",
 					Severity: "info",
-					Title:    fmt.Sprintf("ยอดขาย 7 วันล่าสุดโต %.1f%%", trend.RevenueChangePct),
-					Detail: fmt.Sprintf("7 วันล่าสุด %s บาท เทียบ 7 วันก่อนหน้า %s บาท 📈",
+					Title:    "ยอดขายโต (7 วัน)",
+					Metric:   fmt.Sprintf("+%.0f%%", trend.RevenueChangePct),
+					Detail: fmt.Sprintf("7 วันล่าสุด %s บาท เทียบ 7 วันก่อนหน้า %s บาท",
 						formatMoney(trend.RecentRevenue), formatMoney(trend.PriorRevenue)),
 				})
 			}
@@ -86,8 +96,9 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 			insights = append(insights, AIInsight{
 				Kind:     "plowhorse",
 				Severity: "info",
-				Title:    fmt.Sprintf("%s ขายดีแต่กำไรบาง", eng.Plowhorses[0]),
-				Detail:   "เมนูนี้ขายดีแต่มาร์จิ้นต่ำ ลองทบทวนต้นทุนหรือปรับราคาเพื่อเพิ่มกำไรรวมครับ",
+				Title:    fmt.Sprintf("%s ขายดี", eng.Plowhorses[0]),
+				Metric:   "กำไรบาง",
+				Detail:   "ขายดีแต่มาร์จิ้นต่ำ ลองทบทวนต้นทุนหรือปรับราคาเพื่อเพิ่มกำไรรวมครับ",
 			})
 		}
 	}
@@ -99,8 +110,9 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 			Kind:     "dead_stock",
 			Severity: "info",
 			Title:    fmt.Sprintf("%s ค้างสต็อก", top.Name),
-			Detail: fmt.Sprintf("คงเหลือ %.2f %s (มูลค่าประมาณ %s บาท) ไม่ถูกใช้เลยในช่วง %s",
-				top.Stock, top.Unit, formatMoney(top.Value), analysisWindowLabel()),
+			Metric:   fmt.Sprintf("~%s บาทจม", formatMoney(top.Value)),
+			Detail: fmt.Sprintf("คงเหลือ %.2f %s ไม่ถูกใช้เลยในช่วง %s",
+				top.Stock, top.Unit, analysisWindowLabel()),
 		})
 	}
 

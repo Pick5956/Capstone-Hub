@@ -10,6 +10,7 @@ export type AIInsight = {
   kind: string;
   severity: AIInsightSeverity;
   title: string;
+  metric: string;
   detail: string;
 };
 

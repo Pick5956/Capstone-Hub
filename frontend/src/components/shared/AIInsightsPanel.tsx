@@ -20,20 +20,23 @@ const copyByLang = {
   en: { title: "Today's insights", empty: "All clear — nothing urgent today 👍", loading: "Scanning the shop..." },
 };
 
-const severityStyle: Record<AIInsightSeverity, { bar: string; chip: string; glow: string }> = {
+const severityStyle: Record<AIInsightSeverity, { bar: string; icon: string; metric: string; glow: string }> = {
   critical: {
     bar: "bg-gradient-to-b from-rose-500 to-red-600",
-    chip: "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/60",
+    icon: "bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-sm shadow-rose-500/40",
+    metric: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-900/60",
     glow: "hover:shadow-[0_8px_30px_-12px_rgba(244,63,94,0.45)]",
   },
   warning: {
     bar: "bg-gradient-to-b from-amber-400 to-orange-500",
-    chip: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-900/50",
+    icon: "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm shadow-amber-500/40",
+    metric: "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/50",
     glow: "hover:shadow-[0_8px_30px_-12px_rgba(245,158,11,0.4)]",
   },
   info: {
     bar: "bg-gradient-to-b from-sky-400 to-indigo-500",
-    chip: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:ring-sky-900/50",
+    icon: "bg-gradient-to-br from-sky-400 to-indigo-500 text-white shadow-sm shadow-sky-500/40",
+    metric: "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/50",
     glow: "hover:shadow-[0_8px_30px_-12px_rgba(56,189,248,0.4)]",
   },
 };
@@ -118,15 +121,22 @@ export default function AIInsightsPanel({ language }: Props) {
               >
                 <span className={`absolute inset-y-0 left-0 w-1 ${style.bar}`} aria-hidden />
                 <span
-                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 ${style.chip}`}
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${style.icon}`}
                 >
                   <Icon className="h-4 w-4" />
                 </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-                    {insight.title}
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold leading-snug text-gray-900 dark:text-white">
+                      {insight.title}
+                    </p>
+                    {insight.metric && (
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style.metric}`}>
+                        {insight.metric}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                     {insight.detail}
                   </p>
                 </div>
