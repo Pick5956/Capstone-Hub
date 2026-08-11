@@ -31,6 +31,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
+import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
@@ -634,6 +635,7 @@ export default function AIAssistantPage() {
 
         {/* Snapshot sidebar */}
         <aside className="hidden min-h-0 space-y-3 overflow-y-auto lg:block">
+          <AIInsightsPanel language={language} />
           <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
             <Sparkles className="h-4 w-4 text-orange-500" />
             {copy.snapshot}

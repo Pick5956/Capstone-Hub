@@ -4,6 +4,7 @@ import type {
   AIAskRequest,
   AIAskResponse,
   AIConversationMessage,
+  AIInsight,
   AISnapshot,
 } from "../types/ai";
 
@@ -38,3 +39,6 @@ export const cancelAIAction = (previewId: string) =>
 
 export const getOperationsSnapshot = () =>
   apiClient.get<AISnapshot>("/api/v1/ai/operations/snapshot");
+
+export const getProactiveInsights = () =>
+  apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");

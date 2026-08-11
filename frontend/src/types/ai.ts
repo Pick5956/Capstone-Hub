@@ -4,6 +4,15 @@ export type AISalesSummary = {
   revenue: number;
 };
 
+export type AIInsightSeverity = "critical" | "warning" | "info";
+
+export type AIInsight = {
+  kind: string;
+  severity: AIInsightSeverity;
+  title: string;
+  detail: string;
+};
+
 export type AIMenuSummary = {
   menu_name: string;
   quantity: number;
