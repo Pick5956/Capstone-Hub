@@ -740,10 +740,10 @@ export default function AIOperationsFloatingChat() {
           >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:px-4">
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
-              <div className="flex items-center">
-                <h2 id="ai-operations-chat-title" className="text-sm font-semibold leading-none text-gray-900 dark:text-white">{copy.title}</h2>
+              <div className="flex min-w-0 items-center">
+                <h2 id="ai-operations-chat-title" className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white">{copy.title}</h2>
               </div>
             </div>
 

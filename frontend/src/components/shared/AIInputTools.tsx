@@ -138,6 +138,7 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
 
   return (
     <>
+      <div className="flex shrink-0 items-center gap-0.5">
       <button
         type="button"
         onClick={toggleVoice}
@@ -162,6 +163,7 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
       >
         {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
       </button>
+      </div>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
 
       {error && (
