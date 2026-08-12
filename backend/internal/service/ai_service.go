@@ -287,6 +287,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// Keyword backstop: if the classifier failed to hand back a usable, confident
+	// tool, rescue an unambiguous question with a deterministic keyword route so it
+	// never dead-ends at "please rephrase" and routes the same way on every
+	// provider. Never overrides a confident classification or a risky/out-of-scope
+	// decision (see backstopShouldApply).
+	if rescued, ok := applyKeywordBackstop(routerResult, question); ok {
+		aiStage("route", "keyword backstop → %s (classifier gave weak result)", aiToolOrDash(rescued.SuggestedTool))
+		routerResult = rescued
+	}
+
 	// Product help is always grounded in the embedded public documentation.
 	// The router/planner classification is enough to invoke retrieval here even
 	// when the fast local docs detector did not recognize the wording.
@@ -466,6 +476,27 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	if err != nil {
 		return nil, err
 	}
+
+	// A reorder-forecast question is answered from the deterministic tool no
+	// matter how the router classified it: "ควร" makes it look like a
+	// recommendation, so it otherwise falls to a free-form answer that can leak
+	// raw snapshot field names.
+	if isReorderForecastQuestion(question) {
+		if result, rErr := executeReadOnlyTool(AIToolGetIngredientReorderForecast, snapshot, question); rErr == nil {
+			if answer, ok := localToolAnswer(result); ok {
+				aiStage("flow", "reorder-forecast question → deterministic tool")
+				return &AIAskResponse{
+					Answer:   answer,
+					Intent:   intent,
+					Task:     AITaskRetrieveFact,
+					Tool:     AIToolGetIngredientReorderForecast,
+					Model:    "local-tool-first",
+					Snapshot: snapshot,
+				}, nil
+			}
+		}
+	}
+
 	if answer, guarded := localAnalyticalGuardrailAnswer(question, snapshot); guarded {
 		aiStage("flow", "readiness guardrail (local) — data not ready for a business decision")
 		return &AIAskResponse{
