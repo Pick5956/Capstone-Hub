@@ -978,13 +978,13 @@ export default function AIOperationsFloatingChat() {
         type="button"
         aria-label={labels.openAssistant}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center rounded-full shadow-xl shadow-orange-500/30 ring-1 ring-black/5 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] dark:ring-white/10 sm:bottom-6 sm:right-6 ${
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 scale-100 pointer-events-auto"
         }`}
       >
-        <SiriOrb size="56px" animationDuration={8} />
+        <SiriOrb size="66px" className="shrink-0" animationDuration={8} />
       </button>
     </>
   );
