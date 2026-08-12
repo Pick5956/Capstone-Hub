@@ -482,7 +482,7 @@ export default function AIAssistantPage() {
 
   return (
     <main className="relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
-      <section className="relative flex min-h-0 flex-1 overflow-hidden">
+      <section className="relative flex min-h-0 flex-1">
         {/* Conversation — full width */}
         <div className="relative flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
@@ -512,8 +512,9 @@ export default function AIAssistantPage() {
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
           </div>
-          {/* Messages */}
-          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5">
+          {/* Messages — scroll area bleeds to the window's right edge so its
+              scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
+          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
             {isEmpty && !loading ? (
               <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
                 <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
