@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2, Mic, X } from "lucide-react";
+import { Loader2, Mic, Receipt, X } from "lucide-react";
 import { extractReceipt } from "@/src/lib/ai";
 
 // Two optional AI input helpers, kept in ONE self-contained component so they are
@@ -160,7 +160,7 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
         title={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}
         className={iconBtn}
       >
-        {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Camera className="h-4 w-4" />}
+        {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
       </button>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
 
