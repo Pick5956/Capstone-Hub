@@ -647,7 +647,7 @@ export default function AIAssistantPage() {
                 }}
                 placeholder={copy.askPlaceholder}
                 rows={1}
-                className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+                className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
               />
               <AIInputTools
                 language={language}

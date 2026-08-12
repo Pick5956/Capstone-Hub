@@ -952,7 +952,7 @@ export default function AIOperationsFloatingChat() {
                 placeholder={copy.askPlaceholder}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
-                className="min-h-9 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+                className="min-h-9 min-w-0 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
               <AIInputTools
                 language={language}
