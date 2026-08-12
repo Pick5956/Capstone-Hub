@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -148,6 +148,8 @@ export default function AIAssistantPage() {
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [insightsCount, setInsightsCount] = useState(0);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
@@ -479,27 +481,39 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
-      <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* Conversation column */}
-        <div className="flex min-h-0 flex-col bg-white dark:bg-gray-950">
-          {/* Card header */}
-          <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
-            <div className="flex items-center gap-2">
-              <SiriOrb size="30px" className="shrink-0" animationDuration={8} />
-            </div>
+    <main className="relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
+      <section className="relative flex min-h-0 flex-1 overflow-hidden">
+        {/* Conversation — full width */}
+        <div className="relative flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+          {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((open) => !open)}
+              aria-label={language === "th" ? "ควรรู้วันนี้" : "Insights"}
+              className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-white/80 px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-200 dark:hover:border-orange-800"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-orange-500" />
+              <span className="hidden sm:inline">{language === "th" ? "ควรรู้วันนี้" : "Insights"}</span>
+              {insightsCount > 0 && (
+                <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white">
+                  {insightsCount}
+                </span>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => void handleClearChat()}
               disabled={loading || actionConfirming || actionCancelling}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
+              aria-label={copy.newChat}
+              title={copy.newChat}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{copy.newChat}</span>
             </button>
           </div>
           {/* Messages */}
-          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
+          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5">
             {isEmpty && !loading ? (
               <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
                 <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
@@ -651,11 +665,40 @@ export default function AIAssistantPage() {
             </div>
           </form>
         </div>
+      </section>
 
-        {/* Snapshot sidebar — pulled flush to the window's right edge (cancels the
-            page's lg:px-8) with a slim channel for the minimal scrollbar. */}
-        <aside className="ai-scroll hidden min-h-0 space-y-3 overflow-y-auto lg:block lg:-mr-8 lg:pr-2">
-          <AIInsightsPanel language={language} />
+      {/* Dim overlay — click to dismiss the insights drawer */}
+        {drawerOpen && (
+          <div
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 z-30 bg-black/20 backdrop-blur-[1px] dark:bg-black/40"
+            aria-hidden
+          />
+        )}
+
+        {/* Insights drawer — slides in from the right, off-screen until toggled */}
+        <aside
+          className={`absolute inset-y-0 right-0 z-40 flex w-[340px] max-w-[88vw] flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-gray-800 dark:bg-gray-950 ${
+            drawerOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+          aria-hidden={!drawerOpen}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+            <span className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
+              <Sparkles className="h-4 w-4 text-orange-500" />
+              {language === "th" ? "ข้อมูลร้านวันนี้" : "Shop insights"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              aria-label={language === "th" ? "ปิด" : "Close"}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="ai-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            <AIInsightsPanel language={language} onCount={setInsightsCount} />
           <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
             <Sparkles className="h-4 w-4 text-orange-500" />
             {copy.snapshot}
@@ -697,8 +740,8 @@ export default function AIAssistantPage() {
               {stockRisks.length === 0 && <div className="p-4 text-sm text-gray-400">{copy.empty}</div>}
             </div>
           </section>
+          </div>
         </aside>
-      </section>
     </main>
   );
 }

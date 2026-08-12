@@ -16,7 +16,7 @@ const COLLAPSE_KEY = "ai-insights-collapsed";
 import { getProactiveInsights } from "@/src/lib/ai";
 import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
 
-type Props = { language: "th" | "en" };
+type Props = { language: "th" | "en"; onCount?: (count: number) => void };
 
 const copyByLang = {
   th: { title: "ควรรู้วันนี้", empty: "ทุกอย่างดูโอเค ไม่มีเรื่องด่วนวันนี้ 👍", loading: "กำลังสแกนร้าน..." },
@@ -59,7 +59,7 @@ function iconFor(kind: string) {
   }
 }
 
-export default function AIInsightsPanel({ language }: Props) {
+export default function AIInsightsPanel({ language, onCount }: Props) {
   const copy = copyByLang[language];
   const [insights, setInsights] = useState<AIInsight[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,11 +92,17 @@ export default function AIInsightsPanel({ language }: Props) {
     getProactiveInsights()
       .then((res) => {
         if (!active) return;
-        setInsights(res.data?.insights ?? []);
+        const list = res.data?.insights ?? [];
+        setInsights(list);
+        onCount?.(list.length);
         // next frame → trigger the staggered entrance transition
         requestAnimationFrame(() => active && setMounted(true));
       })
-      .catch(() => active && setInsights([]))
+      .catch(() => {
+        if (!active) return;
+        setInsights([]);
+        onCount?.(0);
+      })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
