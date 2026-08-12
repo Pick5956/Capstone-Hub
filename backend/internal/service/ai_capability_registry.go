@@ -34,6 +34,11 @@ type aiReadCapability struct {
 }
 
 var aiReadCapabilities = []aiReadCapability{
+	// Public documentation tools read the embedded catalog only. They never
+	// receive a restaurant ID or act as authorization for a write operation.
+	{AIToolSearchSystemDocs, ResolvedPlanDomainProduct, nil, 0},
+	{AIToolReadSystemDoc, ResolvedPlanDomainProduct, nil, 1},
+
 	{AIToolGetStoreSummary, ResolvedPlanDomainRestaurant, []ResolvedPlanMetric{ResolvedPlanMetricOverview}, 0},
 
 	{AIToolGetSalesSummary, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricOverview, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount}, 0},

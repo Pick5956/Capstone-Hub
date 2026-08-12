@@ -45,6 +45,18 @@ describe("resolveNavigationRequest navigation guardrails", () => {
     expect(resolveNavigationRequest("เมนู", ownerMembership, "th", "/home")).toBeNull();
   });
 
+  it.each([
+    ["where is menu", "en"],
+    ["where can I find reports", "en"],
+    ["เมนูอยู่ตรงไหน", "th"],
+    ["จอครัวอยู่ไหน", "th"],
+  ] as const)(
+    "does not intercept an informational location question: %s",
+    (input, language) => {
+      expect(resolveNavigationRequest(input, ownerMembership, language, "/home")).toBeNull();
+    },
+  );
+
   it("reports that the user is already on the requested page", () => {
     const resolution = resolveNavigationRequest("open menu", ownerMembership, "en", "/menu/edit");
 

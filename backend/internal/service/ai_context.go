@@ -3,7 +3,37 @@ package service
 import (
 	"fmt"
 	"strings"
+	"time"
 )
+
+// resolveComparisonContinuation turns a bare "กับ <period>" reply — the answer to
+// a "เทียบกับช่วงไหน" clarification — back into a full comparison, using the base
+// period from the most recent comparison turn in history. It is deterministic
+// (no LLM), so this common multi-turn flow ("เทียบ ก.ค. ... " → "กับ พ.ค. 2568")
+// does not depend on the rewrite model guessing right. Returns the original
+// question unchanged when it is not a comparison continuation.
+func resolveComparisonContinuation(question string, history []AIConversationMessage, ref time.Time) (string, bool) {
+	n := strings.ToLower(strings.TrimSpace(question))
+	if !(strings.HasPrefix(n, "กับ") || strings.HasPrefix(n, "vs ") || strings.HasPrefix(n, "versus ")) {
+		return question, false
+	}
+	current := extractPeriods(question, ref)
+	if len(current) == 0 {
+		return question, false // "กับข้าวผัด..." names no period → not a continuation
+	}
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Role != "user" || !mentionsComparison(history[i].Content) {
+			continue
+		}
+		base := extractPeriods(history[i].Content, ref)
+		if len(base) == 0 {
+			continue
+		}
+		// Rebuild a self-contained comparison the dated-sales flow re-parses fresh.
+		return fmt.Sprintf("เทียบยอดขาย%s กับ %s", base[0].Label, current[0].Label), true
+	}
+	return question, false
+}
 
 // looksContextDependent decides whether the latest message is a follow-up that
 // needs the conversation to make sense (e.g. "แล้วอันที่สองล่ะ", "ทำไม",

@@ -11,6 +11,8 @@ export default function DocumentTitle() {
   const { language } = useLanguage();
   const { activeMembership } = useAuth();
   useEffect(() => {
+    if (pathname === "/docs" || pathname.startsWith("/docs/")) return;
+
     const restaurantName = activeMembership?.restaurant?.name?.trim();
     const orderReference = new URLSearchParams(window.location.search).get("ref") || undefined;
     const title = pageTitle(pathname, language, restaurantName || "Dishy", orderReference);

@@ -288,7 +288,7 @@ func (s *AIService) getGeminiTools() []geminiTool {
 				},
 				{
 					Name:        "get_sales_summary",
-					Description: "Get the verified total revenue and order count in the recent 14-day analysis period.",
+					Description: fmt.Sprintf("Get the verified total revenue and order count in the recent %.0f-day analysis period.", analysisWindowDays),
 					Parameters:  geminiParameters{Type: "OBJECT"},
 				},
 				{
@@ -368,7 +368,7 @@ func (s *AIService) getGeminiTools() []geminiTool {
 
 func validateGeminiReadOnlyToolCall(call geminiFunctionCall) (AIToolName, error) {
 	toolName := AIToolName(strings.TrimSpace(call.Name))
-	if !isSupportedReadOnlyTool(toolName) {
+	if !isProviderSnapshotTool(toolName) {
 		return "", errors.New("Gemini requested an unsupported tool")
 	}
 	if len(call.Args) != 0 {

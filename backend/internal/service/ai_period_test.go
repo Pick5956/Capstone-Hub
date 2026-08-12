@@ -99,6 +99,113 @@ func TestResolveDatedSalesRequestComparisonSinglePeriodPairsPrevious(t *testing.
 	}
 }
 
+// A year written after a month name is honored rather than defaulted to the
+// reference year: "กรกฎาคม 68" must resolve to 2568, not the current 2569.
+func TestExtractPeriodsHonorsYearAfterMonth(t *testing.T) {
+	cases := []struct {
+		q    string
+		want string
+	}{
+		{"ยอดขายเดือนกรกฎาคม 68", "เดือนกรกฎาคม 2568"},
+		{"ยอดขายเดือนกรกฎาคม 2568", "เดือนกรกฎาคม 2568"},
+		{"ยอดขายกรกฎาคม 69", "เดือนกรกฎาคม 2569"},
+		{"sales in july 2025", "เดือนกรกฎาคม 2568"},
+	}
+	for _, c := range cases {
+		periods := extractPeriods(c.q, refJuly(t))
+		if len(periods) != 1 || periods[0].Label != c.want {
+			t.Fatalf("%q => %+v, want single %q", c.q, periods, c.want)
+		}
+	}
+}
+
+// A bare day after a month ("2 กรกฎาคม" reversed as "กรกฎาคม 2") must not be
+// swallowed as a year; the month keeps its resolved year.
+func TestExtractPeriodsDoesNotReadDayAsYear(t *testing.T) {
+	periods := extractPeriods("ยอดขายมีนาคม 12", refJuly(t))
+	if len(periods) != 1 || periods[0].Label != "เดือนมีนาคม 2569" {
+		t.Fatalf("day-after-month mistaken for year: %+v", periods)
+	}
+}
+
+// The reported bug: "เทียบ...เดือนกรกฎาคม 69 กับ ปี 68" must compare the same
+// month across the two years, not July 2569 against June 2569.
+func TestResolveDatedSalesRequestYearOverYear(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนกรกฎาคม 69 กับ ปี 68 ให้หน่อย", refJuly(t))
+	if !ok || !req.comparison || len(req.periods) != 2 {
+		t.Fatalf("year-over-year comparison wrong: ok=%v %+v", ok, req)
+	}
+	if req.periods[0].Label != "เดือนกรกฎาคม 2569" || req.periods[1].Label != "เดือนกรกฎาคม 2568" {
+		t.Fatalf("year-over-year pairing wrong: %+v", req.periods)
+	}
+}
+
+// "เทียบเดือนนี้กับปีที่แล้ว" compares this month against the same month a year ago.
+func TestResolveDatedSalesRequestRelativeYearOverYear(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนนี้กับปีที่แล้ว", refJuly(t))
+	if !ok || !req.comparison || len(req.periods) != 2 {
+		t.Fatalf("relative year-over-year wrong: ok=%v %+v", ok, req)
+	}
+	if req.periods[0].Label != "เดือนกรกฎาคม 2569" || req.periods[1].Label != "เดือนกรกฎาคม 2568" {
+		t.Fatalf("relative year-over-year pairing wrong: %+v", req.periods)
+	}
+}
+
+// A comparison whose second operand cannot be parsed asks for clarification
+// instead of silently substituting the previous month.
+func TestResolveDatedSalesRequestUnparseableSecondOperandAsksToClarify(t *testing.T) {
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายเดือนกรกฎาคม 69 กับ ตอนนั้น", refJuly(t))
+	if !ok {
+		t.Fatal("comparison with an unparseable operand should still be claimed (to clarify)")
+	}
+	if req.clarify == "" || len(req.periods) != 0 {
+		t.Fatalf("expected a clarification, got %+v", req)
+	}
+}
+
+// A store summary that names a day resolves that single day; an unscoped summary
+// does not, so it keeps the rolling-window overview.
+func TestSummaryDayScope(t *testing.T) {
+	if _, ok := summaryDayScope("สรุปสถานการณ์ร้าน", refJuly(t)); ok {
+		t.Fatal("an unscoped summary must not resolve a day")
+	}
+	today, ok := summaryDayScope("สรุปร้านวันนี้", refJuly(t))
+	if !ok || today.Label != "วันนี้" {
+		t.Fatalf("today scope wrong: ok=%v %+v", ok, today)
+	}
+	if today.End.Sub(today.Start) != 24*time.Hour {
+		t.Fatalf("today window is not exactly one day: %v..%v", today.Start, today.End)
+	}
+	y, ok := summaryDayScope("สรุปเมื่อวานให้หน่อย", refJuly(t))
+	if !ok || y.Label != "เมื่อวาน" {
+		t.Fatalf("yesterday scope wrong: ok=%v %+v", ok, y)
+	}
+	named, ok := summaryDayScope("สรุปร้านวันที่ 2 กรกฎาคม", refJuly(t))
+	if !ok || named.Label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("named-date scope wrong: ok=%v %+v", ok, named)
+	}
+}
+
+// A day that does not exist for its month must be flagged, not answered as the
+// whole month ("31 กุมภาพันธ์" used to return all of February).
+func TestResolveDatedSalesRequestRejectsImpossibleDate(t *testing.T) {
+	for _, q := range []string{
+		"ยอดขายวันที่ 31 กุมภาพันธ์",
+		"ยอดขาย 31 กุมภาพันธ์",
+		"ยอดขายวันที่ 31 เมษายน",
+	} {
+		req, ok := resolveDatedSalesRequest(q, refJuly(t))
+		if !ok || req.clarify == "" || len(req.periods) != 0 {
+			t.Fatalf("%q should ask to clarify an impossible date, got ok=%v %+v", q, ok, req)
+		}
+	}
+	// A valid day must still resolve to that single day.
+	req, ok := resolveDatedSalesRequest("ยอดขายวันที่ 28 กุมภาพันธ์", refJuly(t))
+	if !ok || req.clarify != "" || len(req.periods) != 1 {
+		t.Fatalf("valid date must resolve to one day, got ok=%v %+v", ok, req)
+	}
+}
+
 func TestResolveDatedSalesRequestExcludesMenuAndAverage(t *testing.T) {
 	for _, q := range []string{
 		"เมนูไหนขายดีเดือนมีนาคม",

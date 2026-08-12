@@ -141,16 +141,12 @@ const navigationPhrases = [
   "bring me",
   "open",
   "navigate",
-  "where is",
-  "where can i find",
   "พาไป",
   "ไปหน้า",
   "ไปที่",
   "เปิดหน้า",
   "เปิดเมนู",
   "เข้าเมนู",
-  "อยู่ตรงไหน",
-  "อยู่ไหน",
 ];
 
 function normalize(text: string) {

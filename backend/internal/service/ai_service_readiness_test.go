@@ -90,10 +90,15 @@ func TestAnalyticalPromptMakesReadinessGuardrailsMandatory(t *testing.T) {
 		"Do not propose price changes",
 		"Never describe a total cost or total profit as a per-unit value",
 		`"can_analyze_margin": false`,
+		// The analysis-window wording tracks analysisWindowDays (30), not a stale 14.
+		"recent 30-day analysis window",
 	} {
 		if !strings.Contains(prompt, requirement) {
 			t.Fatalf("analytical prompt is missing guardrail %q", requirement)
 		}
+	}
+	if strings.Contains(prompt, "14-day") || strings.Contains(prompt, "14 days") {
+		t.Fatalf("analytical prompt still hardcodes the old 14-day window")
 	}
 }
 

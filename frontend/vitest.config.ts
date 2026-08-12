@@ -14,6 +14,7 @@ export default defineConfig({
       "src/lib/__tests__/orderItemGroups.test.ts",
       "src/lib/__tests__/homeDashboard.test.ts",
       "src/lib/__tests__/documentTitle.test.ts",
+      "src/lib/__tests__/docsContent.test.ts",
       "src/lib/__tests__/customerOrderView.test.ts",
       "src/lib/__tests__/invitation.test.ts",
       "src/lib/__tests__/noManualRefreshControls.test.ts",
@@ -33,6 +34,7 @@ export default defineConfig({
       "src/app/(dashboard)/expenses/expensesPage.test.ts",
       "src/components/shared/RealtimeConnectionNotice.test.tsx",
       "src/components/shared/ThemedSelect.test.tsx",
+      "src/components/docs/DocsContent.test.tsx",
     ],
   },
 });

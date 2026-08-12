@@ -3,6 +3,8 @@ package service
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 )
 
 // aiStage emits content-free lifecycle metadata for AI requests. Callers must
@@ -10,6 +12,27 @@ import (
 // output here; those values belong only in request processing and provider I/O.
 func aiStage(stage, format string, args ...interface{}) {
 	log.Printf("[AI] %-5s | %s", stage, fmt.Sprintf(format, args...))
+}
+
+// aiDebug logs full request/response content for LOCAL debugging only. It is a
+// deliberate, opt-in exception to aiStage's content-free policy: it stays silent
+// unless AI_DEBUG is explicitly enabled, so production logs never carry user
+// questions or restaurant data. The persisted turn store remains the durable,
+// TTL-bounded record; this is only for watching a live session while developing.
+func aiDebug(format string, args ...interface{}) {
+	if !aiDebugEnabled() {
+		return
+	}
+	log.Printf("[AI][debug] %s", fmt.Sprintf(format, args...))
+}
+
+func aiDebugEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AI_DEBUG"))) {
+	case "1", "true", "on", "enabled":
+		return true
+	default:
+		return false
+	}
 }
 
 // aiProviderHTTPError deliberately retains only non-sensitive request metadata.

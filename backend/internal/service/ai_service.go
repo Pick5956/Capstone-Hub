@@ -156,11 +156,39 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	s.maybeCleanupAIActionPreviews()
 
 	request := *req
+	originalQuestion := request.Question
 	session, history, err := s.prepareConversationSession(actor, &request)
 	if err != nil {
 		return nil, err
 	}
 	request.History = history
+
+	questionParts := splitSystemDocsAndLiveQuestion(originalQuestion)
+	var docsResponse *AIAskResponse
+	if questionParts.DocsQuestion != "" {
+		var handled bool
+		docsResponse, handled, err = answerSystemDocsQuestion(questionParts.DocsQuestion)
+		if err != nil {
+			return nil, err
+		}
+		if handled && questionParts.LiveQuestion == "" {
+			if session == nil {
+				return docsResponse, nil
+			}
+			docsResponse.ConversationID = session.conversation.ID
+			if err := s.persistConversationTurn(actor, session, originalQuestion, docsResponse); err != nil {
+				return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
+			}
+			return docsResponse, nil
+		}
+		if !handled {
+			docsResponse = nil
+		}
+	}
+	if questionParts.Mixed {
+		request.Question = questionParts.LiveQuestion
+	}
+
 	prepared, err := s.prepareOwnerOrchestration(ctx, actor, &request)
 	if err != nil {
 		return nil, err
@@ -176,11 +204,12 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	if err := s.maybeCreateAIActionPreview(actor, conversationID, response); err != nil {
 		return nil, err
 	}
+	response = combineLiveAndSystemDocsResponse(response, docsResponse)
 	if session == nil {
 		return response, nil
 	}
 	response.ConversationID = session.conversation.ID
-	if err := s.persistConversationTurn(actor, session, request.Question, response); err != nil {
+	if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
 		return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 	}
 	return response, nil
@@ -197,6 +226,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	history := sanitizeConversationHistory(req.History)
 
 	aiStage("input", "question_length=%d history_turns=%d", len([]rune(question)), len(history))
+	aiDebug("Q: %q (history_turns=%d)", question, len(history))
 	// Log how the request was ultimately answered, whichever branch returns.
 	defer func() {
 		if err == nil {
@@ -211,6 +241,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("done", "error: %v", err)
 		case resp != nil:
 			aiStage("done", "model=%s task=%s tool=%s intent=%s", resp.Model, resp.Task, aiToolOrDash(resp.Tool), resp.Intent)
+			aiDebug("A: %q", resp.Answer)
 		}
 	}()
 
@@ -233,7 +264,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence,
 			routerResult.Risk, len(prepared.candidateTools))
 	} else {
-		if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
+		// A bare "กับ <period>" reply to a comparison clarification is rebuilt
+		// deterministically from history before falling back to the LLM rewrite.
+		if resolved, ok := resolveComparisonContinuation(question, history, repository.BangkokNow()); ok {
+			aiStage("route", "comparison continuation resolved from history")
+			aiDebug("continuation → %q", resolved)
+			question = resolved
+		} else if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
 			aiStage("route", "context_rewritten=true resolved_question_length=%d", len([]rune(resolved)))
 			question = resolved
 		}
@@ -248,6 +285,17 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
 				routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
 		}
+	}
+
+	// Product help is always grounded in the embedded public documentation.
+	// The router/planner classification is enough to invoke retrieval here even
+	// when the fast local docs detector did not recognize the wording.
+	if routerResult.Task == AITaskProductHelp {
+		docsResponse, _, docsErr := answerKnownSystemDocsQuestion(question)
+		if docsErr != nil {
+			return nil, docsErr
+		}
+		return docsResponse, nil
 	}
 
 	// A rank follow-up ("อันดับรองลงมา") reads as vague to the router, but the
@@ -448,13 +496,35 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}, nil
 	}
 
+	// A store summary scoped to a specific day ("สรุปวันนี้") answers that day's
+	// real sales first, then the rolling-window overview — so the day the user
+	// named is not silently folded into the window figure.
+	if toolToRun == AIToolGetStoreSummary {
+		if resp, handled, err := s.answerDatedStoreSummary(restaurantID, question, snapshot, intent); err != nil {
+			return nil, err
+		} else if handled {
+			aiStage("flow", "store-summary scoped to a specific day → leading with that day's sales")
+			return resp, nil
+		}
+	}
+
+	// A compound question spans a concern the chosen single-metric tool cannot
+	// express ("ขายดีและกระทบสต็อก"). Skip the deterministic shortcut and let it
+	// reach the snapshot-wide LLM path, which can weigh both dimensions.
+	compoundQuestion := routerResult.Task == AITaskRetrieveFact &&
+		isSupportedReadOnlyTool(toolToRun) &&
+		questionSpansUncoveredConcern(question, toolToRun)
+	if compoundQuestion {
+		aiStage("flow", "compound question → %s covers one concern only, using LLM synthesis", toolToRun)
+	}
+
 	// Deterministic-first: a fact lookup that maps to a supported tool is answered
 	// straight from the snapshot data, skipping the free-form LLM. The LLM already
 	// did its real job (understanding the question) in the router; letting it also
 	// re-read the numbers only risks hallucinated figures, an irrelevant caveat, or
 	// a different phrasing each time. Answering from the tool keeps fact replies
 	// exact, identical on every ask, and free of prior-turn contamination.
-	if routerResult.Task == AITaskRetrieveFact && isSupportedReadOnlyTool(toolToRun) {
+	if routerResult.Task == AITaskRetrieveFact && isSupportedReadOnlyTool(toolToRun) && !compoundQuestion {
 		result, toolErr := executeReadOnlyTool(toolToRun, snapshot, question)
 		if toolErr != nil {
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
@@ -560,6 +630,45 @@ func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {
 // range-scoped repository queries that reach beyond the 14-day snapshot. It
 // returns handled=false when the question is not a dated total-sales request, so
 // the caller continues with the normal analytical flow.
+// answerDatedStoreSummary enriches a store summary that names a single day with
+// that day's verified sales, placed before the rolling-window overview. It
+// returns handled=false when the summary is not day-scoped (keep the plain
+// window summary) or when the day's data is not ready (let the normal flow
+// explain the limitation).
+func (s *AIService) answerDatedStoreSummary(restaurantID uint, question string, snapshot AISnapshot, intent AIIntent) (*AIAskResponse, bool, error) {
+	if s.repo == nil {
+		return nil, false, nil
+	}
+	day, ok := summaryDayScope(question, repository.BangkokNow())
+	if !ok {
+		return nil, false, nil
+	}
+	result, err := executeReadOnlyTool(AIToolGetStoreSummary, snapshot, question)
+	if err != nil {
+		return nil, false, err
+	}
+	summary, ok := localToolAnswer(result)
+	if !ok {
+		return nil, false, nil
+	}
+	d, err := s.repo.SalesForRange(restaurantID, day.Start, day.End)
+	if err != nil {
+		return nil, false, err
+	}
+	lead := fmt.Sprintf("ยอดขาย%sยังไม่มีออเดอร์ที่ปิดบิลครับ\n\n", day.Label)
+	if d.Orders > 0 {
+		lead = fmt.Sprintf("ยอดขาย%s คือ %s บาท จาก %d ออเดอร์ครับ\n\n", day.Label, formatMoney(d.Revenue), d.Orders)
+	}
+	return &AIAskResponse{
+		Answer:   lead + summary,
+		Intent:   intent,
+		Task:     AITaskRetrieveFact,
+		Tool:     AIToolGetStoreSummary,
+		Model:    "local-store-summary-dated",
+		Snapshot: snapshot,
+	}, true, nil
+}
+
 func (s *AIService) answerDatedSalesQuery(restaurantID uint, question string) (*AIAskResponse, bool, error) {
 	if s.repo == nil {
 		return nil, false, nil
@@ -567,6 +676,20 @@ func (s *AIService) answerDatedSalesQuery(restaurantID uint, question string) (*
 	req, ok := resolveDatedSalesRequest(question, repository.BangkokNow())
 	if !ok {
 		return nil, false, nil
+	}
+
+	// A comparison whose second window could not be parsed asks for the missing
+	// period instead of guessing one, so we never answer a different comparison
+	// than the one that was asked.
+	if req.clarify != "" {
+		aiStage("flow", "dated-sales — comparison target unclear → asking to specify")
+		return &AIAskResponse{
+			Answer:   req.clarify,
+			Intent:   AIIntentUnclear,
+			Task:     AITaskUnclear,
+			Model:    "local-period-clarify",
+			Snapshot: AISnapshot{},
+		}, true, nil
 	}
 
 	if req.comparison && len(req.periods) >= 2 {

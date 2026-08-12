@@ -7,6 +7,12 @@ import type {
   AISnapshot,
 } from "../types/ai";
 
+export function normalizeAIAnswer(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const answer = value.trim();
+  return answer || null;
+}
+
 export const askOperationsAI = (
   question: string,
   history: AIConversationMessage[] = [],
