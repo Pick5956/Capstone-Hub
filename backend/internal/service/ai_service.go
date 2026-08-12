@@ -321,6 +321,24 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		structuredFollowUp = true
 	}
 
+	// Deterministic ambiguity gate — runs before the confidence gate because the
+	// LLM is overconfident on vague questions and the keyword backstop may have
+	// already bumped confidence above the threshold. A few clearly-ambiguous shapes
+	// ask back with the likely meanings instead of guessing one (the confidence
+	// gate alone almost never fires for these — measured clarify rate ~0%).
+	if !structuredFollowUp {
+		if clarifyMsg, ok := detectAmbiguousQuestion(askedQuestion); ok {
+			aiStage("flow", "deterministic ambiguity → clarify")
+			return &AIAskResponse{
+				Answer:   clarifyMsg,
+				Intent:   AIIntentUnclear,
+				Task:     AITaskUnclear,
+				Model:    "local-ambiguity-clarify",
+				Snapshot: AISnapshot{},
+			}, nil
+		}
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
 	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
