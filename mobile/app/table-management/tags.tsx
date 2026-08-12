@@ -1,27 +1,29 @@
+import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
-import { Redirect, router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Switch, useWindowDimensions, View } from 'react-native';
 
 import { createTableTag, deleteTableTag, listTableTags, updateTableTag } from '@/src/api/table';
+import { AppIcon } from '@/src/components/app-icon';
+import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { FormField } from '@/src/components/form-controls';
-import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
+import { ActionDock, Button, Divider, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { colors, layout, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { TableTag } from '@/src/types/table';
 
 export default function TagManagerScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const canManage = can(activeMembership, 'manage_table');
-  const insets = useSafeAreaInsets();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const [tags, setTags] = useState<TableTag[]>([]);
   const [editingTag, setEditingTag] = useState<TableTag | null>(null);
+  const [formVisible, setFormVisible] = useState(false);
   const [tagName, setTagName] = useState('');
   const [tagOrder, setTagOrder] = useState('1');
   const [tagActive, setTagActive] = useState(true);
@@ -42,29 +44,38 @@ export default function TagManagerScreen() {
       setTags(response.tags ?? []);
       setTagOrder((current) => (editingTag ? current : String((response.tags ?? []).length + 1)));
     } catch (err) {
-      setError(err instanceof Error
-        ? err.message
-        : copy('โหลดแท็กไม่สำเร็จ', 'Unable to load tags'));
+      setError(err instanceof Error ? err.message : copy('โหลดแท็กไม่สำเร็จ', 'Unable to load tags'));
     } finally {
       setLoading(false);
     }
   }, [canManage, copy, editingTag]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   if (!activeMembership) return <Redirect href="/restaurants" />;
-  if (!canManage) {
-    return <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('จัดการแท็ก', 'Manage tags')}><StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('ต้องมีสิทธิ์ manage_table', 'You need the manage_table permission.')} /></MobileScreen>;
-  }
 
   function resetForm() {
+    setEditingTag(null);
+    setFormVisible(false);
+    setTagName('');
+    setTagOrder(String(tags.length + 1));
+    setTagActive(true);
+    setFormError(null);
+  }
+
+  function startCreate() {
+    if (formVisible || editingTag) {
+      resetForm();
+      return;
+    }
     setEditingTag(null);
     setTagName('');
     setTagOrder(String(tags.length + 1));
     setTagActive(true);
     setFormError(null);
+    setFormVisible(true);
   }
 
   function toggleEdit(tag: TableTag) {
@@ -73,6 +84,7 @@ export default function TagManagerScreen() {
       return;
     }
     setEditingTag(tag);
+    setFormVisible(true);
     setTagName(tag.name);
     setTagOrder(String(tag.display_order || 0));
     setTagActive(tag.is_active);
@@ -88,20 +100,13 @@ export default function TagManagerScreen() {
     setSubmitting(true);
     setFormError(null);
     try {
-      const payload = {
-        name: tagName.trim(),
-        color: 'gray',
-        display_order: toInt(tagOrder, 0),
-        is_active: tagActive,
-      };
+      const payload = { name: tagName.trim(), color: 'gray', display_order: toInt(tagOrder, 0), is_active: tagActive };
       if (editingTag) await updateTableTag(editingTag.ID, payload);
       else await createTableTag(payload);
       resetForm();
       await load();
     } catch (err) {
-      setFormError(err instanceof Error
-        ? err.message
-        : copy('บันทึกแท็กไม่สำเร็จ', 'Unable to save tag'));
+      setFormError(err instanceof Error ? err.message : copy('บันทึกแท็กไม่สำเร็จ', 'Unable to save tag'));
     } finally {
       setSubmitting(false);
     }
@@ -109,96 +114,79 @@ export default function TagManagerScreen() {
 
   async function confirmDelete(tag: TableTag) {
     if (!canManage) return;
-    if (confirmDeleteId !== tag.ID) { setConfirmDeleteId(tag.ID); setFormError(copy(`กดยืนยันอีกครั้งเพื่อลบแท็ก ${tag.name}`, `Press confirm again to delete the ${tag.name} tag.`)); return; }
-    setSubmitting(true); setFormError(null);
-    try { await deleteTableTag(tag.ID); if (editingTag?.ID === tag.ID) resetForm(); setConfirmDeleteId(null); await load(); }
-    catch (err) { setFormError(err instanceof Error ? err.message : copy('ลบแท็กไม่สำเร็จ', 'Unable to delete tag')); }
-    finally { setSubmitting(false); }
+    if (confirmDeleteId !== tag.ID) {
+      setConfirmDeleteId(tag.ID);
+      setFormError(copy(`กดยืนยันอีกครั้งเพื่อลบแท็ก ${tag.name}`, `Press confirm again to delete the ${tag.name} tag.`));
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await deleteTableTag(tag.ID);
+      if (editingTag?.ID === tag.ID) resetForm();
+      setConfirmDeleteId(null);
+      await load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : copy('ลบแท็กไม่สำเร็จ', 'Unable to delete tag'));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[layout.scrollContainer, { paddingBottom: 156 }]}
-      >
-        <View style={layout.headerRow}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text selectable style={typeScale.kicker}>{copy('โต๊ะ', 'TABLES')}</Text>
-            <Text selectable style={typeScale.hero}>{copy('จัดการแท็ก', 'Manage tags')}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{copy('กดรายการเพื่อแก้ไข กดซ้ำเพื่อยกเลิก', 'Tap a tag to edit it. Tap it again to cancel.')}</Text>
-          </View>
-          <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-            <Text style={layout.secondaryButtonText}>{copy('กลับ', 'Back')}</Text>
-          </Pressable>
+  if (!canManage) {
+    return <AppScreen title={copy('จัดการแท็ก', 'Manage tags')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} /></AppScreen>;
+  }
+
+  const showForm = tabletWorkspace || formVisible || Boolean(editingTag);
+  const form = (
+    <Surface style={{ width: '100%' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <AppIcon color={palette.text} name={editingTag ? 'create-outline' : 'add-circle-outline'} size={22} />
+        <Text style={[typeScale.cardTitle, { flex: 1 }]}>{editingTag ? copy('แก้ไขแท็ก', 'Edit tag') : copy('เพิ่มแท็ก', 'Add tag')}</Text>
+        {editingTag || formVisible ? <Button compact variant="ghost" icon="close" label={copy('ปิด', 'Close')} onPress={resetForm} /> : null}
+      </View>
+      <TextField label={copy('ชื่อแท็ก', 'Tag name')} value={tagName} onChangeText={setTagName} icon="pricetag-outline" error={formError && !tagName.trim() ? formError : null} />
+      <TextField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={tagOrder} onChangeText={setTagOrder} />
+      <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.sm }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={typeScale.cardTitle}>{copy('เปิดใช้งาน', 'Active')}</Text>
+          <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('แสดงแท็กนี้ตอนจัดโต๊ะ', 'Show this tag when organizing tables')}</Text>
         </View>
+        <Switch value={tagActive} onValueChange={setTagActive} />
+      </View>
+      {tabletWorkspace ? <Button icon="checkmark" label={editingTag ? copy('บันทึกแท็ก', 'Save tag') : copy('เพิ่มแท็ก', 'Add tag')} onPress={saveTag} loading={submitting} /> : null}
+    </Surface>
+  );
 
-        {!canManage ? <StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('หน้านี้สำหรับสิทธิ์ manage_table', 'This page requires the manage_table permission.')} /> : null}
-        {error ? <StateMessage title={copy('ทำรายการไม่สำเร็จ', 'Unable to complete action')} detail={error} /> : null}
-
-        <View style={{ gap: 10 }}>
-          {tags.map((tag) => {
+  return (
+    <AppScreen
+      title={copy('จัดการแท็ก', 'Manage tags')}
+      subtitle={copy(`${tags.length.toLocaleString('th-TH')} แท็ก`, `${tags.length.toLocaleString('en-US')} tags`)}
+      topLevel={false}
+      action={<Button compact icon={formVisible ? 'close' : 'add'} variant="secondary" label={formVisible ? copy('ปิด', 'Close') : copy('เพิ่ม', 'Add')} onPress={startCreate} />}
+      footer={!tabletWorkspace && showForm ? <ActionDock><Button icon="checkmark" label={editingTag ? copy('บันทึกแท็ก', 'Save tag') : copy('เพิ่มแท็ก', 'Add tag')} onPress={saveTag} loading={submitting} /></ActionDock> : undefined}
+    >
+      {error ? <Feedback title={copy('โหลดแท็กไม่ได้', 'Unable to load tags')} detail={error} tone="danger" /> : null}
+      {formError && (confirmDeleteId || tagName.trim()) ? <Feedback title={copy('ทำรายการไม่ได้', 'Unable to complete action')} detail={formError} tone={confirmDeleteId ? 'warning' : 'danger'} /> : null}
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.1 : undefined, gap: 0, padding: 0, overflow: 'hidden' }}>
+          {tags.map((tag, index) => {
             const selected = editingTag?.ID === tag.ID;
             return (
-              <Pressable
-                key={tag.ID}
-                onPress={() => toggleEdit(tag)}
-                style={[layout.card, selected && { borderColor: colors.primary, backgroundColor: '#FFF7ED' }]}
-              >
-                <View style={{ flex: 1, gap: 6 }}>
-                  <View style={{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.text, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
-                    <Text selectable style={[typeScale.caption, { color: colors.text, fontWeight: '900' }]}>{tag.name}</Text>
-                  </View>
-                  <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                    {copy(`ลำดับ ${tag.display_order.toLocaleString('th-TH')}`, `Order ${tag.display_order.toLocaleString('en-US')}`)}{tag.is_active ? '' : copy(' · ปิดใช้งาน', ' · Inactive')}
-                  </Text>
+              <View key={tag.ID}>
+                {index ? <Divider /> : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
+                  <Button compact variant="ghost" icon="pricetag-outline" label={tag.name} onPress={() => toggleEdit(tag)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
+                  <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{tag.display_order}{tag.is_active ? '' : copy(' · ปิด', ' · Off')}</Text>
+                  <Button compact variant={confirmDeleteId === tag.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === tag.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(tag); }} />
                 </View>
-                <Pressable onPress={() => confirmDelete(tag)} style={layout.secondaryButton}>
-                  <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmDeleteId === tag.ID ? copy('ยืนยันลบ', 'Confirm delete') : copy('ลบ', 'Delete')}</Text>
-                </Pressable>
-              </Pressable>
+              </View>
             );
           })}
-          {!loading && tags.length === 0 ? <StateMessage title={copy('ยังไม่มีแท็ก', 'No tags yet')} detail={copy('เพิ่มแท็กเพื่อจัดกลุ่มคุณสมบัติโต๊ะ', 'Add tags to group table attributes.')} /> : null}
-        </View>
-
-        <View style={layout.panel}>
-          <Text selectable style={typeScale.cardTitle}>{editingTag ? copy('แก้ไขแท็ก', 'Edit tag') : copy('เพิ่มแท็ก', 'Add tag')}</Text>
-          <FormField label={copy('ชื่อแท็ก', 'Tag name')} value={tagName} onChangeText={setTagName} />
-          <FormField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={tagOrder} onChangeText={setTagOrder} />
-          <View style={layout.headerRow}>
-            <Text selectable style={[typeScale.cardTitle, { flex: 1 }]}>{copy('เปิดใช้งาน', 'Active')}</Text>
-            <Switch value={tagActive} onValueChange={setTagActive} />
-          </View>
-          {editingTag ? (
-            <Pressable onPress={resetForm} style={layout.secondaryButton}>
-              <Text style={layout.secondaryButtonText}>{copy('ยกเลิกแก้ไข', 'Cancel editing')}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </ScrollView>
-
-      <View
-        style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            gap: 10,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.canvas,
-            padding: 16,
-            paddingBottom: Math.max(insets.bottom, 12) + 10,
-          }}
-      >
-        {formError ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{formError}</Text> : null}
-        <Pressable disabled={!canManage || submitting} onPress={saveTag} style={[layout.primaryButton, (!canManage || submitting) && { opacity: 0.65 }]}>
-          <Text style={layout.primaryButtonText}>{submitting ? copy('กำลังบันทึก...', 'Saving...') : editingTag ? copy('บันทึกแท็ก', 'Save tag') : copy('เพิ่มแท็ก', 'Add tag')}</Text>
-        </Pressable>
+          {!loading && !tags.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีแท็ก', 'No tags yet')} detail={copy('เพิ่มแท็กเพื่อจัดกลุ่มคุณสมบัติโต๊ะ', 'Add tags to group table attributes.')} /></View> : null}
+        </Surface>
+        {showForm ? <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined }}>{form}</View> : null}
       </View>
-    </KeyboardAvoidingView>
+    </AppScreen>
   );
 }

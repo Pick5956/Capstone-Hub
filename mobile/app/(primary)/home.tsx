@@ -1,13 +1,15 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
 
 import { listIngredients } from '@/src/api/ingredient';
 import { kitchenQueue, listOrders } from '@/src/api/order';
 import { getManagerReport, getTopMenuItemsByMonth } from '@/src/api/report';
 import { listTables } from '@/src/api/table';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
+import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import {
   buildHomeAttention,
@@ -113,22 +115,8 @@ function localizedWorkMode(
     โหมดเจ้าของร้าน: 'Owner mode',
     โหมดทำงาน: 'Work mode',
   };
-  const hints: Record<string, string> = {
-    'เปิดคิวครัวไว้เพื่อดูออเดอร์ที่ส่งเข้ามาและอัปเดตสถานะอาหาร':
-      'Keep the kitchen queue open to receive orders and update item statuses.',
-    'เริ่มจากเลือกโต๊ะ เปิดออเดอร์ เพิ่มเมนู แล้วส่งเข้าครัว':
-      'Choose a table, open an order, add items, then send it to the kitchen.',
-    'ติดตามออเดอร์ ออกบิล และบันทึกการชำระเงินจากมือถือ':
-      'Track orders, issue bills, and record payments from your phone.',
-    'ดูภาพรวมร้าน จัดการเมนู โต๊ะ พนักงาน และรายงานจากแอพเดียว':
-      'Monitor the restaurant and manage menus, tables, staff, and reports in one app.',
-    'ระบบจะแสดงเครื่องมือที่ตรงกับสิทธิ์ของบัญชีนี้':
-      'The app shows the tools available to this account.',
-  };
-
   return {
     title: copy(workMode.title, titles[workMode.title] || workMode.title),
-    hint: copy(workMode.hint, hints[workMode.hint] || workMode.hint),
   };
 }
 
@@ -253,6 +241,8 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const requestIdRef = useRef(0);
   const foregroundRequestIdRef = useRef<number | null>(null);
+  const adjacentWarmRequestedRef = useRef(false);
+  const primaryTabSceneStatus = usePrimaryTabSceneStatus();
   const [selectedDate, setSelectedDate] = useState(() => formatBangkokDate());
   const [loadedDate, setLoadedDate] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -403,8 +393,21 @@ export default function HomeScreen() {
     selectedDate,
   ]);
 
+  useEffect(() => {
+    if (
+      primaryTabSceneStatus !== 'adjacent' ||
+      adjacentWarmRequestedRef.current
+    ) return;
+    adjacentWarmRequestedRef.current = true;
+    void load();
+  }, [load, primaryTabSceneStatus]);
+
   useFocusEffect(useCallback(() => {
-    load();
+    if (adjacentWarmRequestedRef.current) {
+      adjacentWarmRequestedRef.current = false;
+    } else {
+      void load();
+    }
     const timer = isToday ? setInterval(() => load(true), 15000) : null;
     return () => {
       if (timer) clearInterval(timer);
@@ -426,6 +429,7 @@ export default function HomeScreen() {
   const kitchenSummary = useMemo(() => summarizeKitchenQueue(kitchenOrders), [kitchenOrders]);
   const inventorySummary = useMemo(() => summarizeInventory(ingredients), [ingredients]);
   const compactStats = width < 390;
+  const tabletWorkspace = width >= 900;
   const counts = useMemo(() => ({
     ...kitchenSummary,
     ...inventorySummary,
@@ -549,7 +553,7 @@ export default function HomeScreen() {
               opacity: pressed ? 0.72 : 1,
             })}
           >
-            <Text style={{ color: palette.text, fontSize: 24, fontWeight: '700' }}>‹</Text>
+            <AppIcon color={palette.text} name="chevron-back" size={21} />
           </Pressable>
           <View style={{ minWidth: 0, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: palette.borderStrong, backgroundColor: palette.surface, paddingHorizontal: spacing.sm }}>
             <Text selectable numberOfLines={1} adjustsFontSizeToFit style={{ color: palette.textStrong, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{dashboardDateLabel(selectedDate, language)}</Text>
@@ -576,7 +580,7 @@ export default function HomeScreen() {
               opacity: selectedDate >= today ? 0.35 : pressed ? 0.72 : 1,
             })}
           >
-            <Text style={{ color: palette.text, fontSize: 24, fontWeight: '700' }}>›</Text>
+            <AppIcon color={palette.text} name="chevron-forward" size={21} />
           </Pressable>
         </View>
         {!isToday ? (
@@ -646,12 +650,12 @@ export default function HomeScreen() {
                   <View
                     key={metric.key}
                     style={{
-                      width: '50%',
+                      width: tabletWorkspace ? '25%' : '50%',
                       minHeight: 72,
                       justifyContent: 'center',
                       gap: spacing.xs,
                       borderTopWidth: 1,
-                      borderRightWidth: index % 2 === 0 ? 1 : 0,
+                      borderRightWidth: tabletWorkspace ? (index + 1) % 4 === 0 ? 0 : 1 : index % 2 === 0 ? 1 : 0,
                       borderColor: palette.border,
                       paddingHorizontal: spacing.lg,
                       paddingVertical: spacing.md,
@@ -707,7 +711,7 @@ export default function HomeScreen() {
                     <View style={{ width: 8, height: 8, borderRadius: radius.full, backgroundColor: tone.color }} />
                     <Text selectable style={[typeScale.body, { flex: 1, color: palette.textStrong, fontWeight: '700' }]}>{label}</Text>
                     <StatusBadge label={String(item.count)} tone={item.tone} />
-                    <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
+                    <AppIcon color={palette.muted} name="chevron-forward" size={18} />
                   </Pressable>
                 );
               }) : optionalFailures.length ? (
@@ -784,7 +788,7 @@ export default function HomeScreen() {
 
           {isToday ? (
             <Surface>
-              <SectionHeader title={copy('งานระหว่างกะ', 'Shift actions')} detail={workMode.hint} />
+              <SectionHeader title={copy('งานระหว่างกะ', 'Shift actions')} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                 {canTakeOrder ? (
                   <Button
@@ -986,6 +990,7 @@ export default function HomeScreen() {
             {displayOrders.length ? displayOrders.slice(0, 6).map((order) => (
               <Pressable
                 accessibilityLabel={`${order.table?.display_label || order.order_number}, ${localizedOrderStatus(order.status, copy)}, ${formatMoney(order.grand_total, language)}`}
+                accessibilityRole="button"
                 key={order.ID}
                 onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: pressed ? 0.78 : 1 })}

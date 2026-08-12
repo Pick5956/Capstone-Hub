@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { getRoles } from '@/src/api/auth';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
@@ -62,8 +63,8 @@ export default function RolesScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการบทบาท', 'No role management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่มีสิทธิ์ manage_staff',
-            'You must be an owner or manager with the manage_staff permission.',
+            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
+            'You must be an owner or manager with team-management access.',
           )}
         />
       </AppScreen>
@@ -81,6 +82,7 @@ export default function RolesScreen() {
       action={(
         <Button
           compact
+          icon="add-outline"
           label={copy('เพิ่มบทบาท', 'Add role')}
           onPress={() => router.push('/staff/role' as never)}
         />
@@ -123,6 +125,9 @@ export default function RolesScreen() {
                 opacity: pressed ? 0.72 : 1,
               })}
             >
+              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: palette.surfaceSubtle }}>
+                <AppIcon color={palette.text} name="shield-checkmark-outline" size={21} />
+              </View>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text selectable style={typeScale.cardTitle}>{roleLabel(role, language)}</Text>
                 <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
@@ -137,7 +142,7 @@ export default function RolesScreen() {
                     : copy(' · บทบาทร้าน', ' · Restaurant role')}
                 </Text>
               </View>
-              <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
+              <AppIcon color={palette.muted} name="chevron-forward" size={18} />
             </Pressable>
           </View>
         ))}

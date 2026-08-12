@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import {
   createRole,
@@ -9,9 +9,11 @@ import {
   updateRole,
   updateRolePermissions,
 } from '@/src/api/auth';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
+  ActionDock,
   Button,
   EmptyState,
   Feedback,
@@ -27,10 +29,11 @@ import {
 } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { Role } from '@/src/types/restaurant';
 
 export default function RoleEditorScreen() {
+  const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const roleId = Number(id || 0);
   const editing = roleId > 0;
@@ -38,6 +41,7 @@ export default function RoleEditorScreen() {
   const { copy, language } = useDisplayPreferences();
   const actorRole = activeMembership?.role?.name;
   const allowed = canManageTeam(activeMembership);
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [role, setRole] = useState<Role | null>(null);
   const [name, setName] = useState('');
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -45,6 +49,7 @@ export default function RoleEditorScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expandedPermissionGroup, setExpandedPermissionGroup] = useState(0);
 
   useEffect(() => {
     if (!editing || !allowed) {
@@ -137,8 +142,8 @@ export default function RoleEditorScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการบทบาท', 'No role management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่มีสิทธิ์ manage_staff',
-            'You must be an owner or manager with the manage_staff permission.',
+            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
+            'You must be an owner or manager with team-management access.',
           )}
         />
       </AppScreen>
@@ -169,6 +174,16 @@ export default function RoleEditorScreen() {
         'Choose what this role can do in the restaurant.',
       )}
       topLevel={false}
+      footer={!tabletWorkspace ? (
+        <ActionDock>
+          <Button
+            icon="checkmark"
+            label={editing ? copy('บันทึกบทบาท', 'Save role') : copy('เพิ่มบทบาท', 'Add role')}
+            onPress={save}
+            loading={saving}
+          />
+        </ActionDock>
+      ) : undefined}
     >
       {error ? (
         <Feedback
@@ -223,10 +238,25 @@ export default function RoleEditorScreen() {
             `${permissions.length.toLocaleString('en-US')} permissions selected`,
           )}
         />
-        {permissionGroups.map((group) => (
-          <View key={group.title} style={{ gap: spacing.sm }}>
-            <Text style={typeScale.cardTitle}>{group.title}</Text>
-            {group.rows.map((row) => {
+        <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', flexWrap: tabletWorkspace ? 'wrap' : 'nowrap', gap: spacing.md }}>
+        {permissionGroups.map((group, groupIndex) => {
+          const expanded = tabletWorkspace || expandedPermissionGroup === groupIndex;
+          const selectedCount = group.rows.filter((row) => permissions.includes(row.key)).length;
+          return (
+          <View key={group.title} style={{ minWidth: 0, flexGrow: 1, flexBasis: tabletWorkspace ? '46%' : '100%', borderTopWidth: 1, borderTopColor: palette.border }}>
+            <Pressable
+              accessible={!tabletWorkspace}
+              accessibilityRole={tabletWorkspace ? undefined : 'button'}
+              accessibilityState={tabletWorkspace ? undefined : { expanded }}
+              disabled={tabletWorkspace}
+              onPress={() => setExpandedPermissionGroup((current) => current === groupIndex ? -1 : groupIndex)}
+              style={({ pressed }) => ({ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, opacity: pressed ? 0.72 : 1 })}
+            >
+              <Text style={[typeScale.cardTitle, { flex: 1 }]}>{group.title}</Text>
+              <Text style={[typeScale.caption, { color: palette.muted }]}>{selectedCount}/{group.rows.length}</Text>
+              {!tabletWorkspace ? <AppIcon color={palette.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={17} /> : null}
+            </Pressable>
+            {expanded ? group.rows.map((row) => {
               const active = permissions.includes(row.key);
               return (
                 <Pressable
@@ -235,44 +265,44 @@ export default function RoleEditorScreen() {
                   key={row.key}
                   onPress={() => toggle(row.key)}
                   style={({ pressed }) => ({
-                    minHeight: 48,
+                    minHeight: 50,
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: spacing.md,
-                    borderWidth: 1,
-                    borderColor: active ? palette.primary : palette.borderStrong,
-                    borderRadius: radius.md,
-                    backgroundColor: active ? palette.primary : palette.surface,
-                    paddingHorizontal: spacing.md,
+                    borderTopWidth: 1,
+                    borderTopColor: palette.border,
+                    backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
+                    paddingVertical: spacing.sm,
                     opacity: pressed ? 0.75 : 1,
                   })}
                 >
                   <Text style={{
                     flex: 1,
-                    color: active ? palette.primaryText : palette.text,
+                    color: palette.text,
                     fontSize: 14,
                     fontWeight: '600',
                   }}>
                     {row.label}
                   </Text>
-                  <Text style={{ color: active ? palette.primaryText : palette.muted }}>
-                    {active ? '✓' : ''}
-                  </Text>
+                  <AppIcon color={active ? palette.accent : palette.muted} name={active ? 'checkbox' : 'square-outline'} size={22} />
                 </Pressable>
               );
-            })}
+            }) : null}
           </View>
-        ))}
+          );
+        })}
+        </View>
       </Surface>
 
-      <Surface>
-        <Button
+      {tabletWorkspace || editing ? <Surface>
+        {tabletWorkspace ? <Button
+          icon="checkmark"
           label={editing
             ? copy('บันทึกบทบาท', 'Save role')
             : copy('เพิ่มบทบาท', 'Add role')}
           onPress={save}
           loading={saving}
-        />
+        /> : null}
         {editing ? (
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             {confirmDelete ? (
@@ -285,6 +315,7 @@ export default function RoleEditorScreen() {
             ) : null}
             <Button
               variant={confirmDelete ? 'danger' : 'secondary'}
+              icon="trash-outline"
               label={confirmDelete
                 ? copy('ยืนยันลบบทบาท', 'Confirm delete')
                 : copy('ลบบทบาท', 'Delete role')}
@@ -294,7 +325,7 @@ export default function RoleEditorScreen() {
             />
           </View>
         ) : null}
-      </Surface>
+      </Surface> : null}
     </AppScreen>
   );
 }

@@ -25,6 +25,7 @@ export function FormField({
     <View style={inputStyles.fieldGroup}>
       <Text selectable style={inputStyles.label}>{label}</Text>
       <TextInput
+        accessibilityLabel={label}
         autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
         keyboardType={keyboardType}
         multiline={multiline}
@@ -58,6 +59,9 @@ export function ChoiceRow<T extends string | number>({
           const active = option.value === value;
           return (
             <Pressable
+              accessibilityLabel={option.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               key={String(option.value)}
               onPress={() => onChange(option.value)}
               style={[

@@ -1,20 +1,21 @@
 import { StyleSheet } from 'react-native';
 
 export const palette = {
-  canvas: '#F8FAFC',
+  canvas: '#F4F5F7',
   surface: '#FFFFFF',
-  surfaceSubtle: '#F1F5F9',
-  surfaceStrong: '#E2E8F0',
-  border: '#DCE3EA',
-  borderStrong: '#CBD5E1',
-  text: '#111827',
-  textStrong: '#030712',
-  muted: '#5B6678',
-  placeholder: '#6B7280',
-  primary: '#111827',
+  surfaceSubtle: '#F7F8FA',
+  surfaceStrong: '#ECEFF3',
+  border: '#E1E5EA',
+  borderStrong: '#C9D0D8',
+  text: '#252A31',
+  textStrong: '#111318',
+  muted: '#606B78',
+  placeholder: '#687381',
+  primary: '#17191D',
   primaryText: '#FFFFFF',
-  accent: '#EA580C',
+  accent: '#E85D04',
   accentSoft: '#FFF7ED',
+  accentMuted: '#FED7AA',
   success: '#047857',
   successSoft: '#ECFDF5',
   warning: '#B45309',
@@ -40,6 +41,12 @@ export const spacing = {
   xxxl: 32,
 } as const;
 
+export const breakpoints = {
+  tablet: 768,
+  tabletWorkspace: 900,
+  expandedRail: 1240,
+} as const;
+
 export const radius = {
   sm: 4,
   md: 6,
@@ -54,9 +61,10 @@ export const typeScale = StyleSheet.create({
   },
   hero: {
     color: palette.textStrong,
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
-    lineHeight: 34,
+    lineHeight: 31,
+    letterSpacing: -0.3,
   },
   title: {
     color: palette.textStrong,
@@ -66,14 +74,14 @@ export const typeScale = StyleSheet.create({
   },
   cardTitle: {
     color: palette.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    lineHeight: 22,
+    lineHeight: 21,
   },
   body: {
     color: palette.text,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 21,
   },
   caption: {
     color: palette.text,
@@ -83,7 +91,7 @@ export const typeScale = StyleSheet.create({
   number: {
     color: palette.textStrong,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
 });
@@ -106,7 +114,7 @@ export const layout = StyleSheet.create({
     backgroundColor: palette.canvas,
   },
   panel: {
-    gap: spacing.lg,
+    gap: spacing.md,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: palette.border,
@@ -114,7 +122,7 @@ export const layout = StyleSheet.create({
     backgroundColor: palette.surface,
   },
   card: {
-    minHeight: 88,
+    minHeight: 80,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
@@ -136,7 +144,7 @@ export const layout = StyleSheet.create({
   },
   tile: {
     width: '48%',
-    minHeight: 112,
+    minHeight: 104,
     flexGrow: 1,
     flexBasis: 150,
     gap: spacing.sm,
@@ -186,11 +194,11 @@ export const inputStyles = StyleSheet.create({
     fontWeight: '700',
   },
   input: {
-    minHeight: 50,
+    minHeight: 52,
     borderWidth: 1,
-    borderColor: palette.borderStrong,
+    borderColor: palette.border,
     borderRadius: radius.md,
-    backgroundColor: palette.surface,
+    backgroundColor: palette.surfaceSubtle,
     color: palette.textStrong,
     fontSize: 16,
     paddingHorizontal: spacing.md,

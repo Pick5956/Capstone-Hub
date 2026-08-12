@@ -1,18 +1,19 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Image, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { apiUrl } from '@/src/api/client';
 import { kitchenQueue, updateOrderItemStatus } from '@/src/api/order';
+import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
+import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import {
   Button,
   ChipGroup,
   Divider,
   EmptyState,
   Feedback,
-  SectionHeader,
   StatusBadge,
   Surface,
   TextField,
@@ -42,6 +43,247 @@ import type { Order, OrderItem } from '@/src/types/order';
 
 type KitchenLane = 'cooking' | 'done';
 
+const styles = StyleSheet.create({
+  focusSwitch: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  focusButton: {
+    minHeight: 48,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+  },
+  focusLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  focusCount: {
+    minWidth: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+  },
+  focusCountText: {
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  board: {
+    alignItems: 'flex-start',
+    gap: spacing.lg,
+  },
+  lane: {
+    gap: spacing.md,
+  },
+  laneHeader: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.borderStrong,
+    paddingBottom: spacing.sm,
+  },
+  laneIdentity: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  laneDot: {
+    width: 9,
+    height: 9,
+    borderRadius: radius.full,
+  },
+  laneTitle: {
+    color: palette.textStrong,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  laneCount: {
+    color: palette.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  ticket: {
+    gap: 0,
+    overflow: 'hidden',
+    padding: 0,
+  },
+  ticketHeader: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderBottomWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  ticketIdentity: {
+    minWidth: 0,
+    flex: 1,
+    gap: spacing.xs,
+  },
+  orderNumber: {
+    color: palette.textStrong,
+    fontSize: 20,
+    lineHeight: 25,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  ticketMeta: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  timer: {
+    minWidth: 72,
+    alignItems: 'flex-end',
+    gap: 1,
+  },
+  timerValue: {
+    fontSize: 26,
+    lineHeight: 29,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  timerLabel: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  item: {
+    gap: spacing.md,
+    backgroundColor: palette.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+  },
+  itemMain: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  itemContent: {
+    minWidth: 0,
+    flex: 1,
+    gap: spacing.xs,
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  quantity: {
+    minWidth: 34,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceStrong,
+    paddingHorizontal: spacing.xs,
+  },
+  quantityText: {
+    color: palette.textStrong,
+    fontSize: 14,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  itemTitle: {
+    minWidth: 0,
+    flex: 1,
+    color: palette.textStrong,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  itemDetail: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconAction: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
+  },
+  inlineFlow: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: spacing.md,
+  },
+  ticketFooter: {
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    backgroundColor: palette.surfaceSubtle,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+});
+
+function KitchenIconAction({
+  label,
+  icon,
+  tone = 'neutral',
+  onPress,
+  disabled,
+  loading,
+}: {
+  label: string;
+  icon: AppIconName;
+  tone?: 'success' | 'danger' | 'neutral';
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const color = tone === 'success' ? palette.success : tone === 'danger' ? palette.danger : palette.text;
+  const pressedBackground = tone === 'success'
+    ? palette.successSoft
+    : tone === 'danger'
+      ? palette.dangerSoft
+      : palette.surfaceStrong;
+  const inactive = Boolean(disabled || loading);
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ busy: Boolean(loading), disabled: inactive }}
+      disabled={inactive}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.iconAction,
+        {
+          backgroundColor: pressed ? pressedBackground : 'transparent',
+          opacity: inactive ? 0.42 : pressed ? 0.72 : 1,
+        },
+      ]}
+    >
+      {loading ? <ActivityIndicator color={color} size="small" /> : <AppIcon color={color} name={icon} size={22} />}
+    </Pressable>
+  );
+}
+
 export default function KitchenScreen() {
   const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
@@ -64,6 +306,8 @@ export default function KitchenScreen() {
   const [undoConfirmId, setUndoConfirmId] = useState<number | null>(null);
   const mutationGateRef = useRef(createKitchenMutationGate());
   const requestGenerationRef = useRef(createRequestGeneration());
+  const adjacentWarmRequestedRef = useRef(false);
+  const primaryTabSceneStatus = usePrimaryTabSceneStatus();
 
   const reconcileQueue = useCallback(async () => {
     const request = requestGenerationRef.current.begin();
@@ -94,8 +338,21 @@ export default function KitchenScreen() {
     }
   }, [canView, copy, reconcileQueue]);
 
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
+    if (
+      primaryTabSceneStatus !== 'adjacent' ||
+      adjacentWarmRequestedRef.current
+    ) return;
+    adjacentWarmRequestedRef.current = true;
     void load();
+  }, [load, primaryTabSceneStatus]);
+
+  useFocusEffect(useCallback(() => {
+    if (adjacentWarmRequestedRef.current) {
+      adjacentWarmRequestedRef.current = false;
+    } else {
+      void load();
+    }
     const timer = setInterval(() => { void load(true); }, 8000);
     return () => {
       clearInterval(timer);
@@ -258,7 +515,9 @@ export default function KitchenScreen() {
       subtitle={copy(`${cookingTickets.length.toLocaleString('th-TH')} รอบกำลังทำ · ${doneTickets.length.toLocaleString('th-TH')} รอบทำเสร็จ`, `${cookingTickets.length.toLocaleString('en-US')} cooking batches · ${doneTickets.length.toLocaleString('en-US')} done`)}
       topLevel
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
-      action={<StatusBadge label={copy('อัปเดตอัตโนมัติทุก 8 วินาที', 'Auto-updates every 8 seconds')} tone="success" />}
+      action={<StatusBadge label={copy('อัปเดตอัตโนมัติทุก 8 วินาที', 'Auto-updates every 8 seconds')} tone="neutral" />}
+      contentMaxWidth={1320}
+      contentStyle={{ gap: spacing.lg }}
     >
       {error ? <Feedback title={copy('คิวครัวมีปัญหา', 'Kitchen queue issue')} detail={error} tone="danger" /> : null}
       {message ? <Feedback title={message} tone="success" /> : null}
@@ -270,26 +529,81 @@ export default function KitchenScreen() {
         />
       ) : null}
       {width < 820 ? (
-        <ChipGroup
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { label: copy(`กำลังทำ ${cookingTickets.length.toLocaleString('th-TH')}`, `Cooking ${cookingTickets.length.toLocaleString('en-US')}`), value: 'cooking' },
-            { label: copy(`ทำเสร็จ ${doneTickets.length.toLocaleString('th-TH')}`, `Done ${doneTickets.length.toLocaleString('en-US')}`), value: 'done' },
-          ]}
-        />
+        <View accessibilityRole="tablist" style={styles.focusSwitch}>
+          {([
+            {
+              key: 'cooking' as const,
+              label: copy('กำลังทำ', 'Cooking'),
+              count: cookingTickets.length,
+              color: palette.warning,
+              soft: palette.warningSoft,
+              border: '#FDE68A',
+            },
+            {
+              key: 'done' as const,
+              label: copy('ทำเสร็จ', 'Done'),
+              count: doneTickets.length,
+              color: palette.success,
+              soft: palette.successSoft,
+              border: '#A7F3D0',
+            },
+          ]).map((option) => {
+            const selected = option.key === filter;
+            return (
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                key={option.key}
+                onPress={() => setFilter(option.key)}
+                style={({ pressed }) => [
+                  styles.focusButton,
+                  {
+                    borderColor: selected ? option.border : palette.borderStrong,
+                    backgroundColor: selected ? option.soft : palette.surface,
+                    opacity: pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                <Text style={[styles.focusLabel, { color: selected ? option.color : palette.text }]}>{option.label}</Text>
+                <View style={[styles.focusCount, { backgroundColor: selected ? option.color : palette.surfaceStrong }]}>
+                  <Text style={[styles.focusCountText, { color: selected ? palette.surface : palette.text }]}>
+                    {option.count.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       ) : null}
-      <View style={{ flexDirection: width >= 820 ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+      <View style={[styles.board, { flexDirection: width >= 820 ? 'row' : 'column' }]}>
         {visibleGroups.map((group) => (
           <View
             key={group.kind}
-            style={{
+            style={[
+              styles.lane,
+              {
               width: width >= 820 ? undefined : '100%',
               flex: width >= 820 ? 1 : undefined,
-              gap: spacing.md,
-            }}
+              },
+            ]}
           >
-            <SectionHeader title={group.title} detail={copy(`${group.orders.length.toLocaleString('th-TH')} รอบครัว`, `${group.orders.length.toLocaleString('en-US')} kitchen batches`)} />
+            <View style={styles.laneHeader}>
+              <View style={styles.laneIdentity}>
+                <View
+                  style={[
+                    styles.laneDot,
+                    { backgroundColor: group.kind === 'cooking' ? palette.warning : palette.success },
+                  ]}
+                />
+                <Text accessibilityRole="header" selectable style={styles.laneTitle}>{group.title}</Text>
+              </View>
+              <Text selectable style={styles.laneCount}>
+                {copy(
+                  `${group.orders.length.toLocaleString('th-TH')} รอบครัว`,
+                  `${group.orders.length.toLocaleString('en-US')} kitchen batches`,
+                )}
+              </Text>
+            </View>
             {group.orders.map((order) => {
               const ticketKey = kitchenTicketKey(order);
               const items = (order.items || []).filter((item) => (
@@ -312,50 +626,56 @@ export default function KitchenScreen() {
                 ? '#A7F3D0'
                 : timing.urgency === 'overdue'
                   ? '#FECACA'
-                  : timing.urgency === 'warning'
-                    ? '#FDE68A'
-                    : palette.border;
-              const ticketBackgroundColor = group.kind === 'done'
+                  : '#FDE68A';
+              const ticketHeaderBackground = group.kind === 'done'
                 ? palette.successSoft
                 : timing.urgency === 'overdue'
                   ? palette.dangerSoft
-                  : timing.urgency === 'warning'
-                    ? palette.warningSoft
-                    : palette.surface;
+                  : palette.warningSoft;
+              const timerColor = timing.urgency === 'overdue'
+                ? palette.danger
+                : timing.urgency === 'warning'
+                  ? palette.warning
+                  : palette.textStrong;
+              const urgencyLabel = timing.urgency === 'overdue'
+                ? copy('เกินเวลา', 'Overdue')
+                : timing.urgency === 'warning'
+                  ? copy('ใกล้เกินเวลา', 'Due soon')
+                  : null;
               return (
                 <Surface
                   key={ticketKey}
-                  style={{
-                    borderColor: ticketBorderColor,
-                    backgroundColor: ticketBackgroundColor,
-                  }}
+                  style={[styles.ticket, { borderColor: ticketBorderColor }]}
                 >
-                  <SectionHeader
-                    title={order.order_number}
-                    detail={`${location} · ${batchLabel} · ${copy(`${items.length.toLocaleString('th-TH')} รายการ`, `${items.length.toLocaleString('en-US')} items`)}`}
-                    action={group.kind === 'cooking' ? (
-                      <View style={{ minWidth: 52, alignItems: 'flex-end', gap: 1 }}>
-                        <Text
-                          selectable
-                          style={[
-                            typeScale.number,
-                            {
-                              color: timing.urgency === 'overdue'
-                                ? palette.danger
-                                : timing.urgency === 'warning'
-                                  ? palette.warning
-                                  : palette.textStrong,
-                            },
-                          ]}
-                        >
+                  <View
+                    style={[
+                      styles.ticketHeader,
+                      {
+                        borderBottomColor: ticketBorderColor,
+                        backgroundColor: ticketHeaderBackground,
+                      },
+                    ]}
+                  >
+                    <View style={styles.ticketIdentity}>
+                      <Text selectable style={styles.orderNumber}>{order.order_number}</Text>
+                      <Text selectable style={styles.ticketMeta}>
+                        {location} · {batchLabel} · {copy(
+                          `${items.length.toLocaleString('th-TH')} รายการ`,
+                          `${items.length.toLocaleString('en-US')} items`,
+                        )}
+                      </Text>
+                    </View>
+                    {group.kind === 'cooking' ? (
+                      <View style={styles.timer}>
+                        <Text selectable style={[styles.timerValue, { color: timerColor }]}>
                           {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
                         </Text>
-                        <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                          {copy('นาที', 'min')}
+                        <Text selectable style={[styles.timerLabel, { color: timerColor }]}>
+                          {urgencyLabel ? `${copy('นาที', 'min')} · ${urgencyLabel}` : copy('นาที', 'min')}
                         </Text>
                       </View>
-                    ) : undefined}
-                  />
+                    ) : null}
+                  </View>
                   {items.map((item, index) => {
                     const cancelling = cancelTargetId === item.ID;
                     const confirmingUndo = undoConfirmId === item.ID;
@@ -364,28 +684,44 @@ export default function KitchenScreen() {
                     return (
                       <View key={item.ID}>
                         {index ? <Divider /> : null}
-                        <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+                        <View style={styles.item}>
+                          <View style={styles.itemMain}>
                             {imageUri ? (
                               <Image
                                 accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
                                 source={{ uri: imageUri }}
                                 resizeMode="contain"
-                                style={{
-                                  width: width >= 640 ? 64 : 56,
-                                  height: width >= 640 ? 64 : 56,
-                                  borderRadius: radius.md,
-                                  backgroundColor: palette.surfaceSubtle,
-                                }}
-                              />
-                            ) : null}
-                            <View style={{ flex: 1, gap: 3 }}>
-                              <Text selectable style={typeScale.cardTitle}>{item.menu_name}</Text>
-                              <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                                {copy(`จำนวน ${item.quantity.toLocaleString('th-TH')}`, `Quantity ${item.quantity.toLocaleString('en-US')}`)}{item.note ? ` · ${item.note}` : ''}
-                              </Text>
+                                 style={{
+                                   width: width >= 820 ? 60 : 52,
+                                   height: width >= 820 ? 60 : 52,
+                                   borderRadius: radius.md,
+                                   backgroundColor: 'transparent',
+                                 }}
+                               />
+                             ) : null}
+                            <View style={styles.itemContent}>
+                              <View style={styles.itemTitleRow}>
+                                <View
+                                  accessible
+                                  accessibilityLabel={copy(
+                                    `จำนวน ${item.quantity.toLocaleString('th-TH')}`,
+                                    `Quantity ${item.quantity.toLocaleString('en-US')}`,
+                                  )}
+                                  style={styles.quantity}
+                                >
+                                  <Text selectable style={styles.quantityText}>
+                                    ×{item.quantity.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
+                                  </Text>
+                                </View>
+                                <Text selectable style={styles.itemTitle}>{item.menu_name}</Text>
+                              </View>
+                              {item.note ? (
+                                <Text selectable style={[styles.itemDetail, { color: palette.text, fontWeight: '700' }]}>
+                                  {item.note}
+                                </Text>
+                              ) : null}
                               {item.selected_options?.length ? (
-                                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                                <Text selectable style={styles.itemDetail}>
                                   {item.selected_options.map((option) => option.option_name).join(', ')}
                                 </Text>
                               ) : null}
@@ -399,36 +735,44 @@ export default function KitchenScreen() {
                                     : copy('รายการนี้ทานที่ร้าน', 'This item: Dine-in')}
                                 </Text>
                               ) : null}
+                              {!canUpdate || group.kind === 'done' ? (
+                                <StatusBadge
+                                  label={group.kind === 'done' ? copy('ครัวทำเสร็จ', 'Kitchen done') : itemStatusLabel(item.status, language)}
+                                  tone={group.kind === 'done' ? 'success' : 'warning'}
+                                />
+                              ) : null}
                             </View>
-                            <StatusBadge
-                              label={group.kind === 'done' ? copy('ครัวทำเสร็จ', 'Kitchen done') : itemStatusLabel(item.status, language)}
-                              tone={group.kind === 'done' ? 'success' : 'warning'}
-                            />
+                            {canUpdate && group.kind === 'cooking' && !cancelling ? (
+                              <View style={styles.itemActions}>
+                                <KitchenIconAction
+                                  label={copy(`ทำ ${item.menu_name} เสร็จ`, `Mark ${item.menu_name} done`)}
+                                  icon="checkmark"
+                                  tone="success"
+                                  onPress={() => setItemStatus(order.ID, item, 'ready', undefined, copy('ย้ายรายการไปโซนทำเสร็จแล้ว', 'Item moved to Kitchen done'))}
+                                  loading={submittingKey === `ready:${item.ID}`}
+                                  disabled={submittingKey !== null}
+                                />
+                                <KitchenIconAction
+                                  label={copy(`ยกเลิก ${item.menu_name}`, `Cancel ${item.menu_name}`)}
+                                  icon="close"
+                                  tone="danger"
+                                  onPress={() => startCancel(item.ID)}
+                                  disabled={submittingKey !== null}
+                                />
+                              </View>
+                            ) : null}
+                            {canUpdate && group.kind === 'done' && !confirmingUndo ? (
+                              <KitchenIconAction
+                                label={copy(`ย้าย ${item.menu_name} กลับไปกำลังทำ`, `Move ${item.menu_name} back to Cooking`)}
+                                icon="arrow-undo-outline"
+                                onPress={() => confirmUndo(order.ID, item)}
+                                disabled={submittingKey !== null}
+                              />
+                            ) : null}
                           </View>
 
-                          {canUpdate && group.kind === 'cooking' && !cancelling ? (
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                              <Button
-                                compact
-                                label={copy('ทำเสร็จ', 'Mark done')}
-                                onPress={() => setItemStatus(order.ID, item, 'ready', undefined, copy('ย้ายรายการไปโซนทำเสร็จแล้ว', 'Item moved to Kitchen done'))}
-                                loading={submittingKey === `ready:${item.ID}`}
-                                disabled={submittingKey !== null}
-                                style={{ flexGrow: 1 }}
-                              />
-                              <Button
-                                compact
-                                variant="secondary"
-                                label={copy('ยกเลิกรายการ', 'Cancel item')}
-                                onPress={() => startCancel(item.ID)}
-                                disabled={submittingKey !== null}
-                                style={{ flexGrow: 1 }}
-                              />
-                            </View>
-                          ) : null}
-
                           {canUpdate && group.kind === 'cooking' && cancelling ? (
-                            <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}>
+                            <View style={styles.inlineFlow}>
                               <TextField
                                 label={copy('เหตุผลที่ยกเลิก', 'Cancellation reason')}
                                 value={cancelReason}
@@ -452,7 +796,7 @@ export default function KitchenScreen() {
                                   { label: copy('เหตุสุดวิสัย', 'Unavoidable issue'), value: copy('เหตุสุดวิสัย', 'Unavoidable issue') },
                                 ]}
                               />
-                              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                              <View style={[styles.itemActions, { flexDirection: width < 420 ? 'column' : 'row' }]}>
                                 <Button
                                   compact
                                   variant="secondary"
@@ -477,53 +821,45 @@ export default function KitchenScreen() {
                             </View>
                           ) : null}
 
-                          {canUpdate && group.kind === 'done' ? (
-                            confirmingUndo ? (
-                              <View style={{ gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}>
-                                <Text selectable style={[typeScale.body, { color: palette.text }]}>
-                                  {copy('ยืนยันย้ายรายการนี้กลับไปโซนกำลังทำ', 'Move this item back to the Cooking lane?')}
-                                </Text>
-                                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                                  <Button
-                                    compact
-                                    variant="secondary"
-                                    label={copy('ยกเลิก', 'Cancel')}
-                                    onPress={() => setUndoConfirmId(null)}
-                                    disabled={submittingKey !== null}
-                                    style={{ flex: 1 }}
-                                  />
-                                  <Button
-                                    compact
-                                    label={copy('ยืนยันย้ายกลับ', 'Confirm move back')}
-                                    onPress={() => confirmUndo(order.ID, item)}
-                                    loading={submittingKey === `cooking:${item.ID}`}
-                                    disabled={submittingKey !== null}
-                                    style={{ flex: 1 }}
-                                  />
-                                </View>
+                          {canUpdate && group.kind === 'done' && confirmingUndo ? (
+                            <View style={styles.inlineFlow}>
+                              <Text selectable style={[typeScale.body, { color: palette.text }]}>
+                                {copy('ยืนยันย้ายรายการนี้กลับไปโซนกำลังทำ', 'Move this item back to the Cooking lane?')}
+                              </Text>
+                              <View style={[styles.itemActions, { flexDirection: width < 420 ? 'column' : 'row' }]}>
+                                <Button
+                                  compact
+                                  variant="secondary"
+                                  label={copy('ยกเลิก', 'Cancel')}
+                                  onPress={() => setUndoConfirmId(null)}
+                                  disabled={submittingKey !== null}
+                                  style={{ flex: 1 }}
+                                />
+                                <Button
+                                  compact
+                                  label={copy('ยืนยันย้ายกลับ', 'Confirm move back')}
+                                  onPress={() => confirmUndo(order.ID, item)}
+                                  loading={submittingKey === `cooking:${item.ID}`}
+                                  disabled={submittingKey !== null}
+                                  style={{ flex: 1 }}
+                                />
                               </View>
-                            ) : (
-                              <Button
-                                compact
-                                variant="secondary"
-                                label={copy('ย้ายกลับไปกำลังทำ', 'Move back to Cooking')}
-                                onPress={() => confirmUndo(order.ID, item)}
-                                disabled={submittingKey !== null}
-                              />
-                            )
+                            </View>
                           ) : null}
                         </View>
                       </View>
                     );
                   })}
                   {canUpdate && group.kind === 'cooking' && items.length > 1 ? (
-                    <Button
-                      variant="ghost"
-                      label={copy('ทำเสร็จทั้งหมด', 'Mark all done')}
-                      onPress={() => markAllDone(order)}
-                      loading={submittingKey === `all:${ticketKey}`}
-                      disabled={submittingKey !== null}
-                    />
+                    <View style={styles.ticketFooter}>
+                      <Button
+                        variant="ghost"
+                        label={copy('ทำเสร็จทั้งหมด', 'Mark all done')}
+                        onPress={() => markAllDone(order)}
+                        loading={submittingKey === `all:${ticketKey}`}
+                        disabled={submittingKey !== null}
+                      />
+                    </View>
                   ) : null}
                 </Surface>
               );

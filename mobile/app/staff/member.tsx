@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { getRoles } from '@/src/api/auth';
 import {
@@ -9,9 +9,11 @@ import {
   updateMemberRole,
   updateMemberStatus,
 } from '@/src/api/restaurant';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
+  ActionDock,
   Button,
   ChipGroup,
   EmptyState,
@@ -30,10 +32,11 @@ import {
 import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { Membership, MembershipStatus, Role } from '@/src/types/restaurant';
 
 export default function StaffMemberScreen() {
+  const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const routeId = parsePositiveRouteId(id);
   const memberId = routeId.kind === 'valid' ? routeId.id : null;
@@ -42,6 +45,7 @@ export default function StaffMemberScreen() {
   const restaurantId = activeMembership?.restaurant_id;
   const actorRole = activeMembership?.role?.name;
   const allowed = canManageTeam(activeMembership);
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [member, setMember] = useState<Membership | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleId, setRoleId] = useState(0);
@@ -53,6 +57,7 @@ export default function StaffMemberScreen() {
   const [confirmStatus, setConfirmStatus] = useState<MembershipStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandedPermissionGroup, setExpandedPermissionGroup] = useState(0);
 
   useEffect(() => {
     if (!restaurantId || !allowed || memberId === null) {
@@ -180,8 +185,8 @@ export default function StaffMemberScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการทีม', 'No team management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่มีสิทธิ์ manage_staff',
-            'You must be an owner or manager with the manage_staff permission.',
+            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
+            'You must be an owner or manager with team-management access.',
           )}
         />
       </AppScreen>
@@ -223,6 +228,17 @@ export default function StaffMemberScreen() {
         : copy('ข้อมูลพนักงาน', 'Staff details')}
       subtitle={member?.user?.email || copy('กำลังโหลดข้อมูล', 'Loading details')}
       topLevel={false}
+      footer={!tabletWorkspace && member ? (
+        <ActionDock>
+          <Button
+            icon={confirmStatus === 'removed' ? 'person-remove-outline' : 'checkmark'}
+            variant={confirmStatus === 'removed' ? 'danger' : 'primary'}
+            label={confirmStatus ? copy('ยืนยันบันทึก', 'Confirm save') : copy('บันทึกพนักงาน', 'Save staff')}
+            onPress={save}
+            loading={saving}
+          />
+        </ActionDock>
+      ) : undefined}
     >
       {error ? (
         <Feedback
@@ -252,7 +268,8 @@ export default function StaffMemberScreen() {
 
       {member ? (
         <>
-          <Surface>
+          <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+          <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined }}>
             <SectionHeader title={copy('บทบาทและสถานะ', 'Role & status')} />
             <ChipGroup
               label={copy('บทบาท', 'Role')}
@@ -275,7 +292,7 @@ export default function StaffMemberScreen() {
             />
           </Surface>
 
-          <Surface>
+          <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.2 : undefined }}>
             <SectionHeader
               title={copy('สิทธิ์การใช้งาน', 'Permissions')}
               detail={useRolePermissions
@@ -304,10 +321,24 @@ export default function StaffMemberScreen() {
                 { label: copy('กำหนดเอง', 'Customize'), value: 'custom' },
               ]}
             />
-            {!useRolePermissions ? permissionGroups.map((group) => (
-              <View key={group.title} style={{ gap: spacing.sm }}>
-                <Text style={typeScale.cardTitle}>{group.title}</Text>
-                {group.rows.map((row) => {
+            {!useRolePermissions ? permissionGroups.map((group, groupIndex) => {
+              const expanded = tabletWorkspace || expandedPermissionGroup === groupIndex;
+              const selectedCount = group.rows.filter((row) => permissions.includes(row.key)).length;
+              return (
+              <View key={group.title} style={{ borderTopWidth: 1, borderTopColor: palette.border }}>
+                <Pressable
+                  accessible={!tabletWorkspace}
+                  accessibilityRole={tabletWorkspace ? undefined : 'button'}
+                  accessibilityState={tabletWorkspace ? undefined : { expanded }}
+                  disabled={tabletWorkspace}
+                  onPress={() => setExpandedPermissionGroup((current) => current === groupIndex ? -1 : groupIndex)}
+                  style={({ pressed }) => ({ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, opacity: pressed ? 0.72 : 1 })}
+                >
+                  <Text style={[typeScale.cardTitle, { flex: 1 }]}>{group.title}</Text>
+                  <Text style={[typeScale.caption, { color: palette.muted }]}>{selectedCount}/{group.rows.length}</Text>
+                  {!tabletWorkspace ? <AppIcon color={palette.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={17} /> : null}
+                </Pressable>
+                {expanded ? group.rows.map((row) => {
                   const active = permissions.includes(row.key);
                   return (
                     <Pressable
@@ -316,37 +347,36 @@ export default function StaffMemberScreen() {
                       key={row.key}
                       onPress={() => toggle(row.key)}
                       style={({ pressed }) => ({
-                        minHeight: 48,
+                        minHeight: 50,
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: spacing.md,
-                        borderWidth: 1,
-                        borderColor: active ? palette.primary : palette.borderStrong,
-                        borderRadius: radius.md,
-                        backgroundColor: active ? palette.primary : palette.surface,
-                        paddingHorizontal: spacing.md,
+                        borderTopWidth: 1,
+                        borderTopColor: palette.border,
+                        backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
+                        paddingVertical: spacing.sm,
                         opacity: pressed ? 0.76 : 1,
                       })}
                     >
                       <Text style={{
                         flex: 1,
-                        color: active ? palette.primaryText : palette.text,
+                        color: palette.text,
                         fontSize: 14,
                         fontWeight: '600',
                       }}>
                         {row.label}
                       </Text>
-                      <Text style={{ color: active ? palette.primaryText : palette.muted }}>
-                        {active ? '✓' : ''}
-                      </Text>
+                      <AppIcon color={active ? palette.accent : palette.muted} name={active ? 'checkbox' : 'square-outline'} size={22} />
                     </Pressable>
                   );
-                })}
+                }) : null}
               </View>
-            )) : null}
+              );
+            }) : null}
           </Surface>
+          </View>
 
-          <Surface>
+          {tabletWorkspace || confirmStatus ? <Surface>
             {confirmStatus ? (
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                 <Button
@@ -358,22 +388,24 @@ export default function StaffMemberScreen() {
                   }}
                   style={{ flex: 1 }}
                 />
-                <Button
+                {tabletWorkspace ? <Button
                   variant={confirmStatus === 'removed' ? 'danger' : 'primary'}
+                  icon={confirmStatus === 'removed' ? 'person-remove-outline' : 'checkmark'}
                   label={copy('ยืนยันบันทึก', 'Confirm save')}
                   onPress={save}
                   loading={saving}
                   style={{ flex: 1 }}
-                />
+                /> : null}
               </View>
-            ) : (
+            ) : tabletWorkspace ? (
               <Button
+                icon="checkmark"
                 label={copy('บันทึกข้อมูลพนักงาน', 'Save staff details')}
                 onPress={save}
                 loading={saving}
               />
-            )}
-          </Surface>
+            ) : null}
+          </Surface> : null}
         </>
       ) : null}
     </AppScreen>
