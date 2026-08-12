@@ -15,6 +15,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
+import AIInputTools from "@/src/components/shared/AIInputTools";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -952,6 +953,11 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
                 className="min-h-9 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+              />
+              <AIInputTools
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
               />
               <button
                 type="submit"

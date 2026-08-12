@@ -14,6 +14,15 @@ export type AIInsight = {
   detail: string;
 };
 
+export type AIReceiptDraft = {
+  category: "ingredient" | "labor" | "rent" | "utilities" | "equipment" | "other" | string;
+  amount: number;
+  spent_at: string;
+  vendor: string;
+  note: string;
+  confidence: "high" | "medium" | "low" | string;
+};
+
 export type AIMenuSummary = {
   menu_name: string;
   quantity: number;

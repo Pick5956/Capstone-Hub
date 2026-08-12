@@ -32,6 +32,7 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
+import AIInputTools from "@/src/components/shared/AIInputTools";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import SiriOrb from "@/src/components/ui/siri-orb";
@@ -647,6 +648,11 @@ export default function AIAssistantPage() {
                 placeholder={copy.askPlaceholder}
                 rows={1}
                 className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+              />
+              <AIInputTools
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
               />
               <button
                 type="submit"

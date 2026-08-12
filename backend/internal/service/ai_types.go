@@ -156,7 +156,15 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text         string              `json:"text,omitempty"`
+	InlineData   *geminiInlineData   `json:"inline_data,omitempty"`
 	FunctionCall *geminiFunctionCall `json:"functionCall,omitempty"`
+}
+
+// geminiInlineData carries a base64-encoded image (or other blob) so Gemini can
+// read it — used by the receipt scanner to send a photo for field extraction.
+type geminiInlineData struct {
+	MimeType string `json:"mime_type"`
+	Data     string `json:"data"`
 }
 
 type geminiFunctionCall struct {
