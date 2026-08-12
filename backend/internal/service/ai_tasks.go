@@ -335,6 +335,10 @@ func requestedTopSellingLimit(question string) (int, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(question))
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`(\d+)\s*(?:อันดับ|รายการ|เมนู)`),
+		// A rank written after the word ("อันดับ 1", "อันดับที่ 1"). Ranks >= 2 are
+		// already claimed by the structured rank query upstream, so in practice this
+		// resolves the rank-1 case that otherwise fell through to the default of 5.
+		regexp.MustCompile(`อันดับ(?:ที่)?\s*(\d+)`),
 		regexp.MustCompile(`(?:top|first)\s*(\d+)`),
 	}
 	for _, pattern := range patterns {

@@ -163,6 +163,49 @@ func TestResolveDatedSalesRequestUnparseableSecondOperandAsksToClarify(t *testin
 	}
 }
 
+// A store summary that names a day resolves that single day; an unscoped summary
+// does not, so it keeps the rolling-window overview.
+func TestSummaryDayScope(t *testing.T) {
+	if _, ok := summaryDayScope("สรุปสถานการณ์ร้าน", refJuly(t)); ok {
+		t.Fatal("an unscoped summary must not resolve a day")
+	}
+	today, ok := summaryDayScope("สรุปร้านวันนี้", refJuly(t))
+	if !ok || today.Label != "วันนี้" {
+		t.Fatalf("today scope wrong: ok=%v %+v", ok, today)
+	}
+	if today.End.Sub(today.Start) != 24*time.Hour {
+		t.Fatalf("today window is not exactly one day: %v..%v", today.Start, today.End)
+	}
+	y, ok := summaryDayScope("สรุปเมื่อวานให้หน่อย", refJuly(t))
+	if !ok || y.Label != "เมื่อวาน" {
+		t.Fatalf("yesterday scope wrong: ok=%v %+v", ok, y)
+	}
+	named, ok := summaryDayScope("สรุปร้านวันที่ 2 กรกฎาคม", refJuly(t))
+	if !ok || named.Label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("named-date scope wrong: ok=%v %+v", ok, named)
+	}
+}
+
+// A day that does not exist for its month must be flagged, not answered as the
+// whole month ("31 กุมภาพันธ์" used to return all of February).
+func TestResolveDatedSalesRequestRejectsImpossibleDate(t *testing.T) {
+	for _, q := range []string{
+		"ยอดขายวันที่ 31 กุมภาพันธ์",
+		"ยอดขาย 31 กุมภาพันธ์",
+		"ยอดขายวันที่ 31 เมษายน",
+	} {
+		req, ok := resolveDatedSalesRequest(q, refJuly(t))
+		if !ok || req.clarify == "" || len(req.periods) != 0 {
+			t.Fatalf("%q should ask to clarify an impossible date, got ok=%v %+v", q, ok, req)
+		}
+	}
+	// A valid day must still resolve to that single day.
+	req, ok := resolveDatedSalesRequest("ยอดขายวันที่ 28 กุมภาพันธ์", refJuly(t))
+	if !ok || req.clarify != "" || len(req.periods) != 1 {
+		t.Fatalf("valid date must resolve to one day, got ok=%v %+v", ok, req)
+	}
+}
+
 func TestResolveDatedSalesRequestExcludesMenuAndAverage(t *testing.T) {
 	for _, q := range []string{
 		"เมนูไหนขายดีเดือนมีนาคม",

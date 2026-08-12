@@ -204,6 +204,98 @@ func extractSpecificDate(question string, ref time.Time) (AIPeriod, bool) {
 	return dayPeriod(year, time.Month(month), day, loc), true
 }
 
+// summaryDayScope resolves a single day named in a store-summary question
+// ("วันนี้", "เมื่อวาน", or an explicit date), so a day-scoped summary can lead
+// with that day's real total instead of the rolling-window figure. Returns
+// ok=false for an unscoped "สรุปร้าน", which keeps the normal window summary.
+func summaryDayScope(question string, ref time.Time) (AIPeriod, bool) {
+	if day, ok := extractSpecificDate(question, ref); ok {
+		return day, true
+	}
+	loc := bangkokLocation()
+	ref = ref.In(loc)
+	n := strings.ToLower(question)
+	today := dayPeriod(ref.Year(), ref.Month(), ref.Day(), loc)
+	switch {
+	case containsAny(n, "เมื่อวาน", "yesterday"):
+		y := ref.AddDate(0, 0, -1)
+		p := dayPeriod(y.Year(), y.Month(), y.Day(), loc)
+		p.Label = "เมื่อวาน"
+		return p, true
+	case containsAny(n, "วันนี้", "today"):
+		today.Label = "วันนี้"
+		return today, true
+	}
+	return AIPeriod{}, false
+}
+
+// invalidNamedDate returns a clarification when the question names an explicit
+// calendar day that does not exist for the month it names ("31 กุมภาพันธ์",
+// "2569-02-31", "31/4/2569"). Without this the day is silently dropped and the
+// question falls through to the whole month, reporting a figure the user never
+// asked for. It only fires on a clearly-named day, so ordinary month questions
+// are untouched.
+func invalidNamedDate(question string, ref time.Time) (string, bool) {
+	loc := bangkokLocation()
+	ref = ref.In(loc)
+	n := strings.ToLower(strings.TrimSpace(question))
+
+	if m := reISODate.FindStringSubmatch(n); m != nil {
+		year, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		day, _ := strconv.Atoi(m[3])
+		if !validCalendarDate(year, month, day) {
+			return invalidDateMessage(day, month), true
+		}
+		return "", false
+	}
+	if m := reSlashDate.FindStringSubmatch(n); m != nil {
+		day, _ := strconv.Atoi(m[1])
+		month, _ := strconv.Atoi(m[2])
+		year, _ := strconv.Atoi(m[3])
+		if year > 2400 {
+			year -= 543
+		}
+		if !validCalendarDate(year, month, day) {
+			return invalidDateMessage(day, month), true
+		}
+		return "", false
+	}
+
+	day := 0
+	if m := reThaiDayOfMonth.FindStringSubmatch(n); m != nil {
+		day, _ = strconv.Atoi(m[1])
+	}
+	month, hasMonth := detectMonthInText(n)
+	if day == 0 && hasMonth {
+		if idx := reAnyMonth.FindStringIndex(n); idx != nil {
+			if d, ok := trailingDayNumber(n[:idx[0]]); ok {
+				day = d
+			}
+		}
+	}
+	if day == 0 {
+		return "", false
+	}
+	year := ref.Year()
+	resolvedMonth := int(ref.Month())
+	if hasMonth {
+		resolvedMonth = month
+		year = resolveNamedMonthYear(month, ref)
+	}
+	if validCalendarDate(year, resolvedMonth, day) {
+		return "", false
+	}
+	return invalidDateMessage(day, resolvedMonth), true
+}
+
+func invalidDateMessage(day, month int) string {
+	if name := thaiMonthName(month); name != "" {
+		return fmt.Sprintf("วันที่ %d %s ไม่มีอยู่จริงครับ ลองระบุวันที่ที่ถูกต้องได้ไหมครับ", day, name)
+	}
+	return fmt.Sprintf("วันที่ที่ระบุ (วันที่ %d เดือน %d) ไม่ถูกต้องครับ ลองระบุใหม่ได้ไหมครับ", day, month)
+}
+
 // trailingDayNumber reads a 1-2 digit day at the end of the text preceding a
 // month name, allowing an optional "เดือน" between them.
 func trailingDayNumber(prefix string) (int, bool) {
@@ -490,6 +582,11 @@ func resolveDatedSalesRequest(question string, ref time.Time) (datedSalesRequest
 	n := strings.ToLower(strings.TrimSpace(question))
 	if datedSalesExcluded(n) {
 		return datedSalesRequest{}, false
+	}
+	// A named day that does not exist for its month ("31 กุมภาพันธ์") is flagged
+	// rather than silently answered as that whole month.
+	if msg, bad := invalidNamedDate(question, ref); bad && mentionsSalesTotal(n) {
+		return datedSalesRequest{clarify: msg}, true
 	}
 	// A named day is more specific than the month containing it.
 	if day, ok := extractSpecificDate(question, ref); ok && mentionsSalesTotal(n) {

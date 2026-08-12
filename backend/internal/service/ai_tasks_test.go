@@ -10,6 +10,28 @@ import (
 	"Project-M/internal/repository"
 )
 
+// "อันดับ 1" (rank written after the word) must resolve to a single menu, not
+// fall through to the default of five.
+func TestRequestedTopSellingLimitReadsRankAfterWord(t *testing.T) {
+	cases := []struct {
+		q    string
+		want int
+		ok   bool
+	}{
+		{"เมนูขายดีอันดับ 1", 1, true},
+		{"เมนูขายดีอันดับที่ 1", 1, true},
+		{"เมนูขายดี 3 อันดับแรก", 3, true},
+		{"top 5 menus", 5, true},
+		{"เมนูไหนขายดี", 0, false},
+	}
+	for _, c := range cases {
+		got, ok := requestedTopSellingLimit(c.q)
+		if got != c.want || ok != c.ok {
+			t.Fatalf("%q => (%d,%v), want (%d,%v)", c.q, got, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestAIRouterScopeQuestionUsesConversationFlowWithoutSnapshot(t *testing.T) {
 	svc, provider := newScriptedProviderTestService(t,
 		`{"task":"scope_question","confidence":0.97,"needs_restaurant_data":false,"needs_tool":false,"risk":"low","suggested_tool":""}`,
