@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 
 import { listReservations } from '@/src/api/reservation';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
@@ -173,13 +174,13 @@ export default function ReservationsScreen() {
     <AppScreen
       title={copy('ประวัติการจองโต๊ะ', 'Reservation history')}
       subtitle={copy(
-        'ตรวจสอบรายการที่ยังรอลูกค้า รับลูกค้าแล้ว และยกเลิกหรือไม่มา',
-        'Review active bookings, seated guests, cancellations, and no-shows.',
+        'รายการจอง รับลูกค้า และยกเลิก',
+        'Bookings, seated guests and cancellations',
       )}
       topLevel={false}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
     >
-      <ChipGroup value={filter} onChange={setFilter} options={filterOptions} />
+      <ChipGroup value={filter} onChange={setFilter} options={filterOptions} scrollable />
       {error ? (
         <Feedback
           title={copy('โหลดประวัติการจองไม่ได้', 'Could not load reservation history')}
@@ -210,6 +211,9 @@ export default function ReservationsScreen() {
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+                  <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: palette.surfaceSubtle }}>
+                    <AppIcon color={palette.text} name="calendar-outline" size={20} />
+                  </View>
                   <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
                     <Text selectable style={typeScale.cardTitle}>
                       {reservation.table_label
@@ -260,6 +264,7 @@ export default function ReservationsScreen() {
       {hasMore ? (
         <Button
           variant="secondary"
+          icon="time-outline"
           label={copy('ดูรายการก่อนหน้าเพิ่ม', 'Load earlier reservations')}
           onPress={() => { void loadMore(); }}
           loading={loadingMore}

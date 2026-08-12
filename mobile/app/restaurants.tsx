@@ -2,9 +2,10 @@ import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AuthScreen } from '@/src/components/auth-screen';
-import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, EmptyState, Feedback, StatusBadge } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
@@ -38,24 +39,16 @@ export default function RestaurantsScreen() {
 
   return (
     <AuthScreen
-      title={copy('เลือกร้านที่จะทำงาน', 'Choose a restaurant')}
-      subtitle={copy(
-        'ร้านและสิทธิ์ของคุณจากบัญชีเดียวกับเว็บ',
-        'Your restaurants and permissions from the same account as the web app',
-      )}
+      title={copy('เลือกร้าน', 'Choose a restaurant')}
     >
-      <Surface>
-        <SectionHeader
-          title={copy('ร้านของฉัน', 'My restaurants')}
-          detail={membershipsLoadError
-            ? copy(
-              'ยังตรวจสอบรายชื่อร้านล่าสุดไม่ได้',
-              'Could not check your latest restaurant access.',
-            )
+      <View style={{ gap: spacing.xl }}>
+        <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+          {membershipsLoadError
+            ? copy('โหลดรายชื่อร้านไม่ได้', 'Could not load restaurants')
             : language === 'th'
-              ? `${membershipCount} ร้านที่เข้าถึงได้`
-              : `${membershipCount} ${memberships.length === 1 ? 'restaurant' : 'restaurants'} available`}
-        />
+              ? `${membershipCount} ร้าน`
+              : `${membershipCount} ${memberships.length === 1 ? 'restaurant' : 'restaurants'}`}
+        </Text>
         {membershipsLoadError ? (
           <>
             <Feedback
@@ -117,9 +110,7 @@ export default function RestaurantsScreen() {
                   backgroundColor: palette.primary,
                 }}
               >
-                <Text style={{ color: palette.primaryText, fontWeight: '800' }}>
-                  {(membership.restaurant?.name || 'R').slice(0, 1)}
-                </Text>
+                <AppIcon color={palette.primaryText} name="storefront-outline" size={21} />
               </View>
               <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
                 <Text selectable numberOfLines={1} style={typeScale.cardTitle}>
@@ -144,7 +135,7 @@ export default function RestaurantsScreen() {
                   tone="success"
                 />
               ) : (
-                <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
+                <AppIcon color={palette.muted} name="chevron-forward" size={18} />
               )}
             </Pressable>
           );
@@ -158,18 +149,22 @@ export default function RestaurantsScreen() {
             )}
           />
         ) : null}
-      </Surface>
-      {!membershipsLoadError || memberships.length ? <Surface>
-        <Button
-          label={copy('สร้างร้านใหม่', 'Create a restaurant')}
-          onPress={() => router.push('/create-restaurant' as never)}
-        />
-        <Button
-          variant="secondary"
-          label={copy('รับคำเชิญพนักงาน', 'Accept a staff invitation')}
-          onPress={() => router.push('/invite/manual' as never)}
-        />
-      </Surface> : null}
+        {!membershipsLoadError || memberships.length ? (
+          <View style={{ gap: spacing.md }}>
+            <Button
+              icon="add"
+              label={copy('สร้างร้านใหม่', 'Create restaurant')}
+              onPress={() => router.push('/create-restaurant' as never)}
+            />
+            <Button
+              icon="mail-open-outline"
+              variant="secondary"
+              label={copy('เปิดคำเชิญ', 'Open invitation')}
+              onPress={() => router.push('/invite/manual' as never)}
+            />
+          </View>
+        ) : null}
+      </View>
     </AuthScreen>
   );
 }

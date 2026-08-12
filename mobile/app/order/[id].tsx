@@ -1,13 +1,14 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
 
+import { apiUrl } from '@/src/api/client';
 import { listCategories, listMenuItems } from '@/src/api/menu';
 import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, sendOrderToKitchen, updateOrderItem } from '@/src/api/order';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import { createOrderDetailRequestGuard } from '@/src/lib/order-detail-runtime';
 import {
@@ -22,7 +23,7 @@ import { createRequestGeneration } from '@/src/lib/request-generation';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { inputStyles, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
 import type { Order, OrderItem } from '@/src/types/order';
 
@@ -33,7 +34,49 @@ function itemTone(status: OrderItem['status']) {
   return 'neutral' as const;
 }
 
+function resolveImage(value?: string) {
+  if (!value) return '';
+  if (value.startsWith('http')) return value;
+  return `${apiUrl}${value.startsWith('/') ? '' : '/'}${value}`;
+}
+
+function QuantityAction({
+  label,
+  icon,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  icon: 'add' | 'remove';
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: palette.borderStrong,
+        borderRadius: radius.md,
+        backgroundColor: pressed ? palette.surfaceStrong : palette.surface,
+        opacity: disabled ? 0.42 : pressed ? 0.72 : 1,
+      })}
+    >
+      <AppIcon color={palette.textStrong} name={icon} size={20} />
+    </Pressable>
+  );
+}
+
 export default function OrderDetailScreen() {
+  const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
   const validOrderId = Number.isInteger(orderId) && orderId > 0;
@@ -118,6 +161,7 @@ export default function OrderDetailScreen() {
   const activeItems = useMemo(() => activeOrderItems(order?.items), [order?.items]);
   const pending = useMemo(() => activeItems.filter((item) => item.status === 'pending'), [activeItems]);
   const activeQuantity = useMemo(() => activeItems.reduce((sum, item) => sum + item.quantity, 0), [activeItems]);
+  const pendingQuantity = useMemo(() => pending.reduce((sum, item) => sum + item.quantity, 0), [pending]);
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return menuItems.filter((item) => {
@@ -181,10 +225,185 @@ export default function OrderDetailScreen() {
     && (order.payment_status === 'paid' || canOpenOrderBill(order.items)),
   );
   const primaryAction = pending.length && canTakeOrder
-    ? <Button label={copy(`ส่งเข้าครัว ${pending.length.toLocaleString('th-TH')} รายการ`, `Send ${pending.length.toLocaleString('en-US')} items to kitchen`)} onPress={() => mutate(() => sendOrderToKitchen(orderId), copy('ส่งรายการเข้าครัวแล้ว', 'Items sent to kitchen'))} loading={submitting} />
+    ? <Button label={copy('ส่งเข้าครัว', 'Send to kitchen')} onPress={() => mutate(() => sendOrderToKitchen(orderId), copy('ส่งรายการเข้าครัวแล้ว', 'Items sent to kitchen'))} loading={submitting} />
     : canOpenBill
       ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
       : null;
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
+  const splitWorkspace = tabletWorkspace && Boolean(order && canTakeOrder && !locked);
+  const refreshControl = <RefreshControl refreshing={loading} onRefresh={() => load()} />;
+  const orderSummaryContent = order ? (
+    <>
+      <SectionHeader
+        title={copy('สรุปออเดอร์', 'Order summary')}
+        detail={copy(
+          `${activeQuantity.toLocaleString('th-TH')} รายการในออเดอร์`,
+          `${activeQuantity.toLocaleString('en-US')} items in this order`,
+        )}
+      />
+      {activeItems.map((item, index) => {
+        const imageUri = resolveImage(item.menu?.image_url);
+        return (
+          <View key={item.ID}>
+            {index ? <Divider /> : null}
+            <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+                {imageUri ? (
+                  <Image
+                    accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
+                    source={{ uri: imageUri }}
+                    resizeMode="contain"
+                    style={{ width: tabletWorkspace ? 64 : 56, height: tabletWorkspace ? 64 : 56, borderRadius: radius.md, backgroundColor: 'transparent' }}
+                  />
+                ) : null}
+                <View style={{ minWidth: 0, flex: 1, gap: 3 }}>
+                  <Text selectable style={typeScale.cardTitle}>{item.menu_name}</Text>
+                  {item.status !== 'pending' || !canTakeOrder ? (
+                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                      {copy(`จำนวน ${item.quantity.toLocaleString('th-TH')}`, `Quantity ${item.quantity.toLocaleString('en-US')}`)}
+                    </Text>
+                  ) : null}
+                  {item.selected_options?.length ? <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(' · ')}</Text> : null}
+                  {item.note ? <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('หมายเหตุ', 'Note')}: {item.note}</Text> : null}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
+                  <Text selectable style={typeScale.number}>{money(item.subtotal, language)}</Text>
+                  <StatusBadge label={itemStatusLabel(item.status, language)} tone={itemTone(item.status)} />
+                </View>
+              </View>
+              {item.status === 'pending' && canTakeOrder ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm }}>
+                  <QuantityAction
+                    label={copy(`ลดจำนวน ${item.menu_name}`, `Decrease ${item.menu_name} quantity`)}
+                    icon="remove"
+                    onPress={() => changeQuantity(item, -1)}
+                    disabled={submitting}
+                  />
+                  <Text selectable style={[typeScale.number, { minWidth: 34, textAlign: 'center' }]}>{item.quantity.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</Text>
+                  <QuantityAction
+                    label={copy(`เพิ่มจำนวน ${item.menu_name}`, `Increase ${item.menu_name} quantity`)}
+                    icon="add"
+                    onPress={() => changeQuantity(item, 1)}
+                    disabled={submitting}
+                  />
+                </View>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
+      {!activeItems.length ? <EmptyState title={copy('ยังไม่มีรายการอาหาร', 'No items yet')} detail={copy('เลือกเมนูเพื่อเริ่มออเดอร์', 'Choose a menu item to start the order.')} /> : null}
+      {!primaryAction ? (
+        <>
+          <Divider />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.xs }}>
+            <Text selectable style={[typeScale.body, { color: palette.muted }]}>{copy('ยอดรวมออเดอร์', 'Order total')}</Text>
+            <Text selectable style={[typeScale.number, { fontSize: 21 }]}>{money(order.grand_total, language)}</Text>
+          </View>
+        </>
+      ) : null}
+    </>
+  ) : null;
+
+  const menuWorkspace = order && !locked && canTakeOrder ? (
+    <View style={{ gap: spacing.md }}>
+      <SectionHeader title={copy('เพิ่มเมนู', 'Add menu items')} detail={copy('แตะเมนูเพื่อเลือกตัวเลือก จำนวน และหมายเหตุ', 'Tap a menu item to choose options, quantity, and notes.')} />
+      <SearchField
+        accessibilityLabel={copy('ค้นหาเมนู', 'Search menu')}
+        clearLabel={copy('ล้างคำค้นหา', 'Clear search')}
+        value={search}
+        onChangeText={setSearch}
+        placeholder={copy('ค้นหาเมนู', 'Search menu')}
+      />
+      <ChipGroup
+        scrollable
+        value={categoryId}
+        onChange={setCategoryId}
+        options={[{ label: copy('ทั้งหมด', 'All'), value: 'all' }, ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]}
+      />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+        {filteredMenu.map((item) => {
+          const imageUri = resolveImage(item.image_url);
+          return (
+            <Pressable
+              accessibilityLabel={copy(`เพิ่มเมนู ${item.name}`, `Add ${item.name}`)}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !item.is_available }}
+              key={item.ID}
+              disabled={!item.is_available}
+              onPress={() => router.push({ pathname: '/order/item' as never, params: { id: String(orderId), menuId: String(item.ID) } } as never)}
+              style={({ pressed }) => ({
+                minWidth: 148,
+                flexGrow: 1,
+                flexBasis: tabletWorkspace ? 164 : 148,
+                gap: spacing.sm,
+                borderRadius: radius.md,
+                backgroundColor: 'transparent',
+                opacity: !item.is_available ? 0.48 : pressed ? 0.72 : 1,
+                transform: [{ translateY: pressed ? 1 : 0 }],
+              })}
+            >
+              {imageUri ? (
+                <Image
+                  accessibilityLabel={copy(`รูปเมนู ${item.name}`, `Photo of ${item.name}`)}
+                  source={{ uri: imageUri }}
+                  resizeMode="contain"
+                  style={{ width: '100%', aspectRatio: 4 / 3, borderRadius: radius.md, backgroundColor: 'transparent' }}
+                />
+              ) : (
+                <View style={{ width: '100%', aspectRatio: 4 / 3, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
+                  <AppIcon color={palette.muted} name="image-outline" size={26} />
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>{copy('ไม่มีรูป', 'No photo')}</Text>
+                </View>
+              )}
+              <View style={{ gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.sm }}>
+                <Text selectable numberOfLines={2} style={[typeScale.cardTitle, { minHeight: 42 }]}>{item.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text selectable style={[typeScale.number, { flex: 1 }]}>{money(item.price, language)}</Text>
+                  {!item.is_available ? <StatusBadge label={copy('หมด', 'Sold out')} tone="danger" /> : null}
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      {!filteredMenu.length ? <EmptyState title={copy('ไม่พบเมนู', 'No menu items found')} detail={copy('ลองเปลี่ยนหมวดหรือคำค้น', 'Try another category or search.')} /> : null}
+    </View>
+  ) : null;
+
+  function renderDestructiveActions(embedded = false) {
+    const stackActions = width < 520;
+    const actionStyle = stackActions ? { width: '100%' as const } : { flex: 1 };
+    const closeEmptyContent = canCloseEmpty ? (
+      <>
+        <SectionHeader title={copy('ปิดโต๊ะที่เปิดผิด', 'Close mistakenly opened table')} detail={confirmEmptyClose ? copy('แตะยืนยันอีกครั้งเพื่อคืนโต๊ะเป็นว่าง', 'Confirm once more to return the table to available.') : copy('ใช้ได้เมื่อออเดอร์ยังไม่มีรายการอาหาร', 'Available only while this order has no items.')} />
+        <View style={{ flexDirection: stackActions ? 'column' : 'row', gap: spacing.sm }}>{confirmEmptyClose ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => setConfirmEmptyClose(false)} style={actionStyle} /> : null}<Button variant={confirmEmptyClose ? 'danger' : 'secondary'} label={confirmEmptyClose ? copy('ยืนยันปิดโต๊ะ', 'Confirm table close') : copy('ปิดโต๊ะว่าง', 'Close empty table')} onPress={closeEmpty} loading={submitting} style={actionStyle} /></View>
+      </>
+    ) : null;
+    const cancelContent = canCancelCurrent ? (
+      <>
+        <SectionHeader title={copy('ยกเลิกออเดอร์', 'Cancel order')} detail={confirmCancel ? copy('ตรวจเหตุผล แล้วแตะยืนยันอีกครั้ง', 'Check the reason, then confirm once more.') : copy('ใช้เมื่อไม่สามารถทำหรือส่งมอบออเดอร์นี้ได้', 'Use this when the order cannot be prepared or fulfilled.')} />
+        <TextField label={copy('เหตุผลที่ยกเลิก', 'Cancellation reason')} value={cancelReason} onChangeText={(value) => { setCancelReason(value); setConfirmCancel(false); }} multiline />
+        <View style={{ flexDirection: stackActions ? 'column' : 'row', gap: spacing.sm }}>{confirmCancel ? <Button variant="secondary" label={copy('กลับไปทำออเดอร์ต่อ', 'Continue order')} onPress={() => setConfirmCancel(false)} style={actionStyle} /> : null}<Button variant={confirmCancel ? 'danger' : 'secondary'} label={confirmCancel ? copy('ยืนยันยกเลิกออเดอร์', 'Confirm order cancellation') : copy('ยกเลิกออเดอร์', 'Cancel order')} onPress={cancelCurrentOrder} loading={submitting} style={actionStyle} /></View>
+      </>
+    ) : null;
+
+    if (!closeEmptyContent && !cancelContent) return null;
+    if (embedded) {
+      return (
+        <View style={{ gap: spacing.xl }}>
+          {closeEmptyContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmEmptyClose ? palette.danger : palette.border, paddingTop: spacing.lg }}>{closeEmptyContent}</View> : null}
+          {cancelContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmCancel ? palette.danger : palette.border, paddingTop: spacing.lg }}>{cancelContent}</View> : null}
+        </View>
+      );
+    }
+    return (
+      <>
+        {closeEmptyContent ? <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>{closeEmptyContent}</Surface> : null}
+        {cancelContent ? <Surface style={{ borderColor: confirmCancel ? palette.danger : palette.border }}>{cancelContent}</Surface> : null}
+      </>
+    );
+  }
 
   if (!canAccessOrder) {
     return <AppScreen title={copy('รายละเอียดออเดอร์', 'Order details')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์ดูออเดอร์', 'No permission to view orders')} detail={copy('ต้องมีสิทธิ์รับออเดอร์ ดูออเดอร์ หรือรับชำระเงิน', 'The take_order, view_orders, or take_payment permission is required.')} /></AppScreen>;
@@ -194,83 +413,63 @@ export default function OrderDetailScreen() {
     return <AppScreen title={copy('รายละเอียดออเดอร์', 'Order details')} topLevel={false}><EmptyState title={copy('ไม่พบออเดอร์นี้', 'Order not found')} detail={copy('รหัสออเดอร์ไม่ถูกต้อง กรุณากลับไปเลือกรายการใหม่', 'The order ID is invalid. Go back and choose an order again.')} /></AppScreen>;
   }
 
+  const actionDock = primaryAction && order ? (
+    <ActionDock
+      label={pending.length && canTakeOrder
+        ? copy(`${pendingQuantity.toLocaleString('th-TH')} รายการรอส่งครัว`, `${pendingQuantity.toLocaleString('en-US')} items pending`)
+        : copy('ยอดรวมออเดอร์', 'Order total')}
+      value={money(order.grand_total, language)}
+    >
+      {primaryAction}
+    </ActionDock>
+  ) : null;
+
   return (
     <AppScreen
       title={order?.table?.display_label || (order?.order_type === 'takeaway' ? copy('ซื้อกลับบ้าน', 'Takeaway') : copy(`ออเดอร์ #${orderId}`, `Order #${orderId}`))}
-      subtitle={order ? `${order.order_number} · ${orderStatusLabel(order.status, language)} · ${money(order.grand_total, language)}` : copy('กำลังโหลดออเดอร์', 'Loading order')}
+      subtitle={order ? `${order.order_number} · ${orderStatusLabel(order.status, language)}` : copy('กำลังโหลดออเดอร์', 'Loading order')}
       topLevel={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      scroll={!splitWorkspace}
+      refreshControl={splitWorkspace ? undefined : refreshControl}
+      contentMaxWidth={splitWorkspace ? 1440 : undefined}
+      footer={!splitWorkspace ? actionDock : undefined}
       action={order ? <StatusBadge label={order.payment_status === 'paid' ? copy('ชำระแล้ว', 'Paid') : orderStatusLabel(order.status, language)} tone={order.payment_status === 'paid' ? 'success' : order.status === 'ready' ? 'success' : order.status === 'cooking' ? 'warning' : 'neutral'} /> : undefined}
     >
-      {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
-      {message ? <Feedback title={message} tone="success" /> : null}
+      {!splitWorkspace && error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
+      {!splitWorkspace && message ? <Feedback title={message} tone="success" /> : null}
 
-      {order ? (
+      {order ? splitWorkspace ? (
+        <View style={{ minHeight: 0, flex: 1, flexDirection: 'row', gap: spacing.xl }}>
+          <ScrollView
+            style={{ minWidth: 0, flex: 1 }}
+            contentContainerStyle={{ gap: spacing.xl, paddingRight: spacing.xs, paddingBottom: spacing.xxxl }}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            refreshControl={refreshControl}
+            showsVerticalScrollIndicator={false}
+          >
+            {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
+            {message ? <Feedback title={message} tone="success" /> : null}
+            {menuWorkspace}
+          </ScrollView>
+          <View style={{ width: '40%', minWidth: 320, maxWidth: 460, overflow: 'hidden', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface }}>
+            <ScrollView
+              contentContainerStyle={{ gap: spacing.xl, padding: spacing.lg, paddingBottom: spacing.xxl }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {orderSummaryContent}
+              {renderDestructiveActions(true)}
+            </ScrollView>
+            {actionDock}
+          </View>
+        </View>
+      ) : (
         <>
-          <Surface>
-            <SectionHeader title={copy('รายการในออเดอร์', 'Order items')} detail={copy(`${activeQuantity.toLocaleString('th-TH')} รายการ · ยอดรวม ${money(order.grand_total, 'th')}`, `${activeQuantity.toLocaleString('en-US')} items · Total ${money(order.grand_total, 'en')}`)} />
-            {activeItems.map((item, index) => (
-              <View key={item.ID}>
-                {index ? <Divider /> : null}
-                <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-                    <View style={{ minWidth: 0, flex: 1, gap: 3 }}>
-                      <Text selectable style={typeScale.cardTitle}>{item.menu_name}</Text>
-                      {item.selected_options?.length ? <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.selected_options.map((option) => `${option.group_name}: ${option.option_name}`).join(' · ')}</Text> : null}
-                      {item.note ? <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('หมายเหตุ', 'Note')}: {item.note}</Text> : null}
-                    </View>
-                    <View style={{ alignItems: 'flex-end', gap: spacing.xs }}><Text selectable style={typeScale.number}>{money(item.subtotal, language)}</Text><StatusBadge label={itemStatusLabel(item.status, language)} tone={itemTone(item.status)} /></View>
-                  </View>
-                  {item.status === 'pending' && canTakeOrder ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <Button compact variant="secondary" label="−" onPress={() => changeQuantity(item, -1)} disabled={submitting} style={{ width: 44 }} />
-                      <Text selectable style={[typeScale.number, { minWidth: 34, textAlign: 'center' }]}>{item.quantity.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</Text>
-                      <Button compact variant="secondary" label="+" onPress={() => changeQuantity(item, 1)} disabled={submitting} style={{ width: 44 }} />
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-            {!activeItems.length ? <EmptyState title={copy('ยังไม่มีรายการอาหาร', 'No items yet')} detail={copy('เลือกเมนูด้านล่างเพื่อเริ่มออเดอร์', 'Choose a menu item below to start the order.')} /> : null}
-          </Surface>
+          <Surface>{orderSummaryContent}</Surface>
 
-          {!locked && canTakeOrder ? (
-            <View style={{ gap: spacing.md }}>
-              <SectionHeader title={copy('เพิ่มเมนู', 'Add menu items')} detail={copy('แตะเมนูเพื่อเลือกตัวเลือก จำนวน และหมายเหตุในหน้าเต็ม', 'Tap a menu item to choose options, quantity, and notes.')} />
-              <TextInput value={search} onChangeText={setSearch} placeholder={copy('ค้นหาเมนู', 'Search menu')} placeholderTextColor={palette.placeholder} style={inputStyles.input} />
-              <ChipGroup value={categoryId} onChange={setCategoryId} options={[{ label: copy('ทั้งหมด', 'All'), value: 'all' }, ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]} />
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-                {filteredMenu.map((item) => (
-                  <Pressable key={item.ID} disabled={!item.is_available} onPress={() => router.push({ pathname: '/order/item' as never, params: { id: String(orderId), menuId: String(item.ID) } } as never)} style={({ pressed }) => ({ minWidth: 148, minHeight: 112, flexGrow: 1, flexBasis: 160, gap: spacing.sm, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: !item.is_available ? 0.48 : pressed ? 0.74 : 1 })}>
-                    <Text selectable numberOfLines={2} style={typeScale.cardTitle}>{item.name}</Text>
-                    <View style={{ flex: 1 }} />
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <Text selectable style={[typeScale.number, { flex: 1 }]}>{money(item.price, language)}</Text>
-                      {!item.is_available ? <StatusBadge label={copy('หมด', 'Sold out')} tone="danger" /> : null}
-                    </View>
-                  </Pressable>
-                ))}
-              </View>
-              {!filteredMenu.length ? <EmptyState title={copy('ไม่พบเมนู', 'No menu items found')} detail={copy('ลองเปลี่ยนหมวดหรือคำค้น', 'Try another category or search.')} /> : null}
-            </View>
-          ) : null}
-
-          {primaryAction ? <Surface><SectionHeader title={copy('ขั้นตอนถัดไป', 'Next step')} detail={copy('ระบบแสดงเพียงงานหลักที่ควรทำกับออเดอร์นี้', 'Only the main next action for this order is shown.')} />{primaryAction}</Surface> : null}
-
-          {canCloseEmpty ? (
-            <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>
-              <SectionHeader title={copy('ปิดโต๊ะที่เปิดผิด', 'Close mistakenly opened table')} detail={confirmEmptyClose ? copy('แตะยืนยันอีกครั้งเพื่อคืนโต๊ะเป็นว่าง', 'Confirm once more to return the table to available.') : copy('ใช้ได้เมื่อออเดอร์ยังไม่มีรายการอาหาร', 'Available only while this order has no items.')} />
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>{confirmEmptyClose ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => setConfirmEmptyClose(false)} style={{ flex: 1 }} /> : null}<Button variant={confirmEmptyClose ? 'danger' : 'secondary'} label={confirmEmptyClose ? copy('ยืนยันปิดโต๊ะ', 'Confirm table close') : copy('ปิดโต๊ะว่าง', 'Close empty table')} onPress={closeEmpty} loading={submitting} style={{ flex: 1 }} /></View>
-            </Surface>
-          ) : null}
-
-          {canCancelCurrent ? (
-            <Surface style={{ borderColor: confirmCancel ? palette.danger : palette.border }}>
-              <SectionHeader title={copy('ยกเลิกออเดอร์', 'Cancel order')} detail={confirmCancel ? copy('ตรวจเหตุผล แล้วแตะยืนยันอีกครั้ง', 'Check the reason, then confirm once more.') : copy('ใช้เมื่อไม่สามารถทำหรือส่งมอบออเดอร์นี้ได้', 'Use this when the order cannot be prepared or fulfilled.')} />
-              <TextField label={copy('เหตุผลที่ยกเลิก', 'Cancellation reason')} value={cancelReason} onChangeText={(value) => { setCancelReason(value); setConfirmCancel(false); }} multiline />
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>{confirmCancel ? <Button variant="secondary" label={copy('กลับไปทำออเดอร์ต่อ', 'Continue order')} onPress={() => setConfirmCancel(false)} style={{ flex: 1 }} /> : null}<Button variant={confirmCancel ? 'danger' : 'secondary'} label={confirmCancel ? copy('ยืนยันยกเลิกออเดอร์', 'Confirm order cancellation') : copy('ยกเลิกออเดอร์', 'Cancel order')} onPress={cancelCurrentOrder} loading={submitting} style={{ flex: 1 }} /></View>
-            </Surface>
-          ) : null}
+          {menuWorkspace}
+          {renderDestructiveActions()}
         </>
       ) : null}
     </AppScreen>

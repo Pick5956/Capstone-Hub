@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Share, View } from 'react-native';
+import { Linking, Pressable, Share, useWindowDimensions, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   bulkCreateTables,
@@ -13,10 +12,10 @@ import {
   regenerateTableCustomerToken,
   updateTable,
 } from '@/src/api/table';
+import { AppIcon } from '@/src/components/app-icon';
+import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { ChoiceRow, FormField, InlineActions } from '@/src/components/form-controls';
-import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
-import { StatusBadge } from '@/src/components/ui';
+import { ActionDock, Button, ChipGroup, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { tableStatusLabel } from '@/src/lib/format';
 import { toInt } from '@/src/lib/forms';
 import { customerTableUrl } from '@/src/lib/public-web-url';
@@ -25,7 +24,7 @@ import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { canEditTableAvailability, tableEditorSaveStatus } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { colors, layout, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { RestaurantTable, TableStatus, TableTag, TableZone } from '@/src/types/table';
 
 type TableForm = {
@@ -41,6 +40,7 @@ function emptyTableForm(): TableForm {
 }
 
 export default function TableFormScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const params = useLocalSearchParams<{ tableId?: string; mode?: string }>();
@@ -49,7 +49,7 @@ export default function TableFormScreen() {
   const isEditing = routeId.kind === 'valid';
   const invalidRoute = routeId.kind === 'invalid';
   const canManage = can(activeMembership, 'manage_table');
-  const insets = useSafeAreaInsets();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [zones, setZones] = useState<TableZone[]>([]);
@@ -135,54 +135,33 @@ export default function TableFormScreen() {
   if (!activeMembership) return <Redirect href="/restaurants" />;
   if (invalidRoute) {
     return (
-      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
-        <StateMessage
-          title={copy('ไม่พบโต๊ะ', 'Table not found')}
-          detail={copy(
-            'ลิงก์โต๊ะนี้ไม่ถูกต้อง กรุณากลับไปเลือกรายการจากหน้าจัดการโต๊ะ',
-            'This table link is invalid. Go back and choose a table from table management.',
-          )}
-        />
-        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
-        </Pressable>
-      </MobileScreen>
+      <AppScreen title={copy('รายละเอียดโต๊ะ', 'Table details')} topLevel={false}>
+        <EmptyState title={copy('ไม่พบโต๊ะ', 'Table not found')} detail={copy('ลิงก์โต๊ะนี้ไม่ถูกต้อง', 'This table link is invalid.')} />
+      </AppScreen>
     );
   }
   if (!canManage) {
-    return <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('จัดการโต๊ะ', 'Manage tables')}><StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('ต้องมีสิทธิ์ manage_table', 'You need the manage_table permission.')} /></MobileScreen>;
+    return <AppScreen title={copy('จัดการโต๊ะ', 'Manage tables')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} /></AppScreen>;
   }
   if (isEditing && loading) {
     return (
-      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
-        <StateMessage title={copy('กำลังโหลดโต๊ะ', 'Loading table')} detail={copy('กำลังตรวจสอบข้อมูลรายการนี้', 'Checking this table now.')} />
-      </MobileScreen>
+      <AppScreen title={copy('รายละเอียดโต๊ะ', 'Table details')} topLevel={false}>
+        <EmptyState title={copy('กำลังโหลดโต๊ะ', 'Loading table')} />
+      </AppScreen>
     );
   }
   if (isEditing && error) {
     return (
-      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
-        <StateMessage title={copy('โหลดโต๊ะไม่สำเร็จ', 'Unable to load table')} detail={error} />
-        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
-        </Pressable>
-      </MobileScreen>
+      <AppScreen title={copy('รายละเอียดโต๊ะ', 'Table details')} topLevel={false}>
+        <Feedback title={copy('โหลดโต๊ะไม่สำเร็จ', 'Unable to load table')} detail={error} tone="danger" />
+      </AppScreen>
     );
   }
   if (isEditing && !editingTable) {
     return (
-      <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('รายละเอียดโต๊ะ', 'Table details')}>
-        <StateMessage
-          title={copy('ไม่พบโต๊ะ', 'Table not found')}
-          detail={copy(
-            'โต๊ะนี้อาจถูกลบไปแล้ว กรุณากลับไปเลือกรายการจากหน้าจัดการโต๊ะ',
-            'This table may have been deleted. Go back and choose a table from table management.',
-          )}
-        />
-        <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-          <Text style={layout.secondaryButtonText}>{copy('ย้อนกลับ', 'Go back')}</Text>
-        </Pressable>
-      </MobileScreen>
+      <AppScreen title={copy('รายละเอียดโต๊ะ', 'Table details')} topLevel={false}>
+        <EmptyState title={copy('ไม่พบโต๊ะ', 'Table not found')} detail={copy('โต๊ะนี้อาจถูกลบไปแล้ว', 'This table may have been deleted.')} />
+      </AppScreen>
     );
   }
 
@@ -283,170 +262,87 @@ export default function TableFormScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[layout.scrollContainer, { paddingBottom: 150 }]}
-      >
-        <View style={layout.headerRow}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text selectable style={typeScale.kicker}>{copy('โต๊ะ', 'TABLES')}</Text>
-            <Text selectable style={typeScale.hero}>{editingTable ? copy('บันทึกโต๊ะ', 'Edit table') : copy('เพิ่มโต๊ะ', 'Add table')}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-              {editingTable
-                ? copy(
-                  `เลขโต๊ะออกให้อัตโนมัติ: ${editingTable.display_label || editingTable.table_number}`,
-                  `Table number is assigned automatically: ${editingTable.display_label || editingTable.table_number}`,
-                )
-                : copy('สร้างโต๊ะเดี่ยวหรือสร้างเป็นชุดในครั้งเดียว', 'Create one table or a batch of tables at once.')}
-            </Text>
-          </View>
-          <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-            <Text style={layout.secondaryButtonText}>{copy('กลับ', 'Back')}</Text>
-          </Pressable>
-        </View>
-
-        {!canManage ? (
-          <StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('หน้านี้สำหรับเจ้าของร้าน ผู้จัดการ หรือผู้มีสิทธิ์ manage_table', 'This page is for owners, managers, or staff with the manage_table permission.')} />
-        ) : null}
-        {error ? <StateMessage title={copy('ทำรายการไม่สำเร็จ', 'Unable to complete action')} detail={error} /> : null}
-        <View style={layout.panel}>
-          <Text selectable style={typeScale.cardTitle}>{copy('ตั้งค่าโต๊ะ', 'Table settings')}</Text>
-          <ChoiceRow
-            label={copy('โซน', 'Zone')}
-            value={form.zoneId}
-            options={zoneOptions}
-            onChange={(value) => setForm((current) => ({ ...current, zoneId: value }))}
+    <AppScreen
+      title={editingTable ? copy('แก้ไขโต๊ะ', 'Edit table') : copy('เพิ่มโต๊ะ', 'Add tables')}
+      subtitle={editingTable
+        ? editingTable.display_label || editingTable.table_number
+        : copy(`ตัวอย่างเลข ${bulkPreview}`, `Number preview ${bulkPreview}`)}
+      topLevel={false}
+      footer={!tabletWorkspace && confirmAction !== 'delete' && confirmAction !== 'qr' ? (
+        <ActionDock>
+          <Button
+            icon={confirmAction === 'bulk' ? 'checkmark-circle-outline' : 'checkmark'}
+            label={confirmAction === 'bulk' ? copy('ยืนยันสร้างโต๊ะ', 'Confirm table creation') : editingTable ? copy('บันทึกโต๊ะ', 'Save table') : copy('เพิ่มโต๊ะ', 'Add tables')}
+            onPress={saveTable}
+            loading={submitting}
+            disabled={isEditing && !editingTable}
           />
-          {!editingTable ? (
-            <FormField
-              keyboardType="numeric"
-              label={copy('จำนวนโต๊ะ', 'Number of tables')}
-              onChangeText={(value) => setForm((current) => ({ ...current, count: value }))}
-              value={form.count}
-            />
-          ) : null}
-          <FormField
-            keyboardType="numeric"
-            label={copy('จำนวนที่นั่ง', 'Seating capacity')}
-            onChangeText={(value) => setForm((current) => ({ ...current, capacity: value }))}
-            value={form.capacity}
-          />
-          {availabilityStatusEditable ? (
-            <ChoiceRow
-              label={copy('สถานะ', 'Status')}
-              value={form.status}
-              options={statusOptions}
-              onChange={(value) => setForm((current) => ({ ...current, status: value }))}
-            />
-          ) : editingTable ? (
-            <View style={{ gap: 10 }}>
-              <Text selectable style={typeScale.caption}>{copy('สถานะ', 'Status')}</Text>
-              <StatusBadge
-                label={tableStatusLabel(editingTable.status, language)}
-                tone={editingTable.status === 'reserved' ? 'info' : 'warning'}
-              />
-              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                {copy(
-                  'สถานะนี้อัปเดตจากการจองหรือออเดอร์โดยอัตโนมัติ คุณยังแก้โซน จำนวนที่นั่ง และแท็กได้',
-                  'This status is managed automatically by the reservation or order. You can still edit the zone, seating capacity, and tags.',
-                )}
-              </Text>
+        </ActionDock>
+      ) : undefined}
+    >
+      {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Unable to complete action')} detail={error} tone="danger" /> : null}
+      {formError ? <Feedback title={copy('ตรวจสอบอีกครั้ง', 'Check before continuing')} detail={formError} tone={confirmAction === 'delete' ? 'danger' : confirmAction ? 'warning' : 'danger'} /> : null}
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.15 : undefined, gap: spacing.lg }}>
+          <Surface>
+            <SectionHeader title={copy('ตั้งค่าโต๊ะ', 'Table settings')} action={<AppIcon color={palette.muted} name="restaurant-outline" size={22} />} />
+            <ChipGroup label={copy('โซน', 'Zone')} value={form.zoneId} options={zoneOptions} onChange={(value) => setForm((current) => ({ ...current, zoneId: value }))} scrollable />
+            <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
+              {!editingTable ? <View style={{ flex: 1 }}><TextField keyboardType="numeric" label={copy('จำนวนโต๊ะ', 'Number of tables')} value={form.count} onChangeText={(value) => setForm((current) => ({ ...current, count: value }))} /></View> : null}
+              <View style={{ flex: 1 }}><TextField keyboardType="numeric" label={copy('จำนวนที่นั่ง', 'Seating capacity')} value={form.capacity} onChangeText={(value) => setForm((current) => ({ ...current, capacity: value }))} /></View>
             </View>
-          ) : null}
-          {!editingTable ? (
-            <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 12 }}>
-              <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                {copy('ตัวอย่างเลข:', 'Number preview:')} <Text style={{ color: colors.text, fontWeight: '900' }}>{bulkPreview}</Text>
-              </Text>
-            </View>
-          ) : null}
-        </View>
+            {availabilityStatusEditable ? (
+              <ChipGroup label={copy('สถานะ', 'Status')} value={form.status} options={statusOptions} onChange={(value) => setForm((current) => ({ ...current, status: value }))} />
+            ) : editingTable ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('สถานะปัจจุบัน', 'Current status')}</Text>
+                <StatusBadge label={tableStatusLabel(editingTable.status, language)} tone={editingTable.status === 'reserved' ? 'info' : 'warning'} />
+                <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('สถานะนี้เปลี่ยนตามการจองหรือออเดอร์', 'This status follows the reservation or order.')}</Text>
+              </View>
+            ) : null}
+          </Surface>
 
-        <View style={layout.panel}>
-          <Text selectable style={typeScale.cardTitle}>{copy('แท็ก', 'Tags')}</Text>
-          {activeTags.length ? (
-            <InlineActions>
-              {activeTags.map((tag) => {
-                const active = form.tagIds.includes(tag.ID);
-                return (
-                  <Pressable
-                    key={tag.ID}
-                    onPress={() => toggleTag(tag.ID)}
-                    style={[layout.secondaryButton, active && { borderColor: colors.text, backgroundColor: '#FFF7ED' }]}
-                  >
-                    <Text style={layout.secondaryButtonText}>{tag.name}</Text>
-                  </Pressable>
-                );
-              })}
-            </InlineActions>
-          ) : (
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{copy('ยังไม่มีแท็กสำหรับโต๊ะ', 'No table tags yet')}</Text>
-          )}
+          <Surface>
+            <SectionHeader title={copy('แท็ก', 'Tags')} detail={activeTags.length ? copy(`${form.tagIds.length} แท็กที่เลือก`, `${form.tagIds.length} selected`) : undefined} />
+            {activeTags.length ? activeTags.map((tag, index) => {
+              const active = form.tagIds.includes(tag.ID);
+              return (
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  key={tag.ID}
+                  onPress={() => toggleTag(tag.ID)}
+                  style={({ pressed }) => ({ minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: index ? 1 : 0, borderTopColor: palette.border, opacity: pressed ? 0.72 : 1 })}
+                >
+                  <Text style={[typeScale.body, { flex: 1 }]}>{tag.name}</Text>
+                  <AppIcon color={active ? palette.accent : palette.muted} name={active ? 'checkbox' : 'square-outline'} size={22} />
+                </Pressable>
+              );
+            }) : <EmptyState title={copy('ยังไม่มีแท็กสำหรับโต๊ะ', 'No table tags yet')} />}
+            {tabletWorkspace && confirmAction !== 'delete' && confirmAction !== 'qr' ? <Button icon="checkmark" label={confirmAction === 'bulk' ? copy('ยืนยันสร้างโต๊ะ', 'Confirm table creation') : editingTable ? copy('บันทึกโต๊ะ', 'Save table') : copy('เพิ่มโต๊ะ', 'Add tables')} onPress={saveTable} loading={submitting} /> : null}
+          </Surface>
         </View>
-
-        {editingTable && customerOrderLink ? (
-          <View style={layout.panel}>
-            <Text selectable style={typeScale.cardTitle}>{copy('ลิงก์สั่งอาหารของลูกค้า', 'Customer ordering link')}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-              {copy(
-                'แชร์ลิงก์นี้ให้ลูกค้าเพื่อเปิดเมนูโต๊ะและส่งออเดอร์เข้าครัวโดยไม่ต้องล็อกอิน',
-                'Share this link so guests can open the table menu and send orders to the kitchen without signing in.',
-              )}
-            </Text>
-            <Text selectable numberOfLines={2} style={[typeScale.caption, { color: colors.placeholder }]}>{customerOrderLink}</Text>
-            <Pressable onPress={shareCustomerLink} style={layout.secondaryButton}>
-              <Text style={layout.secondaryButtonText}>{copy('แชร์/คัดลอกลิงก์', 'Share/copy link')}</Text>
-            </Pressable>
-            <Pressable onPress={openCustomerMenu} style={layout.primaryButton}>
-              <Text style={layout.primaryButtonText}>{copy('เปิดหน้าเมนูลูกค้า', 'Open customer menu')}</Text>
-            </Pressable>
-            <Pressable onPress={regenerateCustomerLink} style={layout.secondaryButton}>
-              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'qr' ? copy('ยืนยันสร้างลิงก์ใหม่', 'Confirm new link') : copy('สร้างลิงก์ใหม่', 'Regenerate link')}</Text>
-            </Pressable>
-          </View>
-        ) : null}
 
         {editingTable ? (
-          <View style={layout.panel}>
-            <Text selectable style={typeScale.cardTitle}>{copy('การลบโต๊ะ', 'Delete table')}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{copy('ลบเฉพาะเมื่อโต๊ะนี้ไม่ได้ใช้งานแล้ว', 'Delete this table only after it is no longer in use.')}</Text>
-            <Pressable onPress={confirmDelete} style={layout.secondaryButton}>
-              <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmAction === 'delete' ? copy('ยืนยันลบโต๊ะ', 'Confirm delete table') : copy('ลบโต๊ะ', 'Delete table')}</Text>
-            </Pressable>
+          <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.85 : undefined, gap: spacing.lg }}>
+            {customerOrderLink ? (
+              <Surface>
+                <SectionHeader title={copy('เมนูลูกค้า', 'Customer menu')} detail={copy('แชร์ลิงก์นี้ให้ลูกค้าที่โต๊ะ', 'Share this link with guests at the table.')} action={<AppIcon color={palette.muted} name="qr-code-outline" size={22} />} />
+                <Text selectable numberOfLines={2} style={[typeScale.caption, { color: palette.muted }]}>{customerOrderLink}</Text>
+                <Button icon="share-social-outline" variant="secondary" label={copy('แชร์ลิงก์', 'Share link')} onPress={() => { void shareCustomerLink(); }} />
+                <Button icon="open-outline" label={copy('เปิดเมนูลูกค้า', 'Open customer menu')} onPress={() => { void openCustomerMenu(); }} />
+                {confirmAction === 'qr' ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => { setConfirmAction(null); setFormError(null); }} /> : null}
+                <Button icon="link-outline" variant={confirmAction === 'qr' ? 'danger' : 'ghost'} label={confirmAction === 'qr' ? copy('ยืนยันสร้างลิงก์ใหม่', 'Confirm new link') : copy('สร้างลิงก์ใหม่', 'Regenerate link')} onPress={() => { void regenerateCustomerLink(); }} loading={submitting} />
+              </Surface>
+            ) : null}
+            <Surface>
+              <SectionHeader title={copy('ลบโต๊ะ', 'Delete table')} detail={copy('ลบเมื่อโต๊ะไม่ได้ใช้งานแล้วเท่านั้น', 'Delete only when this table is no longer in use.')} />
+              {confirmAction === 'delete' ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => { setConfirmAction(null); setFormError(null); }} /> : null}
+              <Button icon="trash-outline" variant={confirmAction === 'delete' ? 'danger' : 'secondary'} label={confirmAction === 'delete' ? copy('ยืนยันลบโต๊ะ', 'Confirm delete table') : copy('ลบโต๊ะ', 'Delete table')} onPress={() => { void confirmDelete(); }} loading={submitting} />
+            </Surface>
           </View>
         ) : null}
-      </ScrollView>
-
-      <View
-        style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            gap: 10,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.canvas,
-            padding: 16,
-            paddingBottom: Math.max(insets.bottom, 12) + 10,
-          }}
-      >
-        {formError ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{formError}</Text> : null}
-        <Pressable disabled={!canManage || submitting || (isEditing && !editingTable)} onPress={saveTable} style={[layout.primaryButton, (!canManage || submitting || (isEditing && !editingTable)) && { opacity: 0.65 }]}>
-          <Text style={layout.primaryButtonText}>
-            {submitting
-              ? copy('กำลังบันทึก...', 'Saving...')
-              : confirmAction === 'bulk'
-                ? copy('ยืนยันสร้างโต๊ะ', 'Confirm table creation')
-                : editingTable
-                  ? copy('บันทึกโต๊ะ', 'Save table')
-                  : copy('เพิ่มโต๊ะ', 'Add table')}
-          </Text>
-        </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </AppScreen>
   );
 }

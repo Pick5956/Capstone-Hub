@@ -1,27 +1,29 @@
+import { Redirect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, View } from 'react-native';
-import { Redirect, router } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Switch, useWindowDimensions, View } from 'react-native';
 
 import { createTableZone, deleteTableZone, listTableZones, updateTableZone } from '@/src/api/table';
+import { AppIcon } from '@/src/components/app-icon';
+import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { FormField } from '@/src/components/form-controls';
-import { MobileScreen, StateMessage } from '@/src/components/mobile-screen';
+import { ActionDock, Button, Divider, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { colors, layout, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { TableZone } from '@/src/types/table';
 
 export default function ZoneManagerScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const canManage = can(activeMembership, 'manage_table');
-  const insets = useSafeAreaInsets();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const [zones, setZones] = useState<TableZone[]>([]);
   const [editingZone, setEditingZone] = useState<TableZone | null>(null);
+  const [formVisible, setFormVisible] = useState(false);
   const [zoneName, setZoneName] = useState('');
   const [zonePrefix, setZonePrefix] = useState('');
   const [zoneOrder, setZoneOrder] = useState('1');
@@ -43,30 +45,40 @@ export default function ZoneManagerScreen() {
       setZones(response.zones ?? []);
       setZoneOrder((current) => (editingZone ? current : String((response.zones ?? []).length + 1)));
     } catch (err) {
-      setError(err instanceof Error
-        ? err.message
-        : copy('โหลดโซนไม่สำเร็จ', 'Unable to load zones'));
+      setError(err instanceof Error ? err.message : copy('โหลดโซนไม่สำเร็จ', 'Unable to load zones'));
     } finally {
       setLoading(false);
     }
   }, [canManage, copy, editingZone]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   if (!activeMembership) return <Redirect href="/restaurants" />;
-  if (!canManage) {
-    return <MobileScreen kicker={copy('โต๊ะ', 'TABLES')} title={copy('จัดการโซน', 'Manage zones')}><StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('ต้องมีสิทธิ์ manage_table', 'You need the manage_table permission.')} /></MobileScreen>;
-  }
 
   function resetForm() {
+    setEditingZone(null);
+    setFormVisible(false);
+    setZoneName('');
+    setZonePrefix('');
+    setZoneOrder(String(zones.length + 1));
+    setZoneActive(true);
+    setFormError(null);
+  }
+
+  function startCreate() {
+    if (formVisible || editingZone) {
+      resetForm();
+      return;
+    }
     setEditingZone(null);
     setZoneName('');
     setZonePrefix('');
     setZoneOrder(String(zones.length + 1));
     setZoneActive(true);
     setFormError(null);
+    setFormVisible(true);
   }
 
   function toggleEdit(zone: TableZone) {
@@ -75,6 +87,7 @@ export default function ZoneManagerScreen() {
       return;
     }
     setEditingZone(zone);
+    setFormVisible(true);
     setZoneName(zone.name);
     setZonePrefix(zone.prefix || '');
     setZoneOrder(String(zone.display_order || 0));
@@ -102,9 +115,7 @@ export default function ZoneManagerScreen() {
       resetForm();
       await load();
     } catch (err) {
-      setFormError(err instanceof Error
-        ? err.message
-        : copy('บันทึกโซนไม่สำเร็จ', 'Unable to save zone'));
+      setFormError(err instanceof Error ? err.message : copy('บันทึกโซนไม่สำเร็จ', 'Unable to save zone'));
     } finally {
       setSubmitting(false);
     }
@@ -112,97 +123,82 @@ export default function ZoneManagerScreen() {
 
   async function confirmDelete(zone: TableZone) {
     if (!canManage) return;
-    if (confirmDeleteId !== zone.ID) { setConfirmDeleteId(zone.ID); setFormError(copy(`กดยืนยันอีกครั้งเพื่อลบโซน ${zone.name}`, `Press confirm again to delete the ${zone.name} zone.`)); return; }
-    setSubmitting(true); setFormError(null);
-    try { await deleteTableZone(zone.ID); if (editingZone?.ID === zone.ID) resetForm(); setConfirmDeleteId(null); await load(); }
-    catch (err) { setFormError(err instanceof Error ? err.message : copy('ลบโซนไม่สำเร็จ', 'Unable to delete zone')); }
-    finally { setSubmitting(false); }
+    if (confirmDeleteId !== zone.ID) {
+      setConfirmDeleteId(zone.ID);
+      setFormError(copy(`กดยืนยันอีกครั้งเพื่อลบโซน ${zone.name}`, `Press confirm again to delete the ${zone.name} zone.`));
+      return;
+    }
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await deleteTableZone(zone.ID);
+      if (editingZone?.ID === zone.ID) resetForm();
+      setConfirmDeleteId(null);
+      await load();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : copy('ลบโซนไม่สำเร็จ', 'Unable to delete zone'));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[layout.scrollContainer, { paddingBottom: 156 }]}
-      >
-        <View style={layout.headerRow}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text selectable style={typeScale.kicker}>{copy('โต๊ะ', 'TABLES')}</Text>
-            <Text selectable style={typeScale.hero}>{copy('จัดการโซน', 'Manage zones')}</Text>
-            <Text selectable style={[typeScale.caption, { color: colors.muted }]}>{copy('กดรายการเพื่อแก้ไข กดซ้ำเพื่อยกเลิก', 'Tap a zone to edit it. Tap it again to cancel.')}</Text>
-          </View>
-          <Pressable onPress={() => router.back()} style={layout.secondaryButton}>
-            <Text style={layout.secondaryButtonText}>{copy('กลับ', 'Back')}</Text>
-          </Pressable>
+  if (!canManage) {
+    return <AppScreen title={copy('จัดการโซน', 'Manage zones')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} /></AppScreen>;
+  }
+
+  const showForm = tabletWorkspace || formVisible || Boolean(editingZone);
+  const form = (
+    <Surface style={{ width: '100%' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <AppIcon color={palette.text} name={editingZone ? 'create-outline' : 'add-circle-outline'} size={22} />
+        <Text style={[typeScale.cardTitle, { flex: 1 }]}>{editingZone ? copy('แก้ไขโซน', 'Edit zone') : copy('เพิ่มโซน', 'Add zone')}</Text>
+        {editingZone || formVisible ? <Button compact variant="ghost" icon="close" label={copy('ปิด', 'Close')} onPress={resetForm} /> : null}
+      </View>
+      <TextField label={copy('ชื่อโซน', 'Zone name')} value={zoneName} onChangeText={setZoneName} icon="map-outline" error={formError && !zoneName.trim() ? formError : null} />
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
+        <View style={{ flex: 1 }}><TextField label={copy('คำนำหน้า', 'Prefix')} value={zonePrefix} onChangeText={setZonePrefix} /></View>
+        <View style={{ flex: 1 }}><TextField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={zoneOrder} onChangeText={setZoneOrder} /></View>
+      </View>
+      <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.sm }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={typeScale.cardTitle}>{copy('เปิดใช้งาน', 'Active')}</Text>
+          <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('แสดงโซนนี้ตอนจัดโต๊ะ', 'Show this zone when organizing tables')}</Text>
         </View>
+        <Switch value={zoneActive} onValueChange={setZoneActive} />
+      </View>
+      {tabletWorkspace ? <Button icon="checkmark" label={editingZone ? copy('บันทึกโซน', 'Save zone') : copy('เพิ่มโซน', 'Add zone')} onPress={saveZone} loading={submitting} /> : null}
+    </Surface>
+  );
 
-        {!canManage ? <StateMessage title={copy('ไม่มีสิทธิ์จัดการโต๊ะ', 'No table management access')} detail={copy('หน้านี้สำหรับสิทธิ์ manage_table', 'This page requires the manage_table permission.')} /> : null}
-        {error ? <StateMessage title={copy('ทำรายการไม่สำเร็จ', 'Unable to complete action')} detail={error} /> : null}
-
-        <View style={{ gap: 10 }}>
-          {zones.map((zone) => {
+  return (
+    <AppScreen
+      title={copy('จัดการโซน', 'Manage zones')}
+      subtitle={copy(`${zones.length.toLocaleString('th-TH')} โซน`, `${zones.length.toLocaleString('en-US')} zones`)}
+      topLevel={false}
+      action={<Button compact icon={formVisible ? 'close' : 'add'} variant="secondary" label={formVisible ? copy('ปิด', 'Close') : copy('เพิ่ม', 'Add')} onPress={startCreate} />}
+      footer={!tabletWorkspace && showForm ? <ActionDock><Button icon="checkmark" label={editingZone ? copy('บันทึกโซน', 'Save zone') : copy('เพิ่มโซน', 'Add zone')} onPress={saveZone} loading={submitting} /></ActionDock> : undefined}
+    >
+      {error ? <Feedback title={copy('โหลดโซนไม่ได้', 'Unable to load zones')} detail={error} tone="danger" /> : null}
+      {formError && (confirmDeleteId || zoneName.trim()) ? <Feedback title={copy('ทำรายการไม่ได้', 'Unable to complete action')} detail={formError} tone={confirmDeleteId ? 'warning' : 'danger'} /> : null}
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.1 : undefined, gap: 0, padding: 0, overflow: 'hidden' }}>
+          {zones.map((zone, index) => {
             const selected = editingZone?.ID === zone.ID;
             return (
-              <Pressable
-                key={zone.ID}
-                onPress={() => toggleEdit(zone)}
-                style={[layout.card, selected && { borderColor: colors.primary, backgroundColor: '#FFF7ED' }]}
-              >
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text selectable style={[typeScale.cardTitle, !zone.is_active && { color: colors.placeholder, textDecorationLine: 'line-through' }]}>
-                    {zone.name}
-                  </Text>
-                  <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
-                    {zone.prefix ? copy(`คำนำหน้า ${zone.prefix}`, `Prefix ${zone.prefix}`) : copy('ไม่มีคำนำหน้า', 'No prefix')} · {copy(`ลำดับ ${zone.display_order.toLocaleString('th-TH')}`, `Order ${zone.display_order.toLocaleString('en-US')}`)}
-                  </Text>
+              <View key={zone.ID}>
+                {index ? <Divider /> : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
+                  <Button compact variant="ghost" icon="map-outline" label={zone.name} onPress={() => toggleEdit(zone)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
+                  <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{zone.prefix || '−'} · {zone.display_order}</Text>
+                  <Button compact variant={confirmDeleteId === zone.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === zone.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(zone); }} />
                 </View>
-                <Pressable onPress={() => confirmDelete(zone)} style={layout.secondaryButton}>
-                  <Text style={[layout.secondaryButtonText, { color: colors.danger }]}>{confirmDeleteId === zone.ID ? copy('ยืนยันลบ', 'Confirm delete') : copy('ลบ', 'Delete')}</Text>
-                </Pressable>
-              </Pressable>
+              </View>
             );
           })}
-          {!loading && zones.length === 0 ? <StateMessage title={copy('ยังไม่มีโซน', 'No zones yet')} detail={copy('เพิ่มโซนแรกเพื่อจัดกลุ่มโต๊ะในร้าน', 'Add the first zone to group tables in the restaurant.')} /> : null}
-        </View>
-
-        <View style={layout.panel}>
-          <Text selectable style={typeScale.cardTitle}>{editingZone ? copy('แก้ไขโซน', 'Edit zone') : copy('เพิ่มโซน', 'Add zone')}</Text>
-          <FormField label={copy('ชื่อโซน', 'Zone name')} value={zoneName} onChangeText={setZoneName} />
-          <FormField label={copy('คำนำหน้า', 'Prefix')} value={zonePrefix} onChangeText={setZonePrefix} />
-          <FormField keyboardType="numeric" label={copy('ลำดับ', 'Display order')} value={zoneOrder} onChangeText={setZoneOrder} />
-          <View style={layout.headerRow}>
-            <Text selectable style={[typeScale.cardTitle, { flex: 1 }]}>{copy('เปิดใช้งาน', 'Active')}</Text>
-            <Switch value={zoneActive} onValueChange={setZoneActive} />
-          </View>
-          {editingZone ? (
-            <Pressable onPress={resetForm} style={layout.secondaryButton}>
-              <Text style={layout.secondaryButtonText}>{copy('ยกเลิกแก้ไข', 'Cancel editing')}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </ScrollView>
-
-      <View
-        style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            gap: 10,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-            backgroundColor: colors.canvas,
-            padding: 16,
-            paddingBottom: Math.max(insets.bottom, 12) + 10,
-          }}
-      >
-        {formError ? <Text selectable style={[typeScale.caption, { color: colors.danger }]}>{formError}</Text> : null}
-        <Pressable disabled={!canManage || submitting} onPress={saveZone} style={[layout.primaryButton, (!canManage || submitting) && { opacity: 0.65 }]}>
-          <Text style={layout.primaryButtonText}>{submitting ? copy('กำลังบันทึก...', 'Saving...') : editingZone ? copy('บันทึกโซน', 'Save zone') : copy('เพิ่มโซน', 'Add zone')}</Text>
-        </Pressable>
+          {!loading && !zones.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีโซน', 'No zones yet')} detail={copy('เพิ่มโซนเพื่อจัดกลุ่มโต๊ะ', 'Add a zone to group tables.')} /></View> : null}
+        </Surface>
+        {showForm ? <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined }}>{form}</View> : null}
       </View>
-    </KeyboardAvoidingView>
+    </AppScreen>
   );
 }
