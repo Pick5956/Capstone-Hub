@@ -625,11 +625,11 @@ export default function AIOperationsFloatingChat() {
       `}</style>
 
       {/* Chat Window Panel */}
-      <div 
-        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transition-[opacity,transform] duration-200 ease-out ${
+      <div
+        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transform-gpu transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isOpen
             ? "opacity-100 scale-100 pointer-events-auto"
-            : "opacity-0 scale-[0.98] pointer-events-none"
+            : "pointer-events-none scale-90 opacity-0"
         } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
@@ -978,7 +978,7 @@ export default function AIOperationsFloatingChat() {
         type="button"
         aria-label={labels.openAssistant}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 scale-100 pointer-events-auto"
