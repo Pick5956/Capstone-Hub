@@ -172,8 +172,10 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
           mask-image: radial-gradient(black var(--mask-radius), transparent 75%);
         }
         @keyframes siri-orb-rotate { to { --angle: 360deg; } }
+        /* Keep the orb gently alive even under reduced-motion (decorative,
+           slow rotation) instead of freezing it — the owner wants it moving. */
         @media (prefers-reduced-motion: reduce) {
-          .siri-orb::before { animation: none; }
+          .siri-orb::before { animation-duration: calc(var(--animation-duration) * 1.6); }
         }
       `}</style>
     </div>

@@ -31,6 +31,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
+import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import SiriOrb from "@/src/components/ui/siri-orb";
@@ -145,6 +146,7 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
+  const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
@@ -441,7 +443,7 @@ export default function AIAssistantPage() {
     await discardPendingActionPreview();
   }
 
-  const handleGuidedAction = (action: AIGuidedAction) => {
+  const handleGuidedAction = (action: AIGuidedAction, msgId?: string) => {
     if (action.prompt) {
       submitQuestion(action.prompt);
       return;
@@ -449,9 +451,15 @@ export default function AIAssistantPage() {
     if (!action.href) return;
     if (action.requiresConfirmation) {
       setPendingAction(action);
+      setPendingActionMsgId(msgId ?? null);
       return;
     }
     router.push(action.href);
+  };
+
+  const dismissPendingAction = () => {
+    setPendingAction(null);
+    setPendingActionMsgId(null);
   };
 
   if (!canUseAI) {
@@ -478,11 +486,7 @@ export default function AIAssistantPage() {
           {/* Card header */}
           <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
             <div className="flex items-center gap-2">
-              <SiriOrb size="28px" className="shrink-0" />
-              <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                {language === "th" ? "ผู้ช่วยพร้อมวิเคราะห์" : "Assistant ready"}
-              </span>
+              <SiriOrb size="30px" className="shrink-0" animationDuration={8} />
             </div>
             <button
               type="button"
@@ -495,7 +499,7 @@ export default function AIAssistantPage() {
             </button>
           </div>
           {/* Messages */}
-          <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
+          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
             {isEmpty && !loading ? (
               <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
                 <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
@@ -528,13 +532,26 @@ export default function AIAssistantPage() {
                           <button
                             key={`${msg.id}-${action.id}`}
                             type="button"
-                            onClick={() => handleGuidedAction(action)}
+                            onClick={() => handleGuidedAction(action, msg.id)}
                             className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
                           >
                             {action.label}
                           </button>
                         ))}
                       </div>
+                    )}
+                    {pendingAction && pendingActionMsgId === msg.id && (
+                      <AIInlineConfirm
+                        message={pendingAction.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing.")}
+                        confirmLabel={language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
+                        cancelLabel={language === "th" ? "ยกเลิก" : "Cancel"}
+                        onConfirm={() => {
+                          const href = pendingAction.href;
+                          dismissPendingAction();
+                          if (href) router.push(href);
+                        }}
+                        onCancel={dismissPendingAction}
+                      />
                     )}
                   </div>
                 </div>
@@ -558,20 +575,6 @@ export default function AIAssistantPage() {
             {error && (
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 {error}
-              </div>
-            )}
-
-            {pendingAction && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-                <p>{pendingAction.description}</p>
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => pendingAction.href && router.push(pendingAction.href)} className="rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
-                    {language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
-                  </button>
-                  <button type="button" onClick={() => setPendingAction(null)} className="rounded-md border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-800">
-                    {language === "th" ? "ยกเลิก" : "Cancel"}
-                  </button>
-                </div>
               </div>
             )}
 
@@ -649,8 +652,9 @@ export default function AIAssistantPage() {
           </form>
         </div>
 
-        {/* Snapshot sidebar */}
-        <aside className="hidden min-h-0 space-y-3 overflow-y-auto lg:block">
+        {/* Snapshot sidebar — pulled flush to the window's right edge (cancels the
+            page's lg:px-8) with a slim channel for the minimal scrollbar. */}
+        <aside className="ai-scroll hidden min-h-0 space-y-3 overflow-y-auto lg:block lg:-mr-8 lg:pr-2">
           <AIInsightsPanel language={language} />
           <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
             <Sparkles className="h-4 w-4 text-orange-500" />

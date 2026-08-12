@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ChevronDown,
   Coins,
   Loader2,
   PackageX,
@@ -10,6 +11,8 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+
+const COLLAPSE_KEY = "ai-insights-collapsed";
 import { getProactiveInsights } from "@/src/lib/ai";
 import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
 
@@ -61,6 +64,27 @@ export default function AIInsightsPanel({ language }: Props) {
   const [insights, setInsights] = useState<AIInsight[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Restore the owner's collapse choice after mount (avoids SSR hydration drift).
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      /* localStorage unavailable — keep it open */
+    }
+  }, []);
+
+  const toggleCollapsed = () =>
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore persistence failure */
+      }
+      return next;
+    });
 
   useEffect(() => {
     let active = true;
@@ -81,19 +105,30 @@ export default function AIInsightsPanel({ language }: Props) {
 
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-200/80 bg-white/70 shadow-sm backdrop-blur dark:border-gray-800/80 dark:bg-gray-950/60">
-      <header className="flex items-center gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-800/70">
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-gray-50/70 dark:hover:bg-gray-900/40"
+      >
         <span className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm">
           <Sparkles className="h-3.5 w-3.5" />
         </span>
         <h2 className="text-sm font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
-        {insights && insights.length > 0 && (
-          <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-            {insights.length}
-          </span>
-        )}
-      </header>
+        <span className="ml-auto flex items-center gap-1.5">
+          {insights && insights.length > 0 && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              {insights.length}
+            </span>
+          )}
+          <ChevronDown
+            className={`h-4 w-4 text-gray-400 transition-transform duration-300 ${collapsed ? "-rotate-90" : ""}`}
+          />
+        </span>
+      </button>
 
-      <div className="space-y-2 p-3">
+      {!collapsed && (
+      <div className="ai-reveal-down space-y-2 border-t border-gray-100 p-3 dark:border-gray-800/70">
         {loading && (
           <div className="flex items-center gap-2 px-1 py-6 text-xs text-gray-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -144,6 +179,7 @@ export default function AIInsightsPanel({ language }: Props) {
             );
           })}
       </div>
+      )}
     </section>
   );
 }
