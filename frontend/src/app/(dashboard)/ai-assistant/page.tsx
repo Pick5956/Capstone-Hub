@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -706,40 +706,6 @@ export default function AIAssistantPage() {
           <MetricCard icon={<TrendingUp className="h-4 w-4" />} label={copy.salesDays} value={formatNumber(salesDays.length, language)} />
           <MetricCard icon={<Wallet className="h-4 w-4" />} label={copy.inventoryValue} value={formatCurrency(inventorySummary?.value ?? 0, language)} />
           <MetricCard icon={<AlertTriangle className="h-4 w-4" />} label={copy.stockRisks} value={formatNumber(stockRisks.length, language)} />
-
-          <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-950 dark:border-gray-800 dark:text-white">
-              <PackageSearch className="h-4 w-4 text-orange-500" />
-              {copy.stockRisks}
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {stockRisks.slice(0, 5).map((item) => (
-                <div key={item.name} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {formatNumber(item.stock, language)} {item.unit}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-                        item.status === "out"
-                          ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                      }`}
-                    >
-                      {item.status === "out" ? copy.stockOut : copy.stockLow}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    {copy.restock} {formatNumber(item.restock_estimate, language)} {item.unit}
-                  </p>
-                </div>
-              ))}
-              {stockRisks.length === 0 && <div className="p-4 text-sm text-gray-400">{copy.empty}</div>}
-            </div>
-          </section>
           </div>
         </aside>
     </main>
