@@ -179,6 +179,9 @@ export default function AIOperationsFloatingChat() {
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
+  // Tracks whether the panel has been opened at least once, so the open/close
+  // keyframe animations never fire on first mount (which would flash a close).
+  const [hasOpened, setHasOpened] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [hasOpenedStats, setHasOpenedStats] = useState(false);
   const [showTips, setShowTips] = useState(true);
@@ -613,12 +616,28 @@ export default function AIOperationsFloatingChat() {
         .animate-message-slide {
           animation: messageSlideUp 180ms cubic-bezier(0.2, 0, 0, 1) both;
         }
+        @keyframes floatChatIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        /* On close the panel fades out fast (gone by ~55%) THEN keeps shrinking
+           toward the button — so it disappears cleanly before the floating orb
+           brightens, instead of both overlapping half-visible. */
+        @keyframes floatChatOut {
+          0% { opacity: 1; transform: scale(1); }
+          55% { opacity: 0; }
+          100% { opacity: 0; transform: scale(0.8); }
+        }
+        .float-chat-in { animation: floatChatIn 300ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+        .float-chat-out { animation: floatChatOut 200ms ease-out both; }
         .focus-glow:focus {
           border-color: rgb(249 115 22);
           box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
         }
         @media (prefers-reduced-motion: reduce) {
-          .animate-message-slide {
+          .animate-message-slide,
+          .float-chat-in,
+          .float-chat-out {
             animation: none !important;
           }
         }
@@ -626,10 +645,12 @@ export default function AIOperationsFloatingChat() {
 
       {/* Chat Window Panel */}
       <div
-        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transform-gpu transition-[opacity,transform] ${
-          isOpen
-            ? "pointer-events-auto scale-100 opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            : "pointer-events-none scale-90 opacity-0 duration-200 ease-[cubic-bezier(0.4,0,1,1)]"
+        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transform-gpu ${
+          !hasOpened
+            ? "pointer-events-none opacity-0"
+            : isOpen
+              ? "pointer-events-auto float-chat-in"
+              : "pointer-events-none float-chat-out"
         } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
@@ -977,7 +998,10 @@ export default function AIOperationsFloatingChat() {
       <button
         type="button"
         aria-label={labels.openAssistant}
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setIsOpen(true);
+          setHasOpened(true);
+        }}
         className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
