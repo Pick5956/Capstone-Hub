@@ -8,7 +8,7 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
-import { Button, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money, tableStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
@@ -30,6 +30,7 @@ export default function TablesScreen() {
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
+  const [selectedZone, setSelectedZone] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,16 +95,31 @@ export default function TablesScreen() {
     orders.filter((order) => activeOrderStatuses.includes(order.status) && order.table_id).forEach((order) => map.set(Number(order.table_id), order));
     return map;
   }, [orders]);
+  const zones = useMemo(() => {
+    const map = new Map<string, string>();
+    tables.forEach((table) => {
+      const key = String(table.zone_id || 'none');
+      if (!map.has(key)) map.set(key, table.table_zone?.name || table.zone || copy('ไม่มีโซน', 'No zone'));
+    });
+    return Array.from(map, ([value, label]) => ({ value, label }));
+  }, [copy, tables]);
   const groups = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    const map = new Map<string, { label: string; tables: RestaurantTable[] }>();
-    tables.filter((table) => !keyword || [table.table_number, table.display_label, table.table_zone?.name, ...(table.tags || []).map((tag) => tag.name)].some((value) => String(value || '').toLowerCase().includes(keyword))).forEach((table) => {
+    const map = new Map<string, { key: string; label: string; tables: RestaurantTable[] }>();
+    tables.filter((table) => {
+      const zoneMatches = selectedZone === 'all' || String(table.zone_id || 'none') === selectedZone;
+      const searchMatches = !keyword || [table.table_number, table.display_label, table.table_zone?.name, ...(table.tags || []).map((tag) => tag.name)].some((value) => String(value || '').toLowerCase().includes(keyword));
+      return zoneMatches && searchMatches;
+    }).forEach((table) => {
       const key = String(table.zone_id || 'none');
-      if (!map.has(key)) map.set(key, { label: table.table_zone?.name || table.zone || copy('ไม่มีโซน', 'No zone'), tables: [] });
+      if (!map.has(key)) map.set(key, { key, label: table.table_zone?.name || table.zone || copy('ไม่มีโซน', 'No zone'), tables: [] });
       map.get(key)?.tables.push(table);
     });
     return Array.from(map.values());
-  }, [copy, search, tables]);
+  }, [copy, search, selectedZone, tables]);
+  useEffect(() => {
+    if (selectedZone !== 'all' && !zones.some((zone) => zone.value === selectedZone)) setSelectedZone('all');
+  }, [selectedZone, zones]);
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const attentionTables = useMemo(() => tables
     .map((table) => {
@@ -134,18 +150,30 @@ export default function TablesScreen() {
       {error ? <Feedback title={copy('โหลดผังโต๊ะไม่ได้', 'Could not load the table map')} detail={error} tone="danger" /> : null}
       {notice ? <Feedback title={copy('ยังเปิดโต๊ะนี้ไม่ได้', 'This table cannot be opened yet')} detail={notice} tone="warning" /> : null}
       {!canTakeOrder ? <Feedback title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('เลือกโหมดงานอื่นที่บัญชีนี้ได้รับอนุญาตจากเมนูด้านล่าง', 'Choose another work mode allowed for this account from the menu below.')} tone="info" /> : null}
-      <Surface>
-        <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: tabletWorkspace ? 'center' : 'stretch', gap: spacing.md }}>
+      <View style={{ gap: spacing.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           <View style={{ minWidth: 0, flex: 1 }}>
-            <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} />
+            <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ', 'Search tables')} />
           </View>
-          {canTakeOrder ? <Button compact={tabletWorkspace} icon="calendar-outline" variant="secondary" label={copy('จองโต๊ะ', 'Reserve table')} onPress={() => router.push('/table-reservation' as never)} /> : null}
+          {canTakeOrder ? <Button compact icon="calendar-outline" variant="secondary" label={copy('จองโต๊ะ', 'Reserve')} onPress={() => router.push('/table-reservation' as never)} /> : null}
         </View>
-      </Surface>
+        {zones.length > 1 ? (
+          <ChipGroup
+            label={copy('เลือกโซน', 'Select zone')}
+            scrollable
+            value={selectedZone}
+            onChange={setSelectedZone}
+            options={[
+              { label: copy('ทุกโซน', 'All zones'), value: 'all' },
+              ...zones,
+            ]}
+          />
+        ) : null}
+      </View>
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.xl }}>
         <View style={{ minWidth: 0, flex: 1, gap: spacing.xl }}>
           {groups.map((group) => (
-            <View key={group.label} style={{ gap: spacing.md }}>
+            <View key={group.key} style={{ gap: spacing.md }}>
               <SectionHeader title={group.label} detail={copy(`${group.tables.length.toLocaleString('th-TH')} โต๊ะ`, `${group.tables.length.toLocaleString('en-US')} tables`)} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
                 {group.tables.map((table) => {
@@ -153,6 +181,11 @@ export default function TablesScreen() {
                   const ready = (order?.items || []).filter((item) => item.status === 'ready').reduce((sum, item) => sum + item.quantity, 0);
                   const tone = ready ? 'success' : order ? 'warning' : table.status === 'reserved' ? 'info' : table.status === 'inactive' ? 'neutral' : 'success';
                   const tint = statusTone(tone);
+                  const statusLabel = ready
+                    ? copy(`พร้อม ${ready.toLocaleString('th-TH')} รายการ`, `${ready.toLocaleString('en-US')} ready`)
+                    : order
+                      ? copy('กำลังใช้งาน', 'In use')
+                      : tableStatusLabel(table.status, language);
                   return (
                     <Pressable
                       accessibilityLabel={copy(
@@ -162,11 +195,15 @@ export default function TablesScreen() {
                       accessibilityRole="button"
                       key={table.ID}
                       onPress={() => open(table)}
-                      style={({ pressed }) => ({ minWidth: 154, minHeight: 128, flexGrow: 1, flexBasis: tabletWorkspace ? 176 : 164, gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: order || table.status === 'reserved' ? tint.backgroundColor : palette.surface, padding: 14, opacity: pressed ? 0.7 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
+                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, minHeight: 148, flexGrow: 1, flexBasis: tabletWorkspace ? 176 : 150, gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
-                        <Text selectable numberOfLines={1} style={[typeScale.title, { flex: 1 }]}>{table.display_label || table.table_number}</Text>
-                        <StatusBadge label={ready ? copy(`พร้อม ${ready.toLocaleString('th-TH')}`, `${ready.toLocaleString('en-US')} ready`) : order ? copy('ใช้งาน', 'In use') : tableStatusLabel(table.status, language)} tone={tone} />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <Text selectable numberOfLines={1} style={{ minWidth: 0, flex: 1, color: tint.color, fontSize: 23, fontWeight: '800', lineHeight: 30 }}>{table.display_label || table.table_number}</Text>
+                        <AppIcon color={palette.text} name="chevron-forward" size={19} />
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <View style={{ width: 8, height: 8, borderRadius: radius.full, backgroundColor: tint.color }} />
+                        <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: tint.color, fontWeight: '700' }]}>{statusLabel}</Text>
                       </View>
                       <Text selectable numberOfLines={2} style={[typeScale.caption, { color: palette.muted }]}>{order
                         ? copy(`${order.customer_count.toLocaleString('th-TH')} คน`, `${order.customer_count.toLocaleString('en-US')} guests`)
@@ -179,9 +216,9 @@ export default function TablesScreen() {
                           <Text selectable style={typeScale.number}>{money(order.grand_total, language)}</Text>
                         </View>
                       ) : table.status === 'reserved' ? (
-                        <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.info, fontWeight: '700' }]}>{table.reservation_name || copy('ไม่ระบุชื่อผู้จอง', 'No guest name')}</Text>
+                        <Text selectable numberOfLines={1} style={[typeScale.caption, { color: tint.color, fontWeight: '700' }]}>{table.reservation_name || copy('ไม่ระบุชื่อผู้จอง', 'No guest name')}</Text>
                       ) : (
-                        <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{table.status === 'inactive' ? copy('ปิดใช้งาน', 'Inactive') : copy('แตะเพื่อเปิดออเดอร์', 'Tap to open')}</Text>
+                        <Text selectable numberOfLines={1} style={[typeScale.caption, { color: table.status === 'inactive' ? palette.muted : tint.color, fontWeight: '600' }]}>{table.status === 'inactive' ? copy('ปิดใช้งาน', 'Inactive') : copy('แตะเพื่อเปิดออเดอร์', 'Tap to open')}</Text>
                       )}
                     </Pressable>
                   );

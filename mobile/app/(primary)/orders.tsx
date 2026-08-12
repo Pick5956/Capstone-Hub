@@ -15,12 +15,14 @@ import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime'
 import {
   Button,
   ChipGroup,
+  EdgeRow,
+  EdgeSection,
+  EdgeSectionHeader,
   EmptyState,
   Feedback,
   SearchField,
   SectionHeader,
   StatusBadge,
-  Surface,
 } from '@/src/components/ui';
 import { money, orderStatusLabel } from '@/src/lib/format';
 import { orderListAccess, orderListRequest } from '@/src/lib/permission-parity';
@@ -38,6 +40,17 @@ function mergeOrderPages(current: Order[], next: Order[]) {
   const byId = new Map(current.map((order) => [order.ID, order]));
   next.forEach((order) => byId.set(order.ID, order));
   return Array.from(byId.values());
+}
+
+function formatOrderTime(value: string | null | undefined, language: 'th' | 'en') {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
+  }).format(date);
 }
 
 export default function OrdersScreen() {
@@ -156,17 +169,13 @@ export default function OrdersScreen() {
     >
       {error ? <Feedback title={archiveMode ? copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive') : copy('โหลดออเดอร์ที่กำลังทำไม่ได้', 'Could not load active orders')} detail={error} tone="danger" /> : null}
       {archiveMode ? (
-        <Surface>
-          <SectionHeader
-            title={copy('ค้นหาออเดอร์', 'Search orders')}
-            detail={copy('ค้นหาด้วยเลขออเดอร์ โต๊ะ โซน ชื่อลูกค้า หรือเบอร์โทร', 'Search by order number, table, zone, customer name, or phone number.')}
-          />
+        <View style={{ gap: spacing.md }}>
           <SearchField
             accessibilityLabel={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
             clearLabel={copy('ล้างคำค้นหา', 'Clear search')}
             value={search}
             onChangeText={setSearch}
-            placeholder={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
+            placeholder={copy('ค้นหาออเดอร์ โต๊ะ หรือลูกค้า', 'Search orders, tables, or customers')}
           />
           <ChipGroup
             scrollable
@@ -179,19 +188,38 @@ export default function OrdersScreen() {
               { label: copy(`ยกเลิก ${cancelledCount.toLocaleString('th-TH')}`, `Cancelled ${cancelledCount.toLocaleString('en-US')}`), value: 'cancelled' },
             ]}
           />
-        </Surface>
+        </View>
       ) : null}
 
       <View style={{ gap: spacing.md }}>
-        <SectionHeader
-          title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
-          detail={copy(
-            `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
-            `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
-          )}
-        />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-          {orders.map((order) => (
+        {tabletWorkspace ? (
+          <SectionHeader
+            title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
+            detail={copy(
+              `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
+              `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
+            )}
+          />
+        ) : (
+          <EdgeSectionHeader
+            title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
+            detail={copy(
+              `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
+              `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
+            )}
+          />
+        )}
+        {orders.length ? tabletWorkspace ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+          {orders.map((order) => {
+            const statusTone = order.status === 'cancelled'
+              ? 'danger'
+              : order.status === 'ready' || order.status === 'served' || order.status === 'completed'
+                ? 'success'
+                : order.status === 'cooking' || order.status === 'sent_to_kitchen'
+                  ? 'warning'
+                  : 'neutral';
+            const openedAt = formatOrderTime(order.opened_at, language);
+            return (
             <Pressable
               accessibilityLabel={copy(
                 `เปิด ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
@@ -201,43 +229,108 @@ export default function OrdersScreen() {
               key={order.ID}
               onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
               style={({ pressed }) => ({
-                width: tabletWorkspace ? '48.5%' : '100%',
+                width: '48.5%',
+                minHeight: 98,
                 flexGrow: 1,
-                flexBasis: tabletWorkspace ? 340 : undefined,
-                gap: spacing.md,
+                flexBasis: 340,
+                gap: spacing.sm,
                 borderWidth: 1,
                 borderColor: palette.border,
                 borderRadius: radius.md,
                 backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
-                padding: spacing.lg,
+                paddingHorizontal: spacing.lg,
+                paddingVertical: 14,
                 opacity: pressed ? 0.74 : 1,
               })}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-                <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
-                  <Text selectable numberOfLines={1} style={typeScale.cardTitle}>
-                    {order.table?.display_label
-                      || (order.order_type === 'takeaway' ? copy('ซื้อกลับบ้าน', 'Takeaway') : order.order_number)}
-                  </Text>
-                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                    {order.order_number} · {copy(`${(order.items?.length || 0).toLocaleString('th-TH')} รายการ`, `${(order.items?.length || 0).toLocaleString('en-US')} items`)}
-                  </Text>
-                </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0, flex: 1, color: palette.textStrong, fontSize: 16 }]}>
+                  {order.table?.display_label
+                    ? order.table.display_label
+                    : order.order_type === 'takeaway'
+                      ? copy('ซื้อกลับบ้าน', 'Takeaway')
+                      : order.order_number}
+                </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <Text selectable style={[typeScale.number, { fontSize: 19 }]}>{money(order.grand_total, language)}</Text>
+                  <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 18 }]}>{money(order.grand_total, language)}</Text>
                   <AppIcon color={palette.muted} name="chevron-forward" size={17} />
                 </View>
               </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                <StatusBadge
-                  label={orderStatusLabel(order.status, language)}
-                  tone={order.status === 'ready' ? 'success' : order.status === 'cooking' ? 'warning' : order.status === 'cancelled' ? 'danger' : 'neutral'}
-                />
-                <StatusBadge label={order.payment_status === 'paid' ? copy('ชำระแล้ว', 'Paid') : copy('รอชำระ', 'Payment due')} tone={order.payment_status === 'paid' ? 'success' : 'warning'} />
+              <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>
+                {order.order_number}{openedAt ? ` · ${openedAt}` : ''} · {copy(`${(order.items?.length || 0).toLocaleString('th-TH')} รายการ`, `${(order.items?.length || 0).toLocaleString('en-US')} items`)}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <StatusBadge label={orderStatusLabel(order.status, language)} tone={statusTone} />
+                {order.status !== 'cancelled' ? (
+                  <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: order.payment_status === 'paid' ? palette.success : palette.warning, fontWeight: '600' }]}>
+                    {order.payment_status === 'paid' ? copy('ชำระแล้ว', 'Paid') : copy('รอชำระเงิน', 'Payment due')}
+                  </Text>
+                ) : null}
               </View>
             </Pressable>
-          ))}
-        </View>
+            );
+          })}
+        </View> : (
+          <EdgeSection>
+            {orders.map((order) => {
+              const statusTone = order.status === 'cancelled'
+                ? 'danger'
+                : order.status === 'ready' || order.status === 'served' || order.status === 'completed'
+                  ? 'success'
+                  : order.status === 'cooking' || order.status === 'sent_to_kitchen'
+                    ? 'warning'
+                    : 'neutral';
+              const openedAt = formatOrderTime(order.opened_at, language);
+              const title = order.table?.display_label
+                ? order.table.display_label
+                : order.order_type === 'takeaway'
+                  ? copy('ซื้อกลับบ้าน', 'Takeaway')
+                  : order.order_number;
+              const paymentLabel = order.status === 'cancelled'
+                ? ''
+                : order.payment_status === 'paid'
+                  ? copy('ชำระแล้ว', 'Paid')
+                  : copy('รอชำระเงิน', 'Payment due');
+              const detail = `${order.order_number}${openedAt ? ` · ${openedAt}` : ''} · ${copy(`${(order.items?.length || 0).toLocaleString('th-TH')} รายการ`, `${(order.items?.length || 0).toLocaleString('en-US')} items`)}`;
+
+              return (
+                <EdgeRow
+                  key={order.ID}
+                  accessibilityLabel={copy(
+                    `เปิด ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
+                    `Open ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
+                  )}
+                  title={title}
+                  detail={detail}
+                  onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
+                  style={{ minHeight: 96 }}
+                  trailing={(
+                    <View style={{ alignItems: 'flex-end', gap: 5 }}>
+                      <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 17 }]}>
+                        {money(order.grand_total, language)}
+                      </Text>
+                      <StatusBadge label={orderStatusLabel(order.status, language)} tone={statusTone} />
+                      {paymentLabel ? (
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{
+                            color: order.payment_status === 'paid' ? palette.success : palette.warning,
+                            fontSize: 11,
+                            lineHeight: 14,
+                            fontWeight: '600',
+                          }}
+                        >
+                          {paymentLabel}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                />
+              );
+            })}
+          </EdgeSection>
+        ) : null}
 
         {pagination?.has_more ? (
           <Button

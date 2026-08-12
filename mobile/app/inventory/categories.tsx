@@ -5,7 +5,7 @@ import { createIngredientCategory, listIngredientCategories } from '@/src/api/in
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, Divider, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { Button, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -72,8 +72,15 @@ export default function IngredientCategoriesScreen() {
     </Surface>
   );
 
-  const listPanel = (
-    <Surface style={{ flex: tabletWorkspace ? 1.2 : undefined }}>
+  const listHeader = (
+    <EdgeSectionHeader
+      title={copy('หมวดที่ใช้งาน', 'Ingredient categories')}
+      detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
+    />
+  );
+
+  const listPanel = tabletWorkspace ? (
+    <Surface style={{ flex: 1.2 }}>
       <SectionHeader
         title={copy('หมวดที่ใช้งาน', 'Ingredient categories')}
         detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
@@ -94,6 +101,26 @@ export default function IngredientCategoriesScreen() {
         <EmptyState title={copy('ยังไม่มีหมวดวัตถุดิบ', 'No ingredient categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มวัตถุดิบ', 'Add the first category to organize inventory.')} />
       ) : null}
     </Surface>
+  ) : (
+    <View style={{ gap: spacing.sm }}>
+      {listHeader}
+      <EdgeSection>
+        {categories.map((item) => (
+          <EdgeRow
+            icon="file-tray-stacked-outline"
+            iconColor={palette.muted}
+            key={item.ID}
+            title={item.name}
+            trailing={<StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />}
+          />
+        ))}
+        {!categories.length ? (
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState title={copy('ยังไม่มีหมวดวัตถุดิบ', 'No ingredient categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มวัตถุดิบ', 'Add the first category to organize inventory.')} />
+          </View>
+        ) : null}
+      </EdgeSection>
+    </View>
   );
 
   return (

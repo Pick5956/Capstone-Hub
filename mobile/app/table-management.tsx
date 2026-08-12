@@ -6,7 +6,7 @@ import { listTableTags, listTables, listTableZones } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, ChipGroup, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { tableStatusLabel } from '@/src/lib/format';
 import { tableManagementAccess } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
@@ -42,9 +42,8 @@ export default function TableManagementScreen() {
     return <AppScreen title={copy('จัดการโต๊ะ', 'Table management')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูผังโต๊ะ', 'No table layout access')} detail={copy('ต้องมีสิทธิ์ view_tables หรือ manage_table', 'You need the view_tables or manage_table permission.')} /></AppScreen>;
   }
 
-  const summaryPanel = (
-    <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+  const summaryContent = (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
         {[
           { label: copy('ว่าง', 'Available'), value: counts.free },
           { label: copy('กำลังใช้งาน', 'Occupied'), value: counts.occupied },
@@ -66,18 +65,29 @@ export default function TableManagementScreen() {
             <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
           </View>
         ))}
-      </View>
-    </Surface>
+    </View>
   );
 
-  const filterPanel = (
-    <Surface>
-      <SectionHeader
-        title={copy('ค้นหาและกรอง', 'Search and filters')}
-        detail={canManage
-          ? copy('แก้ไขโต๊ะ โซน แท็ก และ QR เมนูลูกค้าผ่านหน้าเต็ม', 'Edit tables, zones, tags, and customer-menu QR codes in the full editor.')
-          : copy('ดูสถานะ ตำแหน่ง และจำนวนที่นั่งของโต๊ะในร้าน', 'View each table’s status, location, and seating capacity.')}
+  const summaryPanel = tabletWorkspace ? (
+    <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+      {summaryContent}
+    </Surface>
+  ) : (
+    <View style={{ gap: spacing.md }}>
+      <EdgeSectionHeader
+        title={copy('สถานะโต๊ะ', 'Table status')}
+        detail={copy('ภาพรวมโต๊ะทั้งหมดในร้าน', 'Overview of all restaurant tables')}
       />
+      <EdgeSection>{summaryContent}</EdgeSection>
+    </View>
+  );
+
+  const filterTitle = copy('ค้นหาและกรอง', 'Search and filters');
+  const filterDetail = canManage
+    ? copy('แก้ไขโต๊ะ โซน แท็ก และ QR เมนูลูกค้าผ่านหน้าเต็ม', 'Edit tables, zones, tags, and customer-menu QR codes in the full editor.')
+    : copy('ดูสถานะ ตำแหน่ง และจำนวนที่นั่งของโต๊ะในร้าน', 'View each table’s status, location, and seating capacity.');
+  const filterContent = (
+    <>
       <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} />
       <ChipGroup scrollable value={zoneFilter} onChange={setZoneFilter} options={[{ label: copy('ทุกโซน', 'All zones'), value: 'all' }, { label: copy('ไม่มีโซน', 'No zone'), value: 'none' }, ...zones.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]} />
       {tags.length ? <ChipGroup scrollable value={tagFilter} onChange={setTagFilter} options={[{ label: copy('ทุกแท็ก', 'All tags'), value: 'all' }, ...tags.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]} /> : null}
@@ -87,13 +97,33 @@ export default function TableManagementScreen() {
           <Button compact icon="pricetags-outline" variant="secondary" label={copy('จัดการแท็ก', 'Manage tags')} onPress={() => router.push('/table-management/tags' as never)} style={{ width: tabletWorkspace ? '100%' : undefined, flexGrow: tabletWorkspace ? 0 : 1 }} />
         </View>
       ) : null}
+    </>
+  );
+  const filterPanel = tabletWorkspace ? (
+    <Surface>
+      <SectionHeader title={filterTitle} detail={filterDetail} />
+      {filterContent}
     </Surface>
+  ) : (
+    <View style={{ gap: spacing.md }}>
+      <EdgeSectionHeader title={filterTitle} detail={filterDetail} />
+      <EdgeSection>
+        <View style={{ gap: spacing.md, padding: spacing.lg }}>
+          {filterContent}
+        </View>
+      </EdgeSection>
+    </View>
   );
 
   const tableList = (
     <View style={{ width: '100%', gap: spacing.md }}>
-      <SectionHeader title={copy('ผังโต๊ะ', 'Table layout')} detail={copy(`${filtered.length.toLocaleString('th-TH')} โต๊ะที่ตรงกับตัวกรอง`, `${filtered.length.toLocaleString('en-US')} matching tables`)} />
-      <View style={{ gap: spacing.sm }}>
+      {tabletWorkspace ? (
+        <SectionHeader title={copy('ผังโต๊ะ', 'Table layout')} detail={copy(`${filtered.length.toLocaleString('th-TH')} โต๊ะที่ตรงกับตัวกรอง`, `${filtered.length.toLocaleString('en-US')} matching tables`)} />
+      ) : (
+        <EdgeSectionHeader title={copy('ผังโต๊ะ', 'Table layout')} detail={copy(`${filtered.length.toLocaleString('th-TH')} โต๊ะที่ตรงกับตัวกรอง`, `${filtered.length.toLocaleString('en-US')} matching tables`)} />
+      )}
+      {tabletWorkspace ? (
+        <View style={{ gap: spacing.sm }}>
         {filtered.map((table) => {
           const tone = table.status === 'free' ? 'success' : table.status === 'occupied' ? 'warning' : table.status === 'reserved' ? 'info' : 'neutral';
           return (
@@ -132,7 +162,47 @@ export default function TableManagementScreen() {
             </Pressable>
           );
         })}
-      </View>
+        </View>
+      ) : filtered.length ? (
+        <EdgeSection>
+          {filtered.map((table) => {
+            const tone = table.status === 'free' ? 'success' : table.status === 'occupied' ? 'warning' : table.status === 'reserved' ? 'info' : 'neutral';
+            const tableLabel = table.display_label || table.table_number;
+            const zoneAndCapacity = `${table.table_zone?.name || table.zone || copy('ไม่มีโซน', 'No zone')} · ${copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`)}`;
+            const tagLabel = table.tags?.length ? table.tags.map((tag) => tag.name).join(', ') : copy('ไม่มีแท็ก', 'No tags');
+            const qrLabel = table.customer_token ? copy('QR เมนูพร้อมใช้', 'Menu QR ready') : copy('ยังไม่มี QR เมนู', 'No menu QR yet');
+
+            return (
+              <EdgeRow
+                key={table.ID}
+                accessibilityLabel={copy(
+                  `โต๊ะ ${tableLabel}, ${tableStatusLabel(table.status, 'th')}, ${table.table_zone?.name || table.zone || 'ไม่มีโซน'}, ${table.capacity.toLocaleString('th-TH')} ที่นั่ง, ${table.customer_token ? 'QR เมนูพร้อมใช้' : 'ยังไม่มี QR เมนู'}`,
+                  `Table ${tableLabel}, ${tableStatusLabel(table.status, 'en')}, ${table.table_zone?.name || table.zone || 'No zone'}, ${table.capacity.toLocaleString('en-US')} seats, ${table.customer_token ? 'menu QR ready' : 'no menu QR yet'}`,
+                )}
+                title={tableLabel}
+                detail={`${zoneAndCapacity}\n${tagLabel}`}
+                onPress={canManage
+                  ? () => router.push({ pathname: '/table-management/table' as never, params: { tableId: String(table.ID) } } as never)
+                  : undefined}
+                showChevron={canManage}
+                style={{ minHeight: 94 }}
+                trailing={(
+                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <StatusBadge label={tableStatusLabel(table.status, language)} tone={tone} />
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: table.customer_token ? palette.success : palette.muted, fontSize: 11, lineHeight: 14 }}
+                    >
+                      {qrLabel}
+                    </Text>
+                  </View>
+                )}
+              />
+            );
+          })}
+        </EdgeSection>
+      ) : null}
       {!loading && !filtered.length ? <EmptyState title={copy('ไม่พบโต๊ะ', 'No tables found')} detail={tables.length ? copy('ลองเปลี่ยนตัวกรองหรือคำค้น', 'Try changing the filters or search term.') : canManage ? copy('เพิ่มโต๊ะแบบเดี่ยวหรือสร้างหลายโต๊ะในหน้าเพิ่มโต๊ะ', 'Add one table or create multiple tables from the add-table screen.') : copy('ร้านนี้ยังไม่มีข้อมูลโต๊ะ', 'This restaurant has no table data yet.')} /> : null}
     </View>
   );

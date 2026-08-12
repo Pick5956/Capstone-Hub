@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { useTabSwipeExclusionHandlers } from '@/src/components/tab-swipe-context';
-import { palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
+import { breakpoints, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
 
 export function Button({
   label,
@@ -78,6 +78,172 @@ export function Surface({ children, style }: { children: React.ReactNode; style?
       ]}
     >
       {children}
+    </View>
+  );
+}
+
+export function EdgeSection({
+  children,
+  fullBleed = true,
+  style,
+}: {
+  children: React.ReactNode;
+  fullBleed?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { width } = useWindowDimensions();
+  const flushToPhoneEdge = fullBleed && width < breakpoints.tablet;
+
+  return (
+    <View
+      style={[
+        {
+          marginHorizontal: flushToPhoneEdge ? -spacing.lg : 0,
+          borderWidth: flushToPhoneEdge ? 0 : 1,
+          borderColor: palette.border,
+          borderRadius: flushToPhoneEdge ? 0 : radius.md,
+          backgroundColor: palette.surface,
+          overflow: 'hidden',
+        },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+export function EdgeSectionHeader({
+  title,
+  detail,
+  action,
+}: {
+  title: string;
+  detail?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md }}>
+      <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
+        <Text
+          accessibilityRole="header"
+          selectable
+          style={{ color: palette.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' }}
+        >
+          {title}
+        </Text>
+        {detail ? (
+          <Text selectable style={{ color: palette.muted, fontSize: 12, lineHeight: 18 }}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {action}
+    </View>
+  );
+}
+
+export function EdgeRow({
+  title,
+  detail,
+  icon,
+  iconColor = palette.text,
+  leading,
+  trailing,
+  showChevron,
+  disabled,
+  onPress,
+  accessibilityLabel,
+  titleStyle,
+  style,
+}: {
+  title: string;
+  detail?: string;
+  icon?: AppIconName;
+  iconColor?: string;
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
+  showChevron?: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  titleStyle?: StyleProp<TextStyle>;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const hasLeading = Boolean(icon || leading);
+  const row = (
+    <>
+      {hasLeading ? (
+        <View style={{ minHeight: detail ? 48 : 36, width: 32, alignItems: 'center', justifyContent: 'center' }}>
+          {leading || (icon ? <AppIcon color={iconColor} name={icon} size={25} /> : null)}
+        </View>
+      ) : null}
+      <View style={{ minWidth: 0, flex: 1, justifyContent: 'center', gap: 1 }}>
+        <Text
+          numberOfLines={detail ? 2 : 1}
+          selectable
+          style={[
+            { color: palette.textStrong, fontSize: 16, lineHeight: 22, fontWeight: '600' },
+            titleStyle,
+          ]}
+        >
+          {title}
+        </Text>
+        {detail ? (
+          <Text numberOfLines={3} selectable style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {trailing ? <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>{trailing}</View> : null}
+      {(showChevron ?? Boolean(onPress)) ? <AppIcon color={palette.placeholder} name="chevron-forward" size={20} /> : null}
+    </>
+  );
+
+  return (
+    <View>
+      {onPress ? (
+        <Pressable
+          accessibilityLabel={accessibilityLabel || title}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: Boolean(disabled) }}
+          disabled={disabled}
+          onPress={onPress}
+          style={({ pressed }) => [
+            {
+              minHeight: detail ? 72 : 60,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: detail ? spacing.sm : spacing.xs,
+              backgroundColor: pressed ? palette.surfaceStrong : palette.surface,
+              opacity: disabled ? 0.48 : 1,
+            },
+            style,
+          ]}
+        >
+          {row}
+        </Pressable>
+      ) : (
+        <View
+          style={[
+            {
+              minHeight: detail ? 72 : 60,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.md,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: detail ? spacing.sm : spacing.xs,
+              backgroundColor: palette.surface,
+              opacity: disabled ? 0.48 : 1,
+            },
+            style,
+          ]}
+        >
+          {row}
+        </View>
+      )}
     </View>
   );
 }

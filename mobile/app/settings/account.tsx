@@ -2,13 +2,11 @@ import { useEffect, useState } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 
 import { updateProfile } from '@/src/api/auth';
-import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
-import { AppText as Text } from '@/src/components/app-text';
-import { ActionDock, Button, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, EdgeRow, EdgeSection, EdgeSectionHeader, Feedback, TextField } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
+import { breakpoints, spacing } from '@/src/theme';
 
 export default function AccountSettingsScreen() {
   const { width } = useWindowDimensions();
@@ -84,8 +82,9 @@ export default function AccountSettingsScreen() {
       ) : null}
       {message ? <Feedback title={message} tone="success" /> : null}
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
-        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.45 : undefined }}>
-          <SectionHeader title={copy('ข้อมูลส่วนตัว', 'Personal information')} />
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.45 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('ข้อมูลส่วนตัว', 'Personal information')} />
+          <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
           <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
             <View style={{ minWidth: 0, flex: 1 }}>
               <TextField label={copy('ชื่อ', 'First name')} value={firstName} onChangeText={setFirstName} icon="person-outline" />
@@ -99,22 +98,20 @@ export default function AccountSettingsScreen() {
           {tabletWorkspace ? (
             <Button icon="checkmark" label={copy('บันทึกบัญชี', 'Save account')} onPress={save} loading={saving} />
           ) : null}
-        </Surface>
-        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined, gap: spacing.sm }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: palette.surfaceSubtle }}>
-              <AppIcon color={palette.text} name={user?.auth_provider === 'google' ? 'logo-google' : 'lock-closed-outline'} size={21} />
-            </View>
-            <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
-              <Text style={typeScale.cardTitle}>{copy('วิธีเข้าสู่ระบบ', 'Sign-in method')}</Text>
-              <Text style={[typeScale.caption, { color: palette.muted }]}>
-                {user?.auth_provider === 'google'
-                  ? copy('เชื่อมกับ Google', 'Connected to Google')
-                  : copy('ใช้อีเมลและรหัสผ่าน', 'Email and password')}
-              </Text>
-            </View>
-          </View>
-        </Surface>
+          </EdgeSection>
+        </View>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('การเข้าสู่ระบบ', 'Sign-in')} />
+          <EdgeSection>
+            <EdgeRow
+              detail={user?.auth_provider === 'google'
+                ? copy('เชื่อมกับ Google', 'Connected to Google')
+                : copy('ใช้อีเมลและรหัสผ่าน', 'Email and password')}
+              icon={user?.auth_provider === 'google' ? 'logo-google' : 'lock-closed-outline'}
+              title={copy('วิธีเข้าสู่ระบบ', 'Sign-in method')}
+            />
+          </EdgeSection>
+        </View>
       </View>
     </AppScreen>
   );

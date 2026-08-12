@@ -3,7 +3,7 @@ import { useWindowDimensions, View } from 'react-native';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { ChipGroup, Feedback, SectionHeader, Surface } from '@/src/components/ui';
+import { ChipGroup, EdgeSection, EdgeSectionHeader, Feedback } from '@/src/components/ui';
 import type {
   DisplayLanguage,
   DisplayTextSize,
@@ -72,13 +72,16 @@ export default function DisplaySettingsScreen() {
     >
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
         <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1 : undefined, gap: spacing.lg }}>
-          <Surface>
-            <SectionHeader title={copy('ภาษา', 'Language')} action={<AppIcon color={palette.muted} name="language-outline" size={21} />} />
+          <View style={{ gap: spacing.sm }}>
+            <EdgeSectionHeader title={copy('ภาษา', 'Language')} action={<AppIcon color={palette.muted} name="language-outline" size={21} />} />
+            <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
             <ChipGroup value={language} options={languageOptions} onChange={setLanguage} />
-          </Surface>
+            </EdgeSection>
+          </View>
         </View>
-        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.15 : undefined }}>
-          <SectionHeader title={copy('ขนาดตัวอักษร', 'Text size')} detail={copy('ทำงานร่วมกับขนาดตัวอักษรของเครื่อง', 'Works with the device text-size setting.')} action={<AppIcon color={palette.muted} name="text-outline" size={21} />} />
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.15 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('ขนาดตัวอักษร', 'Text size')} detail={copy('ทำงานร่วมกับขนาดตัวอักษรของเครื่อง', 'Works with the device text-size setting.')} action={<AppIcon color={palette.muted} name="text-outline" size={21} />} />
+          <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
           <ChipGroup value={textSize} options={textSizeOptions} onChange={setTextSize} />
           <View style={{ borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}>
             <Text selectable style={[typeScale.body, { color: palette.text }]}>
@@ -93,7 +96,8 @@ export default function DisplaySettingsScreen() {
               <Text style={[typeScale.caption, { color: palette.muted }]}>{persistenceCopy.title}</Text>
             </View>
           )}
-        </Surface>
+          </EdgeSection>
+        </View>
       </View>
     </AppScreen>
   );

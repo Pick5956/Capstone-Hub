@@ -14,7 +14,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
@@ -187,10 +187,21 @@ export function PrimaryTabletRail({
   );
 }
 
-const PHONE_DOCK_HEIGHT = 68;
+const PHONE_DOCK_HEIGHT = 53;
 const PHONE_MARKER_SIZE = 50;
 const PHONE_MARKER_HALO_SIZE = 60;
+const PHONE_DOCK_TOP_GUTTER = 22;
+const PHONE_DOCK_BOTTOM_GAP_SCALE = 0.8;
+const PHONE_DOCK_ADDITIONAL_DROP = 10;
 const TAB_MOTION_EASING = Easing.bezier(0.16, 1, 0.3, 1);
+
+function phoneDockBottomGap(bottomInset: number) {
+  return Math.max(
+    0,
+    Math.round((spacing.sm + bottomInset) * PHONE_DOCK_BOTTOM_GAP_SCALE)
+      - PHONE_DOCK_ADDITIONAL_DROP,
+  );
+}
 
 export function PrimaryPhoneNavigation({
   accessibilitySelectedIndex,
@@ -206,6 +217,7 @@ export function PrimaryPhoneNavigation({
   onSelect: (index: number) => void;
 }) {
   const { copy, language } = useDisplayPreferences();
+  const insets = useSafeAreaInsets();
   const [dockWidth, setDockWidth] = useState(0);
   const slotWidth = items.length ? dockWidth / items.length : 0;
   const markerTranslate = Animated.multiply(markerPosition, slotWidth);
@@ -214,8 +226,25 @@ export function PrimaryPhoneNavigation({
   }, []);
 
   return (
-    <SafeAreaView edges={['left', 'right', 'bottom']} style={{ backgroundColor: palette.canvas }}>
-      <View style={{ paddingTop: 22, paddingBottom: spacing.sm }}>
+    <SafeAreaView
+      edges={['left', 'right']}
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        right: 0,
+        bottom: 0,
+        left: 0,
+        zIndex: 20,
+        backgroundColor: 'transparent',
+      }}
+    >
+      <View
+        pointerEvents="box-none"
+        style={{
+          paddingTop: PHONE_DOCK_TOP_GUTTER,
+          paddingBottom: phoneDockBottomGap(insets.bottom),
+        }}
+      >
         <View
           accessibilityLabel={copy('แถบนำทางหลัก ปัดหน้าจอซ้ายหรือขวาเพื่อเปลี่ยนแท็บ', 'Main navigation. Swipe the screen left or right to change tabs.')}
           accessibilityRole="tablist"
@@ -256,7 +285,7 @@ export function PrimaryPhoneNavigation({
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: radius.full,
-                  backgroundColor: palette.canvas,
+                  backgroundColor: palette.surface,
                 }}
               >
                 <View
@@ -285,7 +314,6 @@ export function PrimaryPhoneNavigation({
               accessibilitySelectedIndex ?? selectedIndex
             );
             const label = language === 'th' ? item.label : item.labelEn;
-            const shortLabel = language === 'th' ? item.shortLabel : item.shortLabelEn;
             return (
               <Pressable
                 accessibilityLabel={label}
@@ -299,29 +327,14 @@ export function PrimaryPhoneNavigation({
                   minHeight: PHONE_DOCK_HEIGHT,
                   flex: 1,
                   alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: 2,
-                  paddingTop: 17,
-                  paddingBottom: 7,
+                  justifyContent: 'center',
                   paddingHorizontal: 2,
                   opacity: pressed ? 0.68 : 1,
                 })}
               >
-                <View style={{ height: 27, alignItems: 'center', justifyContent: 'center', opacity: active ? 0 : 1 }}>
-                  <AppIcon color="#AEB6C2" name={item.icon} size={21} />
+                <View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: active ? 0 : 1 }}>
+                  <AppIcon color="#AEB6C2" name={item.icon} size={27} />
                 </View>
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    color: active ? '#FFFFFF' : '#AEB6C2',
-                    fontSize: 10,
-                    lineHeight: 13,
-                    textAlign: 'center',
-                    fontWeight: active ? '700' : '600',
-                  }}
-                >
-                  {shortLabel}
-                </Text>
               </Pressable>
             );
           })}
@@ -398,14 +411,20 @@ export function AppScreen({
   contentMaxWidth?: number;
 }) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { status, user, activeMembership } = useAuth();
   const pathname = usePathname();
   const reducedMotion = useReducedMotion();
   const embeddedInPrimaryTabs = useIsPrimaryTabsHost();
   const isTablet = width >= breakpoints.tablet;
   const expandedRail = width >= breakpoints.expandedRail;
+  const screenBackground = isTablet ? palette.canvas : palette.surface;
   const horizontalPadding = isTablet ? spacing.xxl : spacing.lg;
   const maxWidth = contentMaxWidth || (isTablet ? 1180 : 720);
+  const phoneDockClearance = PHONE_DOCK_HEIGHT
+    + PHONE_DOCK_TOP_GUTTER
+    + phoneDockBottomGap(insets.bottom)
+    + spacing.lg;
   const phoneNavigationItems = useMemo(
     () => primaryNavigation.filter((item) => isAllowed(item, activeMembership)),
     [activeMembership],
@@ -619,7 +638,7 @@ export function AppScreen({
     onShouldBlockNativeResponder: () => false,
   }), [activeTabIndex, contentOpacity, contentTranslateX, embeddedInPrimaryTabs, isTablet, markerPosition, navigateToTab, phoneNavigationItems, reducedMotion, resetTabDrag, topLevel, width]);
 
-  if (status === 'loading') return <View style={{ flex: 1, backgroundColor: palette.canvas }} />;
+  if (status === 'loading') return <View style={{ flex: 1, backgroundColor: screenBackground }} />;
   if (!user) return <Redirect href="/login" />;
   if (!activeMembership) return <Redirect href="/restaurants" />;
 
@@ -631,7 +650,7 @@ export function AppScreen({
   const main = scroll ? (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingHorizontal: horizontalPadding, paddingTop: spacing.lg, paddingBottom: spacing.xxxl }}
+      contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingHorizontal: horizontalPadding, paddingTop: spacing.lg, paddingBottom: topLevel && !isTablet ? phoneDockClearance : spacing.xxxl }}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
@@ -642,7 +661,7 @@ export function AppScreen({
       </View>
     </ScrollView>
   ) : (
-    <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: horizontalPadding, paddingTop: spacing.lg }}>
+    <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: horizontalPadding, paddingTop: spacing.lg, paddingBottom: topLevel && !isTablet ? phoneDockClearance : 0 }}>
       <View style={[{ width: '100%', maxWidth, flex: 1, gap: spacing.lg }, contentStyle]}>
         {heading}
         <View style={{ minHeight: 0, flex: 1 }}>{children}</View>
@@ -656,6 +675,7 @@ export function AppScreen({
       style={{
         minHeight: 0,
         flex: 1,
+        backgroundColor: screenBackground,
         opacity: contentOpacity,
         transform: [{ translateX: contentTranslateX }],
       }}
@@ -669,7 +689,7 @@ export function AppScreen({
   );
 
   const content = (
-    <View style={{ flex: 1, backgroundColor: palette.canvas }}>
+    <View style={{ flex: 1, backgroundColor: screenBackground }}>
       {embeddedInPrimaryTabs ? animatedContent : (
         <TabSwipeGestureProvider setNestedHorizontalGestureActive={setNestedHorizontalGestureActive}>
           {animatedContent}

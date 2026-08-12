@@ -5,7 +5,7 @@ import { createCategory, deleteCategory, listCategories, updateCategory } from '
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { Button, ChipGroup, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
 import { categoryActiveToggleInput } from '@/src/lib/menu-editor';
 import { can } from '@/src/lib/rbac';
@@ -167,8 +167,8 @@ export default function MenuCategoriesScreen() {
     </Surface>
   );
 
-  const listPanel = (
-    <Surface style={{ flex: tabletWorkspace ? 1.18 : undefined }}>
+  const listPanel = tabletWorkspace ? (
+    <Surface style={{ flex: 1.18 }}>
       <SectionHeader
         title={copy('หมวดทั้งหมด', 'All categories')}
         detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
@@ -208,6 +208,46 @@ export default function MenuCategoriesScreen() {
         <EmptyState title={copy('ยังไม่มีหมวดเมนู', 'No menu categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มเมนู', 'Add the first category to organize menu items.')} />
       ) : null}
     </Surface>
+  ) : (
+    <View style={{ gap: spacing.sm }}>
+      <EdgeSectionHeader
+        title={copy('หมวดทั้งหมด', 'All categories')}
+        detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
+      />
+      <EdgeSection>
+        {categories.map((item) => (
+          <EdgeRow
+            detail={copy(`ลำดับ ${item.display_order.toLocaleString('th-TH')}`, `Order ${item.display_order.toLocaleString('en-US')}`)}
+            icon="folder-outline"
+            iconColor={palette.muted}
+            key={item.ID}
+            title={item.name}
+            trailing={(
+              <View style={{ alignItems: 'flex-end', gap: spacing.sm }}>
+                <StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />
+                <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                  <Button compact icon="create-outline" variant="secondary" label={copy('แก้ไข', 'Edit')} onPress={() => choose(item)} />
+                  <Button
+                    compact
+                    icon={item.is_active ? 'eye-off-outline' : 'eye-outline'}
+                    variant="ghost"
+                    label={item.is_active ? copy('ปิด', 'Hide') : copy('เปิด', 'Show')}
+                    onPress={() => void toggleActive(item)}
+                    loading={updatingCategoryId === item.ID}
+                    disabled={updatingCategoryId !== null && updatingCategoryId !== item.ID}
+                  />
+                </View>
+              </View>
+            )}
+          />
+        ))}
+        {!categories.length ? (
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState title={copy('ยังไม่มีหมวดเมนู', 'No menu categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มเมนู', 'Add the first category to organize menu items.')} />
+          </View>
+        ) : null}
+      </EdgeSection>
+    </View>
   );
 
   return (

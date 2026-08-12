@@ -149,6 +149,7 @@ function PrimaryPager({
   const reducedMotion = useReducedMotion();
   const isTablet = width >= breakpoints.tablet;
   const expandedRail = width >= breakpoints.expandedRail;
+  const screenBackground = isTablet ? palette.canvas : palette.surface;
   const railWidth = expandedRail ? 232 : 92;
   const viewportWidth = Math.max(width - (isTablet ? railWidth : 0), 1);
   const useNativeDriver = Platform.OS !== 'web';
@@ -381,7 +382,7 @@ function PrimaryPager({
   }, [activeIndex, pagerPosition, permittedItems, viewportWidth]);
 
   if (status === 'loading') {
-    return <View style={{ flex: 1, backgroundColor: palette.canvas }} />;
+    return <View style={{ flex: 1, backgroundColor: screenBackground }} />;
   }
   if (!user) return <Redirect href="/login" />;
   if (!activeMembership) return <Redirect href="/restaurants" />;
@@ -392,7 +393,7 @@ function PrimaryPager({
   const pager = (
     <View
       {...(!isTablet ? pagerResponder.panHandlers : {})}
-      style={{ minHeight: 0, flex: 1, overflow: 'hidden', backgroundColor: palette.canvas }}
+      style={{ minHeight: 0, flex: 1, overflow: 'hidden', backgroundColor: screenBackground }}
     >
       <TabSlot
         detachInactiveScreens={false}
@@ -408,7 +409,7 @@ function PrimaryPager({
         nestedHorizontalGestureActive.current = active;
       }}
     >
-      <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column', backgroundColor: palette.canvas }}>
+      <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column', backgroundColor: screenBackground }}>
         {isTablet ? (
           <PrimaryTabletRail
             expanded={expandedRail}

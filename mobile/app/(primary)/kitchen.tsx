@@ -46,16 +46,18 @@ type KitchenLane = 'cooking' | 'done';
 const styles = StyleSheet.create({
   focusSwitch: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 2,
+    borderRadius: radius.md,
+    backgroundColor: palette.surfaceStrong,
+    padding: 3,
   },
   focusButton: {
-    minHeight: 48,
+    minHeight: 44,
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    borderWidth: 1,
+    justifyContent: 'center',
+    gap: 6,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
   },
@@ -64,15 +66,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   focusCount: {
-    minWidth: 28,
-    height: 28,
+    minWidth: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
   },
   focusCountText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
@@ -123,13 +122,12 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   ticketHeader: {
-    minHeight: 76,
+    minHeight: 92,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    borderBottomWidth: 1,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
   },
   ticketIdentity: {
     minWidth: 0,
@@ -137,43 +135,47 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   orderNumber: {
-    color: palette.textStrong,
-    fontSize: 20,
-    lineHeight: 25,
-    fontWeight: '800',
+    color: palette.surface,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
   ticketMeta: {
-    color: palette.muted,
+    color: palette.surface,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    opacity: 0.88,
   },
   timer: {
-    minWidth: 72,
+    minWidth: 86,
     alignItems: 'flex-end',
-    gap: 1,
+    gap: 0,
   },
   timerValue: {
-    fontSize: 26,
-    lineHeight: 29,
+    color: palette.surface,
+    fontSize: 38,
+    lineHeight: 42,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
   timerLabel: {
+    color: palette.surface,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
+    opacity: 0.9,
   },
   item: {
-    gap: spacing.md,
+    gap: spacing.sm,
     backgroundColor: palette.surface,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
   },
   itemMain: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.md,
   },
   itemContent: {
@@ -187,13 +189,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   quantity: {
-    minWidth: 34,
-    minHeight: 28,
-    alignItems: 'center',
+    minWidth: 30,
+    minHeight: 24,
+    alignItems: 'flex-start',
     justifyContent: 'center',
-    borderRadius: radius.md,
-    backgroundColor: palette.surfaceStrong,
-    paddingHorizontal: spacing.xs,
   },
   quantityText: {
     color: palette.textStrong,
@@ -235,9 +234,8 @@ const styles = StyleSheet.create({
   ticketFooter: {
     borderTopWidth: 1,
     borderTopColor: palette.border,
-    backgroundColor: palette.surfaceSubtle,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    backgroundColor: palette.surface,
+    padding: spacing.md,
   },
 });
 
@@ -248,6 +246,7 @@ function KitchenIconAction({
   onPress,
   disabled,
   loading,
+  prominent = false,
 }: {
   label: string;
   icon: AppIconName;
@@ -255,13 +254,19 @@ function KitchenIconAction({
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  prominent?: boolean;
 }) {
-  const color = tone === 'success' ? palette.success : tone === 'danger' ? palette.danger : palette.text;
+  const color = tone === 'success'
+    ? prominent ? palette.primaryText : palette.success
+    : tone === 'danger'
+      ? palette.danger
+      : palette.text;
   const pressedBackground = tone === 'success'
-    ? palette.successSoft
+    ? prominent ? palette.primary : palette.successSoft
     : tone === 'danger'
       ? palette.dangerSoft
       : palette.surfaceStrong;
+  const restingBackground = tone === 'success' && prominent ? palette.primary : 'transparent';
   const inactive = Boolean(disabled || loading);
 
   return (
@@ -274,7 +279,7 @@ function KitchenIconAction({
       style={({ pressed }) => [
         styles.iconAction,
         {
-          backgroundColor: pressed ? pressedBackground : 'transparent',
+          backgroundColor: pressed ? pressedBackground : restingBackground,
           opacity: inactive ? 0.42 : pressed ? 0.72 : 1,
         },
       ]}
@@ -511,11 +516,9 @@ export default function KitchenScreen() {
 
   return (
     <AppScreen
-      title={copy('จอครัว', 'Kitchen display')}
-      subtitle={copy(`${cookingTickets.length.toLocaleString('th-TH')} รอบกำลังทำ · ${doneTickets.length.toLocaleString('th-TH')} รอบทำเสร็จ`, `${cookingTickets.length.toLocaleString('en-US')} cooking batches · ${doneTickets.length.toLocaleString('en-US')} done`)}
+      title={copy('ครัว', 'Kitchen')}
       topLevel
       refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
-      action={<StatusBadge label={copy('อัปเดตอัตโนมัติทุก 8 วินาที', 'Auto-updates every 8 seconds')} tone="neutral" />}
       contentMaxWidth={1320}
       contentStyle={{ gap: spacing.lg }}
     >
@@ -535,17 +538,11 @@ export default function KitchenScreen() {
               key: 'cooking' as const,
               label: copy('กำลังทำ', 'Cooking'),
               count: cookingTickets.length,
-              color: palette.warning,
-              soft: palette.warningSoft,
-              border: '#FDE68A',
             },
             {
               key: 'done' as const,
               label: copy('ทำเสร็จ', 'Done'),
               count: doneTickets.length,
-              color: palette.success,
-              soft: palette.successSoft,
-              border: '#A7F3D0',
             },
           ]).map((option) => {
             const selected = option.key === filter;
@@ -558,15 +555,14 @@ export default function KitchenScreen() {
                 style={({ pressed }) => [
                   styles.focusButton,
                   {
-                    borderColor: selected ? option.border : palette.borderStrong,
-                    backgroundColor: selected ? option.soft : palette.surface,
+                    backgroundColor: selected ? palette.primary : 'transparent',
                     opacity: pressed ? 0.72 : 1,
                   },
                 ]}
               >
-                <Text style={[styles.focusLabel, { color: selected ? option.color : palette.text }]}>{option.label}</Text>
-                <View style={[styles.focusCount, { backgroundColor: selected ? option.color : palette.surfaceStrong }]}>
-                  <Text style={[styles.focusCountText, { color: selected ? palette.surface : palette.text }]}>
+                <Text style={[styles.focusLabel, { color: selected ? palette.primaryText : palette.text }]}>{option.label}</Text>
+                <View style={styles.focusCount}>
+                  <Text style={[styles.focusCountText, { color: selected ? palette.primaryText : palette.muted }]}>
                     {option.count.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
                   </Text>
                 </View>
@@ -587,23 +583,25 @@ export default function KitchenScreen() {
               },
             ]}
           >
-            <View style={styles.laneHeader}>
-              <View style={styles.laneIdentity}>
-                <View
-                  style={[
-                    styles.laneDot,
-                    { backgroundColor: group.kind === 'cooking' ? palette.warning : palette.success },
-                  ]}
-                />
-                <Text accessibilityRole="header" selectable style={styles.laneTitle}>{group.title}</Text>
+            {width >= 820 ? (
+              <View style={styles.laneHeader}>
+                <View style={styles.laneIdentity}>
+                  <View
+                    style={[
+                      styles.laneDot,
+                      { backgroundColor: group.kind === 'cooking' ? palette.warning : palette.success },
+                    ]}
+                  />
+                  <Text accessibilityRole="header" selectable style={styles.laneTitle}>{group.title}</Text>
+                </View>
+                <Text selectable style={styles.laneCount}>
+                  {copy(
+                    `${group.orders.length.toLocaleString('th-TH')} รอบครัว`,
+                    `${group.orders.length.toLocaleString('en-US')} kitchen batches`,
+                  )}
+                </Text>
               </View>
-              <Text selectable style={styles.laneCount}>
-                {copy(
-                  `${group.orders.length.toLocaleString('th-TH')} รอบครัว`,
-                  `${group.orders.length.toLocaleString('en-US')} kitchen batches`,
-                )}
-              </Text>
-            </View>
+            ) : null}
             {group.orders.map((order) => {
               const ticketKey = kitchenTicketKey(order);
               const items = (order.items || []).filter((item) => (
@@ -623,20 +621,15 @@ export default function KitchenScreen() {
                 items,
               });
               const ticketBorderColor = group.kind === 'done'
-                ? '#A7F3D0'
+                ? palette.success
                 : timing.urgency === 'overdue'
-                  ? '#FECACA'
-                  : '#FDE68A';
+                  ? palette.danger
+                  : palette.warning;
               const ticketHeaderBackground = group.kind === 'done'
-                ? palette.successSoft
+                ? palette.success
                 : timing.urgency === 'overdue'
-                  ? palette.dangerSoft
-                  : palette.warningSoft;
-              const timerColor = timing.urgency === 'overdue'
-                ? palette.danger
-                : timing.urgency === 'warning'
-                  ? palette.warning
-                  : palette.textStrong;
+                  ? palette.danger
+                  : palette.warning;
               const urgencyLabel = timing.urgency === 'overdue'
                 ? copy('เกินเวลา', 'Overdue')
                 : timing.urgency === 'warning'
@@ -651,7 +644,6 @@ export default function KitchenScreen() {
                     style={[
                       styles.ticketHeader,
                       {
-                        borderBottomColor: ticketBorderColor,
                         backgroundColor: ticketHeaderBackground,
                       },
                     ]}
@@ -667,10 +659,10 @@ export default function KitchenScreen() {
                     </View>
                     {group.kind === 'cooking' ? (
                       <View style={styles.timer}>
-                        <Text selectable style={[styles.timerValue, { color: timerColor }]}>
+                        <Text selectable style={styles.timerValue}>
                           {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
                         </Text>
-                        <Text selectable style={[styles.timerLabel, { color: timerColor }]}>
+                        <Text selectable style={styles.timerLabel}>
                           {urgencyLabel ? `${copy('นาที', 'min')} · ${urgencyLabel}` : copy('นาที', 'min')}
                         </Text>
                       </View>
@@ -748,6 +740,7 @@ export default function KitchenScreen() {
                                   label={copy(`ทำ ${item.menu_name} เสร็จ`, `Mark ${item.menu_name} done`)}
                                   icon="checkmark"
                                   tone="success"
+                                  prominent={items.length === 1}
                                   onPress={() => setItemStatus(order.ID, item, 'ready', undefined, copy('ย้ายรายการไปโซนทำเสร็จแล้ว', 'Item moved to Kitchen done'))}
                                   loading={submittingKey === `ready:${item.ID}`}
                                   disabled={submittingKey !== null}
@@ -852,9 +845,9 @@ export default function KitchenScreen() {
                   })}
                   {canUpdate && group.kind === 'cooking' && items.length > 1 ? (
                     <View style={styles.ticketFooter}>
-                      <Button
-                        variant="ghost"
-                        label={copy('ทำเสร็จทั้งหมด', 'Mark all done')}
+                       <Button
+                         variant="ghost"
+                         label={copy('ทำรอบนี้เสร็จ', 'Complete this batch')}
                         onPress={() => markAllDone(order)}
                         loading={submittingKey === `all:${ticketKey}`}
                         disabled={submittingKey !== null}

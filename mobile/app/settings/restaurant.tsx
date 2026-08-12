@@ -1,15 +1,16 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { deleteRestaurant, getRestaurant, updateRestaurant } from '@/src/api/restaurant';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
-import { AppText as Text } from '@/src/components/app-text';
 import {
   ActionDock,
   Button,
   ChipGroup,
+  EdgeRow,
+  EdgeSection,
   Feedback,
   SectionHeader,
   Surface,
@@ -25,7 +26,7 @@ import {
 } from '@/src/lib/restaurant-types';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing } from '@/src/theme';
 
 type RestaurantSection = 'general' | 'hours' | 'ordering' | 'billing' | 'promptpay';
 
@@ -46,33 +47,35 @@ function SettingsSection({
   onToggle: () => void;
   title: string;
 }) {
+  const { copy } = useDisplayPreferences();
+  const content = (
+    <>
+      <EdgeRow
+        accessibilityLabel={collapsible
+          ? copy(`${title}, ${expanded ? 'เปิดอยู่' : 'ปิดอยู่'}`, `${title}, ${expanded ? 'expanded' : 'collapsed'}`)
+          : title}
+        detail={detail}
+        icon={icon}
+        onPress={collapsible ? onToggle : undefined}
+        showChevron={false}
+        title={title}
+        trailing={collapsible ? (
+          <AppIcon color={palette.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} />
+        ) : undefined}
+      />
+      {expanded ? (
+        <View style={{ gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg }}>
+          {children}
+        </View>
+      ) : null}
+    </>
+  );
+
+  if (collapsible) return <EdgeSection>{content}</EdgeSection>;
+
   return (
-    <Surface style={{ gap: expanded ? spacing.md : 0, padding: 0, overflow: 'hidden' }}>
-      <Pressable
-        accessibilityRole={collapsible ? 'button' : undefined}
-        accessibilityState={collapsible ? { expanded } : undefined}
-        disabled={!collapsible}
-        onPress={onToggle}
-        style={({ pressed }) => ({
-          minHeight: 58,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: spacing.md,
-          backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
-          paddingHorizontal: spacing.lg,
-          paddingVertical: spacing.md,
-        })}
-      >
-        <View style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: palette.surfaceSubtle }}>
-          <AppIcon color={palette.text} name={icon} size={20} />
-        </View>
-        <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
-          <Text style={typeScale.cardTitle}>{title}</Text>
-          {detail ? <Text numberOfLines={expanded ? 3 : 1} style={[typeScale.caption, { color: palette.muted }]}>{detail}</Text> : null}
-        </View>
-        {collapsible ? <AppIcon color={palette.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} /> : null}
-      </Pressable>
-      {expanded ? <View style={{ gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>{children}</View> : null}
+    <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+      {content}
     </Surface>
   );
 }

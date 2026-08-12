@@ -6,7 +6,7 @@ import { listIngredientCategories, listIngredients } from '@/src/api/ingredient'
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, ChipGroup, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -123,58 +123,88 @@ export default function InventoryScreen() {
     </View>
   );
 
-  const ingredientList = (
+  const ingredientRows = filtered.map((item) => {
+    const tone = Number(item.stock) <= 0 ? 'danger' : Number(item.stock) <= Number(item.min_stock) ? 'warning' : 'success';
+    const label = tone === 'danger' ? copy('หมด', 'Out') : tone === 'warning' ? copy('ใกล้หมด', 'Low') : copy('ปกติ', 'In stock');
+    const detail = `${item.category?.name || copy('ไม่มีหมวด', 'Uncategorized')}${item.sku ? ` · ${item.sku}` : ''}`;
+    const trailing = (
+      <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
+        <Text selectable numberOfLines={1} style={typeScale.number}>{Number(item.stock).toLocaleString(locale)} {item.unit}</Text>
+        <StatusBadge label={label} tone={tone} />
+      </View>
+    );
+
+    if (!tabletWorkspace) {
+      return (
+        <EdgeRow
+          accessibilityLabel={copy(`ดูวัตถุดิบ ${item.name}`, `View ingredient ${item.name}`)}
+          detail={detail}
+          icon="cube-outline"
+          iconColor={palette.muted}
+          key={item.ID}
+          onPress={() => router.push({ pathname: '/inventory/item' as never, params: { id: String(item.ID) } } as never)}
+          title={item.name}
+          trailing={trailing}
+        />
+      );
+    }
+
+    return (
+      <Pressable
+        accessibilityLabel={copy(`ดูวัตถุดิบ ${item.name}`, `View ingredient ${item.name}`)}
+        accessibilityRole="button"
+        key={item.ID}
+        onPress={() => router.push({ pathname: '/inventory/item' as never, params: { id: String(item.ID) } } as never)}
+        style={({ pressed }) => ({
+          minHeight: 72,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.md,
+          borderTopWidth: 1,
+          borderTopColor: palette.border,
+          backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          opacity: pressed ? 0.78 : 1,
+        })}
+      >
+        <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
+          <AppIcon color={palette.muted} name="cube-outline" size={21} />
+        </View>
+        <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
+          <Text selectable numberOfLines={1} style={typeScale.cardTitle}>{item.name}</Text>
+          <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{detail}</Text>
+        </View>
+        {trailing}
+      </Pressable>
+    );
+  });
+
+  const emptyIngredients = !loading && !filtered.length ? (
+    <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
+      <EmptyState
+        title={copy('ไม่พบวัตถุดิบ', 'No ingredients found')}
+        detail={ingredients.length ? copy('ลองเปลี่ยนคำค้นหรือหมวดวัตถุดิบ', 'Try changing the search term or category.') : copy('เพิ่มวัตถุดิบรายการแรกเพื่อเริ่มติดตามสต็อก', 'Add your first ingredient to start tracking stock.')}
+      />
+    </View>
+  ) : null;
+
+  const ingredientList = tabletWorkspace ? (
     <Surface style={{ width: '100%', gap: 0, padding: 0, overflow: 'hidden' }}>
       <View style={{ padding: spacing.lg }}>
         <SectionHeader title={copy('รายการวัตถุดิบ', 'Ingredients')} detail={copy(`${filtered.length.toLocaleString('th-TH')} รายการ`, `${filtered.length.toLocaleString('en-US')} items`)} />
       </View>
-      <View>
-        {filtered.map((item) => {
-          const tone = Number(item.stock) <= 0 ? 'danger' : Number(item.stock) <= Number(item.min_stock) ? 'warning' : 'success';
-          const label = tone === 'danger' ? copy('หมด', 'Out') : tone === 'warning' ? copy('ใกล้หมด', 'Low') : copy('ปกติ', 'In stock');
-          return (
-            <Pressable
-              accessibilityLabel={copy(`ดูวัตถุดิบ ${item.name}`, `View ingredient ${item.name}`)}
-              accessibilityRole="button"
-              key={item.ID}
-              onPress={() => router.push({ pathname: '/inventory/item' as never, params: { id: String(item.ID) } } as never)}
-              style={({ pressed }) => ({
-                minHeight: 72,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.md,
-                borderTopWidth: 1,
-                borderTopColor: palette.border,
-                backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
-                paddingHorizontal: spacing.lg,
-                paddingVertical: spacing.md,
-                opacity: pressed ? 0.78 : 1,
-              })}
-            >
-              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
-                <AppIcon color={palette.muted} name="cube-outline" size={21} />
-              </View>
-              <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
-                <Text selectable numberOfLines={1} style={typeScale.cardTitle}>{item.name}</Text>
-                <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{item.category?.name || copy('ไม่มีหมวด', 'Uncategorized')}{item.sku ? ` · ${item.sku}` : ''}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
-                <Text selectable numberOfLines={1} style={typeScale.number}>{Number(item.stock).toLocaleString(locale)} {item.unit}</Text>
-                <StatusBadge label={label} tone={tone} />
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-      {!loading && !filtered.length ? (
-        <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}>
-          <EmptyState
-            title={copy('ไม่พบวัตถุดิบ', 'No ingredients found')}
-            detail={ingredients.length ? copy('ลองเปลี่ยนคำค้นหรือหมวดวัตถุดิบ', 'Try changing the search term or category.') : copy('เพิ่มวัตถุดิบรายการแรกเพื่อเริ่มติดตามสต็อก', 'Add your first ingredient to start tracking stock.')}
-          />
-        </View>
-      ) : null}
+      <View>{ingredientRows}</View>
+      {emptyIngredients}
     </Surface>
+  ) : (
+    <View style={{ width: '100%', gap: spacing.sm }}>
+      <EdgeSectionHeader title={copy('รายการวัตถุดิบ', 'Ingredients')} detail={copy(`${filtered.length.toLocaleString('th-TH')} รายการ`, `${filtered.length.toLocaleString('en-US')} items`)} />
+      <EdgeSection>
+        {ingredientRows}
+        {emptyIngredients}
+      </EdgeSection>
+    </View>
   );
 
   return (

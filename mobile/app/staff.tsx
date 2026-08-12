@@ -13,12 +13,11 @@ import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
   Button,
-  Divider,
+  EdgeSection,
+  EdgeSectionHeader,
   EmptyState,
   Feedback,
-  SectionHeader,
   StatusBadge,
-  Surface,
 } from '@/src/components/ui';
 import {
   auditAttribution,
@@ -201,8 +200,8 @@ export default function StaffScreen() {
 
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
         <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.35 : undefined, gap: spacing.lg }}>
-          <Surface>
-            <SectionHeader
+          <View style={{ gap: spacing.sm }}>
+            <EdgeSectionHeader
               title={copy('ทีมงาน', 'Team')}
               detail={copy(
                 'เจ้าของร้านจัดการทุกบทบาทได้ ส่วนผู้จัดการจัดการได้เฉพาะทีมระดับปฏิบัติการ',
@@ -218,7 +217,8 @@ export default function StaffScreen() {
                 />
               )}
             />
-            {members.map((member, index) => {
+            <EdgeSection>
+            {members.map((member) => {
           const manageable = canManageTarget(
             actorRole,
             member.role?.name,
@@ -226,7 +226,6 @@ export default function StaffScreen() {
           );
           return (
             <View key={member.ID}>
-              {index ? <Divider /> : null}
               <Pressable
                 accessibilityRole={manageable ? 'button' : undefined}
                 accessibilityState={{ disabled: !manageable }}
@@ -240,6 +239,7 @@ export default function StaffScreen() {
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: spacing.sm,
+                  paddingHorizontal: spacing.lg,
                   opacity: pressed ? 0.72 : manageable ? 1 : 0.7,
                 })}
               >
@@ -282,31 +282,34 @@ export default function StaffScreen() {
           );
             })}
             {!members.length && !loading ? (
-          <EmptyState
-            title={copy('ยังไม่มีพนักงาน', 'No staff yet')}
-            detail={copy(
-              'สร้างลิงก์เชิญเพื่อเพิ่มทีมงานเข้าร้าน',
-              'Create an invitation link to add staff to this restaurant.',
-            )}
-          />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState
+              title={copy('ยังไม่มีพนักงาน', 'No staff yet')}
+              detail={copy(
+                'สร้างลิงก์เชิญเพื่อเพิ่มทีมงานเข้าร้าน',
+                'Create an invitation link to add staff to this restaurant.',
+              )}
+            />
+          </View>
             ) : null}
-          </Surface>
+            </EdgeSection>
+          </View>
 
           {invitations.length ? (
-            <Surface>
-          <SectionHeader
+            <View style={{ gap: spacing.sm }}>
+          <EdgeSectionHeader
             title={copy('คำเชิญที่รอดำเนินการ', 'Pending invitations')}
             detail={copy(
               'แชร์ลิงก์ให้ผู้รับตรวจรายละเอียดและเข้าสู่ระบบก่อนเข้าร่วมร้าน',
               'Share the link so the recipient can review it and sign in before joining.',
             )}
           />
-          {invitations.map((invitation, index) => {
+          <EdgeSection>
+          {invitations.map((invitation) => {
             const usable = isInvitationUsableAt(invitation);
             return (
               <View key={invitation.ID}>
-                {index ? <Divider /> : null}
-                <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
+                <View style={{ gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
                     <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
                       <Text selectable numberOfLines={1} style={typeScale.cardTitle}>
@@ -364,24 +367,25 @@ export default function StaffScreen() {
               </View>
             );
           })}
-            </Surface>
+          </EdgeSection>
+            </View>
           ) : null}
 
         </View>
 
         <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined }}>
-          <Surface>
-        <SectionHeader
+          <View style={{ gap: spacing.sm }}>
+        <EdgeSectionHeader
           title={copy('ประวัติการจัดการทีม', 'Team activity')}
           detail={copy(
             'คำเชิญ การเปลี่ยนบทบาท สถานะ และสิทธิ์ล่าสุด',
             'Recent invitations, role, status, and permission changes.',
           )}
         />
-        {auditLogs.map((log, index) => (
+        <EdgeSection>
+        {auditLogs.map((log) => (
           <View key={log.ID}>
-            {index ? <Divider /> : null}
-            <View style={{ gap: 3, paddingVertical: spacing.sm }}>
+            <View style={{ gap: 3, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
               <Text selectable style={typeScale.cardTitle}>
                 {auditMessage(log, language)}
               </Text>
@@ -392,18 +396,23 @@ export default function StaffScreen() {
           </View>
         ))}
         {!auditLogs.length && !loading ? (
-          <EmptyState title={copy('ยังไม่มีประวัติการจัดการทีม', 'No team activity yet')} />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState title={copy('ยังไม่มีประวัติการจัดการทีม', 'No team activity yet')} />
+          </View>
         ) : null}
         {auditHasMore ? (
-          <Button
-            variant="secondary"
-            icon="time-outline"
-            label={copy('ดูเหตุการณ์ก่อนหน้า', 'View earlier activity')}
-            onPress={loadMoreAudit}
-            loading={loadingMoreAudit}
-          />
+          <View style={{ padding: spacing.lg }}>
+            <Button
+              variant="secondary"
+              icon="time-outline"
+              label={copy('ดูเหตุการณ์ก่อนหน้า', 'View earlier activity')}
+              onPress={loadMoreAudit}
+              loading={loadingMoreAudit}
+            />
+          </View>
         ) : null}
-          </Surface>
+        </EdgeSection>
+          </View>
         </View>
       </View>
     </AppScreen>

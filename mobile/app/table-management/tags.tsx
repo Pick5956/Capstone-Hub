@@ -6,7 +6,7 @@ import { createTableTag, deleteTableTag, listTableTags, updateTableTag } from '@
 import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { ActionDock, Button, Divider, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -158,6 +158,51 @@ export default function TagManagerScreen() {
     </Surface>
   );
 
+  const tagList = tabletWorkspace ? (
+    <Surface style={{ minWidth: 0, flex: 1.1, gap: 0, padding: 0, overflow: 'hidden' }}>
+      {tags.map((tag, index) => {
+        const selected = editingTag?.ID === tag.ID;
+        return (
+          <View key={tag.ID}>
+            {index ? <Divider /> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
+              <Button compact variant="ghost" icon="pricetag-outline" label={tag.name} onPress={() => toggleEdit(tag)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
+              <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{tag.display_order}{tag.is_active ? '' : copy(' · ปิด', ' · Off')}</Text>
+              <Button compact variant={confirmDeleteId === tag.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === tag.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(tag); }} />
+            </View>
+          </View>
+        );
+      })}
+      {!loading && !tags.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีแท็ก', 'No tags yet')} detail={copy('เพิ่มแท็กเพื่อจัดกลุ่มคุณสมบัติโต๊ะ', 'Add tags to group table attributes.')} /></View> : null}
+    </Surface>
+  ) : (
+    <View style={{ width: '100%', gap: spacing.sm }}>
+      <EdgeSectionHeader title={copy('แท็กทั้งหมด', 'All tags')} detail={copy(`${tags.length.toLocaleString('th-TH')} แท็ก`, `${tags.length.toLocaleString('en-US')} tags`)} />
+      <EdgeSection>
+        {tags.map((tag) => {
+          const selected = editingTag?.ID === tag.ID;
+          return (
+            <EdgeRow
+              detail={`${tag.display_order}${tag.is_active ? '' : copy(' · ปิด', ' · Off')}`}
+              icon="pricetag-outline"
+              iconColor={selected ? palette.accent : palette.muted}
+              key={tag.ID}
+              style={{ backgroundColor: selected ? palette.accentSoft : palette.surface }}
+              title={tag.name}
+              trailing={(
+                <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                  <Button compact variant="secondary" icon="create-outline" label={copy('แก้ไข', 'Edit')} onPress={() => toggleEdit(tag)} />
+                  <Button compact variant={confirmDeleteId === tag.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === tag.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(tag); }} />
+                </View>
+              )}
+            />
+          );
+        })}
+        {!loading && !tags.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีแท็ก', 'No tags yet')} detail={copy('เพิ่มแท็กเพื่อจัดกลุ่มคุณสมบัติโต๊ะ', 'Add tags to group table attributes.')} /></View> : null}
+      </EdgeSection>
+    </View>
+  );
+
   return (
     <AppScreen
       title={copy('จัดการแท็ก', 'Manage tags')}
@@ -169,22 +214,7 @@ export default function TagManagerScreen() {
       {error ? <Feedback title={copy('โหลดแท็กไม่ได้', 'Unable to load tags')} detail={error} tone="danger" /> : null}
       {formError && (confirmDeleteId || tagName.trim()) ? <Feedback title={copy('ทำรายการไม่ได้', 'Unable to complete action')} detail={formError} tone={confirmDeleteId ? 'warning' : 'danger'} /> : null}
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
-        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.1 : undefined, gap: 0, padding: 0, overflow: 'hidden' }}>
-          {tags.map((tag, index) => {
-            const selected = editingTag?.ID === tag.ID;
-            return (
-              <View key={tag.ID}>
-                {index ? <Divider /> : null}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
-                  <Button compact variant="ghost" icon="pricetag-outline" label={tag.name} onPress={() => toggleEdit(tag)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
-                  <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{tag.display_order}{tag.is_active ? '' : copy(' · ปิด', ' · Off')}</Text>
-                  <Button compact variant={confirmDeleteId === tag.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === tag.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(tag); }} />
-                </View>
-              </View>
-            );
-          })}
-          {!loading && !tags.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีแท็ก', 'No tags yet')} detail={copy('เพิ่มแท็กเพื่อจัดกลุ่มคุณสมบัติโต๊ะ', 'Add tags to group table attributes.')} /></View> : null}
-        </Surface>
+        {tagList}
         {showForm ? <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined }}>{form}</View> : null}
       </View>
     </AppScreen>

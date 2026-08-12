@@ -6,7 +6,7 @@ import { createTableZone, deleteTableZone, listTableZones, updateTableZone } fro
 import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { ActionDock, Button, Divider, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
 import { toInt } from '@/src/lib/forms';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -170,6 +170,51 @@ export default function ZoneManagerScreen() {
     </Surface>
   );
 
+  const zoneList = tabletWorkspace ? (
+    <Surface style={{ minWidth: 0, flex: 1.1, gap: 0, padding: 0, overflow: 'hidden' }}>
+      {zones.map((zone, index) => {
+        const selected = editingZone?.ID === zone.ID;
+        return (
+          <View key={zone.ID}>
+            {index ? <Divider /> : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
+              <Button compact variant="ghost" icon="map-outline" label={zone.name} onPress={() => toggleEdit(zone)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
+              <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{zone.prefix || '−'} · {zone.display_order}</Text>
+              <Button compact variant={confirmDeleteId === zone.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === zone.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(zone); }} />
+            </View>
+          </View>
+        );
+      })}
+      {!loading && !zones.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีโซน', 'No zones yet')} detail={copy('เพิ่มโซนเพื่อจัดกลุ่มโต๊ะ', 'Add a zone to group tables.')} /></View> : null}
+    </Surface>
+  ) : (
+    <View style={{ width: '100%', gap: spacing.sm }}>
+      <EdgeSectionHeader title={copy('โซนทั้งหมด', 'All zones')} detail={copy(`${zones.length.toLocaleString('th-TH')} โซน`, `${zones.length.toLocaleString('en-US')} zones`)} />
+      <EdgeSection>
+        {zones.map((zone) => {
+          const selected = editingZone?.ID === zone.ID;
+          return (
+            <EdgeRow
+              detail={`${zone.prefix || '−'} · ${zone.display_order}`}
+              icon="map-outline"
+              iconColor={selected ? palette.accent : palette.muted}
+              key={zone.ID}
+              style={{ backgroundColor: selected ? palette.accentSoft : palette.surface }}
+              title={zone.name}
+              trailing={(
+                <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                  <Button compact variant="secondary" icon="create-outline" label={copy('แก้ไข', 'Edit')} onPress={() => toggleEdit(zone)} />
+                  <Button compact variant={confirmDeleteId === zone.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === zone.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(zone); }} />
+                </View>
+              )}
+            />
+          );
+        })}
+        {!loading && !zones.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีโซน', 'No zones yet')} detail={copy('เพิ่มโซนเพื่อจัดกลุ่มโต๊ะ', 'Add a zone to group tables.')} /></View> : null}
+      </EdgeSection>
+    </View>
+  );
+
   return (
     <AppScreen
       title={copy('จัดการโซน', 'Manage zones')}
@@ -181,22 +226,7 @@ export default function ZoneManagerScreen() {
       {error ? <Feedback title={copy('โหลดโซนไม่ได้', 'Unable to load zones')} detail={error} tone="danger" /> : null}
       {formError && (confirmDeleteId || zoneName.trim()) ? <Feedback title={copy('ทำรายการไม่ได้', 'Unable to complete action')} detail={formError} tone={confirmDeleteId ? 'warning' : 'danger'} /> : null}
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
-        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.1 : undefined, gap: 0, padding: 0, overflow: 'hidden' }}>
-          {zones.map((zone, index) => {
-            const selected = editingZone?.ID === zone.ID;
-            return (
-              <View key={zone.ID}>
-                {index ? <Divider /> : null}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: selected ? palette.accentSoft : palette.surface, paddingHorizontal: spacing.md }}>
-                  <Button compact variant="ghost" icon="map-outline" label={zone.name} onPress={() => toggleEdit(zone)} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-start' }} />
-                  <Text numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>{zone.prefix || '−'} · {zone.display_order}</Text>
-                  <Button compact variant={confirmDeleteId === zone.ID ? 'danger' : 'ghost'} icon="trash-outline" label={confirmDeleteId === zone.ID ? copy('ยืนยัน', 'Confirm') : copy('ลบ', 'Delete')} onPress={() => { void confirmDelete(zone); }} />
-                </View>
-              </View>
-            );
-          })}
-          {!loading && !zones.length ? <View style={{ paddingHorizontal: spacing.lg }}><EmptyState title={copy('ยังไม่มีโซน', 'No zones yet')} detail={copy('เพิ่มโซนเพื่อจัดกลุ่มโต๊ะ', 'Add a zone to group tables.')} /></View> : null}
-        </Surface>
+        {zoneList}
         {showForm ? <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined }}>{form}</View> : null}
       </View>
     </AppScreen>
