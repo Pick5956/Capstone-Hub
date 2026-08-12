@@ -212,6 +212,13 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		if err := tx.UpdateStock(restaurantID, ingredientID, nextStock); err != nil {
 			return err
 		}
+		// Running the stock down to zero (or below) closes the sale of every menu
+		// that needs this ingredient. Re-opening stays a manual decision.
+		if nextStock <= 0 {
+			if _, err := tx.DisableMenusForDepletedIngredients(restaurantID, []uint{ingredientID}); err != nil {
+				return err
+			}
+		}
 		// Nobody said what this restock cost, so value it at the ingredient's
 		// cost per unit. Only inside the transaction is that rate known.
 		if amount == 0 && kind == "in" {

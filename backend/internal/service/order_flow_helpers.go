@@ -135,6 +135,7 @@ func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, rest
 	if len(snapshots) == 0 {
 		return nil
 	}
+	deductedIngredientIDs := make([]uint, 0, len(snapshots))
 	for _, snapshot := range snapshots {
 		required := snapshot.QuantityPerItem * float64(item.Quantity)
 		if required <= 0 {
@@ -158,6 +159,7 @@ func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, rest
 		if err := tx.SaveIngredient(ingredient); err != nil {
 			return err
 		}
+		deductedIngredientIDs = append(deductedIngredientIDs, ingredient.ID)
 		cost := recipeComponentCost(required, snapshot.CostPerUnit, snapshot.YieldPercent)
 		deduction := &entity.OrderInventoryDeduction{
 			RestaurantID: restaurantID,
@@ -184,6 +186,11 @@ func deductInventoryForCompletedKitchenItem(tx *repository.OrderRepository, rest
 		if err := tx.CreateIngredientTransaction(stockTx); err != nil {
 			return err
 		}
+	}
+	// A dish that just consumed the last of an ingredient can no longer be made,
+	// so switch off its menu automatically. Re-opening stays a manual decision.
+	if _, err := tx.DisableMenusForDepletedIngredients(restaurantID, deductedIngredientIDs); err != nil {
+		return err
 	}
 	return nil
 }

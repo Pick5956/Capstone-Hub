@@ -21,6 +21,31 @@ func (r *IngredientRepository) Transaction(fn func(tx *IngredientRepository) err
 	})
 }
 
+// disableMenusForDepletedIngredients turns off (is_available = false) every menu
+// item whose recipe uses one of the given ingredients that has now run out of
+// stock (stock <= 0). It never re-enables an item, so a manual re-open after a
+// restock is preserved. Returns how many menus were switched off.
+func disableMenusForDepletedIngredients(db *gorm.DB, restaurantID uint, ingredientIDs []uint) (int64, error) {
+	if len(ingredientIDs) == 0 {
+		return 0, nil
+	}
+	result := db.Exec(`
+UPDATE menu_items SET is_available = false, updated_at = ?
+WHERE restaurant_id = ? AND is_available = true AND deleted_at IS NULL AND id IN (
+	SELECT mii.menu_item_id
+	FROM menu_item_ingredients mii
+	JOIN ingredients ing ON ing.id = mii.ingredient_id AND ing.deleted_at IS NULL
+	WHERE mii.deleted_at IS NULL AND ing.stock <= 0 AND mii.ingredient_id IN ?
+)`, BangkokNow(), restaurantID, ingredientIDs)
+	return result.RowsAffected, result.Error
+}
+
+// DisableMenusForDepletedIngredients switches off menus whose recipe depends on
+// any of the given ingredients once that ingredient has hit zero stock.
+func (r *IngredientRepository) DisableMenusForDepletedIngredients(restaurantID uint, ingredientIDs []uint) (int64, error) {
+	return disableMenusForDepletedIngredients(r.db, restaurantID, ingredientIDs)
+}
+
 func (r *IngredientRepository) List(restaurantID uint) ([]entity.Ingredient, error) {
 	var ingredients []entity.Ingredient
 	err := r.db.Preload("Category").Where("restaurant_id = ?", restaurantID).Order("name asc").Find(&ingredients).Error

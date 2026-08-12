@@ -77,6 +77,13 @@ func (r *OrderRepository) Transaction(fn func(tx *OrderRepository) error) error 
 	})
 }
 
+// DisableMenusForDepletedIngredients switches off menus whose recipe depends on
+// any of the given ingredients once that ingredient has hit zero stock. Used
+// after an order deducts inventory so a dish that just ran out stops selling.
+func (r *OrderRepository) DisableMenusForDepletedIngredients(restaurantID uint, ingredientIDs []uint) (int64, error) {
+	return disableMenusForDepletedIngredients(r.db, restaurantID, ingredientIDs)
+}
+
 func (r *OrderRepository) LockRestaurantOrderCounter(restaurantID uint) error {
 	return r.db.Exec("SELECT pg_advisory_xact_lock(?)", int64(restaurantID)).Error
 }
