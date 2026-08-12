@@ -626,10 +626,10 @@ export default function AIOperationsFloatingChat() {
 
       {/* Chat Window Panel */}
       <div
-        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transform-gpu transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transform-gpu transition-[opacity,transform] ${
           isOpen
-            ? "opacity-100 scale-100 pointer-events-auto"
-            : "pointer-events-none scale-90 opacity-0"
+            ? "pointer-events-auto scale-100 opacity-100 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            : "pointer-events-none scale-95 opacity-0 duration-200 ease-[cubic-bezier(0.4,0,1,1)]"
         } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
