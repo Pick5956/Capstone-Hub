@@ -1,0 +1,57 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 520 190"
+  color="#FFFFFF"
+  role="img"
+  aria-labelledby="dishy-title dishy-description"
+>
+  <title id="dishy-title">Dishy custom script wordmark</title>
+  <desc id="dishy-description">A friendly retro brush-script rendering of the lowercase word dishy.</desc>
+  <g
+    fill="none"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path
+      d="M137 23C128 17 119 23 117 35L101 111C97 132 82 144 63 142C43 140 31 122 35 102C39 82 57 69 76 72C95 75 107 92 104 111C101 129 111 138 127 137"
+      stroke-width="20"
+    />
+    <path d="M126 137C139 138 151 132 161 121" stroke-width="9"/>
+    <path
+      d="M165 82C163 97 159 115 156 128C154 138 160 142 169 139C177 136 183 131 189 124"
+      stroke-width="18"
+    />
+    <path
+      d="M167 51C174 45 184 44 189 49C194 55 190 63 182 67C174 71 165 68 163 62C161 58 163 54 167 51Z"
+      fill="currentColor"
+      stroke="none"
+    />
+    <path
+      data-letter="s"
+      d="M240 90C230 79 209 79 198 92C188 103 197 112 215 115C233 118 242 125 237 136C230 150 207 150 194 140"
+      stroke-width="15"
+    />
+    <path data-connector="i-s" d="M196 140C180 145 166 144 154 140" stroke-width="8"/>
+    <path data-connector="s-h" d="M231 140C242 134 250 123 255 114" stroke-width="8"/>
+    <path
+      d="M254 136C260 108 267 71 275 34C277 23 286 18 295 23"
+      stroke-width="21"
+    />
+    <path
+      d="M267 111C280 90 300 82 313 90C326 98 323 113 320 129C318 139 325 143 334 139C341 136 347 130 353 123"
+      stroke-width="17"
+    />
+    <path d="M247 122C253 119 260 115 267 110" stroke-width="9"/>
+    <path
+      d="M354 89C358 108 363 126 371 135C380 145 392 138 399 125C406 112 410 97 413 84"
+      stroke-width="18"
+    />
+    <path
+      d="M422 84C419 107 415 131 410 151C406 168 396 178 383 177C374 177 367 172 362 164"
+      stroke-width="18"
+    />
+    <path d="M383 177C416 182 462 169 499 140" stroke-width="11"/>
+    <path d="M492 139L509 134L501 149Z" fill="currentColor" stroke="none"/>
+  </g>
+</svg>

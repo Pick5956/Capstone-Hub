@@ -24,8 +24,10 @@ import { useIsPrimaryTabsHost } from '@/src/components/primary-tabs-runtime';
 import { TabSwipeGestureProvider } from '@/src/components/tab-swipe-context';
 import { canUseAIAssistant } from '@/src/lib/ai-actions';
 import {
-  classifyHorizontalSwipe,
   getAdjacentNavigationTarget,
+  PAGER_SWIPE_MIN_DISTANCE,
+  resolvePhoneNavigationIndicatorMetrics,
+  resolvePagerSwipeSettlement,
   shouldOpenSettings,
 } from '@/src/lib/navigation-runtime';
 import { orderRoutePermissions } from '@/src/lib/permission-parity';
@@ -188,8 +190,11 @@ export function PrimaryTabletRail({
 }
 
 const PHONE_DOCK_HEIGHT = 53;
-const PHONE_MARKER_SIZE = 50;
-const PHONE_MARKER_HALO_SIZE = 60;
+const PHONE_DOCK_RADIUS = PHONE_DOCK_HEIGHT / 2;
+const PHONE_ACTIVE_INDICATOR_INSET = 4;
+const PHONE_ACTIVE_INDICATOR_RADIUS = (
+  PHONE_DOCK_HEIGHT - PHONE_ACTIVE_INDICATOR_INSET * 2
+) / 2;
 const PHONE_DOCK_TOP_GUTTER = 22;
 const PHONE_DOCK_BOTTOM_GAP_SCALE = 0.8;
 const PHONE_DOCK_ADDITIONAL_DROP = 10;
@@ -219,7 +224,12 @@ export function PrimaryPhoneNavigation({
   const { copy, language } = useDisplayPreferences();
   const insets = useSafeAreaInsets();
   const [dockWidth, setDockWidth] = useState(0);
-  const slotWidth = items.length ? dockWidth / items.length : 0;
+  const indicatorMetrics = resolvePhoneNavigationIndicatorMetrics(
+    dockWidth,
+    items.length,
+    PHONE_ACTIVE_INDICATOR_INSET,
+  );
+  const slotWidth = indicatorMetrics?.slotWidth ?? 0;
   const markerTranslate = Animated.multiply(markerPosition, slotWidth);
   const onDockLayout = useCallback((event: LayoutChangeEvent) => {
     setDockWidth(event.nativeEvent.layout.width);
@@ -246,17 +256,10 @@ export function PrimaryPhoneNavigation({
         }}
       >
         <View
-          accessibilityLabel={copy('แถบนำทางหลัก ปัดหน้าจอซ้ายหรือขวาเพื่อเปลี่ยนแท็บ', 'Main navigation. Swipe the screen left or right to change tabs.')}
-          accessibilityRole="tablist"
-          onLayout={onDockLayout}
           style={{
             height: PHONE_DOCK_HEIGHT,
-            flexDirection: 'row',
             marginHorizontal: spacing.lg,
-            borderTopLeftRadius: radius.md,
-            borderTopRightRadius: radius.md,
-            borderBottomLeftRadius: PHONE_DOCK_HEIGHT / 2,
-            borderBottomRightRadius: PHONE_DOCK_HEIGHT / 2,
+            borderRadius: PHONE_DOCK_RADIUS,
             backgroundColor: palette.primary,
             shadowColor: '#0F172A',
             shadowOffset: { width: 0, height: 10 },
@@ -265,79 +268,70 @@ export function PrimaryPhoneNavigation({
             elevation: 12,
           }}
         >
-          {dockWidth > 0 && selectedIndex >= 0 && selectedIndex < items.length ? (
-            <Animated.View
-              style={{
-                position: 'absolute',
-                top: -22,
-                left: 0,
-                width: slotWidth,
-                alignItems: 'center',
-                pointerEvents: 'none',
-                transform: [{ translateX: markerTranslate }],
-                zIndex: 2,
-              }}
-            >
-              <View
+          <View
+            accessibilityLabel={copy('แถบนำทางหลัก ปัดหน้าจอซ้ายหรือขวาเพื่อเปลี่ยนแท็บ', 'Main navigation. Swipe the screen left or right to change tabs.')}
+            accessibilityRole="tablist"
+            onLayout={onDockLayout}
+            style={{
+              height: PHONE_DOCK_HEIGHT,
+              flexDirection: 'row',
+              overflow: 'hidden',
+              borderRadius: PHONE_DOCK_RADIUS,
+              backgroundColor: palette.primary,
+            }}
+          >
+            {indicatorMetrics && selectedIndex >= 0 && selectedIndex < items.length ? (
+              <Animated.View
+                pointerEvents="none"
                 style={{
-                  width: PHONE_MARKER_HALO_SIZE,
-                  height: PHONE_MARKER_HALO_SIZE,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: radius.full,
-                  backgroundColor: palette.surface,
+                  position: 'absolute',
+                  top: indicatorMetrics.indicatorInset,
+                  bottom: indicatorMetrics.indicatorInset,
+                  left: indicatorMetrics.indicatorInset,
+                  width: indicatorMetrics.indicatorWidth,
+                  borderRadius: PHONE_ACTIVE_INDICATOR_RADIUS,
+                  backgroundColor: palette.accent,
+                  transform: [{ translateX: markerTranslate }],
+                  zIndex: 0,
                 }}
-              >
-                <View
-                  style={{
-                    width: PHONE_MARKER_SIZE,
-                    height: PHONE_MARKER_SIZE,
+              />
+            ) : null}
+            {items.map((item, index) => {
+              const active = index === selectedIndex;
+              const accessibilitySelected = index === (
+                accessibilitySelectedIndex ?? selectedIndex
+              );
+              const label = language === 'th' ? item.label : item.labelEn;
+              return (
+                <Pressable
+                  accessibilityLabel={label}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: accessibilitySelected }}
+                  aria-selected={accessibilitySelected}
+                  key={item.key}
+                  onPress={() => onSelect(index)}
+                  style={({ pressed }) => ({
+                    minWidth: 48,
+                    minHeight: PHONE_DOCK_HEIGHT,
+                    flex: 1,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    borderRadius: radius.full,
-                    backgroundColor: palette.accent,
-                    shadowColor: '#111827',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.28,
-                    shadowRadius: 5,
-                    elevation: 8,
-                  }}
+                    paddingHorizontal: 2,
+                    opacity: pressed ? 0.68 : 1,
+                    zIndex: 1,
+                  })}
                 >
-                  <AppIcon color="#FFFFFF" name={items[selectedIndex].activeIcon} size={24} />
-                </View>
-              </View>
-            </Animated.View>
-          ) : null}
-          {items.map((item, index) => {
-            const active = index === selectedIndex;
-            const accessibilitySelected = index === (
-              accessibilitySelectedIndex ?? selectedIndex
-            );
-            const label = language === 'th' ? item.label : item.labelEn;
-            return (
-              <Pressable
-                accessibilityLabel={label}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: accessibilitySelected }}
-                aria-selected={accessibilitySelected}
-                key={item.key}
-                onPress={() => onSelect(index)}
-                style={({ pressed }) => ({
-                  minWidth: 48,
-                  minHeight: PHONE_DOCK_HEIGHT,
-                  flex: 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingHorizontal: 2,
-                  opacity: pressed ? 0.68 : 1,
-                })}
-              >
-                <View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', opacity: active ? 0 : 1 }}>
-                  <AppIcon color="#AEB6C2" name={item.icon} size={27} />
-                </View>
-              </Pressable>
-            );
-          })}
+                  <View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
+                    <AppIcon
+                      color={active ? palette.primaryText : '#AEB6C2'}
+                      name={active ? item.activeIcon : item.icon}
+                      size={27}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -513,7 +507,7 @@ export function AppScreen({
     nestedHorizontalGestureActive.current = active;
   }, []);
 
-  const navigateToTab = useCallback((targetIndex: number) => {
+  const navigateToTab = useCallback((targetIndex: number, fromSwipe = false) => {
     const target = phoneNavigationItems[targetIndex];
     if (!target || navigationLocked.current) return;
 
@@ -534,7 +528,7 @@ export function AppScreen({
     navigationLocked.current = true;
     setSelectedTabIndex(targetIndex);
     const direction = targetIndex > activeTabIndex ? 1 : -1;
-    const exitDistance = Math.min(width * 0.42, 168);
+    const exitDistance = fromSwipe ? width * 0.5 : Math.min(width * 0.42, 168);
 
     Animated.parallel([
       Animated.timing(markerPosition, {
@@ -584,7 +578,8 @@ export function AppScreen({
       }
       const horizontalDistance = Math.abs(gesture.dx);
       const verticalDistance = Math.abs(gesture.dy);
-      return horizontalDistance >= 10 && horizontalDistance > verticalDistance * 1.35;
+      return horizontalDistance >= PAGER_SWIPE_MIN_DISTANCE &&
+        horizontalDistance > verticalDistance * 1.35;
     },
     onPanResponderGrant: () => {
       contentTranslateX.stopAnimation();
@@ -600,7 +595,7 @@ export function AppScreen({
         direction,
       );
       const resistance = adjacent ? 1 : 0.18;
-      const maxDrag = width * 0.42;
+      const maxDrag = width * 0.5;
       const resistedDrag = gesture.dx * resistance;
       const drag = Math.max(-maxDrag, Math.min(maxDrag, resistedDrag));
       const markerProgress = activeTabIndex - drag / Math.max(width, 1);
@@ -614,24 +609,22 @@ export function AppScreen({
       markerPosition.setValue(boundedMarker);
     },
     onPanResponderRelease: (_, gesture) => {
-      const direction = classifyHorizontalSwipe({
-        deltaX: gesture.dx,
-        deltaY: gesture.dy,
-        velocityX: gesture.vx * 1000,
-      });
-      const target = direction
-        ? getAdjacentNavigationTarget(
-          phoneNavigationItems,
-          activeTabIndex,
-          direction,
-        )
-        : null;
+      const settlement = resolvePagerSwipeSettlement(
+        phoneNavigationItems,
+        activeTabIndex,
+        {
+          deltaX: gesture.dx,
+          deltaY: gesture.dy,
+          velocityX: gesture.vx * 1000,
+        },
+        width,
+      );
 
-      if (!target) {
+      if (!settlement?.shouldNavigate) {
         resetTabDrag();
         return;
       }
-      navigateToTab(target.index);
+      navigateToTab(settlement.targetIndex, true);
     },
     onPanResponderTerminate: resetTabDrag,
     onPanResponderTerminationRequest: () => true,

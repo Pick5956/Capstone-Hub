@@ -15,6 +15,7 @@ import {
 } from "@/src/lib/authModalMotion";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
 type GoogleCredentialResponse = {
@@ -182,10 +183,10 @@ const InputField = ({
 function BrandLine() {
   return (
     <div className="flex items-center gap-2">
-      <AppLogo size={28} />
+      <AppLogo decorative size={28} />
       <div className="leading-none">
-        <p className="text-[13px] font-bold tracking-[-0.02em] text-gray-900 dark:text-white">Dishy</p>
-        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-500 dark:text-gray-500">Restaurant operations</p>
+        <AppWordmark height={14} className="text-gray-900 dark:text-white" />
+        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-400 dark:text-gray-500">Restaurant operations</p>
       </div>
     </div>
   );

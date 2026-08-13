@@ -9,6 +9,7 @@ import { useTheme } from "@/src/providers/ThemeProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { getCurrentUser } from "@/src/lib/auth";
 import AppLogo from "@/src/components/shared/AppLogo";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import type { User } from "@/src/types/auth";
 
@@ -105,10 +106,10 @@ export function ThemeButton() {
 export function BrandMark() {
   return (
     <Link href="/restaurants" className="flex items-center gap-2.5">
-      <AppLogo size={36} />
+      <AppLogo decorative size={36} />
       <div className="leading-none">
-        <p className="text-[16px] font-bold tracking-[-0.025em] text-gray-950 dark:text-white">Dishy</p>
-        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-500">Restaurant operations</p>
+        <AppWordmark height={18} className="text-gray-950 dark:text-white" />
+        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-400">Restaurant operations</p>
       </div>
     </Link>
   );

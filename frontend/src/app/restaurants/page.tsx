@@ -12,6 +12,7 @@ import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUse
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
 import { Plus, LogIn, Clock, Grid, ChevronRight, Phone } from "lucide-react";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 
 const ROLE_LABEL: Record<string, Record<Language, string>> = {
   owner: { th: "เจ้าของร้าน", en: "Owner" },
@@ -259,7 +260,7 @@ export default function RestaurantsPage() {
     <WorkspaceShell hideIntro={true} maxWidthClass="max-w-[1400px]">
       <div className="mb-7 flex flex-col gap-5 border-b border-gray-200 pb-6 sm:flex-row sm:items-end sm:justify-between dark:border-gray-800">
         <div>
-          <p className="text-[12px] font-semibold tracking-[0.12em] text-orange-600 dark:text-orange-400">DISHY</p>
+          <AppWordmark height={13} className="text-orange-600 dark:text-orange-400" />
           <h1 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-gray-950 dark:text-white sm:text-3xl">
             {language === "th" ? "เลือกร้านเพื่อเริ่มงาน" : "Choose a restaurant to start"}
           </h1>

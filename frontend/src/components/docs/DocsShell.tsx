@@ -21,6 +21,7 @@ import {
   type RefObject,
 } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
@@ -343,8 +344,8 @@ export default function DocsShell({ children }: { children: ReactNode }) {
             className="flex min-w-0 shrink-0 items-center gap-2.5 lg:w-[17rem]"
             aria-label={language === "th" ? "หน้าแรกคู่มือ Dishy" : "Dishy docs home"}
           >
-            <AppLogo size={34} priority />
-            <span className="text-[15px] font-semibold text-gray-950 dark:text-white">Dishy</span>
+            <AppLogo decorative size={34} priority />
+            <AppWordmark decorative height={15} className="text-gray-950 dark:text-white" />
             <span className="hidden h-5 w-px bg-gray-200 dark:bg-gray-800 sm:block" aria-hidden="true" />
             <span className="hidden text-[13px] font-medium text-gray-500 dark:text-gray-400 sm:inline">{copy.docs}</span>
           </Link>
@@ -506,9 +507,12 @@ export default function DocsShell({ children }: { children: ReactNode }) {
             className="motion-dialog-stationary flex h-[100dvh] w-11/12 max-w-sm flex-col border-r border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950"
           >
             <div className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 px-4 dark:border-gray-800">
-              <AppLogo size={32} />
+              <AppLogo decorative size={32} />
               <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-gray-950 dark:text-white">Dishy {copy.docs}</p>
+                <div className="flex items-center gap-1.5 text-gray-950 dark:text-white">
+                  <AppWordmark height={13} />
+                  <span className="text-[13px] font-semibold">{copy.docs}</span>
+                </div>
                 <p id="docs-mobile-navigation-title" className="text-[11px] text-gray-500 dark:text-gray-400">{copy.nav}</p>
               </div>
               <button
