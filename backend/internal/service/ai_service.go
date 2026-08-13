@@ -572,13 +572,15 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		aiStage("flow", "compound question → %s covers one concern only, using LLM synthesis", toolToRun)
 	}
 
-	// Deterministic-first: a fact lookup that maps to a supported tool is answered
-	// straight from the snapshot data, skipping the free-form LLM. The LLM already
-	// did its real job (understanding the question) in the router; letting it also
-	// re-read the numbers only risks hallucinated figures, an irrelevant caveat, or
-	// a different phrasing each time. Answering from the tool keeps fact replies
-	// exact, identical on every ask, and free of prior-turn contamination.
-	if routerResult.Task == AITaskRetrieveFact && isSupportedReadOnlyTool(toolToRun) && !compoundQuestion {
+	// Deterministic-first: a fact lookup — OR a recommendation that maps to a clear
+	// tool (e.g. "ควรเอาเมนูไหนออก" → slow movers) — is answered straight from the
+	// snapshot data, skipping the free-form LLM. The LLM already did its real job
+	// (understanding the question) in the router; letting it also re-read the numbers
+	// only risks hallucinated figures, an irrelevant caveat, or a different phrasing
+	// each time. Recommendations without a clear tool still fall through to the LLM
+	// below, so genuine advice questions keep their judgement.
+	if (routerResult.Task == AITaskRetrieveFact || routerResult.Task == AITaskRecommendAction) &&
+		isSupportedReadOnlyTool(toolToRun) && !compoundQuestion {
 		result, toolErr := executeReadOnlyTool(toolToRun, snapshot, question)
 		if toolErr != nil {
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
