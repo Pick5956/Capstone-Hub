@@ -492,6 +492,15 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		aiStage("warn", "total-profit query failed (%v) → snapshot flow", prErr)
 	}
 
+	// Store-wide dish count ("ขายได้กี่จานทั้งหมด") is a units question, distinct
+	// from the baht totals below.
+	if qtyResp, handled, qErr := s.answerTotalQuantityQuery(restaurantID, question); handled {
+		aiStage("flow", "total-quantity query — units sold across the period")
+		return qtyResp, nil
+	} else if qErr != nil {
+		aiStage("warn", "total-quantity query failed (%v) → snapshot flow", qErr)
+	}
+
 	// Tier 1-1: a dated total-sales question (a specific day, a named month, or a
 	// month-to-month comparison) is answered directly from range queries, so it is
 	// not limited to the rolling snapshot window.
