@@ -457,6 +457,22 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// because a broader one would otherwise swallow a narrower question: asking for
 	// lunch on one day must not be answered with the whole month's total.
 
+	// Two-entity comparisons ("เทียบวันจันทร์กับวันเสาร์", "ต้มยำกุ้งกับชาไทยอันไหน
+	// ขายดีกว่า"). They name two things of the same kind and want a verdict, which no
+	// single-metric tool can give, so they run before those tools.
+	if cmpResp, handled, cErr := s.answerWeekdayComparison(restaurantID, question); handled {
+		aiStage("flow", "weekday comparison — per-weekday range query")
+		return cmpResp, nil
+	} else if cErr != nil {
+		aiStage("warn", "weekday comparison failed (%v) → snapshot flow", cErr)
+	}
+	if cmpResp, handled, cErr := s.answerMenuComparison(restaurantID, question); handled {
+		aiStage("flow", "menu comparison — per-menu range query")
+		return cmpResp, nil
+	} else if cErr != nil {
+		aiStage("warn", "menu comparison failed (%v) → snapshot flow", cErr)
+	}
+
 	// Sales for a service period ("ช่วงเที่ยงวันที่ 2 กรกฎาคม") — an hour window
 	// within a day, finer than anything the day-level snapshot holds.
 	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
