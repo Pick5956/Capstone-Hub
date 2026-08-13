@@ -205,7 +205,7 @@ export default function AccountSettingsPage() {
               { label: copy.local, connected: !isGoogleAccount, mark: "@" },
             ].map((account) => {
               const connectedAccountClassName = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
-              const disconnectedMarkClassName = "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500";
+              const disconnectedMarkClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-500";
               const disconnectedBadgeClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
 
               return (

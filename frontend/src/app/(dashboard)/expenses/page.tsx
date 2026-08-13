@@ -321,7 +321,7 @@ export default function ExpensesPage() {
         <div className="text-right">
           <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
           <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(scopedData.total, language)}</p>
-          <p className="text-[11px] text-gray-400">{scopedData.entries} {copy.entries}</p>
+          <p className="text-[11px] text-gray-500">{scopedData.entries} {copy.entries}</p>
         </div>
       </div>
 
@@ -398,7 +398,7 @@ export default function ExpensesPage() {
       </table>
 
       <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 print:hidden">
-        <div className="hidden grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:border-gray-800 lg:grid">
+        <div className="hidden grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 lg:grid">
           <span>{copy.date}</span>
           <span>{copy.category}</span>
           <span>{copy.note}</span>
@@ -438,11 +438,11 @@ export default function ExpensesPage() {
                 <span className="min-w-0 text-gray-700 dark:text-gray-200">
                   <span className="block truncate">{expense.note || "-"}</span>
                   {expense.ingredient_transaction_id != null ? (
-                    <span className="mt-0.5 block text-[11px] text-gray-400 dark:text-gray-500">{copy.generatedStockIn}</span>
+                    <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-500">{copy.generatedStockIn}</span>
                   ) : null}
                 </span>
                 <span className="font-mono font-semibold tabular-nums text-gray-950 dark:text-white lg:text-right">{formatCurrency(expense.amount, language)}</span>
-                <span className="flex items-center justify-end gap-2 text-[12px] text-gray-400">
+                <span className="flex items-center justify-end gap-2 text-[12px] text-gray-500">
                   <span className="truncate">{expense.created_by ? `${expense.created_by.first_name} ${expense.created_by.last_name}`.trim() : "-"}</span>
                   {/* Edit moved onto the row itself; delete stays a button and
                       must not also trigger the row's edit dialog. */}

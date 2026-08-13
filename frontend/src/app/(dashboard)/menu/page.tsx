@@ -780,13 +780,13 @@ export default function MenuPage() {
   const renderMenuToolbar = (placement: "desktop" | "mobile") => (
     <div className={placement === "desktop" ? "flex w-full min-w-0 items-center gap-2 pr-2" : "mb-4 flex flex-col gap-2 lg:hidden"}>
       <label className={placement === "desktop" ? "relative block w-full max-w-md min-w-0" : "relative block w-full"}>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder={copy.searchPlaceholder}
           aria-label={copy.searchPlaceholder}
-          className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
         />
       </label>
       {canManage && (
@@ -818,7 +818,7 @@ export default function MenuPage() {
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="w-full max-w-xs">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.catalogTitle}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.catalogTitle}</p>
                   <div className="mt-1.5">
                     <ThemedSelect
                       value={String(filterCategory)}
@@ -845,7 +845,7 @@ export default function MenuPage() {
                             : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/30 dark:border-gray-800 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/15"
                         }`}
                       >
-                        <p className="truncate text-gray-400">{item.label}</p>
+                        <p className="truncate text-gray-500">{item.label}</p>
                         <p className={`mt-1 font-mono text-[16px] font-semibold tabular-nums ${item.valueClass}`}>{item.value}</p>
                       </button>
                     );
@@ -901,7 +901,7 @@ export default function MenuPage() {
                           })}
                         </div>
                         {item.ingredients?.length ? (
-                          <p className="mt-1 text-[11px] text-gray-400">
+                          <p className="mt-1 text-[11px] text-gray-500">
                             {copy.recipeCost}: {formatCurrency(recipeCost(item.ingredients.map((component) => ({ ingredient_id: component.ingredient_id, quantity: component.quantity, unit: component.unit })), recipeIngredients), language, 2)}
                           </p>
                         ) : null}
@@ -946,7 +946,7 @@ export default function MenuPage() {
           <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
-              <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <div className="space-y-1">
@@ -969,8 +969,8 @@ export default function MenuPage() {
                     }`}
                   >
                     <div className="min-w-0">
-                      <p className={`truncate text-[13px] font-medium ${!category.is_active ? "text-gray-400 line-through" : "text-gray-900 dark:text-white"}`}>{category.name}</p>
-                      <p className="mt-0.5 text-[11px] text-gray-400">{categoryCounts[category.ID] ?? 0} {copy.menuSummary}</p>
+                      <p className={`truncate text-[13px] font-medium ${!category.is_active ? "text-gray-500 line-through" : "text-gray-900 dark:text-white"}`}>{category.name}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500">{categoryCounts[category.ID] ?? 0} {copy.menuSummary}</p>
                     </div>
                     <div className="flex gap-1">
                       <span className="flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">
@@ -1027,7 +1027,7 @@ export default function MenuPage() {
                 {categoryError ? (
                   <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{categoryError}</p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{language === "th" ? "คลิกหมวดเพื่อแก้ชื่อ ใช้ปุ่มลูกศรเพื่อจัดลำดับ" : "Click a category to edit it. Use arrows to reorder."}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500">{language === "th" ? "คลิกหมวดเพื่อแก้ชื่อ ใช้ปุ่มลูกศรเพื่อจัดลำดับ" : "Click a category to edit it. Use arrows to reorder."}</p>
                 )}
               </div>
             </form>
@@ -1042,10 +1042,10 @@ export default function MenuPage() {
           <form onSubmit={saveItem} className={`${drawerClosing ? "motion-dialog-exit" : "motion-dialog"} pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.editorTitle}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.editorTitle}</p>
                 <h2 className="mt-0.5 truncate text-[16px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
               </div>
-              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800 sm:px-5">
               <div className="flex gap-2 overflow-x-auto">
@@ -1175,7 +1175,7 @@ export default function MenuPage() {
                       onError={handleImageEditorError}
                       onEditingChange={setImageEditing}
                     />
-                    <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
+                    <p className={`text-[11px] ${itemErrors.image ? "font-medium text-red-600 dark:text-red-300" : "text-gray-500 dark:text-gray-500"}`}>{itemErrors.image || (uploadingImage ? copy.uploading : copy.imageHelp)}</p>
                   </div>
                 </div>
                 <label className="block">
@@ -1190,7 +1190,7 @@ export default function MenuPage() {
                   <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <div>
                       <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.optionsTitle}</p>
-                      <p className="mt-0.5 text-[11px] text-gray-400">{copy.optionsHint}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500">{copy.optionsHint}</p>
                     </div>
                     <button type="button" onClick={() => updateOptionGroups((groups) => [...groups, emptyOptionGroup()])} className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                       {copy.addOptionGroup}
@@ -1243,7 +1243,7 @@ export default function MenuPage() {
                   <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                     <div>
                       <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.recipeTitle}</p>
-                      <p className="mt-0.5 text-[11px] text-gray-400">{copy.recipeHint}</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500">{copy.recipeHint}</p>
                     </div>
                     <button
                       type="button"

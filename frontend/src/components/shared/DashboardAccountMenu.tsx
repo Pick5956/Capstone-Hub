@@ -44,7 +44,7 @@ function MenuButton({
       <span className={`grid h-5 w-5 shrink-0 place-items-center ${danger ? "text-red-500 dark:text-red-400" : "text-gray-600 dark:text-gray-300"}`}>{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {value ? <span className="max-w-24 truncate text-[12px] text-gray-500 dark:text-gray-400">{value}</span> : null}
-      {chevron ? <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" /> : null}
+      {chevron ? <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" /> : null}
     </button>
   );
 }
@@ -203,7 +203,7 @@ export default function DashboardAccountMenu() {
         <div
           ref={menuRef}
           role="menu"
-          className="fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[#dfe3e8] bg-white py-2 shadow-xl shadow-gray-950/10 dark:border-[#253142] dark:bg-gray-950 dark:shadow-black/40"
+          className="fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 shadow-xl shadow-gray-950/10 dark:bg-gray-950 dark:shadow-black/40"
           style={{ top: menuPosition.top, right: menuPosition.right }}
         >
           {panel === "main" ? (
@@ -218,14 +218,14 @@ export default function DashboardAccountMenu() {
                   </Link>
                 </div>
               </div>
-              <div className="border-t border-[#dfe3e8] dark:border-[#253142]" />
+              <div className="border-t border-[color:var(--dashboard-shell-border)]" />
               <MenuButton icon={isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} label={copy.theme} value={copy.themeValue} chevron onClick={() => setPanel("theme")} />
               <MenuButton icon={<Languages className="h-4 w-4" />} label={copy.language} value={copy.languageValue} chevron onClick={() => setPanel("language")} />
               <MenuButton icon={<CaseSensitive className="h-4 w-4" />} label={copy.fontSize} value={fontLabel ? (language === "th" ? fontLabel.th : fontLabel.en) : ""} chevron onClick={() => setPanel("font")} />
               {activeMembership?.role?.name === "owner" ? (
                 <MenuButton icon={<Sparkles className="h-4 w-4" />} label={copy.aiAssistant} value={copy.aiAssistantValue} chevron onClick={() => setPanel("assistant")} />
               ) : null}
-              <div className="border-t border-[#dfe3e8] dark:border-[#253142]" />
+              <div className="border-t border-[color:var(--dashboard-shell-border)]" />
               <MenuButton icon={<LogOut className="h-4 w-4" />} label={copy.logout} danger onClick={logout} />
             </>
           ) : null}

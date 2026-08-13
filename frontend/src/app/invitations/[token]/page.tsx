@@ -236,15 +236,15 @@ export default function InvitationAcceptPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 text-[12px] sm:grid-cols-3">
                   <div>
-                    <p className="text-gray-400">{copy.roleLabel}</p>
+                    <p className="text-gray-500">{copy.roleLabel}</p>
                     <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{roleLabel(invitation, language)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">{copy.expiryLabel}</p>
+                    <p className="text-gray-500">{copy.expiryLabel}</p>
                     <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{formatExpiry(invitation.expires_at, language)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">{copy.emailLabel}</p>
+                    <p className="text-gray-500">{copy.emailLabel}</p>
                     <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{invitation.email || copy.anyEmail}</p>
                   </div>
                 </div>

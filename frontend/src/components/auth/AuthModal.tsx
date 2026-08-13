@@ -144,7 +144,7 @@ const InputField = ({
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[16px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white sm:text-[13px]`}
+          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[16px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white sm:text-[13px]`}
         />
 
         {value.length > 0 && onClear && (
@@ -154,7 +154,7 @@ const InputField = ({
             title={labels.clear}
             tabIndex={-1}
             aria-label={labels.clear}
-            className={`absolute top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300 ${
+            className={`absolute top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 transition-colors hover:text-gray-600 dark:hover:text-gray-300 ${
               showPasswordToggle ? "right-8" : "right-2"
             }`}
           >
@@ -169,7 +169,7 @@ const InputField = ({
             title={isPasswordVisible ? labels.hidePassword : labels.showPassword}
             tabIndex={-1}
             aria-label={isPasswordVisible ? labels.hidePassword : labels.showPassword}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
           >
             {isPasswordVisible ? <EyeSlashIcon /> : <EyeIcon />}
           </button>
@@ -185,7 +185,7 @@ function BrandLine() {
       <AppLogo size={28} />
       <div className="leading-none">
         <p className="text-[13px] font-bold tracking-[-0.02em] text-gray-900 dark:text-white">Dishy</p>
-        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-400 dark:text-gray-500">Restaurant operations</p>
+        <p className="mt-1 text-[8px] font-semibold uppercase tracking-[0.13em] text-gray-500 dark:text-gray-500">Restaurant operations</p>
       </div>
     </div>
   );
@@ -684,7 +684,7 @@ export default function AuthModal({
             type="button"
             onClick={closeAndRestoreFocus}
             aria-label={copy.close}
-            className="-mr-1.5 -mt-1 rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="-mr-1.5 -mt-1 rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
@@ -752,7 +752,7 @@ export default function AuthModal({
                 <>
                   <div className="flex items-center gap-3 py-0.5">
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-                    <span className="text-[11px] text-gray-400 dark:text-gray-500">{copy.or}</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
                   {/* Google briefly resizes and restyles its iframe while initializing or

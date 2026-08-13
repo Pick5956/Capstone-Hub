@@ -101,7 +101,7 @@ export default function AIInsightsPanel({ language, onCount }: Props) {
 
       <div className="space-y-2">
         {loading && (
-          <div className="flex items-center gap-2 px-1 py-6 text-xs text-gray-400">
+          <div className="flex items-center gap-2 px-1 py-6 text-xs text-gray-500">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {copy.loading}
           </div>

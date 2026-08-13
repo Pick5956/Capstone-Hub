@@ -468,7 +468,7 @@ export default function AIAssistantPage() {
     return (
       <main className="flex w-full flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <section className="rounded-md border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-950">
-          <Bot className="mx-auto h-10 w-10 text-gray-400" />
+          <Bot className="mx-auto h-10 w-10 text-gray-500" />
           <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">{copy.permissionDenied}</h1>
         </section>
       </main>
@@ -646,7 +646,7 @@ export default function AIAssistantPage() {
                 }}
                 placeholder={copy.askPlaceholder}
                 rows={1}
-                className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+                className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
               />
               <button
                 type="submit"

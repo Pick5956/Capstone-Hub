@@ -171,7 +171,7 @@ export default function CustomerTableOrdersPage() {
                       ))}
                       {item.note ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{copy.note}: {item.note}</p> : null}
                       <div className="mt-2 flex items-center gap-1.5">
-                        <Clock3 className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+                        <Clock3 className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
                         <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusClass[item.status]}`}>
                           {customerOrderItemStatusLabel(item.status, language)}
                         </span>

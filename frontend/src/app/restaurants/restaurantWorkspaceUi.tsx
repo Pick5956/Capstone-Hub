@@ -108,7 +108,7 @@ export function BrandMark() {
       <AppLogo size={36} />
       <div className="leading-none">
         <p className="text-[16px] font-bold tracking-[-0.025em] text-gray-950 dark:text-white">Dishy</p>
-        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-400">Restaurant operations</p>
+        <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-500">Restaurant operations</p>
       </div>
     </Link>
   );

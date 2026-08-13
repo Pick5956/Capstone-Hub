@@ -591,7 +591,7 @@ function PhoneMockup({ label, language }: { label: string; language: Language })
             </div>
           </div>
 
-          <div className="grid grid-cols-4 border-t border-gray-200 bg-white px-3 py-1.5 text-gray-400 sm:px-5 sm:py-2.5 md:py-3">
+          <div className="grid grid-cols-4 border-t border-gray-200 bg-white px-3 py-1.5 text-gray-500 sm:px-5 sm:py-2.5 md:py-3">
             {[BarChart3, Table2, ChefHat, UsersRound].map((Icon, index) => (
               <span key={index} className={`flex justify-center ${index === 0 ? "text-orange-600" : ""}`}>
                 <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4 md:h-5 md:w-5" strokeWidth={1.8} />
@@ -734,7 +734,7 @@ function CommandCenterMockup({ language }: { language: Language }) {
                       key={item}
                       className="flex min-w-0 gap-3 rounded-md border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900"
                     >
-                      <span className="mt-1 font-mono text-[10px] text-gray-400">0{index + 1}</span>
+                      <span className="mt-1 font-mono text-[10px] text-gray-500">0{index + 1}</span>
                       <p className="text-[12px] leading-5 text-gray-600 dark:text-gray-300">{item}</p>
                     </div>
                   ))}
@@ -862,7 +862,7 @@ export default function LandingPage() {
               <p className={`text-[16px] font-bold tracking-[-0.025em] ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
                 Dishy
               </p>
-              <p className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
+              <p className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-500"}`}>
                 Restaurant operations
               </p>
             </div>

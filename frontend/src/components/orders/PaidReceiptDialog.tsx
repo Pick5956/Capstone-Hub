@@ -115,7 +115,7 @@ export default function PaidReceiptDialog({
           #archive-print-receipt [data-screen-receipt] { display: none !important; }
           #archive-print-receipt [data-receipt-item] { border: 0 !important; border-bottom: 1px solid #e5e7eb !important; border-radius: 0 !important; padding: 2mm 0 !important; }
           `}
-          #archive-print-receipt .dark\\:text-white, #archive-print-receipt .dark\\:text-gray-200, #archive-print-receipt .dark\\:text-gray-300, #archive-print-receipt .dark\\:text-gray-400 { color: #111827 !important; }
+          #archive-print-receipt .dark\\:text-white, #archive-print-receipt .dark\\:text-gray-200, #archive-print-receipt .dark\\:text-gray-300, #archive-print-receipt .dark\\:text-gray-500 { color: #111827 !important; }
           #archive-print-receipt .dark\\:bg-gray-950 { background: #fff !important; }
           #archive-print-receipt .dark\\:border-gray-800 { border-color: #d1d5db !important; }
         }

@@ -520,13 +520,13 @@ export default function PosTablesPage() {
       <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
         <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
           <label className="relative min-w-0">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               disabled={isNavigating}
               placeholder={copy.search}
-              className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+              className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
               aria-label={copy.search}
             />
           </label>
@@ -534,7 +534,7 @@ export default function PosTablesPage() {
             type="button"
             disabled={isNavigating}
             onClick={openTakeawaySheet}
-            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[#dfe3e8] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
           >
             <ShoppingBag className="h-4 w-4" />
             {copy.takeaway}
@@ -612,7 +612,7 @@ export default function PosTablesPage() {
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
                               <div className="min-w-0">
-                                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{copy.table}</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">{copy.table}</p>
                                 <p className="truncate text-[19px] font-semibold leading-none tracking-tight text-gray-950 dark:text-white">{table.display_label || table.table_number}</p>
                               </div>
                             </div>
@@ -636,7 +636,7 @@ export default function PosTablesPage() {
                           {order ? (
                             <div className="flex min-h-[22px] items-end justify-between gap-2">
                               <p className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white">
-                                <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                                <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
                                 <span className="truncate">{order.order_number}</span>
                               </p>
                               <p className="shrink-0 text-[12px] font-semibold text-gray-600 dark:text-gray-300">฿{order.total_amount.toLocaleString()}</p>

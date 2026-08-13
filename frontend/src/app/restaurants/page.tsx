@@ -118,11 +118,11 @@ function RestaurantCard({
 
           <div className="mt-4 space-y-2 text-xs text-gray-600 dark:text-gray-300 border-t border-gray-100 dark:border-gray-800/60 pt-3">
             <div className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-gray-400 shrink-0" />
+              <Clock className="h-4 w-4 text-gray-500 shrink-0" />
               <span className="font-mono">{hours}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Grid className="h-4 w-4 text-gray-400 shrink-0" />
+              <Grid className="h-4 w-4 text-gray-500 shrink-0" />
               <span>
                 {restaurant?.table_count ? (
                   language === "th" ? (
@@ -137,7 +137,7 @@ function RestaurantCard({
             </div>
             {restaurant?.phone && (
               <div className="flex items-center gap-1.5">
-                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                <Phone className="h-4 w-4 text-gray-500 shrink-0" />
                 <span className="font-mono">{restaurant.phone}</span>
               </div>
             )}
@@ -175,7 +175,7 @@ function EmptyRestaurantsState() {
             ? "เลือกช่องทางเริ่มต้นใช้งานระบบจัดการร้านอาหารเพื่อดำเนินการต่อ"
             : "Choose how you would like to get started with the restaurant management system."}
         </p>
-        <p className="mt-4 text-xs text-gray-400">
+        <p className="mt-4 text-xs text-gray-500">
           {language === "th" ? (
             <>ต้องการความช่วยเหลือ? <Link href="/docs" className="text-orange-600 hover:underline font-medium">ดูคู่มือการใช้งาน</Link></>
           ) : (
@@ -320,7 +320,7 @@ export default function RestaurantsPage() {
       </div>
 
       {/* Help Link Footnote */}
-      <div className="mt-12 text-center text-xs text-gray-400">
+      <div className="mt-12 text-center text-xs text-gray-500">
         {language === "th" ? (
           <>พบปัญหาการใช้งานหรือต้องการเรียนรู้เพิ่มเติม? <Link href="/docs" className="text-orange-600 hover:underline font-medium">ดูคู่มือการใช้งาน</Link></>
         ) : (

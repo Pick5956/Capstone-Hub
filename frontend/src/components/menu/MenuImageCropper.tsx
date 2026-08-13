@@ -369,7 +369,7 @@ export default function MenuImageCropper({
               onChange={(event) => setZoom(Number(event.target.value))}
               className="h-2 w-full accent-orange-600 disabled:opacity-50"
             />
-            <span className="mt-1 grid grid-cols-3 font-mono text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+            <span className="mt-1 grid grid-cols-3 font-mono text-[10px] tabular-nums text-gray-500 dark:text-gray-500">
               <span>-100%</span>
               <span className="text-center">0%</span>
               <span className="text-right">+100%</span>

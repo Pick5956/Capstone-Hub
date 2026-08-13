@@ -247,13 +247,13 @@ export default function OrdersPage() {
   const renderArchiveToolbar = (placement: "desktop" | "mobile") => (
     <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "shrink-0 border-b border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 lg:hidden"}>
       <label className="relative block w-full min-w-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={copy.search}
           aria-label={copy.search}
-          className="h-10 w-full rounded-md border border-[#dfe3e8] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900"
+          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
         />
       </label>
     </div>
@@ -296,7 +296,7 @@ export default function OrdersPage() {
               }`}
             >
               <span>{item.label}</span>
-              <span className={`min-w-5 text-right font-mono text-[13.2px] tabular-nums ${statusFilter === item.value ? "text-orange-600 dark:text-orange-300" : "text-gray-400 dark:text-gray-500"}`}>
+              <span className={`min-w-5 text-right font-mono text-[13.2px] tabular-nums ${statusFilter === item.value ? "text-orange-600 dark:text-orange-300" : "text-gray-500 dark:text-gray-500"}`}>
                 {new Intl.NumberFormat(locale).format(item.count)}
               </span>
             </button>

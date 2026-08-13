@@ -705,16 +705,16 @@ export default function StaffPage() {
               </div>
               <div className="grid border-t border-gray-200 dark:border-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-gray-200 sm:dark:divide-gray-800">
                 <div className="px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.rolePanelTitle}</p>
                   <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.rolePanelSummary}</p>
                 </div>
                 <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 dark:divide-gray-800 dark:border-gray-800 sm:border-t-0">
                   <div className="px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.role}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.role}</p>
                     <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">{allowedRoleOptions(activeRole, roles).length}</p>
                   </div>
                   <div className="px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.customRoleBadge}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.customRoleBadge}</p>
                     <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">
                       {allowedRoleOptions(activeRole, roles).filter(isCustomRole).length}
                     </p>
@@ -737,7 +737,7 @@ export default function StaffPage() {
                 </div>
               ) : members.length ? (
                 <div className="space-y-2">
-                  <div className="hidden grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] gap-3 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800 lg:grid">
+                  <div className="hidden grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] gap-3 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 lg:grid">
                     <span>{copy.name}</span>
                     <span>{copy.role}</span>
                     <span>{copy.status}</span>
@@ -755,12 +755,12 @@ export default function StaffPage() {
                           <UserAvatar src={member.user?.profile_image} name={displayUserName(member, language)} size={40} className="h-10 w-10 text-[12px]" />
                           <div className="min-w-0">
                             <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{displayUserName(member, language)}</p>
-                            <p className="truncate text-[11px] text-gray-400">{member.user?.email}</p>
+                            <p className="truncate text-[11px] text-gray-500">{member.user?.email}</p>
                           </div>
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.role}</p>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.role}</p>
                           {manageable ? (
                             <ThemedSelect
                               className="max-w-full lg:w-full xl:w-[220px]"
@@ -780,14 +780,14 @@ export default function StaffPage() {
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.status}</p>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.status}</p>
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${statusTone(member.status)}`}>
                             {STATUS_LABELS[language][member.status] ?? member.status}
                           </span>
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.joined}</p>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.joined}</p>
                           <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">{formatDate(member.joined_at, language)}</p>
                         </div>
 
@@ -811,7 +811,7 @@ export default function StaffPage() {
                               </button>
                             </div>
                           ) : (
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 lg:text-right">
+                            <p className="text-[11px] text-gray-500 dark:text-gray-500 lg:text-right">
                               {member.user_id === user?.ID ? copy.yourAccount : "-"}
                             </p>
                           )}
@@ -849,7 +849,7 @@ export default function StaffPage() {
                           <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                             {copy.rolePrefix} {roleLabel(invitation.role, language)} · {copy.expiresPrefix} {formatDate(invitation.expires_at, language)}
                           </p>
-                          <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{inviteUrl(invitation.token)}</p>
+                          <p className="mt-1 truncate font-mono text-[11px] text-gray-500">{inviteUrl(invitation.token)}</p>
                         </div>
                         {allowed && (
                           <div className="flex shrink-0 flex-wrap gap-2">
@@ -903,7 +903,7 @@ export default function StaffPage() {
                                 {copy.by} {actorName(log, language)}
                                 {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
                               </p>
-                              <p className="text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</p>
+                              <p className="text-[10px] text-gray-500">{formatDate(log.CreatedAt, language)}</p>
                             </div>
                           </div>
                         ))}
@@ -939,7 +939,7 @@ export default function StaffPage() {
                               {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
                             </p>
                           </div>
-                          <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</span>
+                          <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-500">{formatDate(log.CreatedAt, language)}</span>
                         </div>
                       </div>
                         ))}
@@ -985,7 +985,7 @@ export default function StaffPage() {
                 <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
               </div>
-              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1006,7 +1006,7 @@ export default function StaffPage() {
                       inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
                     }`}
                   />
-                  <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+                  <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-500 dark:text-gray-500"}`}>
                     {inviteError || copy.emailHelp}
                   </p>
                 </label>
@@ -1084,11 +1084,11 @@ export default function StaffPage() {
           <aside className={`${roleManagerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.rolePanelTitle}</p>
                 <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{copy.roleManagerTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.roleManagerHint}</p>
               </div>
-              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1148,7 +1148,7 @@ export default function StaffPage() {
                           <span className="mt-0.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{permissionSummary(role, language)}</span>
                         </div>
                         <div className="flex shrink-0 items-center justify-center">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-400 transition-colors group-hover/card:bg-gray-100 group-hover/card:text-gray-700 dark:group-hover/card:bg-gray-800 dark:group-hover/card:text-gray-200">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors group-hover/card:bg-gray-100 group-hover/card:text-gray-700 dark:group-hover/card:bg-gray-800 dark:group-hover/card:text-gray-200">
                             <ChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                           </span>
                         </div>
@@ -1178,7 +1178,7 @@ export default function StaffPage() {
                     : permissionSummary(permissionTarget.role, language)}
                 </p>
               </div>
-              <button type="button" onClick={() => closePermissionModal()} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closePermissionModal()} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
               {permissionTarget.type === "member" && (

@@ -678,7 +678,7 @@ export default function TablesPage() {
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.inactive, value: inactiveCount }, { label: copy.zones, value: zones.length }].map((item) => (
           <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
-            <p className="text-[11px] text-gray-400">{item.label}</p>
+            <p className="text-[11px] text-gray-500">{item.label}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">{item.value}</p>
           </div>
         ))}
@@ -747,11 +747,11 @@ export default function TablesPage() {
           <form onSubmit={saveTable} className={`${tableDrawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.tableEditor}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.tableEditor}</p>
                 <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{editingTable ? copy.saveTable : copy.createTable}</h2>
-                <p className="mt-1 text-[11px] text-gray-400">{editingTable ? `${copy.autoNumber}: ${editingTable.display_label || editingTable.table_number}` : copy.autoNumber}</p>
+                <p className="mt-1 text-[11px] text-gray-500">{editingTable ? `${copy.autoNumber}: ${editingTable.display_label || editingTable.table_number}` : copy.autoNumber}</p>
               </div>
-              <button type="button" onClick={closeTableDrawer} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeTableDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -849,7 +849,7 @@ export default function TablesPage() {
                       <div className="min-w-0 pr-9">
                         <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.qrOrder}</p>
                         <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.qrHint}</p>
-                        <p className="mt-1 truncate font-mono text-[10px] text-gray-400">{customerOrderLink}</p>
+                        <p className="mt-1 truncate font-mono text-[10px] text-gray-500">{customerOrderLink}</p>
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -966,7 +966,7 @@ function ManagerModal({ title, onClose, children }: { title: string; onClose: ()
       <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+          <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
         </div>
         <div className="p-4">{children}</div>
       </div>
@@ -1018,7 +1018,7 @@ function ManagerRow({
           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/60"
       }`}
     >
-      <p className={`truncate text-[13px] font-medium ${muted ? "text-gray-400 line-through" : badgeClass ? `w-fit rounded-[4px] px-2 py-1 ${badgeClass}` : "text-gray-900 dark:text-white"}`}>{title}</p>
+      <p className={`truncate text-[13px] font-medium ${muted ? "text-gray-500 line-through" : badgeClass ? `w-fit rounded-[4px] px-2 py-1 ${badgeClass}` : "text-gray-900 dark:text-white"}`}>{title}</p>
       <div className="flex gap-1">
         {onMoveUp && onMoveDown ? (
           <span className="flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-700">

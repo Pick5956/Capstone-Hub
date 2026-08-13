@@ -425,7 +425,7 @@ export default function DocsShell({ children }: { children: ReactNode }) {
             className="motion-dialog flex max-h-[78dvh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950"
           >
             <div className="flex items-center gap-3 border-b border-gray-200 px-3 dark:border-gray-800 sm:px-4">
-              <Search className="h-5 w-5 shrink-0 text-gray-400" aria-hidden="true" />
+              <Search className="h-5 w-5 shrink-0 text-gray-500" aria-hidden="true" />
               <label id="docs-search-title" htmlFor="docs-search-input" className="sr-only">{copy.searchDialog}</label>
               <input
                 ref={searchInputRef}

@@ -80,8 +80,8 @@ function statusMeta(status: ItemStatus, copy: Copy) {
     dot: "bg-emerald-500",
     bar: "from-emerald-500 to-teal-400",
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
-    value: "text-slate-900 dark:text-white",
-    accent: "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950",
+    value: "text-gray-900 dark:text-white",
+    accent: "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950",
   };
 }
 
@@ -681,22 +681,22 @@ export default function InventoryPage() {
   }
 
   if (!canView) {
-    return <div className="flex h-64 items-center justify-center text-sm text-slate-400">{copy.permissionDenied}</div>;
+    return <div className="flex h-64 items-center justify-center text-sm text-gray-500">{copy.permissionDenied}</div>;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-screen bg-gray-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
         <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
-            <span className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
+            <span className="inline-flex rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300">
               {formatNumber(totalItems, lang)} {copy.total}
             </span>
           </div>
 
           <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px] md:flex-row md:items-center">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <input
                 type="text"
                 placeholder={copy.searchPlaceholder}
@@ -708,7 +708,7 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={() => setFiltersOpen((value) => !value)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
             >
               <Filter className="h-4 w-4" />
               {copy.filter}
@@ -717,7 +717,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={openCreate}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-900"
               >
                 <Plus className="h-4 w-4" />
                 {copy.add}
@@ -751,15 +751,15 @@ export default function InventoryPage() {
           </div>
         )}
 
-        <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
+        <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
             {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
                 className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
                   statusFilter === status
-                    ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                    ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
+                    : "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
                 }`}
               >
                 {status === "all"
@@ -798,11 +798,11 @@ export default function InventoryPage() {
         </div>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <div className="flex items-center justify-between">
-                  <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">{copy.tableSummary}</p>
-                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                  <p className="text-[12px] font-semibold text-gray-600 dark:text-gray-300">{copy.tableSummary}</p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">
                     {formatNumber(filtered.length, lang)} {lang === "th" ? "รายการ" : "items"}
                     {ingredients.length !== filtered.length ? ` / ${formatNumber(ingredients.length, lang)}` : ""}
                   </p>
@@ -811,16 +811,16 @@ export default function InventoryPage() {
 
               <div className="p-2">
                 {filtered.length === 0 ? (
-                  <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
+                  <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-gray-200 px-6 py-12 text-center dark:border-gray-800">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-500">
                       <Boxes className="h-6 w-6" />
                     </div>
-                    <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
+                    <p className="text-base font-semibold text-gray-700 dark:text-gray-200">
                       {ingredients.length === 0 ? copy.noIngredients : copy.noResults}
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100 dark:divide-gray-800">
+                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {filtered.map((item) => {
                       const status = getStatus(item);
                       const meta = statusMeta(status, copy);
@@ -828,29 +828,29 @@ export default function InventoryPage() {
                       const value = getInventoryValue(item);
 
                       return (
-                        <div key={item.ID} className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-gray-900/40">
+                        <div key={item.ID} className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-900/40">
                           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{item.name}</p>
                               <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${meta.badge}`}>{meta.label}</span>
                             </div>
-                            <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
+                            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-500">
                               {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
                             </p>
                           </div>
                           <div className="hidden w-40 shrink-0 sm:block">
                             <div className="flex items-baseline justify-between text-[13px]">
                               <span className={`font-semibold tabular-nums ${meta.value}`}>
-                                {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
+                                {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-gray-500">{item.unit}</span>
                               </span>
-                              <span className="text-slate-400">/ {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "-"}</span>
+                              <span className="text-gray-500">/ {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "-"}</span>
                             </div>
-                            <div className="mt-1 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                            <div className="mt-1 h-1.5 rounded-full bg-gray-200/80 dark:bg-gray-800">
                               <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
                             </div>
                           </div>
-                          <div className="hidden w-20 shrink-0 text-right text-[13px] font-semibold tabular-nums text-slate-700 dark:text-slate-200 md:block">
+                          <div className="hidden w-20 shrink-0 text-right text-[13px] font-semibold tabular-nums text-gray-700 dark:text-gray-200 md:block">
                             {value > 0 ? formatCurrency(value, lang) : "-"}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
@@ -858,7 +858,7 @@ export default function InventoryPage() {
                               type="button"
                               onClick={() => openTransactions(item)}
                               title={copy.history}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
                             >
                               <History className="h-4 w-4" />
                             </button>
@@ -876,7 +876,7 @@ export default function InventoryPage() {
                                   type="button"
                                   onClick={() => openEdit(item)}
                                   title={copy.edit}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
                                 >
                                   <Pencil className="h-4 w-4" />
                                 </button>
@@ -899,19 +899,19 @@ export default function InventoryPage() {
               </div>
             </section>
 
-            <aside className="rounded-md border border-slate-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+            <aside className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.priorityTitle}</p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{copy.prioritySubtitle}</h2>
+                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{copy.prioritySubtitle}</h2>
                 </div>
-                <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-gray-900 dark:text-slate-300">
+                <span className="rounded-md bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500 dark:bg-gray-900 dark:text-gray-300">
                   {formatNumber(priorityItems.length, lang)}
                 </span>
               </div>
 
               {priorityItems.length === 0 ? (
-                <div className="mt-5 rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-gray-800">
+                <div className="mt-5 rounded-md border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500 dark:border-gray-800">
                   {copy.noPriority}
                 </div>
               ) : (
@@ -926,9 +926,9 @@ export default function InventoryPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
-                              <p className="truncate font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                              <p className="truncate font-semibold text-gray-900 dark:text-white">{item.name}</p>
                             </div>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               {copy.current} {formatNumber(item.stock, lang)} {item.unit} • {copy.target} {formatNumber(getTargetStock(item), lang)} {item.unit}
                             </p>
                           </div>
@@ -937,21 +937,21 @@ export default function InventoryPage() {
                           </span>
                         </div>
 
-                        <div className="mt-3 h-2 rounded-full bg-slate-200/70 dark:bg-gray-800">
+                        <div className="mt-3 h-2 rounded-full bg-gray-200/70 dark:bg-gray-800">
                           <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${getStockPercent(item)}%` }} />
                         </div>
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{copy.recommendedTopup}</p>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">{copy.recommendedTopup}</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
                               {formatNumber(refill, lang)} {item.unit}
                             </p>
                           </div>
                           {canManage && (
                             <button
                               onClick={() => openAdjust(item)}
-                              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                              className="inline-flex items-center gap-2 rounded-md bg-gray-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-900"
                             >
                               <Plus className="h-3.5 w-3.5" />
                               {copy.adjust}
@@ -969,10 +969,10 @@ export default function InventoryPage() {
           <div className="hidden">
             {filtered.length === 0 ? (
               <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
+                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-500">
                   <Boxes className="h-6 w-6" />
                 </div>
-                <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
+                <p className="text-base font-semibold text-gray-700 dark:text-gray-200">
                   {ingredients.length === 0 ? copy.noIngredients : copy.noResults}
                 </p>
               </div>
@@ -980,7 +980,7 @@ export default function InventoryPage() {
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-slate-400">
+                    <tr className="border-b border-gray-200 bg-gray-50/90 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400">
                       <th className="px-5 py-4">{copy.name}</th>
                       <th className="px-5 py-4">{copy.level}</th>
                       <th className="px-5 py-4 text-right">{copy.stock}</th>
@@ -990,7 +990,7 @@ export default function InventoryPage() {
                       <th className="px-5 py-4 text-right">{copy.quickActions}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {filtered.map((item) => {
                       const status = getStatus(item);
                       const meta = statusMeta(status, copy);
@@ -999,23 +999,23 @@ export default function InventoryPage() {
                       const refill = getRestockAmount(item);
 
                       return (
-                        <tr key={item.ID} className="align-top transition hover:bg-slate-50/70 dark:hover:bg-gray-900/35">
+                        <tr key={item.ID} className="align-top transition hover:bg-gray-50/70 dark:hover:bg-gray-900/35">
                           <td className="px-5 py-4">
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300">
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-300">
                                 <PackageOpen className="h-4 w-4" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
+                                  <p className="font-semibold text-gray-900 dark:text-white">{item.name}</p>
                                   <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
                                     {meta.label}
                                   </span>
                                 </div>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                   {copy.sku} {item.sku || "—"} • {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
                                 </p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                   {copy.stockUnit} {item.unit} • {copy.costPerUnit}{" "}
                                   {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
                                 </p>
@@ -1025,12 +1025,12 @@ export default function InventoryPage() {
                           <td className="px-5 py-4">
                             <div className="min-w-[220px]">
                               <div className="flex items-center gap-3">
-                                <div className="h-2 flex-1 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                                <div className="h-2 flex-1 rounded-full bg-gray-200/80 dark:bg-gray-800">
                                   <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
                                 </div>
                                 <span className={`w-12 text-right text-xs font-semibold ${meta.value}`}>{percent}%</span>
                               </div>
-                              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                 {item.min_stock > 0
                                   ? `${copy.recommendedTopup} ${formatNumber(refill, lang)} ${item.unit}`
                                   : copy.noMinimum}
@@ -1040,22 +1040,22 @@ export default function InventoryPage() {
                           <td className={`px-5 py-4 text-right text-base font-semibold tabular-nums ${meta.value}`}>
                             {formatNumber(item.stock, lang)}
                           </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                          <td className="px-5 py-4 text-right tabular-nums text-gray-500 dark:text-gray-400">
                             {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "—"}
                           </td>
                           <td className="px-5 py-4 text-right">
-                            <p className="font-semibold text-slate-900 dark:text-white">{value > 0 ? formatCurrency(value, lang) : "—"}</p>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.coverage}</p>
+                            <p className="font-semibold text-gray-900 dark:text-white">{value > 0 ? formatCurrency(value, lang) : "—"}</p>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{copy.coverage}</p>
                           </td>
                           <td className="px-5 py-4">
-                            <p className="text-sm text-slate-700 dark:text-slate-200">{formatDateTime(item.UpdatedAt ?? item.CreatedAt, lang)}</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-200">{formatDateTime(item.UpdatedAt ?? item.CreatedAt, lang)}</p>
                           </td>
                           <td className="px-5 py-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => openTransactions(item)}
                                 title={copy.history}
-                                className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
+                                className="rounded-md border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
                               >
                                 <History className="h-4 w-4" />
                               </button>
@@ -1071,7 +1071,7 @@ export default function InventoryPage() {
                                   <button
                                     onClick={() => openEdit(item)}
                                     title={copy.edit}
-                                    className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
+                                    className="rounded-md border border-gray-200 p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
                                   >
                                     <Pencil className="h-4 w-4" />
                                   </button>
@@ -1112,19 +1112,19 @@ export default function InventoryPage() {
             }}
             className={`${modalClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                   {lang === "th" ? "คลังวัตถุดิบ" : "Inventory"}
                 </p>
-                <h2 className="mt-0.5 text-[15px] font-semibold text-slate-900 dark:text-white">
+                <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">
                   {editingItem ? copy.edit : copy.add}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={closeModal}
-                className="h-8 w-8 rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-gray-900 dark:hover:text-slate-200"
+                className="h-8 w-8 rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200"
               >
                 <X className="mx-auto h-4 w-4" />
               </button>
@@ -1133,7 +1133,7 @@ export default function InventoryPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.name}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.name}</label>
                     <input
                       type="text"
                       value={form.name}
@@ -1143,7 +1143,7 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.sku}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.sku}</label>
                     <input
                       type="text"
                       value={form.sku ?? ""}
@@ -1155,7 +1155,7 @@ export default function InventoryPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.category}</label>
                       {canManage && (
                         <button
                           type="button"
@@ -1178,7 +1178,7 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.imageUrl}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.imageUrl}</label>
                     <input
                       type="text"
                       value={form.image_url ?? ""}
@@ -1189,7 +1189,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.stockUnit}</label>
                     <ThemedSelect
                       value={form.unit}
                       onChange={(value) => setForm((current) => ({ ...current, unit: value }))}
@@ -1198,7 +1198,7 @@ export default function InventoryPage() {
                   </div>
                   {!editingItem ? (
                     <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.initialStock}</label>
+                      <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.initialStock}</label>
                       <input
                         type="number"
                         min={0}
@@ -1213,7 +1213,7 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.minStock}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.minStock}</label>
                     <input
                       type="number"
                       min={0}
@@ -1225,7 +1225,7 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">
                       {copy.costPerUnit} (THB)
                     </label>
                     <input
@@ -1241,20 +1241,20 @@ export default function InventoryPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
                       {copy.yieldPercent}
                       <span className="group relative inline-flex">
                         <span
                           tabIndex={0}
                           role="button"
                           aria-label={copy.yieldHint}
-                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-400 transition hover:border-orange-400 hover:text-orange-500 focus-visible:border-orange-400 focus-visible:text-orange-500 focus:outline-none dark:border-gray-600 dark:text-gray-500"
+                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-500 transition hover:border-orange-400 hover:text-orange-500 focus-visible:border-orange-400 focus-visible:text-orange-500 focus:outline-none dark:border-gray-600 dark:text-gray-500"
                         >
                           i
                         </span>
                         <span
                           role="tooltip"
-                          className="pointer-events-none absolute left-0 top-6 z-50 w-60 rounded-md border border-gray-200 bg-white px-3 py-2 text-[11px] font-normal leading-relaxed text-slate-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300"
+                          className="pointer-events-none absolute left-0 top-6 z-50 w-60 rounded-md border border-gray-200 bg-white px-3 py-2 text-[11px] font-normal leading-relaxed text-gray-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                         >
                           {copy.yieldHint}
                         </span>
@@ -1272,7 +1272,7 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.storageType}</label>
                     <ThemedSelect
                       value={form.storage_type ?? "room_temp"}
                       onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
@@ -1283,19 +1283,19 @@ export default function InventoryPage() {
                 {formError && <p className="text-xs text-red-500">{formError}</p>}
               </div>
             </div>
-            <div className="border-t border-slate-200 p-4 dark:border-gray-800">
+            <div className="border-t border-gray-200 p-4 dark:border-gray-800">
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                  className="rounded-md px-4 py-2 text-sm font-semibold text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   {copy.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                  className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
                 >
                   {submitting ? "..." : copy.save}
                 </button>
@@ -1308,12 +1308,12 @@ export default function InventoryPage() {
       {categoryModalOpen && (
         <div {...categoryBackdrop} className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
           <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.addCategory}</h2>
+            <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{copy.addCategory}</h2>
             </div>
             <div className="space-y-4 px-6 py-5">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.categoryName}</label>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.categoryName}</label>
                 <input
                   type="text"
                   value={categoryName}
@@ -1324,11 +1324,11 @@ export default function InventoryPage() {
               </div>
               {categoryError && <p className="text-xs text-red-500">{categoryError}</p>}
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
               <button
                 type="button"
                 onClick={closeCategoryModal}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                className="rounded-md px-4 py-2 text-sm font-semibold text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
@@ -1336,7 +1336,7 @@ export default function InventoryPage() {
                 type="button"
                 onClick={handleCreateCategory}
                 disabled={categorySubmitting}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
               >
                 {categorySubmitting ? "..." : copy.save}
               </button>
@@ -1352,13 +1352,13 @@ export default function InventoryPage() {
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">{copy.confirmDelete}</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{copy.deleteMsg(deleteTarget.name)}</p>
+              <h2 className="mb-1 text-lg font-semibold text-gray-900 dark:text-white">{copy.confirmDelete}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{copy.deleteMsg(deleteTarget.name)}</p>
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
               <button
                 onClick={closeDeleteModal}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                className="rounded-md px-4 py-2 text-sm font-semibold text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
@@ -1376,9 +1376,9 @@ export default function InventoryPage() {
       {adjustTarget && (
         <div {...adjustBackdrop} className={`${adjustClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
           <div className={`${adjustClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.adjustTitle}</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-800">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{copy.adjustTitle}</h2>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 {adjustTarget.name} • {copy.current} {formatNumber(adjustTarget.stock, lang)} {adjustTarget.unit}
               </p>
             </div>
@@ -1398,7 +1398,7 @@ export default function InventoryPage() {
                           : type === "out"
                             ? "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
                             : "border-orange-300 bg-orange-50 text-orange-600 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-300"
-                        : "border-slate-200 text-slate-500 hover:border-slate-300 dark:border-gray-700 dark:text-slate-300"
+                        : "border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-300"
                     }`}
                   >
                     {type === "in" ? copy.adjustIn : type === "out" ? copy.adjustOut : copy.adjustSet}
@@ -1406,7 +1406,7 @@ export default function InventoryPage() {
                 ))}
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">
                   {copy.quantity} ({adjustTarget.unit})
                 </label>
                 <input
@@ -1420,7 +1420,7 @@ export default function InventoryPage() {
               </div>
               {adjustType === "in" && canManageExpenses && (
                 <div>
-                  <label htmlFor="adjust-paid-amount" className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <label htmlFor="adjust-paid-amount" className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">
                     {copy.spentAmount}
                   </label>
                   <input
@@ -1435,7 +1435,7 @@ export default function InventoryPage() {
                   />
                   {/* What the server will book if this field stays empty, so the
                       fallback is visible before it happens rather than after. */}
-                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                  <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-500">
                     {adjustPaidAmount.trim() === "" && referenceAdjustAmount > 0
                       ? copy.spentAmountFallback(formatCurrency(referenceAdjustAmount, lang))
                       : copy.spentAmountHint}
@@ -1443,7 +1443,7 @@ export default function InventoryPage() {
                 </div>
               )}
               <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.note}</label>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-500 dark:text-gray-400">{copy.note}</label>
                 <input
                   type="text"
                   value={adjustNote}
@@ -1452,39 +1452,39 @@ export default function InventoryPage() {
                 />
               </div>
               {adjustPreview !== null && (
-                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 dark:bg-gray-900">
-                  <span className="text-xs text-slate-400">{copy.previewAfter}</span>
+                <div className="flex items-center justify-between rounded-md bg-gray-50 px-4 py-3 dark:bg-gray-900">
+                  <span className="text-xs text-gray-500">{copy.previewAfter}</span>
                   <div className="flex items-center gap-2 text-sm font-semibold">
-                    <span className="tabular-nums text-slate-400">{formatNumber(adjustTarget.stock, lang)}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
+                    <span className="tabular-nums text-gray-500">{formatNumber(adjustTarget.stock, lang)}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
                     <span
                       className={`tabular-nums ${
                         adjustPreview > adjustTarget.stock
                           ? "text-emerald-600 dark:text-emerald-400"
                           : adjustPreview < adjustTarget.stock
                             ? "text-red-500 dark:text-red-400"
-                            : "text-slate-900 dark:text-white"
+                            : "text-gray-900 dark:text-white"
                       }`}
                     >
                       {formatNumber(adjustPreview, lang)}
                     </span>
-                    <span className="text-xs font-normal text-slate-400">{adjustTarget.unit}</span>
+                    <span className="text-xs font-normal text-gray-500">{adjustTarget.unit}</span>
                   </div>
                 </div>
               )}
               {adjustError && <p className="text-xs text-red-500">{adjustError}</p>}
             </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-800">
               <button
                 onClick={closeAdjustModal}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                className="rounded-md px-4 py-2 text-sm font-semibold text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 {copy.cancel}
               </button>
               <button
                 onClick={handleAdjust}
                 disabled={adjusting}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900"
               >
                 {adjusting ? "..." : copy.save}
               </button>
@@ -1498,33 +1498,33 @@ export default function InventoryPage() {
           <div
             className={`${txClosing ? "motion-drawer-exit" : "motion-drawer"} flex h-full w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-gray-800">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.txTitle}</h2>
-                <p className="text-xs text-slate-400">{txTarget.name}</p>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{copy.txTitle}</h2>
+                <p className="text-xs text-gray-500">{txTarget.name}</p>
               </div>
               <button
                 onClick={closeTxDrawer}
-                className="rounded-md p-2 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                className="rounded-md p-2 text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {txLoading ? (
-                <div className="flex h-32 items-center justify-center text-sm text-slate-400">{copy.loading}</div>
+                <div className="flex h-32 items-center justify-center text-sm text-gray-500">{copy.loading}</div>
               ) : transactions.length === 0 ? (
-                <div className="flex h-32 items-center justify-center text-sm text-slate-400">{copy.txEmpty}</div>
+                <div className="flex h-32 items-center justify-center text-sm text-gray-500">{copy.txEmpty}</div>
               ) : (
                 <div className="space-y-6">
                   {groupTxByDate(transactions, copy).map(({ label, items }) => (
                     <div key={label}>
-                      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+                      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">{label}</p>
                       <div className="space-y-2">
                         {items.map((tx) => (
                           <div
                             key={tx.ID}
-                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-950"
+                            className="flex items-center gap-3 rounded-md border border-gray-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-950"
                           >
                             <div
                               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
@@ -1532,7 +1532,7 @@ export default function InventoryPage() {
                                   ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300"
                                   : tx.type === "out"
                                     ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300"
-                                    : "bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300"
+                                    : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-300"
                               }`}
                             >
                               {tx.type === "in" ? (
@@ -1544,10 +1544,10 @@ export default function InventoryPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">
                                 {tx.type === "in" ? copy.adjustIn : tx.type === "out" ? copy.adjustOut : copy.adjustSet}
                               </p>
-                              {tx.note && <p className="truncate text-xs text-slate-400">{tx.note}</p>}
+                              {tx.note && <p className="truncate text-xs text-gray-500">{tx.note}</p>}
                             </div>
                             <div className="shrink-0 text-right">
                               <p
@@ -1556,13 +1556,13 @@ export default function InventoryPage() {
                                     ? "text-emerald-600 dark:text-emerald-400"
                                     : tx.type === "out"
                                       ? "text-red-500 dark:text-red-400"
-                                      : "text-slate-700 dark:text-slate-200"
+                                      : "text-gray-700 dark:text-gray-200"
                                 }`}
                               >
                                 {tx.type === "in" ? "+" : tx.type === "out" ? "-" : ""}
                                 {formatNumber(tx.quantity, lang)}
                               </p>
-                              <p className="text-[10px] text-slate-400">
+                              <p className="text-[10px] text-gray-500">
                                 {tx.CreatedAt
                                   ? new Date(tx.CreatedAt).toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", {
                                       hour: "2-digit",

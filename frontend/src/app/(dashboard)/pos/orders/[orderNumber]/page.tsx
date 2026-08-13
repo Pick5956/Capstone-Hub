@@ -742,12 +742,12 @@ export default function PosOrderDetailPage() {
       <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
         <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
-            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[#dfe3e8] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.tableLabel}</span>
@@ -755,13 +755,13 @@ export default function PosOrderDetailPage() {
                   </span>
                   <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
-                    <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                    <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.orderLabel}</span>
                     <span className="truncate">{order.order_number}</span>
                   </span>
                   <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
                   <span className="flex shrink-0 items-center gap-1.5 px-2">
-                    <UtensilsCrossed className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+                    <UtensilsCrossed className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
                     <span className="font-mono tabular-nums">{orderItemCount}</span>
                     <span>{copy.itemsLabel}</span>
                   </span>
@@ -789,8 +789,8 @@ export default function PosOrderDetailPage() {
                 options={categoryOptions}
               />
               <div className="relative min-w-0 lg:order-3">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[#dfe3e8] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900" />
               </div>
             </div>
           )}
@@ -854,7 +854,7 @@ export default function PosOrderDetailPage() {
                     <div className="flex min-w-0 flex-1 flex-col p-3">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                      <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                      <p className="mt-2 truncate text-[11px] text-gray-500">{item.category?.name ?? ""}</p>
                     </div>
                   </button>
                 );
@@ -1104,7 +1104,7 @@ export default function PosOrderDetailPage() {
                 #print-bill { position: static !important; width: 48mm !important; margin: 0 auto !important; padding: 3mm 0 !important; color: #111827; background: white; display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; transform: none !important; }
                 #print-bill [data-receipt-scroll] { overflow: visible !important; }
                 #print-bill [data-receipt-section] { display: block !important; }
-                #print-bill .dark\\:text-white, #print-bill .dark\\:text-gray-300, #print-bill .dark\\:text-gray-400 { color: #111827 !important; }
+                #print-bill .dark\\:text-white, #print-bill .dark\\:text-gray-300, #print-bill .dark\\:text-gray-500 { color: #111827 !important; }
                 #print-bill .dark\\:bg-gray-950 { background: #fff !important; }
                 #print-bill .dark\\:border-gray-800 { border-color: #d1d5db !important; }
                 #print-bill [data-screen-only] { display: none !important; }

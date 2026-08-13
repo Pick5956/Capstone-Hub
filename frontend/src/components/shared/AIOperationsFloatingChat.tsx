@@ -662,7 +662,7 @@ export default function AIOperationsFloatingChat() {
             </div>
 
             {snapshotLoading && !latestSnapshot ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-10 text-gray-400">
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-gray-500">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
                 <p className="mt-3 text-xs">{copy.emptyStats}</p>
               </div>
@@ -697,7 +697,7 @@ export default function AIOperationsFloatingChat() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-xs font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                            <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">
+                            <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-500">
                               {formatNumber(item.stock, language)} {item.unit}
                             </p>
                           </div>
@@ -717,7 +717,7 @@ export default function AIOperationsFloatingChat() {
                       </div>
                     ))}
                     {stockRisks.length === 0 && (
-                      <div className="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
+                      <div className="p-4 text-center text-xs text-gray-500 dark:text-gray-500">
                         {language === "th" ? "ไม่มีสินค้าคลังเสี่ยงหมด" : "No high risk inventory items"}
                       </div>
                     )}
@@ -761,7 +761,7 @@ export default function AIOperationsFloatingChat() {
                   className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 ${
                     showTips
                       ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <Lightbulb className="h-4.5 w-4.5" />
@@ -785,7 +785,7 @@ export default function AIOperationsFloatingChat() {
                   className={`hidden h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 lg:inline-flex ${
                     showStats
                       ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   <BarChart2 className="h-4.5 w-4.5" />

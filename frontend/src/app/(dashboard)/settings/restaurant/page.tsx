@@ -690,7 +690,7 @@ export default function RestaurantSettingsPage() {
           <div className={`${deleteModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-md flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-red-750 dark:text-red-400">{copy.confirmDeleteTitle}</h2>
-              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <form onSubmit={handleDeleteRestaurant} className="p-4 space-y-4">
               <p className="text-[13px] text-gray-650 dark:text-gray-400 leading-relaxed">

@@ -148,20 +148,20 @@ export default function ThemedTimeInput({
         }`}
       >
         <div className="min-w-0">
-          <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">{copy.label}</span>
+          <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-500 dark:text-gray-500">{copy.label}</span>
           <span className="mt-0.5 block font-mono text-[14px] font-semibold tabular-nums">{value || "00:00"}</span>
-          <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">
+          <span className="block text-[10px] uppercase tracking-[0.14em] text-gray-500 dark:text-gray-500">
             {formatPreview(value || "00:00")}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-gray-500">
           <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
         </div>
       </button>
 
       {(error || help) && (
-        <p id={descriptionId} className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+        <p id={descriptionId} className={`mt-1 text-[11px] ${error ? "text-red-600 dark:text-red-300" : "text-gray-500 dark:text-gray-500"}`}>
           {error || help}
         </p>
       )}

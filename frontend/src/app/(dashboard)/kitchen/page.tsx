@@ -891,7 +891,7 @@ export default function KitchenPage() {
                   setCancelReason(event.target.value);
                   if (cancelReasonError) setCancelReasonError("");
                 }}
-                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:ring-2 disabled:opacity-60 dark:bg-gray-950 dark:text-white ${
+                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:opacity-60 dark:bg-gray-950 dark:text-white ${
                   cancelReasonError
                     ? "border-red-400 focus:border-red-500 focus:ring-red-500/15 dark:border-red-700"
                     : "border-gray-300 focus:border-gray-500 focus:ring-gray-500/15 dark:border-gray-700 dark:focus:border-gray-500"
@@ -903,7 +903,7 @@ export default function KitchenPage() {
                     {cancelReasonError}
                   </p>
                 ) : <span />}
-                <span className="shrink-0 text-[11px] tabular-nums text-gray-400">{cancelReason.length}/500</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-gray-500">{cancelReason.length}/500</span>
               </div>
             </div>
 

@@ -93,16 +93,16 @@ export function SectionCard({
         ? "border-red-200/80 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/20"
         : tone === "success"
           ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-          : "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950";
+          : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
 
   return (
     <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
-      <span className="text-[11px] text-slate-400">{label}</span>
-      <p className="mt-1 text-lg font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helper}</p> : null}
+      <span className="text-[11px] text-gray-500">{label}</span>
+      <p className="mt-1 text-lg font-semibold tracking-tight text-gray-900 tabular-nums dark:text-white">{value}</p>
+      {helper ? <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{helper}</p> : null}
     </div>
   );
 }
 
 export const inputCls =
-  "h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder-slate-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:ring-orange-900/30";
+  "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:ring-orange-900/30";
