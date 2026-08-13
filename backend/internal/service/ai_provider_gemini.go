@@ -86,6 +86,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
+		GenerationConfig: &geminiGenerationConfig{Temperature: zeroTemperature()}, // deterministic routing
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

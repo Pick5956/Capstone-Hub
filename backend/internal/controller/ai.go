@@ -25,6 +25,7 @@ type AIOperationsService interface {
 	OperationsSnapshot(restaurantID uint) (*service.AISnapshot, error)
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
+	ProactiveInsightsForOwner(actor service.AIActorContext) ([]service.AIInsight, error)
 	ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error)
 	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
 }
@@ -133,6 +134,31 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (ctrl *AIController) ProactiveInsights(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	insights, err := ctrl.svc.ProactiveInsightsForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	})
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"insights": insights})
 }
 
 func (ctrl *AIController) UsageMetrics(c *gin.Context) {

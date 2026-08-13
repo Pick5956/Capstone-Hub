@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, PackageSearch, RotateCcw, Send, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -31,7 +31,10 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
+import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
+import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
   id: string;
@@ -143,7 +146,10 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
+  const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [insightsCount, setInsightsCount] = useState(0);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
@@ -439,7 +445,7 @@ export default function AIAssistantPage() {
     await discardPendingActionPreview();
   }
 
-  const handleGuidedAction = (action: AIGuidedAction) => {
+  const handleGuidedAction = (action: AIGuidedAction, msgId?: string) => {
     if (action.prompt) {
       submitQuestion(action.prompt);
       return;
@@ -447,9 +453,15 @@ export default function AIAssistantPage() {
     if (!action.href) return;
     if (action.requiresConfirmation) {
       setPendingAction(action);
+      setPendingActionMsgId(msgId ?? null);
       return;
     }
     router.push(action.href);
+  };
+
+  const dismissPendingAction = () => {
+    setPendingAction(null);
+    setPendingActionMsgId(null);
   };
 
   if (!canUseAI) {
@@ -469,38 +481,56 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
-      <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        {/* Conversation column */}
-        <div className="flex min-h-0 flex-col bg-white dark:bg-gray-950">
-          {/* Card header */}
-          <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
-            <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
-                <Bot className="h-4 w-4" />
-              </span>
-              <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                {language === "th" ? "ผู้ช่วยพร้อมวิเคราะห์" : "Assistant ready"}
-              </span>
-            </div>
+    <main className="relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
+      <section className="relative flex min-h-0 flex-1">
+        {/* Conversation — full width */}
+        <div className="relative flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+          {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((open) => !open)}
+              aria-label={language === "th" ? "ควรรู้วันนี้" : "Insights"}
+              className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-white/80 px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-200 dark:hover:border-orange-800"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-orange-500" />
+              <span className="hidden sm:inline">{language === "th" ? "ควรรู้วันนี้" : "Insights"}</span>
+              {insightsCount > 0 && (
+                <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white">
+                  {insightsCount}
+                </span>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => void handleClearChat()}
               disabled={loading || actionConfirming || actionCancelling}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 dark:hover:text-white"
+              aria-label={copy.newChat}
+              title={copy.newChat}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{copy.newChat}</span>
             </button>
           </div>
-          {/* Messages */}
-          <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-4 sm:p-5">
-            {messages.map((msg) => {
+          {/* Messages — scroll area bleeds to the window's right edge so its
+              scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
+          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
+            {isEmpty && !loading ? (
+              <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
+                <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
+                  <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    {copy.welcome}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              messages.map((msg) => {
               if (msg.role === "user") {
                 return (
                   <div key={msg.id} className="ml-auto flex max-w-[85%] items-end justify-end gap-2.5">
-                    <div className="break-words rounded-2xl rounded-br-sm bg-gray-900 px-4 py-2.5 text-sm leading-relaxed text-white dark:bg-white dark:text-gray-900">
+                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
                       {msg.content}
                     </div>
                   </div>
@@ -508,10 +538,8 @@ export default function AIAssistantPage() {
               }
               return (
                 <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5">
-                  <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
-                    <Bot className="h-4.5 w-4.5" />
-                  </span>
-                  <div className="min-w-0 rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-2.5 text-sm text-gray-800 dark:bg-gray-800 dark:text-gray-100">
+                  <SiriOrb size="30px" className="mt-0.5 shrink-0" />
+                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -519,30 +547,42 @@ export default function AIAssistantPage() {
                           <button
                             key={`${msg.id}-${action.id}`}
                             type="button"
-                            onClick={() => handleGuidedAction(action)}
-                            className="rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 transition-colors hover:bg-gray-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-gray-900"
+                            onClick={() => handleGuidedAction(action, msg.id)}
+                            className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
                           >
                             {action.label}
                           </button>
                         ))}
                       </div>
                     )}
+                    {pendingAction && pendingActionMsgId === msg.id && (
+                      <AIInlineConfirm
+                        message={pendingAction.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing.")}
+                        confirmLabel={language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
+                        cancelLabel={language === "th" ? "ยกเลิก" : "Cancel"}
+                        onConfirm={() => {
+                          const href = pendingAction.href;
+                          dismissPendingAction();
+                          if (href) router.push(href);
+                        }}
+                        onCancel={dismissPendingAction}
+                      />
+                    )}
                   </div>
                 </div>
               );
-            })}
+              })
+            )}
 
             {loading && (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
-                  <Bot className="h-4.5 w-4.5" />
-                </span>
-                <div className="flex items-center rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3 dark:bg-gray-800" role="status" aria-label={copy.thinking}>
-                  <span className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                  </span>
+                <SiriOrb size="30px" className="shrink-0" />
+                <div
+                  className="flex items-center gap-2 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 dark:bg-gray-800/80"
+                  role="status"
+                  aria-label={copy.thinking}
+                >
+                  <span className="ai-shimmer-text text-sm font-medium">{copy.thinking}</span>
                 </div>
               </div>
             )}
@@ -550,20 +590,6 @@ export default function AIAssistantPage() {
             {error && (
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 {error}
-              </div>
-            )}
-
-            {pendingAction && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-                <p>{pendingAction.description}</p>
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => pendingAction.href && router.push(pendingAction.href)} className="rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
-                    {language === "th" ? "ยืนยันและเปิดหน้าตรวจสอบ" : "Confirm and open review page"}
-                  </button>
-                  <button type="button" onClick={() => setPendingAction(null)} className="rounded-md border border-amber-300 px-3 py-2 text-xs font-semibold dark:border-amber-800">
-                    {language === "th" ? "ยกเลิก" : "Cancel"}
-                  </button>
-                </div>
               </div>
             )}
 
@@ -582,16 +608,16 @@ export default function AIAssistantPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick questions (only before the conversation starts) */}
+          {/* Quick questions (only before the conversation starts) — rounded pills */}
           {isEmpty && !loading && (
-            <div className="border-t border-gray-200 p-3 dark:border-gray-800">
-              <div className="flex flex-wrap gap-2">
+            <div className="px-3 pb-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 {copy.quickQuestions.map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => submitQuestion(item)}
-                    className="rounded-md border border-gray-200 px-3 py-2 text-left text-xs font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-gray-900 dark:hover:text-orange-300"
+                    className="rounded-full border border-gray-200 bg-white/60 px-4 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
                   >
                     {item}
                   </button>
@@ -600,40 +626,80 @@ export default function AIAssistantPage() {
             </div>
           )}
 
-          {/* Input at the bottom */}
+          {/* Input at the bottom — rounded pill */}
           <form
-            className="flex items-end gap-2.5 border-t border-gray-200 p-3 dark:border-gray-800"
+            className="p-3"
             onSubmit={(event) => {
               event.preventDefault();
               submitQuestion();
             }}
           >
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  submitQuestion();
-                }
-              }}
-              placeholder={copy.askPlaceholder}
-              rows={1}
-              className="max-h-40 min-h-11 flex-1 resize-none rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-800 dark:bg-gray-900 dark:text-white dark:focus:border-orange-600 dark:focus:ring-orange-900/30"
-            />
-            <button
-              type="submit"
-              disabled={loading || actionConfirming || actionCancelling || !input.trim()}
-              aria-label={copy.ask}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            <div className="flex items-end gap-2 rounded-[1.75rem] border border-gray-200 bg-white p-2 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    submitQuestion();
+                  }
+                }}
+                placeholder={copy.askPlaceholder}
+                rows={1}
+                className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white"
+              />
+              <button
+                type="submit"
+                disabled={loading || actionConfirming || actionCancelling || !input.trim()}
+                aria-label={copy.ask}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    <span className="hidden sm:inline">{copy.ask}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </div>
+      </section>
 
-        {/* Snapshot sidebar */}
-        <aside className="hidden min-h-0 space-y-3 overflow-y-auto lg:block">
+      {/* Dim overlay — click to dismiss the insights drawer */}
+        {drawerOpen && (
+          <div
+            onClick={() => setDrawerOpen(false)}
+            className="absolute inset-0 z-30 bg-black/20 backdrop-blur-[1px] dark:bg-black/40"
+            aria-hidden
+          />
+        )}
+
+        {/* Insights drawer — slides in from the right, off-screen until toggled */}
+        <aside
+          className={`absolute inset-y-0 right-0 z-40 flex w-[340px] max-w-[88vw] flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-gray-800 dark:bg-gray-950 ${
+            drawerOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+          aria-hidden={!drawerOpen}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+            <span className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
+              <Sparkles className="h-4 w-4 text-orange-500" />
+              {language === "th" ? "ข้อมูลร้านวันนี้" : "Shop insights"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              aria-label={language === "th" ? "ปิด" : "Close"}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="ai-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            <AIInsightsPanel language={language} onCount={setInsightsCount} />
           <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
             <Sparkles className="h-4 w-4 text-orange-500" />
             {copy.snapshot}
@@ -641,42 +707,8 @@ export default function AIAssistantPage() {
           <MetricCard icon={<TrendingUp className="h-4 w-4" />} label={copy.salesDays} value={formatNumber(salesDays.length, language)} />
           <MetricCard icon={<Wallet className="h-4 w-4" />} label={copy.inventoryValue} value={formatCurrency(inventorySummary?.value ?? 0, language)} />
           <MetricCard icon={<AlertTriangle className="h-4 w-4" />} label={copy.stockRisks} value={formatNumber(stockRisks.length, language)} />
-
-          <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-            <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-950 dark:border-gray-800 dark:text-white">
-              <PackageSearch className="h-4 w-4 text-orange-500" />
-              {copy.stockRisks}
-            </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {stockRisks.slice(0, 5).map((item) => (
-                <div key={item.name} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {formatNumber(item.stock, language)} {item.unit}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-                        item.status === "out"
-                          ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                      }`}
-                    >
-                      {item.status === "out" ? copy.stockOut : copy.stockLow}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    {copy.restock} {formatNumber(item.restock_estimate, language)} {item.unit}
-                  </p>
-                </div>
-              ))}
-              {stockRisks.length === 0 && <div className="p-4 text-sm text-gray-400">{copy.empty}</div>}
-            </div>
-          </section>
+          </div>
         </aside>
-      </section>
     </main>
   );
 }

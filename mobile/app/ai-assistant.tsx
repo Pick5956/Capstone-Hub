@@ -1,6 +1,6 @@
 import { router, usePathname } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, useWindowDimensions, View } from 'react-native';
 
 import {
   askOperationsAI,
@@ -9,10 +9,11 @@ import {
   deleteAIConversation,
   getOperationsSnapshot,
 } from '@/src/api/ai';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppTextInput as TextInput } from '@/src/components/app-text-input';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, Feedback, SectionHeader, Surface } from '@/src/components/ui';
+import { Button, EmptyState, Feedback, SectionHeader, Surface } from '@/src/components/ui';
 import {
   type AIGuidedAction,
   canUseAIAssistant,
@@ -40,7 +41,7 @@ import { money } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
 import type {
   AIActionPreview,
   AIConversationMessage,
@@ -106,7 +107,7 @@ function AIActionPreviewPanel({
   const presentation = describeAIActionPreview(preview, language);
   return (
     <View
-      style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.lg }}
+      style={{ gap: spacing.md }}
     >
       <Feedback
         title={presentation.title}
@@ -133,7 +134,7 @@ function AIActionPreviewPanel({
             {presentation.currentValue}
           </Text>
         </View>
-        <Text accessibilityElementsHidden style={{ color: palette.warning, fontSize: 18 }}>→</Text>
+        <AppIcon color={palette.warning} name="arrow-forward" size={19} />
         <View style={{ flex: 1, gap: spacing.xs }}>
           <Text selectable style={[typeScale.caption, { color: palette.warning }]}>
             {presentation.requestedLabel}
@@ -166,6 +167,7 @@ function AIActionPreviewPanel({
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
         <Button
           variant="secondary"
+          icon="close-outline"
           label={cancelling ? presentation.cancellingLabel : presentation.cancelLabel}
           onPress={onCancel}
           disabled={confirming || cancelling}
@@ -173,6 +175,7 @@ function AIActionPreviewPanel({
           style={{ flex: 1 }}
         />
         <Button
+          icon="checkmark-outline"
           label={confirming ? presentation.confirmingLabel : presentation.confirmLabel}
           onPress={onConfirm}
           loading={confirming}
@@ -185,6 +188,7 @@ function AIActionPreviewPanel({
 }
 
 export default function AIAssistantScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const pathname = usePathname();
@@ -208,6 +212,7 @@ export default function AIAssistantScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const conversationRequestsRef = useRef(createAIConversationRequestGuard());
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   useEffect(() => {
     conversationRequestsRef.current.clearConversation();
     setConversationId(null);
@@ -441,16 +446,196 @@ export default function AIAssistantScreen() {
     }
   }
 
+  const snapshotPanel = snapshot ? (
+    <Surface>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
+        <AppIcon color={palette.muted} name="analytics-outline" size={20} />
+        <View style={{ flex: 1, gap: spacing.xs }}>
+          <Text selectable style={typeScale.title}>{copy('ข้อมูลร้าน', 'Restaurant data')}</Text>
+          <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+            {canRecommend ? copy('พร้อมวิเคราะห์', 'Ready to analyze') : copy('ข้อมูลต้นทุนหรือสูตรยังไม่ครบ', 'Cost or recipe data is incomplete')}
+          </Text>
+        </View>
+      </View>
+      <View style={{ flexDirection: tabletWorkspace ? 'column' : 'row', flexWrap: 'wrap', gap: spacing.lg }}>
+        {[
+          { icon: 'cube-outline' as const, value: snapshot.inventory_summary.total_items.toLocaleString(language === 'th' ? 'th-TH' : 'en-US'), label: copy('วัตถุดิบ', 'Ingredients') },
+          { icon: 'alert-circle-outline' as const, value: (snapshot.inventory_summary.low_items + snapshot.inventory_summary.out_items).toLocaleString(language === 'th' ? 'th-TH' : 'en-US'), label: copy('ต้องตรวจ', 'Need review') },
+          { icon: 'wallet-outline' as const, value: money(snapshot.inventory_summary.value, language), label: copy('มูลค่าคงคลัง', 'Inventory value') },
+        ].map((item) => (
+          <View key={item.label} style={{ minWidth: 112, flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <AppIcon color={palette.muted} name={item.icon} size={18} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text selectable style={typeScale.number}>{item.value}</Text>
+              <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+      {(snapshot.analysis_readiness.warnings ?? []).map((warning) => (
+        <View key={warning} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderTopWidth: 1, borderTopColor: palette.border }}>
+          <AppIcon color={palette.warning} name="warning-outline" size={18} />
+          <Text selectable style={[typeScale.caption, { flex: 1, color: palette.warning }]}>{warning}</Text>
+        </View>
+      ))}
+    </Surface>
+  ) : null;
+
+  const conversationPanel = (
+    <Surface>
+      <SectionHeader
+        title={copy('บทสนทนา', 'Conversation')}
+        detail={latestAnswer ? copy('คำตอบล่าสุดอยู่ล่างสุด', 'Latest answer is at the bottom') : copy('ถามจากข้อมูลล่าสุดของร้าน', 'Ask from current restaurant data')}
+        action={history.length ? (
+          <Button
+            compact
+            variant="ghost"
+            icon="trash-outline"
+            label={clearingConversation ? copy('กำลังล้าง...', 'Clearing...') : copy('ล้าง', 'Clear')}
+            onPress={() => { void handleClearConversation(); }}
+            loading={clearingConversation}
+            disabled={loading || actionConfirming || actionCancelling}
+          />
+        ) : undefined}
+      />
+      {history.length ? history.map((item, index) => (
+        <View
+          key={`${item.role}-${index}`}
+          style={{
+            borderTopWidth: index ? 1 : 0,
+            borderTopColor: palette.border,
+            paddingTop: index ? spacing.lg : 0,
+          }}
+        >
+          {item.role === 'user' ? (
+            <View style={{ alignSelf: 'flex-end', maxWidth: '86%', borderRadius: radius.md, backgroundColor: palette.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
+              <Text selectable style={[typeScale.body, { color: palette.primaryText }]}>{item.content}</Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+              <AppIcon color={palette.muted} name="sparkles-outline" size={19} />
+              <View style={{ flex: 1 }}><AIResponseContent content={item.content} /></View>
+            </View>
+          )}
+        </View>
+      )) : (
+        <EmptyState title={copy('ยังไม่มีบทสนทนา', 'No conversation yet')} detail={copy('เลือกคำถามตัวอย่างหรือพิมพ์คำถามด้านล่าง', 'Choose a prompt or type a question below.')} />
+      )}
+    </Surface>
+  );
+
+  const resultPanel = notice || actions.length || pendingAction || pendingActionPreview ? (
+    <Surface>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <AppIcon color={palette.muted} name="navigate-outline" size={20} />
+        <Text selectable style={typeScale.title}>{copy('ขั้นตอนถัดไป', 'Next steps')}</Text>
+      </View>
+      {notice ? <Feedback title={notice} tone="info" /> : null}
+      {actions.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {actions.map((action) => (
+            <Button compact key={action.id} variant="secondary" icon="arrow-forward-outline" label={action.label} onPress={() => handleAction(action)} />
+          ))}
+        </View>
+      ) : null}
+      {pendingAction ? (
+        <View style={{ gap: spacing.md }}>
+          <Feedback
+            title={copy('ยืนยันก่อนเปิดหน้าตรวจสอบ', 'Confirm before opening the review page')}
+            detail={pendingAction.description || copy('ระบบจะเปิดหน้าที่เกี่ยวข้องโดยไม่แก้ไขข้อมูลอัตโนมัติ', 'The related page will open without changing any data automatically.')}
+            tone="warning"
+          />
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <Button variant="secondary" icon="close-outline" label={copy('ยกเลิก', 'Cancel')} onPress={() => setPendingAction(null)} style={{ flex: 1 }} />
+            <Button
+              icon="open-outline"
+              label={copy('ยืนยันและเปิด', 'Confirm and open')}
+              onPress={() => {
+                if (pendingAction.href) router.push(pendingAction.href as never);
+                setPendingAction(null);
+              }}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </View>
+      ) : null}
+      {pendingActionPreview ? (
+        <AIActionPreviewPanel
+          preview={pendingActionPreview}
+          language={language}
+          confirming={actionConfirming}
+          cancelling={actionCancelling}
+          error={actionPreviewError}
+          onConfirm={() => { void handleConfirmActionPreview(); }}
+          onCancel={() => { void handleCancelActionPreview(); }}
+        />
+      ) : null}
+    </Surface>
+  ) : null;
+
+  const composerPanel = (
+    <Surface>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <AppIcon color={palette.muted} name="chatbubble-ellipses-outline" size={20} />
+        <Text selectable style={typeScale.title}>{copy('ถามผู้ช่วย', 'Ask AI')}</Text>
+      </View>
+      <View style={{ gap: spacing.sm }}>
+        {prompts.map((prompt) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: loading || actionConfirming || actionCancelling || clearingConversation }}
+            disabled={loading || actionConfirming || actionCancelling || clearingConversation}
+            key={prompt}
+            onPress={() => { void ask(prompt); }}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.sm,
+              borderTopWidth: 1,
+              borderTopColor: palette.border,
+              paddingVertical: spacing.sm,
+              opacity: loading || actionConfirming || actionCancelling || clearingConversation ? 0.5 : pressed ? 0.68 : 1,
+            })}
+          >
+            <Text style={[typeScale.caption, { flex: 1, fontWeight: '600' }]}>{prompt}</Text>
+            <AppIcon color={palette.muted} name="arrow-forward-circle-outline" size={20} />
+          </Pressable>
+        ))}
+      </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ gap: spacing.sm }}>
+          <View>
+            <View style={{ pointerEvents: 'none', position: 'absolute', top: spacing.md, left: spacing.md, zIndex: 1 }}>
+              <AppIcon color={palette.muted} name="create-outline" size={19} />
+            </View>
+            <TextInput
+              accessibilityLabel={copy('คำถามสำหรับผู้ช่วย AI', 'Question for the AI assistant')}
+              multiline
+              maxLength={800}
+              value={question}
+              onChangeText={setQuestion}
+              placeholder={copy('เช่น พรุ่งนี้ควรเตรียมอะไรเพิ่ม?', 'For example: What should we prepare more of tomorrow?')}
+              placeholderTextColor={palette.placeholder}
+              style={{ minHeight: 104, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surfaceSubtle, color: palette.text, fontSize: 16, paddingLeft: 44, paddingRight: spacing.md, paddingVertical: spacing.md, textAlignVertical: 'top' }}
+            />
+          </View>
+          <Button icon="send-outline" label={loading ? copy('กำลังวิเคราะห์...', 'Analyzing...') : copy('ส่งคำถาม', 'Send question')} onPress={() => { void ask(); }} loading={loading} disabled={!question.trim() || actionConfirming || actionCancelling || clearingConversation} />
+        </View>
+      </KeyboardAvoidingView>
+    </Surface>
+  );
+
   if (!canUseAI) {
     return (
-      <AppScreen title={copy('ผู้ช่วยวิเคราะห์ร้าน', 'Restaurant analytics assistant')} subtitle={copy('ถามจากยอดขายและคลังวัตถุดิบล่าสุดของร้าน', 'Ask questions using the restaurant’s latest sales and inventory data.')} topLevel>
+      <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel>
         <Feedback title={copy('ไม่มีสิทธิ์ใช้ผู้ช่วยวิเคราะห์', 'Analytics assistant access unavailable')} detail={copy('ผู้ช่วยวิเคราะห์เปิดให้ใช้งานเฉพาะเจ้าของร้าน', 'The analytics assistant is available to restaurant owners only.')} tone="info" />
       </AppScreen>
     );
   }
 
   return (
-    <AppScreen title={copy('ผู้ช่วยวิเคราะห์ร้าน', 'Restaurant analytics assistant')} subtitle={copy('ถามจากยอดขายและคลังวัตถุดิบล่าสุดของร้าน', 'Ask questions using the restaurant’s latest sales and inventory data.')} topLevel>
+    <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel>
       {error ? <Feedback title={copy('วิเคราะห์ข้อมูลไม่ได้', 'Could not analyze data')} detail={error} tone="danger" /> : null}
       {conversationClearError ? (
         <Feedback
@@ -459,121 +644,25 @@ export default function AIAssistantScreen() {
           tone="warning"
         />
       ) : null}
-      {snapshot ? (
-        <Surface>
-          <SectionHeader title={copy('ความพร้อมของข้อมูล', 'Data readiness')} detail={canRecommend ? copy('ข้อมูลพร้อมสำหรับคำแนะนำเชิงธุรกิจ', 'The data is ready for business recommendations.') : copy('บางคำตอบอาจยังจำกัด เพราะข้อมูลต้นทุนหรือสูตรไม่ครบ', 'Some answers may be limited because cost or recipe data is incomplete.')} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
-            <View style={{ flex: 1, minWidth: 130 }}><Text selectable style={typeScale.number}>{snapshot.inventory_summary.total_items.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</Text><Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('วัตถุดิบทั้งหมด', 'Total ingredients')}</Text></View>
-            <View style={{ flex: 1, minWidth: 130 }}><Text selectable style={typeScale.number}>{(snapshot.inventory_summary.low_items + snapshot.inventory_summary.out_items).toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}</Text><Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('สต็อกต้องตรวจสอบ', 'Stock requiring review')}</Text></View>
-            <View style={{ flex: 1, minWidth: 130 }}><Text selectable style={typeScale.number}>{money(snapshot.inventory_summary.value, language)}</Text><Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('มูลค่าคงคลัง', 'Inventory value')}</Text></View>
+      {tabletWorkspace ? (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xl }}>
+          <View style={{ flex: 1.35, gap: spacing.xl }}>
+            {conversationPanel}
+            {resultPanel}
           </View>
-          {(snapshot.analysis_readiness.warnings ?? []).map((warning) => <Feedback key={warning} title={warning} tone="warning" />)}
-        </Surface>
-      ) : null}
-
-      <Surface>
-        <SectionHeader title={copy('ถามผู้ช่วย', 'Ask the assistant')} detail={copy('ระบบตอบจากข้อมูลของร้าน ไม่ใช่ข้อมูลสมมติ', 'Answers are based on restaurant data, not hypothetical data.')} />
-        {notice ? <Feedback title={notice} tone="info" /> : null}
-        {actions.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-            {actions.map((action) => (
-              <Button
-                compact
-                key={action.id}
-                variant="secondary"
-                label={action.label}
-                onPress={() => handleAction(action)}
-              />
-            ))}
+          <View style={{ flex: 0.85, gap: spacing.xl }}>
+            {snapshotPanel}
+            {composerPanel}
           </View>
-        ) : null}
-        {pendingAction ? (
-          <View style={{ gap: spacing.md }}>
-            <Feedback
-              title={copy('ยืนยันก่อนเปิดหน้าตรวจสอบ', 'Confirm before opening the review page')}
-              detail={pendingAction.description || copy('ระบบจะเปิดหน้าที่เกี่ยวข้องโดยไม่แก้ไขข้อมูลอัตโนมัติ', 'The related page will open without changing any data automatically.')}
-              tone="warning"
-            />
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <Button
-                variant="secondary"
-                label={copy('ยกเลิก', 'Cancel')}
-                onPress={() => setPendingAction(null)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                label={copy('ยืนยันและเปิด', 'Confirm and open')}
-                onPress={() => {
-                  if (pendingAction.href) router.push(pendingAction.href as never);
-                  setPendingAction(null);
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        ) : null}
-        {pendingActionPreview ? (
-          <AIActionPreviewPanel
-            preview={pendingActionPreview}
-            language={language}
-            confirming={actionConfirming}
-            cancelling={actionCancelling}
-            error={actionPreviewError}
-            onConfirm={() => { void handleConfirmActionPreview(); }}
-            onCancel={() => { void handleCancelActionPreview(); }}
-          />
-        ) : null}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-          {prompts.map((prompt) => <Pressable disabled={loading || actionConfirming || actionCancelling || clearingConversation} key={prompt} onPress={() => ask(prompt)} style={({ pressed }) => ({ minHeight: 40, justifyContent: 'center', borderWidth: 1, borderColor: palette.borderStrong, borderRadius: radius.md, paddingHorizontal: spacing.md, opacity: loading || actionConfirming || actionCancelling || clearingConversation ? 0.5 : pressed ? 0.7 : 1 })}><Text style={{ color: palette.text, fontSize: 13, fontWeight: '600' }}>{prompt}</Text></Pressable>)}
         </View>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={{ gap: spacing.sm }}>
-            <TextInput accessibilityLabel={copy('คำถามสำหรับผู้ช่วย AI', 'Question for the AI assistant')} multiline maxLength={800} value={question} onChangeText={setQuestion} placeholder={copy('เช่น พรุ่งนี้ควรเตรียมวัตถุดิบอะไรเพิ่ม?', 'For example: Which ingredients should we prepare more of tomorrow?')} placeholderTextColor={palette.placeholder} style={{ minHeight: 92, borderWidth: 1, borderColor: palette.borderStrong, borderRadius: radius.md, color: palette.text, fontSize: 16, padding: spacing.md, textAlignVertical: 'top' }} />
-            <Button label={loading ? copy('กำลังวิเคราะห์...', 'Analyzing...') : copy('ถาม AI', 'Ask AI')} onPress={() => ask()} loading={loading} disabled={!question.trim() || actionConfirming || actionCancelling || clearingConversation} />
-          </View>
-        </KeyboardAvoidingView>
-      </Surface>
-
-      {history.length ? (
-        <Surface>
-          <SectionHeader
-            title={copy('บทสนทนา', 'Conversation')}
-            detail={latestAnswer ? copy('คำตอบล่าสุดอยู่ด้านล่าง', 'The latest answer appears below.') : undefined}
-            action={(
-              <Button
-                compact
-                variant="secondary"
-                label={clearingConversation ? copy('กำลังล้าง...', 'Clearing...') : copy('ล้างบทสนทนา', 'Clear')}
-                onPress={() => { void handleClearConversation(); }}
-                loading={clearingConversation}
-                disabled={loading || actionConfirming || actionCancelling}
-              />
-            )}
-          />
-          {history.map((item, index) => (
-            <View
-              key={`${item.role}-${index}`}
-              style={{
-                alignSelf: item.role === 'user' ? 'flex-end' : 'stretch',
-                maxWidth: item.role === 'user' ? '86%' : '100%',
-                borderWidth: item.role === 'user' ? 0 : 1,
-                borderColor: palette.border,
-                borderRadius: radius.md,
-                backgroundColor: item.role === 'user' ? palette.primary : palette.surfaceSubtle,
-                padding: spacing.md,
-              }}
-            >
-              {item.role === 'user' ? (
-                <Text selectable style={[typeScale.body, { color: palette.primaryText }]}>
-                  {item.content}
-                </Text>
-              ) : (
-                <AIResponseContent content={item.content} />
-              )}
-            </View>
-          ))}
-        </Surface>
-      ) : null}
+      ) : (
+        <View style={{ gap: spacing.xl }}>
+          {snapshotPanel}
+          {conversationPanel}
+          {resultPanel}
+          {composerPanel}
+        </View>
+      )}
     </AppScreen>
   );
 }

@@ -1,14 +1,18 @@
+import { useWindowDimensions, View } from 'react-native';
+
+import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { ChipGroup, Feedback, SectionHeader, Surface } from '@/src/components/ui';
+import { ChipGroup, EdgeSection, EdgeSectionHeader, Feedback } from '@/src/components/ui';
 import type {
   DisplayLanguage,
   DisplayTextSize,
 } from '@/src/lib/display-preferences';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 
 export default function DisplaySettingsScreen() {
+  const { width } = useWindowDimensions();
   const {
     copy,
     language,
@@ -17,6 +21,7 @@ export default function DisplaySettingsScreen() {
     setTextSize,
     textSize,
   } = useDisplayPreferences();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const languageOptions: Array<{
     label: string;
@@ -38,98 +43,62 @@ export default function DisplaySettingsScreen() {
     persistenceStatus === 'loading'
       ? {
           title: copy('กำลังโหลดการตั้งค่า', 'Loading settings'),
-          detail: copy(
-            'กำลังอ่านค่าที่บันทึกไว้ในอุปกรณ์',
-            'Reading the preferences saved on this device.',
-          ),
+          detail: copy('กำลังอ่านค่าจากอุปกรณ์', 'Reading preferences from this device.'),
           tone: 'info' as const,
         }
       : persistenceStatus === 'saving'
         ? {
             title: copy('กำลังบันทึก', 'Saving'),
-            detail: copy(
-              'ระบบกำลังบันทึกการตั้งค่าสำหรับครั้งถัดไป',
-              'Saving these preferences for the next app launch.',
-            ),
+            detail: copy('กำลังบันทึกลงอุปกรณ์', 'Saving on this device.'),
             tone: 'info' as const,
           }
         : persistenceStatus === 'memory-only'
           ? {
               title: copy('บันทึกถาวรไม่ได้', 'Could not save permanently'),
-              detail: copy(
-                'ค่าที่เลือกยังใช้ได้ในรอบนี้ แต่จะกลับเป็นค่าเดิมเมื่อปิดแอป',
-                'Your choice works for this session, but may reset after the app closes.',
-              ),
+              detail: copy('ใช้ได้ในรอบนี้ แต่อาจถูกรีเซ็ตเมื่อปิดแอป', 'Works for this session, but may reset after the app closes.'),
               tone: 'warning' as const,
             }
           : {
-              title: copy('บันทึกในอุปกรณ์แล้ว', 'Saved on this device'),
-              detail: copy(
-                'การตั้งค่านี้ไม่ต้อง build แอปใหม่และจะถูกใช้เมื่อเปิดแอปครั้งถัดไป',
-                'No new app build is required; these settings are restored the next time the app opens.',
-              ),
+              title: copy('บันทึกแล้ว', 'Saved'),
+              detail: copy('ใช้ค่าเดิมเมื่อเปิดแอปครั้งถัดไป', 'Restored the next time the app opens.'),
               tone: 'success' as const,
             };
 
   return (
     <AppScreen
       title={copy('การแสดงผล', 'Display')}
-      subtitle={copy(
-        'ตั้งค่าภาษาและขนาดข้อความสำหรับอุปกรณ์นี้',
-        'Set the language and text size for this device',
-      )}
+      subtitle={copy('ใช้เฉพาะอุปกรณ์นี้', 'Applies to this device')}
       topLevel={false}
     >
-      <Surface>
-        <SectionHeader
-          title={copy('ภาษา', 'Language')}
-          detail={copy(
-            'แถบนำทางและหน้าที่รองรับจะเปลี่ยนทันที โดยข้อมูลร้านและ API ไม่ถูกแก้ไข',
-            'Navigation and supported screens update immediately. Restaurant and API data remain unchanged.',
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1 : undefined, gap: spacing.lg }}>
+          <View style={{ gap: spacing.sm }}>
+            <EdgeSectionHeader title={copy('ภาษา', 'Language')} action={<AppIcon color={palette.muted} name="language-outline" size={21} />} />
+            <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
+            <ChipGroup value={language} options={languageOptions} onChange={setLanguage} />
+            </EdgeSection>
+          </View>
+        </View>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.15 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('ขนาดตัวอักษร', 'Text size')} detail={copy('ทำงานร่วมกับขนาดตัวอักษรของเครื่อง', 'Works with the device text-size setting.')} action={<AppIcon color={palette.muted} name="text-outline" size={21} />} />
+          <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
+          <ChipGroup value={textSize} options={textSizeOptions} onChange={setTextSize} />
+          <View style={{ borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}>
+            <Text selectable style={[typeScale.body, { color: palette.text }]}>
+              {copy('ตัวอย่างข้อความ', 'Text preview')}
+            </Text>
+          </View>
+          {persistenceStatus !== 'saved' ? (
+            <Feedback title={persistenceCopy.title} detail={persistenceCopy.detail} tone={persistenceCopy.tone} />
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <AppIcon color={palette.success} name="checkmark-circle-outline" size={18} />
+              <Text style={[typeScale.caption, { color: palette.muted }]}>{persistenceCopy.title}</Text>
+            </View>
           )}
-        />
-        <ChipGroup
-          value={language}
-          options={languageOptions}
-          onChange={setLanguage}
-        />
-      </Surface>
-
-      <Surface>
-        <SectionHeader
-          title={copy('ขนาดตัวอักษร', 'Text size')}
-          detail={copy(
-            'ใช้ร่วมกับการตั้งค่าขนาดตัวอักษรของ iOS หรือ Android',
-            'Works together with the text-size setting on iOS or Android.',
-          )}
-        />
-        <ChipGroup
-          value={textSize}
-          options={textSizeOptions}
-          onChange={setTextSize}
-        />
-        <Text selectable style={[typeScale.body, { color: palette.text }]}>
-          {copy(
-            'ตัวอย่างข้อความสำหรับตรวจสอบความอ่านง่ายระหว่างกะ',
-            'Preview text for checking readability during a shift.',
-          )}
-        </Text>
-        <Feedback
-          title={persistenceCopy.title}
-          detail={persistenceCopy.detail}
-          tone={persistenceCopy.tone}
-        />
-      </Surface>
-
-      <Surface>
-        <SectionHeader
-          title={copy('หน้าจอและการหมุน', 'Screen and rotation')}
-          detail={copy(
-            'มือถือใช้แถบนำทางด้านล่าง ส่วน iPad ใช้แถบด้านข้าง และรองรับทั้งแนวตั้งกับแนวนอน',
-            'Phones use bottom navigation, while iPad uses a side rail in portrait and landscape.',
-          )}
-        />
-      </Surface>
+          </EdgeSection>
+        </View>
+      </View>
     </AppScreen>
   );
 }

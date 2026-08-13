@@ -1,21 +1,20 @@
 "use client";
 
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { 
-  AlertTriangle, 
-  Bot, 
-  Loader2, 
-  PackageSearch, 
-  Send, 
-  TrendingUp, 
-  Wallet, 
+import {
+  AlertTriangle,
+  Loader2,
+  PackageSearch,
+  Send,
+  TrendingUp,
+  Wallet,
   X,
   BarChart2,
   Lightbulb,
   RotateCcw
 } from "lucide-react";
+import SiriOrb from "@/src/components/ui/siri-orb";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -736,17 +735,12 @@ export default function AIOperationsFloatingChat() {
             role="dialog"
             aria-modal="false"
             aria-labelledby="ai-operations-chat-title"
-            className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30"
+            className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30"
           >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:px-4">
             <div className="flex items-center gap-2.5">
-              <div className="relative">
-                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-300">
-                  <Bot className="h-5 w-5" />
-                </span>
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-gray-950"></span>
-              </div>
+              <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
               <div className="flex items-center">
                 <h2 id="ai-operations-chat-title" className="text-sm font-semibold leading-none text-gray-900 dark:text-white">{copy.title}</h2>
               </div>
@@ -841,20 +835,9 @@ export default function AIOperationsFloatingChat() {
 
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="flex items-end gap-2.5 justify-end max-w-[90%] ml-auto animate-message-slide">
-                    {/* User Message Bubble (Rounded on all sides) */}
-                    <div className="max-w-full break-words rounded-md bg-gray-900 px-4 py-3 text-xs leading-relaxed text-white dark:bg-white dark:text-gray-900 sm:text-[13px]">
+                  <div key={msg.id} className="ml-auto flex max-w-[90%] items-end justify-end gap-2.5 animate-message-slide">
+                    <div className="max-w-full break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-xs leading-relaxed text-white shadow-sm shadow-orange-500/25 sm:text-[13px]">
                       {msg.content}
-                    </div>
-                    {/* User Avatar */}
-                    <div className="h-8 w-8 flex-none shrink-0 overflow-hidden rounded-full border border-gray-200 dark:border-gray-800">
-                      {user?.profile_image ? (
-                        <Image src={user.profile_image} width={32} height={32} unoptimized className="h-full w-full object-cover" alt="" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-orange-100 text-[11px] font-semibold text-orange-600 dark:bg-orange-950/40 dark:text-orange-400 uppercase">
-                          {user?.nickname?.charAt(0) || user?.first_name?.charAt(0) || "U"}
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -862,13 +845,9 @@ export default function AIOperationsFloatingChat() {
 
               // Assistant/AI message
               return (
-                <div key={msg.id} className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
-                  {/* AI Avatar */}
-                  <div className="flex h-8 w-8 flex-none shrink-0 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
-                    <Bot className="h-4.5 w-4.5" />
-                  </div>
-                  {/* AI Message Bubble (Rounded on all sides) */}
-                  <div className="max-w-full break-words rounded-md bg-gray-100 px-4 py-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-800 dark:text-gray-100 sm:text-[13px]">
+                <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5 animate-message-slide">
+                  <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
+                  <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -877,7 +856,7 @@ export default function AIOperationsFloatingChat() {
                             key={`${msg.id}-${action.id}`}
                             type="button"
                             onClick={() => handleAction(action)}
-                            className="min-h-10 rounded-md border border-orange-200 bg-white px-3 py-2 text-[11px] font-semibold text-orange-700 transition-colors hover:bg-gray-50 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:bg-gray-900"
+                            className="min-h-9 rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-[11px] font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
                           >
                             {action.label}
                           </button>
@@ -890,23 +869,14 @@ export default function AIOperationsFloatingChat() {
             })}
 
             {loading && (
-              <div className="flex items-end gap-2.5 justify-start max-w-[90%] animate-message-slide">
-                {/* AI Avatar */}
-                <div className="flex h-8 w-8 flex-none shrink-0 items-center justify-center rounded-full border border-orange-100 bg-orange-50 text-orange-600 dark:border-orange-950/50 dark:bg-orange-950/30 dark:text-orange-300">
-                  <Bot className="h-4.5 w-4.5" />
-                </div>
-                {/* Loading Bubble */}
+              <div className="flex items-center gap-2.5 animate-message-slide">
+                <SiriOrb size="30px" className="shrink-0" animationDuration={8} />
                 <div
                   role="status"
                   aria-label={copy.thinking}
-                  className="flex items-center rounded-md bg-gray-100 px-3.5 py-3 text-xs leading-relaxed text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                  className="flex items-center rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 dark:bg-gray-800/80"
                 >
-                  <span className="sr-only">{copy.thinking}</span>
-                  <span aria-hidden="true" className="flex items-center gap-1.5 text-orange-500 dark:text-orange-400">
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                    <span className="ai-thinking-dot"></span>
-                  </span>
+                  <span className="ai-shimmer-text text-xs font-medium sm:text-[13px]">{copy.thinking}</span>
                 </div>
               </div>
             )}
@@ -954,7 +924,7 @@ export default function AIOperationsFloatingChat() {
                       e.stopPropagation();
                       handleSend(q);
                     }}
-                    className="min-h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-[12px] font-semibold text-gray-700 transition-colors hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:bg-gray-900 dark:hover:text-orange-300"
+                    className="min-h-10 w-full rounded-xl border border-gray-200 bg-white/70 px-3.5 py-2 text-left text-[12px] font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
                   >
                     {q}
                   </button>
@@ -970,9 +940,9 @@ export default function AIOperationsFloatingChat() {
               handleSend();
             }}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-b-md border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 sm:p-3.5"
+            className="rounded-b-2xl border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 sm:p-3.5"
           >
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
               <input
                 ref={inputRef}
                 type="text"
@@ -981,13 +951,13 @@ export default function AIOperationsFloatingChat() {
                 placeholder={copy.askPlaceholder}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
-                className="min-h-11 flex-1 rounded-md border border-gray-200 bg-white px-3.5 py-2.5 text-sm font-medium !text-gray-950 placeholder-gray-500 outline-none transition-[border-color,box-shadow] focus-glow dark:border-gray-800 dark:bg-gray-900 dark:!text-gray-50 dark:placeholder-gray-400"
+                className="min-h-9 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
               <button
                 type="submit"
                 aria-label={copy.send}
                 disabled={loading || actionConfirming || actionCancelling || !input.trim()}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-950 text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -1002,15 +972,13 @@ export default function AIOperationsFloatingChat() {
         type="button"
         aria-label={labels.openAssistant}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center rounded-md border border-gray-800 bg-gray-950 text-white shadow-xl shadow-gray-950/15 transition-[opacity,transform,background-color] duration-200 ease-out hover:bg-gray-800 active:scale-[0.98] dark:border-white/10 dark:bg-white dark:text-gray-950 dark:shadow-black/30 dark:hover:bg-gray-200 sm:bottom-6 sm:right-6 ${
-          isOpen 
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center rounded-full shadow-xl shadow-orange-500/30 ring-1 ring-black/5 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] dark:ring-white/10 sm:bottom-6 sm:right-6 ${
+          isOpen
             ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 scale-100 pointer-events-auto"
         }`}
       >
-        <span className="flex h-6 w-6 items-center justify-center">
-          <Bot className="h-6 w-6" />
-        </span>
+        <SiriOrb size="56px" animationDuration={8} />
       </button>
     </>
   );

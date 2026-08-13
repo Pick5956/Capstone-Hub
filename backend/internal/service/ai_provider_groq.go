@@ -87,6 +87,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		Temperature: zeroTemperature(), // deterministic routing
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

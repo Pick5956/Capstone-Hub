@@ -1,17 +1,16 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import { getRoles } from '@/src/api/auth';
-import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import {
   Button,
-  Divider,
+  EdgeRow,
+  EdgeSection,
+  EdgeSectionHeader,
   EmptyState,
   Feedback,
-  SectionHeader,
-  Surface,
 } from '@/src/components/ui';
 import { parsePermissions } from '@/src/lib/permissions';
 import {
@@ -21,7 +20,7 @@ import {
 } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, spacing, typeScale } from '@/src/theme';
+import { spacing } from '@/src/theme';
 import type { Role } from '@/src/types/restaurant';
 
 export default function RolesScreen() {
@@ -62,8 +61,8 @@ export default function RolesScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการบทบาท', 'No role management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่มีสิทธิ์ manage_staff',
-            'You must be an owner or manager with the manage_staff permission.',
+            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
+            'You must be an owner or manager with team-management access.',
           )}
         />
       </AppScreen>
@@ -81,6 +80,7 @@ export default function RolesScreen() {
       action={(
         <Button
           compact
+          icon="add-outline"
           label={copy('เพิ่มบทบาท', 'Add role')}
           onPress={() => router.push('/staff/role' as never)}
         />
@@ -93,8 +93,8 @@ export default function RolesScreen() {
           tone="danger"
         />
       ) : null}
-      <Surface>
-        <SectionHeader
+      <View style={{ gap: spacing.sm }}>
+        <EdgeSectionHeader
           title={copy('บทบาทที่จัดการได้', 'Roles you can manage')}
           detail={actorRole === 'manager'
             ? copy(
@@ -106,51 +106,45 @@ export default function RolesScreen() {
               'Owners can edit every role except the owner role.',
             )}
         />
-        {roles.map((role, index) => (
-          <View key={role.ID}>
-            {index ? <Divider /> : null}
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push({
-                pathname: '/staff/role' as never,
-                params: { id: String(role.ID) },
-              } as never)}
-              style={({ pressed }) => ({
-                minHeight: 64,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.md,
-                opacity: pressed ? 0.72 : 1,
-              })}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text selectable style={typeScale.cardTitle}>{roleLabel(role, language)}</Text>
-                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                  {role.permissions === '["*"]'
-                    ? copy('ทุกสิทธิ์', 'All permissions')
-                    : copy(
-                      `${parsePermissions(role.permissions).length.toLocaleString('th-TH')} สิทธิ์`,
-                      `${parsePermissions(role.permissions).length.toLocaleString('en-US')} permissions`,
-                    )}
-                  {role.is_system
-                    ? copy(' · บทบาทมาตรฐาน', ' · Standard role')
-                    : copy(' · บทบาทร้าน', ' · Restaurant role')}
-                </Text>
-              </View>
-              <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
-            </Pressable>
-          </View>
-        ))}
-        {!roles.length && !loading ? (
-          <EmptyState
-            title={copy('ยังไม่มีบทบาทที่จัดการได้', 'No manageable roles yet')}
-            detail={copy(
-              'เพิ่มบทบาทใหม่สำหรับงานของร้านนี้',
-              'Add a new role for this restaurant.',
-            )}
-          />
+        {roles.length ? (
+          <EdgeSection>
+            {roles.map((role) => {
+              const permissionCount = parsePermissions(role.permissions).length;
+              const detail = `${role.permissions === '["*"]'
+                ? copy('ทุกสิทธิ์', 'All permissions')
+                : copy(
+                  `${permissionCount.toLocaleString('th-TH')} สิทธิ์`,
+                  `${permissionCount.toLocaleString('en-US')} permissions`,
+                )}${role.is_system
+                ? copy(' · บทบาทมาตรฐาน', ' · Standard role')
+                : copy(' · บทบาทร้าน', ' · Restaurant role')}`;
+
+              return (
+                <EdgeRow
+                  detail={detail}
+                  icon="shield-checkmark-outline"
+                  key={role.ID}
+                  onPress={() => router.push({
+                    pathname: '/staff/role' as never,
+                    params: { id: String(role.ID) },
+                  } as never)}
+                  title={roleLabel(role, language)}
+                />
+              );
+            })}
+          </EdgeSection>
+        ) : !loading ? (
+          <EdgeSection style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState
+              title={copy('ยังไม่มีบทบาทที่จัดการได้', 'No manageable roles yet')}
+              detail={copy(
+                'เพิ่มบทบาทใหม่สำหรับงานของร้านนี้',
+                'Add a new role for this restaurant.',
+              )}
+            />
+          </EdgeSection>
         ) : null}
-      </Surface>
+      </View>
     </AppScreen>
   );
 }

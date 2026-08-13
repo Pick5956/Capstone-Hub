@@ -126,8 +126,13 @@ type AIFinalJSONResponse struct {
 }
 
 type geminiGenerateRequest struct {
-	Contents []geminiContent `json:"contents"`
-	Tools    []geminiTool    `json:"tools,omitempty"`
+	Contents         []geminiContent         `json:"contents"`
+	Tools            []geminiTool            `json:"tools,omitempty"`
+	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
+}
+
+type geminiGenerationConfig struct {
+	Temperature *float64 `json:"temperature,omitempty"`
 }
 
 type geminiTool struct {
@@ -186,6 +191,16 @@ type groqRequest struct {
 	Model    string        `json:"model"`
 	Messages []groqMessage `json:"messages"`
 	Tools    []groqTool    `json:"tools,omitempty"`
+	// Temperature is a pointer so 0 is actually sent (omitempty would drop a 0
+	// value). Used to pin the classifier to deterministic routing.
+	Temperature *float64 `json:"temperature,omitempty"`
+}
+
+// zeroTemperature returns a pointer to 0 for deterministic calls (the intent
+// classifier), so the same question routes the same way every time.
+func zeroTemperature() *float64 {
+	v := 0.0
+	return &v
 }
 
 type groqTool struct {

@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -10,6 +12,7 @@ import {
   DisplayPreferencesProvider,
   useDisplayPreferences,
 } from '@/src/providers/display-preferences-provider';
+import { APP_FONT_FAMILIES } from '@/src/lib/app-font';
 import { colors } from '@/src/theme';
 
 export {
@@ -27,14 +30,24 @@ const topLevelScreenOptions = {
 
 SplashScreen.preventAutoHideAsync();
 
+const bundledFonts = {
+  ...Ionicons.font,
+  [APP_FONT_FAMILIES.regular]: require('../assets/fonts/Kanit-Regular.ttf'),
+  [APP_FONT_FAMILIES.medium]: require('../assets/fonts/Kanit-Medium.ttf'),
+  [APP_FONT_FAMILIES.semiBold]: require('../assets/fonts/Kanit-SemiBold.ttf'),
+  [APP_FONT_FAMILIES.bold]: require('../assets/fonts/Kanit-Bold.ttf'),
+  [APP_FONT_FAMILIES.extraBold]: require('../assets/fonts/Kanit-ExtraBold.ttf'),
+};
+
 function AppNavigator() {
   const { ready } = useDisplayPreferences();
+  const [fontsLoaded, fontError] = useFonts(bundledFonts);
 
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (ready && (fontsLoaded || fontError)) void SplashScreen.hideAsync();
+  }, [fontError, fontsLoaded, ready]);
 
-  if (!ready) {
+  if (!ready || (!fontsLoaded && !fontError)) {
     return <View style={{ flex: 1, backgroundColor: colors.surface }} />;
   }
 
@@ -48,9 +61,7 @@ function AppNavigator() {
         <Stack.Screen name="create-restaurant" />
         <Stack.Screen name="invite/manual" />
         <Stack.Screen name="invite/[token]" />
-        <Stack.Screen name="home" options={topLevelScreenOptions} />
-        <Stack.Screen name="more" options={topLevelScreenOptions} />
-        <Stack.Screen name="tables" options={topLevelScreenOptions} />
+        <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
         <Stack.Screen name="reservations" />
         <Stack.Screen name="table-reservation" />
         <Stack.Screen name="table-management" />
@@ -60,8 +71,6 @@ function AppNavigator() {
         <Stack.Screen name="order/[id]" />
         <Stack.Screen name="order/new" />
         <Stack.Screen name="menu" />
-        <Stack.Screen name="orders" options={topLevelScreenOptions} />
-        <Stack.Screen name="kitchen" options={topLevelScreenOptions} />
         <Stack.Screen name="staff" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="inventory" />

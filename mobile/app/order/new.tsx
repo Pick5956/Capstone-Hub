@@ -1,23 +1,26 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { createOrder } from '@/src/api/order';
 import { listTables } from '@/src/api/table';
 import { AppText as Text } from '@/src/components/app-text';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, ChipGroup, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, ChipGroup, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
 import { canOpenDineInOrder } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { RestaurantTable } from '@/src/types/table';
 
 export default function NewOrderScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy } = useDisplayPreferences();
   const canTakeOrder = can(activeMembership, 'take_order');
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const params = useLocalSearchParams<{
     tableId?: string;
     type?: string;
@@ -75,20 +78,29 @@ export default function NewOrderScreen() {
     } catch (err) { setError(err instanceof Error ? err.message : copy('เปิดออเดอร์ไม่สำเร็จ', 'Could not open the order')); }
     finally { setSaving(false); }
   }
-  if (!canTakeOrder) return <AppScreen title={copy('เปิดออเดอร์', 'Open order')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('ต้องมีสิทธิ์ take_order', 'The take_order permission is required.')} /></AppScreen>;
+  if (!canTakeOrder) return <AppScreen title={copy('เปิดออเดอร์', 'Open order')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} /></AppScreen>;
   return (
-    <AppScreen title={orderType === 'takeaway' ? copy('ออเดอร์ซื้อกลับบ้าน', 'Takeaway order') : copy(`เปิด ${table?.display_label || 'โต๊ะ'}`, `Open ${table?.display_label || 'table'}`)} subtitle={copy('ตรวจรายละเอียดก่อนเริ่มเพิ่มรายการอาหาร', 'Check the details before adding menu items.')} topLevel={false}>
+    <AppScreen
+      title={orderType === 'takeaway' ? copy('ออเดอร์ซื้อกลับบ้าน', 'Takeaway order') : copy(`เปิด ${table?.display_label || 'โต๊ะ'}`, `Open ${table?.display_label || 'table'}`)}
+      subtitle={copy('ระบุข้อมูลลูกค้าก่อนเลือกเมนู', 'Add guest details before choosing menu items')}
+      topLevel={false}
+      footer={!tabletWorkspace ? <ActionDock><Button icon="arrow-forward" label={copy('เปิดออเดอร์', 'Open order')} onPress={submit} loading={saving} disabled={orderType === 'dine_in' && !canOpenDineInOrder(tableId, Boolean(table))} /></ActionDock> : undefined}
+    >
       {error ? <Feedback title={copy('เปิดออเดอร์ไม่ได้', 'Could not open the order')} detail={error} tone="danger" /> : null}
-      <Surface>
-        <SectionHeader title={copy('ประเภทออเดอร์', 'Order type')} />
-        <ChipGroup value={orderType} onChange={setOrderType} options={[{ label: copy('ทานที่ร้าน', 'Dine-in'), value: 'dine_in' }, { label: copy('ซื้อกลับบ้าน', 'Takeaway'), value: 'takeaway' }]} />
-        {orderType === 'dine_in' ? <View style={{ flexDirection: 'row', gap: spacing.md }}><View style={{ flex: 1 }}><Text selectable style={typeScale.cardTitle}>{table?.display_label || (tableResolved ? copy('ไม่พบโต๊ะ', 'Table not found') : copy('กำลังโหลดโต๊ะ', 'Loading table'))}</Text><Text selectable style={typeScale.caption}>{table ? copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`) : '−'}</Text></View></View> : null}
-        <TextField label={copy('จำนวนลูกค้า', 'Guest count')} value={customerCount} onChangeText={setCustomerCount} keyboardType="number-pad" />
-        <TextField label={copy('ชื่อลูกค้า (ไม่บังคับ)', 'Customer name (optional)')} value={customerName} onChangeText={setCustomerName} />
-        <TextField label={copy('เบอร์โทร (ไม่บังคับ)', 'Phone number (optional)')} value={customerPhone} onChangeText={setCustomerPhone} keyboardType="phone-pad" />
-        <TextField label={copy('หมายเหตุออเดอร์', 'Order note')} value={note} onChangeText={setNote} multiline />
-        <Button label={copy('เปิดออเดอร์และเลือกเมนู', 'Open order and choose menu items')} onPress={submit} loading={saving} disabled={orderType === 'dine_in' && !canOpenDineInOrder(tableId, Boolean(table))} />
-      </Surface>
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined }}>
+          <SectionHeader title={copy('ประเภทออเดอร์', 'Order type')} action={<AppIcon color={palette.muted} name={orderType === 'takeaway' ? 'bag-handle-outline' : 'restaurant-outline'} size={22} />} />
+          <ChipGroup value={orderType} onChange={setOrderType} options={[{ label: copy('ทานที่ร้าน', 'Dine-in'), value: 'dine_in' }, { label: copy('ซื้อกลับบ้าน', 'Takeaway'), value: 'takeaway' }]} />
+          {orderType === 'dine_in' ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, paddingTop: spacing.md }}><AppIcon color={palette.text} name="restaurant-outline" size={22} /><View style={{ flex: 1 }}><Text selectable style={typeScale.cardTitle}>{table?.display_label || (tableResolved ? copy('ไม่พบโต๊ะ', 'Table not found') : copy('กำลังโหลดโต๊ะ', 'Loading table'))}</Text><Text selectable style={[typeScale.caption, { color: palette.muted }]}>{table ? copy(`${table.capacity.toLocaleString('th-TH')} ที่นั่ง`, `${table.capacity.toLocaleString('en-US')} seats`) : '−'}</Text></View></View> : null}
+        </Surface>
+        <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.2 : undefined }}>
+          <TextField icon="people-outline" label={copy('จำนวนลูกค้า', 'Guest count')} value={customerCount} onChangeText={setCustomerCount} keyboardType="number-pad" />
+          <TextField icon="person-outline" label={copy('ชื่อลูกค้า (ไม่บังคับ)', 'Customer name (optional)')} value={customerName} onChangeText={setCustomerName} />
+          <TextField icon="call-outline" label={copy('เบอร์โทร (ไม่บังคับ)', 'Phone number (optional)')} value={customerPhone} onChangeText={setCustomerPhone} keyboardType="phone-pad" />
+          <TextField label={copy('หมายเหตุออเดอร์', 'Order note')} value={note} onChangeText={setNote} multiline />
+          {tabletWorkspace ? <Button icon="arrow-forward" label={copy('เปิดออเดอร์', 'Open order')} onPress={submit} loading={saving} disabled={orderType === 'dine_in' && !canOpenDineInOrder(tableId, Boolean(table))} /> : null}
+        </Surface>
+      </View>
     </AppScreen>
   );
 }

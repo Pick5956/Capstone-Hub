@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
+import { useWindowDimensions, View } from 'react-native';
 
 import { updateProfile } from '@/src/api/auth';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, EdgeRow, EdgeSection, EdgeSectionHeader, Feedback, TextField } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { breakpoints, spacing } from '@/src/theme';
 
 export default function AccountSettingsScreen() {
+  const { width } = useWindowDimensions();
   const { user, refreshProfile } = useAuth();
   const { copy } = useDisplayPreferences();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [nickname, setNickname] = useState('');
@@ -58,6 +62,16 @@ export default function AccountSettingsScreen() {
       title={copy('บัญชีของฉัน', 'My account')}
       subtitle={user?.email || copy('ข้อมูลผู้ใช้งาน', 'User information')}
       topLevel={false}
+      footer={!tabletWorkspace ? (
+        <ActionDock>
+          <Button
+            icon="checkmark"
+            label={copy('บันทึกบัญชี', 'Save account')}
+            onPress={save}
+            loading={saving}
+          />
+        </ActionDock>
+      ) : undefined}
     >
       {error ? (
         <Feedback
@@ -67,43 +81,38 @@ export default function AccountSettingsScreen() {
         />
       ) : null}
       {message ? <Feedback title={message} tone="success" /> : null}
-      <Surface>
-        <SectionHeader title={copy('ข้อมูลส่วนตัว', 'Personal information')} />
-        <TextField
-          label={copy('ชื่อ', 'First name')}
-          value={firstName}
-          onChangeText={setFirstName}
-        />
-        <TextField
-          label={copy('นามสกุล', 'Last name')}
-          value={lastName}
-          onChangeText={setLastName}
-        />
-        <TextField
-          label={copy('ชื่อเล่น', 'Nickname')}
-          value={nickname}
-          onChangeText={setNickname}
-        />
-        <TextField
-          label={copy('เบอร์โทร', 'Phone number')}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-        <Button
-          label={copy('บันทึกข้อมูลบัญชี', 'Save account information')}
-          onPress={save}
-          loading={saving}
-        />
-      </Surface>
-      <Surface>
-        <SectionHeader
-          title={copy('วิธีเข้าสู่ระบบ', 'Sign-in method')}
-          detail={user?.auth_provider === 'google'
-            ? copy('บัญชีนี้เชื่อมกับ Google', 'This account is connected to Google')
-            : copy('บัญชีนี้ใช้รหัสผ่าน', 'This account uses a password')}
-        />
-      </Surface>
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.45 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('ข้อมูลส่วนตัว', 'Personal information')} />
+          <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
+          <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
+            <View style={{ minWidth: 0, flex: 1 }}>
+              <TextField label={copy('ชื่อ', 'First name')} value={firstName} onChangeText={setFirstName} icon="person-outline" />
+            </View>
+            <View style={{ minWidth: 0, flex: 1 }}>
+              <TextField label={copy('นามสกุล', 'Last name')} value={lastName} onChangeText={setLastName} />
+            </View>
+          </View>
+          <TextField label={copy('ชื่อเล่นในร้าน', 'Restaurant nickname')} value={nickname} onChangeText={setNickname} icon="id-card-outline" />
+          <TextField label={copy('เบอร์โทร', 'Phone number')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" icon="call-outline" />
+          {tabletWorkspace ? (
+            <Button icon="checkmark" label={copy('บันทึกบัญชี', 'Save account')} onPress={save} loading={saving} />
+          ) : null}
+          </EdgeSection>
+        </View>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined, gap: spacing.sm }}>
+          <EdgeSectionHeader title={copy('การเข้าสู่ระบบ', 'Sign-in')} />
+          <EdgeSection>
+            <EdgeRow
+              detail={user?.auth_provider === 'google'
+                ? copy('เชื่อมกับ Google', 'Connected to Google')
+                : copy('ใช้อีเมลและรหัสผ่าน', 'Email and password')}
+              icon={user?.auth_provider === 'google' ? 'logo-google' : 'lock-closed-outline'}
+              title={copy('วิธีเข้าสู่ระบบ', 'Sign-in method')}
+            />
+          </EdgeSection>
+        </View>
+      </View>
     </AppScreen>
   );
 }

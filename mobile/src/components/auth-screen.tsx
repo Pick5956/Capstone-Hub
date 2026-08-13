@@ -1,83 +1,222 @@
 import { router } from 'expo-router';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
+import { BrandMark } from '@/src/components/brand-mark';
+import { MotionReveal } from '@/src/components/motion';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, radius, spacing } from '@/src/theme';
 
-export function AuthScreen({ title, subtitle, children, showBack = false }: { title: string; subtitle: string; children: React.ReactNode; showBack?: boolean }) {
+function LanguageControl() {
   const { copy, language, setLanguage } = useDisplayPreferences();
-  const { width } = useWindowDimensions(); const tablet = width >= 760;
-  const screenBackground = tablet ? palette.canvas : palette.surface;
+  const nextLanguage = language === 'th' ? 'en' : 'th';
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: screenBackground }}>
+    <Pressable
+      accessibilityLabel={copy('เปลี่ยนเป็นภาษาอังกฤษ', 'Switch to Thai')}
+      accessibilityRole="button"
+      hitSlop={3}
+      onPress={() => setLanguage(nextLanguage)}
+      style={({ pressed }) => ({
+        minWidth: 64,
+        height: 44,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 7,
+        borderWidth: 1,
+        borderColor: palette.border,
+        borderRadius: radius.md,
+        backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle,
+        paddingHorizontal: spacing.md,
+        opacity: pressed ? 0.72 : 1,
+        transform: [{ scale: pressed ? 0.98 : 1 }],
+      })}
+    >
+      <AppIcon color={palette.muted} name="language-outline" size={18} />
+      <Text allowFontScaling={false} style={{ color: palette.textStrong, fontSize: 12, fontWeight: '800' }}>
+        {language === 'th' ? 'TH' : 'EN'}
+      </Text>
+    </Pressable>
+  );
+}
+
+function BackButton() {
+  const { copy } = useDisplayPreferences();
+  return (
+    <Pressable
+      accessibilityLabel={copy('ย้อนกลับ', 'Go back')}
+      accessibilityRole="button"
+      hitSlop={3}
+      onPress={() => router.back()}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radius.md,
+        backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle,
+        opacity: pressed ? 0.72 : 1,
+        transform: [{ scale: pressed ? 0.97 : 1 }],
+      })}
+    >
+      <AppIcon color={palette.textStrong} name="arrow-back" size={22} />
+    </Pressable>
+  );
+}
+
+function AuthArtwork() {
+  return (
+    <View
+      style={{
+        pointerEvents: 'none',
+        flex: 1,
+        justifyContent: 'space-between',
+        overflow: 'hidden',
+        backgroundColor: palette.primary,
+        padding: spacing.xxxl,
+      }}
+    >
+      <BrandMark inverse size={42} />
+      <MotionReveal distance={0} style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 360, height: 360, alignItems: 'center', justifyContent: 'center' }}>
+          <View
+            style={{
+              position: 'absolute',
+              width: 360,
+              height: 360,
+              borderWidth: 1,
+              borderColor: '#2F333A',
+              borderRadius: radius.full,
+            }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              width: 244,
+              height: 244,
+              borderWidth: 1,
+              borderColor: '#3A3E46',
+              borderRadius: radius.full,
+            }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              top: 52,
+              right: 84,
+              width: 14,
+              height: 14,
+              borderRadius: radius.full,
+              backgroundColor: palette.accent,
+            }}
+          />
+          <View
+            style={{
+              width: 104,
+              height: 104,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#464B54',
+              borderRadius: radius.full,
+              backgroundColor: '#202329',
+            }}
+          >
+            <BrandMark inverse showName={false} size={58} />
+          </View>
+        </View>
+      </MotionReveal>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ width: 36, height: 3, borderRadius: radius.full, backgroundColor: palette.accent }} />
+        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: '#444851' }} />
+        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: '#444851' }} />
+      </View>
+    </View>
+  );
+}
+
+export function AuthScreen({
+  title,
+  subtitle,
+  children,
+  showBack = false,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  showBack?: boolean;
+}) {
+  const { width } = useWindowDimensions();
+  const tablet = width >= breakpoints.tablet;
+
+  const form = (
+    <View
+      style={{
+        minWidth: 0,
+        flex: tablet ? 1 : undefined,
+        alignItems: 'center',
+        justifyContent: tablet ? 'center' : 'flex-start',
+        backgroundColor: palette.surface,
+        paddingHorizontal: tablet ? 52 : spacing.xxl,
+        paddingVertical: tablet ? spacing.xxxl : spacing.xl,
+      }}
+    >
+      <MotionReveal style={{ width: '100%', maxWidth: 440 }}>
+        <View style={{ gap: tablet ? 28 : spacing.xxl }}>
+          <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }}>
+            {showBack ? <BackButton /> : tablet ? <View /> : <BrandMark size={40} />}
+            <LanguageControl />
+          </View>
+
+          <View style={{ gap: subtitle ? spacing.sm : 0 }}>
+            <Text
+              accessibilityRole="header"
+              selectable
+              style={{
+                color: palette.textStrong,
+                fontSize: tablet ? 31 : 29,
+                lineHeight: tablet ? 39 : 36,
+                fontWeight: '800',
+                letterSpacing: -0.65,
+              }}
+            >
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text selectable style={{ color: palette.muted, fontSize: 14, lineHeight: 21 }}>
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+
+          {children}
+        </View>
+      </MotionReveal>
+    </View>
+  );
+
+  return (
+    <SafeAreaView edges={['top', 'right', 'bottom', 'left']} style={{ flex: 1, backgroundColor: palette.surface }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
-          style={{ backgroundColor: screenBackground }}
-          contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: tablet ? 'center' : 'flex-start', padding: tablet ? spacing.xxxl : spacing.lg }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={{ width: '100%', maxWidth: 980, flexDirection: tablet ? 'row' : 'column', borderWidth: tablet ? 1 : 0, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, overflow: 'hidden' }}>
-            {tablet ? <View style={{ width: '38%', justifyContent: 'space-between', backgroundColor: palette.primary, padding: spacing.xxxl }}><View style={{ gap: spacing.md }}><Text style={{ color: '#FB923C', fontSize: 14, fontWeight: '800' }}>DISHY</Text><Text style={{ color: palette.primaryText, fontSize: 30, lineHeight: 38, fontWeight: '700' }}>{copy('งานหน้าร้าน ครัว และหลังร้าน ในระบบเดียว', 'Front of house, kitchen, and back office in one place')}</Text></View><Text style={{ color: '#CBD5E1', fontSize: 14, lineHeight: 21 }}>{copy('ออกแบบสำหรับเจ้าของร้าน พนักงานเสิร์ฟ แคชเชียร์ และครัวระหว่างกะจริง', 'Built for restaurant owners, servers, cashiers, and kitchen teams during real shifts')}</Text></View> : null}
-            <View style={{ flex: 1, gap: spacing.xl, padding: tablet ? spacing.xxxl : spacing.sm }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: showBack ? 'space-between' : 'flex-end', gap: spacing.md }}>
-                {showBack ? <Pressable accessibilityLabel={copy('ย้อนกลับ', 'Go back')} onPress={() => router.back()} style={({ pressed }) => ({ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.borderStrong, borderRadius: radius.md, opacity: pressed ? 0.7 : 1 })}><Text style={{ color: palette.text, fontSize: 22, fontWeight: '700' }}>‹</Text></Pressable> : null}
-                <View
-                  accessibilityLabel={copy('ภาษา', 'Language')}
-                  accessibilityRole="radiogroup"
-                  style={{ flexDirection: 'row', gap: spacing.xs }}
-                >
-                  {([
-                    {
-                      label: 'ไทย',
-                      value: 'th' as const,
-                      accessibilityLabel: copy('ใช้ภาษาไทย', 'Use Thai'),
-                    },
-                    {
-                      label: 'EN',
-                      value: 'en' as const,
-                      accessibilityLabel: copy('ใช้ภาษาอังกฤษ', 'Use English'),
-                    },
-                  ]).map((option) => {
-                    const selected = language === option.value;
-                    return (
-                      <Pressable
-                        key={option.value}
-                        accessibilityLabel={option.accessibilityLabel}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected }}
-                        onPress={() => setLanguage(option.value)}
-                        style={({ pressed }) => ({
-                          minWidth: 46,
-                          minHeight: 40,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderWidth: 1,
-                          borderColor: selected ? palette.primary : palette.borderStrong,
-                          borderRadius: radius.md,
-                          backgroundColor: selected ? palette.primary : palette.surface,
-                          paddingHorizontal: spacing.sm,
-                          opacity: pressed ? 0.72 : 1,
-                        })}
-                      >
-                        <Text
-                          style={{
-                            color: selected ? palette.primaryText : palette.text,
-                            fontSize: 12,
-                            fontWeight: '800',
-                          }}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-              <View style={{ gap: spacing.sm }}>{!tablet ? <Text style={{ color: palette.accent, fontSize: 13, fontWeight: '800' }}>DISHY</Text> : null}<Text selectable style={typeScale.hero}>{title}</Text><Text selectable style={[typeScale.body, { color: palette.muted }]}>{subtitle}</Text></View>
-              {children}
-            </View>
+          <View style={{ minHeight: tablet ? 720 : undefined, flex: 1, flexDirection: tablet ? 'row' : 'column' }}>
+            {tablet ? <View style={{ width: '42%', minHeight: 720 }}><AuthArtwork /></View> : null}
+            {form}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -1,9 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { register } from '@/src/api/auth';
+import { AppIcon } from '@/src/components/app-icon';
 import { AuthScreen } from '@/src/components/auth-screen';
-import { Button, Feedback, Surface, TextField } from '@/src/components/ui';
+import { AppText as Text } from '@/src/components/app-text';
+import { Button, Feedback, TextField } from '@/src/components/ui';
 import {
   validateRegistrationInput,
   type RegistrationValidation,
@@ -16,6 +19,7 @@ import {
 import { invitationTokenFrom } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { palette, radius, spacing } from '@/src/theme';
 
 type RegistrationError = Exclude<RegistrationValidation, { valid: true }>['error'];
 
@@ -24,6 +28,7 @@ interface RegistrationFeedback {
   detail: string;
   tone: 'danger' | 'warning';
   field?: 'confirmPassword';
+  validationError?: RegistrationError;
 }
 
 type Copy = (thai: string, english: string) => string;
@@ -63,6 +68,7 @@ function failureMessage(error: unknown, copy: Copy): string {
 }
 
 export default function RegisterScreen() {
+  const { width } = useWindowDimensions();
   const { inviteToken: rawInviteToken } = useLocalSearchParams<{ inviteToken?: string }>();
   const inviteToken = invitationTokenFrom(rawInviteToken || '');
   const { signIn } = useAuth();
@@ -77,6 +83,7 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [feedback, setFeedback] = useState<RegistrationFeedback | null>(null);
   const [accountCreated, setAccountCreated] = useState(false);
+  const [optionalOpen, setOptionalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function goToLogin() {
@@ -111,6 +118,7 @@ export default function RegisterScreen() {
         detail: validationMessage(validation.error, copy),
         tone: 'danger',
         field: validation.error === 'password_mismatch' ? 'confirmPassword' : undefined,
+        validationError: validation.error,
       });
       return;
     }
@@ -154,87 +162,177 @@ export default function RegisterScreen() {
       title: copy('สร้างบัญชีแล้ว', 'Account created'),
       detail: copy(
         'ระบบเข้าสู่ระบบอัตโนมัติไม่ได้ บัญชีนี้พร้อมใช้งานแล้ว กรุณาเข้าสู่ระบบด้วยอีเมลและรหัสผ่านเดิม โดยไม่ต้องสมัครซ้ำ',
-        'Automatic sign-in was unsuccessful, but your account is ready. Sign in with the same email and password—there is no need to register again.',
+        'Automatic sign-in was unsuccessful, but your account is ready. Sign in with the same email and password; there is no need to register again.',
       ),
       tone: 'warning',
     });
   }
+
+  const feedbackTitle = feedback?.validationError
+    ? copy('ตรวจสอบข้อมูลอีกครั้ง', 'Check your information')
+    : feedback?.title;
+  const feedbackDetail = feedback?.validationError
+    ? validationMessage(feedback.validationError, copy)
+    : feedback?.detail;
 
   return (
     <AuthScreen
       title={copy('สร้างบัญชี', 'Create an account')}
       subtitle={inviteToken
         ? copy(
-          'สมัครและเข้าสู่ระบบ จากนั้น Dishy จะพากลับไปยืนยันคำเชิญนี้',
-          'Create an account and sign in, then Dishy will bring you back to accept this invitation.',
+          'สร้างบัญชีเพื่อเปิดคำเชิญนี้',
+          'Create an account to open this invitation.',
         )
-        : copy(
-          'สมัครเสร็จแล้วระบบจะเข้าสู่ระบบให้ทันที เพื่อเลือกร้านหรือสร้างร้านใหม่',
-          'After registration, you will be signed in immediately to choose or create a restaurant.',
-        )}
+        : undefined}
       showBack
     >
-      <Surface>
+      <View style={{ gap: spacing.xl }}>
         {feedback && !feedback.field ? (
-          <Feedback title={feedback.title} detail={feedback.detail} tone={feedback.tone} />
+          <Feedback title={feedbackTitle || ''} detail={feedbackDetail} tone={feedback.tone} />
         ) : null}
 
         {accountCreated ? (
           <Button
+            icon="log-in-outline"
             label={copy('ไปหน้าเข้าสู่ระบบ', 'Go to sign in')}
             onPress={goToLogin}
           />
         ) : (
           <>
+            <View style={{ flexDirection: width >= 360 ? 'row' : 'column', gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  icon="person-outline"
+                  label={copy('ชื่อ', 'First name')}
+                  autoComplete="given-name"
+                  textContentType="givenName"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <TextField
+                  icon="person-outline"
+                  label={copy('นามสกุล', 'Last name')}
+                  autoComplete="family-name"
+                  textContentType="familyName"
+                  value={lastName}
+                  onChangeText={setLastName}
+                />
+              </View>
+            </View>
             <TextField
-              label={copy('ชื่อ', 'First name')}
-              value={firstName}
-              onChangeText={setFirstName}
-            />
-            <TextField
-              label={copy('นามสกุล', 'Last name')}
-              value={lastName}
-              onChangeText={setLastName}
-            />
-            <TextField
-              label={copy('ชื่อเล่นในร้าน', 'Restaurant nickname')}
-              value={nickname}
-              onChangeText={setNickname}
-            />
-            <TextField
+              icon="mail-outline"
               label={copy('อีเมล', 'Email')}
+              autoComplete="email"
+              textContentType="emailAddress"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
               placeholder="you@example.com"
             />
             <TextField
-              label={copy('เบอร์โทร', 'Phone number')}
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-            />
-            <TextField
-              label={copy('รหัสผ่าน (8–72 ไบต์)', 'Password (8–72 bytes)')}
+              icon="lock-closed-outline"
+              label={copy('รหัสผ่าน', 'Password')}
+              autoComplete="new-password"
+              textContentType="newPassword"
               value={password}
               onChangeText={updatePassword}
               secureTextEntry
+              revealLabel={copy('แสดง', 'Show')}
+              hideLabel={copy('ซ่อน', 'Hide')}
             />
             <TextField
+              icon="shield-checkmark-outline"
               label={copy('ยืนยันรหัสผ่าน', 'Confirm password')}
+              autoComplete="new-password"
+              textContentType="newPassword"
               value={confirmPassword}
               onChangeText={updateConfirmPassword}
               secureTextEntry
-              error={feedback?.field === 'confirmPassword' ? feedback.detail : null}
+              revealLabel={copy('แสดง', 'Show')}
+              hideLabel={copy('ซ่อน', 'Hide')}
+              error={feedback?.field === 'confirmPassword' ? feedbackDetail : null}
             />
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: optionalOpen }}
+              onPress={() => setOptionalOpen((current) => !current)}
+              style={({ pressed }) => ({
+                minHeight: 48,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: radius.md,
+                backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle,
+                paddingHorizontal: spacing.md,
+                opacity: pressed ? 0.72 : 1,
+              })}
+            >
+              <AppIcon color={palette.muted} name="add-circle-outline" size={19} />
+              <Text style={{ flex: 1, color: palette.text, fontSize: 13, fontWeight: '700' }}>
+                {copy('เพิ่มชื่อเล่นหรือเบอร์โทร', 'Add nickname or phone')}
+              </Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>
+                {copy('ไม่บังคับ', 'Optional')}
+              </Text>
+              <AppIcon color={palette.muted} name={optionalOpen ? 'chevron-up' : 'chevron-down'} size={17} />
+            </Pressable>
+
+            {optionalOpen ? (
+              <View style={{ gap: spacing.md }}>
+                <TextField
+                  icon="happy-outline"
+                  label={copy('ชื่อเล่น', 'Nickname')}
+                  value={nickname}
+                  onChangeText={setNickname}
+                />
+                <TextField
+                  icon="call-outline"
+                  label={copy('เบอร์โทร', 'Phone number')}
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+            ) : null}
+
             <Button
-              label={copy('สร้างบัญชีและเข้าสู่ระบบ', 'Create account and sign in')}
+              icon="arrow-forward"
+              label={copy('สร้างบัญชี', 'Create account')}
               onPress={submit}
               loading={submitting}
             />
+
+            <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+              <Text style={{ color: palette.muted, fontSize: 13 }}>
+                {copy('มีบัญชีแล้ว?', 'Already have an account?')}
+              </Text>
+              <Pressable
+                accessibilityRole="link"
+                disabled={submitting}
+                hitSlop={10}
+                onPress={goToLogin}
+                style={({ pressed }) => ({
+                  minHeight: 44,
+                  minWidth: 44,
+                  justifyContent: 'center',
+                  opacity: submitting ? 0.42 : pressed ? 0.58 : 1,
+                })}
+              >
+                <Text style={{ color: palette.textStrong, fontSize: 13, fontWeight: '800' }}>
+                  {copy('เข้าสู่ระบบ', 'Sign in')}
+                </Text>
+              </Pressable>
+            </View>
           </>
         )}
-      </Surface>
+      </View>
     </AuthScreen>
   );
 }
