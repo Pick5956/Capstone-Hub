@@ -7,14 +7,33 @@ import {
   getNavigationIndexByRouteName,
   getPagerSceneTranslateXFromPosition,
   resetRouteStack,
+  resolvePhoneNavigationIndicatorMetrics,
+  resolvePagerAnimationSettlement,
+  resolvePagerSwipeSettlement,
   shouldOpenSettings,
 } from './navigation-runtime.ts';
+
+test('root-level resets replace without dispatching an unhandled pop-to-top action', () => {
+  const actions = [];
+
+  resetRouteStack(
+    {
+      canDismiss: () => false,
+      dismissAll: () => actions.push('dismiss-all'),
+      replace: (href) => actions.push(`replace:${href}`),
+    },
+    '/login',
+  );
+
+  assert.deepEqual(actions, ['replace:/login']);
+});
 
 test('restaurant switching dismisses the prior stack before entering the new workspace', () => {
   const actions = [];
 
   resetRouteStack(
     {
+      canDismiss: () => true,
       dismissAll: () => actions.push('dismiss-all'),
       replace: (href) => actions.push(`replace:${href}`),
     },
@@ -30,6 +49,7 @@ test('auth and restaurant invalidation targets use the same non-backtrackable re
 
     resetRouteStack(
       {
+        canDismiss: () => true,
         dismissAll: () => actions.push('dismiss-all'),
         replace: (href) => actions.push(`replace:${href}`),
       },
@@ -74,6 +94,298 @@ test('slow short movement is not classified as a tab swipe', () => {
   assert.equal(
     classifyHorizontalSwipe({ deltaX: 24, deltaY: 3, velocityX: 180 }),
     null,
+  );
+});
+
+test('phone navigation indicator stays inside every dock slot on narrow screens', () => {
+  const dockWidth = 288;
+
+  for (const itemCount of [1, 2, 3, 5]) {
+    const metrics = resolvePhoneNavigationIndicatorMetrics(dockWidth, itemCount, 4);
+
+    assert.ok(metrics);
+    assert.equal(metrics.slotWidth, dockWidth / itemCount);
+    assert.equal(metrics.indicatorInset, 4);
+    assert.equal(metrics.indicatorWidth, metrics.slotWidth - 8);
+
+    for (const position of [0, (itemCount - 1) / 2, itemCount - 1]) {
+      const left = metrics.indicatorInset + position * metrics.slotWidth;
+      const right = left + metrics.indicatorWidth;
+
+      assert.ok(left >= 0);
+      assert.ok(right <= dockWidth);
+    }
+  }
+});
+
+test('phone navigation indicator rejects unusable dock geometry', () => {
+  assert.equal(resolvePhoneNavigationIndicatorMetrics(0, 5, 4), null);
+  assert.equal(resolvePhoneNavigationIndicatorMetrics(Number.NaN, 5, 4), null);
+  assert.equal(resolvePhoneNavigationIndicatorMetrics(288, 0, 4), null);
+  assert.equal(resolvePhoneNavigationIndicatorMetrics(288, 2.5, 4), null);
+  assert.equal(resolvePhoneNavigationIndicatorMetrics(288, 5, -1), null);
+});
+
+test('a released short drag settles exactly on the committed page', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+  const settlement = resolvePagerSwipeSettlement(
+    items,
+    1,
+    { deltaX: -17, deltaY: 2, velocityX: -120 },
+    390,
+  );
+
+  assert.deepEqual(settlement, { targetIndex: 1, shouldNavigate: false });
+  const interruptedReturn = resolvePagerAnimationSettlement({
+    committedIndex: 1,
+    finished: false,
+    ownsTransition: true,
+    targetIndex: settlement.targetIndex,
+  });
+  assert.deepEqual(interruptedReturn, { completed: false, position: 1 });
+  assert.equal(
+    getPagerSceneTranslateXFromPosition(1, interruptedReturn.position, 390),
+    0,
+  );
+});
+
+test('a pager swipe commits at half the viewport without needing release velocity', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -194, deltaY: 3, velocityX: -299 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: 194, deltaY: 3, velocityX: 299 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -195, deltaY: 3, velocityX: -1 },
+      390,
+    ),
+    { targetIndex: 2, shouldNavigate: true },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: 195, deltaY: 3, velocityX: 1 },
+      390,
+    ),
+    { targetIndex: 0, shouldNavigate: true },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -195, deltaY: 3, velocityX: Number.POSITIVE_INFINITY },
+      390,
+    ),
+    { targetIndex: 2, shouldNavigate: true },
+  );
+});
+
+test('a deliberate fast flick commits before half the viewport in either direction', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -5, deltaY: 1, velocityX: -300 },
+      390,
+    ),
+    { targetIndex: 2, shouldNavigate: true },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: 5, deltaY: 1, velocityX: 300 },
+      390,
+    ),
+    { targetIndex: 0, shouldNavigate: true },
+  );
+});
+
+test('a short pager movement must meet both flick speed and minimum distance', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -5, deltaY: 1, velocityX: -299 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -4, deltaY: 1, velocityX: -4_000 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+});
+
+test('a fast flick cannot commit when its release velocity reverses direction', () => {
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      [{ href: '/home' }, { href: '/tables' }, { href: '/kitchen' }],
+      1,
+      { deltaX: -5, deltaY: 1, velocityX: 4_000 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+});
+
+test('a pager swipe still needs to be predominantly horizontal at half the viewport', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -205, deltaY: 205, velocityX: -4_000 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -5, deltaY: 5, velocityX: -4_000 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+});
+
+test('an invalid pager viewport cannot commit navigation', () => {
+  assert.equal(
+    resolvePagerSwipeSettlement(
+      [{ href: '/home' }, { href: '/tables' }],
+      0,
+      { deltaX: -250, deltaY: 0 },
+      0,
+    ),
+    null,
+  );
+});
+
+test('a swipe beyond either pager edge settles on the current page', () => {
+  const items = [{ href: '/home' }, { href: '/tables' }];
+
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      0,
+      { deltaX: 210, deltaY: 4, velocityX: 320 },
+      390,
+    ),
+    { targetIndex: 0, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -210, deltaY: 4, velocityX: -320 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      0,
+      { deltaX: 5, deltaY: 1, velocityX: 300 },
+      390,
+    ),
+    { targetIndex: 0, shouldNavigate: false },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      1,
+      { deltaX: -5, deltaY: 1, velocityX: -300 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+  );
+});
+
+test('an interrupted current pager animation rolls back to the committed page', () => {
+  assert.deepEqual(
+    resolvePagerAnimationSettlement({
+      committedIndex: 1,
+      finished: false,
+      ownsTransition: true,
+      targetIndex: 2,
+    }),
+    { completed: false, position: 1 },
+  );
+});
+
+test('a stale interrupted pager animation leaves the newer transition alone', () => {
+  assert.equal(
+    resolvePagerAnimationSettlement({
+      committedIndex: 1,
+      finished: false,
+      ownsTransition: false,
+      targetIndex: 2,
+    }),
+    null,
+  );
+});
+
+test('a completed pager animation settles exactly on its target page', () => {
+  assert.deepEqual(
+    resolvePagerAnimationSettlement({
+      committedIndex: 1,
+      finished: true,
+      ownsTransition: true,
+      targetIndex: 2,
+    }),
+    { completed: true, position: 2 },
   );
 });
 

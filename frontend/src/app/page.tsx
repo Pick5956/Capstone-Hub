@@ -7,6 +7,7 @@ import "swiper/css/pagination";
 
 import { Fragment } from "react";
 import AppLogo from "@/src/components/shared/AppLogo";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
@@ -510,7 +511,7 @@ function PhoneMockup({ label, language }: { label: string; language: Language })
               <Store className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" strokeWidth={2} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[8px] font-semibold sm:text-[11px] md:text-sm">Dishy</p>
+              <AppWordmark decorative height={10} className="text-gray-950" />
               <p className="truncate text-[6px] text-gray-500 sm:text-[9px] md:text-[11px]">{copy.shift}</p>
             </div>
             <span className="rounded bg-emerald-50 px-1 py-0.5 text-[6px] font-semibold text-emerald-700 sm:px-1.5 sm:text-[8px] md:text-[10px]">
@@ -857,11 +858,12 @@ export default function LandingPage() {
       >
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
-            <AppLogo size={34} priority />
+            <AppLogo decorative size={34} priority />
             <div className="hidden leading-none sm:block">
-              <p className={`text-[16px] font-bold tracking-[-0.025em] ${headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}`}>
-                Dishy
-              </p>
+              <AppWordmark
+                height={18}
+                className={headerOnImage ? "text-white" : "text-gray-950 dark:text-white"}
+              />
               <p className={`mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] ${headerOnImage ? "text-white/62" : "text-gray-400"}`}>
                 Restaurant operations
               </p>
@@ -1083,8 +1085,8 @@ export default function LandingPage() {
       <footer className="border-t border-gray-100 bg-white py-8 dark:border-gray-800 dark:bg-gray-950">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-sm text-gray-500 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
-            <AppLogo size={28} />
-            <span className="font-semibold text-gray-900 dark:text-white">Dishy</span>
+            <AppLogo decorative size={28} />
+            <AppWordmark height={16} className="text-gray-900 dark:text-white" />
           </div>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
             <span>{copy.footerProject}</span>

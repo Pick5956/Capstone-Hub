@@ -5,6 +5,7 @@ import { useTheme } from "@/src/providers/ThemeProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import AppLogo from "@/src/components/shared/AppLogo";
+import AppWordmark from "@/src/components/shared/AppWordmark";
 
 function ThemeButton() {
   const { theme, mounted, toggle } = useTheme();
@@ -48,9 +49,9 @@ export default function NotFoundUI() {
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-950/95 backdrop-blur">
         <div className="h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           <Link href="/" className="flex items-center gap-2.5">
-            <AppLogo size={36} />
+            <AppLogo decorative size={36} />
             <div className="leading-none">
-              <p className="text-[16px] font-bold tracking-[-0.025em] text-gray-950 dark:text-white">Dishy</p>
+              <AppWordmark height={18} className="text-gray-950 dark:text-white" />
               <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-400">Restaurant operations</p>
             </div>
           </Link>

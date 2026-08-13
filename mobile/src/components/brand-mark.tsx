@@ -1,7 +1,7 @@
-import { View } from 'react-native';
-
-import { AppText as Text } from '@/src/components/app-text';
+import { Image, View } from 'react-native';
 import { palette, radius, spacing } from '@/src/theme';
+
+const WORDMARK_ASPECT_RATIO = 520 / 190;
 
 export function BrandMark({
   inverse = false,
@@ -12,52 +12,51 @@ export function BrandMark({
   showName?: boolean;
   size?: number;
 }) {
+  const wordmarkHeight = size >= 44 ? 23 : 20;
+
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+    <View
+      accessibilityLabel="Dishy"
+      accessibilityRole="image"
+      accessible
+      style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}
+    >
       <View
         style={{
           width: size,
           height: size,
-          alignItems: 'center',
-          justifyContent: 'center',
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: inverse ? 'rgba(255,255,255,0.24)' : palette.border,
           borderRadius: radius.md,
-          backgroundColor: inverse ? palette.surface : palette.primary,
+          backgroundColor: palette.surface,
         }}
       >
-        <Text
-          allowFontScaling={false}
+        <Image
+          accessibilityElementsHidden
+          accessibilityIgnoresInvertColors
+          importantForAccessibility="no-hide-descendants"
+          resizeMode="cover"
+          source={require('../../assets/images/brand-logo.png')}
           style={{
-            color: palette.accent,
-            fontSize: Math.round(size * 0.46),
-            fontWeight: '900',
-            letterSpacing: -0.8,
-          }}
-        >
-          D
-        </Text>
-        <View
-          style={{
-            position: 'absolute',
-            right: Math.max(5, Math.round(size * 0.16)),
-            bottom: Math.max(5, Math.round(size * 0.16)),
-            width: Math.max(3, Math.round(size * 0.1)),
-            height: Math.max(3, Math.round(size * 0.1)),
-            borderRadius: radius.full,
-            backgroundColor: inverse ? palette.primary : palette.surface,
+            width: size - 2,
+            height: size - 2,
           }}
         />
       </View>
       {showName ? (
-        <Text
+        <Image
+          accessibilityElementsHidden
+          accessibilityIgnoresInvertColors
+          importantForAccessibility="no-hide-descendants"
+          resizeMode="contain"
+          source={require('../../assets/images/dishy-wordmark.png')}
           style={{
-            color: inverse ? palette.primaryText : palette.textStrong,
-            fontSize: size >= 44 ? 19 : 17,
-            fontWeight: '800',
-            letterSpacing: -0.35,
+            width: Math.round(wordmarkHeight * WORDMARK_ASPECT_RATIO),
+            height: wordmarkHeight,
+            tintColor: inverse ? palette.primaryText : palette.textStrong,
           }}
-        >
-          Dishy
-        </Text>
+        />
       ) : null}
     </View>
   );
