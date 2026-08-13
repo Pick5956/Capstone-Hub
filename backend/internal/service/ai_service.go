@@ -549,6 +549,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		return nil, err
 	}
 
+	// A two-part question ("ยอดขายเท่าไหร่ แล้วเมนูไหนขายดีสุด") would otherwise be
+	// answered for the first concern only. Split it and answer each half from the
+	// deterministic paths — but only when BOTH halves resolve, so it never emits a
+	// confident half-guess. Runs first so the single-tool path below does not claim
+	// the question for its first concern.
+	if compoundResp, handled := s.answerCompoundQuestion(restaurantID, question, snapshot); handled {
+		aiStage("flow", "compound question → answered both parts deterministically")
+		return compoundResp, nil
+	}
+
 	// A reorder-forecast question is answered from the deterministic tool no
 	// matter how the router classified it: "ควร" makes it look like a
 	// recommendation, so it otherwise falls to a free-form answer that can leak
