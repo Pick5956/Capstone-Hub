@@ -71,3 +71,38 @@ func detectAmbiguousQuestion(question string) (string, bool) {
 
 	return "", false
 }
+
+// A referential fragment ("อันดับล่ะ", "ทำไม", "รองลงมา") only makes sense as a
+// follow-up. These prefixes point back at a previous turn.
+var referentialFragmentPrefix = regexp.MustCompile(`^(แล้ว|ทำไม|เพราะอะไร|เพราะ|อันดับ|อันที่|ตัวที่|รองลงมา|อันแรก|อันสอง|อันถัดไป)`)
+
+func hasAssistantHistory(history []AIConversationMessage) bool {
+	for _, m := range history {
+		if m.Role == "assistant" && strings.TrimSpace(m.Content) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// detectDanglingFragment catches a referential follow-up fragment that arrives
+// with NO prior conversation to resolve it against — asking what it refers to
+// instead of guessing. When there IS assistant history, it returns ok=false so
+// the normal context resolver can rewrite the fragment into a full question.
+func detectDanglingFragment(question string, history []AIConversationMessage) (string, bool) {
+	if hasAssistantHistory(history) {
+		return "", false // there is context to resolve against — not dangling
+	}
+	q := strings.ToLower(strings.TrimSpace(question))
+	rc := len([]rune(q))
+	if rc == 0 || rc > 20 {
+		return "", false // only short, isolated fragments qualify
+	}
+	if clarifyContainsAny(q, clarifyDomainWords) {
+		return "", false // a concrete subject is present → not a bare reference
+	}
+	if referentialFragmentPrefix.MatchString(q) {
+		return "ดูเหมือนคุณถามต่อจากเรื่องก่อนหน้า แต่ตอนนี้ยังไม่มีบทสนทนาก่อนครับ — อยากถามเรื่องอะไร? เช่น เมนูขายดี, กำไรเมนู, หรือยอดขายครับ", true
+	}
+	return "", false
+}

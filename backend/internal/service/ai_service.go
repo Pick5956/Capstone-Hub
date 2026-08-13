@@ -327,7 +327,12 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// ask back with the likely meanings instead of guessing one (the confidence
 	// gate alone almost never fires for these — measured clarify rate ~0%).
 	if !structuredFollowUp {
-		if clarifyMsg, ok := detectAmbiguousQuestion(askedQuestion); ok {
+		clarifyMsg, ok := detectAmbiguousQuestion(askedQuestion)
+		if !ok {
+			// A referential fragment ("อันดับล่ะ") with no history to resolve it.
+			clarifyMsg, ok = detectDanglingFragment(askedQuestion, history)
+		}
+		if ok {
 			aiStage("flow", "deterministic ambiguity → clarify")
 			return &AIAskResponse{
 				Answer:   clarifyMsg,

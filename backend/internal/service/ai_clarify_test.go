@@ -49,3 +49,42 @@ func TestDetectAmbiguousQuestion(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectDanglingFragment(t *testing.T) {
+	withHistory := []AIConversationMessage{
+		{Role: "user", Content: "เมนูขายดีอันดับ 1"},
+		{Role: "assistant", Content: "เมนูขายดีอันดับ 1 คือ ผัดกะเพรา ครับ"},
+	}
+
+	cases := []struct {
+		name        string
+		question    string
+		history     []AIConversationMessage
+		wantClarify bool
+	}{
+		// Referential fragment, NO history → ask what it refers to.
+		{"rank fragment no history", "อันดับล่ะ", nil, true},
+		{"why no history", "ทำไม", nil, true},
+		{"next one no history", "รองลงมา", nil, true},
+		{"second one no history", "แล้วอันที่สองล่ะ", nil, true},
+
+		// Same fragment WITH assistant history → let the resolver handle it.
+		{"rank fragment with history", "อันดับล่ะ", withHistory, false},
+		{"why with history", "ทำไม", withHistory, false},
+
+		// Clear/standalone questions → never treated as dangling.
+		{"clear sales question", "ยอดขายวันนี้เท่าไหร่", nil, false},
+		{"has subject", "อันดับขายดีของเมนู", nil, false},
+		{"greeting", "สวัสดีครับ", nil, false},
+		{"empty", "", nil, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			msg, ok := detectDanglingFragment(tc.question, tc.history)
+			if ok != tc.wantClarify {
+				t.Fatalf("detectDanglingFragment(%q, hist=%d) ok=%v, want %v (msg=%q)", tc.question, len(tc.history), ok, tc.wantClarify, msg)
+			}
+		})
+	}
+}
