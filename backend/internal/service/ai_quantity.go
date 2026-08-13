@@ -50,11 +50,13 @@ func (s *AIService) answerTotalQuantityQuery(restaurantID uint, question string)
 			label, formatInt(qty), formatMoney(revenue))
 	}
 
+	hinted, assumed := appendScopeHint(question, answer, false)
 	return &AIAskResponse{
-		Answer:   appendScopeHint(question, answer, false),
-		Intent:   AIIntentAnalysis,
-		Task:     AITaskRetrieveFact,
-		Model:    "local-total-quantity",
-		Snapshot: AISnapshot{},
+		Answer:       hinted,
+		ScopeAssumed: assumed,
+		Intent:       AIIntentAnalysis,
+		Task:         AITaskRetrieveFact,
+		Model:        "local-total-quantity",
+		Snapshot:     AISnapshot{},
 	}, true, nil
 }

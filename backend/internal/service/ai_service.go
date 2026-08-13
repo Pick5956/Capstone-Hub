@@ -645,13 +645,15 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
 		} else if answer, ok := localToolAnswer(result); ok {
 			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
+			hinted, assumed := appendScopeHint(question, answer, todayHasNoSales(snapshot))
 			return &AIAskResponse{
-				Answer:   appendScopeHint(question, answer, todayHasNoSales(snapshot)),
-				Intent:   intent,
-				Task:     routerResult.Task,
-				Tool:     toolToRun,
-				Model:    "local-tool-first",
-				Snapshot: snapshot,
+				Answer:       hinted,
+				ScopeAssumed: assumed,
+				Intent:       intent,
+				Task:         routerResult.Task,
+				Tool:         toolToRun,
+				Model:        "local-tool-first",
+				Snapshot:     snapshot,
 			}, nil
 		}
 	}

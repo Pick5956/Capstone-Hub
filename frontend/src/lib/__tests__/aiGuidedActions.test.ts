@@ -59,3 +59,34 @@ describe("getGuidedActions derives chips from the structured tool", () => {
     expect(ids).toContain("fu-trend");
   });
 });
+
+describe("getGuidedActions offers period pivots when the backend assumed scope", () => {
+  it("a scope-less sales answer surfaces day/month pivots as the primary chips", () => {
+    const actions = getGuidedActions(
+      "ยอดขายเท่าไหร่",
+      "ยอดขายรวมช่วง 30 วันล่าสุดคือ ...",
+      ownerMembership,
+      "th",
+      "get_sales_summary",
+      true, // scope_assumed from the backend
+    );
+    const ids = actions.map((action) => action.id);
+    expect(ids).toContain("fu-scope-today");
+    expect(ids).toContain("fu-scope-month");
+    expect(ids).toContain("fu-scope-prev");
+    // The period pivots win the slice(0, 3) over the generic sales chips.
+    expect(ids).not.toContain("fu-trend");
+    // Clicking re-asks the SAME metric, scoped to the chosen period.
+    expect(actions.find((a) => a.id === "fu-scope-today")?.prompt).toBe("ยอดขายวันนี้เท่าไหร่");
+  });
+
+  it("does not show period pivots without the flag", () => {
+    const actions = getGuidedActions("ยอดขายวันนี้เท่าไหร่", "...", ownerMembership, "th", "get_sales_summary");
+    expect(actions.map((a) => a.id)).not.toContain("fu-scope-today");
+  });
+
+  it("a profit question re-asks กำไร, not ยอดขาย", () => {
+    const actions = getGuidedActions("กำไรเท่าไหร่", "กำไร ...", ownerMembership, "th", undefined, true);
+    expect(actions.find((a) => a.id === "fu-scope-prev")?.prompt).toBe("กำไรเดือนที่แล้วเท่าไหร่");
+  });
+});

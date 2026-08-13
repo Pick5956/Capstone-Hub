@@ -63,14 +63,18 @@ func todayHasNoSales(snapshot AISnapshot) bool {
 // metric answer, and nothing to anything else. When today has no sales it uses
 // that to explain why the rolling window was chosen — the touch that makes the
 // assistant read as aware of its own assumption rather than guessing.
-func appendScopeHint(question, answer string, todayEmpty bool) string {
+//
+// It also returns whether it fired, so the response's ScopeAssumed flag stays in
+// lock-step with the note — the client then trusts one boolean instead of
+// re-deriving the "no scope stated" test and drifting out of sync.
+func appendScopeHint(question, answer string, todayEmpty bool) (string, bool) {
 	if !isScopelessMetricQuestion(question) {
-		return answer
+		return answer, false
 	}
 	if todayEmpty {
 		return answer + "\n\nวันนี้ยังไม่มีออเดอร์ ผมเลยสรุป " + analysisWindowLabel() +
-			"ให้ก่อนนะครับ — อยากดูเดือนนี้ หรือเดือนก่อน บอกได้เลย"
+			"ให้ก่อนนะครับ — อยากดูเดือนนี้ หรือเดือนก่อน บอกได้เลย", true
 	}
 	return answer + "\n\nผมสรุปเป็น " + analysisWindowLabel() +
-		"ให้ก่อนนะครับ — อยากดูวันนี้ เดือนนี้ หรือเดือนก่อน บอกได้เลย"
+		"ให้ก่อนนะครับ — อยากดูวันนี้ เดือนนี้ หรือเดือนก่อน บอกได้เลย", true
 }

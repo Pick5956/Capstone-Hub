@@ -162,6 +162,9 @@ export type AIAskResponse = {
   tool?: "get_lowest_margin_menu" | string;
   model: string;
   snapshot: AISnapshot;
+  // True when the answer covers a default time window the user did not ask for
+  // (e.g. "ยอดขายเท่าไหร่" → last 30 days). Drives the period-pivot chips.
+  scope_assumed?: boolean;
   conversation_id?: string;
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;

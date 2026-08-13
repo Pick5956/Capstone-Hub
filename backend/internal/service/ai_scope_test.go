@@ -34,21 +34,24 @@ func TestIsScopelessMetricQuestion(t *testing.T) {
 
 func TestAppendScopeHint(t *testing.T) {
 	// Scope-less + today empty → names the empty day as the reason for the window.
-	got := appendScopeHint("ยอดขายเท่าไหร่", "ยอดขายรวม 100 บาท", true)
+	got, assumed := appendScopeHint("ยอดขายเท่าไหร่", "ยอดขายรวม 100 บาท", true)
+	if !assumed {
+		t.Fatal("scope-less question should report assumed=true")
+	}
 	if !strings.Contains(got, "วันนี้ยังไม่มีออเดอร์") || !strings.Contains(got, analysisWindowLabel()) {
 		t.Fatalf("empty-today hint missing: %s", got)
 	}
 	// Scope-less, today has data → still offers to change the period.
-	got = appendScopeHint("กำไรเท่าไหร่", "กำไร 50 บาท", false)
-	if !strings.Contains(got, "อยากดู") {
-		t.Fatalf("default hint should invite a period change: %s", got)
+	got, assumed = appendScopeHint("กำไรเท่าไหร่", "กำไร 50 บาท", false)
+	if !assumed || !strings.Contains(got, "อยากดู") {
+		t.Fatalf("default hint should invite a period change: %s (assumed=%v)", got, assumed)
 	}
-	// A scoped question is left untouched.
-	if got := appendScopeHint("ยอดขายวันนี้เท่าไหร่", "X", true); got != "X" {
-		t.Fatalf("scoped question must not get a hint: %s", got)
+	// A scoped question is left untouched, and flags assumed=false.
+	if got, assumed := appendScopeHint("ยอดขายวันนี้เท่าไหร่", "X", true); got != "X" || assumed {
+		t.Fatalf("scoped question must not get a hint: %s (assumed=%v)", got, assumed)
 	}
 	// A non-metric question is left untouched.
-	if got := appendScopeHint("เมนูไหนขายดีสุด", "X", true); got != "X" {
-		t.Fatalf("non-metric question must not get a hint: %s", got)
+	if got, assumed := appendScopeHint("เมนูไหนขายดีสุด", "X", true); got != "X" || assumed {
+		t.Fatalf("non-metric question must not get a hint: %s (assumed=%v)", got, assumed)
 	}
 }

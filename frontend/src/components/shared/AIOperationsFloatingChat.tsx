@@ -463,7 +463,7 @@ export default function AIOperationsFloatingChat() {
         actions: data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool)
+            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool, data.scope_assumed)
             : undefined,
       };
       
