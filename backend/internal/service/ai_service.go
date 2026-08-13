@@ -646,7 +646,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		} else if answer, ok := localToolAnswer(result); ok {
 			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
 			return &AIAskResponse{
-				Answer:   answer,
+				Answer:   appendScopeHint(question, answer, todayHasNoSales(snapshot)),
 				Intent:   intent,
 				Task:     routerResult.Task,
 				Tool:     toolToRun,

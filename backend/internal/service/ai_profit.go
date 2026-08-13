@@ -97,7 +97,7 @@ func (s *AIService) answerTotalProfitQuery(restaurantID uint, question string) (
 	}
 
 	return &AIAskResponse{
-		Answer:   answer,
+		Answer:   appendScopeHint(question, answer, false),
 		Intent:   AIIntentAnalysis,
 		Task:     AITaskRetrieveFact,
 		Model:    "local-total-profit",

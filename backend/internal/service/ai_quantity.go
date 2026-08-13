@@ -51,7 +51,7 @@ func (s *AIService) answerTotalQuantityQuery(restaurantID uint, question string)
 	}
 
 	return &AIAskResponse{
-		Answer:   answer,
+		Answer:   appendScopeHint(question, answer, false),
 		Intent:   AIIntentAnalysis,
 		Task:     AITaskRetrieveFact,
 		Model:    "local-total-quantity",
