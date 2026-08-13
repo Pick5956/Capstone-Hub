@@ -425,6 +425,20 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 
 	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
 	if !needsData {
+		// Open-ended strategy asks ("จะเพิ่มกำไรยังไง", "ควรทำโปรโมชั่นอะไร") are
+		// classified as advice with needs_data=false, so they would get generic
+		// textbook answers from the conversational LLM. Ground them in real data: build
+		// the snapshot and answer from the deterministic insights + snapshot levers, so
+		// the advice names this shop's actual menus and figures instead of a stock list.
+		if isAdvisoryStrategyQuestion(question) {
+			if adviceSnapshot, snapErr := s.buildSnapshot(restaurantID); snapErr != nil {
+				aiStage("warn", "strategy advice snapshot failed (%v) → conversational LLM", snapErr)
+			} else if adviceResp, handled := s.answerStrategyAdvice(question, adviceSnapshot); handled {
+				aiStage("flow", "strategy advice (conversational branch) → grounded in deterministic insights")
+				return adviceResp, nil
+			}
+		}
+
 		aiStage("flow", "conversational — no snapshot (task=%s)", routerResult.Task)
 		request := aiProviderAnswerRequest{
 			Question: question,
@@ -630,6 +644,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 				Snapshot: snapshot,
 			}, nil
 		}
+	}
+
+	// Open-ended strategy asks ("จะเพิ่มกำไรยังไง", "ควรโฟกัสอะไร") have no single
+	// tool and would otherwise get generic textbook advice from the LLM. Ground them
+	// in the deterministic insights + snapshot levers instead, so the advice names
+	// this shop's real menus and numbers. Runs last, so any specific tool above still
+	// wins; only the truly open-ended asks reach here.
+	if adviceResp, handled := s.answerStrategyAdvice(question, snapshot); handled {
+		aiStage("flow", "strategy advice → grounded in deterministic insights")
+		return adviceResp, nil
 	}
 
 	// executeAnalytical runs one provider adapter and handles CALL_TOOL responses.
