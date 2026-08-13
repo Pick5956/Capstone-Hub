@@ -466,6 +466,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
 	}
 
+	// Store-wide profit ("กำไรรวมเดือนนี้เท่าไหร่") is revenue − cost, a different
+	// figure from the sales total below. It runs first so a "กำไร…เดือนนี้" question
+	// is not siphoned off as a plain sales question.
+	if profitResp, handled, prErr := s.answerTotalProfitQuery(restaurantID, question); handled {
+		aiStage("flow", "total-profit query — range-scoped revenue minus cost")
+		return profitResp, nil
+	} else if prErr != nil {
+		aiStage("warn", "total-profit query failed (%v) → snapshot flow", prErr)
+	}
+
 	// Tier 1-1: a dated total-sales question (a specific day, a named month, or a
 	// month-to-month comparison) is answered directly from range queries, so it is
 	// not limited to the rolling snapshot window.
