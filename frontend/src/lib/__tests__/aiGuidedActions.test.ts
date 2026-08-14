@@ -89,4 +89,9 @@ describe("getGuidedActions offers period pivots when the backend assumed scope",
     const actions = getGuidedActions("กำไรเท่าไหร่", "กำไร ...", ownerMembership, "th", undefined, true);
     expect(actions.find((a) => a.id === "fu-scope-prev")?.prompt).toBe("กำไรเดือนที่แล้วเท่าไหร่");
   });
+
+  it("a dish-count question re-asks กี่จาน, not ยอดขาย", () => {
+    const actions = getGuidedActions("ขายได้กี่จานทั้งหมด", "... ขายได้รวม ... จาน", ownerMembership, "th", undefined, true);
+    expect(actions.find((a) => a.id === "fu-scope-today")?.prompt).toBe("วันนี้ขายได้กี่จาน");
+  });
 });
