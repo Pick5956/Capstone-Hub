@@ -46,6 +46,7 @@ func TestMembershipResponseUsesSafeUserSummary(t *testing.T) {
 }
 
 func TestInvitationResponsesExposeTokenOnlyToAuthorizedAdminShape(t *testing.T) {
+	displayNameOverride := "หน้าร้าน"
 	invitation := &entity.Invitation{
 		RestaurantID: 3,
 		RoleID:       2,
@@ -59,9 +60,10 @@ func TestInvitationResponsesExposeTokenOnlyToAuthorizedAdminShape(t *testing.T) 
 			PromptPayQRImage: "must not be exposed",
 		},
 		Role: &entity.Role{
-			Name:        "waiter",
-			DisplayName: "Waiter",
-			Permissions: `["take_order"]`,
+			Name:                "waiter",
+			DisplayName:         displayNameOverride,
+			DisplayNameOverride: &displayNameOverride,
+			Permissions:         `["take_order"]`,
 		},
 		InvitedBy: &entity.User{
 			Email:    "manager@example.test",
@@ -89,6 +91,9 @@ func TestInvitationResponsesExposeTokenOnlyToAuthorizedAdminShape(t *testing.T) 
 	if !strings.Contains(publicSerialized, "i***@e***.test") {
 		t.Fatalf("public invitation omitted masked email hint: %s", publicSerialized)
 	}
+	if !strings.Contains(publicSerialized, `"display_name_override":"หน้าร้าน"`) {
+		t.Fatalf("public invitation omitted the scoped role-name override: %s", publicSerialized)
+	}
 
 	adminPayload, err := json.Marshal(NewAdminInvitationResponse(invitation))
 	if err != nil {
@@ -105,5 +110,20 @@ func TestInvitationResponsesExposeTokenOnlyToAuthorizedAdminShape(t *testing.T) 
 		if strings.Contains(adminSerialized, forbidden) {
 			t.Fatalf("admin invitation exposed %q: %s", forbidden, adminSerialized)
 		}
+	}
+}
+
+func TestRoleResponseIncludesScopedDisplayNameOverride(t *testing.T) {
+	override := "แคชเชียร์หน้าร้าน"
+	payload, err := json.Marshal(newRoleResponse(&entity.Role{
+		Name:                "cashier",
+		DisplayName:         override,
+		DisplayNameOverride: &override,
+	}, true))
+	if err != nil {
+		t.Fatalf("marshal role response: %v", err)
+	}
+	if !strings.Contains(string(payload), `"display_name_override":"แคชเชียร์หน้าร้าน"`) {
+		t.Fatalf("role response omitted display-name override: %s", payload)
 	}
 }

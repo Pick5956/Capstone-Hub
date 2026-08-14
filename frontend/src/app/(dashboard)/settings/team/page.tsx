@@ -4,20 +4,20 @@ import Link from "next/link";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
-import { can } from "@/src/lib/rbac";
+import { canAccessTeam } from "@/src/lib/rbac";
 import { SettingsPanel, SettingsShell } from "../_components/SettingsPrimitives";
 
 export default function TeamSettingsPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
-  const allowed = can(activeMembership, "manage_staff");
+  const allowed = canAccessTeam(activeMembership);
   const copy = language === "th"
     ? {
         eyebrow: "Team",
         title: "ทีมและสิทธิ์",
         subtitle: "การเชิญสมาชิกและเปลี่ยนบทบาทอยู่ที่หน้าพนักงาน เพื่อไม่ให้ settings ซ้ำกับ workflow หลัก",
         back: "ตั้งค่า",
-        denied: "เฉพาะผู้จัดการหรือเจ้าของร้านเท่านั้น",
+        denied: "บัญชีนี้ยังไม่มีสิทธิ์จัดการทีม",
         panel: "ไปหน้าพนักงาน",
         hint: "ใช้หน้านี้เพื่อสร้างคำเชิญ เปลี่ยนบทบาท ระงับสมาชิก และดู audit log",
         button: "เปิดหน้าพนักงาน",
@@ -27,7 +27,7 @@ export default function TeamSettingsPage() {
         title: "Team and permissions",
         subtitle: "Invitations and role changes stay on the staff page so settings does not duplicate the core workflow.",
         back: "Settings",
-        denied: "Only managers or owners can manage team settings.",
+        denied: "This account does not have team-management permission.",
         panel: "Open staff management",
         hint: "Use this page to create invitations, change roles, suspend members, and review audit logs.",
         button: "Open staff page",

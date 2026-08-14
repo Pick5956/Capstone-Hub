@@ -19,6 +19,7 @@ test('Expo branding uses the Dishy launcher, adaptive, splash, and favicon asset
   );
 
   assert.equal(config.expo.icon, './assets/images/icon.png');
+  assert.equal(config.expo.backgroundColor, '#FFF7ED');
   assert.deepEqual(adaptiveIcon, {
     backgroundColor: '#FFFFFF',
     backgroundImage: './assets/images/android-icon-background.png',
@@ -28,6 +29,7 @@ test('Expo branding uses the Dishy launcher, adaptive, splash, and favicon asset
   assert.equal(config.expo.web.favicon, './assets/images/favicon.png');
   assert.equal(splashPlugin[1].image, './assets/images/splash-icon.png');
   assert.equal(splashPlugin[1].imageWidth, 220);
+  assert.equal(splashPlugin[1].backgroundColor, '#FFF7ED');
 });
 
 test('the in-app mobile brand asset is byte-identical to the canonical web logo', async () => {

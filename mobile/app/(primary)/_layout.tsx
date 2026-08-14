@@ -42,9 +42,15 @@ import {
 import {
   getAdjacentNavigationTarget,
   getNavigationIndexByRouteName,
-  PAGER_SWIPE_MIN_DISTANCE,
+  isPagerSwipeCooldownActive,
+  notePagerVerticalScrollActivity,
+  resolvePagerAnimationDuration,
   resolvePagerAnimationSettlement,
+  resolvePagerDockSelectionPlan,
+  resolvePagerGestureStartPlan,
+  resolvePagerRouteSyncAction,
   resolvePagerSwipeSettlement,
+  shouldStartPagerHorizontalSwipe,
 } from '@/src/lib/navigation-runtime';
 import { useAuth } from '@/src/providers/auth-provider';
 import { breakpoints, palette } from '@/src/theme';
@@ -174,9 +180,15 @@ function PrimaryPager({
   const pagerPositionRef = useRef(Math.max(activeIndex, 0));
   const activeIndexRef = useRef(activeIndex);
   const permittedItemsRef = useRef(permittedItems);
+  const permittedKeysSnapshotRef = useRef(permittedKeys);
   const transitionIdRef = useRef(0);
   const transitionActiveRef = useRef(false);
+  const pendingRouteIndexRef = useRef<number | null>(null);
+  const gestureBaseIndexRef = useRef(Math.max(activeIndex, 0));
+  const pagerGestureActiveRef = useRef(false);
   const nestedHorizontalGestureActive = useRef(false);
+  const pagerSwipeBlockedUntilRef = useRef(0);
+  const pagerSwipeTouchBlockedRef = useRef(false);
   const pagerSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [presentedIndex, setPresentedIndex] = useState(activeIndex);
@@ -200,6 +212,13 @@ function PrimaryPager({
     pagerPosition.setValue(position);
   }, [pagerPosition]);
 
+  const reportVerticalScrollActivity = useCallback((activityTimeMs: number) => {
+    pagerSwipeBlockedUntilRef.current = notePagerVerticalScrollActivity(
+      pagerSwipeBlockedUntilRef.current,
+      activityTimeMs,
+    );
+  }, []);
+
   const restoreCommittedPager = useCallback((transitionId?: number) => {
     if (
       transitionId !== undefined &&
@@ -208,6 +227,8 @@ function PrimaryPager({
 
     transitionIdRef.current += 1;
     transitionActiveRef.current = false;
+    pagerGestureActiveRef.current = false;
+    pendingRouteIndexRef.current = null;
     clearPagerSettleTimer();
     clearRouteSyncTimer();
     pagerPosition.stopAnimation();
@@ -218,9 +239,28 @@ function PrimaryPager({
   }, [clearPagerSettleTimer, clearRouteSyncTimer, pagerPosition, writePagerPosition]);
 
   useLayoutEffect(() => {
+    const permittedItemsChanged = permittedKeysSnapshotRef.current !== permittedKeys;
+    permittedKeysSnapshotRef.current = permittedKeys;
+    const routeSyncAction = resolvePagerRouteSyncAction({
+      activeIndex,
+      pendingRouteIndex: pendingRouteIndexRef.current,
+      permittedItemsChanged,
+    });
+
+    if (routeSyncAction === 'ignore-stale') return;
+    if (routeSyncAction === 'acknowledge') {
+      pendingRouteIndexRef.current = null;
+      clearRouteSyncTimer();
+      return;
+    }
+
     transitionIdRef.current += 1;
     transitionActiveRef.current = false;
+    pagerGestureActiveRef.current = false;
+    pendingRouteIndexRef.current = null;
     nestedHorizontalGestureActive.current = false;
+    pagerSwipeBlockedUntilRef.current = 0;
+    pagerSwipeTouchBlockedRef.current = false;
     clearPagerSettleTimer();
     clearRouteSyncTimer();
     pagerPosition.stopAnimation();
@@ -230,31 +270,49 @@ function PrimaryPager({
 
   useEffect(() => () => {
     transitionIdRef.current += 1;
+    pagerGestureActiveRef.current = false;
+    pendingRouteIndexRef.current = null;
     clearPagerSettleTimer();
     clearRouteSyncTimer();
     pagerPosition.stopAnimation();
   }, [clearPagerSettleTimer, clearRouteSyncTimer, pagerPosition]);
 
-  const commitTabNavigation = useCallback((targetKey: string) => {
-    const target = permittedItemsRef.current.find((item) => item.key === targetKey);
+  const requestTabNavigation = useCallback((
+    targetIndex: number,
+    transitionId: number,
+  ) => {
+    const target = permittedItemsRef.current[targetIndex];
     if (!target) return false;
+
+    clearRouteSyncTimer();
+    pendingRouteIndexRef.current = targetIndex;
+    if (targetIndex !== activeIndexRef.current) {
+      routeSyncTimer.current = setTimeout(() => {
+        if (pagerGestureActiveRef.current) return;
+        restoreCommittedPager(transitionId);
+      }, ROUTE_SYNC_TIMEOUT_MS);
+    }
+
     tabs.navigation.dispatch({
       type: 'JUMP_TO',
       payload: { name: target.key },
     });
+
+    if (targetIndex === activeIndexRef.current) {
+      pendingRouteIndexRef.current = null;
+    }
     return true;
-  }, [tabs.navigation]);
+  }, [clearRouteSyncTimer, restoreCommittedPager, tabs.navigation]);
 
   const animatePagerTo = useCallback((
     targetIndex: number,
     navigateAfterAnimation: boolean,
     knownCurrentPosition?: number,
   ) => {
-    const target = permittedItems[targetIndex];
+    const target = permittedItemsRef.current[targetIndex];
     if (!target) return;
 
     const transitionId = ++transitionIdRef.current;
-    const targetKey = target.key;
     setPresentedIndex(targetIndex);
     transitionActiveRef.current = true;
     clearPagerSettleTimer();
@@ -268,21 +326,21 @@ function PrimaryPager({
     };
     armPagerSettleWatchdog(PAGER_START_TIMEOUT_MS);
 
+    const routeIndexToRequest = navigateAfterAnimation
+      ? targetIndex
+      : pendingRouteIndexRef.current;
+    if (
+      routeIndexToRequest !== null &&
+      !requestTabNavigation(routeIndexToRequest, transitionId)
+    ) {
+      restoreCommittedPager(transitionId);
+      return;
+    }
+
     const finish = () => {
       if (transitionId !== transitionIdRef.current) return;
       clearPagerSettleTimer();
-      if (!navigateAfterAnimation || targetIndex === activeIndexRef.current) {
-        transitionActiveRef.current = false;
-        return;
-      }
-
-      routeSyncTimer.current = setTimeout(() => {
-        restoreCommittedPager(transitionId);
-      }, ROUTE_SYNC_TIMEOUT_MS);
-
-      if (!commitTabNavigation(targetKey)) {
-        restoreCommittedPager(transitionId);
-      }
+      transitionActiveRef.current = false;
     };
 
     const startAnimation = (currentPosition: number) => {
@@ -300,9 +358,11 @@ function PrimaryPager({
         return;
       }
 
-      const duration = navigateAfterAnimation
-        ? Math.min(280, 180 + Math.ceil(travel) * 40)
-        : 180;
+      const duration = resolvePagerAnimationDuration({
+        navigateAfterAnimation,
+        settleAfterGesture: knownCurrentPosition !== undefined,
+        travel,
+      });
       armPagerSettleWatchdog(duration + PAGER_SETTLE_GRACE_MS);
       Animated.timing(pagerPosition, {
         toValue: targetIndex,
@@ -318,12 +378,11 @@ function PrimaryPager({
         });
         if (!settlement) return;
         clearPagerSettleTimer();
-        writePagerPosition(settlement.position);
         if (!settlement.completed) {
-          transitionActiveRef.current = false;
-          setPresentedIndex(settlement.position);
+          restoreCommittedPager(transitionId);
           return;
         }
+        writePagerPosition(settlement.position);
         finish();
       });
     };
@@ -334,20 +393,47 @@ function PrimaryPager({
       return;
     }
     pagerPosition.stopAnimation(startAnimation);
-  }, [clearPagerSettleTimer, clearRouteSyncTimer, commitTabNavigation, isTablet, pagerPosition, permittedItems, reducedMotion, restoreCommittedPager, useNativeDriver, writePagerPosition]);
+  }, [clearPagerSettleTimer, clearRouteSyncTimer, isTablet, pagerPosition, reducedMotion, requestTabNavigation, restoreCommittedPager, useNativeDriver, writePagerPosition]);
 
-  const navigateToTab = useCallback((targetIndex: number) => {
-    if (!permittedItems[targetIndex] || activeIndex < 0) return;
-    animatePagerTo(targetIndex, targetIndex !== activeIndex);
-  }, [activeIndex, animatePagerTo, permittedItems]);
+  const jumpToTab = useCallback((targetIndex: number) => {
+    const items = permittedItemsRef.current;
+    const plan = resolvePagerDockSelectionPlan({
+      committedIndex: activeIndexRef.current,
+      itemCount: items.length,
+      pendingRouteIndex: pendingRouteIndexRef.current,
+      targetIndex,
+      transitionActive: transitionActiveRef.current,
+    });
+    if (!plan) return;
+
+    const transitionId = ++transitionIdRef.current;
+    transitionActiveRef.current = false;
+    pagerGestureActiveRef.current = false;
+    clearPagerSettleTimer();
+    clearRouteSyncTimer();
+    pagerPosition.stopAnimation();
+    writePagerPosition(plan.position);
+    setPresentedIndex(plan.position);
+
+    if (!plan.shouldNavigate) {
+      pendingRouteIndexRef.current = null;
+      return;
+    }
+    if (!requestTabNavigation(targetIndex, transitionId)) {
+      restoreCommittedPager(transitionId);
+    }
+  }, [clearPagerSettleTimer, clearRouteSyncTimer, pagerPosition, requestTabNavigation, restoreCommittedPager, writePagerPosition]);
 
   const finishGesture = useCallback((
     _: GestureResponderEvent,
     gesture: PanResponderGestureState,
   ) => {
+    pagerGestureActiveRef.current = false;
+    const items = permittedItemsRef.current;
+    const gestureBaseIndex = gestureBaseIndexRef.current;
     const settlement = resolvePagerSwipeSettlement(
-      permittedItems,
-      activeIndex,
+      items,
+      gestureBaseIndex,
       {
         deltaX: gesture.dx,
         deltaY: gesture.dy,
@@ -364,38 +450,69 @@ function PrimaryPager({
       settlement.shouldNavigate,
       pagerPositionRef.current,
     );
-  }, [activeIndex, animatePagerTo, permittedItems, restoreCommittedPager, viewportWidth]);
+  }, [animatePagerTo, restoreCommittedPager, viewportWidth]);
 
   const pagerResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponderCapture: () => {
+      pagerSwipeTouchBlockedRef.current = isPagerSwipeCooldownActive(
+        pagerSwipeBlockedUntilRef.current,
+        Date.now(),
+      );
+      return false;
+    },
     onMoveShouldSetPanResponder: (_, gesture) => {
+      if (isPagerSwipeCooldownActive(
+        pagerSwipeBlockedUntilRef.current,
+        Date.now(),
+      )) {
+        pagerSwipeTouchBlockedRef.current = true;
+      }
       if (
         isTablet ||
-        transitionActiveRef.current ||
         nestedHorizontalGestureActive.current ||
-        activeIndex < 0 ||
-        permittedItems.length < 2 ||
+        activeIndexRef.current < 0 ||
+        permittedItemsRef.current.length < 2 ||
         gesture.numberActiveTouches > 1
       ) return false;
-      const horizontalDistance = Math.abs(gesture.dx);
-      const verticalDistance = Math.abs(gesture.dy);
-      return horizontalDistance >= PAGER_SWIPE_MIN_DISTANCE &&
-        horizontalDistance > verticalDistance * 1.35;
+      return shouldStartPagerHorizontalSwipe({
+        deltaX: gesture.dx,
+        deltaY: gesture.dy,
+      }, pagerSwipeTouchBlockedRef.current);
     },
     onPanResponderGrant: () => {
-      transitionIdRef.current += 1;
+      const startPlan = resolvePagerGestureStartPlan({
+        committedIndex: activeIndexRef.current,
+        itemCount: permittedItemsRef.current.length,
+        pendingRouteIndex: pendingRouteIndexRef.current,
+      });
+      if (!startPlan) return;
+
+      pagerGestureActiveRef.current = true;
+      gestureBaseIndexRef.current = startPlan.startIndex;
+      const transitionId = ++transitionIdRef.current;
       transitionActiveRef.current = false;
       clearPagerSettleTimer();
       clearRouteSyncTimer();
       pagerPosition.stopAnimation();
-      writePagerPosition(Math.max(activeIndex, 0));
-      setPresentedIndex(activeIndex);
+      writePagerPosition(startPlan.startIndex);
+      setPresentedIndex(startPlan.startIndex);
+
+      if (startPlan.routeIndexToReaffirm === null) {
+        pendingRouteIndexRef.current = null;
+        return;
+      }
+      if (!requestTabNavigation(startPlan.routeIndexToReaffirm, transitionId)) {
+        restoreCommittedPager(transitionId);
+      }
     },
     onPanResponderMove: (_, gesture) => {
-      if (reducedMotion || activeIndex < 0) return;
+      const items = permittedItemsRef.current;
+      const gestureBaseIndex = gestureBaseIndexRef.current;
+      if (reducedMotion || gestureBaseIndex < 0) return;
       const direction = gesture.dx < 0 ? 1 : -1;
       const adjacent = getAdjacentNavigationTarget(
-        permittedItems,
-        activeIndex,
+        items,
+        gestureBaseIndex,
         direction,
       );
       const resistance = adjacent ? 1 : 0.18;
@@ -407,20 +524,23 @@ function PrimaryPager({
       writePagerPosition(Math.max(
         0,
         Math.min(
-          permittedItems.length - 1,
-          activeIndex - boundedDrag / viewportWidth,
+          items.length - 1,
+          gestureBaseIndex - boundedDrag / viewportWidth,
         ),
       ));
     },
     onPanResponderRelease: finishGesture,
-    onPanResponderTerminate: () => animatePagerTo(
-      activeIndex,
-      false,
-      pagerPositionRef.current,
-    ),
+    onPanResponderTerminate: () => {
+      pagerGestureActiveRef.current = false;
+      animatePagerTo(
+        gestureBaseIndexRef.current,
+        false,
+        pagerPositionRef.current,
+      );
+    },
     onPanResponderTerminationRequest: () => true,
     onShouldBlockNativeResponder: () => false,
-  }), [activeIndex, animatePagerTo, clearPagerSettleTimer, clearRouteSyncTimer, finishGesture, isTablet, pagerPosition, permittedItems, reducedMotion, viewportWidth, writePagerPosition]);
+  }), [animatePagerTo, clearPagerSettleTimer, clearRouteSyncTimer, finishGesture, isTablet, pagerPosition, reducedMotion, requestTabNavigation, restoreCommittedPager, viewportWidth, writePagerPosition]);
 
   const renderTabScene = useCallback((
     descriptor: TabsDescriptor,
@@ -471,6 +591,7 @@ function PrimaryPager({
 
   return (
     <PrimaryTabSwipeGestureProvider
+      reportVerticalScrollActivity={reportVerticalScrollActivity}
       setNestedHorizontalGestureActive={(active) => {
         nestedHorizontalGestureActive.current = active;
       }}
@@ -480,7 +601,7 @@ function PrimaryPager({
           <PrimaryTabletRail
             expanded={expandedRail}
             onSelectPrimary={(item) => {
-              navigateToTab(permittedItems.findIndex(
+              jumpToTab(permittedItems.findIndex(
                 (candidate) => candidate.key === item.key,
               ));
             }}
@@ -493,7 +614,7 @@ function PrimaryPager({
               accessibilitySelectedIndex={activeIndex}
               items={permittedItems}
               markerPosition={pagerPosition}
-              onSelect={navigateToTab}
+              onSelect={jumpToTab}
               selectedIndex={presentedIndex}
             />
           ) : null}

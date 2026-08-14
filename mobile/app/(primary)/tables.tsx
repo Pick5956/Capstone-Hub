@@ -1,12 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listOrders } from '@/src/api/order';
 import { listTables } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money, tableStatusLabel } from '@/src/lib/format';
@@ -87,6 +87,7 @@ export default function TablesScreen() {
       clearInterval(timer);
       requestGenerationRef.current.invalidate();
       foregroundRequestRef.current = null;
+      setLoading(false);
     };
   }, [load]));
 
@@ -146,7 +147,7 @@ export default function TablesScreen() {
   }
 
   return (
-    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />} action={canTakeOrder ? <Button compact icon="bag-handle-outline" variant="secondary" label={copy('ซื้อกลับบ้าน', 'Takeaway')} onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : undefined}>
+    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<AppRefreshControl onRefresh={load} />} action={canTakeOrder ? <Button compact icon="bag-handle-outline" variant="secondary" label={copy('ซื้อกลับบ้าน', 'Takeaway')} onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : undefined}>
       {error ? <Feedback title={copy('โหลดผังโต๊ะไม่ได้', 'Could not load the table map')} detail={error} tone="danger" /> : null}
       {notice ? <Feedback title={copy('ยังเปิดโต๊ะนี้ไม่ได้', 'This table cannot be opened yet')} detail={notice} tone="warning" /> : null}
       {!canTakeOrder ? <Feedback title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('เลือกโหมดงานอื่นที่บัญชีนี้ได้รับอนุญาตจากเมนูด้านล่าง', 'Choose another work mode allowed for this account from the menu below.')} tone="info" /> : null}

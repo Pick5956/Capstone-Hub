@@ -5,6 +5,7 @@ import { AppScreen } from '@/src/components/app-shell';
 import { type AppIconName } from '@/src/components/app-icon';
 import { EdgeRow, EdgeSection, EdgeSectionHeader } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
+import { canAccessTeam } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { breakpoints, palette, spacing } from '@/src/theme';
@@ -14,9 +15,8 @@ export default function SettingsScreen() {
   const { activeMembership, signOut, user } = useAuth();
   const { copy } = useDisplayPreferences();
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
-  const managementRole = activeMembership?.role?.name === 'owner' || activeMembership?.role?.name === 'manager';
-  const canManageRestaurant = managementRole && can(activeMembership, 'manage_staff');
-  const canManageTeam = managementRole && can(activeMembership, 'manage_staff');
+  const canManageRestaurant = can(activeMembership, 'manage_restaurant_settings');
+  const canManageTeam = canAccessTeam(activeMembership);
   const settingsItems: Array<{ title: string; detail: string; href: string; icon: AppIconName; show: boolean }> = [
     { title: copy('บัญชีของฉัน', 'My account'), detail: user?.email || copy('ชื่อและเบอร์โทร', 'Name and phone'), href: '/settings/account', icon: 'person-outline', show: true },
     { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษาและขนาดตัวอักษร', 'Language and text size'), href: '/settings/display', icon: 'text-outline', show: true },
@@ -42,7 +42,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <AppScreen title={copy('ตั้งค่า', 'Settings')} topLevel>
+    <AppScreen title={copy('ตั้งค่า', 'Settings')} topLevel={false}>
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
         <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.6 : undefined, gap: spacing.xl }}>
           <View style={{ gap: spacing.sm }}>

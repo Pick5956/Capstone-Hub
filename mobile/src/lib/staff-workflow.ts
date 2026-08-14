@@ -5,6 +5,8 @@ import type {
   Role,
 } from '@/src/types/restaurant';
 import type { DisplayLanguage } from '@/src/lib/display-preferences';
+import { can } from './rbac.ts';
+import { normalizePermissionSelection, parsePermissionsForRole } from './permissions.ts';
 
 const ROLE_LABELS: Record<string, Record<DisplayLanguage, string>> = {
   owner: { th: 'เจ้าของร้าน', en: 'Owner' },
@@ -32,54 +34,75 @@ export function invitationExpiryLabel(
   return language === 'th' ? `${days} วัน` : `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
-function permissionList(raw: string | null | undefined): string[] | null {
-  if (!raw) return null;
-  try {
-    const value = JSON.parse(raw) as unknown;
-    return Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === 'string')
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function hasManageStaffPermission(membership: Membership): boolean {
-  if (membership.permissions_override != null) {
-    const override = permissionList(membership.permissions_override);
-    return Boolean(override?.includes('*') || override?.includes('manage_staff'));
-  }
-
-  const rolePermissions = permissionList(membership.role?.permissions);
-  return Boolean(
-    rolePermissions?.includes('*') || rolePermissions?.includes('manage_staff'),
-  );
-}
-
-export function canManageTeam(membership: Membership | null | undefined): boolean {
+function activeCan(
+  membership: Membership | null | undefined,
+  permission: string,
+): boolean {
   if (!membership || membership.status !== 'active') return false;
-  const roleName = membership.role?.name;
-  return (roleName === 'owner' || roleName === 'manager') && hasManageStaffPermission(membership);
+  return can(membership, permission);
+}
+
+export function canManageInvitations(membership: Membership | null | undefined): boolean {
+  return activeCan(membership, 'manage_invites');
+}
+
+export function canManageMembers(membership: Membership | null | undefined): boolean {
+  return activeCan(membership, 'manage_members');
+}
+
+export function canManageRoles(membership: Membership | null | undefined): boolean {
+  return activeCan(membership, 'manage_roles');
+}
+
+export function canViewTeamAudit(membership: Membership | null | undefined): boolean {
+  return activeCan(membership, 'view_audit_log');
+}
+
+export function canAccessTeam(membership: Membership | null | undefined): boolean {
+  return canManageInvitations(membership)
+    || canManageMembers(membership)
+    || canManageRoles(membership)
+    || canViewTeamAudit(membership);
+}
+
+// Compatibility alias for screens that only need to know whether the team
+// workspace is reachable. Mutation controls must use the granular helpers.
+export function canManageTeam(membership: Membership | null | undefined): boolean {
+  return canAccessTeam(membership);
 }
 
 export function canManageTarget(
   actorRole?: string,
   targetRole?: string,
   isSelf = false,
+  hasOperationalAuthority = false,
 ): boolean {
   if (isSelf || !actorRole || !targetRole) return false;
   if (actorRole === 'owner') return targetRole !== 'owner';
   if (actorRole === 'manager') return targetRole !== 'owner' && targetRole !== 'manager';
-  return false;
+  return hasOperationalAuthority && targetRole !== 'owner' && targetRole !== 'manager';
 }
 
-export function allowedRoleOptions(actorRole: string | undefined, roles: Role[]): Role[] {
-  if (actorRole !== 'owner' && actorRole !== 'manager') return [];
+export function allowedRoleOptions(
+  actorRole: string | undefined,
+  roles: Role[],
+  hasOperationalAuthority = actorRole === 'owner' || actorRole === 'manager',
+): Role[] {
+  if (!hasOperationalAuthority) return [];
   return roles.filter((role) => {
     if (role.name === 'owner') return false;
-    if (actorRole === 'manager' && role.name === 'manager') return false;
+    if (actorRole !== 'owner' && role.name === 'manager') return false;
     return true;
   });
+}
+
+export function canGrantRole(
+  membership: Membership | null | undefined,
+  role: Role,
+): boolean {
+  if (!membership || membership.status !== 'active') return false;
+  return normalizePermissionSelection(parsePermissionsForRole(role.permissions, role.name))
+    .every((permission) => can(membership, permission));
 }
 
 export function invitationTokenFrom(value: string): string {
@@ -130,8 +153,132 @@ export function roleLabel(
 ): string {
   const roleName = typeof role === 'string' ? role : role?.name;
   if (!roleName) return language === 'th' ? 'พนักงาน' : 'Staff';
+  const override = typeof role === 'string'
+    ? ''
+    : role?.display_name_override?.trim();
   const displayName = typeof role === 'string' ? '' : role?.display_name?.trim();
-  return ROLE_LABELS[roleName]?.[language] ?? (displayName || roleName);
+  if (override) return override;
+  if (typeof role === 'string' || role?.is_system) {
+    const localizedSystemName = ROLE_LABELS[roleName]?.[language];
+    if (localizedSystemName) return localizedSystemName;
+  }
+  return displayName || roleName;
+}
+
+export function canFinishRoleNameEdit(value: string): boolean {
+  return value.trim().length > 0;
+}
+
+export function roleSaveFailureMessage(
+  nameSaved: boolean,
+  failure: string,
+  language: DisplayLanguage = 'th',
+): string {
+  const detail = failure.trim() || (language === 'th'
+    ? 'บันทึกบทบาทไม่สำเร็จ'
+    : 'Unable to save role');
+  if (!nameSaved) return detail;
+  return language === 'th'
+    ? `บันทึกชื่อบทบาทแล้ว แต่บันทึกสิทธิ์ไม่สำเร็จ: ${detail}`
+    : `Role name saved, but permissions could not be saved: ${detail}`;
+}
+
+export function teamActivityCopy(language: DisplayLanguage = 'th') {
+  return language === 'th'
+    ? {
+      sectionTitle: 'กิจกรรมล่าสุด',
+      emptyTitle: 'ยังไม่มีกิจกรรม',
+      emptyDetail: 'รายการเชิญและการแก้ไขทีมจะอยู่ที่นี่',
+    }
+    : {
+      sectionTitle: 'Recent activity',
+      emptyTitle: 'No activity yet',
+      emptyDetail: 'Invites and team changes will appear here.',
+    };
+}
+
+export function staffCountSubtitle(
+  memberCount: number,
+  invitationCount: number,
+  canViewInvitations: boolean,
+  loading: boolean,
+  language: DisplayLanguage = 'th',
+): string | undefined {
+  if (loading && memberCount === 0 && invitationCount === 0) return undefined;
+
+  const localizedMembers = memberCount.toLocaleString(language === 'th' ? 'th-TH' : 'en-US');
+  if (canViewInvitations && invitationCount > 0) {
+    const localizedInvitations = invitationCount.toLocaleString(language === 'th' ? 'th-TH' : 'en-US');
+    return language === 'th'
+      ? `${localizedMembers} คน · ${localizedInvitations} คำเชิญ`
+      : `${localizedMembers} staff · ${localizedInvitations} ${invitationCount === 1 ? 'invite' : 'invites'}`;
+  }
+
+  return language === 'th'
+    ? `${localizedMembers} คนในทีม`
+    : `${localizedMembers} staff ${memberCount === 1 ? 'member' : 'members'}`;
+}
+
+export function roleListMeta(
+  role: Pick<Role, 'is_system' | 'name' | 'permissions'>,
+  language: DisplayLanguage = 'th',
+) {
+  let hasAllPermissions = false;
+  try {
+    const parsed = JSON.parse(role.permissions || '[]') as unknown;
+    hasAllPermissions = Array.isArray(parsed) && parsed.includes('*');
+  } catch {
+    hasAllPermissions = false;
+  }
+
+  const permissionCount = parsePermissionsForRole(role.permissions, role.name).length;
+  const permissionLabel = hasAllPermissions
+    ? language === 'th' ? 'ทุกสิทธิ์' : 'All permissions'
+    : language === 'th'
+      ? `${permissionCount.toLocaleString('th-TH')} สิทธิ์`
+      : `${permissionCount.toLocaleString('en-US')} ${permissionCount === 1 ? 'permission' : 'permissions'}`;
+
+  return {
+    typeLabel: role.is_system
+      ? language === 'th' ? 'มาตรฐาน' : 'Standard'
+      : language === 'th' ? 'กำหนดเอง' : 'Custom',
+    permissionLabel,
+  };
+}
+
+export function roleEditorHeading(
+  editing: boolean,
+  role: Role | null | undefined,
+  language: DisplayLanguage = 'th',
+): { title: string; subtitle?: string } {
+  if (!editing) {
+    return language === 'th'
+      ? { title: 'เพิ่มบทบาท', subtitle: 'ตั้งชื่อและเลือกสิทธิ์' }
+      : { title: 'Add role', subtitle: 'Name the role and choose permissions' };
+  }
+  if (!role) {
+    return {
+      title: language === 'th' ? 'แก้ไขบทบาท' : 'Edit role',
+      subtitle: undefined,
+    };
+  }
+  return {
+    title: roleLabel(role, language),
+    subtitle: role.is_system
+      ? language === 'th'
+        ? 'บทบาทมาตรฐาน · แก้ไขชื่อและสิทธิ์'
+        : 'Standard role · Edit name and permissions'
+      : language === 'th'
+        ? 'บทบาทกำหนดเอง · แก้ไขชื่อและสิทธิ์'
+        : 'Custom role · Edit name and permissions',
+  };
+}
+
+export function resolvePermissionGroupTransition(
+  currentGroupIndex: number,
+  pressedGroupIndex: number,
+): number {
+  return currentGroupIndex === pressedGroupIndex ? -1 : pressedGroupIndex;
 }
 
 export function staffStatusLabel(
@@ -161,6 +308,8 @@ export function auditMessage(
   const toStatus = typeof details.to_status === 'string' ? details.to_status : '';
   const fromRole = typeof details.from_role === 'string' ? details.from_role : '';
   const toRole = typeof details.to_role === 'string' ? details.to_role : '';
+  const fromName = typeof details.from_name === 'string' ? details.from_name : '';
+  const toName = typeof details.to_name === 'string' ? details.to_name : '';
 
   if (log.action === 'invitation_created') {
     return language === 'th'
@@ -192,6 +341,26 @@ export function auditMessage(
     return language === 'th'
       ? 'ปรับสิทธิ์เฉพาะพนักงาน'
       : 'Changed member-specific permissions';
+  }
+  if (log.action === 'role_created') {
+    return language === 'th'
+      ? `สร้างบทบาท${roleName ? ` ${roleLabel(roleName, language)}` : ''}`
+      : `Created role${roleName ? ` ${roleLabel(roleName, language)}` : ''}`;
+  }
+  if (log.action === 'role_renamed') {
+    return language === 'th'
+      ? `เปลี่ยนชื่อบทบาท ${fromName || '-'} → ${toName || '-'}`
+      : `Renamed role ${fromName || '-'} → ${toName || '-'}`;
+  }
+  if (log.action === 'role_permissions_changed') {
+    return language === 'th'
+      ? `ปรับสิทธิ์บทบาท${roleName ? ` ${roleLabel(roleName, language)}` : ''}`
+      : `Changed role permissions${roleName ? ` for ${roleLabel(roleName, language)}` : ''}`;
+  }
+  if (log.action === 'role_deleted') {
+    return language === 'th'
+      ? `ลบบทบาท${roleName ? ` ${roleLabel(roleName, language)}` : ''}`
+      : `Deleted role${roleName ? ` ${roleLabel(roleName, language)}` : ''}`;
   }
   return log.action;
 }

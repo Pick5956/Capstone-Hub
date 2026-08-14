@@ -3,6 +3,7 @@ export interface Role {
   restaurant_id?: number | null;
   name: string;
   display_name: string;
+  display_name_override?: string | null;
   permissions: string; // JSON array of permission keys, e.g. '["view_dashboard","take_order"]'
   is_system: boolean;
 }

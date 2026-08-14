@@ -1,11 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listTableTags, listTables, listTableZones } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { tableStatusLabel } from '@/src/lib/format';
 import { tableManagementAccess } from '@/src/lib/permission-parity';
@@ -39,7 +39,7 @@ export default function TableManagementScreen() {
   };
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   if (!canView) {
-    return <AppScreen title={copy('จัดการโต๊ะ', 'Table management')} topLevel><EmptyState title={copy('ไม่มีสิทธิ์ดูผังโต๊ะ', 'No table layout access')} detail={copy('ต้องมีสิทธิ์ view_tables หรือ manage_table', 'You need the view_tables or manage_table permission.')} /></AppScreen>;
+    return <AppScreen title={copy('จัดการโต๊ะ', 'Table management')} topLevel={false}><EmptyState title={copy('ไม่มีสิทธิ์ดูผังโต๊ะ', 'No table layout access')} detail={copy('ต้องมีสิทธิ์ view_tables หรือ manage_table', 'You need the view_tables or manage_table permission.')} /></AppScreen>;
   }
 
   const summaryContent = (
@@ -208,7 +208,7 @@ export default function TableManagementScreen() {
   );
 
   return (
-    <AppScreen title={copy('จัดการโต๊ะ', 'Table management')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${zones.length.toLocaleString('th-TH')} โซน · ${tags.length.toLocaleString('th-TH')} แท็ก`, `${tables.length.toLocaleString('en-US')} tables · ${zones.length.toLocaleString('en-US')} zones · ${tags.length.toLocaleString('en-US')} tags`)} topLevel refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />} action={canManage ? <Button compact icon="add" label={copy('เพิ่มโต๊ะ', 'Add table')} onPress={() => router.push('/table-management/table' as never)} /> : undefined}>
+    <AppScreen title={copy('จัดการโต๊ะ', 'Table management')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${zones.length.toLocaleString('th-TH')} โซน · ${tags.length.toLocaleString('th-TH')} แท็ก`, `${tables.length.toLocaleString('en-US')} tables · ${zones.length.toLocaleString('en-US')} zones · ${tags.length.toLocaleString('en-US')} tags`)} topLevel={false} refreshControl={<AppRefreshControl onRefresh={load} />} action={canManage ? <Button compact icon="add" label={copy('เพิ่มโต๊ะ', 'Add table')} onPress={() => router.push('/table-management/table' as never)} /> : undefined}>
       {error ? <Feedback title={copy('โหลดผังโต๊ะไม่ได้', 'Unable to load table layout')} detail={error} tone="danger" /> : null}
       <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
         <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.65 : undefined, gap: spacing.lg }}>

@@ -1,4 +1,9 @@
 import { apiRequest } from './client';
+import {
+  MENU_IMAGE_UPLOAD_PATH,
+  appendMenuImageUpload,
+  type MenuImageUploadFile,
+} from '@/src/lib/menu-image';
 import type { Category, CategoryInput, MenuItem, MenuItemInput } from '@/src/types/menu';
 
 export function listCategories() {
@@ -54,5 +59,14 @@ export function setMenuItemAvailability(id: number, isAvailable: boolean) {
   return apiRequest<MenuItem>(`/api/v1/menu-items/${id}/availability`, {
     method: 'PATCH',
     body: JSON.stringify({ is_available: isAvailable }),
+  });
+}
+
+export function uploadMenuImage(file: MenuImageUploadFile) {
+  const formData = new FormData();
+  appendMenuImageUpload(formData, file);
+  return apiRequest<{ image_url: string; path: string }>(MENU_IMAGE_UPLOAD_PATH, {
+    method: 'POST',
+    body: formData,
   });
 }

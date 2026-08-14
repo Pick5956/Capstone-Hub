@@ -1,11 +1,11 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listIngredientCategories, listIngredients } from '@/src/api/ingredient';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
@@ -63,7 +63,7 @@ export default function InventoryScreen() {
 
   if (!canView) {
     return (
-      <AppScreen title={copy('คลังวัตถุดิบ', 'Inventory')} topLevel>
+      <AppScreen title={copy('คลังวัตถุดิบ', 'Inventory')} topLevel={false}>
         <EmptyState title={copy('ไม่มีสิทธิ์ดูคลังวัตถุดิบ', 'Inventory access unavailable')} detail={copy('บัญชีนี้ต้องมีสิทธิ์ดูหรือจัดการคลังวัตถุดิบ', 'This account needs permission to view or manage inventory.')} />
       </AppScreen>
     );
@@ -211,8 +211,8 @@ export default function InventoryScreen() {
     <AppScreen
       title={copy('คลังวัตถุดิบ', 'Inventory')}
       subtitle={copy(`${ingredients.length.toLocaleString('th-TH')} รายการ · ${(low + out).toLocaleString('th-TH')} รายการต้องตรวจสอบ`, `${ingredients.length.toLocaleString('en-US')} items · ${(low + out).toLocaleString('en-US')} need attention`)}
-      topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+      topLevel={false}
+      refreshControl={<AppRefreshControl onRefresh={load} />}
       action={canManage ? <Button compact icon="add-outline" label={copy('เพิ่มวัตถุดิบ', 'Add ingredient')} onPress={() => router.push('/inventory/item' as never)} /> : undefined}
     >
       {error ? <Feedback title={copy('โหลดคลังไม่ได้', 'Could not load inventory')} detail={error} tone="danger" /> : null}

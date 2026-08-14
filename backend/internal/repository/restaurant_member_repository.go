@@ -33,9 +33,11 @@ func (r *RestaurantMemberRepository) FindByID(id uint) (*entity.RestaurantMember
 	if err != nil {
 		return nil, err
 	}
-	if err := applyEffectiveRolePermissions(r.db, member.RestaurantID, member.Role); err != nil {
+	effectiveRole, err := resolveEffectiveRole(r.db, member.RestaurantID, member.Role)
+	if err != nil {
 		return nil, err
 	}
+	member.Role = effectiveRole
 	return &member, nil
 }
 
@@ -49,9 +51,11 @@ func (r *RestaurantMemberRepository) FindByUserAndRestaurant(userID, restaurantI
 	if err != nil {
 		return nil, err
 	}
-	if err := applyEffectiveRolePermissions(r.db, member.RestaurantID, member.Role); err != nil {
+	effectiveRole, err := resolveEffectiveRole(r.db, member.RestaurantID, member.Role)
+	if err != nil {
 		return nil, err
 	}
+	member.Role = effectiveRole
 	return &member, nil
 }
 
@@ -68,9 +72,11 @@ func (r *RestaurantMemberRepository) FindActiveByUser(userID uint) ([]entity.Res
 		return nil, err
 	}
 	for index := range members {
-		if err := applyEffectiveRolePermissions(r.db, members[index].RestaurantID, members[index].Role); err != nil {
+		effectiveRole, err := resolveEffectiveRole(r.db, members[index].RestaurantID, members[index].Role)
+		if err != nil {
 			return nil, err
 		}
+		members[index].Role = effectiveRole
 	}
 	return members, nil
 }
@@ -88,9 +94,11 @@ func (r *RestaurantMemberRepository) FindActiveByRestaurant(restaurantID uint) (
 		return nil, err
 	}
 	for index := range members {
-		if err := applyEffectiveRolePermissions(r.db, restaurantID, members[index].Role); err != nil {
+		effectiveRole, err := resolveEffectiveRole(r.db, restaurantID, members[index].Role)
+		if err != nil {
 			return nil, err
 		}
+		members[index].Role = effectiveRole
 	}
 	return members, nil
 }
@@ -107,9 +115,11 @@ func (r *RestaurantMemberRepository) FindAllByRestaurant(restaurantID uint) ([]e
 		return nil, err
 	}
 	for index := range members {
-		if err := applyEffectiveRolePermissions(r.db, restaurantID, members[index].Role); err != nil {
+		effectiveRole, err := resolveEffectiveRole(r.db, restaurantID, members[index].Role)
+		if err != nil {
 			return nil, err
 		}
+		members[index].Role = effectiveRole
 	}
 	return members, nil
 }

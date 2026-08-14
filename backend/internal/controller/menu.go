@@ -3,7 +3,6 @@ package controller
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -57,11 +56,14 @@ func memberCan(c *gin.Context, permission string) bool {
 	if !ok || member.Role == nil {
 		return false
 	}
+	if service.MemberHasPermission(member, permission) {
+		return true
+	}
 	if member.PermissionsOverride != nil {
-		return permissionListContains(*member.PermissionsOverride, permission)
+		return false
 	}
 	if member.Role.Permissions != "" {
-		return permissionListContains(member.Role.Permissions, permission)
+		return false
 	}
 	role := member.Role.Name
 	if permission == "view_menu" {
@@ -109,19 +111,6 @@ func memberCan(c *gin.Context, permission string) bool {
 func memberCanAny(c *gin.Context, permissions ...string) bool {
 	for _, permission := range permissions {
 		if memberCan(c, permission) {
-			return true
-		}
-	}
-	return false
-}
-
-func permissionListContains(raw string, permission string) bool {
-	var permissions []string
-	if err := json.Unmarshal([]byte(raw), &permissions); err != nil {
-		return false
-	}
-	for _, item := range permissions {
-		if item == "*" || item == permission {
 			return true
 		}
 	}

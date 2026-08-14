@@ -63,14 +63,7 @@ function localizedRoleLabel(
   role: Invitation['role'],
   language: 'th' | 'en',
 ): string {
-  if (language === 'th') return roleLabel(role);
-  const roleName = role?.name;
-  if (roleName === 'owner') return 'Owner';
-  if (roleName === 'manager') return 'Manager';
-  if (roleName === 'cashier') return 'Cashier';
-  if (roleName === 'waiter') return 'Server';
-  if (roleName === 'chef') return 'Kitchen';
-  return role?.display_name?.trim() || roleName || 'Staff';
+  return roleLabel(role, language);
 }
 
 export default function InviteTokenScreen() {

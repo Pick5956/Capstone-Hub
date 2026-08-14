@@ -70,7 +70,7 @@ function canTopic(membership: Membership | null | undefined, topic: Topic): bool
     case "sales-volume":
       return can(membership, "view_reports");
     case "billing":
-      return can(membership, "manage_staff");
+      return can(membership, "manage_restaurant_settings");
   }
 }
 

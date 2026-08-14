@@ -51,5 +51,8 @@ export const updateRolePermissions = (roleId: number, permissions: string[]) =>
 export const createRole = (data: { display_name: string; permissions: string[] }) =>
   apiClient.post<{ role: Role }>("/api/v1/roles", data);
 
+export const updateRole = (roleId: number, data: { display_name: string }) =>
+  apiClient.patch<{ role: Role }>(`/api/v1/roles/${roleId}`, data);
+
 export const deleteRole = (roleId: number) =>
   apiClient.delete<{ status: string }>(`/api/v1/roles/${roleId}`);

@@ -1,15 +1,55 @@
-import { Permission } from "../types/auth";
-import { Membership } from "../types/restaurant";
+import type { Permission } from "../types/auth";
+import type { Membership } from "../types/restaurant";
+
+export const TEAM_MANAGEMENT_PERMISSIONS = [
+  "manage_invites",
+  "manage_members",
+  "manage_roles",
+  "view_audit_log",
+] as const satisfies readonly Permission[];
 
 const fallbackRolePermissions: Record<string, Permission[]> = {
   owner: ["*"],
-  manager: ["view_dashboard", "manage_menu", "manage_table", "manage_staff", "manage_inventory", "manage_expenses", "view_reports", "take_order", "take_payment", "view_orders", "view_kitchen", "update_order_status"],
+  manager: [
+    "view_dashboard",
+    "manage_menu",
+    "view_tables",
+    "manage_table",
+    "take_order",
+    "view_orders",
+    "take_payment",
+    "view_kitchen",
+    "update_order_status",
+    "view_inventory",
+    "manage_inventory",
+    "manage_expenses",
+    "view_reports",
+    "manage_invites",
+    "manage_members",
+    "manage_roles",
+    "view_audit_log",
+    "manage_restaurant_settings",
+  ],
   cashier: ["view_dashboard", "take_payment", "view_orders", "view_tables"],
   waiter: ["view_dashboard", "take_order", "take_payment", "view_tables", "view_orders"],
   chef: ["view_kitchen", "update_order_status", "view_inventory"],
 };
 
 const deprecatedPermissions = new Set<Permission>(["view_menu"]);
+const legacyStaffCapabilities = new Set<Permission>([
+  "manage_invites",
+  "manage_members",
+  "manage_roles",
+  "view_audit_log",
+  "manage_restaurant_settings",
+]);
+
+function permissionListAllows(permissions: Permission[], roleName: string, permission: Permission) {
+  if (permissions.includes("*") || permissions.includes(permission)) return true;
+  return (roleName === "owner" || roleName === "manager")
+    && permissions.includes("manage_staff")
+    && legacyStaffCapabilities.has(permission);
+}
 
 export function can(membership: Membership | null | undefined, permission: Permission): boolean {
   if (deprecatedPermissions.has(permission)) {
@@ -20,7 +60,7 @@ export function can(membership: Membership | null | undefined, permission: Permi
   if (memberOverride) {
     try {
       const permissions = JSON.parse(memberOverride) as Permission[];
-      return permissions.includes("*") || permissions.includes(permission);
+      return permissionListAllows(permissions, membership?.role?.name ?? "", permission);
     } catch {
       return false;
     }
@@ -30,7 +70,7 @@ export function can(membership: Membership | null | undefined, permission: Permi
   if (rawPermissions) {
     try {
       const permissions = JSON.parse(rawPermissions) as Permission[];
-      return permissions.includes("*") || permissions.includes(permission);
+      return permissionListAllows(permissions, membership?.role?.name ?? "", permission);
     } catch {
       // Fall through to role-name defaults.
     }
@@ -38,5 +78,9 @@ export function can(membership: Membership | null | undefined, permission: Permi
 
   const roleName = membership?.role?.name ?? "";
   const permissions = fallbackRolePermissions[roleName] ?? [];
-  return permissions.includes("*") || permissions.includes(permission);
+  return permissionListAllows(permissions, roleName, permission);
+}
+
+export function canAccessTeam(membership: Membership | null | undefined) {
+  return TEAM_MANAGEMENT_PERMISSIONS.some((permission) => can(membership, permission));
 }

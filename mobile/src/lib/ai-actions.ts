@@ -43,12 +43,12 @@ const navigationEntries: NavigationEntry[] = [
   { href: '/orders', label: { th: 'ออเดอร์', en: 'Orders' }, permissions: ['view_orders', 'take_order'], aliases: ['orders', 'active orders', 'order archive', 'ออเดอร์', 'ออเดอร์ที่กำลังทำ', 'รายการออเดอร์', 'คลังออเดอร์'] },
   { href: '/inventory', label: { th: 'คลังวัตถุดิบ', en: 'Inventory' }, permissions: ['manage_inventory', 'view_inventory'], aliases: ['inventory', 'stock', 'ingredients', 'คลัง', 'คลังวัตถุดิบ', 'วัตถุดิบ', 'สต๊อก', 'สต็อก'] },
   { href: '/ai-assistant', label: { th: 'AI ผู้ช่วย', en: 'AI assistant' }, ownerOnly: true, aliases: ['ai', 'assistant', 'ai assistant', 'ผู้ช่วย ai', 'ai ผู้ช่วย'] },
-  { href: '/staff', label: { th: 'พนักงาน', en: 'Staff' }, permissions: ['manage_staff'], aliases: ['staff', 'team', 'employees', 'พนักงาน', 'ทีม', 'ทีมงาน', 'จัดการคน'] },
+  { href: '/staff', label: { th: 'พนักงาน', en: 'Staff' }, permissions: ['manage_invites', 'manage_members', 'manage_roles', 'view_audit_log'], aliases: ['staff', 'team', 'employees', 'พนักงาน', 'ทีม', 'ทีมงาน', 'จัดการคน'] },
   { href: '/reports', label: { th: 'รายงาน', en: 'Reports' }, permissions: ['view_reports'], aliases: ['reports', 'report', 'analytics', 'revenue', 'sales report', 'รายงาน', 'ยอดขาย', 'รายได้', 'วิเคราะห์'] },
   { href: '/settings/account', label: { th: 'ตั้งค่าบัญชี', en: 'Account settings' }, aliases: ['account', 'profile', 'my account', 'บัญชี', 'โปรไฟล์', 'บัญชีของฉัน', 'ข้อมูลส่วนตัว'] },
   { href: '/settings/display', label: { th: 'ภาษาและการแสดงผล', en: 'Language and display' }, aliases: ['display', 'language', 'font', 'theme', 'ภาษา', 'การแสดงผล', 'ฟอนต์', 'ธีม'] },
-  { href: '/settings/restaurant', label: { th: 'ข้อมูลร้านและการคิดเงิน', en: 'Restaurant and billing' }, permissions: ['manage_staff'], aliases: ['restaurant settings', 'billing settings', 'promptpay', 'vat', 'service charge', 'ตั้งค่าร้าน', 'ข้อมูลร้าน', 'การคิดเงิน', 'พร้อมเพย์', 'ภาษี'] },
-  { href: '/staff', label: { th: 'ทีมและสิทธิ์', en: 'Team and permissions' }, permissions: ['manage_staff'], aliases: ['team settings', 'permissions', 'roles', 'invitations', 'สิทธิ์', 'บทบาท', 'ทีมและสิทธิ์', 'คำเชิญ'] },
+  { href: '/settings/restaurant', label: { th: 'ข้อมูลร้านและการคิดเงิน', en: 'Restaurant and billing' }, permissions: ['manage_restaurant_settings'], aliases: ['restaurant settings', 'billing settings', 'promptpay', 'vat', 'service charge', 'ตั้งค่าร้าน', 'ข้อมูลร้าน', 'การคิดเงิน', 'พร้อมเพย์', 'ภาษี'] },
+  { href: '/staff', label: { th: 'ทีมและสิทธิ์', en: 'Team and permissions' }, permissions: ['manage_invites', 'manage_members', 'manage_roles', 'view_audit_log'], aliases: ['team settings', 'permissions', 'roles', 'invitations', 'สิทธิ์', 'บทบาท', 'ทีมและสิทธิ์', 'คำเชิญ'] },
   { href: '/settings', label: { th: 'ตั้งค่า', en: 'Settings' }, aliases: ['settings', 'setting', 'config', 'preferences', 'ตั้งค่า', 'การตั้งค่า'] },
 ];
 
@@ -211,7 +211,7 @@ export function resolveAIClarificationRequest(
       { id: 'settings-account', href: '/settings/account', label: language === 'th' ? 'ตั้งค่าบัญชี' : 'Account settings' },
       { id: 'settings-display', href: '/settings/display', label: language === 'th' ? 'ภาษาและการแสดงผล' : 'Language and display' },
     ];
-    if (hasPermission('manage_staff')) {
+    if (hasPermission('manage_restaurant_settings')) {
       actions.push({ id: 'settings-restaurant', href: '/settings/restaurant', label: language === 'th' ? 'ข้อมูลร้านและการคิดเงิน' : 'Restaurant and billing' });
     }
     return { message: language === 'th' ? 'ต้องการตั้งค่าส่วนไหนครับ?' : 'Which settings would you like to open?', actions };
@@ -264,7 +264,7 @@ export function getGuidedAIActions(
 
   if (
     includesAny(text, ['vat', 'promptpay', 'service charge', 'คิดเงิน', 'ภาษี', 'พร้อมเพย์'])
-    && hasPermission('manage_staff')
+    && hasPermission('manage_restaurant_settings')
   ) {
     add({ id: 'restaurant-billing', href: '/settings/restaurant', label: language === 'th' ? 'เปิดการตั้งค่าร้าน' : 'Open restaurant settings' });
   }

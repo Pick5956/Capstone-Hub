@@ -6,10 +6,18 @@ import {
   getAdjacentNavigationTarget,
   getNavigationIndexByRouteName,
   getPagerSceneTranslateXFromPosition,
+  isPagerSwipeCooldownActive,
+  notePagerVerticalScrollActivity,
+  PAGER_VERTICAL_SCROLL_COOLDOWN_MS,
   resetRouteStack,
+  resolvePagerAnimationDuration,
+  resolvePagerDockSelectionPlan,
+  resolvePagerGestureStartPlan,
   resolvePhoneNavigationIndicatorMetrics,
   resolvePagerAnimationSettlement,
+  resolvePagerRouteSyncAction,
   resolvePagerSwipeSettlement,
+  shouldStartPagerHorizontalSwipe,
   shouldOpenSettings,
 } from './navigation-runtime.ts';
 
@@ -97,6 +105,76 @@ test('slow short movement is not classified as a tab swipe', () => {
   );
 });
 
+test('vertical scrolling blocks an otherwise valid horizontal pager gesture', () => {
+  const blockedUntil = notePagerVerticalScrollActivity(0, 1_000);
+
+  assert.equal(
+    blockedUntil,
+    1_000 + PAGER_VERTICAL_SCROLL_COOLDOWN_MS,
+  );
+  assert.equal(isPagerSwipeCooldownActive(blockedUntil, 1_001), true);
+  assert.equal(
+    shouldStartPagerHorizontalSwipe(
+      { deltaX: -5, deltaY: 1 },
+      isPagerSwipeCooldownActive(blockedUntil, 1_001),
+    ),
+    false,
+  );
+});
+
+test('post-scroll horizontal pager lock lasts exactly 30 milliseconds', () => {
+  const blockedUntil = notePagerVerticalScrollActivity(0, 5_000);
+
+  assert.equal(PAGER_VERTICAL_SCROLL_COOLDOWN_MS, 30);
+  assert.equal(isPagerSwipeCooldownActive(blockedUntil, 5_029), true);
+  assert.equal(isPagerSwipeCooldownActive(blockedUntil, 5_030), false);
+});
+
+test('horizontal pager gestures resume at the exact end of the scroll cooldown', () => {
+  const blockedUntil = notePagerVerticalScrollActivity(0, 2_000);
+
+  assert.equal(
+    isPagerSwipeCooldownActive(blockedUntil, blockedUntil - 1),
+    true,
+  );
+  assert.equal(isPagerSwipeCooldownActive(blockedUntil, blockedUntil), false);
+  assert.equal(
+    shouldStartPagerHorizontalSwipe(
+      { deltaX: -5, deltaY: 1 },
+      isPagerSwipeCooldownActive(blockedUntil, blockedUntil),
+    ),
+    true,
+  );
+});
+
+test('pager responder admission keeps its minimum distance and direction dominance', () => {
+  assert.equal(
+    shouldStartPagerHorizontalSwipe({ deltaX: 4, deltaY: 0 }, false),
+    false,
+  );
+  assert.equal(
+    shouldStartPagerHorizontalSwipe({ deltaX: 5, deltaY: 5 }, false),
+    false,
+  );
+  assert.equal(
+    shouldStartPagerHorizontalSwipe({ deltaX: 5, deltaY: 1 }, false),
+    true,
+  );
+});
+
+test('continued vertical momentum extends the pager cooldown from its latest activity', () => {
+  const firstDeadline = notePagerVerticalScrollActivity(0, 3_000);
+  const momentumDeadline = notePagerVerticalScrollActivity(firstDeadline, 3_180);
+  const staleDeadline = notePagerVerticalScrollActivity(momentumDeadline, 3_100);
+
+  assert.equal(
+    momentumDeadline,
+    3_180 + PAGER_VERTICAL_SCROLL_COOLDOWN_MS,
+  );
+  assert.equal(staleDeadline, momentumDeadline);
+  assert.equal(isPagerSwipeCooldownActive(momentumDeadline, firstDeadline), true);
+});
+
 test('phone navigation indicator stays inside every dock slot on narrow screens', () => {
   const dockWidth = 288;
 
@@ -150,6 +228,168 @@ test('a released short drag settles exactly on the committed page', () => {
   assert.equal(
     getPagerSceneTranslateXFromPosition(1, interruptedReturn.position, 390),
     0,
+  );
+});
+
+test('post-release tab switching uses 500 milliseconds without slowing rollback', () => {
+  assert.equal(
+    resolvePagerAnimationDuration({
+      navigateAfterAnimation: true,
+      settleAfterGesture: true,
+      travel: 0.65,
+    }),
+    500,
+  );
+  assert.equal(
+    resolvePagerAnimationDuration({
+      navigateAfterAnimation: false,
+      settleAfterGesture: true,
+      travel: 0.35,
+    }),
+    180,
+  );
+});
+
+test('dock selections jump directly and can supersede an in-flight swipe', () => {
+  assert.deepEqual(
+    resolvePagerDockSelectionPlan({
+      committedIndex: 1,
+      itemCount: 5,
+      pendingRouteIndex: null,
+      targetIndex: 3,
+      transitionActive: false,
+    }),
+    {
+      animation: 'none',
+      interruptsTransition: false,
+      position: 3,
+      shouldNavigate: true,
+    },
+  );
+  assert.deepEqual(
+    resolvePagerDockSelectionPlan({
+      committedIndex: 1,
+      itemCount: 5,
+      pendingRouteIndex: 2,
+      targetIndex: 4,
+      transitionActive: true,
+    }),
+    {
+      animation: 'none',
+      interruptsTransition: true,
+      position: 4,
+      shouldNavigate: true,
+    },
+  );
+  assert.deepEqual(
+    resolvePagerDockSelectionPlan({
+      committedIndex: 2,
+      itemCount: 5,
+      pendingRouteIndex: null,
+      targetIndex: 2,
+      transitionActive: true,
+    }),
+    {
+      animation: 'none',
+      interruptsTransition: true,
+      position: 2,
+      shouldNavigate: false,
+    },
+  );
+  assert.deepEqual(
+    resolvePagerDockSelectionPlan({
+      committedIndex: 0,
+      itemCount: 5,
+      pendingRouteIndex: 1,
+      targetIndex: 0,
+      transitionActive: true,
+    }),
+    {
+      animation: 'none',
+      interruptsTransition: true,
+      position: 0,
+      shouldNavigate: true,
+    },
+    'the committed tab must still dispatch when it cancels a pending swipe route',
+  );
+});
+
+test('a consecutive swipe starts from the pending target without waiting for settle', () => {
+  const items = [
+    { href: '/home' },
+    { href: '/tables' },
+    { href: '/kitchen' },
+  ];
+  const firstSwipe = resolvePagerSwipeSettlement(
+    items,
+    0,
+    { deltaX: -8, deltaY: 1, velocityX: -350 },
+    390,
+  );
+  assert.deepEqual(firstSwipe, { targetIndex: 1, shouldNavigate: true });
+
+  const nextGesture = resolvePagerGestureStartPlan({
+    committedIndex: 0,
+    itemCount: items.length,
+    pendingRouteIndex: firstSwipe.targetIndex,
+  });
+  assert.deepEqual(nextGesture, {
+    routeIndexToReaffirm: 1,
+    startIndex: 1,
+  });
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      nextGesture.startIndex,
+      { deltaX: -8, deltaY: 1, velocityX: -350 },
+      390,
+    ),
+    { targetIndex: 2, shouldNavigate: true },
+  );
+  assert.deepEqual(
+    resolvePagerSwipeSettlement(
+      items,
+      nextGesture.startIndex,
+      { deltaX: -3, deltaY: 1, velocityX: -200 },
+      390,
+    ),
+    { targetIndex: 1, shouldNavigate: false },
+    'canceling the second gesture must retain the reaffirmed pending tab',
+  );
+});
+
+test('route acknowledgement preserves a running settle and ignores stale route updates', () => {
+  assert.equal(
+    resolvePagerRouteSyncAction({
+      activeIndex: 1,
+      pendingRouteIndex: 4,
+      permittedItemsChanged: false,
+    }),
+    'ignore-stale',
+  );
+  assert.equal(
+    resolvePagerRouteSyncAction({
+      activeIndex: 4,
+      pendingRouteIndex: 4,
+      permittedItemsChanged: false,
+    }),
+    'acknowledge',
+  );
+  assert.equal(
+    resolvePagerRouteSyncAction({
+      activeIndex: 2,
+      pendingRouteIndex: null,
+      permittedItemsChanged: false,
+    }),
+    'reconcile',
+  );
+  assert.equal(
+    resolvePagerRouteSyncAction({
+      activeIndex: 2,
+      pendingRouteIndex: 2,
+      permittedItemsChanged: true,
+    }),
+    'reconcile',
   );
 });
 

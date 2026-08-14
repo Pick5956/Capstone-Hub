@@ -53,7 +53,15 @@ function AppNavigator() {
 
   return (
     <AuthProvider>
-      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: colors.surface } }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+          presentation: 'card',
+          contentStyle: { backgroundColor: colors.surface },
+        }}
+      >
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />

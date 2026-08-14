@@ -62,13 +62,10 @@ function BackButton() {
         height: 44,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radius.md,
-        backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle,
-        opacity: pressed ? 0.72 : 1,
-        transform: [{ scale: pressed ? 0.97 : 1 }],
+        opacity: pressed ? 0.5 : 1,
       })}
     >
-      <AppIcon color={palette.textStrong} name="arrow-back" size={22} />
+      <AppIcon color={palette.textStrong} name="chevron-back-outline" size={30} />
     </Pressable>
   );
 }
@@ -81,7 +78,7 @@ function AuthArtwork() {
         flex: 1,
         justifyContent: 'space-between',
         overflow: 'hidden',
-        backgroundColor: palette.primary,
+        backgroundColor: palette.navigationSurface,
         padding: spacing.xxxl,
       }}
     >
@@ -94,7 +91,7 @@ function AuthArtwork() {
               width: 360,
               height: 360,
               borderWidth: 1,
-              borderColor: '#2F333A',
+              borderColor: palette.navigationMuted,
               borderRadius: radius.full,
             }}
           />
@@ -104,7 +101,7 @@ function AuthArtwork() {
               width: 244,
               height: 244,
               borderWidth: 1,
-              borderColor: '#3A3E46',
+              borderColor: palette.accentMuted,
               borderRadius: radius.full,
             }}
           />
@@ -116,7 +113,7 @@ function AuthArtwork() {
               width: 14,
               height: 14,
               borderRadius: radius.full,
-              backgroundColor: palette.accent,
+              backgroundColor: palette.navigationActive,
             }}
           />
           <View
@@ -126,9 +123,9 @@ function AuthArtwork() {
               alignItems: 'center',
               justifyContent: 'center',
               borderWidth: 1,
-              borderColor: '#464B54',
+              borderColor: palette.navigationMuted,
               borderRadius: radius.full,
-              backgroundColor: '#202329',
+              backgroundColor: palette.primary,
             }}
           >
             <BrandMark inverse showName={false} size={58} />
@@ -136,9 +133,9 @@ function AuthArtwork() {
         </View>
       </MotionReveal>
       <View style={{ flexDirection: 'row', gap: 6 }}>
-        <View style={{ width: 36, height: 3, borderRadius: radius.full, backgroundColor: palette.accent }} />
-        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: '#444851' }} />
-        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: '#444851' }} />
+        <View style={{ width: 36, height: 3, borderRadius: radius.full, backgroundColor: palette.navigationActive }} />
+        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: palette.navigationMuted }} />
+        <View style={{ width: 12, height: 3, borderRadius: radius.full, backgroundColor: palette.navigationMuted }} />
       </View>
     </View>
   );

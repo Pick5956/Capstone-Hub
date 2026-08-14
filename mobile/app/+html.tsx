@@ -32,5 +32,5 @@ const responsiveBackground = `
 html,
 body,
 #root {
-  background-color: #FFFFFF;
+  background-color: #FFF7ED;
 }`;

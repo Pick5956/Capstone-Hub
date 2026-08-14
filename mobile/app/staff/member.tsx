@@ -21,11 +21,22 @@ import {
   SectionHeader,
   Surface,
 } from '@/src/components/ui';
-import { allPermissions, parsePermissions, permissionGroupsFor } from '@/src/lib/permissions';
+import {
+  allPermissions,
+  normalizePermissionSelection,
+  parsePermissionsForRole,
+  permissionCanBeGranted,
+  permissionGroupsFor,
+  shouldUpdateMemberPermissions,
+  togglePermissionSelection,
+} from '@/src/lib/permissions';
+import { can } from '@/src/lib/rbac';
 import {
   allowedRoleOptions,
+  canGrantRole,
+  canManageMembers,
+  canManageRoles,
   canManageTarget,
-  canManageTeam,
   roleLabel,
   userDisplayName,
 } from '@/src/lib/staff-workflow';
@@ -44,7 +55,9 @@ export default function StaffMemberScreen() {
   const { copy, language } = useDisplayPreferences();
   const restaurantId = activeMembership?.restaurant_id;
   const actorRole = activeMembership?.role?.name;
-  const allowed = canManageTeam(activeMembership);
+  const canEditStatus = canManageMembers(activeMembership);
+  const canEditRole = canManageRoles(activeMembership);
+  const allowed = canEditStatus || canEditRole;
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [member, setMember] = useState<Membership | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -67,15 +80,24 @@ export default function StaffMemberScreen() {
     setLoading(true);
     setMember(null);
     setError(null);
-    Promise.all([listMembers(restaurantId), getRoles()])
+    Promise.all([
+      listMembers(restaurantId),
+      canEditRole ? getRoles() : Promise.resolve({ data: [] as Role[] }),
+    ])
       .then(([memberResponse, roleResponse]) => {
         const next = memberResponse.members.find((item) => item.ID === memberId) || null;
         setMember(next);
-        setRoles(allowedRoleOptions(actorRole, roleResponse.data || []));
+        setRoles(
+          allowedRoleOptions(actorRole, roleResponse.data || [], canEditRole)
+            .filter((role) => canGrantRole(activeMembership, role)),
+        );
         setRoleId(next?.role_id || 0);
         setStatus(next?.status || 'active');
         setUseRolePermissions(next?.permissions_override == null);
-        setPermissions(parsePermissions(next?.permissions_override ?? next?.role?.permissions));
+        setPermissions(parsePermissionsForRole(
+          next?.permissions_override ?? next?.role?.permissions,
+          next?.role?.name,
+        ));
       })
       .catch((err) => {
         setError(err instanceof Error
@@ -83,32 +105,46 @@ export default function StaffMemberScreen() {
           : copy('โหลดข้อมูลพนักงานไม่สำเร็จ', 'Unable to load staff details'));
       })
       .finally(() => setLoading(false));
-  }, [actorRole, allowed, copy, memberId, restaurantId]);
+  }, [activeMembership, actorRole, allowed, canEditRole, copy, memberId, restaurantId]);
 
   const manageable = Boolean(
-    allowed
+    (canEditStatus || (canEditRole && member?.role && canGrantRole(activeMembership, member.role)))
     && member
-    && canManageTarget(actorRole, member.role?.name, member.user_id === user?.ID),
+    && canManageTarget(
+      actorRole,
+      member.role?.name,
+      member.user_id === user?.ID,
+      canEditStatus || canEditRole,
+    ),
+  );
+  const canEditMemberRole = Boolean(
+    canEditRole
+    && member?.role
+    && canGrantRole(activeMembership, member.role),
   );
   const roleOptions = useMemo(
     () => roles.map((role) => ({ label: roleLabel(role, language), value: role.ID })),
     [language, roles],
   );
   const permissionGroups = useMemo(() => permissionGroupsFor(language), [language]);
+  const grantablePermissions = useMemo(() => new Set(
+    (allPermissions as readonly string[]).filter((permission) => (
+      can(activeMembership, permission)
+    )),
+  ), [activeMembership]);
 
   function changeRole(nextRoleId: number) {
+    if (!canEditMemberRole) return;
     setRoleId(nextRoleId);
     if (useRolePermissions) {
-      setPermissions(parsePermissions(roles.find((role) => role.ID === nextRoleId)?.permissions));
+      const nextRole = roles.find((role) => role.ID === nextRoleId);
+      setPermissions(parsePermissionsForRole(nextRole?.permissions, nextRole?.name));
     }
   }
 
   function toggle(key: string) {
-    setPermissions((current) => (
-      current.includes(key)
-        ? current.filter((item) => item !== key)
-        : [...current, key]
-    ));
+    if (!canEditMemberRole || !permissionCanBeGranted(key, grantablePermissions)) return;
+    setPermissions((current) => togglePermissionSelection(current, key));
   }
 
   async function save() {
@@ -119,34 +155,64 @@ export default function StaffMemberScreen() {
       return;
     }
 
+    const roleChanged = canEditMemberRole && roleId !== member.role_id;
+    const previousPermissions = parsePermissionsForRole(
+      member.permissions_override ?? member.role?.permissions,
+      member.role?.name,
+    );
+    const updatePermissions = canEditMemberRole && shouldUpdateMemberPermissions({
+      roleChanged,
+      previousUsesRolePermissions: member.permissions_override == null,
+      useRolePermissions,
+      previousPermissions,
+      selectedPermissions: permissions,
+    });
+    const editablePermissions = normalizePermissionSelection(permissions);
+    if (
+      updatePermissions
+      && !useRolePermissions
+      && editablePermissions.some((permission) => (
+        !(allPermissions as readonly string[]).includes(permission)
+        || !can(activeMembership, permission)
+      ))
+    ) {
+      setError(copy(
+        'บันทึกสิทธิ์ไม่ได้ เพราะมีสิทธิ์ที่บัญชีนี้มอบต่อไม่ได้ กรุณาให้ผู้มีสิทธิ์สูงกว่าเป็นผู้แก้ไข',
+        'These permissions exceed your grant scope. Ask a higher-privileged account to edit them.',
+      ));
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
       let updated = member;
-      if (roleId !== updated.role_id) {
+      if (roleChanged) {
         updated = (await updateMemberRole(restaurantId, updated.ID, roleId)).member;
         setMember(updated);
       }
-      if (status !== updated.status) {
+      if (canEditStatus && status !== updated.status) {
         updated = (await updateMemberStatus(restaurantId, updated.ID, status)).member;
         setMember(updated);
       }
-      const editablePermissions = permissions.filter((permission) => (
-        (allPermissions as readonly string[]).includes(permission)
-      ));
-      updated = (
-        await updateMemberPermissions(
-          restaurantId,
-          updated.ID,
-          useRolePermissions ? null : editablePermissions,
-        )
-      ).member;
+      if (updatePermissions) {
+        updated = (
+          await updateMemberPermissions(
+            restaurantId,
+            updated.ID,
+            useRolePermissions ? null : editablePermissions,
+          )
+        ).member;
+      }
       setMember(updated);
       setRoleId(updated.role_id);
       setStatus(updated.status);
       setUseRolePermissions(updated.permissions_override == null);
-      setPermissions(parsePermissions(updated.permissions_override ?? updated.role?.permissions));
+      setPermissions(parsePermissionsForRole(
+        updated.permissions_override ?? updated.role?.permissions,
+        updated.role?.name,
+      ));
       setConfirmStatus(null);
       setMessage(copy('บันทึกข้อมูลพนักงานแล้ว', 'Staff details saved'));
     } catch (err) {
@@ -185,8 +251,8 @@ export default function StaffMemberScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการทีม', 'No team management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
-            'You must be an owner or manager with team-management access.',
+            'บัญชีนี้ไม่ได้รับสิทธิ์จัดการสถานะหรือบทบาทของพนักงาน',
+            'This account cannot manage staff status or roles.',
           )}
         />
       </AppScreen>
@@ -202,8 +268,8 @@ export default function StaffMemberScreen() {
             : copy('ไม่พบพนักงาน', 'Staff member not found')}
           detail={member
             ? copy(
-              'ระบบไม่อนุญาตให้แก้ไขตนเอง เจ้าของร้าน หรือผู้จัดการในระดับเดียวกัน',
-              'You cannot edit yourself, an owner, or a manager at the same level.',
+              'แก้ไขตนเอง เจ้าของร้าน ผู้จัดการ หรือสิทธิ์ที่สูงกว่าขอบเขตของบัญชีนี้ไม่ได้',
+              'You cannot edit yourself, protected managers, owners, or access above your grant scope.',
             )
             : copy(
               'พนักงานอาจถูกนำออกหรือไม่ได้อยู่ในร้านนี้',
@@ -248,6 +314,19 @@ export default function StaffMemberScreen() {
         />
       ) : null}
       {message ? <Feedback title={message} tone="success" /> : null}
+      {canEditMemberRole
+        && member
+        && roleId !== member.role_id
+        && member.permissions_override != null ? (
+        <Feedback
+          title={copy('การเปลี่ยนบทบาทจะล้างสิทธิ์เดิม', 'Changing role resets old custom access')}
+          detail={copy(
+            'เมื่อบันทึก ระบบจะล้างสิทธิ์เฉพาะคนชุดเดิม หากเลือกกำหนดเอง รายการด้านล่างจะถูกบันทึกเป็นชุดใหม่',
+            'Saving clears the previous member override. If Customize is selected, the permissions below become the new override.',
+          )}
+          tone="warning"
+        />
+      ) : null}
       {confirmStatus ? (
         <Feedback
           title={confirmStatus === 'removed'
@@ -271,13 +350,17 @@ export default function StaffMemberScreen() {
           <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
           <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined }}>
             <SectionHeader title={copy('บทบาทและสถานะ', 'Role & status')} />
-            <ChipGroup
+            {canEditMemberRole ? <ChipGroup
               label={copy('บทบาท', 'Role')}
               value={roleId}
               onChange={changeRole}
               options={roleOptions}
-            />
-            <ChipGroup
+            /> : (
+              <Text selectable style={typeScale.cardTitle}>
+                {roleLabel(member.role, language)}
+              </Text>
+            )}
+            {canEditStatus ? <ChipGroup
               label={copy('สถานะ', 'Status')}
               value={status}
               onChange={(value) => {
@@ -289,10 +372,10 @@ export default function StaffMemberScreen() {
                 { label: copy('ระงับ', 'Suspended'), value: 'suspended' },
                 { label: copy('นำออกจากร้าน', 'Remove from restaurant'), value: 'removed' },
               ]}
-            />
+            /> : null}
           </Surface>
 
-          <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.2 : undefined }}>
+          {canEditMemberRole ? <Surface style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.2 : undefined }}>
             <SectionHeader
               title={copy('สิทธิ์การใช้งาน', 'Permissions')}
               detail={useRolePermissions
@@ -311,8 +394,10 @@ export default function StaffMemberScreen() {
                 const useRole = value === 'role';
                 setUseRolePermissions(useRole);
                 if (!useRole) {
-                  setPermissions(parsePermissions(
-                    roles.find((role) => role.ID === roleId)?.permissions,
+                  const selectedRole = roles.find((role) => role.ID === roleId);
+                  setPermissions(parsePermissionsForRole(
+                    selectedRole?.permissions,
+                    selectedRole?.name,
                   ));
                 }
               }}
@@ -340,10 +425,12 @@ export default function StaffMemberScreen() {
                 </Pressable>
                 {expanded ? group.rows.map((row) => {
                   const active = permissions.includes(row.key);
+                  const grantable = permissionCanBeGranted(row.key, grantablePermissions);
                   return (
                     <Pressable
                       accessibilityRole="checkbox"
-                      accessibilityState={{ checked: active }}
+                      accessibilityState={{ checked: active, disabled: !grantable }}
+                      disabled={!grantable}
                       key={row.key}
                       onPress={() => toggle(row.key)}
                       style={({ pressed }) => ({
@@ -355,7 +442,7 @@ export default function StaffMemberScreen() {
                         borderTopColor: palette.border,
                         backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
                         paddingVertical: spacing.sm,
-                        opacity: pressed ? 0.76 : 1,
+                        opacity: !grantable ? 0.5 : pressed ? 0.76 : 1,
                       })}
                     >
                       <Text style={{
@@ -373,7 +460,7 @@ export default function StaffMemberScreen() {
               </View>
               );
             }) : null}
-          </Surface>
+          </Surface> : null}
           </View>
 
           {tabletWorkspace || confirmStatus ? <Surface>

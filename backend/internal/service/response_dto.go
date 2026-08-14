@@ -19,12 +19,13 @@ type UserSummary struct {
 }
 
 type RoleResponse struct {
-	ID           uint   `json:"ID"`
-	RestaurantID *uint  `json:"restaurant_id,omitempty"`
-	Name         string `json:"name"`
-	DisplayName  string `json:"display_name"`
-	Permissions  string `json:"permissions"`
-	IsSystem     bool   `json:"is_system"`
+	ID                  uint    `json:"ID"`
+	RestaurantID        *uint   `json:"restaurant_id,omitempty"`
+	Name                string  `json:"name"`
+	DisplayName         string  `json:"display_name"`
+	DisplayNameOverride *string `json:"display_name_override,omitempty"`
+	Permissions         string  `json:"permissions"`
+	IsSystem            bool    `json:"is_system"`
 }
 
 // RestaurantResponse contains the operational restaurant fields clients need
@@ -115,11 +116,12 @@ type InvitationRestaurantSummary struct {
 }
 
 type InvitationRoleSummary struct {
-	ID           uint   `json:"ID"`
-	RestaurantID *uint  `json:"restaurant_id,omitempty"`
-	Name         string `json:"name"`
-	DisplayName  string `json:"display_name"`
-	IsSystem     bool   `json:"is_system"`
+	ID                  uint    `json:"ID"`
+	RestaurantID        *uint   `json:"restaurant_id,omitempty"`
+	Name                string  `json:"name"`
+	DisplayName         string  `json:"display_name"`
+	DisplayNameOverride *string `json:"display_name_override,omitempty"`
+	IsSystem            bool    `json:"is_system"`
 }
 
 type PublicInvitationResponse struct {
@@ -171,11 +173,12 @@ func NewPublicInvitationResponse(invitation *entity.Invitation) PublicInvitation
 	}
 	if invitation.Role != nil {
 		response.Role = &InvitationRoleSummary{
-			ID:           invitation.Role.ID,
-			RestaurantID: invitation.Role.RestaurantID,
-			Name:         invitation.Role.Name,
-			DisplayName:  invitation.Role.DisplayName,
-			IsSystem:     invitation.Role.IsSystem,
+			ID:                  invitation.Role.ID,
+			RestaurantID:        invitation.Role.RestaurantID,
+			Name:                invitation.Role.Name,
+			DisplayName:         invitation.Role.DisplayName,
+			DisplayNameOverride: invitation.Role.DisplayNameOverride,
+			IsSystem:            invitation.Role.IsSystem,
 		}
 	}
 	return response
@@ -231,11 +234,12 @@ func newRoleResponse(role *entity.Role, includePermissions bool) *RoleResponse {
 		return nil
 	}
 	response := &RoleResponse{
-		ID:           role.ID,
-		RestaurantID: role.RestaurantID,
-		Name:         role.Name,
-		DisplayName:  role.DisplayName,
-		IsSystem:     role.IsSystem,
+		ID:                  role.ID,
+		RestaurantID:        role.RestaurantID,
+		Name:                role.Name,
+		DisplayName:         role.DisplayName,
+		DisplayNameOverride: role.DisplayNameOverride,
+		IsSystem:            role.IsSystem,
 	}
 	if includePermissions {
 		response.Permissions = role.Permissions

@@ -1,25 +1,18 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
-import { apiUrl } from '@/src/api/client';
 import { listCategories, listMenuItems, setMenuItemAvailability } from '@/src/api/menu';
-import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { Button, ChipGroup, EmptyState, Feedback, SearchField, StatusBadge } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
-
-function resolveImage(value: string) {
-  if (!value) return '';
-  if (value.startsWith('http')) return value;
-  return `${apiUrl}${value.startsWith('/') ? '' : '/'}${value}`;
-}
 
 export default function MenuScreen() {
   const { width } = useWindowDimensions();
@@ -87,7 +80,7 @@ export default function MenuScreen() {
 
   if (!canView) {
     return (
-      <AppScreen title={copy('เมนูอาหาร', 'Menu')} topLevel>
+      <AppScreen title={copy('เมนูอาหาร', 'Menu')} topLevel={false}>
         <EmptyState
           title={copy('ไม่มีสิทธิ์ดูเมนู', 'Menu access unavailable')}
           detail={copy('บัญชีนี้ยังไม่ได้รับสิทธิ์ดูหรือจัดการเมนู', 'This account does not have permission to view or manage the menu.')}
@@ -103,8 +96,8 @@ export default function MenuScreen() {
         `${items.length.toLocaleString('th-TH')} เมนู · ${categories.length.toLocaleString('th-TH')} หมวด${canManage ? '' : ' · ดูอย่างเดียว'}`,
         `${items.length.toLocaleString('en-US')} items · ${categories.length.toLocaleString('en-US')} categories${canManage ? '' : ' · Read only'}`,
       )}
-      topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+      topLevel={false}
+      refreshControl={<AppRefreshControl onRefresh={load} />}
       action={canManage ? (
         <Button compact icon="add-outline" label={copy('เพิ่มเมนู', 'Add item')} onPress={() => router.push('/menu/item' as never)} />
       ) : undefined}
@@ -173,19 +166,11 @@ export default function MenuScreen() {
               onPress={() => router.push({ pathname: '/menu/item' as never, params: { id: String(item.ID) } } as never)}
               style={({ pressed }) => ({ gap: spacing.sm, opacity: pressed ? 0.72 : 1 })}
             >
-              {item.image_url ? (
-                <Image
-                  accessibilityLabel={copy(`รูปเมนู ${item.name}`, `Photo of ${item.name}`)}
-                  source={{ uri: resolveImage(item.image_url) }}
-                  resizeMode="contain"
-                  style={{ width: '100%', aspectRatio: 4 / 3, borderRadius: radius.md, backgroundColor: 'transparent' }}
-                />
-              ) : (
-                <View style={{ width: '100%', aspectRatio: 4 / 3, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
-                  <AppIcon color={palette.muted} name="restaurant-outline" size={28} />
-                  <Text style={[typeScale.caption, { color: palette.muted }]}>{copy('ยังไม่มีรูป', 'No photo')}</Text>
-                </View>
-              )}
+              <MenuImage
+                accessibilityLabel={copy(`รูปเมนู ${item.name}`, `Photo of ${item.name}`)}
+                imageUrl={item.image_url}
+                variant="card"
+              />
               <View style={{ gap: spacing.xs, paddingHorizontal: spacing.xs }}>
                 <Text selectable numberOfLines={2} style={typeScale.cardTitle}>{item.name}</Text>
                 <Text selectable style={typeScale.number}>{money(item.price, language)}</Text>

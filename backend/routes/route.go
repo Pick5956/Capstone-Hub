@@ -27,7 +27,7 @@ func SetupRoutes(r *gin.Engine) {
 		v1.POST("/users/profile/upload-image", userCtrl.UploadProfileImage)
 		v1.GET("/roles", roleCtrl.GetScopedRoles)
 		v1.POST("/roles", roleCtrl.CreateCustomRole)
-		v1.PATCH("/roles/:roleId", roleCtrl.UpdateCustomRole)
+		v1.PATCH("/roles/:roleId", roleCtrl.UpdateRoleDisplayName)
 		v1.DELETE("/roles/:roleId", roleCtrl.DeleteCustomRole)
 		v1.PATCH("/roles/:roleId/permissions", roleCtrl.UpdateRolePermissions)
 	}

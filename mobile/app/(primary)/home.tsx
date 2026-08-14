@@ -1,13 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listIngredients } from '@/src/api/ingredient';
 import { kitchenQueue, listOrders } from '@/src/api/order';
 import { getManagerReport, getTopMenuItemsByMonth } from '@/src/api/report';
 import { listTables } from '@/src/api/table';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import { Button, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
@@ -28,6 +28,7 @@ import {
   type HomeOperationalMetricKey,
   type HomePriority,
 } from '@/src/lib/home-dashboard';
+import { resolveHomeRestaurantIdentity } from '@/src/lib/app-shell-runtime';
 import { formatBangkokDate } from '@/src/lib/order-query';
 import { can } from '@/src/lib/rbac';
 import { getBangkokReportMonth } from '@/src/lib/report-query';
@@ -295,6 +296,77 @@ function orderStatusPresentation(status: OrderStatus) {
   return statusTone('info');
 }
 
+function HomeRestaurantIdentity() {
+  const { activeMembership, user } = useAuth();
+  const { copy } = useDisplayPreferences();
+  const identity = resolveHomeRestaurantIdentity({
+    restaurantName: activeMembership?.restaurant?.name,
+    branchName: activeMembership?.restaurant?.branch_name,
+    roleDisplayNameOverride: activeMembership?.role?.display_name_override,
+    roleDisplayName: activeMembership?.role?.display_name,
+    roleName: activeMembership?.role?.name,
+    nickname: user?.nickname,
+    firstName: user?.first_name,
+    email: user?.email,
+  });
+  const detail = identity.detail || copy('เลือกร้าน', 'Choose restaurant');
+
+  return (
+    <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+      <Pressable
+        accessibilityLabel={copy(
+          `เปลี่ยนร้าน ร้านปัจจุบัน ${identity.restaurantName} ${detail}`,
+          `Change restaurant. Current restaurant: ${identity.restaurantName}, ${detail}`,
+        )}
+        accessibilityRole="button"
+        onPress={() => router.push('/restaurants')}
+        style={({ pressed }) => ({
+          minWidth: 0,
+          minHeight: 48,
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+          opacity: pressed ? 0.68 : 1,
+        })}
+      >
+        <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.accentSoft }}>
+          <AppIcon color={palette.accent} name="storefront-outline" size={20} />
+        </View>
+        <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
+          <Text numberOfLines={1} style={{ color: palette.textStrong, fontSize: 15, fontWeight: '800' }}>
+            {identity.restaurantName}
+          </Text>
+          <Text numberOfLines={1} style={{ color: palette.muted, fontSize: 12 }}>
+            {detail}
+          </Text>
+        </View>
+        <AppIcon color={palette.muted} name="chevron-down" size={17} />
+      </Pressable>
+      <Pressable
+        accessibilityLabel={copy('เปิดบัญชีและการตั้งค่า', 'Open account and settings')}
+        accessibilityRole="button"
+        onPress={() => router.push('/settings')}
+        style={({ pressed }) => ({
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: palette.accentMuted,
+          borderRadius: radius.full,
+          backgroundColor: palette.accentSoft,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Text allowFontScaling={false} style={{ color: palette.accent, fontSize: 14, fontWeight: '800' }}>
+          {identity.userInitial}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
@@ -317,7 +389,6 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const workMode = localizedWorkMode(getWorkModeCopy(activeMembership), copy);
-  const restaurant = activeMembership?.restaurant;
   const canViewDashboard = can(activeMembership, 'view_dashboard');
   const canTakeOrder = can(activeMembership, 'take_order');
   const canViewOrders = can(activeMembership, 'view_orders');
@@ -473,6 +544,7 @@ export default function HomeScreen() {
       if (timer) clearInterval(timer);
       requestIdRef.current += 1;
       foregroundRequestIdRef.current = null;
+      setLoading(false);
     };
   }, [isToday, load]));
 
@@ -552,7 +624,11 @@ export default function HomeScreen() {
 
   if (!canViewDashboard) {
     return (
-      <AppScreen title={copy('ภาพรวมร้าน', 'Restaurant overview')} topLevel>
+      <AppScreen
+        beforeHeading={<HomeRestaurantIdentity />}
+        title={copy('ภาพรวมร้าน', 'Restaurant overview')}
+        topLevel
+      >
         <EmptyState
           title={copy('ไม่มีสิทธิ์ดูภาพรวมร้าน', 'You cannot view the restaurant overview')}
           detail={copy('ต้องมีสิทธิ์ view_dashboard', 'The view_dashboard permission is required')}
@@ -563,10 +639,11 @@ export default function HomeScreen() {
 
   return (
     <AppScreen
+      beforeHeading={<HomeRestaurantIdentity />}
       title={copy('ภาพรวมร้าน', 'Restaurant overview')}
-      subtitle={`${restaurant?.branch_name || copy('สาขาหลัก', 'Main branch')} · ${workMode.title}`}
+      subtitle={workMode.title}
       topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
       action={(
         <StatusBadge
           label={

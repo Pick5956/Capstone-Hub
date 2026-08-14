@@ -20,16 +20,24 @@ import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { BrandMark } from '@/src/components/brand-mark';
 import { MotionReveal, useReducedMotion } from '@/src/components/motion';
-import { useIsPrimaryTabsHost } from '@/src/components/primary-tabs-runtime';
-import { TabSwipeGestureProvider } from '@/src/components/tab-swipe-context';
+import {
+  useIsPrimaryTabsHost,
+  usePrimaryTabSceneStatus,
+} from '@/src/components/primary-tabs-runtime';
+import {
+  TabSwipeGestureProvider,
+  useTabSwipeVerticalScrollActivityReporter,
+} from '@/src/components/tab-swipe-context';
 import { canUseAIAssistant } from '@/src/lib/ai-actions';
 import {
   getAdjacentNavigationTarget,
-  PAGER_SWIPE_MIN_DISTANCE,
+  isPagerSwipeCooldownActive,
+  notePagerVerticalScrollActivity,
   resolvePhoneNavigationIndicatorMetrics,
   resolvePagerSwipeSettlement,
-  shouldOpenSettings,
+  shouldStartPagerHorizontalSwipe,
 } from '@/src/lib/navigation-runtime';
+import { runManualRefresh } from '@/src/lib/app-shell-runtime';
 import { orderRoutePermissions } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -65,7 +73,7 @@ const managementNavigation: NavItem[] = [
   { key: 'inventory', label: 'คลังวัตถุดิบ', labelEn: 'Inventory', shortLabel: 'คลัง', shortLabelEn: 'Stock', href: '/inventory', icon: 'cube-outline', activeIcon: 'cube', permission: 'view_inventory', fallbackPermission: 'manage_inventory' },
   { key: 'tables-manage', label: 'จัดการโต๊ะ', labelEn: 'Table management', shortLabel: 'โต๊ะ', shortLabelEn: 'Tables', href: '/table-management', icon: 'grid-outline', activeIcon: 'grid', permission: 'view_tables', fallbackPermission: 'manage_table' },
   { key: 'reservations', label: 'ประวัติการจอง', labelEn: 'Reservations', shortLabel: 'การจอง', shortLabelEn: 'Bookings', href: '/reservations', icon: 'calendar-outline', activeIcon: 'calendar', permissions: ['view_tables', 'manage_table', 'take_order'] },
-  { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', icon: 'people-outline', activeIcon: 'people', permission: 'manage_staff', roles: ['owner', 'manager'] },
+  { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', icon: 'people-outline', activeIcon: 'people', permissions: ['manage_invites', 'manage_members', 'manage_roles', 'view_audit_log'] },
   { key: 'reports', label: 'รายงาน', labelEn: 'Reports', shortLabel: 'รายงาน', shortLabelEn: 'Reports', href: '/reports', icon: 'bar-chart-outline', activeIcon: 'bar-chart', permission: 'view_reports' },
   { key: 'ai', label: 'ผู้ช่วยวิเคราะห์', labelEn: 'AI assistant', shortLabel: 'AI', shortLabelEn: 'AI', href: '/ai-assistant', icon: 'sparkles-outline', activeIcon: 'sparkles', ownerOnly: true },
   { key: 'settings', label: 'ตั้งค่า', labelEn: 'Settings', shortLabel: 'ตั้งค่า', shortLabelEn: 'Settings', href: '/settings', icon: 'settings-outline', activeIcon: 'settings' },
@@ -126,21 +134,21 @@ function NavigationButton({
         justifyContent: !expanded ? 'center' : 'flex-start',
         gap: expanded ? spacing.md : 3,
         borderWidth: active ? 1 : 0,
-        borderColor: active ? '#3A3E45' : 'transparent',
+        borderColor: active ? palette.navigationMuted : 'transparent',
         borderRadius: radius.md,
-        backgroundColor: active ? '#292C31' : 'transparent',
+        backgroundColor: active ? palette.navigationActive : 'transparent',
         paddingHorizontal: expanded ? spacing.md : spacing.xs,
         opacity: pressed ? 0.68 : 1,
       })}
     >
-      <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: active ? '#34383F' : 'transparent' }}>
+      <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: active ? palette.accentMuted : 'transparent' }}>
         <AppIcon
-          color={active ? palette.accent : '#AEB6C2'}
+          color={active ? palette.navigationActiveText : palette.navigationMuted}
           name={active ? item.activeIcon : item.icon}
           size={20}
         />
       </View>
-      <Text numberOfLines={expanded ? 1 : 2} style={{ flex: expanded ? 1 : undefined, color: active ? '#FFFFFF' : '#AEB6C2', fontSize: expanded ? 13 : 10, lineHeight: expanded ? 18 : 13, textAlign: !expanded ? 'center' : 'left', fontWeight: active ? '700' : '600' }}>
+      <Text numberOfLines={expanded ? 1 : 2} style={{ flex: expanded ? 1 : undefined, color: active ? palette.navigationActiveText : palette.navigationMuted, fontSize: expanded ? 13 : 10, lineHeight: expanded ? 18 : 13, textAlign: !expanded ? 'center' : 'left', fontWeight: active ? '700' : '600' }}>
         {expanded ? label : shortLabel}
       </Text>
     </Pressable>
@@ -167,7 +175,7 @@ export function PrimaryTabletRail({
   const management = managementNavigation.filter((item) => item.key !== 'settings' && isAllowed(item, activeMembership));
 
   return (
-    <SafeAreaView edges={['top', 'bottom', 'left']} style={{ width: expanded ? 232 : 92, borderRightWidth: 1, borderRightColor: '#292C31', backgroundColor: palette.primary, paddingHorizontal: expanded ? spacing.md : spacing.sm }}>
+    <SafeAreaView edges={['top', 'bottom', 'left']} style={{ width: expanded ? 232 : 92, borderRightWidth: 1, borderRightColor: palette.navigationBorder, backgroundColor: palette.navigationSurface, paddingHorizontal: expanded ? spacing.md : spacing.sm }}>
       <BrandBlock expanded={expanded} />
       <ScrollView contentContainerStyle={{ gap: spacing.xs, paddingVertical: spacing.sm }} showsVerticalScrollIndicator={false}>
         {primary.map((item) => (
@@ -180,7 +188,7 @@ export function PrimaryTabletRail({
         ))}
         {expanded ? (
           <>
-            <View style={{ height: 1, backgroundColor: '#34383F', marginVertical: spacing.sm }} />
+            <View style={{ height: 1, backgroundColor: palette.navigationMuted, marginVertical: spacing.sm }} />
             {management.map((item) => <NavigationButton item={item} key={item.key} mode="expanded" />)}
           </>
         ) : null}
@@ -260,8 +268,8 @@ export function PrimaryPhoneNavigation({
             height: PHONE_DOCK_HEIGHT,
             marginHorizontal: spacing.lg,
             borderRadius: PHONE_DOCK_RADIUS,
-            backgroundColor: palette.primary,
-            shadowColor: '#0F172A',
+            backgroundColor: palette.navigationSurface,
+            shadowColor: palette.shadow,
             shadowOffset: { width: 0, height: 10 },
             shadowOpacity: 0.2,
             shadowRadius: 16,
@@ -277,7 +285,7 @@ export function PrimaryPhoneNavigation({
               flexDirection: 'row',
               overflow: 'hidden',
               borderRadius: PHONE_DOCK_RADIUS,
-              backgroundColor: palette.primary,
+              backgroundColor: palette.navigationSurface,
             }}
           >
             {indicatorMetrics && selectedIndex >= 0 && selectedIndex < items.length ? (
@@ -290,7 +298,7 @@ export function PrimaryPhoneNavigation({
                   left: indicatorMetrics.indicatorInset,
                   width: indicatorMetrics.indicatorWidth,
                   borderRadius: PHONE_ACTIVE_INDICATOR_RADIUS,
-                  backgroundColor: palette.accent,
+                  backgroundColor: palette.navigationActive,
                   transform: [{ translateX: markerTranslate }],
                   zIndex: 0,
                 }}
@@ -323,7 +331,7 @@ export function PrimaryPhoneNavigation({
                 >
                   <View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center' }}>
                     <AppIcon
-                      color={active ? palette.primaryText : '#AEB6C2'}
+                      color={active ? palette.navigationActiveText : palette.navigationMuted}
                       name={active ? item.activeIcon : item.icon}
                       size={27}
                     />
@@ -338,55 +346,96 @@ export function PrimaryPhoneNavigation({
   );
 }
 
-function RestaurantBar({ detail }: { detail?: boolean }) {
-  const pathname = usePathname();
-  const { activeMembership, user } = useAuth();
-  const { copy } = useDisplayPreferences();
-  const restaurant = activeMembership?.restaurant;
-  const settingsActive = !shouldOpenSettings(pathname);
-  const userInitial = (user?.nickname || user?.first_name || user?.email || 'D').trim().charAt(0).toUpperCase();
+export function AppRefreshControl({
+  onRefresh,
+}: {
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const refresh = useCallback(() => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    void runManualRefresh(onRefresh, (nextRefreshing) => {
+      refreshingRef.current = nextRefreshing;
+      if (mountedRef.current) setRefreshing(nextRefreshing);
+    }).catch(() => undefined);
+  }, [onRefresh]);
 
   return (
-    <View style={{ minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: spacing.md }}>
-      {detail ? (
-        <Pressable accessibilityLabel={copy('ย้อนกลับ', 'Go back')} accessibilityRole="button" hitSlop={4} onPress={() => router.back()} style={({ pressed }) => ({ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle })}>
-          <AppIcon color={palette.textStrong} name="arrow-back" size={21} />
-        </Pressable>
-      ) : (
-        <View style={{ width: 4, height: 26, borderRadius: radius.full, backgroundColor: palette.accent }} />
-      )}
-      <Pressable accessibilityLabel={copy('เปลี่ยนร้าน', 'Change restaurant')} accessibilityRole="button" onPress={() => router.push('/restaurants')} style={({ pressed }) => ({ minWidth: 0, minHeight: 44, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, opacity: pressed ? 0.68 : 1 })}>
-        <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
-          <Text numberOfLines={1} style={{ color: palette.textStrong, fontSize: 14, fontWeight: '800' }}>{restaurant?.name || 'Dishy'}</Text>
-          <Text numberOfLines={1} style={{ color: palette.muted, fontSize: 11 }}>{restaurant?.branch_name || activeMembership?.role?.display_name || activeMembership?.role?.name || copy('เลือกร้าน', 'Choose restaurant')}</Text>
-        </View>
-        <AppIcon color={palette.muted} name="chevron-down" size={16} />
-      </Pressable>
-      <Pressable accessibilityLabel={copy('เปิดบัญชีและการตั้งค่า', 'Open account and settings')} accessibilityRole="button" accessibilityState={{ selected: settingsActive }} onPress={() => { if (!settingsActive) router.push('/settings'); }} style={({ pressed }) => ({ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: settingsActive ? palette.accentMuted : palette.borderStrong, borderRadius: radius.full, backgroundColor: settingsActive ? palette.accentSoft : palette.surface, opacity: pressed ? 0.7 : 1 })}>
-        <Text allowFontScaling={false} style={{ color: settingsActive ? palette.accent : palette.textStrong, fontSize: 14, fontWeight: '800' }}>{userInitial}</Text>
-      </Pressable>
-    </View>
+    <RefreshControl
+      colors={[palette.accent]}
+      onRefresh={refresh}
+      progressBackgroundColor={palette.surface}
+      refreshing={refreshing}
+      tintColor={palette.accent}
+    />
   );
 }
 
-function ScreenHeading({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+function ScreenHeading({
+  title,
+  titleContent,
+  subtitle,
+  action,
+  showBack = false,
+}: {
+  title: string;
+  titleContent?: React.ReactNode;
+  subtitle?: string;
+  action?: React.ReactNode;
+  showBack?: boolean;
+}) {
+  const { copy } = useDisplayPreferences();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-      <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
-        <Text accessibilityRole="header" selectable style={typeScale.hero}>{title}</Text>
-        {subtitle ? <Text selectable style={[typeScale.body, { color: palette.muted }]}>{subtitle}</Text> : null}
+      {showBack ? (
+        <Pressable
+          accessibilityLabel={copy('ย้อนกลับ', 'Go back')}
+          accessibilityRole="button"
+          hitSlop={4}
+          onPress={() => router.back()}
+          style={({ pressed }) => ({
+            width: 44,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: pressed ? 0.5 : 1,
+          })}
+        >
+          <AppIcon color={palette.textStrong} name="chevron-back-outline" size={30} />
+        </Pressable>
+      ) : null}
+      <View style={{ minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+        <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
+          {titleContent ?? (
+            <Text accessibilityRole="header" selectable style={typeScale.hero}>{title}</Text>
+          )}
+          {subtitle ? <Text selectable style={[typeScale.body, { color: palette.muted }]}>{subtitle}</Text> : null}
+        </View>
+        {action ? <View style={{ paddingTop: 1 }}>{action}</View> : null}
       </View>
-      {action ? <View style={{ paddingTop: 1 }}>{action}</View> : null}
     </View>
   );
 }
 
 export function AppScreen({
   title,
+  titleContent,
   subtitle,
   children,
-  topLevel = true,
+  topLevel = false,
   action,
+  beforeHeading,
   refreshControl,
   scroll = true,
   footer,
@@ -394,10 +443,12 @@ export function AppScreen({
   contentMaxWidth,
 }: {
   title: string;
+  titleContent?: React.ReactNode;
   subtitle?: string;
   children: React.ReactNode;
   topLevel?: boolean;
   action?: React.ReactNode;
+  beforeHeading?: React.ReactNode;
   refreshControl?: React.ReactElement<React.ComponentProps<typeof RefreshControl>>;
   scroll?: boolean;
   footer?: React.ReactNode;
@@ -410,6 +461,8 @@ export function AppScreen({
   const pathname = usePathname();
   const reducedMotion = useReducedMotion();
   const embeddedInPrimaryTabs = useIsPrimaryTabsHost();
+  const primaryTabSceneStatus = usePrimaryTabSceneStatus();
+  const reportParentVerticalScrollActivity = useTabSwipeVerticalScrollActivityReporter();
   const isTablet = width >= breakpoints.tablet;
   const expandedRail = width >= breakpoints.expandedRail;
   const screenBackground = isTablet ? palette.canvas : palette.surface;
@@ -433,6 +486,8 @@ export function AppScreen({
   const contentOpacity = useRef(new Animated.Value(1)).current;
   const navigationLocked = useRef(false);
   const nestedHorizontalGestureActive = useRef(false);
+  const pagerSwipeBlockedUntilRef = useRef(0);
+  const pagerSwipeTouchBlockedRef = useRef(false);
   const navigationFallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedTabIndex, setSelectedTabIndex] = useState(activeTabIndex);
   const useNativeDriver = Platform.OS !== 'web';
@@ -444,6 +499,8 @@ export function AppScreen({
     }
     navigationLocked.current = false;
     nestedHorizontalGestureActive.current = false;
+    pagerSwipeBlockedUntilRef.current = 0;
+    pagerSwipeTouchBlockedRef.current = false;
     contentTranslateX.setValue(0);
     contentOpacity.setValue(1);
     setSelectedTabIndex(activeTabIndex);
@@ -507,6 +564,20 @@ export function AppScreen({
     nestedHorizontalGestureActive.current = active;
   }, []);
 
+  const reportVerticalScrollActivity = useCallback((activityTimeMs: number) => {
+    pagerSwipeBlockedUntilRef.current = notePagerVerticalScrollActivity(
+      pagerSwipeBlockedUntilRef.current,
+      activityTimeMs,
+    );
+    if (primaryTabSceneStatus === null || primaryTabSceneStatus === 'active') {
+      reportParentVerticalScrollActivity(activityTimeMs);
+    }
+  }, [primaryTabSceneStatus, reportParentVerticalScrollActivity]);
+
+  const reportVerticalScrollNow = useCallback(() => {
+    reportVerticalScrollActivity(Date.now());
+  }, [reportVerticalScrollActivity]);
+
   const navigateToTab = useCallback((targetIndex: number, fromSwipe = false) => {
     const target = phoneNavigationItems[targetIndex];
     if (!target || navigationLocked.current) return;
@@ -563,7 +634,20 @@ export function AppScreen({
   }, [activeTabIndex, contentOpacity, contentTranslateX, markerPosition, pathname, phoneNavigationItems, reducedMotion, resetTabDrag, useNativeDriver, width]);
 
   const tabSwipeResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponderCapture: () => {
+      pagerSwipeTouchBlockedRef.current = isPagerSwipeCooldownActive(
+        pagerSwipeBlockedUntilRef.current,
+        Date.now(),
+      );
+      return false;
+    },
     onMoveShouldSetPanResponder: (_, gesture) => {
+      if (isPagerSwipeCooldownActive(
+        pagerSwipeBlockedUntilRef.current,
+        Date.now(),
+      )) {
+        pagerSwipeTouchBlockedRef.current = true;
+      }
       if (
         embeddedInPrimaryTabs ||
         !topLevel ||
@@ -576,10 +660,10 @@ export function AppScreen({
       ) {
         return false;
       }
-      const horizontalDistance = Math.abs(gesture.dx);
-      const verticalDistance = Math.abs(gesture.dy);
-      return horizontalDistance >= PAGER_SWIPE_MIN_DISTANCE &&
-        horizontalDistance > verticalDistance * 1.35;
+      return shouldStartPagerHorizontalSwipe({
+        deltaX: gesture.dx,
+        deltaY: gesture.dy,
+      }, pagerSwipeTouchBlockedRef.current);
     },
     onPanResponderGrant: () => {
       contentTranslateX.stopAnimation();
@@ -636,8 +720,15 @@ export function AppScreen({
   if (!activeMembership) return <Redirect href="/restaurants" />;
 
   const heading = (
-    <MotionReveal>
-      <ScreenHeading title={title} subtitle={subtitle} action={action} />
+    <MotionReveal style={{ gap: spacing.xl }}>
+      {beforeHeading}
+      <ScreenHeading
+        action={action}
+        showBack={!topLevel}
+        subtitle={subtitle}
+        title={title}
+        titleContent={titleContent}
+      />
     </MotionReveal>
   );
   const main = scroll ? (
@@ -646,7 +737,13 @@ export function AppScreen({
       contentContainerStyle={{ flexGrow: 1, alignItems: 'center', paddingHorizontal: horizontalPadding, paddingTop: spacing.lg, paddingBottom: topLevel && !isTablet ? phoneDockClearance : spacing.xxxl }}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
+      onMomentumScrollBegin={reportVerticalScrollNow}
+      onMomentumScrollEnd={reportVerticalScrollNow}
+      onScroll={reportVerticalScrollNow}
+      onScrollBeginDrag={reportVerticalScrollNow}
+      onScrollEndDrag={reportVerticalScrollNow}
       refreshControl={refreshControl}
+      scrollEventThrottle={32}
     >
       <View style={[{ width: '100%', maxWidth, gap: spacing.xl }, contentStyle]}>
         {heading}
@@ -664,7 +761,6 @@ export function AppScreen({
 
   const animatedContent = (
     <Animated.View
-      {...(topLevel && !isTablet && !embeddedInPrimaryTabs ? tabSwipeResponder.panHandlers : {})}
       style={{
         minHeight: 0,
         flex: 1,
@@ -673,9 +769,10 @@ export function AppScreen({
         transform: [{ translateX: contentTranslateX }],
       }}
     >
-      <SafeAreaView edges={isTablet ? ['top', 'right'] : ['top', 'left', 'right']} style={{ backgroundColor: palette.surface }}>
-        <RestaurantBar detail={!topLevel} />
-      </SafeAreaView>
+      <SafeAreaView
+        edges={isTablet ? ['top', 'right'] : ['top', 'left', 'right']}
+        style={{ backgroundColor: screenBackground }}
+      />
       {main}
       {footer ? <SafeAreaView edges={isTablet ? ['right', 'bottom'] : ['left', 'right', 'bottom']} style={{ backgroundColor: palette.surface }}>{footer}</SafeAreaView> : null}
     </Animated.View>
@@ -684,18 +781,13 @@ export function AppScreen({
   const content = (
     <View style={{ flex: 1, backgroundColor: screenBackground }}>
       {embeddedInPrimaryTabs ? animatedContent : (
-        <TabSwipeGestureProvider setNestedHorizontalGestureActive={setNestedHorizontalGestureActive}>
+        <TabSwipeGestureProvider
+          reportVerticalScrollActivity={reportVerticalScrollActivity}
+          setNestedHorizontalGestureActive={setNestedHorizontalGestureActive}
+        >
           {animatedContent}
         </TabSwipeGestureProvider>
       )}
-      {topLevel && !isTablet && !embeddedInPrimaryTabs ? (
-        <PrimaryPhoneNavigation
-          items={phoneNavigationItems}
-          markerPosition={markerPosition}
-          onSelect={navigateToTab}
-          selectedIndex={selectedTabIndex}
-        />
-      ) : null}
     </View>
   );
 

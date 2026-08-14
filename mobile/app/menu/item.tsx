@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listIngredients } from '@/src/api/ingredient';
-import { createMenuItem, deleteMenuItem, listCategories, listMenuItems, updateMenuItem } from '@/src/api/menu';
+import { createMenuItem, deleteMenuItem, listCategories, listMenuItems, updateMenuItem, uploadMenuImage } from '@/src/api/menu';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
+import { MenuImageCropper } from '@/src/components/menu-image-cropper';
 import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { toFloat, toInt } from '@/src/lib/forms';
 import {
@@ -20,6 +21,7 @@ import {
   type MenuOptionGroupDraft,
   type MenuOptionGroupIssueCode,
 } from '@/src/lib/menu-editor';
+import { resolveCommittedMenuImageUrl, type MenuImageUploadFile } from '@/src/lib/menu-image';
 import { can } from '@/src/lib/rbac';
 import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -46,6 +48,7 @@ export default function MenuItemEditorScreen() {
   const [available, setAvailable] = useState<'yes' | 'no'>('yes'); const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [optionGroups, setOptionGroups] = useState<MenuOptionGroupDraft[]>([]); const [ingredients, setIngredients] = useState<MenuIngredientDraft[]>([]); const [ingredientCandidate, setIngredientCandidate] = useState('none');
   const [saving, setSaving] = useState(false); const [error, setError] = useState<string | null>(null); const [confirmDelete, setConfirmDelete] = useState(false);
+  const [imageEditing, setImageEditing] = useState(false); const [uploadingImage, setUploadingImage] = useState(false); const [imageError, setImageError] = useState<string | null>(null);
   const [showOptionErrors, setShowOptionErrors] = useState(false);
   const [loading, setLoading] = useState(editing);
   const [itemExists, setItemExists] = useState<boolean | null>(editing ? null : true);
@@ -125,6 +128,7 @@ export default function MenuItemEditorScreen() {
   async function save() {
     if (!canManage || invalidRoute) return;
     if (editing && (itemId === null || itemExists !== true)) return;
+    if (imageEditing || uploadingImage) return;
     setShowOptionErrors(true);
     if (!name.trim() || !price || !categoryIds.length) { setError(copy('กรอกชื่อ ราคา และเลือกอย่างน้อย 1 หมวด', 'Enter a name and price, then choose at least one category.')); return; }
     if (optionValidation.issues.length) { setError(null); return; }
@@ -140,6 +144,25 @@ export default function MenuItemEditorScreen() {
       router.back();
     } catch (err) { setError(err instanceof Error ? err.message : copy('บันทึกเมนูไม่สำเร็จ', 'Could not save the menu item.')); }
     finally { setSaving(false); }
+  }
+  async function uploadImage(file: MenuImageUploadFile) {
+    setUploadingImage(true);
+    setImageError(null);
+    try {
+      const response = await uploadMenuImage(file);
+      const nextImageUrl = resolveCommittedMenuImageUrl(imageUrl, response.image_url);
+      if (!response.image_url?.trim()) throw new Error('Menu image upload returned no URL.');
+      setImageUrl(nextImageUrl);
+      return true;
+    } catch {
+      setImageError(copy(
+        'อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB',
+        'Could not upload image. Use jpg, png, or webp up to 5MB.',
+      ));
+      return false;
+    } finally {
+      setUploadingImage(false);
+    }
   }
   async function remove() {
     if (!canManage || itemId === null || itemExists !== true) return;
@@ -209,8 +232,32 @@ export default function MenuItemEditorScreen() {
           <TextField icon="reorder-three-outline" label={copy('ลำดับ', 'Display order')} value={displayOrder} onChangeText={setDisplayOrder} keyboardType="number-pad" />
         </View>
       </View>
+      <Divider />
+      <View style={{ gap: spacing.sm }}>
+        <Text style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>
+          {copy('รูปเมนู', 'Menu image')}
+        </Text>
+        <MenuImageCropper
+          copy={copy}
+          currentImageUrl={imageUrl}
+          disabled={saving || uploadingImage}
+          onEditingChange={setImageEditing}
+          onError={(message) => setImageError(message || null)}
+          onUpload={uploadImage}
+        />
+        {imageError ? (
+          <Text accessibilityRole="alert" style={[typeScale.caption, { color: palette.danger, fontWeight: '600' }]}>
+            {imageError}
+          </Text>
+        ) : null}
+        {uploadingImage ? (
+          <Text style={[typeScale.caption, { color: palette.muted }]}>
+            {copy('กำลังอัปโหลดรูป...', 'Uploading image...')}
+          </Text>
+        ) : null}
+      </View>
+      <Divider />
       <TextField icon="document-text-outline" label={copy('คำอธิบาย', 'Description')} value={description} onChangeText={setDescription} multiline />
-      <TextField icon="image-outline" label={copy('ลิงก์รูปเมนู', 'Menu photo URL')} value={imageUrl} onChangeText={setImageUrl} placeholder={copy('https://... หรือ /uploads/...', 'https://... or /uploads/...')} />
       <ChipGroup
         label={copy('สถานะขาย', 'Availability')}
         value={available}
@@ -388,7 +435,13 @@ export default function MenuItemEditorScreen() {
       topLevel={false}
       footer={(
         <ActionDock>
-          <Button icon="save-outline" label={editing ? copy('บันทึกเมนู', 'Save menu item') : copy('เพิ่มเมนู', 'Add menu item')} onPress={save} loading={saving} />
+          <Button
+            disabled={saving || imageEditing || uploadingImage}
+            icon="save-outline"
+            label={editing ? copy('บันทึกเมนู', 'Save menu item') : copy('เพิ่มเมนู', 'Add menu item')}
+            loading={saving}
+            onPress={save}
+          />
         </ActionDock>
       )}
     >

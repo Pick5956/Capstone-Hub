@@ -85,9 +85,8 @@ export default function RestaurantSettingsScreen() {
   const { activeMembership, refreshMemberships } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const restaurantId = activeMembership?.restaurant_id;
-  const managementRole = activeMembership?.role?.name === 'owner'
-    || activeMembership?.role?.name === 'manager';
-  const canManageRestaurant = managementRole && can(activeMembership, 'manage_staff');
+  const canManageRestaurant = can(activeMembership, 'manage_restaurant_settings');
+  const isOwner = activeMembership?.role?.name === 'owner';
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const [name, setName] = useState('');
@@ -232,7 +231,7 @@ export default function RestaurantSettingsScreen() {
   }
 
   async function remove() {
-    if (!restaurantId || saving) return;
+    if (!restaurantId || !isOwner || saving) return;
     if (!confirmDelete) {
       setConfirmDelete(true);
       return;
@@ -491,7 +490,7 @@ export default function RestaurantSettingsScreen() {
         />
       </Surface> : null}
 
-      {activeMembership?.role?.name === 'owner' ? (
+      {isOwner ? (
         <Surface style={{ borderColor: confirmDelete ? palette.danger : palette.border }}>
           <SectionHeader
             title={copy('ลบร้าน', 'Delete restaurant')}

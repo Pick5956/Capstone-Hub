@@ -72,6 +72,11 @@ func (r *InvitationRepository) FindByID(id uint) (*entity.Invitation, error) {
 	if err != nil {
 		return nil, err
 	}
+	effectiveRole, err := resolveEffectiveRole(r.db, inv.RestaurantID, inv.Role)
+	if err != nil {
+		return nil, err
+	}
+	inv.Role = effectiveRole
 	return &inv, nil
 }
 
@@ -85,6 +90,11 @@ func (r *InvitationRepository) FindByToken(token string) (*entity.Invitation, er
 	if err != nil {
 		return nil, err
 	}
+	effectiveRole, err := resolveEffectiveRole(r.db, inv.RestaurantID, inv.Role)
+	if err != nil {
+		return nil, err
+	}
+	inv.Role = effectiveRole
 	return &inv, nil
 }
 
@@ -99,6 +109,13 @@ func (r *InvitationRepository) ListPendingByRestaurant(restaurantID uint) ([]ent
 		Find(&invs).Error
 	if err != nil {
 		return nil, err
+	}
+	for index := range invs {
+		effectiveRole, err := resolveEffectiveRole(r.db, restaurantID, invs[index].Role)
+		if err != nil {
+			return nil, err
+		}
+		invs[index].Role = effectiveRole
 	}
 	return invs, nil
 }
@@ -126,6 +143,11 @@ func (s *gormInvitationAcceptanceStore) FindInvitationByTokenForUpdate(token str
 	if err != nil {
 		return nil, err
 	}
+	effectiveRole, err := resolveEffectiveRole(s.db, invitation.RestaurantID, invitation.Role)
+	if err != nil {
+		return nil, err
+	}
+	invitation.Role = effectiveRole
 	return &invitation, nil
 }
 
@@ -140,9 +162,11 @@ func (s *gormInvitationAcceptanceStore) FindMemberByUserAndRestaurant(userID, re
 	if err != nil {
 		return nil, err
 	}
-	if err := applyEffectiveRolePermissions(s.db, restaurantID, member.Role); err != nil {
+	effectiveRole, err := resolveEffectiveRole(s.db, restaurantID, member.Role)
+	if err != nil {
 		return nil, err
 	}
+	member.Role = effectiveRole
 	return &member, nil
 }
 

@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import {
   listOrders,
@@ -10,7 +10,7 @@ import {
 } from '@/src/api/order';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import {
   Button,
@@ -145,6 +145,8 @@ export default function OrdersScreen() {
     }
     return () => {
       requestIdRef.current += 1;
+      setLoading(false);
+      setLoadingMore(false);
     };
   }, [load]));
 
@@ -165,7 +167,7 @@ export default function OrdersScreen() {
         ? copy(`${activeCount.toLocaleString('th-TH')} กำลังดำเนินการ · ${totalCount.toLocaleString('th-TH')} ออเดอร์ทั้งหมด`, `${activeCount.toLocaleString('en-US')} active · ${totalCount.toLocaleString('en-US')} total orders`)
         : copy(`${totalCount.toLocaleString('th-TH')} ออเดอร์ที่ยังไม่ปิด`, `${totalCount.toLocaleString('en-US')} open ${totalCount === 1 ? 'order' : 'orders'}`)}
       topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
     >
       {error ? <Feedback title={archiveMode ? copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive') : copy('โหลดออเดอร์ที่กำลังทำไม่ได้', 'Could not load active orders')} detail={error} tone="danger" /> : null}
       {archiveMode ? (

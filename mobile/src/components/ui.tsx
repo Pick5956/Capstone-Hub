@@ -341,7 +341,7 @@ export function TextField({
           style={{
             minHeight: multiline ? 104 : 54,
             borderWidth: 1,
-            borderColor: error ? palette.danger : focused ? palette.textStrong : palette.border,
+            borderColor: error ? palette.danger : focused ? palette.primary : palette.controlBorder,
             borderRadius: radius.md,
             backgroundColor: focused ? palette.surface : palette.surfaceSubtle,
             color: palette.textStrong,
@@ -396,7 +396,7 @@ export function SearchField({
         style={{
           minHeight: 52,
           borderWidth: 1,
-          borderColor: focused ? palette.textStrong : palette.border,
+          borderColor: focused ? palette.primary : palette.controlBorder,
           borderRadius: radius.md,
           backgroundColor: focused ? palette.surface : palette.surfaceSubtle,
           color: palette.textStrong,
@@ -478,7 +478,11 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
 export function Feedback({ title, detail, tone = 'neutral' }: { title: string; detail?: string; tone?: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }) {
   const style = statusTone(tone);
   return (
-    <View accessibilityRole={tone === 'danger' ? 'alert' : undefined} style={{ gap: spacing.xs, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, ...style }}>
+    <View
+      accessibilityLiveRegion={tone === 'danger' ? 'assertive' : tone === 'neutral' ? 'none' : 'polite'}
+      accessibilityRole={tone === 'danger' ? 'alert' : undefined}
+      style={{ gap: spacing.xs, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, ...style }}
+    >
       <Text selectable style={{ color: style.color, fontSize: 14, fontWeight: '700' }}>{title}</Text>
       {detail ? <Text selectable style={{ color: style.color, fontSize: 13, lineHeight: 19 }}>{detail}</Text> : null}
     </View>
@@ -503,13 +507,15 @@ export function ActionDock({
   label,
   value,
   children,
+  showTopBorder = true,
 }: {
   label?: string;
   value?: string;
   children: React.ReactNode;
+  showTopBorder?: boolean;
 }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: showTopBorder ? 1 : 0, borderTopColor: palette.border, backgroundColor: palette.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
       {label || value ? (
         <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
           {label ? <Text style={[typeScale.caption, { color: palette.muted }]}>{label}</Text> : null}

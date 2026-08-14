@@ -1,12 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { apiUrl } from '@/src/api/client';
+import { listMenuItems } from '@/src/api/menu';
 import { kitchenQueue, updateOrderItemStatus } from '@/src/api/order';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import {
   Button,
@@ -19,12 +20,12 @@ import {
   TextField,
 } from '@/src/components/ui';
 import { itemStatusLabel } from '@/src/lib/format';
+import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   createKitchenMutationGate,
   KitchenMutationError,
   kitchenFulfillmentContext,
   kitchenTicketTiming,
-  resolveKitchenImageUrl,
   runKitchenMutation,
 } from '@/src/lib/kitchen-workflow';
 import { createRequestGeneration } from '@/src/lib/request-generation';
@@ -300,6 +301,7 @@ export default function KitchenScreen() {
   const canUpdate = access.canUpdate;
   const canView = access.canView;
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuImageById, setMenuImageById] = useState<ReadonlyMap<number, string>>(new Map());
   const [filter, setFilter] = useState<KitchenLane>('cooking');
   const [loading, setLoading] = useState(true);
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
@@ -313,6 +315,22 @@ export default function KitchenScreen() {
   const requestGenerationRef = useRef(createRequestGeneration());
   const adjacentWarmRequestedRef = useRef(false);
   const primaryTabSceneStatus = usePrimaryTabSceneStatus();
+
+  useEffect(() => {
+    if (!canView) return;
+    let active = true;
+    void listMenuItems()
+      .then((response) => {
+        if (!active) return;
+        setMenuImageById(new Map(
+          (response.menu_items || []).map((item) => [item.ID, item.image_url]),
+        ));
+      })
+      .catch(() => {
+        if (active) setMenuImageById(new Map());
+      });
+    return () => { active = false; };
+  }, [canView]);
 
   const reconcileQueue = useCallback(async () => {
     const request = requestGenerationRef.current.begin();
@@ -518,7 +536,7 @@ export default function KitchenScreen() {
     <AppScreen
       title={copy('ครัว', 'Kitchen')}
       topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
       contentMaxWidth={1320}
       contentStyle={{ gap: spacing.lg }}
     >
@@ -671,26 +689,22 @@ export default function KitchenScreen() {
                   {items.map((item, index) => {
                     const cancelling = cancelTargetId === item.ID;
                     const confirmingUndo = undoConfirmId === item.ID;
-                    const imageUri = resolveKitchenImageUrl(item.menu?.image_url, apiUrl);
                     const fulfillment = kitchenFulfillmentContext(order.order_type, item.fulfillment_type);
+                    const imageUrl = selectOrderItemImage({
+                      menuId: item.menu_id,
+                      menuImageUrl: item.menu?.image_url,
+                    }, menuImageById);
                     return (
                       <View key={item.ID}>
                         {index ? <Divider /> : null}
                         <View style={styles.item}>
                           <View style={styles.itemMain}>
-                            {imageUri ? (
-                              <Image
-                                accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                                source={{ uri: imageUri }}
-                                resizeMode="contain"
-                                 style={{
-                                   width: width >= 820 ? 60 : 52,
-                                   height: width >= 820 ? 60 : 52,
-                                   borderRadius: radius.md,
-                                   backgroundColor: 'transparent',
-                                 }}
-                               />
-                             ) : null}
+                            <MenuImage
+                              accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
+                              imageUrl={imageUrl}
+                              size={width >= 820 ? 60 : 52}
+                              variant="row"
+                            />
                             <View style={styles.itemContent}>
                               <View style={styles.itemTitleRow}>
                                 <View

@@ -8,7 +8,7 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import AppLogo from '@/src/components/shared/AppLogo';
 import { useBackdropClose } from '@/src/hooks/useBackdropClose';
-import { can } from '@/src/lib/rbac';
+import { can, TEAM_MANAGEMENT_PERMISSIONS } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
 type SubItem = {
@@ -106,7 +106,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'พนักงาน' : 'Staff',
           href: '/staff',
-          permission: 'manage_staff',
+          permission: [...TEAM_MANAGEMENT_PERMISSIONS],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
         },
         {
@@ -132,7 +132,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
             {
               label: language === 'th' ? 'จัดการร้านและภาษี' : 'Restaurant & Taxes',
               href: '/settings/restaurant',
-              permission: 'manage_staff',
+              permission: 'manage_restaurant_settings',
             },
             {
               label: language === 'th' ? 'ภาษาและการแสดงผล' : 'Display settings',

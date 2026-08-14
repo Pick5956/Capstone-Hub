@@ -4,7 +4,7 @@
     "slug": "restaurant-hub-mobile",
     "version": "1.0.0",
     "orientation": "default",
-    "backgroundColor": "#FFFFFF",
+    "backgroundColor": "#FFF7ED",
     "icon": "./assets/images/icon.png",
     "scheme": "restauranthub",
     "userInterfaceStyle": "automatic",
@@ -36,11 +36,19 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF"
+          "backgroundColor": "#FFF7ED"
         }
       ],
       "expo-secure-store",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "อนุญาตให้ Dishy เข้าถึงคลังรูปเพื่อเลือกรูปเมนู",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-font"
     ],
     "experiments": {

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshControl, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { getManagerReport, getTopMenuItemsByMonth } from '@/src/api/report';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { Button, ChipGroup, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { loadFilteredReplacement } from '@/src/lib/filter-reload';
@@ -203,14 +203,14 @@ export default function ReportsScreen() {
 
   if (!canView) {
     return (
-      <AppScreen title={copy('รายงานร้าน', 'Reports')} subtitle={copy('ยอดขาย กำไร และสต็อก', 'Sales, profit, and stock')} topLevel>
+      <AppScreen title={copy('รายงานร้าน', 'Reports')} subtitle={copy('ยอดขาย กำไร และสต็อก', 'Sales, profit, and stock')} topLevel={false}>
         <Feedback title={copy('ไม่มีสิทธิ์ดูรายงาน', 'Report access unavailable')} detail={copy('หน้านี้ต้องใช้สิทธิ์ดูรายงานของร้าน', 'This page requires permission to view restaurant reports.')} tone="info" />
       </AppScreen>
     );
   }
 
   return (
-    <AppScreen title={copy('รายงานร้าน', 'Reports')} subtitle={copy('ยอดขาย กำไร และสต็อก', 'Sales, profit, and stock')} topLevel refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
+    <AppScreen title={copy('รายงานร้าน', 'Reports')} subtitle={copy('ยอดขาย กำไร และสต็อก', 'Sales, profit, and stock')} topLevel={false} refreshControl={<AppRefreshControl onRefresh={load} />}>
       {error ? <Feedback title={copy('โหลดรายงานไม่ได้', 'Could not load reports')} detail={error} tone="danger" /> : null}
       {tabletWorkspace && report ? (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xl }}>
