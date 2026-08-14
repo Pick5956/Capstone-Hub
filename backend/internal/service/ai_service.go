@@ -579,6 +579,41 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// A reprice question ("เมนูไหนน่าปรับราคา") reads as a revenue ranking to the
+	// router, but the useful answer is the thin-margin menu whose price or cost most
+	// needs attention — so it is answered from the lowest-margin tool regardless.
+	if isRepriceQuestion(question) {
+		if result, rErr := executeReadOnlyTool(AIToolGetLowestMarginMenu, snapshot, question); rErr == nil {
+			if answer, ok := localToolAnswer(result); ok {
+				aiStage("flow", "reprice question → lowest-margin menu (price/cost candidate)")
+				return &AIAskResponse{
+					Answer:   answer,
+					Intent:   intent,
+					Task:     AITaskRecommendAction,
+					Tool:     AIToolGetLowestMarginMenu,
+					Model:    "local-tool-first",
+					Snapshot: snapshot,
+				}, nil
+			}
+		}
+	}
+
+	// "ควรเพิ่มเมนูอะไร" has no data-backed answer (the shop has no info on menus it
+	// does not sell), so give an honest, grounded suggestion instead of the current
+	// best-sellers dressed up as the answer.
+	if isAddMenuQuestion(question) {
+		if answer, ok := s.answerAddMenuAdvice(snapshot); ok {
+			aiStage("flow", "add-menu question → honest grounded suggestion")
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   AIIntentAnalysis,
+				Task:     AITaskRecommendAction,
+				Model:    "local-add-menu-advice",
+				Snapshot: snapshot,
+			}, nil
+		}
+	}
+
 	if answer, guarded := localAnalyticalGuardrailAnswer(question, snapshot); guarded {
 		aiStage("flow", "readiness guardrail (local) — data not ready for a business decision")
 		return &AIAskResponse{

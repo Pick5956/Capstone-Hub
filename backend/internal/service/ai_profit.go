@@ -107,16 +107,29 @@ func (s *AIService) answerTotalProfitQuery(restaurantID uint, question string) (
 	}, true, nil
 }
 
-// profitPeriod resolves the window a profit question is about. An explicit period
-// in the text wins; otherwise it defaults to the last 30 days. explicit reports
-// whether the text named the period, so an empty explicit period can be softened
-// with a rolling-window fallback.
+// profitPeriod resolves the window a profit/quantity question is about, from the
+// most specific scope to the least: a specific date, then "วันนี้"/"เมื่อวาน", then
+// a named or relative month, and finally the rolling 30-day default. explicit
+// reports whether the text named the period, so an empty explicit period can be
+// softened with a rolling-window fallback.
 func profitPeriod(question string, now time.Time) (start, end time.Time, label string, explicit bool) {
+	loc := now.Location()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	n := strings.ToLower(question)
+
+	if day, ok := extractSpecificDate(question, now); ok {
+		return day.Start, day.End, day.Label, true
+	}
+	switch {
+	case containsAny(n, "วันนี้", "today"):
+		return today, today.AddDate(0, 0, 1), "วันนี้", true
+	case containsAny(n, "เมื่อวาน", "วานนี้", "yesterday"):
+		return today.AddDate(0, 0, -1), today, "เมื่อวาน", true
+	}
 	if periods := extractPeriods(question, now); len(periods) > 0 {
 		return periods[0].Start, periods[0].End, periods[0].Label, true
 	}
-	loc := now.Location()
-	end = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1)
+	end = today.AddDate(0, 0, 1)
 	start = end.AddDate(0, 0, -30)
 	return start, end, "ช่วง 30 วันล่าสุด", false
 }

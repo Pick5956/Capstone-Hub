@@ -56,3 +56,26 @@ func TestProfitPeriodDefaultsToRollingWindow(t *testing.T) {
 		t.Fatalf("named month should win: %q explicit=%v", label, explicit)
 	}
 }
+
+// "วันนี้ขายกี่จาน" used to fall through to the 30-day window because only months
+// were parsed. Relative single days and specific dates must now scope correctly.
+func TestProfitPeriodParsesDays(t *testing.T) {
+	ref := time.Date(2026, time.August, 14, 20, 0, 0, 0, bangkokLocation())
+	today := time.Date(2026, time.August, 14, 0, 0, 0, 0, bangkokLocation())
+
+	start, end, label, explicit := profitPeriod("วันนี้ขายกี่จาน", ref)
+	if !explicit || label != "วันนี้" || !start.Equal(today) || !end.Equal(today.AddDate(0, 0, 1)) {
+		t.Fatalf("today wrong: %v..%v %q explicit=%v", start, end, label, explicit)
+	}
+
+	start, end, label, explicit = profitPeriod("เมื่อวานขายกี่จาน", ref)
+	if !explicit || label != "เมื่อวาน" || !start.Equal(today.AddDate(0, 0, -1)) || !end.Equal(today) {
+		t.Fatalf("yesterday wrong: %v..%v %q explicit=%v", start, end, label, explicit)
+	}
+
+	// A specific date still wins over everything.
+	_, _, label, explicit = profitPeriod("กำไรวันที่ 2 กรกฎาคมเท่าไหร่", ref)
+	if !explicit || label != "วันที่ 2 กรกฎาคม 2569" {
+		t.Fatalf("specific date should win: %q explicit=%v", label, explicit)
+	}
+}

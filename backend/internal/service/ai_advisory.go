@@ -77,6 +77,39 @@ func (s *AIService) answerStrategyAdvice(question string, snapshot AISnapshot) (
 	}, true
 }
 
+// answerAddMenuAdvice handles "ควรเพิ่มเมนูอะไร". The system has no data on menus
+// the shop does not already sell, so the honest answer says so, then grounds a
+// suggestion in what already works — the best-seller to extend and the top-margin
+// item to make more of — instead of listing current best-sellers as the answer.
+func (s *AIService) answerAddMenuAdvice(snapshot AISnapshot) (string, bool) {
+	var top, highMargin string
+	if len(snapshot.TopMenuItems) > 0 {
+		top = snapshot.TopMenuItems[0].MenuName
+	}
+	if snapshot.AnalysisReadiness.CanAnalyzeMargin && len(snapshot.AllMenuMargins) > 0 {
+		hi := snapshot.AllMenuMargins[0]
+		for _, m := range snapshot.AllMenuMargins {
+			if m.Margin > hi.Margin {
+				hi = m
+			}
+		}
+		highMargin = hi.MenuName
+	}
+	if top == "" && highMargin == "" {
+		return "", false
+	}
+
+	var b strings.Builder
+	b.WriteString("ตรงๆ นะครับ ระบบมีข้อมูลเฉพาะเมนูที่ขายอยู่ เลยชี้ชัดว่า \"ควรเพิ่มเมนูใหม่อะไร\" ให้ไม่ได้ (ไม่มีข้อมูลเทรนด์หรือความชอบลูกค้านอกร้าน) — แต่จากข้อมูลจริง แนะนำให้ต่อยอดจากของที่เวิร์กอยู่ครับ:")
+	if top != "" {
+		b.WriteString(fmt.Sprintf("\n- %s ขายดีสุด → ลองเพิ่มเวอร์ชัน/ท็อปปิ้ง/จัดเซ็ตของเมนูนี้", top))
+	}
+	if highMargin != "" && highMargin != top {
+		b.WriteString(fmt.Sprintf("\n- %s กำไรดีสุด → เพิ่มเมนูสไตล์เดียวกันช่วยดันกำไรรวม", highMargin))
+	}
+	return b.String(), true
+}
+
 // strategyLevers returns the always-available profit/sales levers: promote the
 // best-seller, and fix the thinnest margin. Both come straight from snapshot rows.
 func strategyLevers(snapshot AISnapshot) []string {
