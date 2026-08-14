@@ -62,6 +62,36 @@ func TestStructuredQueryAnswersRunnerUpPrice(t *testing.T) {
 	}
 }
 
+// A bare ordinal follow-up must keep the metric the USER asked for, not one the
+// context rewrite scraped from the previous answer. "เมนูไหนขายดีสุด" (quantity)
+// then "แล้วอันที่สองล่ะ" must give the #2 best-SELLER, even though the rewrite
+// was polluted into a revenue query by the answer's "รายได้/ราคา" wording.
+func TestRankFollowUpKeepsUserMetricOverRewrite(t *testing.T) {
+	history := []AIConversationMessage{
+		{Role: "user", Content: "เมนูไหนขายดีสุด"},
+		{Role: "assistant", Content: "อันดับ 1 ปีกไก่ทอดน้ำปลา รายได้รวม 19,800 บาท (ราคาเฉลี่ย 99 บาท/จาน)"},
+	}
+	// question = polluted rewrite (revenue axis); askedQuestion = the raw follow-up.
+	answer, tool, ok := structuredQueryAnswer("เมนูรายได้อันดับสอง", "แล้วอันที่สองล่ะ", history, bridgeSnapshot())
+	if !ok {
+		t.Fatal("rank-only follow-up should resolve from history")
+	}
+	if tool != AIToolGetTopSellingMenus {
+		t.Fatalf("tool = %q, want top-selling — user asked ขายดี, not revenue/price", tool)
+	}
+	if !strings.Contains(answer, "ต้มยำกุ้งน้ำข้น") {
+		t.Fatalf("expected the #2 best-seller ต้มยำกุ้งน้ำข้น: %s", answer)
+	}
+}
+
+// A follow-up that has NO prior metric in history must not be answered from a
+// polluted rewrite — it should decline so the outer flow can clarify.
+func TestRankFollowUpWithoutHistoryDeclines(t *testing.T) {
+	if _, _, ok := structuredQueryAnswer("เมนูรายได้อันดับสอง", "แล้วอันที่สองล่ะ", nil, bridgeSnapshot()); ok {
+		t.Fatal("a bare ordinal with no history metric must not be answered from the rewrite")
+	}
+}
+
 // Rank-1 questions must stay with the existing flow — this is what makes wiring
 // the pilot in a no-regression change.
 func TestStructuredQueryIgnoresRankOne(t *testing.T) {

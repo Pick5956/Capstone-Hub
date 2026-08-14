@@ -32,6 +32,10 @@ type AIAskResponse struct {
 	Tool           AIToolName               `json:"tool,omitempty"`
 	Model          string                   `json:"model"`
 	Snapshot       AISnapshot               `json:"snapshot"`
+	// ScopeAssumed is true when the answer covers a default time window the user did
+	// not ask for ("ยอดขายเท่าไหร่" → last 30 days). The client uses it to offer
+	// period-pivot chips, without re-deriving the "no scope stated" test itself.
+	ScopeAssumed   bool                     `json:"scope_assumed,omitempty"`
 	ConversationID string                   `json:"conversation_id,omitempty"`
 	TurnID         string                   `json:"turn_id,omitempty"`
 	ResolvedPlan   *ResolvedPlan            `json:"resolved_plan,omitempty"`
@@ -156,7 +160,15 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text         string              `json:"text,omitempty"`
+	InlineData   *geminiInlineData   `json:"inline_data,omitempty"`
 	FunctionCall *geminiFunctionCall `json:"functionCall,omitempty"`
+}
+
+// geminiInlineData carries a base64-encoded image (or other blob) so Gemini can
+// read it — used by the receipt scanner to send a photo for field extraction.
+type geminiInlineData struct {
+	MimeType string `json:"mime_type"`
+	Data     string `json:"data"`
 }
 
 type geminiFunctionCall struct {

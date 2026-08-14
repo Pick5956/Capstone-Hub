@@ -39,6 +39,17 @@ func structuredQueryAnswer(question, askedQuestion string, history []AIConversat
 		rank = r
 	}
 
+	// A pure ordinal follow-up ("แล้วอันที่สองล่ะ") names no metric of its own. The
+	// rewritten `question` cannot be trusted for the metric here: the context rewrite
+	// can absorb a metric word from the previous ANSWER — a best-seller list also
+	// prints รายได้/ราคา — and silently switch the axis (ขายดี → รายได้/ราคา). So when
+	// the user's own words carry no metric, the metric is inherited from history and
+	// the rewrite-derived metric is ignored. If history cannot supply it, fall
+	// through to a clarify rather than guessing.
+	if rank > 1 && !hasMetricWord(askedQuestion) {
+		return inheritedRankAnswer(history, askedQuestion, rank, snapshot)
+	}
+
 	if q, ok := parseMenuRankQuery(question); ok {
 		if rank > 1 && q.Rank <= 1 {
 			q.Rank, q.Limit = rank, 1
@@ -60,19 +71,35 @@ func structuredQueryAnswer(question, askedQuestion string, history []AIConversat
 		}
 	}
 
-	// Rank-only follow-up: take the subject from the conversation.
+	// Rank-only follow-up whose own wording did carry a metric but no parseable
+	// subject: still fall back to the conversation.
 	if rank > 1 {
-		if q, ok := inheritRankQueryFromHistory(history, askedQuestion, question); ok {
-			q.Rank, q.Limit = rank, 1
-			if answer, tool, done := answerMenuRank(q, snapshot); done {
-				return answer, tool, true
-			}
+		if answer, tool, done := inheritedRankAnswer(history, askedQuestion, rank, snapshot); done {
+			return answer, tool, true
 		}
-		if q, ok := inheritIngredientQueryFromHistory(history, askedQuestion, question); ok {
-			q.Rank, q.Limit = rank, 1
-			if answer, tool, done := answerIngredientRank(q, snapshot); done {
-				return answer, tool, true
-			}
+	}
+	return "", "", false
+}
+
+// inheritedRankAnswer resolves a rank-only follow-up from the most recent user
+// question in history that named a metric, trying the menu domain then the
+// ingredient one. The metric comes from what the user actually asked, never from
+// the previous answer's wording.
+//
+// Only the raw current question is excluded from the history scan. The rewritten
+// text must NOT be excluded: a good rewrite reconstructs the earlier question, so
+// it can equal the very history entry the metric should be inherited from.
+func inheritedRankAnswer(history []AIConversationMessage, askedQuestion string, rank int, snapshot AISnapshot) (string, AIToolName, bool) {
+	if q, ok := inheritRankQueryFromHistory(history, askedQuestion); ok {
+		q.Rank, q.Limit = rank, 1
+		if answer, tool, done := answerMenuRank(q, snapshot); done {
+			return answer, tool, true
+		}
+	}
+	if q, ok := inheritIngredientQueryFromHistory(history, askedQuestion); ok {
+		q.Rank, q.Limit = rank, 1
+		if answer, tool, done := answerIngredientRank(q, snapshot); done {
+			return answer, tool, true
 		}
 	}
 	return "", "", false

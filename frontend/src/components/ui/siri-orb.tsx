@@ -139,6 +139,10 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
           overflow: hidden;
           border-radius: 50%;
           position: relative;
+          /* Give each orb its own compositor layer so its continuous conic-gradient
+             repaint stays isolated and never forces its parent (e.g. the floating
+             chat panel) to re-raster while opening/closing. */
+          transform: translateZ(0);
         }
         .siri-orb::before,
         .siri-orb::after {

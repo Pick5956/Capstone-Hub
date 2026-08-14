@@ -19,6 +19,17 @@ import (
 func looksLikeDataCoverageQuestion(question string) bool {
 	n := strings.ToLower(strings.TrimSpace(question))
 
+	// "how much / is there enough data?" — a question about the VOLUME of records
+	// themselves, not a business metric. It must name the data ("ข้อมูล"/records),
+	// so "ยอดขายมากไหม" (are sales high?) is never mistaken for a coverage question.
+	if containsAny(n, "ข้อมูล", "บันทึก", "records", "data") &&
+		containsAny(n,
+			"มากแค่ไหน", "เยอะแค่ไหน", "มากไหม", "เยอะไหม", "พอไหม", "เพียงพอ",
+			"มากพอ", "เยอะพอ", "ครบไหม", "มีเท่าไหร่", "มีกี่", "how much", "how many", "enough",
+		) {
+		return true
+	}
+
 	asksAboutData := containsAny(n, "ข้อมูล", "ยอดขาย", "ออเดอร์", "บันทึก", "data", "sales", "records")
 	if !asksAboutData {
 		return false

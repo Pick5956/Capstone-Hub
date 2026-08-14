@@ -72,6 +72,11 @@ func (f *fakeAIOperationsService) ProactiveInsightsForOwner(actor service.AIActo
 	return nil, f.askErr
 }
 
+func (f *fakeAIOperationsService) ExtractReceiptForOwner(actor service.AIActorContext, _ string, _ string) (*service.ReceiptDraft, error) {
+	f.actor = actor
+	return nil, f.askErr
+}
+
 func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error) {
 	f.confirmCalls++
 	f.actor = actor
