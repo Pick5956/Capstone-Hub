@@ -5,6 +5,7 @@ import type {
   AIAskResponse,
   AIConversationMessage,
   AIInsight,
+  AIReceiptDraft,
   AISnapshot,
 } from "../types/ai";
 
@@ -42,3 +43,12 @@ export const getOperationsSnapshot = () =>
 
 export const getProactiveInsights = () =>
   apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");
+
+export const extractReceipt = (imageBase64: string, mimeType: string) =>
+  apiClient.post<{ draft: AIReceiptDraft }>(
+    "/api/v1/ai/operations/receipt",
+    { image: imageBase64, mime_type: mimeType },
+    // vision reads take longer than chat, and a stuck key rotates on the server;
+    // cap the wait so the UI fails gracefully instead of hanging forever.
+    { timeout: 70000 },
+  );

@@ -80,6 +80,7 @@ export function getGuidedActions(
   membership: Membership | null | undefined,
   language: "th" | "en",
   tool?: string,
+  scopeAssumed?: boolean,
 ): AIGuidedAction[] {
   // Prefer the structured tool; fall back to text only for free-form answers.
   const topics =
@@ -139,6 +140,24 @@ export function getGuidedActions(
     if (followUps.some((existing) => existing.id === id)) return;
     followUps.push({ id, label: language === "th" ? labelTh : labelEn, prompt: language === "th" ? promptTh : promptEn });
   };
+
+  // The backend answered a scope-less metric question for its default window and
+  // flagged it. Offer period pivots as the FIRST chips — that is the ambiguity the
+  // user most likely wants to resolve — so they surface ahead of the topic chips
+  // below and win the slice(0, 3) cut. The metric is read only to phrase the
+  // re-ask prompt; the "was scope assumed?" decision stays the backend's.
+  if (scopeAssumed) {
+    const q = question.toLowerCase();
+    const isQty = q.includes("กี่จาน") || q.includes("กี่ที่") || q.includes("จำนวนที่ขาย");
+    const metric = isQty ? "จาน" : q.includes("กำไร") || q.includes("profit") ? "กำไร" : "ยอดขาย";
+    // Re-ask the SAME metric scoped to the period. Dish-count phrasing needs its own
+    // shape ("วันนี้ขายได้กี่จาน"); baht metrics take "<metric><period>เท่าไหร่".
+    const mk = (period: string) => (isQty ? `${period}ขายได้กี่จาน` : `${metric}${period}เท่าไหร่`);
+    const en = isQty ? "dishes sold" : metric;
+    addFollowUp("fu-scope-today", "วันนี้", "Today", mk("วันนี้"), `${en} today`);
+    addFollowUp("fu-scope-month", "เดือนนี้", "This month", mk("เดือนนี้"), `${en} this month`);
+    addFollowUp("fu-scope-prev", "เดือนก่อน", "Last month", mk("เดือนที่แล้ว"), `${en} last month`);
+  }
 
   if (has("sales-volume")) {
     addFollowUp("fu-top-margin", "เมนูกำไรดีสุด", "Top-margin menu", "เมนูไหนกำไรดีสุด", "which menu has the highest margin");

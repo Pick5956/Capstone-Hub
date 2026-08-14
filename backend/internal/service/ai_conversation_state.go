@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	aiConversationContextTurnLimit = 10
+	// aiConversationContextTurnLimit is how many past exchanges (each a
+	// question+answer) the assistant loads as context. 20 turns = 40 messages, which
+	// must stay in step with structuredPlannerMaxContextItems (the message-count cap
+	// every history path is trimmed to) or the extra turns are silently dropped.
+	aiConversationContextTurnLimit = 20
 	aiConversationCleanupEvery     = 100
 	aiConversationStateVersion     = "1.0"
 )
