@@ -471,6 +471,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// because a broader one would otherwise swallow a narrower question: asking for
 	// lunch on one day must not be answered with the whole month's total.
 
+	// Sales forecast ("ทำนายยอดขายสัปดาห์หน้า") — the one place the assistant predicts
+	// the future. The number comes from a fixed formula (not the LLM), is bounded by
+	// an error measured on this shop's own history, and is always framed as a guess.
+	if fcResp, handled, fErr := s.answerSalesForecast(restaurantID, question); handled {
+		aiStage("flow", "sales forecast — seasonal moving average + backtest")
+		return fcResp, nil
+	} else if fErr != nil {
+		aiStage("warn", "sales forecast failed (%v) → snapshot flow", fErr)
+	}
+
 	// Two-entity comparisons ("เทียบวันจันทร์กับวันเสาร์", "ต้มยำกุ้งกับชาไทยอันไหน
 	// ขายดีกว่า"). They name two things of the same kind and want a verdict, which no
 	// single-metric tool can give, so they run before those tools.
