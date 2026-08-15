@@ -54,11 +54,19 @@ export default function ForecastChart({
     ...data.history.map((h) => ({ date: h.date, actual: h.actual })),
     ...data.forecast.map((f) => ({ date: f.date, predicted: f.predicted, band: [f.lower, f.upper] })),
   ];
-  // Bridge the solid history line into the dashed forecast so they connect.
+  // Bridge the solid history line into the dashed forecast so they connect — but
+  // only when they are actually contiguous. If the data is stale (a gap between the
+  // last actual and the first forecast), leave a visible break instead of drawing a
+  // line across days that do not exist.
   if (data.history.length && data.forecast.length) {
-    const last = rows[data.history.length - 1] as { actual?: number; predicted?: number; band?: number[] };
-    last.predicted = last.actual;
-    last.band = [last.actual as number, last.actual as number];
+    const gapDays = Math.round(
+      (Date.parse(data.forecast[0].date) - Date.parse(data.history[data.history.length - 1].date)) / 86_400_000,
+    );
+    if (gapDays <= 2) {
+      const last = rows[data.history.length - 1] as { actual?: number; predicted?: number; band?: number[] };
+      last.predicted = last.actual;
+      last.band = [last.actual as number, last.actual as number];
+    }
   }
   const forecastStart = data.forecast[0]?.date;
 

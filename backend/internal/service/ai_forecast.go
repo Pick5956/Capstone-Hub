@@ -49,6 +49,7 @@ type AIForecastResult struct {
 	MAE        float64                  `json:"mae"`         // mean abs error, baht
 	BacktestN  int                      `json:"backtest_n"`  // days evaluated
 	SampleDays int                      `json:"sample_days"` // history days the model saw
+	StaleDays  int                      `json:"stale_days"`  // how far behind today the latest data is
 }
 
 type AIForecastHistoryPoint struct {
@@ -96,9 +97,31 @@ func (s *AIService) answerSalesForecast(restaurantID uint, question string) (*AI
 		}, true, nil
 	}
 
-	result := buildForecast(points, forecastHorizonDays, forecastBacktestDays)
+	// Forecast the days AFTER today, not after the last data point — "สัปดาห์หน้า"
+	// means the coming week. When the data is stale (a demo DB that stopped days
+	// ago) this reaches across the gap, so the staleness is stated plainly.
+	now := repository.BangkokNow()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	lastData := points[len(points)-1].date
+	anchor := today
+	if lastData.After(anchor) {
+		anchor = lastData
+	}
+
+	result := buildForecast(points, anchor, forecastHorizonDays, forecastBacktestDays)
+	if staleDays := int(today.Sub(lastData).Hours() / 24); staleDays > 0 {
+		result.StaleDays = staleDays
+	}
+
+	answer := formatForecastAnswer(result)
+	if result.StaleDays > 2 {
+		answer = fmt.Sprintf(
+			"หมายเหตุ: ข้อมูลล่าสุดคือ %s (เก่ากว่าวันนี้ %d วัน) การทำนายจึงอิงข้อมูลชุดนั้น ความแม่นอาจลดลงครับ\n\n%s",
+			formatThaiDate(lastData.Format("2006-01-02")), result.StaleDays, answer)
+	}
+
 	return &AIAskResponse{
-		Answer:   formatForecastAnswer(result),
+		Answer:   answer,
 		Intent:   AIIntentAnalysis,
 		Task:     AITaskRecommendAction,
 		Model:    "local-forecast",
@@ -213,7 +236,7 @@ func backtestForecast(points []forecastDailyPoint, holdoutDays int) (mape, mae f
 	return sumAPE / float64(n) * 100, sumAE / float64(n), n
 }
 
-func buildForecast(points []forecastDailyPoint, horizon, holdout int) AIForecastResult {
+func buildForecast(points []forecastDailyPoint, anchor time.Time, horizon, holdout int) AIForecastResult {
 	mape, mae, n := backtestForecast(points, holdout)
 
 	band := mape / 100
@@ -221,10 +244,9 @@ func buildForecast(points []forecastDailyPoint, horizon, holdout int) AIForecast
 		band = forecastFallbackBand
 	}
 
-	last := points[len(points)-1].date
 	forecast := make([]AIForecastPoint, 0, horizon)
 	for i := 1; i <= horizon; i++ {
-		target := last.AddDate(0, 0, i)
+		target := anchor.AddDate(0, 0, i)
 		pred, ok := forecastDay(points, target)
 		if !ok {
 			continue

@@ -162,6 +162,7 @@ export type AIForecastResult = {
   mae: number;
   backtest_n: number;
   sample_days: number;
+  stale_days: number;
 };
 
 export type AIAskResponse = {
