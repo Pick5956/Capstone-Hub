@@ -29,10 +29,11 @@ import {
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIActionPreview, AISnapshot, AIConversationMessage } from "@/src/types/ai";
+import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResult } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import AIInputTools from "@/src/components/shared/AIInputTools";
+import ForecastChart from "@/src/components/shared/ForecastChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import SiriOrb from "@/src/components/ui/siri-orb";
@@ -44,6 +45,7 @@ type Message = {
   createdAt: Date;
   actions?: AIGuidedAction[];
   model?: string;
+  forecast?: AIForecastResult;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
@@ -350,6 +352,7 @@ export default function AIAssistantPage() {
           createdAt: new Date(),
           actions,
           model: data.model,
+          forecast: data.forecast,
         },
       ]);
     } catch (err: unknown) {
@@ -542,6 +545,9 @@ export default function AIAssistantPage() {
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
                   <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
+                    {msg.forecast && msg.forecast.forecast.length > 0 && (
+                      <ForecastChart data={msg.forecast} language={language} />
+                    )}
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {msg.actions.map((action) => (

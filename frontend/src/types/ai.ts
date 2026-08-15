@@ -155,6 +155,15 @@ export type AISystemDocSource = {
   url: `/docs#${string}` | `/docs/${string}#${string}`;
 };
 
+export type AIForecastResult = {
+  history: { date: string; actual: number }[];
+  forecast: { date: string; weekday: string; predicted: number; lower: number; upper: number }[];
+  mape: number;
+  mae: number;
+  backtest_n: number;
+  sample_days: number;
+};
+
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
@@ -165,6 +174,8 @@ export type AIAskResponse = {
   // True when the answer covers a default time window the user did not ask for
   // (e.g. "ยอดขายเท่าไหร่" → last 30 days). Drives the period-pivot chips.
   scope_assumed?: boolean;
+  // Chart-ready sales forecast when the question asked for one.
+  forecast?: AIForecastResult;
   conversation_id?: string;
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;
