@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -33,6 +33,7 @@ import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResu
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import AIInputTools from "@/src/components/shared/AIInputTools";
+import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
@@ -152,6 +153,7 @@ export default function AIAssistantPage() {
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsCount, setInsightsCount] = useState(0);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
@@ -515,7 +517,17 @@ export default function AIAssistantPage() {
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
+              title={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+            </button>
           </div>
+          <AISettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} language={language} />
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
