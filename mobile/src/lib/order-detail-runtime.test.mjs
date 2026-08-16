@@ -225,3 +225,35 @@ test('current-round source uses tap-to-edit and explicit swipe delete without in
   assert.match(editorSource, /updateOrderItem\(/);
   assert.doesNotMatch(editorSource, /addOrderItem\(/);
 });
+
+test('current-round list leaves unused tablet space on the app canvas while keeping focused surfaces', async () => {
+  const roundSource = await readFile(path.join(mobileRoot, 'app', 'order', 'current-round.tsx'), 'utf8')
+    .then((source) => source.replace(/\r\n/g, '\n'));
+  const listSectionStart = roundSource.indexOf('<EdgeSection');
+  const listSectionEnd = roundSource.indexOf('</EdgeSection>', listSectionStart);
+  const rowStart = roundSource.indexOf('function SwipeToDeleteRow(');
+  const rowEnd = roundSource.indexOf('function SendCurrentRoundAction(', rowStart);
+  const footerStart = roundSource.indexOf('const footer =');
+  const footerEnd = roundSource.indexOf('\n  return (', footerStart);
+
+  assert.ok(listSectionStart >= 0 && listSectionEnd > listSectionStart);
+  const listSection = roundSource.slice(listSectionStart, listSectionEnd);
+  assert.match(listSection, /backgroundColor:\s*'transparent'/);
+  assert.match(listSection, /<FlatList\b/);
+
+  assert.ok(rowStart >= 0 && rowEnd > rowStart);
+  assert.match(roundSource.slice(rowStart, rowEnd), /backgroundColor:\s*palette\.surface/);
+  assert.ok(footerStart >= 0 && footerEnd > footerStart);
+  assert.match(roundSource.slice(footerStart, footerEnd), /<ActionDock\b/);
+  assert.match(roundSource, /footer=\{footer\}/);
+});
+
+test('editable order taking uses routed review surfaces at every width', async () => {
+  const detailSource = await readFile(path.join(mobileRoot, 'app', 'order', '[id].tsx'), 'utf8');
+
+  assert.doesNotMatch(detailSource, /\bsplitWorkspace\b/);
+  assert.doesNotMatch(detailSource, /width:\s*'40%'/);
+  assert.match(detailSource, /<OrderSummaryAction\b[\s\S]*?\/order\/summary/);
+  assert.match(detailSource, /<CurrentRoundBasket\b[\s\S]*?\/order\/current-round/);
+  assert.match(detailSource, /footer=\{currentRoundBasket \|\| actionDock\}/);
+});

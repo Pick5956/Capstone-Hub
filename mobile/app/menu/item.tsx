@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listIngredients } from '@/src/api/ingredient';
-import { createMenuItem, deleteMenuItem, listCategories, listMenuItems, updateMenuItem, uploadMenuImage } from '@/src/api/menu';
+import { createMenuItem, deleteMenuItem, listCategories, listMenuItems, previewMenuImageBackground, updateMenuItem, uploadMenuImage } from '@/src/api/menu';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { MenuImageCropper } from '@/src/components/menu-image-cropper';
@@ -21,7 +21,7 @@ import {
   type MenuOptionGroupDraft,
   type MenuOptionGroupIssueCode,
 } from '@/src/lib/menu-editor';
-import { resolveCommittedMenuImageUrl, type MenuImageUploadFile } from '@/src/lib/menu-image';
+import { menuImageUploadCanCommit, resolveCommittedMenuImageUrl, type MenuImageBackgroundOptions, type MenuImageUploadFile, type MenuImageUploadResult } from '@/src/lib/menu-image';
 import { can } from '@/src/lib/rbac';
 import { parsePositiveRouteId } from '@/src/lib/route-id';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -145,21 +145,27 @@ export default function MenuItemEditorScreen() {
     } catch (err) { setError(err instanceof Error ? err.message : copy('บันทึกเมนูไม่สำเร็จ', 'Could not save the menu item.')); }
     finally { setSaving(false); }
   }
-  async function uploadImage(file: MenuImageUploadFile) {
+  async function uploadImage(file: MenuImageUploadFile, options: MenuImageBackgroundOptions): Promise<MenuImageUploadResult> {
     setUploadingImage(true);
     setImageError(null);
     try {
-      const response = await uploadMenuImage(file);
+      const response = await uploadMenuImage(file, options);
       const nextImageUrl = resolveCommittedMenuImageUrl(imageUrl, response.image_url);
       if (!response.image_url?.trim()) throw new Error('Menu image upload returned no URL.');
+      const backgroundRemoved = response.background_removed === true;
+      if (!menuImageUploadCanCommit(options, backgroundRemoved)) {
+        return { uploaded: true, backgroundRemoved };
+      }
       setImageUrl(nextImageUrl);
-      return true;
+      return { uploaded: true, backgroundRemoved };
     } catch {
-      setImageError(copy(
-        'อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB',
-        'Could not upload image. Use jpg, png, or webp up to 5MB.',
-      ));
-      return false;
+      if (!options.removeBackground) {
+        setImageError(copy(
+          'อัปโหลดรูปไม่สำเร็จ กรุณาใช้ไฟล์ jpg, png หรือ webp ขนาดไม่เกิน 5MB',
+          'Could not upload image. Use jpg, png, or webp up to 5MB.',
+        ));
+      }
+      return { uploaded: false, backgroundRemoved: false };
     } finally {
       setUploadingImage(false);
     }
@@ -243,6 +249,7 @@ export default function MenuItemEditorScreen() {
           disabled={saving || uploadingImage}
           onEditingChange={setImageEditing}
           onError={(message) => setImageError(message || null)}
+          onPreview={previewMenuImageBackground}
           onUpload={uploadImage}
         />
         {imageError ? (

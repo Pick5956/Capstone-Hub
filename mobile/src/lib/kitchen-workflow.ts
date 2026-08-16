@@ -32,6 +32,7 @@ export class KitchenMutationError extends Error {
 
 type KitchenTimingSource = {
   opened_at?: string | null;
+  kitchen_sent_at?: string | null;
   items?: readonly {
     sent_at?: string | null;
   }[] | null;
@@ -60,17 +61,38 @@ function timestamp(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function kitchenTicketStartedAt(ticket: KitchenTimingSource) {
+  const kitchenSentAt = timestamp(ticket.kitchen_sent_at);
+  if (kitchenSentAt !== null) return kitchenSentAt;
+
+  const sentTimes = (ticket.items || [])
+    .map((item) => timestamp(item.sent_at))
+    .filter((value): value is number => value !== null);
+  if (sentTimes.length) return Math.min(...sentTimes);
+
+  return timestamp(ticket.opened_at);
+}
+
+export function kitchenTicketSentTimeLabel(
+  ticket: KitchenTimingSource,
+  language: 'th' | 'en',
+) {
+  const startedAt = kitchenTicketStartedAt(ticket);
+  if (startedAt === null) return '−';
+  const time = new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(startedAt));
+  return language === 'th' ? `${time} น.` : time;
+}
+
 export function kitchenTicketTiming(
   ticket: KitchenTimingSource,
   now = Date.now(),
 ): { minutes: number; urgency: KitchenUrgency } {
-  const sentTimes = (ticket.items || [])
-    .map((item) => timestamp(item.sent_at))
-    .filter((value): value is number => value !== null);
-  const fallback = timestamp(ticket.opened_at);
-  const startedAt = sentTimes.length
-    ? Math.min(...sentTimes)
-    : fallback;
+  const startedAt = kitchenTicketStartedAt(ticket);
   const minutes = startedAt === null
     ? 0
     : Math.max(0, Math.floor((now - startedAt) / 60000));

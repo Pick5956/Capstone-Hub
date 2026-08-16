@@ -2,14 +2,18 @@ package controller
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"Project-M/internal/entity"
+	"Project-M/internal/media"
 	"Project-M/internal/repository"
 	"Project-M/internal/service"
 
@@ -20,6 +24,15 @@ import (
 type MenuController struct {
 	menuSvc *service.MenuService
 }
+
+const defaultMenuBackgroundStrength = 50
+
+var (
+	errInvalidRemoveBackground   = errors.New("remove_background must be true or false")
+	errInvalidBackgroundStrength = errors.New("background_strength must be between 0 and 100")
+	errBackgroundNotDetected     = errors.New("a removable background was not detected")
+	errProcessedImageTooLarge    = errors.New("processed image exceeds the 5MB upload limit")
+)
 
 func ProvideMenuController(db *gorm.DB) *MenuController {
 	return &MenuController{
@@ -326,31 +339,209 @@ func (ctrl *MenuController) UploadMenuImage(c *gin.Context) {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
+	removeBackground, backgroundStrength, err := parseMenuBackgroundOptions(
+		c.PostForm("remove_background"),
+		c.PostForm("background_strength"),
+	)
+	if err != nil {
+		respondMenuBackgroundOptionError(c, err)
+		return
+	}
+	relativeDir := filepath.Join("uploads", "menu", strconv.FormatUint(uint64(restaurantID), 10))
+
+	opened, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read image"})
+		return
+	}
+	source, readErr := io.ReadAll(opened)
+	closeErr := opened.Close()
+	if readErr != nil || closeErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read image"})
+		return
+	}
+	processed, err := media.ProcessMenuImageUpload(c.Request.Context(), source, ext, media.MenuImageProcessOptions{
+		RemoveBackground: removeBackground,
+		Strength:         backgroundStrength,
+	})
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	storedContents, storedExtension, backgroundRemoved, err := selectMenuImageForStorage(source, ext, processed, removeBackground)
+	if err != nil {
+		respondMenuBackgroundSelectionError(c, err)
+		return
+	}
+	if err := ensureUploadQuota(relativeDir, int64(len(storedContents)), maxTenantImageFiles, maxTenantImageBytes); err != nil {
+		respondAPIError(c, http.StatusInsufficientStorage, err)
+		return
+	}
 
 	random := make([]byte, 12)
 	if _, err := rand.Read(random); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate filename"})
 		return
 	}
-	fileName := hex.EncodeToString(random) + ext
-	relativeDir := filepath.Join("uploads", "menu", strconv.FormatUint(uint64(restaurantID), 10))
-	if err := ensureUploadQuota(relativeDir, file.Size, maxTenantImageFiles, maxTenantImageBytes); err != nil {
-		respondAPIError(c, http.StatusInsufficientStorage, err)
-		return
-	}
+	fileName := hex.EncodeToString(random) + storedExtension
 	if err := os.MkdirAll(relativeDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to prepare upload folder"})
 		return
 	}
 	destination := filepath.Join(relativeDir, fileName)
-	if err := c.SaveUploadedFile(file, destination); err != nil {
+	if err := saveMenuImageUpload(relativeDir, destination, storedContents); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save image"})
 		return
 	}
 
 	publicPath := "/uploads/menu/" + strconv.FormatUint(uint64(restaurantID), 10) + "/" + fileName
 	c.JSON(http.StatusCreated, gin.H{
-		"image_url": publicURL(c, publicPath),
-		"path":      publicPath,
+		"image_url":          publicURL(c, publicPath),
+		"path":               publicPath,
+		"background_removed": backgroundRemoved,
 	})
+}
+
+func (ctrl *MenuController) PreviewMenuImageBackground(c *gin.Context) {
+	if _, ok := requireRestaurantWithPermission(c, "manage_menu", "missing manage_menu permission"); !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+	ext, err := validateImageUpload(file)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	_, strength, err := parseMenuBackgroundOptions("true", c.PostForm("background_strength"))
+	if err != nil {
+		respondMenuBackgroundOptionError(c, err)
+		return
+	}
+
+	opened, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read image"})
+		return
+	}
+	source, readErr := io.ReadAll(opened)
+	closeErr := opened.Close()
+	if readErr != nil || closeErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read image"})
+		return
+	}
+
+	preview, err := media.PreviewMenuImageUpload(c.Request.Context(), source, ext, strength, maxImageUploadBytes)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	canRemove := preview.Result.BackgroundRemoved &&
+		int64(len(preview.Result.Bytes)) <= maxImageUploadBytes &&
+		len(preview.PreviewPNG) > 0
+	previewDataURL := ""
+	if canRemove {
+		previewDataURL = "data:image/png;base64," + base64.StdEncoding.EncodeToString(preview.PreviewPNG)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"can_remove":       canRemove,
+		"preview_data_url": previewDataURL,
+		"removed_ratio":    preview.Result.RemovedRatio,
+		"strength":         strength,
+	})
+}
+
+func parseMenuBackgroundOptions(removeRaw, strengthRaw string) (bool, int, error) {
+	removeRaw = strings.ToLower(strings.TrimSpace(removeRaw))
+	removeBackground := false
+	switch removeRaw {
+	case "", "false":
+	case "true":
+		removeBackground = true
+	default:
+		return false, 0, errInvalidRemoveBackground
+	}
+	strengthRaw = strings.TrimSpace(strengthRaw)
+	if strengthRaw == "" {
+		if removeBackground {
+			return true, defaultMenuBackgroundStrength, nil
+		}
+		return false, 0, nil
+	}
+	strength, err := strconv.Atoi(strengthRaw)
+	if err != nil || strength < 0 || strength > 100 {
+		return false, 0, errInvalidBackgroundStrength
+	}
+	return removeBackground, strength, nil
+}
+
+func respondMenuBackgroundOptionError(c *gin.Context, err error) {
+	code := "INVALID_BACKGROUND_STRENGTH"
+	if errors.Is(err, errInvalidRemoveBackground) {
+		code = "INVALID_REMOVE_BACKGROUND"
+	}
+	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": code})
+}
+
+func respondMenuBackgroundSelectionError(c *gin.Context, err error) {
+	if errors.Is(err, errProcessedImageTooLarge) {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+			"error": err.Error(),
+			"code":  "PROCESSED_IMAGE_TOO_LARGE",
+		})
+		return
+	}
+	c.JSON(http.StatusUnprocessableEntity, gin.H{
+		"error": err.Error(),
+		"code":  "BACKGROUND_NOT_DETECTED",
+	})
+}
+
+func selectMenuImageForStorage(source []byte, sourceExtension string, processed media.MenuImageResult, removeBackground bool) ([]byte, string, bool, error) {
+	if !removeBackground {
+		return source, sourceExtension, false, nil
+	}
+	if !processed.BackgroundRemoved {
+		return nil, "", false, errBackgroundNotDetected
+	}
+	if int64(len(processed.Bytes)) > maxImageUploadBytes {
+		return nil, "", false, errProcessedImageTooLarge
+	}
+	return processed.Bytes, processed.Extension, true, nil
+}
+
+func saveMenuImageUpload(directory, destination string, contents []byte) error {
+	temporary, err := os.CreateTemp(directory, ".menu-image-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+
+	if _, err := temporary.Write(contents); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Chmod(0644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, destination); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }

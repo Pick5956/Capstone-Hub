@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   resolveHomeRestaurantIdentity,
   runManualRefresh,
+  shouldShowTabletWorkspaceRail,
 } from './app-shell-runtime.ts';
 import { palette } from './theme-palette.ts';
 
@@ -143,7 +144,8 @@ test('staff warnings are announced and only describe a real custom-access reset'
 
 test('role editor animates local state changes without stacked boxes or extra rules', async () => {
   const [roleSource, motionSource, uiSource, shellSource] = await Promise.all([
-    readFile(path.join(mobileRoot, 'app', 'staff', 'role.tsx'), 'utf8'),
+    readFile(path.join(mobileRoot, 'app', 'staff', 'role.tsx'), 'utf8')
+      .then((source) => source.replace(/\r\n/g, '\n')),
     readFile(path.join(mobileRoot, 'src', 'components', 'motion.tsx'), 'utf8'),
     readFile(path.join(mobileRoot, 'src', 'components', 'ui.tsx'), 'utf8'),
     readFile(path.join(mobileRoot, 'src', 'components', 'app-shell.tsx'), 'utf8'),
@@ -357,6 +359,123 @@ test('the primary tab navigator is the sole owner of the phone bottom dock', asy
     primaryLayoutSource,
     /routeSyncTimer\.current = setTimeout\(\(\) => \{\s*if \(pagerGestureActiveRef\.current\) return;\s*restoreCommittedPager\(transitionId\);/,
     'the route watchdog must not reset the pager while a deliberate drag is still held',
+  );
+});
+
+test('the tablet rail stays outside native stack screen transitions', async () => {
+  const [rootLayoutSource, appShellSource, primaryLayoutSource] = await Promise.all([
+    readFile(path.join(mobileRoot, 'app', '_layout.tsx'), 'utf8'),
+    readFile(
+      path.join(mobileRoot, 'src', 'components', 'app-shell.tsx'),
+      'utf8',
+    ),
+    readFile(path.join(mobileRoot, 'app', '(primary)', '_layout.tsx'), 'utf8'),
+  ]);
+
+  const stackLayoutStart = rootLayoutSource.indexOf('function TabletWorkspaceStackLayout(');
+  const stackLayoutEnd = rootLayoutSource.indexOf('function AppNavigator(', stackLayoutStart);
+  assert.ok(
+    stackLayoutStart >= 0 && stackLayoutEnd > stackLayoutStart,
+    'the native Stack must have a stable tablet workspace layout',
+  );
+  const stackLayoutSource = rootLayoutSource.slice(stackLayoutStart, stackLayoutEnd);
+  assert.match(stackLayoutSource, /<TabletWorkspaceFrame>/);
+  assert.match(stackLayoutSource, /\{children\}/);
+  assert.match(stackLayoutSource, /<\/TabletWorkspaceFrame>/);
+
+  const rootStackStart = rootLayoutSource.indexOf('<Stack');
+  const rootStackEnd = rootLayoutSource.indexOf('</Stack>', rootStackStart);
+  assert.ok(rootStackStart >= 0 && rootStackEnd > rootStackStart, 'root Stack must exist');
+  const rootStackSource = rootLayoutSource.slice(rootStackStart, rootStackEnd);
+  assert.match(
+    rootStackSource,
+    /\blayout=\{TabletWorkspaceStackLayout\}/,
+    'the tablet workspace frame must wrap navigator children, not individual screens',
+  );
+  assert.match(
+    rootStackSource,
+    /screenOptions=\{\{[\s\S]*?animation:\s*'slide_from_right'/,
+    'pushed workflow content must retain the native slide transition',
+  );
+
+  const frameStart = appShellSource.indexOf('export function TabletWorkspaceFrame(');
+  const frameEnd = appShellSource.indexOf('const PHONE_DOCK_HEIGHT', frameStart);
+  assert.ok(frameStart >= 0 && frameEnd > frameStart, 'TabletWorkspaceFrame must exist');
+  const frameSource = appShellSource.slice(frameStart, frameEnd);
+  assert.equal(
+    (frameSource.match(/<PrimaryTabletRail\b/g) || []).length,
+    1,
+    'the persistent tablet frame must render exactly one rail',
+  );
+  assert.match(frameSource, /shouldShowTabletWorkspaceRail\(/);
+  assert.match(frameSource, /tabletBreakpoint:\s*breakpoints\.tablet/);
+  assert.match(
+    frameSource,
+    /\{showRail\s*\?\s*\(\s*<PrimaryTabletRail\b/,
+    'the shared visibility decision must gate the rendered tablet rail',
+  );
+  assert.match(frameSource, /const isOnPrimaryRoot = primaryNavigation\.some\(/);
+  assert.match(frameSource, /router\.navigate\(item\.href as never\)/);
+  assert.match(
+    frameSource,
+    /onSelectPrimary=\{isOnPrimaryRoot \? navigateToPrimaryRoot : undefined\}/,
+    'primary rail presses must dispatch tab-compatible navigation while inside the tab host',
+  );
+
+  const appScreenStart = appShellSource.indexOf('export function AppScreen(');
+  assert.ok(appScreenStart >= 0, 'AppScreen must exist');
+  assert.doesNotMatch(
+    appShellSource.slice(appScreenStart),
+    /<PrimaryTabletRail\b/,
+    'individual stack screens must not recreate the tablet rail',
+  );
+  assert.doesNotMatch(
+    primaryLayoutSource,
+    /<PrimaryTabletRail\b/,
+    'the primary tab host must use the same persistent tablet rail',
+  );
+});
+
+test('the persistent tablet rail is limited to authenticated workspace routes', () => {
+  const baseInput = {
+    activeMembership: true,
+    authStatus: 'ready',
+    tabletBreakpoint: 768,
+    user: true,
+    width: 1024,
+  };
+
+  for (const pathname of ['/home', '/order/new', '/menu/item', '/settings/display']) {
+    assert.equal(
+      shouldShowTabletWorkspaceRail({ ...baseInput, pathname }),
+      true,
+      `${pathname} must retain the persistent tablet rail`,
+    );
+  }
+
+  for (const pathname of ['/', '/login', '/register', '/restaurants', '/invite/manual']) {
+    assert.equal(
+      shouldShowTabletWorkspaceRail({ ...baseInput, pathname }),
+      false,
+      `${pathname} must remain outside the workspace shell`,
+    );
+  }
+
+  assert.equal(
+    shouldShowTabletWorkspaceRail({ ...baseInput, pathname: '/home', width: 767 }),
+    false,
+  );
+  assert.equal(
+    shouldShowTabletWorkspaceRail({ ...baseInput, pathname: '/home', width: 768 }),
+    true,
+  );
+  assert.equal(
+    shouldShowTabletWorkspaceRail({ ...baseInput, authStatus: 'loading', pathname: '/home' }),
+    false,
+  );
+  assert.equal(
+    shouldShowTabletWorkspaceRail({ ...baseInput, activeMembership: false, pathname: '/home' }),
+    false,
   );
 });
 

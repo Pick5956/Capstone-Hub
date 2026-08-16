@@ -5,10 +5,17 @@ import {
   createKitchenMutationGate,
   KitchenMutationError,
   kitchenFulfillmentContext,
+  kitchenTicketSentTimeLabel,
+  kitchenTicketStartedAt,
   kitchenTicketTiming,
   resolveKitchenImageUrl,
   runKitchenMutation,
 } from './kitchen-workflow.ts';
+import {
+  isKitchenOrderChangeEvent,
+  parseOrderChangeEvent,
+  parseServerSentEvents,
+} from './order-events.ts';
 import {
   createRequestGeneration,
   shouldStartRequest,
@@ -187,6 +194,82 @@ test('kitchen ticket timing uses the oldest sent item and web urgency thresholds
     opened_at: '2026-07-30T05:06:00.000Z',
     items: [],
   }, now).urgency, 'normal');
+});
+
+test('kitchen ticket time uses the batch sent time and formats Bangkok time', () => {
+  const ticket = {
+    opened_at: '2026-07-30T01:00:00.000Z',
+    kitchen_sent_at: '2026-07-30T02:55:00.000Z',
+    items: [
+      { sent_at: '2026-07-30T03:00:00.000Z' },
+      { sent_at: '2026-07-30T03:01:00.000Z' },
+    ],
+  };
+
+  assert.equal(kitchenTicketStartedAt(ticket), Date.parse(ticket.kitchen_sent_at));
+  assert.equal(kitchenTicketSentTimeLabel(ticket, 'th'), '09:55 น.');
+  assert.equal(kitchenTicketSentTimeLabel(ticket, 'en'), '09:55');
+  assert.equal(kitchenTicketSentTimeLabel({}, 'th'), '−');
+});
+
+test('kitchen ticket time falls back to the oldest item before order open time', () => {
+  assert.equal(kitchenTicketStartedAt({
+    opened_at: '2026-07-30T05:08:00.000Z',
+    items: [
+      { sent_at: '2026-07-30T05:06:00.000Z' },
+      { sent_at: '2026-07-30T05:02:00.000Z' },
+    ],
+  }), Date.parse('2026-07-30T05:02:00.000Z'));
+  assert.equal(kitchenTicketStartedAt({
+    opened_at: '2026-07-30T05:08:00.000Z',
+    items: [{ sent_at: 'not-a-date' }],
+  }), Date.parse('2026-07-30T05:08:00.000Z'));
+});
+
+test('mobile SSE parser preserves partial messages and ignores heartbeats', () => {
+  const partial = parseServerSentEvents(
+    '',
+    'id: 7\nevent: orders.changed\ndata: {"order_id":',
+  );
+  assert.deepEqual(partial.messages, []);
+
+  const complete = parseServerSentEvents(
+    partial.buffer,
+    '42}\n\n: keepalive\n\nevent: connected\ndata: {}\n\n',
+  );
+  assert.deepEqual(complete.messages, [
+    { id: '7', event: 'orders.changed', data: '{"order_id":42}' },
+    { id: undefined, event: 'connected', data: '{}' },
+  ]);
+  assert.equal(complete.buffer, '');
+});
+
+test('mobile kitchen SSE filter refreshes for newly sent orders only after valid parsing', () => {
+  const sent = parseOrderChangeEvent({
+    event: 'orders.changed',
+    data: JSON.stringify({
+      type: 'orders.changed',
+      action: 'order.sent_to_kitchen',
+      order_id: 42,
+      occurred_at: '2026-07-30T05:10:00.000Z',
+    }),
+  });
+  assert.ok(sent);
+  assert.equal(isKitchenOrderChangeEvent(sent), true);
+
+  const itemAdded = parseOrderChangeEvent({
+    event: 'orders.changed',
+    data: JSON.stringify({
+      type: 'orders.changed',
+      action: 'item.added',
+      order_id: 42,
+      occurred_at: '2026-07-30T05:10:00.000Z',
+    }),
+  });
+  assert.ok(itemAdded);
+  assert.equal(isKitchenOrderChangeEvent(itemAdded), false);
+  assert.equal(parseOrderChangeEvent({ event: 'connected', data: '{}' }), null);
+  assert.equal(parseOrderChangeEvent({ event: 'orders.changed', data: 'not-json' }), null);
 });
 
 test('kitchen fulfillment context inherits the order and flags mixed fulfillment', () => {

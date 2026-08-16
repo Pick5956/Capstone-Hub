@@ -3,10 +3,11 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { TabletWorkspaceFrame } from '@/src/components/app-shell';
 import { AuthProvider } from '@/src/providers/auth-provider';
 import {
   DisplayPreferencesProvider,
@@ -39,6 +40,10 @@ const bundledFonts = {
   [APP_FONT_FAMILIES.extraBold]: require('../assets/fonts/Kanit-ExtraBold.ttf'),
 };
 
+function TabletWorkspaceStackLayout({ children }: { children: ReactNode }) {
+  return <TabletWorkspaceFrame>{children}</TabletWorkspaceFrame>;
+}
+
 function AppNavigator() {
   const { ready } = useDisplayPreferences();
   const [fontsLoaded, fontError] = useFonts(bundledFonts);
@@ -54,6 +59,7 @@ function AppNavigator() {
   return (
     <AuthProvider>
       <Stack
+        layout={TabletWorkspaceStackLayout}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',

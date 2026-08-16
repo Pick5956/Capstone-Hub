@@ -2,10 +2,16 @@ export const MENU_IMAGE_OUTPUT_WIDTH = 1200;
 export const MENU_IMAGE_OUTPUT_HEIGHT = 900;
 export const MENU_IMAGE_OUTPUT_MIME_TYPE = 'image/webp';
 export const MENU_IMAGE_OUTPUT_QUALITY = 0.9;
+export const MENU_IMAGE_BACKGROUND_PROCESSING_MIME_TYPE = 'image/png';
+export const MENU_IMAGE_BACKGROUND_PROCESSING_QUALITY = 1;
 export const MENU_IMAGE_MIN_ZOOM = -100;
 export const MENU_IMAGE_MAX_ZOOM = 100;
 export const MENU_IMAGE_ZOOM_STEP = 5;
 export const MENU_IMAGE_MAX_FILE_BYTES = 5 * 1024 * 1024;
+export const MENU_IMAGE_BACKGROUND_STRENGTH_MIN = 0;
+export const MENU_IMAGE_BACKGROUND_STRENGTH_MAX = 100;
+export const MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT = 50;
+export const MENU_IMAGE_BACKGROUND_STRENGTH_STEP = 5;
 
 export const MENU_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -57,14 +63,14 @@ export function validateMenuImageAsset(
   return null;
 }
 
-export function menuImageOutputName(sourceName?: string | null) {
+export function menuImageOutputName(sourceName?: string | null, removeBackground = false) {
   const baseName = String(sourceName || '')
     .trim()
     .split(/[\\/]/)
     .pop()
     ?.replace(/\.[^.]+$/, '')
     .trim();
-  return `${baseName || 'menu-image'}-cropped.webp`;
+  return `${baseName || 'menu-image'}-cropped.${removeBackground ? 'png' : 'webp'}`;
 }
 
 export function resolveCommittedMenuImageUrl(
@@ -82,7 +88,32 @@ export interface MenuImageUploadFile {
 }
 
 export const MENU_IMAGE_UPLOAD_PATH = '/api/v1/menu-items/upload-image';
+export const MENU_IMAGE_BACKGROUND_PREVIEW_PATH = '/api/v1/menu-items/preview-background';
 export const MENU_IMAGE_UPLOAD_FIELD = 'image';
+
+export interface MenuImageBackgroundOptions {
+  removeBackground: boolean;
+  backgroundStrength: number;
+}
+
+export interface MenuImageBackgroundPreview {
+  can_remove: boolean;
+  preview_data_url: string;
+  removed_ratio: number;
+  strength: number;
+}
+
+export interface MenuImageUploadResult {
+  uploaded: boolean;
+  backgroundRemoved: boolean;
+}
+
+export function menuImageUploadCanCommit(
+  options: MenuImageBackgroundOptions,
+  backgroundRemoved: boolean,
+) {
+  return !options.removeBackground || backgroundRemoved;
+}
 
 export function menuImageCaptureLogicalSize(pixelRatio: number) {
   const safePixelRatio = Number.isFinite(pixelRatio) && pixelRatio > 0
@@ -109,11 +140,56 @@ export function menuImageZoomFromTrackPosition(
   );
 }
 
+export function normalizeMenuImageBackgroundStrength(value: number) {
+  if (!Number.isFinite(value)) return MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT;
+  return Math.min(
+    MENU_IMAGE_BACKGROUND_STRENGTH_MAX,
+    Math.max(MENU_IMAGE_BACKGROUND_STRENGTH_MIN, Math.round(value)),
+  );
+}
+
+export function menuImageBackgroundStrengthFromTrackPosition(
+  locationX: number,
+  trackWidth: number,
+) {
+  if (!Number.isFinite(locationX) || !Number.isFinite(trackWidth) || trackWidth <= 0) {
+    return null;
+  }
+  const ratio = Math.min(1, Math.max(0, locationX / trackWidth));
+  const rawValue = MENU_IMAGE_BACKGROUND_STRENGTH_MIN
+    + ratio * (MENU_IMAGE_BACKGROUND_STRENGTH_MAX - MENU_IMAGE_BACKGROUND_STRENGTH_MIN);
+  return normalizeMenuImageBackgroundStrength(
+    Math.round(rawValue / MENU_IMAGE_BACKGROUND_STRENGTH_STEP)
+      * MENU_IMAGE_BACKGROUND_STRENGTH_STEP,
+  );
+}
+
+export function appendMenuImageBackgroundPreview(
+  formData: Pick<FormData, 'append'>,
+  file: MenuImageUploadFile,
+  backgroundStrength: number,
+) {
+  formData.append(MENU_IMAGE_UPLOAD_FIELD, file as unknown as Blob);
+  formData.append(
+    'background_strength',
+    String(normalizeMenuImageBackgroundStrength(backgroundStrength)),
+  );
+}
+
 export function appendMenuImageUpload(
   formData: Pick<FormData, 'append'>,
   file: MenuImageUploadFile,
+  options: MenuImageBackgroundOptions = {
+    removeBackground: false,
+    backgroundStrength: MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT,
+  },
 ) {
   formData.append(MENU_IMAGE_UPLOAD_FIELD, file as unknown as Blob);
+  formData.append('remove_background', String(options.removeBackground));
+  formData.append(
+    'background_strength',
+    String(normalizeMenuImageBackgroundStrength(options.backgroundStrength)),
+  );
 }
 
 export interface MenuImageFrameInput {

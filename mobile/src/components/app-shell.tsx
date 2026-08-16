@@ -37,7 +37,10 @@ import {
   resolvePagerSwipeSettlement,
   shouldStartPagerHorizontalSwipe,
 } from '@/src/lib/navigation-runtime';
-import { runManualRefresh } from '@/src/lib/app-shell-runtime';
+import {
+  runManualRefresh,
+  shouldShowTabletWorkspaceRail,
+} from '@/src/lib/app-shell-runtime';
 import { orderRoutePermissions } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -194,6 +197,44 @@ export function PrimaryTabletRail({
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+export function TabletWorkspaceFrame({ children }: { children: React.ReactNode }) {
+  const { width } = useWindowDimensions();
+  const pathname = usePathname();
+  const { activeMembership, status, user } = useAuth();
+  const isOnPrimaryRoot = primaryNavigation.some((item) => pathname === item.href);
+  const navigateToPrimaryRoot = useCallback((item: NavItem) => {
+    if (pathname !== item.href) router.navigate(item.href as never);
+  }, [pathname]);
+  const showRail = shouldShowTabletWorkspaceRail({
+    activeMembership: Boolean(activeMembership),
+    authStatus: status,
+    pathname,
+    tabletBreakpoint: breakpoints.tablet,
+    user: Boolean(user),
+    width,
+  });
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        flexDirection: 'row',
+        backgroundColor: showRail ? palette.canvas : palette.surface,
+      }}
+    >
+      {showRail ? (
+        <PrimaryTabletRail
+          expanded={width >= breakpoints.expandedRail}
+          onSelectPrimary={isOnPrimaryRoot ? navigateToPrimaryRoot : undefined}
+        />
+      ) : null}
+      <View key="workspace-content" style={{ minWidth: 0, flex: 1 }}>
+        {children}
+      </View>
+    </View>
   );
 }
 
@@ -464,7 +505,6 @@ export function AppScreen({
   const primaryTabSceneStatus = usePrimaryTabSceneStatus();
   const reportParentVerticalScrollActivity = useTabSwipeVerticalScrollActivityReporter();
   const isTablet = width >= breakpoints.tablet;
-  const expandedRail = width >= breakpoints.expandedRail;
   const screenBackground = isTablet ? palette.canvas : palette.surface;
   const horizontalPadding = isTablet ? spacing.xxl : spacing.lg;
   const maxWidth = contentMaxWidth || (isTablet ? 1180 : 720);
@@ -791,13 +831,7 @@ export function AppScreen({
     </View>
   );
 
-  if (!isTablet || embeddedInPrimaryTabs) return content;
-  return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: palette.canvas }}>
-      <PrimaryTabletRail expanded={expandedRail} />
-      <View style={{ minWidth: 0, flex: 1 }}>{content}</View>
-    </View>
-  );
+  return content;
 }
 
 export const appNavigation = { primaryNavigation, managementNavigation, isAllowed };

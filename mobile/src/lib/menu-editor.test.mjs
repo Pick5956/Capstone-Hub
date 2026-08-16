@@ -24,6 +24,13 @@ import {
 import {
   MENU_IMAGE_MAX_FILE_BYTES,
   MENU_IMAGE_MAX_ZOOM,
+  MENU_IMAGE_BACKGROUND_PROCESSING_MIME_TYPE,
+  MENU_IMAGE_BACKGROUND_PROCESSING_QUALITY,
+  MENU_IMAGE_BACKGROUND_PREVIEW_PATH,
+  MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT,
+  MENU_IMAGE_BACKGROUND_STRENGTH_MAX,
+  MENU_IMAGE_BACKGROUND_STRENGTH_MIN,
+  MENU_IMAGE_BACKGROUND_STRENGTH_STEP,
   MENU_IMAGE_MIN_ZOOM,
   MENU_IMAGE_MIME_TYPES,
   MENU_IMAGE_OUTPUT_HEIGHT,
@@ -33,12 +40,15 @@ import {
   MENU_IMAGE_UPLOAD_FIELD,
   MENU_IMAGE_UPLOAD_PATH,
   MENU_IMAGE_ZOOM_STEP,
+  appendMenuImageBackgroundPreview,
   appendMenuImageUpload,
   calculateMenuImageFrame,
   inferMenuImageMimeType,
   menuImageCaptureLogicalSize,
   menuImageOutputName,
   menuImageZoomFromTrackPosition,
+  menuImageBackgroundStrengthFromTrackPosition,
+  menuImageUploadCanCommit,
   moveMenuImagePosition,
   validateMenuImageAsset,
 } from './menu-image.ts';
@@ -254,6 +264,8 @@ test('menu image validation matches the web upload contract', () => {
   assert.equal(MENU_IMAGE_OUTPUT_HEIGHT, 900);
   assert.equal(MENU_IMAGE_OUTPUT_MIME_TYPE, 'image/webp');
   assert.equal(MENU_IMAGE_OUTPUT_QUALITY, 0.9);
+  assert.equal(MENU_IMAGE_BACKGROUND_PROCESSING_MIME_TYPE, 'image/png');
+  assert.equal(MENU_IMAGE_BACKGROUND_PROCESSING_QUALITY, 1);
   assert.equal(MENU_IMAGE_MIN_ZOOM, -100);
   assert.equal(MENU_IMAGE_MAX_ZOOM, 100);
   assert.equal(MENU_IMAGE_ZOOM_STEP, 5);
@@ -269,15 +281,15 @@ test('menu image validation matches the web upload contract', () => {
   assert.equal(validateMenuImageAsset({ mimeType: 'image/png', fileSize: 0 }), 'empty');
 });
 
-test('native picker metadata resolves to a safe WebP upload name', () => {
+test('native picker metadata resolves to compact default and safe PNG processing names', () => {
   assert.equal(inferMenuImageMimeType('image/JPEG', 'camera.heic'), 'image/jpeg');
   assert.equal(inferMenuImageMimeType(null, 'food.photo.PNG?cache=1'), 'image/png');
   assert.equal(inferMenuImageMimeType(undefined, 'file:///menu.webp'), 'image/webp');
   assert.equal(inferMenuImageMimeType('image/heic', 'camera.heic'), 'image/heic');
   assert.equal(inferMenuImageMimeType('image/gif', 'misnamed.jpg'), 'image/gif');
   assert.equal(menuImageOutputName('my.menu.jpg'), 'my.menu-cropped.webp');
-  assert.equal(menuImageOutputName('folder\\dish.png'), 'dish-cropped.webp');
-  assert.equal(menuImageOutputName(''), 'menu-image-cropped.webp');
+  assert.equal(menuImageOutputName('folder\\dish.png', true), 'dish-cropped.png');
+  assert.equal(menuImageOutputName('', true), 'menu-image-cropped.png');
 });
 
 test('native capture and zoom helpers preserve the exact output contract', () => {
@@ -294,19 +306,45 @@ test('native capture and zoom helpers preserve the exact output contract', () =>
 test('menu image upload uses the same endpoint and multipart field as the web', () => {
   const appended = [];
   const file = {
-    uri: 'file:///menu.webp',
-    name: 'menu-cropped.webp',
-    type: 'image/webp',
+    uri: 'file:///menu.png',
+    name: 'menu-cropped.png',
+    type: 'image/png',
   };
   appendMenuImageUpload({
     append(field, value) {
       appended.push([field, value]);
     },
-  }, file);
+  }, file, { removeBackground: false, backgroundStrength: 50 });
 
   assert.equal(MENU_IMAGE_UPLOAD_PATH, '/api/v1/menu-items/upload-image');
   assert.equal(MENU_IMAGE_UPLOAD_FIELD, 'image');
-  assert.deepEqual(appended, [['image', file]]);
+  assert.deepEqual(appended, [
+    ['image', file],
+    ['remove_background', 'false'],
+    ['background_strength', '50'],
+  ]);
+});
+
+test('native background-removal preview and strength follow the multipart contract', () => {
+  const appended = [];
+  const file = { uri: 'file:///menu.png', name: 'menu.png', type: 'image/png' };
+
+  appendMenuImageBackgroundPreview({
+    append(field, value) { appended.push([field, value]); },
+  }, file, 65);
+
+  assert.equal(MENU_IMAGE_BACKGROUND_PREVIEW_PATH, '/api/v1/menu-items/preview-background');
+  assert.equal(MENU_IMAGE_BACKGROUND_STRENGTH_MIN, 0);
+  assert.equal(MENU_IMAGE_BACKGROUND_STRENGTH_MAX, 100);
+  assert.equal(MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT, 50);
+  assert.equal(MENU_IMAGE_BACKGROUND_STRENGTH_STEP, 5);
+  assert.deepEqual(appended, [['image', file], ['background_strength', '65']]);
+  assert.equal(menuImageBackgroundStrengthFromTrackPosition(0, 200), 0);
+  assert.equal(menuImageBackgroundStrengthFromTrackPosition(100, 200), 50);
+  assert.equal(menuImageBackgroundStrengthFromTrackPosition(200, 200), 100);
+  assert.equal(menuImageUploadCanCommit({ removeBackground: false, backgroundStrength: 50 }, false), true);
+  assert.equal(menuImageUploadCanCommit({ removeBackground: true, backgroundStrength: 50 }, true), true);
+  assert.equal(menuImageUploadCanCommit({ removeBackground: true, backgroundStrength: 50 }, false), false);
 });
 
 test('menu image positioning uses the same 4:3 framing as the web editor', () => {
@@ -557,7 +595,8 @@ test('the bill add-item catalog uses the same 4:3 menu card image as web', () =>
 test('native menu uploads leave the multipart boundary to fetch', () => {
   const source = readFileSync(new URL('../api/menu.ts', import.meta.url), 'utf8');
   assert.match(source, /new FormData\(\)/);
-  assert.match(source, /appendMenuImageUpload\(formData, file\)/);
+  assert.match(source, /appendMenuImageBackgroundPreview\(formData, file, backgroundStrength\)/);
+  assert.match(source, /appendMenuImageUpload\(formData, file, options\)/);
   assert.match(source, /method:\s*'POST'/);
   assert.doesNotMatch(source, /Content-Type/);
 });
@@ -590,7 +629,7 @@ test('menu item editor replaces the raw URL field with the native crop and uploa
   assert.doesNotMatch(source, /https:\/\/\.\.\.[^\n]*uploads/);
 });
 
-test('native cropper owns picker, exact framing export, WebP conversion, and accessible zoom', () => {
+test('native cropper owns picker, exact framing export, and accessible zoom', () => {
   const source = readFileSync(
     new URL('../components/menu-image-cropper.tsx', import.meta.url),
     'utf8',
@@ -604,6 +643,7 @@ test('native cropper owns picker, exact framing export, WebP conversion, and acc
   assert.match(source, /collapsable=\{false\}/);
   assert.match(source, /PixelRatio\.get\(\)/);
   assert.match(source, /expo-image-manipulator/);
+  assert.match(source, /SaveFormat\.PNG/);
   assert.match(source, /SaveFormat\.WEBP/);
   assert.match(source, /MENU_IMAGE_OUTPUT_WIDTH/);
   assert.match(source, /MENU_IMAGE_OUTPUT_HEIGHT/);
@@ -616,6 +656,47 @@ test('native cropper owns picker, exact framing export, WebP conversion, and acc
   assert.match(source, /คืนค่าตำแหน่ง/);
   assert.match(source, /ใช้รูปนี้/);
   assert.doesNotMatch(source, /ลบรูป|Remove image/);
+});
+
+test('native cropper renders an automatic race-safe cutout in the existing crop viewport', () => {
+  const cropperSource = readFileSync(
+    new URL('../components/menu-image-cropper.tsx', import.meta.url),
+    'utf8',
+  );
+  const apiSource = readFileSync(new URL('../api/menu.ts', import.meta.url), 'utf8');
+  const editorSource = readFileSync(new URL('../../app/menu/item.tsx', import.meta.url), 'utf8');
+
+  assert.match(cropperSource, /useState\(false\)/);
+  assert.match(cropperSource, /accessibilityRole="switch"/);
+  assert.match(cropperSource, /accessibilityRole="adjustable"/);
+  assert.match(cropperSource, /ตัดน้อยลง|Cut less/);
+  assert.match(cropperSource, /ตัดมากขึ้น|Cut more/);
+  assert.match(cropperSource, /previewGenerationRef/);
+  assert.match(cropperSource, /AbortController/);
+  assert.match(cropperSource, /BACKGROUND_PREVIEW_DEBOUNCE_MS/);
+  assert.match(cropperSource, /BACKGROUND_PREVIEW_TIMEOUT_MS/);
+  assert.match(cropperSource, /previewRevision/);
+  assert.match(cropperSource, /if \(!removeBackground \|\| applying \|\| dragging\) return/);
+  assert.match(cropperSource, /accessibilityState=\{\{\s*busy:/);
+  assert.doesNotMatch(cropperSource, /sliderInteracting|previewInteractionActive/);
+  assert.doesNotMatch(cropperSource, /onInteractionStart|onInteractionEnd/);
+  assert.doesNotMatch(cropperSource, /ปล่อยนิ้วเพื่ออัปเดต|Release to update/);
+  assert.ok((cropperSource.match(/nextValue !== valueRef\.current/g) ?? []).length >= 2);
+  assert.match(cropperSource, /cancelBackgroundPreviewRequest/);
+  assert.match(cropperSource, /invalidateBackgroundPreview/);
+  assert.match(cropperSource, /preview_data_url/);
+  assert.match(cropperSource, /backgroundPreviewOverlay/);
+  assert.match(cropperSource, /กำลังอัปเดตภาพที่ตัด/);
+  assert.match(cropperSource, /ตัดพื้นหลังแล้วประมาณ/);
+  assert.doesNotMatch(cropperSource, /ดูตัวอย่างการตัดพื้นหลัง|Preview background removal/);
+  assert.doesNotMatch(cropperSource, /backgroundPreviewCanvas/);
+  assert.match(cropperSource, /removeBackground\s*&&\s*!approvedBackgroundPreview/);
+  assert.match(cropperSource, /approvedBackgroundPreview!\.file/);
+  assert.match(apiSource, /previewMenuImageBackground/);
+  assert.match(apiSource, /MENU_IMAGE_BACKGROUND_PREVIEW_PATH/);
+  assert.match(apiSource, /signal/);
+  assert.match(editorSource, /background_removed/);
+  assert.match(editorSource, /menuImageUploadCanCommit\(options, backgroundRemoved\)/);
 });
 
 test('Expo declares the native photo-library permission plugin used by the menu cropper', () => {

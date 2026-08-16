@@ -480,7 +480,7 @@ export default function CurrentRoundScreen() {
         {loading ? (
           <EmptyState title={language === 'th' ? 'กำลังโหลดรายการรอบนี้' : 'Loading current round'} />
         ) : pendingItems.length ? (
-          <EdgeSection style={{ flex: 1, borderWidth: 0, borderRadius: 0 }}>
+          <EdgeSection style={{ flex: 1, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent' }}>
             <FlatList
               data={pendingItems}
               directionalLockEnabled

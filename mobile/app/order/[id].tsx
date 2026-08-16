@@ -1,9 +1,9 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listCategories, listMenuItems } from '@/src/api/menu';
-import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, sendOrderToKitchen, updateOrderItem } from '@/src/api/order';
+import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, updateOrderItem } from '@/src/api/order';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
@@ -321,17 +321,10 @@ export default function OrderDetailScreen() {
     && (order.payment_status === 'paid' || canOpenOrderBill(order.items)),
   );
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
-  const splitWorkspace = tabletWorkspace && Boolean(order && canTakeOrder && !locked);
-  const tabletPrimaryAction = pending.length && canTakeOrder
-    ? <Button label={copy('ส่งเข้าครัว', 'Send to kitchen')} onPress={() => mutate(() => sendOrderToKitchen(orderId), copy('ส่งรายการเข้าครัวแล้ว', 'Items sent to kitchen'))} loading={submitting} />
-    : canOpenBill
-      ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
-      : null;
-  const phonePrimaryAction = canOpenBill
+  const primaryAction = canOpenBill
     ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
     : null;
-  const primaryAction = splitWorkspace ? tabletPrimaryAction : phonePrimaryAction;
-  const showCurrentRoundBasket = !splitWorkspace && shouldShowCurrentRoundBasket({
+  const showCurrentRoundBasket = shouldShowCurrentRoundBasket({
     canTakeOrder,
     orderStatus: order?.status,
     pendingQuantity: currentRoundSummary.quantity,
@@ -468,7 +461,7 @@ export default function OrderDetailScreen() {
     </View>
   ) : null;
 
-  function renderDestructiveActions(embedded = false) {
+  function renderDestructiveActions() {
     const stackActions = width < 520;
     const actionStyle = stackActions ? { width: '100%' as const } : { flex: 1 };
     const closeEmptyContent = canCloseEmpty ? (
@@ -486,14 +479,6 @@ export default function OrderDetailScreen() {
     ) : null;
 
     if (!closeEmptyContent && !cancelContent) return null;
-    if (embedded) {
-      return (
-        <View style={{ gap: spacing.xl }}>
-          {closeEmptyContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmEmptyClose ? palette.danger : palette.border, paddingTop: spacing.lg }}>{closeEmptyContent}</View> : null}
-          {cancelContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmCancel ? palette.danger : palette.border, paddingTop: spacing.lg }}>{cancelContent}</View> : null}
-        </View>
-      );
-    }
     return (
       <>
         {closeEmptyContent ? <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>{closeEmptyContent}</Surface> : null}
@@ -535,10 +520,8 @@ export default function OrderDetailScreen() {
       title={order?.table?.display_label || (order?.order_type === 'takeaway' ? copy('ซื้อกลับบ้าน', 'Takeaway') : copy(`ออเดอร์ #${orderId}`, `Order #${orderId}`))}
       subtitle={order ? `${order.order_number} · ${orderStatusLabel(order.status, language)}` : copy('กำลังโหลดออเดอร์', 'Loading order')}
       topLevel={false}
-      scroll={!splitWorkspace}
-      refreshControl={splitWorkspace ? undefined : refreshControl}
-      contentMaxWidth={splitWorkspace ? 1440 : undefined}
-      footer={!splitWorkspace ? currentRoundBasket || actionDock : undefined}
+      refreshControl={refreshControl}
+      footer={currentRoundBasket || actionDock}
       action={order ? (
         <OrderSummaryAction
           accessibilityLabel={orderSummaryCopy.title}
@@ -548,36 +531,10 @@ export default function OrderDetailScreen() {
         />
       ) : undefined}
     >
-      {!splitWorkspace && error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
-      {!splitWorkspace && message ? <Feedback title={message} tone="success" /> : null}
+      {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
+      {message ? <Feedback title={message} tone="success" /> : null}
 
-      {order ? splitWorkspace ? (
-        <View style={{ minHeight: 0, flex: 1, flexDirection: 'row', gap: spacing.xl }}>
-          <ScrollView
-            style={{ minWidth: 0, flex: 1 }}
-            contentContainerStyle={{ gap: spacing.xl, paddingRight: spacing.xs, paddingBottom: spacing.xxxl }}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
-            refreshControl={refreshControl}
-            showsVerticalScrollIndicator={false}
-          >
-            {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
-            {message ? <Feedback title={message} tone="success" /> : null}
-            {menuWorkspace}
-          </ScrollView>
-          <View style={{ width: '40%', minWidth: 320, maxWidth: 460, overflow: 'hidden', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface }}>
-            <ScrollView
-              contentContainerStyle={{ gap: spacing.xl, padding: spacing.lg, paddingBottom: spacing.xxl }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {orderSummaryContent}
-              {renderDestructiveActions(true)}
-            </ScrollView>
-            {actionDock}
-          </View>
-        </View>
-      ) : (
+      {order ? (
         <>
           {!canTakeOrder || locked ? <Surface>{orderSummaryContent}</Surface> : null}
 

@@ -30,7 +30,6 @@ import {
 import {
   isAllowed,
   PrimaryPhoneNavigation,
-  PrimaryTabletRail,
   primaryNavigation,
 } from '@/src/components/app-shell';
 import { useReducedMotion } from '@/src/components/motion';
@@ -596,17 +595,7 @@ function PrimaryPager({
         nestedHorizontalGestureActive.current = active;
       }}
     >
-      <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column', backgroundColor: screenBackground }}>
-        {isTablet ? (
-          <PrimaryTabletRail
-            expanded={expandedRail}
-            onSelectPrimary={(item) => {
-              jumpToTab(permittedItems.findIndex(
-                (candidate) => candidate.key === item.key,
-              ));
-            }}
-          />
-        ) : null}
+      <View style={{ flex: 1, backgroundColor: screenBackground }}>
         <View style={{ minWidth: 0, flex: 1 }}>
           {pager}
           {!isTablet ? (

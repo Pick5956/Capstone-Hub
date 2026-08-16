@@ -1,6 +1,6 @@
 import { ImageManipulator, SaveFormat, type ImageResult } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -21,6 +21,12 @@ import { MenuImage } from '@/src/components/menu-image';
 import { useTabSwipeExclusionHandlers } from '@/src/components/tab-swipe-context';
 import { Button } from '@/src/components/ui';
 import {
+  MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT,
+  MENU_IMAGE_BACKGROUND_STRENGTH_MAX,
+  MENU_IMAGE_BACKGROUND_STRENGTH_MIN,
+  MENU_IMAGE_BACKGROUND_STRENGTH_STEP,
+  MENU_IMAGE_BACKGROUND_PROCESSING_MIME_TYPE,
+  MENU_IMAGE_BACKGROUND_PROCESSING_QUALITY,
   MENU_IMAGE_MAX_ZOOM,
   MENU_IMAGE_MIN_ZOOM,
   MENU_IMAGE_OUTPUT_HEIGHT,
@@ -30,23 +36,36 @@ import {
   MENU_IMAGE_ZOOM_STEP,
   calculateMenuImageFrame,
   inferMenuImageMimeType,
+  menuImageBackgroundStrengthFromTrackPosition,
   menuImageCaptureLogicalSize,
   menuImageOutputName,
   menuImageZoomFromTrackPosition,
   moveMenuImagePosition,
+  normalizeMenuImageBackgroundStrength,
   validateMenuImageAsset,
+  type MenuImageBackgroundOptions,
+  type MenuImageBackgroundPreview,
   type MenuImageFrame,
   type MenuImageUploadFile,
+  type MenuImageUploadResult,
 } from '@/src/lib/menu-image';
+import { createRequestGeneration } from '@/src/lib/request-generation';
 import { palette, radius, spacing, typeScale } from '@/src/theme';
 
 type Copy = (thai: string, english: string) => string;
+const BACKGROUND_PREVIEW_DEBOUNCE_MS = 350;
+const BACKGROUND_PREVIEW_TIMEOUT_MS = 30_000;
 
 interface MenuImageCropperProps {
   currentImageUrl: string;
   copy: Copy;
   disabled?: boolean;
-  onUpload: (file: MenuImageUploadFile) => Promise<boolean>;
+  onPreview: (
+    file: MenuImageUploadFile,
+    backgroundStrength: number,
+    signal?: AbortSignal,
+  ) => Promise<MenuImageBackgroundPreview>;
+  onUpload: (file: MenuImageUploadFile, options: MenuImageBackgroundOptions) => Promise<MenuImageUploadResult>;
   onError: (message: string) => void;
   onEditingChange?: (editing: boolean) => void;
 }
@@ -92,7 +111,7 @@ function ZoomSlider({
     const width = trackWidthRef.current;
     if (!width || disabledRef.current) return;
     const nextValue = menuImageZoomFromTrackPosition(locationX, width);
-    if (nextValue !== null) onChange(nextValue);
+    if (nextValue !== null && nextValue !== valueRef.current) onChange(nextValue);
   };
 
   const panResponder = useMemo(() => PanResponder.create({
@@ -113,7 +132,8 @@ function ZoomSlider({
 
   const changeByStep = (direction: -1 | 1) => {
     if (disabledRef.current) return;
-    onChange(clampZoom(valueRef.current + direction * MENU_IMAGE_ZOOM_STEP));
+    const nextValue = clampZoom(valueRef.current + direction * MENU_IMAGE_ZOOM_STEP);
+    if (nextValue !== valueRef.current) onChange(nextValue);
   };
 
   const onAccessibilityAction = (event: AccessibilityActionEvent) => {
@@ -164,10 +184,141 @@ function ZoomSlider({
   );
 }
 
+interface ApprovedBackgroundPreview {
+  file: MenuImageUploadFile;
+  preview: MenuImageBackgroundPreview;
+}
+
+function BackgroundStrengthControl({
+  copy,
+  disabled,
+  value,
+  onChange,
+}: {
+  copy: Copy;
+  disabled: boolean;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const valueRef = useRef(value);
+  const disabledRef = useRef(disabled);
+  const trackWidthRef = useRef(trackWidth);
+  const tabSwipeExclusionHandlers = useTabSwipeExclusionHandlers();
+  valueRef.current = value;
+  disabledRef.current = disabled;
+  trackWidthRef.current = trackWidth;
+
+  const setFromTrackPosition = (locationX: number) => {
+    if (!trackWidthRef.current || disabledRef.current) return;
+    const nextValue = menuImageBackgroundStrengthFromTrackPosition(
+      locationX,
+      trackWidthRef.current,
+    );
+    if (nextValue !== null && nextValue !== valueRef.current) onChange(nextValue);
+  };
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => !disabledRef.current,
+    onMoveShouldSetPanResponder: () => !disabledRef.current,
+    onPanResponderGrant: (event) => {
+      setFromTrackPosition(event.nativeEvent.locationX);
+    },
+    onPanResponderMove: (event) => setFromTrackPosition(event.nativeEvent.locationX),
+    onPanResponderRelease: (event) => {
+      setFromTrackPosition(event.nativeEvent.locationX);
+    },
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
+  }), [onChange]);
+
+  const changeByStep = (direction: -1 | 1) => {
+    if (disabledRef.current) return;
+    const nextValue = normalizeMenuImageBackgroundStrength(
+      valueRef.current + direction * MENU_IMAGE_BACKGROUND_STRENGTH_STEP,
+    );
+    if (nextValue !== valueRef.current) onChange(nextValue);
+  };
+  const progress = (value - MENU_IMAGE_BACKGROUND_STRENGTH_MIN)
+    / (MENU_IMAGE_BACKGROUND_STRENGTH_MAX - MENU_IMAGE_BACKGROUND_STRENGTH_MIN);
+
+  return (
+    <View style={styles.strengthRow}>
+      <Pressable
+        accessibilityLabel={copy('ตัดน้อยลง', 'Cut less')}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: disabled || value <= MENU_IMAGE_BACKGROUND_STRENGTH_MIN }}
+        disabled={disabled || value <= MENU_IMAGE_BACKGROUND_STRENGTH_MIN}
+        onPress={() => changeByStep(-1)}
+        style={({ pressed }) => [
+          styles.zoomButton,
+          (disabled || value <= MENU_IMAGE_BACKGROUND_STRENGTH_MIN) && styles.disabled,
+          pressed && styles.pressed,
+        ]}
+      >
+        <AppIcon color={palette.text} name="remove-outline" size={19} />
+      </Pressable>
+      <View style={styles.zoomColumn}>
+        <View style={styles.zoomLabelRow}>
+          <Text style={styles.zoomLabel}>{copy('ความแรงในการตัด', 'Removal strength')}</Text>
+          <Text style={styles.zoomValue}>{value}%</Text>
+        </View>
+        <View
+          {...tabSwipeExclusionHandlers}
+          {...panResponder.panHandlers}
+          accessibilityActions={[
+            { name: 'decrement', label: copy('ตัดน้อยลง', 'Cut less') },
+            { name: 'increment', label: copy('ตัดมากขึ้น', 'Cut more') },
+          ]}
+          accessibilityLabel={copy('ความแรงในการตัดพื้นหลัง', 'Background removal strength')}
+          accessibilityRole="adjustable"
+          accessibilityState={{ disabled }}
+          accessibilityValue={{
+            min: MENU_IMAGE_BACKGROUND_STRENGTH_MIN,
+            max: MENU_IMAGE_BACKGROUND_STRENGTH_MAX,
+            now: value,
+            text: `${value}%`,
+          }}
+          onAccessibilityAction={(event) => {
+            if (event.nativeEvent.actionName === 'increment') changeByStep(1);
+            if (event.nativeEvent.actionName === 'decrement') changeByStep(-1);
+          }}
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          style={[styles.sliderTouchArea, disabled && styles.disabled]}
+        >
+          <View pointerEvents="none" style={styles.sliderTrack}>
+            <View style={[styles.sliderFill, { width: `${progress * 100}%` }]} />
+            <View style={[styles.sliderThumb, { left: `${progress * 100}%` }]} />
+          </View>
+        </View>
+        <View style={styles.zoomScaleRow}>
+          <Text style={styles.zoomScale}>{copy('น้อย', 'Less')}</Text>
+          <Text style={styles.zoomScale}>{copy('มาก', 'More')}</Text>
+        </View>
+      </View>
+      <Pressable
+        accessibilityLabel={copy('ตัดมากขึ้น', 'Cut more')}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: disabled || value >= MENU_IMAGE_BACKGROUND_STRENGTH_MAX }}
+        disabled={disabled || value >= MENU_IMAGE_BACKGROUND_STRENGTH_MAX}
+        onPress={() => changeByStep(1)}
+        style={({ pressed }) => [
+          styles.zoomButton,
+          (disabled || value >= MENU_IMAGE_BACKGROUND_STRENGTH_MAX) && styles.disabled,
+          pressed && styles.pressed,
+        ]}
+      >
+        <AppIcon color={palette.text} name="add-outline" size={19} />
+      </Pressable>
+    </View>
+  );
+}
+
 export function MenuImageCropper({
   currentImageUrl,
   copy,
   disabled = false,
+  onPreview,
   onUpload,
   onError,
   onEditingChange,
@@ -181,17 +332,38 @@ export function MenuImageCropper({
   const [naturalSize, setNaturalSize] = useState<Size | null>(null);
   const [sourceLoaded, setSourceLoaded] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [previewRevision, setPreviewRevision] = useState(0);
+  const [removeBackground, setRemoveBackground] = useState(false);
+  const [backgroundStrength, setBackgroundStrength] = useState(MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT);
+  const [backgroundPreview, setBackgroundPreview] = useState<MenuImageBackgroundPreview | null>(null);
+  const [approvedBackgroundPreview, setApprovedBackgroundPreview] = useState<ApprovedBackgroundPreview | null>(null);
+  const [backgroundError, setBackgroundError] = useState('');
   const captureTargetRef = useRef<View | null>(null);
+  const copyRef = useRef(copy);
+  const onErrorRef = useRef(onError);
+  const onPreviewRef = useRef(onPreview);
   const sourceTokenRef = useRef(0);
   const positionRef = useRef({ x: positionX, y: positionY });
   const frameRef = useRef<MenuImageFrame | null>(null);
   const viewportSizeRef = useRef(viewportSize);
   const disabledRef = useRef(disabled);
   const applyingRef = useRef(applying);
+  const previewGenerationRef = useRef(createRequestGeneration());
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<DragStart | null>(null);
   const tabSwipeExclusionHandlers = useTabSwipeExclusionHandlers();
   const editing = Boolean(sourceUri);
+  const processing = applying || previewing;
+  const removedPercent = backgroundPreview
+    ? Math.round(Math.min(100, Math.max(0,
+      backgroundPreview.removed_ratio <= 1
+        ? backgroundPreview.removed_ratio * 100
+        : backgroundPreview.removed_ratio)))
+    : 0;
   const sourceRenderToken = sourceTokenRef.current;
   const pixelRatio = PixelRatio.get();
   const captureSize = useMemo(
@@ -206,6 +378,47 @@ export function MenuImageCropper({
   viewportSizeRef.current = viewportSize;
   disabledRef.current = disabled;
   applyingRef.current = applying;
+  copyRef.current = copy;
+  onErrorRef.current = onError;
+  onPreviewRef.current = onPreview;
+
+  const cancelBackgroundPreviewRequest = useCallback(() => {
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+      previewDebounceRef.current = null;
+    }
+    previewAbortRef.current?.abort();
+    previewAbortRef.current = null;
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+  }, []);
+
+  const invalidateBackgroundPreview = useCallback(() => {
+    cancelBackgroundPreviewRequest();
+    previewGenerationRef.current.invalidate();
+    setBackgroundPreview(null);
+    setApprovedBackgroundPreview(null);
+    setBackgroundError('');
+    setPreviewing(false);
+    setPreviewRevision((current) => current + 1);
+  }, [cancelBackgroundPreviewRequest]);
+
+  const changeZoom = useCallback((value: number) => {
+    invalidateBackgroundPreview();
+    setZoom(clampZoom(value));
+  }, [invalidateBackgroundPreview]);
+
+  const changeBackgroundStrength = useCallback((value: number) => {
+    invalidateBackgroundPreview();
+    setBackgroundStrength(normalizeMenuImageBackgroundStrength(value));
+  }, [invalidateBackgroundPreview]);
+
+  const toggleBackgroundRemoval = useCallback(() => {
+    invalidateBackgroundPreview();
+    setRemoveBackground((current) => !current);
+  }, [invalidateBackgroundPreview]);
 
   const previewFrame = useMemo(() => {
     if (!naturalSize || !captureSize.width || !captureSize.height) return null;
@@ -227,10 +440,13 @@ export function MenuImageCropper({
 
   useEffect(() => () => {
     sourceTokenRef.current += 1;
+    cancelBackgroundPreviewRequest();
+    previewGenerationRef.current.invalidate();
     onEditingChange?.(false);
-  }, [onEditingChange]);
+  }, [cancelBackgroundPreviewRequest, onEditingChange]);
 
   const resetPlacement = () => {
+    invalidateBackgroundPreview();
     positionRef.current = { x: 0.5, y: 0.5 };
     setZoom(0);
     setPositionX(0.5);
@@ -245,6 +461,8 @@ export function MenuImageCropper({
     setSourceLoaded(false);
     setApplying(false);
     setDragging(false);
+    setRemoveBackground(false);
+    setBackgroundStrength(MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT);
     dragStartRef.current = null;
     resetPlacement();
   };
@@ -263,6 +481,8 @@ export function MenuImageCropper({
       ? knownSize
       : null);
     setSourceLoaded(false);
+    setRemoveBackground(false);
+    setBackgroundStrength(MENU_IMAGE_BACKGROUND_STRENGTH_DEFAULT);
     resetPlacement();
 
     if (knownSize && knownSize.width > 0 && knownSize.height > 0) return;
@@ -332,6 +552,7 @@ export function MenuImageCropper({
       frameRef.current && !disabledRef.current && !applyingRef.current,
     ),
     onPanResponderGrant: () => {
+      invalidateBackgroundPreview();
       dragStartRef.current = {
         positionX: positionRef.current.x,
         positionY: positionRef.current.y,
@@ -365,20 +586,16 @@ export function MenuImageCropper({
     },
     onPanResponderTerminationRequest: () => false,
     onShouldBlockNativeResponder: () => true,
-  }), [captureSize.height, captureSize.width]);
+  }), [captureSize.height, captureSize.width, invalidateBackgroundPreview]);
 
-  const applyCrop = async () => {
+  const captureOutput = useCallback(async (
+    forBackgroundRemoval: boolean,
+  ): Promise<MenuImageUploadFile> => {
     const target = captureTargetRef.current;
     if (!target || !previewFrame || !sourceLoaded) {
-      onError(copy(
-        'เปิดรูปเพื่อจัดวางไม่สำเร็จ กรุณาเลือกรูปใหม่',
-        'Could not open this image for positioning. Choose a new image.',
-      ));
-      return;
+      throw new Error('Menu image is not ready to capture.');
     }
 
-    setApplying(true);
-    onError('');
     let capturedUri = '';
     try {
       capturedUri = await captureRef(target, {
@@ -397,8 +614,10 @@ export function MenuImageCropper({
         const renderedImage = await context.renderAsync();
         try {
           converted = await renderedImage.saveAsync({
-            format: SaveFormat.WEBP,
-            compress: MENU_IMAGE_OUTPUT_QUALITY,
+            format: forBackgroundRemoval ? SaveFormat.PNG : SaveFormat.WEBP,
+            compress: forBackgroundRemoval
+              ? MENU_IMAGE_BACKGROUND_PROCESSING_QUALITY
+              : MENU_IMAGE_OUTPUT_QUALITY,
           });
         } finally {
           renderedImage.release();
@@ -414,12 +633,148 @@ export function MenuImageCropper({
         throw new Error('Unexpected menu image output size.');
       }
 
-      const uploaded = await onUpload({
+      return {
         uri: converted.uri,
-        name: menuImageOutputName(sourceName),
-        type: MENU_IMAGE_OUTPUT_MIME_TYPE,
+        name: menuImageOutputName(sourceName, forBackgroundRemoval),
+        type: forBackgroundRemoval
+          ? MENU_IMAGE_BACKGROUND_PROCESSING_MIME_TYPE
+          : MENU_IMAGE_OUTPUT_MIME_TYPE,
+      };
+    } finally {
+      if (capturedUri) releaseCapture(capturedUri);
+    }
+  }, [previewFrame, sourceLoaded, sourceName]);
+
+  const runBackgroundPreview = useCallback(async () => {
+    if (!removeBackground || applying || dragging) return;
+    cancelBackgroundPreviewRequest();
+    const request = previewGenerationRef.current.begin();
+    const abortController = new AbortController();
+    const requestedStrength = backgroundStrength;
+    previewAbortRef.current = abortController;
+    previewTimeoutRef.current = setTimeout(
+      () => abortController.abort(),
+      BACKGROUND_PREVIEW_TIMEOUT_MS,
+    );
+    setPreviewing(true);
+    setBackgroundError('');
+    onErrorRef.current('');
+    try {
+      const file = await captureOutput(true);
+      if (!previewGenerationRef.current.isCurrent(request)) return;
+      const preview = await onPreviewRef.current(file, requestedStrength, abortController.signal);
+      if (!previewGenerationRef.current.isCurrent(request)) return;
+      if (
+        !preview.can_remove
+        || !preview.preview_data_url?.trim()
+        || normalizeMenuImageBackgroundStrength(preview.strength) !== requestedStrength
+      ) {
+        setBackgroundPreview(null);
+        setApprovedBackgroundPreview(null);
+        setBackgroundError(copyRef.current(
+          'ระบบแยกพื้นหลังรูปนี้ได้ไม่ชัด ลองปรับความแรง หรือปิดการตัดพื้นหลังเพื่อใช้รูปเดิม',
+          'The background could not be separated reliably. Adjust the strength or turn background removal off to use the original image.',
+        ));
+        return;
+      }
+      setBackgroundPreview(preview);
+      setApprovedBackgroundPreview({ file, preview });
+    } catch {
+      if (!previewGenerationRef.current.isCurrent(request)) return;
+      setApprovedBackgroundPreview(null);
+      setBackgroundPreview(null);
+      setBackgroundError(copyRef.current(
+        'อัปเดตภาพที่ตัดไม่สำเร็จ ขยับรูปหรือปรับความแรงเพื่อให้ระบบลองใหม่ หรือปิดการตัดพื้นหลัง',
+        'Could not update the cutout. Move the image or adjust the strength to try again, or turn background removal off.',
+      ));
+    } finally {
+      if (previewGenerationRef.current.isCurrent(request)) {
+        if (previewAbortRef.current === abortController) previewAbortRef.current = null;
+        if (previewTimeoutRef.current) {
+          clearTimeout(previewTimeoutRef.current);
+          previewTimeoutRef.current = null;
+        }
+        setPreviewing(false);
+      }
+    }
+  }, [
+    applying,
+    backgroundStrength,
+    cancelBackgroundPreviewRequest,
+    captureOutput,
+    dragging,
+    removeBackground,
+  ]);
+
+  useEffect(() => {
+    if (
+      !removeBackground
+      || disabled
+      || applying
+      || dragging
+      || !previewFrame
+      || !sourceLoaded
+    ) {
+      return;
+    }
+
+    const debounce = setTimeout(() => {
+      if (previewDebounceRef.current === debounce) previewDebounceRef.current = null;
+      void runBackgroundPreview();
+    }, BACKGROUND_PREVIEW_DEBOUNCE_MS);
+    previewDebounceRef.current = debounce;
+
+    return () => {
+      clearTimeout(debounce);
+      if (previewDebounceRef.current === debounce) previewDebounceRef.current = null;
+    };
+  }, [
+    applying,
+    disabled,
+    previewFrame,
+    dragging,
+    previewRevision,
+    removeBackground,
+    runBackgroundPreview,
+    sourceLoaded,
+  ]);
+
+  const applyCrop = async () => {
+    if (removeBackground && !approvedBackgroundPreview) {
+      setBackgroundError(copy(
+        'รอให้ภาพที่ตัดอัปเดตเสร็จ แล้วจึงใช้รูปนี้',
+        'Wait for the cutout to finish updating before using this image.',
+      ));
+      return;
+    }
+
+    setApplying(true);
+    setBackgroundError('');
+    onError('');
+    try {
+      const file = removeBackground
+        ? approvedBackgroundPreview!.file
+        : await captureOutput(false);
+      const uploaded = await onUpload(file, {
+        removeBackground,
+        backgroundStrength,
       });
-      if (uploaded) {
+      if (removeBackground && !uploaded.uploaded) {
+        setBackgroundError(copy(
+          'ตัดพื้นหลังและอัปโหลดไม่สำเร็จ รูปเดิมยังไม่ถูกเปลี่ยน ลองอีกครั้งหรือปิดการตัดพื้นหลัง',
+          'Background removal and upload failed. The original image was kept. Try again or turn background removal off.',
+        ));
+        return;
+      }
+      if (removeBackground && uploaded.uploaded && !uploaded.backgroundRemoved) {
+        setBackgroundError(copy(
+          'ระบบยังไม่ได้ตัดพื้นหลัง รูปเดิมจึงยังไม่ถูกเปลี่ยน ลองปรับความแรงให้ภาพอัปเดตใหม่ หรือปิดการตัดพื้นหลัง',
+          'The background was not removed, so the original image was kept. Adjust the strength for a new cutout or turn background removal off.',
+        ));
+        return;
+      }
+
+      if (uploaded.uploaded) {
         AccessibilityInfo.announceForAccessibility(copy(
           'อัปโหลดรูปเมนูแล้ว',
           'Menu image uploaded.',
@@ -432,7 +787,6 @@ export function MenuImageCropper({
         'Could not position this image. Choose a new image.',
       ));
     } finally {
-      if (capturedUri) releaseCapture(capturedUri);
       setApplying(false);
     }
   };
@@ -446,6 +800,7 @@ export function MenuImageCropper({
   const moveWithAccessibility = (deltaX: number, deltaY: number) => {
     const frame = frameRef.current;
     if (!frame || disabled || applying) return;
+    invalidateBackgroundPreview();
     const scale = displayScale || 1;
     const next = moveMenuImagePosition({
       positionX: positionRef.current.x,
@@ -516,8 +871,8 @@ export function MenuImageCropper({
         </View>
         <Text style={styles.supportText}>
           {copy(
-            'รองรับ jpg, png, webp ไม่เกิน 5MB',
-            'Supports jpg, png, webp up to 5MB',
+            'รองรับ jpg, png, webp ไม่เกิน 5MB · เลือกตัดพื้นหลังได้หลังจัดวางรูป',
+            'Supports jpg, png, webp up to 5MB · Background removal is optional after positioning',
           )}
         </Text>
       </View>
@@ -556,6 +911,10 @@ export function MenuImageCropper({
           'Menu image positioning area',
         )}
         accessibilityRole="adjustable"
+        accessibilityState={{
+          busy: removeBackground
+            && (dragging || previewing || (!approvedBackgroundPreview && !backgroundError)),
+        }}
         accessible
         onAccessibilityAction={onCropAccessibilityAction}
         onLayout={onViewportLayout}
@@ -610,6 +969,16 @@ export function MenuImageCropper({
             </View>
           </View>
         ) : null}
+        {removeBackground && backgroundPreview?.preview_data_url?.trim() ? (
+          <View pointerEvents="none" style={styles.backgroundPreviewOverlay}>
+            <Image
+              accessible={false}
+              resizeMode="stretch"
+              source={{ uri: backgroundPreview.preview_data_url }}
+              style={styles.backgroundPreviewImage}
+            />
+          </View>
+        ) : null}
         {!previewFrame || !sourceLoaded ? (
           <View pointerEvents="none" style={styles.cropLoading}>
             <ActivityIndicator color={palette.muted} />
@@ -631,7 +1000,7 @@ export function MenuImageCropper({
           accessibilityRole="button"
           accessibilityState={{ disabled: disabled || applying || zoom <= MENU_IMAGE_MIN_ZOOM }}
           disabled={disabled || applying || zoom <= MENU_IMAGE_MIN_ZOOM}
-          onPress={() => setZoom((current) => clampZoom(current - MENU_IMAGE_ZOOM_STEP))}
+          onPress={() => changeZoom(zoom - MENU_IMAGE_ZOOM_STEP)}
           style={({ pressed }) => [
             styles.zoomButton,
             (disabled || applying || zoom <= MENU_IMAGE_MIN_ZOOM) && styles.disabled,
@@ -643,7 +1012,7 @@ export function MenuImageCropper({
         <ZoomSlider
           copy={copy}
           disabled={disabled || applying}
-          onChange={setZoom}
+          onChange={changeZoom}
           value={zoom}
         />
         <Pressable
@@ -651,7 +1020,7 @@ export function MenuImageCropper({
           accessibilityRole="button"
           accessibilityState={{ disabled: disabled || applying || zoom >= MENU_IMAGE_MAX_ZOOM }}
           disabled={disabled || applying || zoom >= MENU_IMAGE_MAX_ZOOM}
-          onPress={() => setZoom((current) => clampZoom(current + MENU_IMAGE_ZOOM_STEP))}
+          onPress={() => changeZoom(zoom + MENU_IMAGE_ZOOM_STEP)}
           style={({ pressed }) => [
             styles.zoomButton,
             (disabled || applying || zoom >= MENU_IMAGE_MAX_ZOOM) && styles.disabled,
@@ -660,6 +1029,78 @@ export function MenuImageCropper({
         >
           <AppIcon color={palette.text} name="add-outline" size={19} />
         </Pressable>
+      </View>
+
+      <View style={styles.backgroundRemovalSection}>
+        <Pressable
+          accessibilityHint={copy(
+            'เปิดแล้วภาพที่ตัดจะอัปเดตในกรอบจัดวางโดยอัตโนมัติ',
+            'Turn on to update the cutout automatically inside the positioning frame.',
+          )}
+          accessibilityLabel={copy('ตัดพื้นหลังรูปอาหาร', 'Remove food photo background')}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: removeBackground, disabled: disabled || applying }}
+          disabled={disabled || applying}
+          onPress={toggleBackgroundRemoval}
+          style={({ pressed }) => [
+            styles.backgroundToggle,
+            pressed && styles.pressed,
+            (disabled || applying) && styles.disabled,
+          ]}
+        >
+          <View style={[
+            styles.backgroundToggleIndicator,
+            removeBackground && styles.backgroundToggleIndicatorActive,
+          ]}>
+            {removeBackground ? <AppIcon color={palette.primaryText} name="checkmark" size={16} /> : null}
+          </View>
+          <View style={styles.backgroundToggleCopy}>
+            <Text style={styles.fieldLabel}>{copy('ตัดพื้นหลัง', 'Remove background')}</Text>
+            <Text style={styles.supportText}>{copy(
+              'ปิดไว้เป็นค่าเริ่มต้น เปิดเมื่อต้องการให้เหลือเฉพาะอาหาร',
+              'Off by default. Turn on when you want to keep only the food.',
+            )}</Text>
+          </View>
+        </Pressable>
+
+        {removeBackground ? (
+          <View style={styles.backgroundRemovalControls}>
+            <BackgroundStrengthControl
+              copy={copy}
+              disabled={disabled || applying}
+              onChange={changeBackgroundStrength}
+              value={backgroundStrength}
+            />
+            {dragging ? (
+              <Text accessibilityLiveRegion="polite" style={styles.backgroundStatus}>
+                {copy(
+                  'กำลังจัดตำแหน่งรูป...',
+                  'Positioning image...',
+                )}
+              </Text>
+            ) : previewing || (!approvedBackgroundPreview && !backgroundError) ? (
+              <View accessibilityLiveRegion="polite" style={styles.backgroundStatusRow}>
+                <ActivityIndicator color={palette.muted} size="small" />
+                <Text style={styles.backgroundStatus}>
+                  {previewing
+                    ? copy('กำลังอัปเดตภาพที่ตัด...', 'Updating cutout...')
+                    : copy('กำลังเตรียมภาพที่ตัด...', 'Preparing cutout...')}
+                </Text>
+              </View>
+            ) : approvedBackgroundPreview ? (
+              <Text accessibilityLiveRegion="polite" style={styles.backgroundSuccess}>
+                {copy(
+                  `ตัดพื้นหลังแล้วประมาณ ${removedPercent.toLocaleString('th-TH')}% · เส้นสีส้มคือขอบที่เก็บไว้`,
+                  `About ${removedPercent.toLocaleString('en-US')}% removed · the orange line marks the kept edge.`,
+                )}
+              </Text>
+            ) : backgroundError ? (
+              <Text accessibilityRole="alert" style={styles.backgroundError}>
+                {backgroundError}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.editorActions}>
@@ -680,7 +1121,7 @@ export function MenuImageCropper({
           />
           <Button
             compact
-            disabled={disabled || applying || !previewFrame || !sourceLoaded}
+            disabled={disabled || processing || !previewFrame || !sourceLoaded || (removeBackground && !approvedBackgroundPreview)}
             label={applying
               ? copy('กำลังเตรียมรูป...', 'Preparing image...')
               : copy('ใช้รูปนี้', 'Use this image')}
@@ -764,6 +1205,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+  backgroundPreviewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: palette.surfaceSubtle,
   },
   cropLoading: {
     ...StyleSheet.absoluteFillObject,
@@ -864,6 +1309,73 @@ const styles = StyleSheet.create({
     color: palette.placeholder,
     fontSize: 10,
     fontVariant: ['tabular-nums'],
+  },
+  strengthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  backgroundRemovalSection: {
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: spacing.md,
+  },
+  backgroundToggle: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  backgroundToggleIndicator: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: palette.borderStrong,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+  },
+  backgroundToggleIndicatorActive: {
+    borderColor: palette.primary,
+    backgroundColor: palette.primary,
+  },
+  backgroundToggleCopy: {
+    minWidth: 0,
+    flex: 1,
+    gap: 2,
+  },
+  backgroundRemovalControls: {
+    gap: spacing.md,
+  },
+  backgroundPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  backgroundStatusRow: {
+    minHeight: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  backgroundStatus: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  backgroundSuccess: {
+    color: palette.success,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  backgroundError: {
+    color: palette.danger,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   editorActions: {
     flexDirection: 'row',
