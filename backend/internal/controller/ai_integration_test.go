@@ -77,6 +77,14 @@ func (f *fakeAIOperationsService) ExtractReceiptForOwner(actor service.AIActorCo
 	return nil, f.askErr
 }
 
+func (f *fakeAIOperationsService) OperatingCalendarForOwner(uint) (service.AICalendarView, error) {
+	return service.AICalendarView{}, f.askErr
+}
+
+func (f *fakeAIOperationsService) SetOperatingCalendar(uint, service.AICalendarView) error {
+	return f.askErr
+}
+
 func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error) {
 	f.confirmCalls++
 	f.actor = actor
