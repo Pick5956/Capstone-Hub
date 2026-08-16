@@ -120,6 +120,14 @@ func (r *AIRepository) RecentSalesSummary(restaurantID uint, since time.Time) ([
 // during the hours [startHour, endHour) in Bangkok time — "how did lunch go?".
 // The hour is taken from completed_at so the figure stays consistent with every
 // other revenue number, which is also attributed to when the bill was closed.
+// OperatingCalendarRules returns the AI-owned open/closed rules for a restaurant,
+// used by the sales forecast to know which days the shop is closed.
+func (r *AIRepository) OperatingCalendarRules(restaurantID uint) ([]entity.AIOperatingCalendarRule, error) {
+	var rules []entity.AIOperatingCalendarRule
+	err := r.db.Where("restaurant_id = ?", restaurantID).Find(&rules).Error
+	return rules, err
+}
+
 func (r *AIRepository) SalesForHourRange(restaurantID uint, start, end time.Time, startHour, endHour int) (AISalesRange, error) {
 	var res AISalesRange
 	err := r.db.Model(&entity.Order{}).

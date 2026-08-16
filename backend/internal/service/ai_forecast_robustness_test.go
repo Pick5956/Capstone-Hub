@@ -23,7 +23,7 @@ func TestForecastDegradesGracefully(t *testing.T) {
 
 	t.Run("empty series", func(t *testing.T) {
 		defer failIfPanic(t)
-		r := buildForecast(nil, anchor, 7, 28)
+		r := buildForecast(nil, operatingCalendar{}, anchor, 7, 28)
 		if len(r.Forecast) != 0 || r.BacktestN != 0 {
 			t.Fatalf("empty input should produce nothing, got fc=%d n=%d", len(r.Forecast), r.BacktestN)
 		}
@@ -49,7 +49,7 @@ func TestForecastDegradesGracefully(t *testing.T) {
 		for i := 60; i >= 1; i-- {
 			pts = append(pts, forecastDailyPoint{date: anchor.AddDate(0, 0, -i), rev: 0})
 		}
-		r := buildForecast(pts, anchor, 7, 28)
+		r := buildForecast(pts, operatingCalendar{}, anchor, 7, 28)
 		// Zero revenue cannot be forecast, and MAPE (÷actual) must not explode.
 		if r.BacktestN != 0 {
 			t.Fatalf("all-zero data cannot be backtested, got N=%d", r.BacktestN)
@@ -65,13 +65,13 @@ func TestForecastDegradesGracefully(t *testing.T) {
 		for i := 60; i >= 1; i-- {
 			pts = append(pts, forecastDailyPoint{date: anchor.AddDate(0, 0, -i), rev: -1234})
 		}
-		_ = buildForecast(pts, anchor, 7, 28) // just must not panic
+		_ = buildForecast(pts, operatingCalendar{}, anchor, 7, 28) // just must not panic
 	})
 
 	t.Run("single data point", func(t *testing.T) {
 		defer failIfPanic(t)
 		pts := []forecastDailyPoint{{date: anchor.AddDate(0, 0, -1), rev: 9000}}
-		_ = buildForecast(pts, anchor, 7, 28)
+		_ = buildForecast(pts, operatingCalendar{}, anchor, 7, 28)
 	})
 
 	t.Run("one huge outlier does not crash and stays finite", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestForecastDegradesGracefully(t *testing.T) {
 			}
 			pts = append(pts, forecastDailyPoint{date: anchor.AddDate(0, 0, -i), rev: rev})
 		}
-		r := buildForecast(pts, anchor, 7, 28)
+		r := buildForecast(pts, operatingCalendar{}, anchor, 7, 28)
 		for _, f := range r.Forecast {
 			if f.Predicted < 0 || f.Predicted > 1e12 || f.Lower > f.Upper {
 				t.Fatalf("outlier produced an insane/invalid point: %+v", f)

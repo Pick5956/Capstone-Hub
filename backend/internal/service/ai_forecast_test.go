@@ -31,7 +31,7 @@ func TestForecastRecoversWeeklyPattern(t *testing.T) {
 	base := weekdayBase()
 	pts := buildSyntheticSeries(12, base, time.Date(2026, time.August, 1, 0, 0, 0, 0, bangkokLocation()))
 
-	r := buildForecast(pts, pts[len(pts)-1].date, 7, 28)
+	r := buildForecast(pts, operatingCalendar{}, pts[len(pts)-1].date, 7, 28)
 	if r.BacktestN < 20 {
 		t.Fatalf("expected a full backtest window, got N=%d", r.BacktestN)
 	}

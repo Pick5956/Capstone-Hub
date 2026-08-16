@@ -63,6 +63,7 @@ type AIForecastPoint struct {
 	Predicted float64 `json:"predicted"`
 	Lower     float64 `json:"lower"`
 	Upper     float64 `json:"upper"`
+	Closed    bool    `json:"closed,omitempty"` // shop is closed that day → no sales predicted
 }
 
 // isForecastQuestion matches forward-looking asks only. Bare "แนวโน้ม" is left to
@@ -108,7 +109,13 @@ func (s *AIService) answerSalesForecast(restaurantID uint, question string) (*AI
 		anchor = lastData
 	}
 
-	result := buildForecast(points, anchor, forecastHorizonDays, forecastBacktestDays)
+	// Operating calendar: explicit rules if the shop set any, otherwise inferred
+	// from the sales history. A read failure just means "no rules" → fall back to
+	// inference, never a broken forecast.
+	rules, _ := s.repo.OperatingCalendarRules(restaurantID)
+	cal := buildOperatingCalendar(rules, points)
+
+	result := buildForecast(points, cal, anchor, forecastHorizonDays, forecastBacktestDays)
 	if staleDays := int(today.Sub(lastData).Hours() / 24); staleDays > 0 {
 		result.StaleDays = staleDays
 	}
@@ -236,7 +243,7 @@ func backtestForecast(points []forecastDailyPoint, holdoutDays int) (mape, mae f
 	return sumAPE / float64(n) * 100, sumAE / float64(n), n
 }
 
-func buildForecast(points []forecastDailyPoint, anchor time.Time, horizon, holdout int) AIForecastResult {
+func buildForecast(points []forecastDailyPoint, cal operatingCalendar, anchor time.Time, horizon, holdout int) AIForecastResult {
 	mape, mae, n := backtestForecast(points, holdout)
 
 	band := mape / 100
@@ -247,6 +254,15 @@ func buildForecast(points []forecastDailyPoint, anchor time.Time, horizon, holdo
 	forecast := make([]AIForecastPoint, 0, horizon)
 	for i := 1; i <= horizon; i++ {
 		target := anchor.AddDate(0, 0, i)
+		// A closed day sells nothing — say so instead of predicting a number.
+		if !cal.isOpen(target) {
+			forecast = append(forecast, AIForecastPoint{
+				Date:    target.Format("2006-01-02"),
+				Weekday: thaiWeekdayName(int(target.Weekday())),
+				Closed:  true,
+			})
+			continue
+		}
 		pred, ok := forecastDay(points, target)
 		if !ok {
 			continue
@@ -287,6 +303,10 @@ func formatForecastAnswer(r AIForecastResult) string {
 	var b strings.Builder
 	b.WriteString("คาดการณ์ยอดขาย 7 วันข้างหน้า (อิงค่าเฉลี่ยรายวันในสัปดาห์ + แนวโน้มล่าสุด)ครับ:")
 	for _, f := range r.Forecast {
+		if f.Closed {
+			b.WriteString(fmt.Sprintf("\n- %s %s: ร้านปิด", formatThaiDate(f.Date), f.Weekday))
+			continue
+		}
 		b.WriteString(fmt.Sprintf("\n- %s %s: ประมาณ %s บาท (ช่วง %s–%s)",
 			formatThaiDate(f.Date), f.Weekday, formatMoney(f.Predicted), formatMoney(f.Lower), formatMoney(f.Upper)))
 	}

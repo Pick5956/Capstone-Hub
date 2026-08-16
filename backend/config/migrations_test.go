@@ -75,6 +75,9 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// therefore its fingerprint — is unchanged from version 7.
 		8: "6ef6936c4f2e182a3e37a64d9addcfc9b4a80869cc546d324666041e826cc343",
 		9: "6ef6936c4f2e182a3e37a64d9addcfc9b4a80869cc546d324666041e826cc343",
+		// Version 10 (AI operating calendar) also registers its table inside the
+		// migration, so the frozen baseline registry is unchanged from version 7.
+		10: "6ef6936c4f2e182a3e37a64d9addcfc9b4a80869cc546d324666041e826cc343",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
@@ -116,11 +119,11 @@ func TestAIConversationMigrationIsAdditiveVersionEight(t *testing.T) {
 
 func TestAIActionPreviewMigrationIsAdditiveVersionNine(t *testing.T) {
 	plan := schemaMigrationPlan()
-	latest := plan[len(plan)-1]
-	if latest.Version != 9 || latest.Name != "add_ai_action_previews" {
-		t.Fatalf("latest migration = %d %q, want version 9 AI action preview migration", latest.Version, latest.Name)
+	preview := plan[8] // version 9 is the ninth migration
+	if preview.Version != 9 || preview.Name != "add_ai_action_previews" {
+		t.Fatalf("migration 9 = %d %q, want version 9 AI action preview migration", preview.Version, preview.Name)
 	}
-	if latest.Up == nil {
+	if preview.Up == nil {
 		t.Fatal("AI action preview migration has no up function")
 	}
 
@@ -136,6 +139,24 @@ func TestAIActionPreviewMigrationIsAdditiveVersionNine(t *testing.T) {
 	wantForeignKeys := []string{"Restaurant", "Owner", "Conversation", "Turn", "TargetMenuItem"}
 	if !reflect.DeepEqual(aiActionPreviewForeignKeys, wantForeignKeys) {
 		t.Fatalf("AI action preview foreign keys = %#v, want %#v", aiActionPreviewForeignKeys, wantForeignKeys)
+	}
+}
+
+func TestAIOperatingCalendarMigrationIsAdditiveVersionTen(t *testing.T) {
+	plan := schemaMigrationPlan()
+	latest := plan[len(plan)-1]
+	if latest.Version != 10 || latest.Name != "add_ai_operating_calendar" {
+		t.Fatalf("latest migration = %d %q, want version 10 AI operating calendar migration", latest.Version, latest.Name)
+	}
+	if latest.Up == nil {
+		t.Fatal("AI operating calendar migration has no up function")
+	}
+	// The frozen baseline registry must not gain the new AI-owned table; it lives
+	// only in the numbered migration, so disabling the forecast leaves it unused.
+	for _, model := range SchemaModels() {
+		if reflect.TypeOf(model).Elem().Name() == "AIOperatingCalendarRule" {
+			t.Fatal("AIOperatingCalendarRule must not be added to the frozen SchemaModels baseline")
+		}
 	}
 }
 

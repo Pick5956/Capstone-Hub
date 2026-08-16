@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 9
+	CurrentSchemaVersion int64 = 10
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -186,6 +186,20 @@ func schemaMigrationPlan() []SchemaMigration {
 				// schema ledger intentionally rejects an older binary.
 				if err := migrateAIActionPreviews(ctx.DB); err != nil {
 					return fmt.Errorf("migrate AI action previews: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 10,
+			Name:    "add_ai_operating_calendar",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only: the AI feature's own operating calendar (closed
+				// weekdays + one-off closures/holidays) used by the sales forecast. It
+				// links by restaurant_id and never touches the shared restaurant table,
+				// so disabling the forecast leaves this table unused as the rollback.
+				if err := ctx.DB.AutoMigrate(&entity.AIOperatingCalendarRule{}); err != nil {
+					return fmt.Errorf("migrate AI operating calendar: %w", err)
 				}
 				return nil
 			},
