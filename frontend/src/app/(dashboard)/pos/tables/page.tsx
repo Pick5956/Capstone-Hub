@@ -42,10 +42,10 @@ function tableAccentClass(status: TableStatus) {
 }
 
 function tableStatusPillClass(status: TableStatus) {
-  if (status === "inactive") return "bg-gray-100 text-gray-600 ring-1 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700";
-  if (status === "occupied") return "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:ring-amber-900/70";
-  if (status === "reserved") return "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:ring-sky-900/70";
-  return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:ring-emerald-900/70";
+  if (status === "inactive") return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300";
+  if (status === "occupied") return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
+  if (status === "reserved") return "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300";
+  return "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300";
 }
 
 export default function PosTablesPage() {
@@ -604,7 +604,7 @@ export default function PosTablesPage() {
                       data-table-id={table.ID}
                       disabled={isNavigating}
                       onClick={handleTableClick}
-                      className={`ui-press group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-950 ${disabled ? "cursor-default opacity-70" : "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700"}`}
+                      className={`ui-press group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-900 ${disabled ? "cursor-default opacity-70" : "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700 dark:hover:bg-gray-800"}`}
                     >
                       <span className={`w-1.5 shrink-0 ${tableAccentClass(status)}`} />
                       <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
@@ -666,7 +666,7 @@ export default function PosTablesPage() {
 
       {(selectedTable || takeawayOpen) && (
         <div {...openOrderBackdrop} className={`${sheetClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm`}>
-          <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">
                 {takeawayOpen ? copy.openTakeaway : `${sheetMode === "reserved" ? copy.reserved : copy.openOrder} · ${selectedTable?.table_number ?? ""}`}
@@ -683,14 +683,14 @@ export default function PosTablesPage() {
                   </div>
                   {customerCountField}
                 </div>
-                <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800 sm:grid-cols-3">
-                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
+                <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
                     {copy.cancel}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={cancelReservation} className="ui-press h-11 rounded-md border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50 sm:h-9 sm:text-[12px]">
+                  <button type="button" disabled={submitting || isNavigating} onClick={cancelReservation} className="ui-press h-10 rounded-md border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50">
                     {copy.cancelReservation}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-11 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900 sm:col-span-1 sm:h-9 sm:text-[12px]">
+                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-10 whitespace-nowrap rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
                     {copy.acceptReservation}
                   </button>
                 </div>

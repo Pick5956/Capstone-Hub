@@ -399,12 +399,12 @@ export default function CustomerTableOrderPage() {
         </div>
 
         {filteredMenu.length ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredMenu.map((item) => {
               const orderedQuantity = cartMenuQuantities.get(item.ID) ?? 0;
 
               return (
-                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:hover:-translate-y-0.5">
+                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
                   {!item.is_available && (
                     <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                       {copy.soldOut}
@@ -418,7 +418,7 @@ export default function CustomerTableOrderPage() {
                   <div className="aspect-[4/3] bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }} aria-label={item.image_url ? `${item.name}` : undefined} />
                   <div className="flex min-w-0 flex-1 flex-col p-3">
                     <h2 className="truncate text-[15px] font-semibold text-gray-900 dark:text-white">{item.name}</h2>
-                    <p className="mt-auto pt-2 text-right font-mono text-[20px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
+                    <p className="mt-auto pt-2 text-right font-mono text-[16px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
                   </div>
                 </button>
               );

@@ -810,7 +810,7 @@ func validateEmptyTableClose(order *entity.Order) error {
 }
 
 func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*entity.Order, error) {
-	var changed uint
+	var closedEmpty *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
@@ -819,24 +819,40 @@ func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*ent
 		if err := validateEmptyTableClose(order); err != nil {
 			return err
 		}
+		now := repository.BangkokNow()
 
+		if len(order.Items) == 0 {
+			// The table was opened but nothing was ever ordered. Delete the empty
+			// order outright so it is not archived — there is nothing to record.
+			if err := tx.DeleteOrder(order); err != nil {
+				return err
+			}
+			if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
+				return err
+			}
+			// The row is gone; reflect the close in the in-memory copy we return.
+			order.Status = entity.OrderStatusCancelled
+			order.ClosedAt = &now
+			closedEmpty = order
+			return nil
+		}
+
+		// Items were placed then all cancelled — keep a cancelled record.
 		const reason = "empty table closed"
 		order.CancelledReason = reason
-		now := repository.BangkokNow()
 		order.ClosedAt = &now
 		if err := setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, reason); err != nil {
 			return err
 		}
-		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
-			return err
-		}
-		changed = order.ID
-		return nil
+		return releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.FindOrder(restaurantID, changed)
+	if closedEmpty != nil {
+		return closedEmpty, nil
+	}
+	return s.repo.FindOrder(restaurantID, orderID)
 }
 
 func (s *OrderService) KitchenQueue(restaurantID uint) ([]entity.Order, error) {
