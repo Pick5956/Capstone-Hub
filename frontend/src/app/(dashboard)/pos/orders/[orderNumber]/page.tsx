@@ -173,7 +173,7 @@ export default function PosOrderDetailPage() {
       undeliveredWarn: "มีรายการที่ยังไม่ได้เสิร์ฟ — ยกเลิก (ครัวทำไม่ทัน) หรือรอครัวก่อนชำระเงิน",
       closeEmptyTable: "ปิดโต๊ะ",
       closeEmptyTableTitle: "ปิดโต๊ะที่เปิดผิด?",
-      closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะยกเลิกออเดอร์ว่างและเปลี่ยนโต๊ะกลับเป็นว่าง",
+      closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะไม่บันทึกออเดอร์ว่างนี้ (ไม่ขึ้นในประวัติ) และเปลี่ยนโต๊ะกลับเป็นว่าง",
       keepTableOpen: "เปิดโต๊ะไว้",
       tableClosed: "ปิดโต๊ะแล้ว",
       remove: "ลบ",
@@ -241,7 +241,7 @@ export default function PosOrderDetailPage() {
       undeliveredWarn: "Some items haven't been served — void them (kitchen too slow) or wait before payment.",
       closeEmptyTable: "Close table",
       closeEmptyTableTitle: "Close this table opened by mistake?",
-      closeEmptyTableBody: "This table has no items. The empty order will be cancelled and the table will become available again.",
+      closeEmptyTableBody: "This table has no items. The empty order won't be recorded (it won't appear in the archive) and the table becomes available again.",
       keepTableOpen: "Keep table open",
       tableClosed: "Table closed",
       remove: "Remove",
@@ -917,12 +917,12 @@ export default function PosOrderDetailPage() {
         // ── Menu grid (normal order-taking mode) ─────────────────────────────
         <div className="px-3 py-3 sm:px-4 lg:px-5">
           <section className="min-w-0">
-            <div className="grid auto-rows-max grid-cols-2 content-start items-start gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid auto-rows-max grid-cols-3 content-start items-start gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
                     {!item.is_available && (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}

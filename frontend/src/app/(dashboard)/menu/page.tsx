@@ -33,7 +33,6 @@ import {
 type DeleteTarget =
   | { type: "category"; id: number; name: string }
   | { type: "item"; id: number; name: string };
-type AvailabilityFilter = "all" | "available" | "unavailable";
 type ItemEditorTab = "basic" | "options" | "recipe";
 
 export default function MenuPage() {
@@ -53,7 +52,6 @@ export default function MenuPage() {
   const [itemForm, setItemForm] = useState<MenuItemInput>(emptyItem);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [filterCategory, setFilterCategory] = useState(0);
-  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -391,13 +389,10 @@ export default function MenuPage() {
     const keyword = search.trim().toLowerCase();
     return items.filter((item) => {
       const categoryMatch = !filterCategory || menuCategoryIds(item).includes(filterCategory);
-      const availabilityMatch =
-        availabilityFilter === "all" ||
-        (availabilityFilter === "available" ? item.is_available : !item.is_available);
       const searchMatch = !keyword || item.name.toLowerCase().includes(keyword) || item.description.toLowerCase().includes(keyword);
-      return categoryMatch && availabilityMatch && searchMatch;
+      return categoryMatch && searchMatch;
     });
-  }, [availabilityFilter, filterCategory, items, search]);
+  }, [filterCategory, items, search]);
 
   const categoryCounts = useMemo(() => {
     return categories.reduce<Record<number, number>>((acc, category) => {
@@ -413,8 +408,6 @@ export default function MenuPage() {
     { value: "0", label: copy.allCategories },
     ...sortedCategories.map((category) => ({ value: String(category.ID), label: category.name })),
   ], [copy.allCategories, sortedCategories]);
-  const availableCount = items.filter((item) => item.is_available).length;
-  const unavailableCount = items.length - availableCount;
 
   const normalizeOptionGroups = (groups: MenuOptionGroupInput[]) =>
     groups
@@ -827,16 +820,6 @@ export default function MenuPage() {
           className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
         />
       </label>
-      {canManage && (
-        <div className={placement === "desktop" ? "flex shrink-0 items-center gap-2" : "flex justify-end gap-2"}>
-          <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            {copy.categoryManager}
-          </button>
-          <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
-            + {copy.createItem}
-          </button>
-        </div>
-      )}
     </div>
   );
 
@@ -856,39 +839,22 @@ export default function MenuPage() {
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="w-full max-w-xs">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.catalogTitle}</p>
-                  <div className="mt-1.5">
-                    <ThemedSelect
-                      value={String(filterCategory)}
-                      onChange={(next) => setFilterCategory(Number(next))}
-                      options={categoryFilterOptions}
-                    />
+                  <ThemedSelect
+                    value={String(filterCategory)}
+                    onChange={(next) => setFilterCategory(Number(next))}
+                    options={categoryFilterOptions}
+                  />
+                </div>
+                {canManage ? (
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+                      {copy.categoryManager}
+                    </button>
+                    <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">
+                      + {copy.createItem}
+                    </button>
                   </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-[11px] sm:min-w-[330px]">
-                  {([
-                    { key: "all" as const, label: copy.menuSummary, value: items.length, valueClass: "text-gray-950 dark:text-white" },
-                    { key: "available" as const, label: copy.availableSummary, value: availableCount, valueClass: "text-emerald-600 dark:text-emerald-300" },
-                    { key: "unavailable" as const, label: copy.unavailableSummary, value: unavailableCount, valueClass: "text-gray-500 dark:text-gray-400" },
-                  ]).map((item) => {
-                    const selected = availabilityFilter === item.key;
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setAvailabilityFilter(item.key)}
-                        className={`rounded-md border px-3 py-2 text-left transition-[background-color,border-color,box-shadow] ${
-                          selected
-                            ? "border-orange-300 bg-orange-50 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.18)] dark:border-orange-800 dark:bg-orange-950/25"
-                            : "border-gray-200 hover:border-orange-200 hover:bg-orange-50/30 dark:border-gray-800 dark:hover:border-orange-900/60 dark:hover:bg-orange-950/15"
-                        }`}
-                      >
-                        <p className="truncate text-gray-500">{item.label}</p>
-                        <p className={`mt-1 font-mono text-[16px] font-semibold tabular-nums ${item.valueClass}`}>{item.value}</p>
-                      </button>
-                    );
-                  })}
-                </div>
+                ) : null}
               </div>
             </div>
 

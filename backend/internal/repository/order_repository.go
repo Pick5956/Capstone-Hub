@@ -327,6 +327,12 @@ func (r *OrderRepository) DeleteItem(item *entity.OrderItem) error {
 	return r.db.Delete(item).Error
 }
 
+// DeleteOrder soft-deletes an order. Used when closing a table that was opened
+// but never ordered on — the empty order is removed rather than archived.
+func (r *OrderRepository) DeleteOrder(order *entity.Order) error {
+	return r.db.Delete(order).Error
+}
+
 func (r *OrderRepository) FindItemForUpdate(restaurantID, orderID, itemID uint) (*entity.OrderItem, error) {
 	var item entity.OrderItem
 	err := r.db.
