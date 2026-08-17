@@ -138,3 +138,25 @@ func (r *IngredientRepository) FindCategoryByName(restaurantID uint, name string
 func (r *IngredientRepository) CreateCategory(category *entity.IngredientCategory) error {
 	return r.db.Create(category).Error
 }
+
+func (r *IngredientRepository) UpdateCategory(category *entity.IngredientCategory) error {
+	return r.db.Save(category).Error
+}
+
+// CountIngredientsInCategory reports how many ingredients still point at a
+// category, so deletion can be blocked while it is in use.
+func (r *IngredientRepository) CountIngredientsInCategory(restaurantID, categoryID uint) (int64, error) {
+	var count int64
+	err := r.db.Model(&entity.Ingredient{}).
+		Where("restaurant_id = ? AND category_id = ?", restaurantID, categoryID).
+		Count(&count).Error
+	return count, err
+}
+
+// DeleteCategory hard-deletes the row (Unscoped) so its (restaurant, name)
+// unique slot is freed and the same name can be created again later.
+func (r *IngredientRepository) DeleteCategory(restaurantID, categoryID uint) error {
+	return r.db.Unscoped().
+		Where("restaurant_id = ? AND id = ?", restaurantID, categoryID).
+		Delete(&entity.IngredientCategory{}).Error
+}

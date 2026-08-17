@@ -65,6 +65,44 @@ func (ctrl *IngredientController) CreateCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, category)
 }
 
+func (ctrl *IngredientController) UpdateCategory(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
+	if !ok {
+		return
+	}
+	categoryID, ok := parseUintParam(c, "categoryId")
+	if !ok {
+		return
+	}
+	var req service.IngredientCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	category, err := ctrl.svc.UpdateCategory(restaurantID, categoryID, &req)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, category)
+}
+
+func (ctrl *IngredientController) DeleteCategory(c *gin.Context) {
+	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
+	if !ok {
+		return
+	}
+	categoryID, ok := parseUintParam(c, "categoryId")
+	if !ok {
+		return
+	}
+	if err := ctrl.svc.DeleteCategory(restaurantID, categoryID); err != nil {
+		respondAPIError(c, http.StatusConflict, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
 func (ctrl *IngredientController) Create(c *gin.Context) {
 	restaurantID, ok := requireRestaurantWithPermission(c, "manage_inventory", "missing manage_inventory permission")
 	if !ok {

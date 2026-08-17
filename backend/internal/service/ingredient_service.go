@@ -82,6 +82,44 @@ func (s *IngredientService) CreateCategory(restaurantID uint, req *IngredientCat
 	return category, nil
 }
 
+func (s *IngredientService) UpdateCategory(restaurantID, categoryID uint, req *IngredientCategoryRequest) (*entity.IngredientCategory, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, errors.New("category name is required")
+	}
+	if len([]rune(name)) > 120 {
+		return nil, errors.New("category name is too long")
+	}
+	category, err := s.repo.FindCategory(restaurantID, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	category.Name = name
+	if req.IsActive != nil {
+		category.IsActive = *req.IsActive
+	}
+	if err := s.repo.UpdateCategory(category); err != nil {
+		return nil, err
+	}
+	return category, nil
+}
+
+// DeleteCategory removes a category only when no ingredient still uses it — the
+// safe choice, so deleting never silently orphans an ingredient's category.
+func (s *IngredientService) DeleteCategory(restaurantID, categoryID uint) error {
+	if _, err := s.repo.FindCategory(restaurantID, categoryID); err != nil {
+		return err
+	}
+	count, err := s.repo.CountIngredientsInCategory(restaurantID, categoryID)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return errors.New("category is in use by ingredients")
+	}
+	return s.repo.DeleteCategory(restaurantID, categoryID)
+}
+
 func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientRequest) (*entity.Ingredient, error) {
 	name, unit, storageType, categoryID, err := s.normalizeIngredientFields(restaurantID, req)
 	if err != nil {

@@ -16,6 +16,14 @@ export const createIngredientCategory = (data: {
   is_active?: boolean;
 }) => apiClient.post<IngredientCategory>("/api/v1/ingredient-categories", data);
 
+export const updateIngredientCategory = (
+  id: number,
+  data: { name: string; display_order?: number; is_active?: boolean },
+) => apiClient.put<IngredientCategory>(`/api/v1/ingredient-categories/${id}`, data);
+
+export const deleteIngredientCategory = (id: number) =>
+  apiClient.delete(`/api/v1/ingredient-categories/${id}`);
+
 export const listIngredients = () =>
   apiClient.get<{ ingredients: Ingredient[] }>("/api/v1/ingredients");
 
