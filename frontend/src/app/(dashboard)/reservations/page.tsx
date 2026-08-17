@@ -113,7 +113,7 @@ export default function ReservationsPage() {
   ];
 
   return (
-    <OperationalPageShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle}>
+    <OperationalPageShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} hideHeaderText>
       <div className="mb-4 flex flex-wrap gap-2">
         {filters.map((item) => (
           <button

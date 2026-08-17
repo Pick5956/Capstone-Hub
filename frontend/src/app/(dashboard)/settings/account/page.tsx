@@ -161,7 +161,7 @@ export default function AccountSettingsPage() {
   };
 
   return (
-    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back}>
+    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <form onSubmit={saveProfile} className="space-y-4">
           <SettingsPanel title={copy.profile} hint={copy.profileHint}>

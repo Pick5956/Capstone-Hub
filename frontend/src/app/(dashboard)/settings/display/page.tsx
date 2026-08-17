@@ -59,7 +59,7 @@ export default function DisplaySettingsPage() {
   };
 
   return (
-    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back}>
+    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
       <div className="max-w-2xl">
         <SettingsPanel title={copy.title} hint={copy.subtitle}>
           <div className="grid gap-6">

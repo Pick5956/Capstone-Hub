@@ -21,6 +21,7 @@ export default function OperationalPageShell({
   subtitle,
   actions,
   showHeader = true,
+  hideHeaderText = false,
   edgeToEdge = false,
   stats,
   lastUpdated,
@@ -31,6 +32,10 @@ export default function OperationalPageShell({
   subtitle?: string;
   actions?: React.ReactNode;
   showHeader?: boolean;
+  // Hide the eyebrow/title/subtitle text (the sidebar already names the page)
+  // while keeping any actions. The title stays as a visually-hidden heading so
+  // the document outline and screen readers are unaffected.
+  hideHeaderText?: boolean;
   edgeToEdge?: boolean;
   stats?: OperationalStat[];
   lastUpdated?: string;
@@ -46,15 +51,29 @@ export default function OperationalPageShell({
     >
       <div className={edgeToEdge ? "flex min-h-0 w-full flex-1 flex-col" : "w-full space-y-5"}>
         {showHeader ? (
-          <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
-              {subtitle ? <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
-              {lastUpdated ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-500">{lastUpdated}</p> : null}
-            </div>
-            {actions ? <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{actions}</div> : null}
-          </header>
+          hideHeaderText ? (
+            <>
+              <h1 className="sr-only">{title}</h1>
+              {actions || lastUpdated ? (
+                <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="min-w-0">
+                    {lastUpdated ? <p className="text-[11px] text-gray-500 dark:text-gray-500">{lastUpdated}</p> : null}
+                  </div>
+                  {actions ? <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{actions}</div> : null}
+                </header>
+              ) : null}
+            </>
+          ) : (
+            <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
+                {subtitle ? <p className="mt-1 max-w-3xl text-[13px] leading-5 text-gray-500 dark:text-gray-400">{subtitle}</p> : null}
+                {lastUpdated ? <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-500">{lastUpdated}</p> : null}
+              </div>
+              {actions ? <div className="flex flex-col gap-2 sm:flex-row sm:items-center">{actions}</div> : null}
+            </header>
+          )
         ) : null}
 
         {stats?.length ? (

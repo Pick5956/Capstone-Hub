@@ -36,7 +36,7 @@ export default function TeamSettingsPage() {
   if (!allowed) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back}>
+    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
       <SettingsPanel title={copy.panel} hint={copy.hint}>
         <Link href="/staff" className="ui-press inline-flex h-10 items-center rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white dark:bg-white dark:text-gray-900">
           {copy.button}

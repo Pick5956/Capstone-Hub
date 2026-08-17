@@ -433,7 +433,7 @@ const rowTint = {
 const cardToneTile: Record<CardTone, string> = {
   revenue: "border-sky-400 bg-sky-200 text-sky-900 dark:border-sky-600 dark:bg-sky-900/70 dark:text-sky-100",
   profit: "border-emerald-400 bg-emerald-200 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-900/70 dark:text-emerald-100",
-  cost: "border-rose-400 bg-rose-200 text-rose-900 dark:border-rose-600 dark:bg-rose-900/70 dark:text-rose-100",
+  cost: "border-red-400 bg-red-200 text-red-900 dark:border-red-600 dark:bg-red-900/70 dark:text-red-100",
 };
 const cardToneRow = cardToneTile;
 const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";

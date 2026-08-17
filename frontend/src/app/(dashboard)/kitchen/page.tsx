@@ -9,7 +9,6 @@ import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
-import { listMenuItems } from "@/src/lib/menu";
 import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -86,7 +85,6 @@ export default function KitchenPage() {
   const canView = can(activeMembership, "view_kitchen");
   const canUpdate = can(activeMembership, "update_order_status");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuImageById, setMenuImageById] = useState<Map<number, string>>(() => new Map());
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -278,27 +276,6 @@ export default function KitchenPage() {
     eventFilter: { kind: "kitchen" },
   });
   useVisiblePolling(load, { enabled: canView, intervalMs: 60_000 });
-
-  // The kitchen queue payload does not embed each item's menu, so fetch the menu
-  // catalogue once and resolve thumbnails by menu_id (mirrors the POS order page).
-  useEffect(() => {
-    if (!canView) return;
-    let active = true;
-    listMenuItems()
-      .then((res) => {
-        if (!active) return;
-        setMenuImageById(new Map(res.data.menu_items.map((item) => [item.ID, item.image_url])));
-      })
-      .catch(() => {
-        // Kitchen-only roles may lack menu access; fall back to the placeholder image.
-      });
-    return () => {
-      active = false;
-    };
-  }, [canView]);
-
-  const orderItemImageUrl = (item: OrderItem) =>
-    item.menu?.image_url || menuImageById.get(item.menu_id) || "/menu-placeholder-v2.webp";
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);
@@ -533,7 +510,7 @@ export default function KitchenPage() {
                 </div>
               </div>
             ) : null}
-            <div className={`flex items-start justify-between gap-3 px-4 ${isReadyLane ? "py-3" : "py-4"}`}>
+            <div className={`flex items-start justify-between gap-3 px-4 ${isReadyLane ? "py-2.5" : "py-3"}`}>
               <div className="min-w-0">
                 {isReadyLane ? (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -571,7 +548,7 @@ export default function KitchenPage() {
             </div>
 
             {!isReadyLane ? (
-              <div className="flex min-h-14 items-center justify-between gap-3 border-y border-black/5 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
+              <div className="flex min-h-11 items-center justify-between gap-3 border-y border-black/5 bg-white/60 px-3 py-1.5 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
                 <p className="text-[12px] font-medium tabular-nums text-gray-600 dark:text-gray-300">
                   {copy.remaining(laneItems.length)}
                 </p>
@@ -580,7 +557,7 @@ export default function KitchenPage() {
                     type="button"
                     disabled={submittingId !== null}
                     onClick={() => markAllReady(order)}
-                    className="ui-press inline-flex h-11 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
+                    className="ui-press inline-flex h-9 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
                   >
                     {copy.markAllReady}
                   </button>
@@ -596,18 +573,12 @@ export default function KitchenPage() {
                 >
                   <div className="min-h-0 overflow-hidden">
                     <div
-                      className={`flex min-h-[72px] items-center gap-3 px-3 py-3 sm:px-4 ${
+                      className={`flex min-h-[52px] items-center gap-3 px-3 py-2.5 sm:px-4 ${
                         isReadyLane ? "bg-emerald-50/35 dark:bg-emerald-950/10" : ""
                       } ${completingItemIds.has(item.ID) ? "kitchen-item-complete" : ""} ${
                         isReadyLane && enteringReadyItemIds.has(item.ID) ? "kitchen-item-ready-enter" : ""
                       }`}
                     >
-                      <div
-                        role="img"
-                        aria-label={`${language === "th" ? "รูปเมนู" : "Menu image"} ${item.menu_name}`}
-                        className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
-                        style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
-                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <p className={`font-semibold leading-5 ${isReadyLane ? "text-gray-700 dark:text-gray-200" : "text-gray-900 dark:text-white"}`}>{item.quantity}x {item.menu_name}</p>
@@ -627,7 +598,7 @@ export default function KitchenPage() {
                         {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
                       </div>
                       {!canUpdate && isReadyLane ? (
-                        <span className="inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        <span className="inline-flex h-10 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
                           <Check className="h-4 w-4" aria-hidden="true" />
                           {copy.ready}
                         </span>
@@ -640,7 +611,7 @@ export default function KitchenPage() {
                               title={copy.undo}
                               disabled={submittingId !== null}
                               onClick={() => revertToCooking(order, item)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
                             >
                               <Undo2 className="h-[18px] w-[18px]" aria-hidden="true" />
                             </button>
@@ -651,7 +622,7 @@ export default function KitchenPage() {
                               title={copy.markReady}
                               disabled={submittingId !== null}
                               onClick={() => markReady(order, item.ID)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
                             >
                               <Check className="h-5 w-5" strokeWidth={3} aria-hidden="true" />
                             </button>
@@ -663,7 +634,7 @@ export default function KitchenPage() {
                               title={copy.cancelItem}
                               disabled={submittingId !== null}
                               onClick={() => openCancelDialog(order, item)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
                             >
                               <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />
                             </button>
@@ -712,72 +683,101 @@ export default function KitchenPage() {
     const label = isReadyLane ? copy.readyZone : copy.cookingZone;
     const emptyLabel = isReadyLane ? copy.readyEmpty : copy.cookingEmpty;
     const Icon = isReadyLane ? CheckCircle2 : Clock3;
+    // Only the "done" zone can be collapsed; the cooking zone always stays open.
+    const collapsible = isReadyLane;
+    const isOpen = collapsible ? open : true;
+
+    const zoneIconLabel = (
+      <span className="relative z-10 flex min-w-0 items-center gap-3">
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[21px] font-semibold leading-tight">{label}</span>
+        </span>
+      </span>
+    );
+    const zoneCount = (
+      <span
+        aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
+        className={`min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums ${
+          isReadyLane ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"
+        }`}
+      >
+        {count}
+      </span>
+    );
 
     return (
       <section
         aria-label={label}
         className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
       >
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={contentId}
-          onPointerDown={(event) => startZoneRipple(lane, event)}
-          onClick={() => setOpen((current) => !current)}
-          className="kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden bg-gray-100 px-4 py-1.5 text-left text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
-        >
-          {zoneRipple?.lane === lane ? (
-            <span
-              key={zoneRipple.id}
-              aria-hidden="true"
-              className="kitchen-zone-ripple"
-              style={{ height: zoneRipple.size, left: zoneRipple.x, top: zoneRipple.y, width: zoneRipple.size }}
-            />
-          ) : null}
-          <span className="relative z-10 flex min-w-0 items-center gap-3">
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
-              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[21px] font-semibold leading-tight">{label}</span>
-            </span>
-          </span>
-          <span className="relative z-10 flex shrink-0 items-center gap-2">
-            <span
-              aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
-              className={`min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums ${
-                isReadyLane ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"
-              }`}
-            >
-              {count}
-            </span>
-            <span className="grid h-9 w-9 place-items-center text-gray-500 dark:text-gray-300">
-              <ChevronDown
-                className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
-                strokeWidth={3}
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={contentId}
+            onPointerDown={(event) => startZoneRipple(lane, event)}
+            onClick={() => setOpen((current) => !current)}
+            className="kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden bg-gray-100 px-4 py-1.5 text-left text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
+          >
+            {zoneRipple?.lane === lane ? (
+              <span
+                key={zoneRipple.id}
                 aria-hidden="true"
+                className="kitchen-zone-ripple"
+                style={{ height: zoneRipple.size, left: zoneRipple.x, top: zoneRipple.y, width: zoneRipple.size }}
               />
+            ) : null}
+            {zoneIconLabel}
+            <span className="relative z-10 flex shrink-0 items-center gap-2">
+              {zoneCount}
+              <span className="grid h-9 w-9 place-items-center text-gray-500 dark:text-gray-300">
+                <ChevronDown
+                  className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
+                  strokeWidth={3}
+                  aria-hidden="true"
+                />
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+        ) : (
+          <div className="flex min-h-[52px] w-full items-center justify-between gap-3 bg-gray-100 px-4 py-1.5 text-gray-900 dark:bg-gray-800 dark:text-white">
+            {zoneIconLabel}
+            <span className="flex shrink-0 items-center gap-2 pr-1">
+              {zoneCount}
+            </span>
+          </div>
+        )}
 
         <div
           id={contentId}
-          aria-hidden={!open}
-          inert={open ? undefined : true}
-          className={`kitchen-zone-collapse grid ${open ? "kitchen-zone-collapse-open" : ""}`}
+          aria-hidden={!isOpen}
+          inert={isOpen ? undefined : true}
+          className={`kitchen-zone-collapse grid ${isOpen ? "kitchen-zone-collapse-open" : ""}`}
         >
           <div className="min-h-0 overflow-hidden">
             <div className="kitchen-zone-collapse-content border-t border-gray-200 p-3 sm:p-4 dark:border-gray-800">
               {loading ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Skeleton className="h-52" />
-                  <Skeleton className="h-52" />
-                  <Skeleton className="h-52" />
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {[0, 1, 2, 3].map((index) => (
+                    <Skeleton key={index} className="h-52 w-72 shrink-0" />
+                  ))}
                 </div>
               ) : laneOrders.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {laneOrders.map((order) => renderTicket(order, lane))}
+                // Carousel: show ~4 cards across, scroll horizontally for the rest
+                // instead of wrapping onto new rows.
+                <div className="flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-2">
+                  {laneOrders.map((order) => (
+                    <div
+                      key={`${lane}:${ticketKey(order)}`}
+                      className="min-w-[260px] shrink-0 snap-start"
+                      style={{ flexBasis: "calc((100% - 2.25rem) / 4)" }}
+                    >
+                      {renderTicket(order, lane)}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="flex min-h-24 items-center justify-center px-4 py-6 text-center text-[13px] font-semibold text-gray-600 dark:text-gray-300">

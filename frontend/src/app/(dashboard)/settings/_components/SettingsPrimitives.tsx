@@ -22,7 +22,11 @@ export function SettingsShell({
 }) {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      {!hideHeader && (
+      {hideHeader ? (
+        // The sidebar already names the page; keep only a visually-hidden
+        // heading so the document outline and screen readers are unaffected.
+        <h1 className="sr-only">{title}</h1>
+      ) : (
         <div className="px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6 mb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
