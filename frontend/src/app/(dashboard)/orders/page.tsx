@@ -279,9 +279,6 @@ export default function OrdersPage() {
             }`}
           >
             {item.label}
-            <span className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${statusFilter === item.value ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"}`}>
-              {new Intl.NumberFormat(locale).format(item.count)}
-            </span>
           </button>
         ))}
       </div>

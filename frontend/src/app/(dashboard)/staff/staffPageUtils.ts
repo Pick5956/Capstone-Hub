@@ -86,7 +86,7 @@ export function allowedRoleOptions(actorRole?: string, roles: Role[] = []) {
 export function statusTone(status: string) {
   if (status === "active") return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
   if (status === "suspended") return "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300";
-  return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 }
 
 export function replaceMember(current: Membership[], nextMember: Membership) {

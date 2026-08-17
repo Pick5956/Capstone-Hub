@@ -127,9 +127,6 @@ export default function ReservationsPage() {
             }`}
           >
             {item.label}
-            {typeof item.count === "number" && (
-              <span className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${filter === item.value ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"}`}>{item.count}</span>
-            )}
           </button>
         ))}
       </div>

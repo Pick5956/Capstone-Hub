@@ -22,13 +22,22 @@
 }
 
 .dark {
-  --background: #0a0a0a;
+  --background: #0f0f0f;
   --foreground: #ededed;
-  --dashboard-shell-border: #253142;
-  --scrollbar-track: #020617;
-  --scrollbar-thumb: #334155;
-  --scrollbar-thumb-hover: #64748b;
-  --scrollbar-corner: #020617;
+  --dashboard-shell-border: #303030;
+  --scrollbar-track: #0f0f0f;
+  --scrollbar-thumb: #383838;
+  --scrollbar-thumb-hover: #585858;
+  --scrollbar-corner: #0f0f0f;
+
+  /* YouTube-style neutral dark surfaces. These override Tailwind's blue-tinted
+     grays in dark mode only (utilities compile to var(--color-gray-*)), so the
+     app's many `dark:bg-gray-950/900/800` usages shift to neutral without
+     touching light mode, where the defaults still apply. */
+  --color-gray-950: #0f0f0f;
+  --color-gray-900: #212121;
+  --color-gray-800: #303030;
+  --color-gray-700: #454545;
 }
 
 @theme inline {
@@ -45,7 +54,7 @@ body {
   overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-kanit), Arial, Helvetica, sans-serif;
+  font-family: var(--font-latin), var(--font-kitchen), var(--font-kanit), Arial, Helvetica, sans-serif;
   font-kerning: normal;
   margin: 0;
   padding: 0;
