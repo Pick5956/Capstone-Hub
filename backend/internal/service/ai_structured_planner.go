@@ -10,7 +10,11 @@ import (
 )
 
 const (
-	structuredPlannerMaxContextItems = 20
+	// structuredPlannerMaxContextItems is the message-count cap every history path is
+	// trimmed to. It is the true memory window: 40 messages = 20 question+answer
+	// turns, matching aiConversationContextTurnLimit. structuredPlannerMaxContextRunes
+	// is a per-message size guard, not a total-context budget.
+	structuredPlannerMaxContextItems = 40
 	structuredPlannerMaxContextRunes = 4000
 )
 

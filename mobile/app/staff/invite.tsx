@@ -17,7 +17,8 @@ import {
 } from '@/src/components/ui';
 import {
   allowedRoleOptions,
-  canManageTeam,
+  canGrantRole,
+  canManageInvitations,
   DEFAULT_INVITATION_EXPIRY_DAYS,
   invitationExpiryLabel,
   INVITATION_EXPIRY_DAY_OPTIONS,
@@ -35,7 +36,7 @@ export default function InviteStaffScreen() {
   const { copy, language } = useDisplayPreferences();
   const restaurantId = activeMembership?.restaurant_id;
   const actorRole = activeMembership?.role?.name;
-  const allowed = canManageTeam(activeMembership);
+  const allowed = canManageInvitations(activeMembership);
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleId, setRoleId] = useState(0);
@@ -56,7 +57,8 @@ export default function InviteStaffScreen() {
     setLoadingRoles(true);
     getRoles()
       .then((response) => {
-        const available = allowedRoleOptions(actorRole, response.data || []);
+        const available = allowedRoleOptions(actorRole, response.data || [], allowed)
+          .filter((role) => canGrantRole(activeMembership, role));
         setRoles(available);
         setRoleId(
           available.find((role) => role.name === 'waiter')?.ID
@@ -70,7 +72,7 @@ export default function InviteStaffScreen() {
           : copy('โหลดบทบาทไม่สำเร็จ', 'Unable to load roles'));
       })
       .finally(() => setLoadingRoles(false));
-  }, [actorRole, allowed, copy, restaurantId]);
+  }, [activeMembership, actorRole, allowed, copy, restaurantId]);
 
   const roleOptions = useMemo(
     () => roles.map((role) => ({ label: roleLabel(role, language), value: role.ID })),
@@ -123,8 +125,8 @@ export default function InviteStaffScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์สร้างคำเชิญ', 'No invitation access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
-            'You must be an owner or manager with team-management access.',
+            'บัญชีนี้ไม่ได้รับสิทธิ์สร้างและจัดการคำเชิญ',
+            'This account cannot create or manage invitations.',
           )}
         />
       </AppScreen>
@@ -193,8 +195,8 @@ export default function InviteStaffScreen() {
             <EmptyState
               title={copy('ไม่มีบทบาทที่เชิญได้', 'No roles available')}
               detail={copy(
-                'เพิ่มบทบาทสำหรับร้านก่อนสร้างคำเชิญ',
-                'Add a restaurant role before creating an invitation.',
+                'บัญชีนี้มอบได้เฉพาะบทบาทที่มีสิทธิ์ไม่เกินขอบเขตของตนเอง',
+                'You can invite only to roles within your own permission scope.',
               )}
             />
           ) : null}

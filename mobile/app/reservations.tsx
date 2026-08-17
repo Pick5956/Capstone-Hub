@@ -1,11 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { RefreshControl, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { listReservations } from '@/src/api/reservation';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import {
   Button,
   ChipGroup,
@@ -188,7 +188,7 @@ export default function ReservationsScreen() {
         'Bookings, seated guests and cancellations',
       )}
       topLevel={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+      refreshControl={<AppRefreshControl onRefresh={load} />}
     >
       <ChipGroup value={filter} onChange={setFilter} options={filterOptions} scrollable />
       {error ? (

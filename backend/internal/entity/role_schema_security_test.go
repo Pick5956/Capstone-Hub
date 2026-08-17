@@ -54,3 +54,39 @@ func TestRolePermissionOverrideDeclaresForeignKeyAssociations(t *testing.T) {
 		}
 	}
 }
+
+func TestRoleDisplayNameOverrideIsTransientAPIState(t *testing.T) {
+	field, ok := reflect.TypeOf(Role{}).FieldByName("DisplayNameOverride")
+	if !ok {
+		t.Fatal("Role.DisplayNameOverride field missing")
+	}
+	if got := field.Tag.Get("gorm"); got != "-" {
+		t.Fatalf("Role.DisplayNameOverride gorm tag = %q, want -", got)
+	}
+	if got := field.Tag.Get("json"); got != "display_name_override,omitempty" {
+		t.Fatalf("Role.DisplayNameOverride json tag = %q", got)
+	}
+}
+
+func TestRoleDisplayNameOverrideIsTenantScopedAndCascades(t *testing.T) {
+	overrideType := reflect.TypeOf(RestaurantRoleDisplayNameOverride{})
+	for _, fieldName := range []string{"RestaurantID", "RoleID"} {
+		field, ok := overrideType.FieldByName(fieldName)
+		if !ok {
+			t.Fatalf("RestaurantRoleDisplayNameOverride.%s field missing", fieldName)
+		}
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, "uniqueIndex:idx_restaurant_role_display_name_override") {
+			t.Fatalf("%s does not share the tenant-role unique index: %s", fieldName, tag)
+		}
+	}
+	for _, fieldName := range []string{"Restaurant", "Role"} {
+		field, ok := overrideType.FieldByName(fieldName)
+		if !ok {
+			t.Fatalf("RestaurantRoleDisplayNameOverride.%s association missing", fieldName)
+		}
+		if tag := field.Tag.Get("gorm"); !strings.Contains(tag, "OnDelete:CASCADE") {
+			t.Fatalf("%s association lacks cascade constraint: %s", fieldName, tag)
+		}
+	}
+}

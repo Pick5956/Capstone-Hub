@@ -1,4 +1,4 @@
-import { can } from "@/src/lib/rbac";
+import { can, TEAM_MANAGEMENT_PERMISSIONS } from "@/src/lib/rbac";
 import type { Permission } from "@/src/types/auth";
 import type { Membership } from "@/src/types/restaurant";
 
@@ -88,7 +88,7 @@ const navigationEntries: NavigationEntry[] = [
   {
     href: "/staff",
     label: { th: "พนักงาน", en: "Staff" },
-    permission: "manage_staff",
+    permission: [...TEAM_MANAGEMENT_PERMISSIONS],
     aliases: ["staff", "team", "employees", "workers", "พนักงาน", "ทีม", "ทีมงาน", "จัดการคน"],
   },
   {
@@ -110,7 +110,7 @@ const navigationEntries: NavigationEntry[] = [
   {
     href: "/settings/restaurant",
     label: { th: "ข้อมูลร้านและการคิดเงิน", en: "Restaurant and billing" },
-    permission: "manage_staff",
+    permission: "manage_restaurant_settings",
     aliases: [
       "restaurant settings",
       "billing settings",
@@ -130,7 +130,7 @@ const navigationEntries: NavigationEntry[] = [
   {
     href: "/settings/team",
     label: { th: "ทีมและสิทธิ์", en: "Team and permissions" },
-    permission: "manage_staff",
+    permission: [...TEAM_MANAGEMENT_PERMISSIONS],
     aliases: ["team settings", "permissions", "roles", "invitations", "สิทธิ์", "บทบาท", "ทีมและสิทธิ์", "คำเชิญ"],
   },
 ];

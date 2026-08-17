@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"Project-M/internal/entity"
+	"Project-M/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,10 +47,10 @@ func requireRestaurantWithAnyPermission(c *gin.Context, message string, permissi
 	return restaurantID, true
 }
 
-func requireManageStaffMember(c *gin.Context) (*entity.RestaurantMember, bool) {
+func requireManageRolesMember(c *gin.Context) (*entity.RestaurantMember, bool) {
 	member, ok := contextMember(c)
-	if !ok || member.Role == nil || !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_staff permission"})
+	if !ok || member.Role == nil || !memberCan(c, service.PermissionManageRoles) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_roles permission"})
 		return nil, false
 	}
 	return member, true

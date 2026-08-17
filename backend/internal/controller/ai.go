@@ -26,6 +26,7 @@ type AIOperationsService interface {
 	DeleteConversationForOwner(actor service.AIActorContext, conversationID string) error
 	AIUsageForOwner(actor service.AIActorContext) (*service.AIUsageSnapshot, error)
 	ProactiveInsightsForOwner(actor service.AIActorContext) ([]service.AIInsight, error)
+	ExtractReceiptForOwner(actor service.AIActorContext, imageBase64, mimeType string) (*service.ReceiptDraft, error)
 	ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error)
 	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
 }
@@ -159,6 +160,44 @@ func (ctrl *AIController) ProactiveInsights(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"insights": insights})
+}
+
+// ExtractReceipt reads a bill photo into a draft expense (owner reviews before saving).
+func (ctrl *AIController) ExtractReceipt(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	var req struct {
+		Image    string `json:"image"`
+		MimeType string `json:"mime_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	draft, err := ctrl.svc.ExtractReceiptForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, req.Image, req.MimeType)
+	if err != nil {
+		if errors.Is(err, service.ErrAIQuotaExceeded) {
+			respondAPIError(c, http.StatusTooManyRequests, err)
+			return
+		}
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"draft": draft})
 }
 
 func (ctrl *AIController) UsageMetrics(c *gin.Context) {

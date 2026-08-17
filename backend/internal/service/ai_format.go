@@ -31,6 +31,27 @@ func formatThaiDate(isoDate string) string {
 	return fmt.Sprintf("%d %s %d", t.Day(), thaiMonthName(int(t.Month())), t.Year()+543)
 }
 
+// formatInt renders a whole count with thousand separators, e.g. 3500 -> "3,500".
+// Used for dish/order counts where the ".00" of formatMoney would be noise.
+func formatInt(n int64) string {
+	negative := n < 0
+	if negative {
+		n = -n
+	}
+	digits := strconv.FormatInt(n, 10)
+	var b strings.Builder
+	for i := 0; i < len(digits); i++ {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte(digits[i])
+	}
+	if negative {
+		return "-" + b.String()
+	}
+	return b.String()
+}
+
 // formatMoney renders a baht amount with thousand separators, e.g.
 // 588804 -> "588,804.00". Six-figure sums are unreadable without them.
 func formatMoney(value float64) string {

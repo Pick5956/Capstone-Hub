@@ -11,6 +11,13 @@ const wordmarkSourcePath = path.resolve(
   'public',
   'dishy-wordmark.png',
 );
+const menuPlaceholderSourcePath = path.resolve(
+  mobileRoot,
+  '..',
+  'frontend',
+  'public',
+  'menu-placeholder-v2.webp',
+);
 const outputDir = path.join(mobileRoot, 'assets', 'images');
 
 function centeredCanvas(size, color, artwork, artworkSize) {
@@ -30,6 +37,10 @@ async function main() {
 
   fs.copyFileSync(sourcePath, path.join(outputDir, 'brand-logo.png'));
   fs.copyFileSync(wordmarkSourcePath, path.join(outputDir, 'dishy-wordmark.png'));
+  fs.copyFileSync(
+    menuPlaceholderSourcePath,
+    path.join(outputDir, 'menu-placeholder-v2.webp'),
+  );
 
   const iosIcon = centeredCanvas(1024, 0xffffffff, logo, 820);
   iosIcon.scan(0, 0, 1024, 1024, (_x, _y, index) => {

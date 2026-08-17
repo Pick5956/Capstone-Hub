@@ -5,30 +5,15 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
+import { useLanguage } from "@/src/providers/LanguageProvider";
 import { restaurantRepository } from "../repositories/restaurantRepository";
 import type { Membership } from "@/src/types/restaurant";
 import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUser } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
+import { roleLabel } from "@/src/lib/roleLabels";
 import { Plus, LogIn, Clock, Grid, ChevronRight, Phone } from "lucide-react";
 import AppWordmark from "@/src/components/shared/AppWordmark";
-
-const ROLE_LABEL: Record<string, Record<Language, string>> = {
-  owner: { th: "เจ้าของร้าน", en: "Owner" },
-  manager: { th: "ผู้จัดการ", en: "Manager" },
-  cashier: { th: "แคชเชียร์", en: "Cashier" },
-  waiter: { th: "พนักงานเสิร์ฟ", en: "Waiter" },
-  chef: { th: "ครัว", en: "Kitchen" },
-};
-
-function roleNameOf(membership: Membership) {
-  return membership.role?.name ?? "waiter";
-}
-
-function roleLabelOf(membership: Membership, language: Language) {
-  return ROLE_LABEL[roleNameOf(membership)]?.[language] ?? roleNameOf(membership);
-}
 
 export function getRestaurantCoverPath(type: string | undefined) {
   const normalized = type?.trim().toLowerCase() || "";
@@ -55,7 +40,7 @@ function RestaurantCard({
 }) {
   const { language } = useLanguage();
   const restaurant = membership.restaurant;
-  const roleLabel = roleLabelOf(membership, language);
+  const displayRoleName = roleLabel(membership.role, language);
   const restaurantName = restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant");
   const branchName = restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch");
   const restaurantType = getRestaurantTypeLabel(restaurant?.restaurant_type?.trim() || "ร้านอาหาร", language);
@@ -110,7 +95,7 @@ function RestaurantCard({
               {restaurantName}
             </h3>
             <span className="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-              {roleLabel}
+              {displayRoleName}
             </span>
           </div>
           <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">

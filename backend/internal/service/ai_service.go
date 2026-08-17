@@ -321,6 +321,29 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		structuredFollowUp = true
 	}
 
+	// Deterministic ambiguity gate — runs before the confidence gate because the
+	// LLM is overconfident on vague questions and the keyword backstop may have
+	// already bumped confidence above the threshold. A few clearly-ambiguous shapes
+	// ask back with the likely meanings instead of guessing one (the confidence
+	// gate alone almost never fires for these — measured clarify rate ~0%).
+	if !structuredFollowUp {
+		clarifyMsg, ok := detectAmbiguousQuestion(askedQuestion)
+		if !ok {
+			// A referential fragment ("อันดับล่ะ") with no history to resolve it.
+			clarifyMsg, ok = detectDanglingFragment(askedQuestion, history)
+		}
+		if ok {
+			aiStage("flow", "deterministic ambiguity → clarify")
+			return &AIAskResponse{
+				Answer:   clarifyMsg,
+				Intent:   AIIntentUnclear,
+				Task:     AITaskUnclear,
+				Model:    "local-ambiguity-clarify",
+				Snapshot: AISnapshot{},
+			}, nil
+		}
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
 	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
@@ -402,6 +425,20 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 
 	// Step 5: Conversational Flow (Needs Data = False, 0 DB load)
 	if !needsData {
+		// Open-ended strategy asks ("จะเพิ่มกำไรยังไง", "ควรทำโปรโมชั่นอะไร") are
+		// classified as advice with needs_data=false, so they would get generic
+		// textbook answers from the conversational LLM. Ground them in real data: build
+		// the snapshot and answer from the deterministic insights + snapshot levers, so
+		// the advice names this shop's actual menus and figures instead of a stock list.
+		if isAdvisoryStrategyQuestion(question) {
+			if adviceSnapshot, snapErr := s.buildSnapshot(restaurantID); snapErr != nil {
+				aiStage("warn", "strategy advice snapshot failed (%v) → conversational LLM", snapErr)
+			} else if adviceResp, handled := s.answerStrategyAdvice(question, adviceSnapshot); handled {
+				aiStage("flow", "strategy advice (conversational branch) → grounded in deterministic insights")
+				return adviceResp, nil
+			}
+		}
+
 		aiStage("flow", "conversational — no snapshot (task=%s)", routerResult.Task)
 		request := aiProviderAnswerRequest{
 			Question: question,
@@ -434,6 +471,22 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// because a broader one would otherwise swallow a narrower question: asking for
 	// lunch on one day must not be answered with the whole month's total.
 
+	// Two-entity comparisons ("เทียบวันจันทร์กับวันเสาร์", "ต้มยำกุ้งกับชาไทยอันไหน
+	// ขายดีกว่า"). They name two things of the same kind and want a verdict, which no
+	// single-metric tool can give, so they run before those tools.
+	if cmpResp, handled, cErr := s.answerWeekdayComparison(restaurantID, question); handled {
+		aiStage("flow", "weekday comparison — per-weekday range query")
+		return cmpResp, nil
+	} else if cErr != nil {
+		aiStage("warn", "weekday comparison failed (%v) → snapshot flow", cErr)
+	}
+	if cmpResp, handled, cErr := s.answerMenuComparison(restaurantID, question); handled {
+		aiStage("flow", "menu comparison — per-menu range query")
+		return cmpResp, nil
+	} else if cErr != nil {
+		aiStage("warn", "menu comparison failed (%v) → snapshot flow", cErr)
+	}
+
 	// Sales for a service period ("ช่วงเที่ยงวันที่ 2 กรกฎาคม") — an hour window
 	// within a day, finer than anything the day-level snapshot holds.
 	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
@@ -441,6 +494,25 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		return partResp, nil
 	} else if pErr != nil {
 		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
+	}
+
+	// Store-wide profit ("กำไรรวมเดือนนี้เท่าไหร่") is revenue − cost, a different
+	// figure from the sales total below. It runs first so a "กำไร…เดือนนี้" question
+	// is not siphoned off as a plain sales question.
+	if profitResp, handled, prErr := s.answerTotalProfitQuery(restaurantID, question); handled {
+		aiStage("flow", "total-profit query — range-scoped revenue minus cost")
+		return profitResp, nil
+	} else if prErr != nil {
+		aiStage("warn", "total-profit query failed (%v) → snapshot flow", prErr)
+	}
+
+	// Store-wide dish count ("ขายได้กี่จานทั้งหมด") is a units question, distinct
+	// from the baht totals below.
+	if qtyResp, handled, qErr := s.answerTotalQuantityQuery(restaurantID, question); handled {
+		aiStage("flow", "total-quantity query — units sold across the period")
+		return qtyResp, nil
+	} else if qErr != nil {
+		aiStage("warn", "total-quantity query failed (%v) → snapshot flow", qErr)
 	}
 
 	// Tier 1-1: a dated total-sales question (a specific day, a named month, or a
@@ -477,6 +549,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		return nil, err
 	}
 
+	// A two-part question ("ยอดขายเท่าไหร่ แล้วเมนูไหนขายดีสุด") would otherwise be
+	// answered for the first concern only. Split it and answer each half from the
+	// deterministic paths — but only when BOTH halves resolve, so it never emits a
+	// confident half-guess. Runs first so the single-tool path below does not claim
+	// the question for its first concern.
+	if compoundResp, handled := s.answerCompoundQuestion(restaurantID, question, snapshot); handled {
+		aiStage("flow", "compound question → answered both parts deterministically")
+		return compoundResp, nil
+	}
+
 	// A reorder-forecast question is answered from the deterministic tool no
 	// matter how the router classified it: "ควร" makes it look like a
 	// recommendation, so it otherwise falls to a free-form answer that can leak
@@ -494,6 +576,41 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 					Snapshot: snapshot,
 				}, nil
 			}
+		}
+	}
+
+	// A reprice question ("เมนูไหนน่าปรับราคา") reads as a revenue ranking to the
+	// router, but the useful answer is the thin-margin menu whose price or cost most
+	// needs attention — so it is answered from the lowest-margin tool regardless.
+	if isRepriceQuestion(question) {
+		if result, rErr := executeReadOnlyTool(AIToolGetLowestMarginMenu, snapshot, question); rErr == nil {
+			if answer, ok := localToolAnswer(result); ok {
+				aiStage("flow", "reprice question → lowest-margin menu (price/cost candidate)")
+				return &AIAskResponse{
+					Answer:   answer,
+					Intent:   intent,
+					Task:     AITaskRecommendAction,
+					Tool:     AIToolGetLowestMarginMenu,
+					Model:    "local-tool-first",
+					Snapshot: snapshot,
+				}, nil
+			}
+		}
+	}
+
+	// "ควรเพิ่มเมนูอะไร" has no data-backed answer (the shop has no info on menus it
+	// does not sell), so give an honest, grounded suggestion instead of the current
+	// best-sellers dressed up as the answer.
+	if isAddMenuQuestion(question) {
+		if answer, ok := s.answerAddMenuAdvice(snapshot); ok {
+			aiStage("flow", "add-menu question → honest grounded suggestion")
+			return &AIAskResponse{
+				Answer:   answer,
+				Intent:   AIIntentAnalysis,
+				Task:     AITaskRecommendAction,
+				Model:    "local-add-menu-advice",
+				Snapshot: snapshot,
+			}, nil
 		}
 	}
 
@@ -549,27 +666,41 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		aiStage("flow", "compound question → %s covers one concern only, using LLM synthesis", toolToRun)
 	}
 
-	// Deterministic-first: a fact lookup that maps to a supported tool is answered
-	// straight from the snapshot data, skipping the free-form LLM. The LLM already
-	// did its real job (understanding the question) in the router; letting it also
-	// re-read the numbers only risks hallucinated figures, an irrelevant caveat, or
-	// a different phrasing each time. Answering from the tool keeps fact replies
-	// exact, identical on every ask, and free of prior-turn contamination.
-	if routerResult.Task == AITaskRetrieveFact && isSupportedReadOnlyTool(toolToRun) && !compoundQuestion {
+	// Deterministic-first: a fact lookup — OR a recommendation that maps to a clear
+	// tool (e.g. "ควรเอาเมนูไหนออก" → slow movers) — is answered straight from the
+	// snapshot data, skipping the free-form LLM. The LLM already did its real job
+	// (understanding the question) in the router; letting it also re-read the numbers
+	// only risks hallucinated figures, an irrelevant caveat, or a different phrasing
+	// each time. Recommendations without a clear tool still fall through to the LLM
+	// below, so genuine advice questions keep their judgement.
+	if (routerResult.Task == AITaskRetrieveFact || routerResult.Task == AITaskRecommendAction) &&
+		isSupportedReadOnlyTool(toolToRun) && !compoundQuestion {
 		result, toolErr := executeReadOnlyTool(toolToRun, snapshot, question)
 		if toolErr != nil {
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
 		} else if answer, ok := localToolAnswer(result); ok {
 			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
+			hinted, assumed := appendScopeHint(question, answer, todayHasNoSales(snapshot))
 			return &AIAskResponse{
-				Answer:   answer,
-				Intent:   intent,
-				Task:     routerResult.Task,
-				Tool:     toolToRun,
-				Model:    "local-tool-first",
-				Snapshot: snapshot,
+				Answer:       hinted,
+				ScopeAssumed: assumed,
+				Intent:       intent,
+				Task:         routerResult.Task,
+				Tool:         toolToRun,
+				Model:        "local-tool-first",
+				Snapshot:     snapshot,
 			}, nil
 		}
+	}
+
+	// Open-ended strategy asks ("จะเพิ่มกำไรยังไง", "ควรโฟกัสอะไร") have no single
+	// tool and would otherwise get generic textbook advice from the LLM. Ground them
+	// in the deterministic insights + snapshot levers instead, so the advice names
+	// this shop's real menus and numbers. Runs last, so any specific tool above still
+	// wins; only the truly open-ended asks reach here.
+	if adviceResp, handled := s.answerStrategyAdvice(question, snapshot); handled {
+		aiStage("flow", "strategy advice → grounded in deterministic insights")
+		return adviceResp, nil
 	}
 
 	// executeAnalytical runs one provider adapter and handles CALL_TOOL responses.

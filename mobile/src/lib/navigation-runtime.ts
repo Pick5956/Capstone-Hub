@@ -42,6 +42,23 @@ export type PagerAnimationSettlement = Readonly<{
   position: number;
 }>;
 
+export type PagerDockSelectionPlan = Readonly<{
+  animation: 'none';
+  interruptsTransition: boolean;
+  position: number;
+  shouldNavigate: boolean;
+}>;
+
+export type PagerGestureStartPlan = Readonly<{
+  routeIndexToReaffirm: number | null;
+  startIndex: number;
+}>;
+
+export type PagerRouteSyncAction =
+  | 'acknowledge'
+  | 'ignore-stale'
+  | 'reconcile';
+
 export type PhoneNavigationIndicatorMetrics = Readonly<{
   indicatorInset: number;
   indicatorWidth: number;
@@ -54,6 +71,12 @@ const DEFAULT_SWIPE_DOMINANCE_RATIO = 1.25;
 const PAGER_SWIPE_COMMIT_FRACTION = 0.5;
 export const PAGER_SWIPE_MIN_DISTANCE = 5;
 const PAGER_FLICK_MIN_VELOCITY = 300;
+const PAGER_RESPONDER_DOMINANCE_RATIO = 1.35;
+export const PAGER_VERTICAL_SCROLL_COOLDOWN_MS = 30;
+const PAGER_BASE_SETTLE_DURATION_MS = 180;
+const PAGER_NAVIGATION_STEP_DURATION_MS = 40;
+const PAGER_NAVIGATION_MAX_DURATION_MS = 280;
+const PAGER_POST_RELEASE_SETTLE_DURATION_MS = 500;
 
 export function resetRouteStack<Href>(router: StackResetRouter<Href>, href: Href) {
   if (router.canDismiss()) {
@@ -90,6 +113,40 @@ export function resolvePhoneNavigationIndicatorMetrics(
 
 export function shouldOpenSettings(pathname: string) {
   return pathname !== '/settings' && !pathname.startsWith('/settings/');
+}
+
+export function notePagerVerticalScrollActivity(
+  blockedUntil: number,
+  activityTimeMs: number,
+) {
+  const currentDeadline = Number.isFinite(blockedUntil) ? blockedUntil : 0;
+  if (!Number.isFinite(activityTimeMs)) return currentDeadline;
+
+  return Math.max(
+    currentDeadline,
+    activityTimeMs + PAGER_VERTICAL_SCROLL_COOLDOWN_MS,
+  );
+}
+
+export function isPagerSwipeCooldownActive(
+  blockedUntil: number,
+  currentTimeMs: number,
+) {
+  return Number.isFinite(blockedUntil) &&
+    Number.isFinite(currentTimeMs) &&
+    currentTimeMs < blockedUntil;
+}
+
+export function shouldStartPagerHorizontalSwipe(
+  { deltaX, deltaY }: HorizontalSwipeSample,
+  swipeBlocked: boolean,
+) {
+  if (swipeBlocked || ![deltaX, deltaY].every(Number.isFinite)) return false;
+
+  const horizontalDistance = Math.abs(deltaX);
+  const verticalDistance = Math.abs(deltaY);
+  return horizontalDistance >= PAGER_SWIPE_MIN_DISTANCE &&
+    horizontalDistance > verticalDistance * PAGER_RESPONDER_DOMINANCE_RATIO;
 }
 
 export function classifyHorizontalSwipe(
@@ -183,6 +240,119 @@ export function resolvePagerSwipeSettlement<Href>(
   return adjacent
     ? { targetIndex: adjacent.index, shouldNavigate: true }
     : { targetIndex: activeIndex, shouldNavigate: false };
+}
+
+export function resolvePagerAnimationDuration({
+  navigateAfterAnimation,
+  settleAfterGesture,
+  travel,
+}: {
+  navigateAfterAnimation: boolean;
+  settleAfterGesture: boolean;
+  travel: number;
+}) {
+  const normalizedTravel = Number.isFinite(travel) ? Math.max(0, travel) : 0;
+  const baseDuration = navigateAfterAnimation
+    ? Math.min(
+      PAGER_NAVIGATION_MAX_DURATION_MS,
+      PAGER_BASE_SETTLE_DURATION_MS +
+        Math.ceil(normalizedTravel) * PAGER_NAVIGATION_STEP_DURATION_MS,
+    )
+    : PAGER_BASE_SETTLE_DURATION_MS;
+
+  return settleAfterGesture && navigateAfterAnimation
+    ? PAGER_POST_RELEASE_SETTLE_DURATION_MS
+    : baseDuration;
+}
+
+export function resolvePagerDockSelectionPlan({
+  committedIndex,
+  itemCount,
+  pendingRouteIndex,
+  targetIndex,
+  transitionActive,
+}: {
+  committedIndex: number;
+  itemCount: number;
+  pendingRouteIndex: number | null;
+  targetIndex: number;
+  transitionActive: boolean;
+}): PagerDockSelectionPlan | null {
+  if (
+    !Number.isInteger(committedIndex) ||
+    committedIndex < 0 ||
+    committedIndex >= itemCount ||
+    !Number.isInteger(itemCount) ||
+    itemCount <= 0 ||
+    !Number.isInteger(targetIndex) ||
+    targetIndex < 0 ||
+    targetIndex >= itemCount
+  ) {
+    return null;
+  }
+
+  const supersedesPendingRoute = pendingRouteIndex !== null &&
+    pendingRouteIndex !== targetIndex;
+
+  return {
+    animation: 'none',
+    interruptsTransition: transitionActive || pendingRouteIndex !== null,
+    position: targetIndex,
+    shouldNavigate: targetIndex !== committedIndex || supersedesPendingRoute,
+  };
+}
+
+export function resolvePagerGestureStartPlan({
+  committedIndex,
+  itemCount,
+  pendingRouteIndex,
+}: {
+  committedIndex: number;
+  itemCount: number;
+  pendingRouteIndex: number | null;
+}): PagerGestureStartPlan | null {
+  if (
+    !Number.isInteger(itemCount) ||
+    itemCount <= 0 ||
+    !Number.isInteger(committedIndex) ||
+    committedIndex < 0 ||
+    committedIndex >= itemCount
+  ) {
+    return null;
+  }
+
+  const hasValidPendingRoute = pendingRouteIndex !== null &&
+    Number.isInteger(pendingRouteIndex) &&
+    pendingRouteIndex >= 0 &&
+    pendingRouteIndex < itemCount;
+  const startIndex = hasValidPendingRoute
+    ? pendingRouteIndex
+    : committedIndex;
+
+  return {
+    routeIndexToReaffirm: hasValidPendingRoute && startIndex !== committedIndex
+      ? startIndex
+      : null,
+    startIndex,
+  };
+}
+
+export function resolvePagerRouteSyncAction({
+  activeIndex,
+  pendingRouteIndex,
+  permittedItemsChanged,
+}: {
+  activeIndex: number;
+  pendingRouteIndex: number | null;
+  permittedItemsChanged: boolean;
+}): PagerRouteSyncAction {
+  if (permittedItemsChanged || pendingRouteIndex === null) {
+    return 'reconcile';
+  }
+
+  return activeIndex === pendingRouteIndex
+    ? 'acknowledge'
+    : 'ignore-stale';
 }
 
 export function resolvePagerAnimationSettlement({

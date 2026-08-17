@@ -1,14 +1,21 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
 type NestedHorizontalGestureSetter = (active: boolean) => void;
+type VerticalScrollActivityReporter = (activityTimeMs: number) => void;
+
+type PrimaryTabSwipeGestureContextValue = Readonly<{
+  reportVerticalScrollActivity: VerticalScrollActivityReporter;
+  setNestedHorizontalGestureActive: NestedHorizontalGestureSetter;
+}>;
 
 export type PrimaryTabSceneStatus = 'active' | 'adjacent' | 'inactive' | null;
 
 const PrimaryTabsHostContext = createContext(false);
 const PrimaryTabSceneStatusContext = createContext<PrimaryTabSceneStatus>(null);
-const PrimaryTabSwipeGestureContext = createContext<NestedHorizontalGestureSetter>(
-  () => undefined,
-);
+const PrimaryTabSwipeGestureContext = createContext<PrimaryTabSwipeGestureContextValue>({
+  reportVerticalScrollActivity: () => undefined,
+  setNestedHorizontalGestureActive: () => undefined,
+});
 
 export function PrimaryTabsHostProvider({ children }: { children: ReactNode }) {
   return (
@@ -42,22 +49,30 @@ export function usePrimaryTabSceneStatus() {
 
 export function PrimaryTabSwipeGestureProvider({
   children,
+  reportVerticalScrollActivity,
   setNestedHorizontalGestureActive,
 }: {
   children: ReactNode;
+  reportVerticalScrollActivity: VerticalScrollActivityReporter;
   setNestedHorizontalGestureActive: NestedHorizontalGestureSetter;
 }) {
+  const value = useMemo(
+    () => ({
+      reportVerticalScrollActivity,
+      setNestedHorizontalGestureActive,
+    }),
+    [reportVerticalScrollActivity, setNestedHorizontalGestureActive],
+  );
+
   return (
-    <PrimaryTabSwipeGestureContext.Provider value={setNestedHorizontalGestureActive}>
+    <PrimaryTabSwipeGestureContext.Provider value={value}>
       {children}
     </PrimaryTabSwipeGestureContext.Provider>
   );
 }
 
 export function usePrimaryTabSwipeExclusionHandlers() {
-  const setNestedHorizontalGestureActive = useContext(
-    PrimaryTabSwipeGestureContext,
-  );
+  const { setNestedHorizontalGestureActive } = useContext(PrimaryTabSwipeGestureContext);
 
   return useMemo(
     () => ({
@@ -70,4 +85,8 @@ export function usePrimaryTabSwipeExclusionHandlers() {
     }),
     [setNestedHorizontalGestureActive],
   );
+}
+
+export function usePrimaryTabVerticalScrollActivityReporter() {
+  return useContext(PrimaryTabSwipeGestureContext).reportVerticalScrollActivity;
 }

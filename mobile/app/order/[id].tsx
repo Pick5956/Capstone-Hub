@@ -1,16 +1,24 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
-import { apiUrl } from '@/src/api/client';
 import { listCategories, listMenuItems } from '@/src/api/menu';
-import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, sendOrderToKitchen, updateOrderItem } from '@/src/api/order';
+import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, updateOrderItem } from '@/src/api/order';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
-import { createOrderDetailRequestGuard } from '@/src/lib/order-detail-runtime';
+import {
+  CURRENT_ROUND_BAR_COLORS,
+  createOrderDetailRequestGuard,
+  currentRoundPresentation,
+  orderSummaryPresentation,
+  selectOrderItemImage,
+  shouldShowCurrentRoundBasket,
+  summarizeCurrentRound,
+} from '@/src/lib/order-detail-runtime';
 import {
   activeOrderItems,
   canCancelOrderFromDetail,
@@ -32,12 +40,6 @@ function itemTone(status: OrderItem['status']) {
   if (status === 'cooking' || status === 'pending') return 'warning' as const;
   if (status === 'cancelled') return 'danger' as const;
   return 'neutral' as const;
-}
-
-function resolveImage(value?: string) {
-  if (!value) return '';
-  if (value.startsWith('http')) return value;
-  return `${apiUrl}${value.startsWith('/') ? '' : '/'}${value}`;
 }
 
 function QuantityAction({
@@ -75,6 +77,98 @@ function QuantityAction({
   );
 }
 
+function CurrentRoundBasket({
+  label,
+  value,
+  accessibilityLabel,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  accessibilityLabel: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View style={{ backgroundColor: palette.surface, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.xxl }}>
+      <Pressable
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          height: 56,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: spacing.lg,
+          borderWidth: 1,
+          borderColor: CURRENT_ROUND_BAR_COLORS.borderColor,
+          borderRadius: 8,
+          backgroundColor: CURRENT_ROUND_BAR_COLORS.backgroundColor,
+          paddingHorizontal: spacing.lg,
+          shadowColor: palette.shadow,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.18,
+          shadowRadius: 6,
+          elevation: 4,
+          opacity: disabled ? 0.5 : pressed ? 0.82 : 1,
+          transform: [{ scale: pressed ? 0.992 : 1 }],
+        })}
+      >
+        <View style={{ minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <AppIcon color={CURRENT_ROUND_BAR_COLORS.foregroundColor} name="basket-outline" size={20} />
+          <Text numberOfLines={1} style={{ minWidth: 0, flex: 1, color: CURRENT_ROUND_BAR_COLORS.foregroundColor, fontSize: 14, fontWeight: '700' }}>
+            {label}
+          </Text>
+        </View>
+        <Text numberOfLines={1} style={{ color: CURRENT_ROUND_BAR_COLORS.foregroundColor, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+          {value}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function OrderSummaryAction({
+  count,
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  count: number;
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        height: 44,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        borderWidth: 1,
+        borderColor: palette.border,
+        borderRadius: radius.md,
+        backgroundColor: pressed ? palette.surfaceStrong : palette.surface,
+        paddingHorizontal: spacing.md,
+        opacity: pressed ? 0.76 : 1,
+      })}
+    >
+      <AppIcon color={palette.muted} name="receipt-outline" size={17} />
+      <Text numberOfLines={1} style={{ color: palette.text, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+        {count.toLocaleString()} {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function OrderDetailScreen() {
   const { width } = useWindowDimensions();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -87,7 +181,6 @@ export default function OrderDetailScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState('all');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -105,7 +198,6 @@ export default function OrderDetailScreen() {
     if (!canAccessOrder || !validOrderId) {
       requestGuardRef.current.invalidateLoads();
       foregroundLoadRef.current = null;
-      setLoading(false);
       return;
     }
     if (quiet && foregroundLoadRef.current !== null) return;
@@ -115,7 +207,6 @@ export default function OrderDetailScreen() {
 
     if (!quiet) {
       foregroundLoadRef.current = request;
-      setLoading(true);
     }
     setError(null);
     try {
@@ -144,7 +235,6 @@ export default function OrderDetailScreen() {
     } finally {
       if (!quiet && foregroundLoadRef.current === request) {
         foregroundLoadRef.current = null;
-        setLoading(false);
       }
     }
   }, [canAccessOrder, canTakeOrder, copy, orderId, validOrderId]);
@@ -162,6 +252,13 @@ export default function OrderDetailScreen() {
   const pending = useMemo(() => activeItems.filter((item) => item.status === 'pending'), [activeItems]);
   const activeQuantity = useMemo(() => activeItems.reduce((sum, item) => sum + item.quantity, 0), [activeItems]);
   const pendingQuantity = useMemo(() => pending.reduce((sum, item) => sum + item.quantity, 0), [pending]);
+  const menuImageById = useMemo(
+    () => new Map(menuItems.map((item) => [item.ID, item.image_url])),
+    [menuItems],
+  );
+  const currentRoundSummary = useMemo(() => summarizeCurrentRound(order?.items), [order?.items]);
+  const currentRoundCopy = useMemo(() => currentRoundPresentation(currentRoundSummary, language), [currentRoundSummary, language]);
+  const orderSummaryCopy = useMemo(() => orderSummaryPresentation(language), [language]);
   const filteredMenu = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return menuItems.filter((item) => {
@@ -179,7 +276,6 @@ export default function OrderDetailScreen() {
 
     if (foregroundLoadRef.current !== null) {
       foregroundLoadRef.current = null;
-      setLoading(false);
     }
     setSubmitting(true); setError(null); setMessage(null);
     try {
@@ -224,14 +320,16 @@ export default function OrderDetailScreen() {
     && canAccessOrder
     && (order.payment_status === 'paid' || canOpenOrderBill(order.items)),
   );
-  const primaryAction = pending.length && canTakeOrder
-    ? <Button label={copy('ส่งเข้าครัว', 'Send to kitchen')} onPress={() => mutate(() => sendOrderToKitchen(orderId), copy('ส่งรายการเข้าครัวแล้ว', 'Items sent to kitchen'))} loading={submitting} />
-    : canOpenBill
-      ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
-      : null;
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
-  const splitWorkspace = tabletWorkspace && Boolean(order && canTakeOrder && !locked);
-  const refreshControl = <RefreshControl refreshing={loading} onRefresh={() => load()} />;
+  const primaryAction = canOpenBill
+    ? <Button label={order?.payment_status === 'paid' ? copy('ดูใบเสร็จ', 'View receipt') : canPay ? copy('ออกบิล / รับเงิน', 'Bill / Pay') : copy('ดูบิล', 'View bill')} onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(orderId) } } as never)} />
+    : null;
+  const showCurrentRoundBasket = shouldShowCurrentRoundBasket({
+    canTakeOrder,
+    orderStatus: order?.status,
+    pendingQuantity: currentRoundSummary.quantity,
+  });
+  const refreshControl = <AppRefreshControl onRefresh={() => load()} />;
   const orderSummaryContent = order ? (
     <>
       <SectionHeader
@@ -242,20 +340,21 @@ export default function OrderDetailScreen() {
         )}
       />
       {activeItems.map((item, index) => {
-        const imageUri = resolveImage(item.menu?.image_url);
+        const imageUrl = selectOrderItemImage({
+          menuId: item.menu_id,
+          menuImageUrl: item.menu?.image_url,
+        }, menuImageById);
         return (
           <View key={item.ID}>
             {index ? <Divider /> : null}
             <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-                {imageUri ? (
-                  <Image
-                    accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                    source={{ uri: imageUri }}
-                    resizeMode="contain"
-                    style={{ width: tabletWorkspace ? 64 : 56, height: tabletWorkspace ? 64 : 56, borderRadius: radius.md, backgroundColor: 'transparent' }}
-                  />
-                ) : null}
+                <MenuImage
+                  accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
+                  imageUrl={imageUrl}
+                  size={tabletWorkspace ? 64 : 56}
+                  variant="row"
+                />
                 <View style={{ minWidth: 0, flex: 1, gap: 3 }}>
                   <Text selectable style={typeScale.cardTitle}>{item.menu_name}</Text>
                   {item.status !== 'pending' || !canTakeOrder ? (
@@ -323,7 +422,6 @@ export default function OrderDetailScreen() {
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
         {filteredMenu.map((item) => {
-          const imageUri = resolveImage(item.image_url);
           return (
             <Pressable
               accessibilityLabel={copy(`เพิ่มเมนู ${item.name}`, `Add ${item.name}`)}
@@ -343,19 +441,11 @@ export default function OrderDetailScreen() {
                 transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
-              {imageUri ? (
-                <Image
-                  accessibilityLabel={copy(`รูปเมนู ${item.name}`, `Photo of ${item.name}`)}
-                  source={{ uri: imageUri }}
-                  resizeMode="contain"
-                  style={{ width: '100%', aspectRatio: 4 / 3, borderRadius: radius.md, backgroundColor: 'transparent' }}
-                />
-              ) : (
-                <View style={{ width: '100%', aspectRatio: 4 / 3, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
-                  <AppIcon color={palette.muted} name="image-outline" size={26} />
-                  <Text style={{ color: palette.muted, fontSize: 12 }}>{copy('ไม่มีรูป', 'No photo')}</Text>
-                </View>
-              )}
+              <MenuImage
+                accessibilityLabel={copy(`รูปเมนู ${item.name}`, `Photo of ${item.name}`)}
+                imageUrl={item.image_url}
+                variant="card"
+              />
               <View style={{ gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.sm }}>
                 <Text selectable numberOfLines={2} style={[typeScale.cardTitle, { minHeight: 42 }]}>{item.name}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -371,7 +461,7 @@ export default function OrderDetailScreen() {
     </View>
   ) : null;
 
-  function renderDestructiveActions(embedded = false) {
+  function renderDestructiveActions() {
     const stackActions = width < 520;
     const actionStyle = stackActions ? { width: '100%' as const } : { flex: 1 };
     const closeEmptyContent = canCloseEmpty ? (
@@ -389,14 +479,6 @@ export default function OrderDetailScreen() {
     ) : null;
 
     if (!closeEmptyContent && !cancelContent) return null;
-    if (embedded) {
-      return (
-        <View style={{ gap: spacing.xl }}>
-          {closeEmptyContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmEmptyClose ? palette.danger : palette.border, paddingTop: spacing.lg }}>{closeEmptyContent}</View> : null}
-          {cancelContent ? <View style={{ gap: spacing.md, borderTopWidth: 1, borderTopColor: confirmCancel ? palette.danger : palette.border, paddingTop: spacing.lg }}>{cancelContent}</View> : null}
-        </View>
-      );
-    }
     return (
       <>
         {closeEmptyContent ? <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>{closeEmptyContent}</Surface> : null}
@@ -423,50 +505,38 @@ export default function OrderDetailScreen() {
       {primaryAction}
     </ActionDock>
   ) : null;
+  const currentRoundBasket = showCurrentRoundBasket ? (
+    <CurrentRoundBasket
+      accessibilityLabel={currentRoundCopy.openLabel}
+      disabled={submitting}
+      label={currentRoundCopy.basketLabel}
+      value={money(currentRoundSummary.subtotal, language)}
+      onPress={() => router.push({ pathname: '/order/current-round' as never, params: { id: String(orderId) } } as never)}
+    />
+  ) : null;
 
   return (
     <AppScreen
       title={order?.table?.display_label || (order?.order_type === 'takeaway' ? copy('ซื้อกลับบ้าน', 'Takeaway') : copy(`ออเดอร์ #${orderId}`, `Order #${orderId}`))}
       subtitle={order ? `${order.order_number} · ${orderStatusLabel(order.status, language)}` : copy('กำลังโหลดออเดอร์', 'Loading order')}
       topLevel={false}
-      scroll={!splitWorkspace}
-      refreshControl={splitWorkspace ? undefined : refreshControl}
-      contentMaxWidth={splitWorkspace ? 1440 : undefined}
-      footer={!splitWorkspace ? actionDock : undefined}
-      action={order ? <StatusBadge label={order.payment_status === 'paid' ? copy('ชำระแล้ว', 'Paid') : orderStatusLabel(order.status, language)} tone={order.payment_status === 'paid' ? 'success' : order.status === 'ready' ? 'success' : order.status === 'cooking' ? 'warning' : 'neutral'} /> : undefined}
+      refreshControl={refreshControl}
+      footer={currentRoundBasket || actionDock}
+      action={order ? (
+        <OrderSummaryAction
+          accessibilityLabel={orderSummaryCopy.title}
+          count={activeQuantity}
+          label={copy('รายการ', 'Items')}
+          onPress={() => router.push({ pathname: '/order/summary' as never, params: { id: String(orderId) } } as never)}
+        />
+      ) : undefined}
     >
-      {!splitWorkspace && error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
-      {!splitWorkspace && message ? <Feedback title={message} tone="success" /> : null}
+      {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
+      {message ? <Feedback title={message} tone="success" /> : null}
 
-      {order ? splitWorkspace ? (
-        <View style={{ minHeight: 0, flex: 1, flexDirection: 'row', gap: spacing.xl }}>
-          <ScrollView
-            style={{ minWidth: 0, flex: 1 }}
-            contentContainerStyle={{ gap: spacing.xl, paddingRight: spacing.xs, paddingBottom: spacing.xxxl }}
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
-            refreshControl={refreshControl}
-            showsVerticalScrollIndicator={false}
-          >
-            {error ? <Feedback title={copy('ทำรายการไม่ได้', 'Could not complete this action')} detail={error} tone="danger" /> : null}
-            {message ? <Feedback title={message} tone="success" /> : null}
-            {menuWorkspace}
-          </ScrollView>
-          <View style={{ width: '40%', minWidth: 320, maxWidth: 460, overflow: 'hidden', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface }}>
-            <ScrollView
-              contentContainerStyle={{ gap: spacing.xl, padding: spacing.lg, paddingBottom: spacing.xxl }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {orderSummaryContent}
-              {renderDestructiveActions(true)}
-            </ScrollView>
-            {actionDock}
-          </View>
-        </View>
-      ) : (
+      {order ? (
         <>
-          <Surface>{orderSummaryContent}</Surface>
+          {!canTakeOrder || locked ? <Surface>{orderSummaryContent}</Surface> : null}
 
           {menuWorkspace}
           {renderDestructiveActions()}

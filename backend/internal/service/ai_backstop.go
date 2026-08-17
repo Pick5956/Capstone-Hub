@@ -52,6 +52,26 @@ func keywordBackstopTool(question string) (AIToolName, bool) {
 	return "", false
 }
 
+// isRepriceQuestion recognises "which menu should I reprice" questions. The router
+// tends to read them as a revenue ranking, but the useful answer is the thin-margin
+// menu whose price or cost most needs attention.
+func isRepriceQuestion(question string) bool {
+	n := strings.ToLower(question)
+	if !containsAny(n, "ปรับราคา", "ขึ้นราคา", "ตั้งราคาใหม่", "ราคาไม่เหมาะ", "ราคาเหมาะสม", "reprice") {
+		return false
+	}
+	return containsAny(n, "เมนู", "จาน", "อะไร", "ตัวไหน", "อันไหน", "menu", "dish")
+}
+
+// isAddMenuQuestion recognises "what new menu should I add" questions. The store
+// holds no data on menus it does not sell, so this cannot be answered directly —
+// the honest reply grounds a suggestion in what already works instead of listing
+// the current best-sellers as if they were the answer.
+func isAddMenuQuestion(question string) bool {
+	n := strings.ToLower(question)
+	return containsAny(n, "เพิ่มเมนู", "ควรมีเมนู", "เมนูใหม่", "ออกเมนูใหม่", "เพิ่มรายการอาหาร", "add menu", "new menu", "new dish")
+}
+
 // isReorderForecastQuestion recognises "which ingredients should I reorder"
 // questions. The word "ควร" makes the router classify them as a recommendation
 // and sometimes pick the wrong tool, so they are intercepted and answered from

@@ -54,11 +54,11 @@ func (s *InvitationService) CreateInvitation(restaurantID, invitedByUserID uint,
 		return nil, err
 	}
 
-	role, err := s.roleRepo.FindByID(req.RoleID)
+	role, err := s.roleRepo.FindByIDForRestaurant(req.RoleID, restaurantID)
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if !roleAssignableToRestaurant(role, restaurantID) || !canAssignMemberRole(actor, role) {
+	if !roleAssignableToRestaurant(role, restaurantID) || !canGrantRole(actor, role) {
 		return nil, errors.New("role cannot be invited")
 	}
 	if role.RestaurantID == nil {
@@ -202,6 +202,7 @@ func (s *InvitationService) AcceptInvitation(userID uint, token string) (*entity
 			if member.Status != "active" {
 				member.RoleID = invitation.RoleID
 				member.Status = "active"
+				member.PermissionsOverride = nil
 				member.InvitedByUserID = &invitation.InvitedByUserID
 				if err := store.UpdateMember(member); err != nil {
 					return err

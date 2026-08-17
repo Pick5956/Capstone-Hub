@@ -27,7 +27,8 @@ type roleRequest struct {
 
 func ProvideRoleController(db *gorm.DB) *RoleController {
 	roleRepo := repository.NewRoleRepository(db)
-	roleService := service.ProvideRoleService(roleRepo)
+	auditRepo := repository.NewRestaurantAuditLogRepository(db)
+	roleService := service.ProvideRoleService(roleRepo, auditRepo)
 	return &RoleController{
 		roleService: roleService,
 	}
@@ -38,7 +39,7 @@ func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	member, ok := requireManageStaffMember(c)
+	member, ok := requireManageRolesMember(c)
 	if !ok {
 		return
 	}
@@ -56,7 +57,7 @@ func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 		return
 	}
 
-	role, err := ctrl.roleService.UpdateRolePermissions(uint(roleID), restaurantID, member.Role.Name, req.Permissions)
+	role, err := ctrl.roleService.UpdateRolePermissions(uint(roleID), restaurantID, member, req.Permissions)
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
@@ -83,7 +84,7 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	member, ok := requireManageStaffMember(c)
+	member, ok := requireManageRolesMember(c)
 	if !ok {
 		return
 	}
@@ -92,7 +93,7 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	role, err := ctrl.roleService.CreateCustomRole(restaurantID, member.Role.Name, &service.RoleRequest{
+	role, err := ctrl.roleService.CreateCustomRole(restaurantID, member, &service.RoleRequest{
 		DisplayName: req.DisplayName,
 		Permissions: req.Permissions,
 	})
@@ -103,12 +104,12 @@ func (ctrl *RoleController) CreateCustomRole(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"role": role})
 }
 
-func (ctrl *RoleController) UpdateCustomRole(c *gin.Context) {
+func (ctrl *RoleController) UpdateRoleDisplayName(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {
 		return
 	}
-	member, ok := requireManageStaffMember(c)
+	member, ok := requireManageRolesMember(c)
 	if !ok {
 		return
 	}
@@ -122,7 +123,7 @@ func (ctrl *RoleController) UpdateCustomRole(c *gin.Context) {
 		respondInvalidRequest(c)
 		return
 	}
-	role, err := ctrl.roleService.UpdateCustomRole(roleID, restaurantID, member.Role.Name, &service.RoleRequest{
+	role, err := ctrl.roleService.UpdateRoleDisplayName(roleID, restaurantID, member, &service.RoleRequest{
 		DisplayName: req.DisplayName,
 	})
 	if err != nil {
@@ -137,7 +138,7 @@ func (ctrl *RoleController) DeleteCustomRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	member, ok := requireManageStaffMember(c)
+	member, ok := requireManageRolesMember(c)
 	if !ok {
 		return
 	}
@@ -146,7 +147,7 @@ func (ctrl *RoleController) DeleteCustomRole(c *gin.Context) {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}
-	if err := ctrl.roleService.DeleteCustomRole(roleID, restaurantID, member.Role.Name); err != nil {
+	if err := ctrl.roleService.DeleteCustomRole(roleID, restaurantID, member); err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
 		return
 	}

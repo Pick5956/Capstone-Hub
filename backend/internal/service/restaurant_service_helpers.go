@@ -19,48 +19,108 @@ func normalizeBusinessTime(value, fallback string) string {
 	return value
 }
 
+const (
+	PermissionManageInvites            = "manage_invites"
+	PermissionManageMembers            = "manage_members"
+	PermissionManageRoles              = "manage_roles"
+	PermissionViewAuditLog             = "view_audit_log"
+	PermissionManageRestaurantSettings = "manage_restaurant_settings"
+)
+
+var granularAdministrationPermissions = []string{
+	PermissionManageInvites,
+	PermissionManageMembers,
+	PermissionManageRoles,
+	PermissionViewAuditLog,
+	PermissionManageRestaurantSettings,
+}
+
+var permissionDependencies = map[string][]string{
+	"update_order_status": {"view_kitchen"},
+	"take_payment":        {"view_orders"},
+	"manage_table":        {"view_tables"},
+	"manage_inventory":    {"view_inventory"},
+}
+
 func canManageInvites(member *entity.RestaurantMember) bool {
-	return isOwnerOrManager(member) && memberHasPermission(member, "manage_staff")
+	return memberHasPermission(member, PermissionManageInvites)
 }
 
-func canManageTeam(member *entity.RestaurantMember) bool {
-	return canManageInvites(member)
+func canViewTeam(member *entity.RestaurantMember) bool {
+	return memberHasAnyPermission(
+		member,
+		PermissionManageInvites,
+		PermissionManageMembers,
+		PermissionManageRoles,
+		PermissionViewAuditLog,
+	)
 }
 
-func canManageMember(actor, target *entity.RestaurantMember) bool {
+func canManageMemberWithPermission(actor, target *entity.RestaurantMember, permission string) bool {
 	if actor == nil || target == nil || actor.Role == nil || target.Role == nil {
 		return false
 	}
 	if actor.UserID == target.UserID {
 		return false
 	}
-	if !memberHasPermission(actor, "manage_staff") {
+	if !memberHasPermission(actor, permission) {
 		return false
 	}
 
-	switch actor.Role.Name {
-	case "owner":
+	if actor.Role.Name == "owner" {
 		return target.Role.Name != "owner"
-	case "manager":
-		return target.Role.Name != "owner" && target.Role.Name != "manager"
-	default:
-		return false
 	}
+	return target.Role.Name != "owner" && target.Role.Name != "manager"
 }
 
 func isOwnerOrManager(member *entity.RestaurantMember) bool {
 	return member != nil && member.Role != nil && (member.Role.Name == "owner" || member.Role.Name == "manager")
 }
 
+// MemberHasPermission returns the effective permission for a membership. The
+// direct member override remains an exact replacement for role permissions.
+// Legacy manage_staff is expanded only for the built-in owner/manager roles so
+// old tenant overrides remain usable without empowering operational/custom roles.
+func MemberHasPermission(member *entity.RestaurantMember, permission string) bool {
+	return memberHasPermission(member, permission)
+}
+
 func memberHasPermission(member *entity.RestaurantMember, permission string) bool {
 	if member == nil || member.Role == nil {
 		return false
 	}
+	raw := member.Role.Permissions
 	if member.PermissionsOverride != nil {
-		return permissionJSONContains(*member.PermissionsOverride, permission)
+		raw = *member.PermissionsOverride
 	}
-	if member.Role.Permissions != "" {
-		return permissionJSONContains(member.Role.Permissions, permission)
+	if raw == "" {
+		return false
+	}
+	if permissionJSONContains(raw, permission) {
+		return true
+	}
+	if isGranularAdministrationPermission(permission) &&
+		isOwnerOrManager(member) &&
+		permissionJSONContains(raw, "manage_staff") {
+		return true
+	}
+	return false
+}
+
+func memberHasAnyPermission(member *entity.RestaurantMember, permissions ...string) bool {
+	for _, permission := range permissions {
+		if memberHasPermission(member, permission) {
+			return true
+		}
+	}
+	return false
+}
+
+func isGranularAdministrationPermission(permission string) bool {
+	for _, candidate := range granularAdministrationPermissions {
+		if candidate == permission {
+			return true
+		}
 	}
 	return false
 }
@@ -78,19 +138,60 @@ func permissionJSONContains(raw string, permission string) bool {
 	return false
 }
 
-func canAssignMemberRole(actor *entity.RestaurantMember, role *entity.Role) bool {
+func permissionsWithinGrantCeiling(actor *entity.RestaurantMember, permissions []string) bool {
+	for _, permission := range permissions {
+		if !memberHasPermission(actor, permission) {
+			return false
+		}
+	}
+	return true
+}
+
+func roleWithinGrantCeiling(actor *entity.RestaurantMember, role *entity.Role) bool {
+	if role == nil {
+		return false
+	}
+	var permissions []string
+	if err := json.Unmarshal([]byte(role.Permissions), &permissions); err != nil {
+		return false
+	}
+	normalized, err := normalizePermissions(permissions)
+	if err != nil {
+		return false
+	}
+	return permissionsWithinGrantCeiling(actor, normalized)
+}
+
+func canGrantRole(actor *entity.RestaurantMember, role *entity.Role) bool {
 	if actor == nil || role == nil || actor.Role == nil {
 		return false
 	}
-
-	switch actor.Role.Name {
-	case "owner":
-		return role.Name != "owner"
-	case "manager":
-		return role.Name != "owner" && role.Name != "manager"
-	default:
+	if role.Name == "owner" {
 		return false
 	}
+	if actor.Role.Name != "owner" && role.Name == "manager" {
+		return false
+	}
+	return roleWithinGrantCeiling(actor, role)
+}
+
+func canAssignMemberRole(actor *entity.RestaurantMember, role *entity.Role) bool {
+	return memberHasPermission(actor, PermissionManageRoles) && canGrantRole(actor, role)
+}
+
+func canManageRole(actor *entity.RestaurantMember, role *entity.Role) bool {
+	if !memberHasPermission(actor, PermissionManageRoles) || actor.Role == nil || role == nil {
+		return false
+	}
+	if role.Name == "owner" {
+		return false
+	}
+	return actor.Role.Name == "owner" || role.Name != "manager"
+}
+
+func assignMemberRole(member *entity.RestaurantMember, role *entity.Role) {
+	member.RoleID = role.ID
+	member.PermissionsOverride = nil
 }
 
 func roleAssignableToRestaurant(role *entity.Role, restaurantID uint) bool {
@@ -213,13 +314,13 @@ func countDigits(value string) int {
 	return count
 }
 
-func (s *RestaurantService) loadManagedMemberPair(actorUserID, restaurantID, memberID uint) (*entity.RestaurantMember, *entity.RestaurantMember, error) {
+func (s *RestaurantService) loadManagedMemberPair(actorUserID, restaurantID, memberID uint, permission string) (*entity.RestaurantMember, *entity.RestaurantMember, error) {
 	actor, err := s.GetMembership(actorUserID, restaurantID)
 	if err != nil {
 		return nil, nil, err
 	}
-	if !canManageTeam(actor) {
-		return nil, nil, errors.New("only owner or manager can manage members")
+	if !memberHasPermission(actor, permission) {
+		return nil, nil, errors.New("missing " + permission + " permission")
 	}
 
 	target, err := s.memberRepo.FindByID(memberID)

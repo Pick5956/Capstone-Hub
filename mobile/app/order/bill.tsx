@@ -8,8 +8,10 @@ import { addOrderItem, getBill, payOrder, updateOrderItemStatus } from '@/src/ap
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { itemStatusLabel, money } from '@/src/lib/format';
+import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   activeOrderItems,
   billExitRoute,
@@ -112,6 +114,10 @@ export default function BillScreen() {
     [activeItems],
   );
   const undelivered = useMemo(() => undeliveredOrderItems(activeItems), [activeItems]);
+  const menuImageById = useMemo(
+    () => new Map(menuItems.map((item) => [item.ID, item.image_url])),
+    [menuItems],
+  );
   const paymentReady = canTakeOrderPayment(activeItems);
   const paymentStage = bill
     ? billPaymentStage(bill.payment_status, paymentRecorded)
@@ -376,25 +382,22 @@ export default function BillScreen() {
       />
 
       {activeItems.map((item, index) => {
-        const imageUri = resolveImage(item.menu?.image_url || '');
         const thumbnailSize = splitWorkspace ? 64 : 56;
+        const imageUrl = selectOrderItemImage({
+          menuId: item.menu_id,
+          menuImageUrl: item.menu?.image_url,
+        }, menuImageById);
         return (
           <View key={item.ID}>
             {index ? <Divider /> : null}
             <View style={{ gap: spacing.sm, paddingVertical: spacing.sm }}>
               <View style={{ minHeight: 56, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-                {imageUri ? (
-                  <Image
-                    accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                    source={{ uri: imageUri }}
-                    resizeMode="contain"
-                    style={{ width: thumbnailSize, height: thumbnailSize, borderRadius: radius.md, backgroundColor: 'transparent' }}
-                  />
-                ) : (
-                  <View style={{ width: thumbnailSize, height: thumbnailSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceSubtle }}>
-                    <AppIcon color={palette.muted} name="image-outline" size={22} />
-                  </View>
-                )}
+                <MenuImage
+                  accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
+                  imageUrl={imageUrl}
+                  size={thumbnailSize}
+                  variant="row"
+                />
                 <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
                   <Text selectable style={typeScale.cardTitle}>{item.menu_name}</Text>
                   <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
@@ -521,27 +524,31 @@ export default function BillScreen() {
               }}
               style={({ pressed }) => ({
                 minWidth: 148,
-                minHeight: 112,
                 flexGrow: 1,
                 flexBasis: splitWorkspace ? 168 : 148,
-                gap: spacing.sm,
+                overflow: 'hidden',
                 borderWidth: 1,
                 borderColor: palette.border,
                 borderRadius: radius.md,
                 backgroundColor: palette.surface,
-                padding: spacing.lg,
                 opacity: disabled ? 0.46 : pressed ? 0.74 : 1,
                 transform: [{ translateY: pressed ? 1 : 0 }],
               })}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
-                <Text selectable numberOfLines={2} style={[typeScale.cardTitle, { minWidth: 0, flex: 1 }]}>{item.name}</Text>
-                <AppIcon color={disabled ? palette.muted : palette.textStrong} name="add-circle-outline" size={20} />
+              <MenuImage
+                accessible={false}
+                imageUrl={item.image_url}
+                style={{ borderRadius: 0 }}
+                variant="card"
+              />
+              <View style={{ gap: 2, padding: spacing.sm }}>
+                <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0 }]}>{item.name}</Text>
+                <Text selectable style={{ color: palette.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+                  {money(item.price, language)}
+                </Text>
+                {!item.is_available ? <Text style={[typeScale.caption, { color: palette.danger }]}>{copy('หมด', 'Sold out')}</Text> : null}
+                {requiresOptions ? <Text style={[typeScale.caption, { color: palette.warning }]}>{copy('มีตัวเลือกบังคับ', 'Requires options')}</Text> : null}
               </View>
-              <View style={{ flex: 1 }} />
-              <Text selectable style={typeScale.number}>{money(item.price, language)}</Text>
-              {!item.is_available ? <Text style={[typeScale.caption, { color: palette.danger }]}>{copy('หมด', 'Sold out')}</Text> : null}
-              {requiresOptions ? <Text style={[typeScale.caption, { color: palette.warning }]}>{copy('มีตัวเลือกบังคับ', 'Requires options')}</Text> : null}
             </Pressable>
           );
         })}

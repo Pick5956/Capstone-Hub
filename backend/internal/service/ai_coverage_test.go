@@ -15,6 +15,11 @@ func TestLooksLikeDataCoverageQuestion(t *testing.T) {
 		"ข้อมูลยอดขายมีตั้งแต่เมื่อไหร่",
 		"ข้อมูลย้อนหลังกี่เดือน",
 		"how far back does the sales data go",
+		// data-volume phrasings (flywheel case: real question that misrouted to a store summary)
+		"ตอนนี้ข้อมูลร้านมีมากแค่ไหน",
+		"ข้อมูลเยอะไหม",
+		"มีข้อมูลมากพอไหม",
+		"ข้อมูลครบไหม",
 	}
 	for _, q := range coverage {
 		if !looksLikeDataCoverageQuestion(q) {
@@ -24,6 +29,7 @@ func TestLooksLikeDataCoverageQuestion(t *testing.T) {
 
 	notCoverage := []string{
 		"ยอดขายวันนี้เท่าไหร่",
+		"ยอดขายมากไหม", // asks whether sales are HIGH, not about data volume
 		"เมนูไหนขายดีสุด",
 		"สวัสดีครับ",
 		"วัตถุดิบอะไรใกล้หมด",

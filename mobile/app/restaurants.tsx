@@ -14,6 +14,7 @@ import {
 } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { roleLabel } from '@/src/lib/staff-workflow';
 import { breakpoints, palette, spacing } from '@/src/theme';
 
 export default function RestaurantsScreen() {
@@ -82,18 +83,7 @@ export default function RestaurantsScreen() {
             <EdgeSection style={edgeSectionStyle}>
               {memberships.map((membership) => {
                 const active = activeMembership?.restaurant_id === membership.restaurant_id;
-                const roleName = membership.role?.name || '';
-                const defaultRole = roleName === 'owner'
-                  ? copy('เจ้าของร้าน', 'Owner')
-                  : roleName === 'manager'
-                    ? copy('ผู้จัดการ', 'Manager')
-                    : roleName === 'cashier'
-                      ? copy('แคชเชียร์', 'Cashier')
-                      : roleName === 'waiter'
-                        ? copy('พนักงานเสิร์ฟ', 'Server')
-                        : roleName === 'chef'
-                          ? copy('ครัว', 'Kitchen')
-                          : membership.role?.display_name || roleName || copy('พนักงาน', 'Staff');
+                const defaultRole = roleLabel(membership.role, language);
                 const restaurantName = membership.restaurant?.name
                   || copy(
                     `ร้าน #${membership.restaurant_id}`,

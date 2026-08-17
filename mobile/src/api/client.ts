@@ -9,6 +9,7 @@ import {
   getToken,
   getTokenType,
 } from '@/src/storage/session-store';
+import { normalizeApiMediaUrls } from '@/src/lib/media-url';
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
@@ -92,7 +93,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  const payload = await response.json() as T;
+  return normalizeApiMediaUrls(payload, apiUrl);
 }
 
 function tryParseJson(rawBody: string): { error?: string; message?: string } | null {

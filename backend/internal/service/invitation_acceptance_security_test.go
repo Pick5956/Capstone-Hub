@@ -164,3 +164,36 @@ func TestAcceptInvitationIsSingleUseUnderConcurrency(t *testing.T) {
 		t.Fatalf("invitation status = %q, want accepted", runner.invitation.Status)
 	}
 }
+
+func TestAcceptInvitationClearsOldPermissionOverrideWhenReactivatingMembership(t *testing.T) {
+	oldOverride := `["take_payment"]`
+	runner := &memoryInvitationAcceptanceRunner{
+		invitation: entity.Invitation{
+			RestaurantID: 5,
+			RoleID:       3,
+			Token:        testInvitationToken,
+			Status:       entity.InvitationStatusPending,
+		},
+		users: map[uint]entity.User{
+			9: {Email: "returning@example.test", Status: "active"},
+		},
+		members: map[[2]uint]entity.RestaurantMember{
+			{9, 5}: {
+				UserID:              9,
+				RestaurantID:        5,
+				RoleID:              4,
+				Status:              "removed",
+				PermissionsOverride: &oldOverride,
+			},
+		},
+	}
+	service := &InvitationService{acceptanceTx: runner}
+
+	member, err := service.AcceptInvitation(9, testInvitationToken)
+	if err != nil {
+		t.Fatalf("AcceptInvitation() error = %v", err)
+	}
+	if member.PermissionsOverride != nil {
+		t.Fatalf("reactivated override = %q, want nil", *member.PermissionsOverride)
+	}
+}

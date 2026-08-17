@@ -9,6 +9,10 @@ const (
 	AuditActionMemberStatusChanged      = "member_status_changed"
 	AuditActionMemberRoleChanged        = "member_role_changed"
 	AuditActionMemberPermissionsChanged = "member_permissions_changed"
+	AuditActionRoleCreated              = "role_created"
+	AuditActionRoleRenamed              = "role_renamed"
+	AuditActionRoleDeleted              = "role_deleted"
+	AuditActionRolePermissionsChanged   = "role_permissions_changed"
 	AuditActionAISetMenuAvailability    = "ai_set_menu_availability"
 )
 

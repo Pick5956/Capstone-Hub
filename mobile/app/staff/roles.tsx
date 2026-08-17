@@ -1,36 +1,40 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { getRoles } from '@/src/api/auth';
 import { AppScreen } from '@/src/components/app-shell';
+import { AppText as Text } from '@/src/components/app-text';
 import {
   Button,
+  Divider,
   EdgeRow,
   EdgeSection,
-  EdgeSectionHeader,
   EmptyState,
   Feedback,
 } from '@/src/components/ui';
-import { parsePermissions } from '@/src/lib/permissions';
 import {
   allowedRoleOptions,
-  canManageTeam,
+  canGrantRole,
+  canManageRoles,
   roleLabel,
+  roleListMeta,
 } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { spacing } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { Role } from '@/src/types/restaurant';
 
 export default function RolesScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const actorRole = activeMembership?.role?.name;
-  const allowed = canManageTeam(activeMembership);
+  const allowed = canManageRoles(activeMembership);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const splitRoleMetadata = width >= breakpoints.tablet;
 
   const load = useCallback(async () => {
     if (!allowed) {
@@ -41,7 +45,10 @@ export default function RolesScreen() {
     setError(null);
     try {
       const response = await getRoles();
-      setRoles(allowedRoleOptions(actorRole, response.data || []));
+      setRoles(
+        allowedRoleOptions(actorRole, response.data || [], allowed)
+          .filter((role) => canGrantRole(activeMembership, role)),
+      );
     } catch (err) {
       setError(err instanceof Error
         ? err.message
@@ -49,7 +56,7 @@ export default function RolesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [actorRole, allowed, copy]);
+  }, [activeMembership, actorRole, allowed, copy]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -61,8 +68,8 @@ export default function RolesScreen() {
         <EmptyState
           title={copy('ไม่มีสิทธิ์จัดการบทบาท', 'No role management access')}
           detail={copy(
-            'ต้องเป็นเจ้าของร้านหรือผู้จัดการที่ได้รับสิทธิ์จัดการทีม',
-            'You must be an owner or manager with team-management access.',
+            'บัญชีนี้ไม่ได้รับสิทธิ์จัดการบทบาทและสิทธิ์ของทีม',
+            'This account cannot manage team roles and permissions.',
           )}
         />
       </AppScreen>
@@ -72,10 +79,6 @@ export default function RolesScreen() {
   return (
     <AppScreen
       title={copy('บทบาทและสิทธิ์', 'Roles & permissions')}
-      subtitle={copy(
-        'กำหนดสิทธิ์เริ่มต้นและบทบาทที่ใช้กับทีมในร้านนี้',
-        'Set default permissions and roles for this restaurant team.',
-      )}
       topLevel={false}
       action={(
         <Button
@@ -93,58 +96,50 @@ export default function RolesScreen() {
           tone="danger"
         />
       ) : null}
-      <View style={{ gap: spacing.sm }}>
-        <EdgeSectionHeader
-          title={copy('บทบาทที่จัดการได้', 'Roles you can manage')}
-          detail={actorRole === 'manager'
-            ? copy(
-              'ผู้จัดการแก้ไขได้เฉพาะบทบาทระดับปฏิบัติการ',
-              'Managers can edit operational roles only.',
-            )
-            : copy(
-              'เจ้าของร้านแก้ไขทุกบทบาทได้ ยกเว้นบทบาทเจ้าของร้าน',
-              'Owners can edit every role except the owner role.',
-            )}
-        />
-        {roles.length ? (
-          <EdgeSection>
-            {roles.map((role) => {
-              const permissionCount = parsePermissions(role.permissions).length;
-              const detail = `${role.permissions === '["*"]'
-                ? copy('ทุกสิทธิ์', 'All permissions')
-                : copy(
-                  `${permissionCount.toLocaleString('th-TH')} สิทธิ์`,
-                  `${permissionCount.toLocaleString('en-US')} permissions`,
-                )}${role.is_system
-                ? copy(' · บทบาทมาตรฐาน', ' · Standard role')
-                : copy(' · บทบาทร้าน', ' · Restaurant role')}`;
-
-              return (
+      {roles.length ? (
+        <EdgeSection>
+          {roles.map((role, index) => {
+            const title = roleLabel(role, language);
+            const meta = roleListMeta(role, language);
+            return (
+              <View key={role.ID}>
+                {index ? <Divider /> : null}
                 <EdgeRow
-                  detail={detail}
+                  accessibilityLabel={`${title}, ${meta.typeLabel}, ${meta.permissionLabel}`}
+                  detail={splitRoleMetadata
+                    ? meta.typeLabel
+                    : `${meta.typeLabel} · ${meta.permissionLabel}`}
                   icon="shield-checkmark-outline"
-                  key={role.ID}
                   onPress={() => router.push({
                     pathname: '/staff/role' as never,
                     params: { id: String(role.ID) },
                   } as never)}
-                  title={roleLabel(role, language)}
+                  title={title}
+                  trailing={splitRoleMetadata ? (
+                    <Text
+                      numberOfLines={1}
+                      selectable
+                      style={[typeScale.caption, { color: palette.muted, fontVariant: ['tabular-nums'] }]}
+                    >
+                      {meta.permissionLabel}
+                    </Text>
+                  ) : undefined}
                 />
-              );
-            })}
-          </EdgeSection>
-        ) : !loading ? (
-          <EdgeSection style={{ paddingHorizontal: spacing.lg }}>
-            <EmptyState
-              title={copy('ยังไม่มีบทบาทที่จัดการได้', 'No manageable roles yet')}
-              detail={copy(
-                'เพิ่มบทบาทใหม่สำหรับงานของร้านนี้',
-                'Add a new role for this restaurant.',
-              )}
-            />
-          </EdgeSection>
-        ) : null}
-      </View>
+              </View>
+            );
+          })}
+        </EdgeSection>
+      ) : !loading ? (
+        <EdgeSection style={{ paddingHorizontal: spacing.lg }}>
+          <EmptyState
+            title={copy('ยังไม่มีบทบาทที่จัดการได้', 'No manageable roles yet')}
+            detail={copy(
+              'เพิ่มบทบาทใหม่สำหรับงานของร้านนี้',
+              'Add a new role for this restaurant.',
+            )}
+          />
+        </EdgeSection>
+      ) : null}
     </AppScreen>
   );
 }

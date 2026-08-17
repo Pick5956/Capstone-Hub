@@ -6,7 +6,8 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
 import { formatCurrency } from "@/src/lib/format";
-import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
+import { createCategory, createMenuItem, deleteCategory, deleteMenuItem, listCategories, listMenuItems, previewMenuImageBackground, updateCategory, updateMenuItem, updateMenuItemAvailability, uploadMenuImage } from "@/src/lib/menu";
+import type { MenuImageUploadOptions } from "@/src/lib/menuImageCrop";
 import { listIngredients } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { apiErrorCode } from "@/src/lib/apiErrors";
@@ -168,6 +169,18 @@ export default function MenuPage() {
         preparingImage: "กำลังเตรียมรูป...",
         imageLoadError: "เปิดรูปเพื่อจัดวางไม่สำเร็จ กรุณาเลือกรูปใหม่",
         imageCropError: "จัดวางรูปไม่สำเร็จ กรุณาเลือกรูปใหม่",
+        removeBackground: "ตัดพื้นหลัง",
+        removeBackgroundHelp: "ปิดไว้เป็นค่าเริ่มต้น เปิดเมื่อต้องการตัดพื้นหลังสีเรียบ",
+        backgroundStrength: "ความเข้มการตัดพื้นหลัง",
+        cutLess: "ตัดน้อยลง",
+        cutMore: "ตัดมากขึ้น",
+        previewingBackground: "กำลังอัปเดตผลการตัด...",
+        backgroundPreviewRequired: "ผลการตัดจะแสดงในกรอบรูปด้านบนโดยอัตโนมัติ",
+        backgroundPreviewUnavailable: "ยังแยกพื้นหลังรูปนี้ได้ไม่ชัด ลองปรับความเข้มหรือปิดการตัดพื้นหลัง",
+        backgroundPreviewError: "อัปเดตผลการตัดไม่สำเร็จ ลองปรับระดับอีกครั้ง",
+        backgroundPreviewReady: "แสดงรูปที่ตัดแล้วด้านบน เส้นสีส้มคือขอบของส่วนที่จะคงไว้",
+        backgroundPreviewAria: "รูปที่ตัดพื้นหลังแล้วพร้อมเส้นขอบสีส้ม",
+        backgroundUploadMismatch: "ระบบยังตัดพื้นหลังรูปนี้ไม่สำเร็จ ลองปรับระดับหรือปิดการตัดพื้นหลัง",
         uploading: "กำลังอัปโหลดรูป...",
         imageHelp: "รองรับ jpg, png, webp ไม่เกิน 5MB",
         description: "รายละเอียดเมนู",
@@ -295,6 +308,18 @@ export default function MenuPage() {
         preparingImage: "Preparing image...",
         imageLoadError: "Could not open this image for positioning. Choose a new image.",
         imageCropError: "Could not position this image. Choose a new image.",
+        removeBackground: "Remove background",
+        removeBackgroundHelp: "Off by default. Turn on for simple solid-color backgrounds.",
+        backgroundStrength: "Background cut strength",
+        cutLess: "Cut less",
+        cutMore: "Cut more",
+        previewingBackground: "Updating the cut...",
+        backgroundPreviewRequired: "The cut result appears automatically in the image frame above.",
+        backgroundPreviewUnavailable: "The background is not clear enough to separate. Adjust the strength or turn removal off.",
+        backgroundPreviewError: "Could not update the cut. Adjust the strength and try again.",
+        backgroundPreviewReady: "The cut image is shown above. The orange outline marks what will be kept.",
+        backgroundPreviewAria: "Image with background removed and an orange cut outline",
+        backgroundUploadMismatch: "The background was not removed. Adjust the strength or turn removal off.",
         uploading: "Uploading image...",
         imageHelp: "Supports jpg, png, webp up to 5MB",
         description: "Menu description",
@@ -756,7 +781,16 @@ export default function MenuPage() {
     });
   };
 
-  const uploadImage = async (file: File | undefined) => {
+  const previewImageBackground = async (
+    file: File,
+    backgroundStrength: number,
+    signal?: AbortSignal,
+  ) => {
+    const response = await previewMenuImageBackground(file, backgroundStrength, signal);
+    return response.data;
+  };
+
+  const uploadImage = async (file: File | undefined, options: MenuImageUploadOptions) => {
     if (!file) return false;
     if (!file.type.startsWith("image/")) {
       setItemErrors((current) => ({ ...current, image: copy.imageTypeError }));
@@ -766,7 +800,11 @@ export default function MenuPage() {
     setError("");
     setItemErrors((current) => ({ ...current, image: undefined }));
     try {
-      const res = await uploadMenuImage(file);
+      const res = await uploadMenuImage(file, options);
+      if (options.removeBackground && res.data.background_removed !== true) {
+        setItemErrors((current) => ({ ...current, image: copy.backgroundUploadMismatch }));
+        return false;
+      }
       setItemForm((current) => ({ ...current, image_url: res.data.image_url }));
       return true;
     } catch {
@@ -1170,7 +1208,19 @@ export default function MenuPage() {
                         invalidFile: copy.imageUploadError,
                         loadError: copy.imageLoadError,
                         cropError: copy.imageCropError,
+                        removeBackground: copy.removeBackground,
+                        removeBackgroundHelp: copy.removeBackgroundHelp,
+                        backgroundStrength: copy.backgroundStrength,
+                        cutLess: copy.cutLess,
+                        cutMore: copy.cutMore,
+                        previewingBackground: copy.previewingBackground,
+                        backgroundPreviewRequired: copy.backgroundPreviewRequired,
+                        backgroundPreviewUnavailable: copy.backgroundPreviewUnavailable,
+                        backgroundPreviewError: copy.backgroundPreviewError,
+                        backgroundPreviewReady: copy.backgroundPreviewReady,
+                        backgroundPreviewAria: copy.backgroundPreviewAria,
                       }}
+                      onPreview={previewImageBackground}
                       onUpload={uploadImage}
                       onError={handleImageEditorError}
                       onEditingChange={setImageEditing}

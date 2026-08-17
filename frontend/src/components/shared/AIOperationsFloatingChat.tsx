@@ -15,6 +15,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
+import AIInputTools from "@/src/components/shared/AIInputTools";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -462,7 +463,7 @@ export default function AIOperationsFloatingChat() {
         actions: data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool)
+            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool, data.scope_assumed)
             : undefined,
       };
       
@@ -624,11 +625,9 @@ export default function AIOperationsFloatingChat() {
       `}</style>
 
       {/* Chat Window Panel */}
-      <div 
-        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch origin-bottom-right transition-[opacity,transform] duration-200 ease-out ${
-          isOpen
-            ? "opacity-100 scale-100 pointer-events-auto"
-            : "opacity-0 scale-[0.98] pointer-events-none"
+      <div
+        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch transition-opacity duration-200 ease-out ${
+          isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
@@ -739,10 +738,10 @@ export default function AIOperationsFloatingChat() {
           >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:px-4">
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
               <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
-              <div className="flex items-center">
-                <h2 id="ai-operations-chat-title" className="text-sm font-semibold leading-none text-gray-900 dark:text-white">{copy.title}</h2>
+              <div className="flex min-w-0 items-center">
+                <h2 id="ai-operations-chat-title" className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white">{copy.title}</h2>
               </div>
             </div>
 
@@ -951,7 +950,12 @@ export default function AIOperationsFloatingChat() {
                 placeholder={copy.askPlaceholder}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
-                className="min-h-9 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+                className="min-h-9 min-w-0 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+              />
+              <AIInputTools
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
               />
               <button
                 type="submit"
@@ -972,13 +976,13 @@ export default function AIOperationsFloatingChat() {
         type="button"
         aria-label={labels.openAssistant}
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center rounded-full shadow-xl shadow-orange-500/30 ring-1 ring-black/5 transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] dark:ring-white/10 sm:bottom-6 sm:right-6 ${
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
             : "opacity-100 scale-100 pointer-events-auto"
         }`}
       >
-        <SiriOrb size="56px" animationDuration={8} />
+        <SiriOrb size="66px" className="shrink-0" animationDuration={8} />
       </button>
     </>
   );

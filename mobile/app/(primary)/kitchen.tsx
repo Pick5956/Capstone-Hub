@@ -1,13 +1,15 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { apiUrl } from '@/src/api/client';
+import { listMenuItems } from '@/src/api/menu';
 import { kitchenQueue, updateOrderItemStatus } from '@/src/api/order';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
+import { useKitchenOrderEvents } from '@/src/hooks/use-kitchen-order-events';
 import {
   Button,
   ChipGroup,
@@ -19,15 +21,16 @@ import {
   TextField,
 } from '@/src/components/ui';
 import { itemStatusLabel } from '@/src/lib/format';
+import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   createKitchenMutationGate,
   KitchenMutationError,
   kitchenFulfillmentContext,
+  kitchenTicketSentTimeLabel,
   kitchenTicketTiming,
-  resolveKitchenImageUrl,
   runKitchenMutation,
 } from '@/src/lib/kitchen-workflow';
-import { createRequestGeneration } from '@/src/lib/request-generation';
+import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
 import {
   isCookingItem,
   isKitchenDoneItem,
@@ -122,48 +125,61 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   ticketHeader: {
-    minHeight: 92,
+    minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   ticketIdentity: {
     minWidth: 0,
     flex: 1,
-    gap: spacing.xs,
+    gap: 2,
   },
-  orderNumber: {
+  ticketTitle: {
+    color: palette.surface,
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  ticketMeta: {
+    color: palette.surface,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    opacity: 0.88,
+  },
+  timer: {
+    minWidth: 64,
+    alignItems: 'flex-end',
+    gap: 1,
+  },
+  timerLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  timerValue: {
     color: palette.surface,
     fontSize: 22,
     lineHeight: 27,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
-  ticketMeta: {
+  timerUnit: {
     color: palette.surface,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
-    opacity: 0.88,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    opacity: 0.9,
   },
-  timer: {
-    minWidth: 86,
-    alignItems: 'flex-end',
-    gap: 0,
-  },
-  timerValue: {
+  timerUrgency: {
     color: palette.surface,
-    fontSize: 38,
-    lineHeight: 42,
-    fontWeight: '900',
-    fontVariant: ['tabular-nums'],
-  },
-  timerLabel: {
-    color: palette.surface,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: '800',
     opacity: 0.9,
   },
@@ -300,6 +316,7 @@ export default function KitchenScreen() {
   const canUpdate = access.canUpdate;
   const canView = access.canView;
   const [orders, setOrders] = useState<Order[]>([]);
+  const [menuImageById, setMenuImageById] = useState<ReadonlyMap<number, string>>(new Map());
   const [filter, setFilter] = useState<KitchenLane>('cooking');
   const [loading, setLoading] = useState(true);
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
@@ -311,11 +328,28 @@ export default function KitchenScreen() {
   const [undoConfirmId, setUndoConfirmId] = useState<number | null>(null);
   const mutationGateRef = useRef(createKitchenMutationGate());
   const requestGenerationRef = useRef(createRequestGeneration());
+  const foregroundRequestRef = useRef<number | null>(null);
+  const pendingQuietRefreshRef = useRef(false);
   const adjacentWarmRequestedRef = useRef(false);
   const primaryTabSceneStatus = usePrimaryTabSceneStatus();
 
-  const reconcileQueue = useCallback(async () => {
-    const request = requestGenerationRef.current.begin();
+  useEffect(() => {
+    if (!canView) return;
+    let active = true;
+    void listMenuItems()
+      .then((response) => {
+        if (!active) return;
+        setMenuImageById(new Map(
+          (response.menu_items || []).map((item) => [item.ID, item.image_url]),
+        ));
+      })
+      .catch(() => {
+        if (active) setMenuImageById(new Map());
+      });
+    return () => { active = false; };
+  }, [canView]);
+
+  const requestQueueSnapshot = useCallback(async (request: number) => {
     try {
       const response = await kitchenQueue();
       if (requestGenerationRef.current.isCurrent(request)) {
@@ -326,22 +360,60 @@ export default function KitchenScreen() {
     }
   }, []);
 
+  const reconcileQueue = useCallback(async () => {
+    const request = requestGenerationRef.current.begin();
+    if (foregroundRequestRef.current !== null) {
+      foregroundRequestRef.current = null;
+      pendingQuietRefreshRef.current = false;
+      setLoading(false);
+    }
+    await requestQueueSnapshot(request);
+  }, [requestQueueSnapshot]);
+
   const load = useCallback(async (quiet = false) => {
     if (!canView) {
       setLoading(false);
       return;
     }
-    if (mutationGateRef.current.locked) return;
-    if (!quiet) setLoading(true);
+    if (mutationGateRef.current.locked) {
+      if (quiet) pendingQuietRefreshRef.current = true;
+      return;
+    }
+    if (!shouldStartRequest(quiet, foregroundRequestRef.current !== null)) {
+      pendingQuietRefreshRef.current = true;
+      return;
+    }
+
+    const request = requestGenerationRef.current.begin();
+    if (!quiet) {
+      foregroundRequestRef.current = request;
+      setLoading(true);
+    }
     setError(null);
     try {
-      await reconcileQueue();
+      await requestQueueSnapshot(request);
     } catch (err) {
+      if (!requestGenerationRef.current.isCurrent(request)) return;
       setError(err instanceof Error ? err.message : copy('โหลดคิวครัวไม่สำเร็จ', 'Could not load the kitchen queue'));
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && foregroundRequestRef.current === request) {
+        foregroundRequestRef.current = null;
+        setLoading(false);
+        if (pendingQuietRefreshRef.current) {
+          pendingQuietRefreshRef.current = false;
+          void load(true);
+        }
+      }
     }
-  }, [canView, copy, reconcileQueue]);
+  }, [canView, copy, requestQueueSnapshot]);
+
+  useKitchenOrderEvents(
+    () => load(true),
+    {
+      enabled: canView && (primaryTabSceneStatus === null || primaryTabSceneStatus === 'active'),
+      restaurantId: activeMembership?.restaurant_id,
+    },
+  );
 
   useEffect(() => {
     if (
@@ -358,10 +430,13 @@ export default function KitchenScreen() {
     } else {
       void load();
     }
-    const timer = setInterval(() => { void load(true); }, 8000);
+    const timer = setInterval(() => { void load(true); }, 60_000);
     return () => {
       clearInterval(timer);
       requestGenerationRef.current.invalidate();
+      foregroundRequestRef.current = null;
+      pendingQuietRefreshRef.current = false;
+      setLoading(false);
     };
   }, [load]));
 
@@ -383,6 +458,14 @@ export default function KitchenScreen() {
         orders: filter === 'cooking' ? cookingTickets : doneTickets,
         kind: filter,
       }];
+
+  function releaseMutationGate() {
+    mutationGateRef.current.release();
+    if (pendingQuietRefreshRef.current) {
+      pendingQuietRefreshRef.current = false;
+      void load(true);
+    }
+  }
 
   async function setItemStatus(
     orderId: number,
@@ -409,7 +492,7 @@ export default function KitchenScreen() {
       return false;
     } finally {
       setSubmittingKey(null);
-      mutationGateRef.current.release();
+      releaseMutationGate();
     }
   }
 
@@ -458,7 +541,7 @@ export default function KitchenScreen() {
       }
     } finally {
       setSubmittingKey(null);
-      mutationGateRef.current.release();
+      releaseMutationGate();
     }
   }
 
@@ -518,7 +601,7 @@ export default function KitchenScreen() {
     <AppScreen
       title={copy('ครัว', 'Kitchen')}
       topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
       contentMaxWidth={1320}
       contentStyle={{ gap: spacing.lg }}
     >
@@ -612,12 +695,21 @@ export default function KitchenScreen() {
               const tableLabel = order.table?.display_label
                 || order.table?.table_number
                 || (order.table_id ? String(order.table_id) : '−');
-              const location = order.order_type === 'takeaway'
-                ? `${copy('ซื้อกลับบ้าน', 'Takeaway')}${order.customer_name?.trim() ? ` · ${order.customer_name.trim()}` : ''}`
+              const ticketTitle = order.order_type === 'takeaway'
+                ? copy('ซื้อกลับบ้าน', 'Takeaway')
                 : copy(`โต๊ะ ${tableLabel}`, `Table ${tableLabel}`);
+              const customerLabel = order.order_type === 'takeaway'
+                ? order.customer_name?.trim() || ''
+                : '';
               const batchLabel = order.kitchen_batch ? copy(`รอบ ${order.kitchen_batch.toLocaleString('th-TH')}`, `Batch ${order.kitchen_batch.toLocaleString('en-US')}`) : copy('รอบครัว', 'Kitchen batch');
+              const sentTimeLabel = kitchenTicketSentTimeLabel({
+                opened_at: order.opened_at,
+                kitchen_sent_at: order.kitchen_sent_at,
+                items,
+              }, language);
               const timing = kitchenTicketTiming({
                 opened_at: order.opened_at,
+                kitchen_sent_at: order.kitchen_sent_at,
                 items,
               });
               const ticketBorderColor = group.kind === 'done'
@@ -649,48 +741,50 @@ export default function KitchenScreen() {
                     ]}
                   >
                     <View style={styles.ticketIdentity}>
-                      <Text selectable style={styles.orderNumber}>{order.order_number}</Text>
+                      <Text selectable style={styles.ticketTitle}>{ticketTitle}</Text>
                       <Text selectable style={styles.ticketMeta}>
-                        {location} · {batchLabel} · {copy(
-                          `${items.length.toLocaleString('th-TH')} รายการ`,
-                          `${items.length.toLocaleString('en-US')} items`,
-                        )}
+                        {[
+                          customerLabel,
+                          sentTimeLabel,
+                          batchLabel,
+                          copy(
+                            `${items.length.toLocaleString('th-TH')} รายการ`,
+                            `${items.length.toLocaleString('en-US')} items`,
+                          ),
+                        ].filter(Boolean).join(' · ')}
                       </Text>
                     </View>
                     {group.kind === 'cooking' ? (
                       <View style={styles.timer}>
-                        <Text selectable style={styles.timerValue}>
-                          {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
-                        </Text>
-                        <Text selectable style={styles.timerLabel}>
-                          {urgencyLabel ? `${copy('นาที', 'min')} · ${urgencyLabel}` : copy('นาที', 'min')}
-                        </Text>
+                        <View style={styles.timerLine}>
+                          <Text selectable style={styles.timerValue}>
+                            {timing.minutes.toLocaleString(language === 'th' ? 'th-TH' : 'en-US')}
+                          </Text>
+                          <Text selectable style={styles.timerUnit}>{copy('นาที', 'min')}</Text>
+                        </View>
+                        {urgencyLabel ? <Text selectable style={styles.timerUrgency}>{urgencyLabel}</Text> : null}
                       </View>
                     ) : null}
                   </View>
                   {items.map((item, index) => {
                     const cancelling = cancelTargetId === item.ID;
                     const confirmingUndo = undoConfirmId === item.ID;
-                    const imageUri = resolveKitchenImageUrl(item.menu?.image_url, apiUrl);
                     const fulfillment = kitchenFulfillmentContext(order.order_type, item.fulfillment_type);
+                    const imageUrl = selectOrderItemImage({
+                      menuId: item.menu_id,
+                      menuImageUrl: item.menu?.image_url,
+                    }, menuImageById);
                     return (
                       <View key={item.ID}>
                         {index ? <Divider /> : null}
                         <View style={styles.item}>
                           <View style={styles.itemMain}>
-                            {imageUri ? (
-                              <Image
-                                accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                                source={{ uri: imageUri }}
-                                resizeMode="contain"
-                                 style={{
-                                   width: width >= 820 ? 60 : 52,
-                                   height: width >= 820 ? 60 : 52,
-                                   borderRadius: radius.md,
-                                   backgroundColor: 'transparent',
-                                 }}
-                               />
-                             ) : null}
+                            <MenuImage
+                              accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
+                              imageUrl={imageUrl}
+                              size={width >= 820 ? 60 : 52}
+                              variant="row"
+                            />
                             <View style={styles.itemContent}>
                               <View style={styles.itemTitleRow}>
                                 <View

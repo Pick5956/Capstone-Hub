@@ -1,24 +1,22 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listMenuItems } from '@/src/api/menu';
 import { addOrderItem, getOrder } from '@/src/api/order';
-import { apiUrl } from '@/src/api/client';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
+import { MenuImage } from '@/src/components/menu-image';
 import { ActionDock, Button, ChipGroup, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import { isOptionSelectionBelowMinimum } from '@/src/lib/order-workflow';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { MenuItem } from '@/src/types/menu';
 import type { Order } from '@/src/types/order';
-
-function imageUrl(value: string) { if (!value) return ''; if (value.startsWith('http')) return value; return `${apiUrl}${value.startsWith('/') ? '' : '/'}${value}`; }
 
 export default function AddOrderItemScreen() {
   const { width } = useWindowDimensions();
@@ -80,7 +78,11 @@ export default function AddOrderItemScreen() {
       {menu ? (
         <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
           <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.8 : undefined, gap: spacing.lg }}>
-            {menu.image_url ? <Image source={{ uri: imageUrl(menu.image_url) }} resizeMode="contain" style={{ width: '100%', aspectRatio: 4 / 3, borderRadius: radius.md, backgroundColor: 'transparent' }} /> : null}
+            <MenuImage
+              accessibilityLabel={copy(`รูปเมนู ${menu.name}`, `Photo of ${menu.name}`)}
+              imageUrl={menu.image_url}
+              variant="hero"
+            />
             {!menu.is_available ? <Feedback title={copy('เมนูนี้หมดชั่วคราว', 'This menu item is sold out')} detail={copy('กลับไปเลือกเมนูอื่น', 'Choose another menu item.')} tone="warning" /> : null}
           </View>
           <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.2 : undefined, gap: spacing.lg }}>

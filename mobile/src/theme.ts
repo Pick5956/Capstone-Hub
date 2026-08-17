@@ -1,32 +1,8 @@
 import { StyleSheet } from 'react-native';
 
-export const palette = {
-  canvas: '#F4F5F7',
-  surface: '#FFFFFF',
-  surfaceSubtle: '#F7F8FA',
-  surfaceStrong: '#ECEFF3',
-  border: '#E1E5EA',
-  borderStrong: '#C9D0D8',
-  text: '#252A31',
-  textStrong: '#111318',
-  muted: '#606B78',
-  placeholder: '#687381',
-  primary: '#17191D',
-  primaryText: '#FFFFFF',
-  accent: '#E85D04',
-  accentSoft: '#FFF7ED',
-  accentMuted: '#FED7AA',
-  success: '#047857',
-  successSoft: '#ECFDF5',
-  warning: '#B45309',
-  warningSoft: '#FFFBEB',
-  danger: '#B91C1C',
-  dangerSoft: '#FEF2F2',
-  info: '#0369A1',
-  infoSoft: '#F0F9FF',
-  neutral: '#475569',
-  neutralSoft: '#F1F5F9',
-} as const;
+import { palette } from '@/src/lib/theme-palette';
+
+export { palette };
 
 // Compatibility alias for existing screens while they move onto the new shared shell.
 export const colors = palette;
@@ -196,7 +172,7 @@ export const inputStyles = StyleSheet.create({
   input: {
     minHeight: 52,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: palette.controlBorder,
     borderRadius: radius.md,
     backgroundColor: palette.surfaceSubtle,
     color: palette.textStrong,

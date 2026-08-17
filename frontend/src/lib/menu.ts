@@ -1,4 +1,10 @@
 import { apiClient } from "./apiClient";
+import {
+  MENU_BACKGROUND_DEFAULT_STRENGTH,
+  clampMenuBackgroundStrength,
+  type MenuBackgroundPreviewResult,
+  type MenuImageUploadOptions,
+} from "./menuImageCrop";
 import type { Category, CategoryInput, MenuItem, MenuItemInput } from "../types/menu";
 
 export const listCategories = () =>
@@ -30,10 +36,38 @@ export const updateMenuItemAvailability = (id: number, isAvailable: boolean) =>
 export const deleteMenuItem = (id: number) =>
   apiClient.delete(`/api/v1/menu-items/${id}`);
 
-export const uploadMenuImage = (file: File) => {
+export interface MenuImageUploadResponse {
+  image_url: string;
+  path: string;
+  background_removed: boolean;
+}
+
+export const previewMenuImageBackground = (
+  file: File,
+  backgroundStrength: number,
+  signal?: AbortSignal,
+) => {
   const formData = new FormData();
   formData.append("image", file);
-  return apiClient.post<{ image_url: string; path: string }>("/api/v1/menu-items/upload-image", formData, {
+  formData.append("background_strength", String(clampMenuBackgroundStrength(backgroundStrength)));
+  return apiClient.post<MenuBackgroundPreviewResult>("/api/v1/menu-items/preview-background", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    signal,
+  });
+};
+
+export const uploadMenuImage = (
+  file: File,
+  options: MenuImageUploadOptions = {
+    removeBackground: false,
+    backgroundStrength: MENU_BACKGROUND_DEFAULT_STRENGTH,
+  },
+) => {
+  const formData = new FormData();
+  formData.append("image", file);
+  formData.append("remove_background", String(options.removeBackground));
+  formData.append("background_strength", String(clampMenuBackgroundStrength(options.backgroundStrength)));
+  return apiClient.post<MenuImageUploadResponse>("/api/v1/menu-items/upload-image", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
 };

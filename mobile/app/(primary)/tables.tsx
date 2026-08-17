@@ -1,14 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listOrders } from '@/src/api/order';
 import { listTables } from '@/src/api/table';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
-import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader } from '@/src/components/ui';
 import { money, tableStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
@@ -87,6 +87,7 @@ export default function TablesScreen() {
       clearInterval(timer);
       requestGenerationRef.current.invalidate();
       foregroundRequestRef.current = null;
+      setLoading(false);
     };
   }, [load]));
 
@@ -121,15 +122,6 @@ export default function TablesScreen() {
     if (selectedZone !== 'all' && !zones.some((zone) => zone.value === selectedZone)) setSelectedZone('all');
   }, [selectedZone, zones]);
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
-  const attentionTables = useMemo(() => tables
-    .map((table) => {
-      const order = activeOrderByTable.get(table.ID);
-      const ready = (order?.items || []).filter((item) => item.status === 'ready').reduce((sum, item) => sum + item.quantity, 0);
-      return { table, order, ready };
-    })
-    .filter((entry) => Boolean(entry.order))
-    .sort((left, right) => right.ready - left.ready)
-    .slice(0, 6), [activeOrderByTable, tables]);
 
   function open(table: RestaurantTable) {
     setNotice(null);
@@ -146,7 +138,7 @@ export default function TablesScreen() {
   }
 
   return (
-    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />} action={canTakeOrder ? <Button compact icon="bag-handle-outline" variant="secondary" label={copy('ซื้อกลับบ้าน', 'Takeaway')} onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : undefined}>
+    <AppScreen title={copy('รับออเดอร์', 'Order taking')} subtitle={copy(`${tables.length.toLocaleString('th-TH')} โต๊ะ · ${activeOrderByTable.size.toLocaleString('th-TH')} โต๊ะกำลังใช้งาน`, `${tables.length.toLocaleString('en-US')} tables · ${activeOrderByTable.size.toLocaleString('en-US')} in use`)} topLevel refreshControl={<AppRefreshControl onRefresh={load} />} action={canTakeOrder ? <Button compact icon="bag-handle-outline" variant="secondary" label={copy('ซื้อกลับบ้าน', 'Takeaway')} onPress={() => router.push({ pathname: '/order/new' as never, params: { type: 'takeaway' } } as never)} /> : undefined}>
       {error ? <Feedback title={copy('โหลดผังโต๊ะไม่ได้', 'Could not load the table map')} detail={error} tone="danger" /> : null}
       {notice ? <Feedback title={copy('ยังเปิดโต๊ะนี้ไม่ได้', 'This table cannot be opened yet')} detail={notice} tone="warning" /> : null}
       {!canTakeOrder ? <Feedback title={copy('ไม่มีสิทธิ์รับออเดอร์', 'No order-taking permission')} detail={copy('เลือกโหมดงานอื่นที่บัญชีนี้ได้รับอนุญาตจากเมนูด้านล่าง', 'Choose another work mode allowed for this account from the menu below.')} tone="info" /> : null}
@@ -227,36 +219,6 @@ export default function TablesScreen() {
             </View>
           ))}
         </View>
-        {tabletWorkspace ? (
-          <Surface style={{ width: 320, gap: 0, paddingVertical: 0 }}>
-            <View style={{ paddingVertical: spacing.lg }}>
-              <SectionHeader title={copy('โต๊ะที่ต้องดูต่อ', 'Tables in progress')} detail={copy('รายการพร้อมเสิร์ฟจะแสดงก่อน', 'Ready-to-serve tables appear first')} />
-            </View>
-            {attentionTables.map(({ table, order, ready }, index) => (
-              <Pressable
-                accessibilityLabel={copy(
-                  `เปิด ${table.display_label || table.table_number}, ${ready ? `พร้อมเสิร์ฟ ${ready.toLocaleString('th-TH')} รายการ` : 'กำลังทำ'}`,
-                  `Open ${table.display_label || table.table_number}, ${ready ? `${ready.toLocaleString('en-US')} ready to serve` : 'in progress'}`,
-                )}
-                accessibilityRole="button"
-                key={table.ID}
-                onPress={() => open(table)}
-                style={({ pressed }) => ({ minHeight: 72, gap: spacing.xs, borderTopWidth: index ? 1 : 0, borderTopColor: palette.border, backgroundColor: pressed ? palette.surfaceSubtle : palette.surface, paddingVertical: spacing.md })}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0, flex: 1 }]}>{table.display_label || table.table_number}</Text>
-                  <StatusBadge label={ready ? copy(`พร้อม ${ready.toLocaleString('th-TH')}`, `${ready.toLocaleString('en-US')} ready`) : copy('กำลังทำ', 'In progress')} tone={ready ? 'success' : 'warning'} />
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  <Text selectable style={[typeScale.caption, { flex: 1, color: palette.muted }]}>{order?.order_number}</Text>
-                  <Text selectable style={[typeScale.number, { fontSize: 15 }]}>{money(order?.grand_total || 0, language)}</Text>
-                  <AppIcon color={palette.muted} name="chevron-forward" size={16} />
-                </View>
-              </Pressable>
-            ))}
-            {!attentionTables.length ? <EmptyState title={copy('ยังไม่มีโต๊ะที่เปิดอยู่', 'No tables in progress')} detail={copy('โต๊ะที่เปิดออเดอร์แล้วจะอยู่ตรงนี้', 'Open table orders will appear here.')} /> : null}
-          </Surface>
-        ) : null}
       </View>
       {!loading && !groups.length ? <EmptyState title={copy('ไม่พบโต๊ะ', 'No tables found')} detail={tables.length ? copy('ลองเปลี่ยนคำค้น', 'Try a different search.') : canManageTables ? copy('สร้างโต๊ะในหน้าจัดการโต๊ะก่อนรับออเดอร์', 'Create tables in Table management before taking orders.') : copy('ร้านนี้ยังไม่มีโต๊ะที่พร้อมรับออเดอร์', 'This restaurant has no tables ready for orders yet.')} action={canManageTables ? <Button label={copy('ไปหน้าจัดการโต๊ะ', 'Open Table management')} onPress={() => router.push('/table-management')} /> : undefined} /> : null}
     </AppScreen>

@@ -617,7 +617,7 @@ export default function AIAssistantScreen() {
               onChangeText={setQuestion}
               placeholder={copy('เช่น พรุ่งนี้ควรเตรียมอะไรเพิ่ม?', 'For example: What should we prepare more of tomorrow?')}
               placeholderTextColor={palette.placeholder}
-              style={{ minHeight: 104, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surfaceSubtle, color: palette.text, fontSize: 16, paddingLeft: 44, paddingRight: spacing.md, paddingVertical: spacing.md, textAlignVertical: 'top' }}
+              style={{ minHeight: 104, borderWidth: 1, borderColor: palette.controlBorder, borderRadius: radius.md, backgroundColor: palette.surfaceSubtle, color: palette.text, fontSize: 16, paddingLeft: 44, paddingRight: spacing.md, paddingVertical: spacing.md, textAlignVertical: 'top' }}
             />
           </View>
           <Button icon="send-outline" label={loading ? copy('กำลังวิเคราะห์...', 'Analyzing...') : copy('ส่งคำถาม', 'Send question')} onPress={() => { void ask(); }} loading={loading} disabled={!question.trim() || actionConfirming || actionCancelling || clearingConversation} />
@@ -628,14 +628,14 @@ export default function AIAssistantScreen() {
 
   if (!canUseAI) {
     return (
-      <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel>
+      <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel={false}>
         <Feedback title={copy('ไม่มีสิทธิ์ใช้ผู้ช่วยวิเคราะห์', 'Analytics assistant access unavailable')} detail={copy('ผู้ช่วยวิเคราะห์เปิดให้ใช้งานเฉพาะเจ้าของร้าน', 'The analytics assistant is available to restaurant owners only.')} tone="info" />
       </AppScreen>
     );
   }
 
   return (
-    <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel>
+    <AppScreen title={copy('ผู้ช่วย AI', 'AI assistant')} subtitle={copy('วิเคราะห์จากข้อมูลร้านล่าสุด', 'Analyze current restaurant data')} topLevel={false}>
       {error ? <Feedback title={copy('วิเคราะห์ข้อมูลไม่ได้', 'Could not analyze data')} detail={error} tone="danger" /> : null}
       {conversationClearError ? (
         <Feedback

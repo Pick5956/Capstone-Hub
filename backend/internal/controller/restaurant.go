@@ -49,18 +49,6 @@ type updateMemberPermissionsRequest struct {
 	Permissions        []string `json:"permissions"`
 }
 
-func canManageRestaurantProfile(memberRoleName string) bool {
-	return memberRoleName == "owner" || memberRoleName == "manager"
-}
-
-func canManageStaff(c *gin.Context) bool {
-	member, ok := contextMember(c)
-	if !ok || member.Role == nil {
-		return false
-	}
-	return canManageRestaurantProfile(member.Role.Name) && memberCan(c, "manage_staff")
-}
-
 func contextUserID(c *gin.Context) (uint, bool) {
 	v, ok := c.Get("user_id")
 	if !ok {
@@ -188,8 +176,8 @@ func (ctrl *RestaurantController) Update(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || !canManageRestaurantProfile(member.Role.Name) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
+	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
 		return
 	}
 
@@ -226,8 +214,8 @@ func (ctrl *RestaurantController) UploadLogo(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || !canManageRestaurantProfile(member.Role.Name) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
+	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
 		return
 	}
 	existingRestaurant, err := ctrl.restaurantSvc.GetRestaurant(restaurantID)
@@ -302,8 +290,8 @@ func (ctrl *RestaurantController) UploadCover(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || !canManageRestaurantProfile(member.Role.Name) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
+	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
 		return
 	}
 	existingRestaurant, err := ctrl.restaurantSvc.GetRestaurant(restaurantID)
@@ -378,8 +366,8 @@ func (ctrl *RestaurantController) UploadPromptPayQR(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "not a member of this restaurant"})
 		return
 	}
-	if member.Role == nil || !canManageRestaurantProfile(member.Role.Name) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can update restaurant settings"})
+	if !service.MemberHasPermission(member, service.PermissionManageRestaurantSettings) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "missing manage_restaurant_settings permission"})
 		return
 	}
 
@@ -432,6 +420,16 @@ func (ctrl *RestaurantController) ListMembers(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !requireAnyPermission(
+		c,
+		"missing team management permission",
+		service.PermissionManageInvites,
+		service.PermissionManageMembers,
+		service.PermissionManageRoles,
+		service.PermissionViewAuditLog,
+	) {
+		return
+	}
 	members, err := ctrl.restaurantSvc.ListMembersForActor(userID, restaurantID)
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
@@ -449,6 +447,9 @@ func (ctrl *RestaurantController) UpdateMemberStatus(c *gin.Context) {
 	}
 	restaurantID, ok := requireScopedRestaurantParam(c, "id")
 	if !ok {
+		return
+	}
+	if !requirePermission(c, service.PermissionManageMembers, "missing manage_members permission") {
 		return
 	}
 	memberID, err := parseIDParam(c, "memberId")
@@ -482,6 +483,9 @@ func (ctrl *RestaurantController) UpdateMemberRole(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !requirePermission(c, service.PermissionManageRoles, "missing manage_roles permission") {
+		return
+	}
 	memberID, err := parseIDParam(c, "memberId")
 	if err != nil {
 		respondAPIError(c, http.StatusBadRequest, err)
@@ -511,6 +515,9 @@ func (ctrl *RestaurantController) UpdateMemberPermissions(c *gin.Context) {
 	}
 	restaurantID, ok := requireScopedRestaurantParam(c, "id")
 	if !ok {
+		return
+	}
+	if !requirePermission(c, service.PermissionManageRoles, "missing manage_roles permission") {
 		return
 	}
 	memberID, err := parseIDParam(c, "memberId")
@@ -546,6 +553,9 @@ func (ctrl *RestaurantController) ListAuditLogs(c *gin.Context) {
 	}
 	restaurantID, ok := requireScopedRestaurantParam(c, "id")
 	if !ok {
+		return
+	}
+	if !requirePermission(c, service.PermissionViewAuditLog, "missing view_audit_log permission") {
 		return
 	}
 
@@ -589,8 +599,7 @@ func (ctrl *RestaurantController) CreateInvitation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can invite"})
+	if !requirePermission(c, service.PermissionManageInvites, "missing manage_invites permission") {
 		return
 	}
 
@@ -619,8 +628,7 @@ func (ctrl *RestaurantController) ListPendingInvitations(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can list invitations"})
+	if !requirePermission(c, service.PermissionManageInvites, "missing manage_invites permission") {
 		return
 	}
 
@@ -643,8 +651,7 @@ func (ctrl *RestaurantController) RevokeInvitation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !canManageStaff(c) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "only owner or manager can revoke"})
+	if !requirePermission(c, service.PermissionManageInvites, "missing manage_invites permission") {
 		return
 	}
 	invitationID, err := parseIDParam(c, "invitationId")

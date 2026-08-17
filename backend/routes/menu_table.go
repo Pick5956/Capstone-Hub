@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"time"
+
 	"Project-M/config"
 	"Project-M/internal/controller"
 
@@ -19,7 +21,8 @@ func SetupMenuTableRoutes(v1 *gin.RouterGroup) {
 
 	v1.GET("/menu-items", menuCtrl.ListMenuItems)
 	v1.POST("/menu-items", menuCtrl.CreateMenuItem)
-	v1.POST("/menu-items/upload-image", menuCtrl.UploadMenuImage)
+	v1.POST("/menu-items/preview-background", rateLimitRequests(30, time.Minute), menuCtrl.PreviewMenuImageBackground)
+	v1.POST("/menu-items/upload-image", rateLimitRequests(30, time.Minute), menuCtrl.UploadMenuImage)
 	v1.PUT("/menu-items/:id", menuCtrl.UpdateMenuItem)
 	v1.PATCH("/menu-items/:id/availability", menuCtrl.UpdateMenuItemAvailability)
 	v1.DELETE("/menu-items/:id", menuCtrl.DeleteMenuItem)

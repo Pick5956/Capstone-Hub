@@ -32,6 +32,38 @@ func TestParseDayPartNamedSegments(t *testing.T) {
 	}
 }
 
+// A comparison names two windows; parseDayParts must return both, in the order
+// they appear, so "กลางวันหรือกลางคืน" can be answered as a real comparison
+// instead of silently collapsing to the first one.
+func TestParseDayPartsComparison(t *testing.T) {
+	parts := parseDayParts("ขายดีตอนกลางวันหรือกลางคืน")
+	if len(parts) != 2 {
+		t.Fatalf("expected 2 day parts, got %d: %+v", len(parts), parts)
+	}
+	if parts[0].Label != "ช่วงเที่ยง" || parts[1].Label != "ช่วงค่ำ" {
+		t.Fatalf("order/labels wrong: %+v", parts)
+	}
+}
+
+// A single named period is not a comparison.
+func TestParseDayPartsSingle(t *testing.T) {
+	if parts := parseDayParts("ยอดขายช่วงเที่ยงเท่าไหร่"); len(parts) != 1 {
+		t.Fatalf("expected 1 day part, got %d: %+v", len(parts), parts)
+	}
+}
+
+// "เที่ยงคืน" contains "เที่ยง"; the overlap must not be double-counted as two
+// periods, which would wrongly trigger comparison mode.
+func TestParseDayPartsNoOverlapDoubleCount(t *testing.T) {
+	parts := parseDayParts("ยอดขายช่วงเที่ยงคืน")
+	if len(parts) != 1 {
+		t.Fatalf("เที่ยงคืน should be one part, got %d: %+v", len(parts), parts)
+	}
+	if parts[0].StartHour != 21 {
+		t.Fatalf("เที่ยงคืน should map to the late-night window, got %+v", parts[0])
+	}
+}
+
 // "เที่ยงคืน" is midnight, not noon — the more specific word must win.
 func TestParseDayPartMidnightBeatsNoon(t *testing.T) {
 	got, ok := parseDayPart("ยอดขายช่วงเที่ยงคืน")

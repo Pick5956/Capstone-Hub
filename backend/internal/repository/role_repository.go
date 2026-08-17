@@ -30,9 +30,11 @@ func (r *RoleRepository) FindAssignableByRestaurant(restaurantID uint) ([]entity
 		return nil, err
 	}
 	for index := range roles {
-		if err := applyEffectiveRolePermissions(r.db, restaurantID, &roles[index]); err != nil {
+		effective, err := resolveEffectiveRole(r.db, restaurantID, &roles[index])
+		if err != nil {
 			return nil, err
 		}
+		roles[index] = *effective
 	}
 	return roles, nil
 }
@@ -43,6 +45,14 @@ func (r *RoleRepository) FindByID(id uint) (*entity.Role, error) {
 		return nil, err
 	}
 	return &role, nil
+}
+
+func (r *RoleRepository) FindByIDForRestaurant(id uint, restaurantID uint) (*entity.Role, error) {
+	role, err := r.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return resolveEffectiveRole(r.db, restaurantID, role)
 }
 
 func (r *RoleRepository) Update(role *entity.Role) error {
@@ -61,6 +71,21 @@ func (r *RoleRepository) UpsertRestaurantPermissionOverride(restaurantID, roleID
 			{Name: "role_id"},
 		},
 		DoUpdates: clause.AssignmentColumns([]string{"permissions", "updated_at"}),
+	}).Create(override).Error
+}
+
+func (r *RoleRepository) UpsertRestaurantDisplayNameOverride(restaurantID, roleID uint, displayName string) error {
+	override := &entity.RestaurantRoleDisplayNameOverride{
+		RestaurantID: restaurantID,
+		RoleID:       roleID,
+		DisplayName:  displayName,
+	}
+	return r.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "restaurant_id"},
+			{Name: "role_id"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{"display_name", "updated_at"}),
 	}).Create(override).Error
 }
 
@@ -109,21 +134,45 @@ func (r *RoleRepository) FindByName(name string) (*entity.Role, error) {
 	return &role, nil
 }
 
-func applyEffectiveRolePermissions(db *gorm.DB, restaurantID uint, role *entity.Role) error {
-	if role == nil || role.RestaurantID != nil {
-		return nil
+func resolveEffectiveRole(db *gorm.DB, restaurantID uint, role *entity.Role) (*entity.Role, error) {
+	effective := cloneRoleWithDisplayNameOverride(role, nil)
+	if effective == nil || effective.RestaurantID != nil {
+		return effective, nil
 	}
 
-	var override entity.RestaurantRolePermissionOverride
+	var permissionOverride entity.RestaurantRolePermissionOverride
 	err := db.
-		Where("restaurant_id = ? AND role_id = ?", restaurantID, role.ID).
-		First(&override).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+		Where("restaurant_id = ? AND role_id = ?", restaurantID, effective.ID).
+		First(&permissionOverride).Error
+	if err == nil {
+		effective.Permissions = permissionOverride.Permissions
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	var displayNameOverride entity.RestaurantRoleDisplayNameOverride
+	err = db.
+		Where("restaurant_id = ? AND role_id = ?", restaurantID, effective.ID).
+		First(&displayNameOverride).Error
+	if err == nil {
+		effective = cloneRoleWithDisplayNameOverride(effective, &displayNameOverride.DisplayName)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	return effective, nil
+}
+
+func cloneRoleWithDisplayNameOverride(role *entity.Role, displayNameOverride *string) *entity.Role {
+	if role == nil {
 		return nil
 	}
-	if err != nil {
-		return err
+	effective := *role
+	effective.DisplayNameOverride = nil
+	if displayNameOverride != nil {
+		override := *displayNameOverride
+		effective.DisplayName = override
+		effective.DisplayNameOverride = &override
 	}
-	role.Permissions = override.Permissions
-	return nil
+	return &effective
 }

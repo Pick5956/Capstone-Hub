@@ -66,7 +66,7 @@ export function resolveClarificationRequest(
       { id: "settings-account", href: "/settings/account", label: language === "th" ? "ตั้งค่าบัญชี" : "Account settings" },
       { id: "settings-display", href: "/settings/display", label: language === "th" ? "ภาษาและการแสดงผล" : "Language and display" },
     ];
-    if (can(membership, "manage_staff")) {
+    if (can(membership, "manage_restaurant_settings")) {
       actions.push({ id: "settings-restaurant", href: "/settings/restaurant", label: language === "th" ? "ข้อมูลร้านและการคิดเงิน" : "Restaurant and billing" });
     }
     return {

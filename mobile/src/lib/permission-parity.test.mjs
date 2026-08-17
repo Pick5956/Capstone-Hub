@@ -10,7 +10,15 @@ import {
   orderRoutePermissions,
   tableManagementAccess,
 } from './permission-parity.ts';
-import { allPermissions, permissionGroupsFor } from './permissions.ts';
+import {
+  allPermissions,
+  normalizePermissionSelection,
+  parsePermissionsForRole,
+  permissionCanBeGranted,
+  permissionGroupsFor,
+  shouldUpdateMemberPermissions,
+  togglePermissionSelection,
+} from './permissions.ts';
 import { can } from './rbac.ts';
 import { parsePositiveRouteId } from './route-id.ts';
 
@@ -75,6 +83,136 @@ test('expense management stays in the editable mobile permission registry', () =
       .flatMap((group) => group.rows)
       .find((row) => row.key === 'view_reports')?.label,
     'View reports',
+  );
+});
+
+test('team and restaurant administration use granular editable permissions', () => {
+  const rows = permissionGroupsFor('en').flatMap((group) => group.rows);
+  for (const key of [
+    'manage_invites',
+    'manage_members',
+    'manage_roles',
+    'view_audit_log',
+    'manage_restaurant_settings',
+  ]) {
+    assert.equal(allPermissions.includes(key), true, `${key} should be editable`);
+    assert.equal(rows.some((row) => row.key === key), true, `${key} should have a label`);
+  }
+  assert.equal(allPermissions.includes('manage_staff'), false);
+});
+
+test('permission dependencies are added before a role or member override is saved', () => {
+  assert.deepEqual(
+    normalizePermissionSelection([
+      'update_order_status',
+      'take_payment',
+      'manage_table',
+      'manage_inventory',
+    ]),
+    [
+      'take_payment',
+      'view_kitchen',
+      'update_order_status',
+      'view_orders',
+      'view_tables',
+      'manage_table',
+      'view_inventory',
+      'manage_inventory',
+    ],
+  );
+});
+
+test('unchecking a prerequisite also removes permissions that depend on it', () => {
+  for (const [prerequisite, dependent] of [
+    ['view_kitchen', 'update_order_status'],
+    ['view_orders', 'take_payment'],
+    ['view_tables', 'manage_table'],
+    ['view_inventory', 'manage_inventory'],
+  ]) {
+    assert.deepEqual(
+      togglePermissionSelection([prerequisite, dependent], prerequisite),
+      [],
+      `${dependent} should be removed with ${prerequisite}`,
+    );
+    assert.deepEqual(
+      togglePermissionSelection([prerequisite, dependent], dependent),
+      [prerequisite],
+      `${prerequisite} should remain when ${dependent} is removed`,
+    );
+  }
+  assert.deepEqual(
+    togglePermissionSelection(['future_permission'], 'take_payment'),
+    ['take_payment', 'view_orders', 'future_permission'],
+  );
+});
+
+test('a delegated editor cannot select a permission when it lacks a required prerequisite', () => {
+  assert.equal(
+    permissionCanBeGranted('take_payment', ['take_payment']),
+    false,
+  );
+  assert.equal(
+    permissionCanBeGranted('take_payment', ['take_payment', 'view_orders']),
+    true,
+  );
+});
+
+test('status-only saves do not rewrite unchanged member access or race a role reset', () => {
+  const unchanged = {
+    roleChanged: false,
+    previousUsesRolePermissions: false,
+    useRolePermissions: false,
+    previousPermissions: ['future_permission'],
+    selectedPermissions: ['future_permission'],
+  };
+  assert.equal(shouldUpdateMemberPermissions(unchanged), false);
+  assert.equal(shouldUpdateMemberPermissions({
+    ...unchanged,
+    useRolePermissions: true,
+  }), true);
+  assert.equal(shouldUpdateMemberPermissions({
+    ...unchanged,
+    roleChanged: true,
+    useRolePermissions: true,
+  }), false);
+  assert.equal(shouldUpdateMemberPermissions({
+    ...unchanged,
+    roleChanged: true,
+    useRolePermissions: false,
+  }), true);
+});
+
+test('legacy manage_staff does not become delegated administration for operational roles', () => {
+  const legacyManager = {
+    status: 'active',
+    role: { name: 'manager', permissions: '["manage_staff"]' },
+  };
+  const legacyShiftLead = {
+    status: 'active',
+    role: { name: 'custom_shift_lead', permissions: '["manage_staff"]' },
+  };
+
+  assert.equal(can(legacyManager, 'manage_roles'), true);
+  assert.equal(can(legacyManager, 'manage_restaurant_settings'), true);
+  assert.equal(can(legacyShiftLead, 'manage_roles'), false);
+  assert.equal(can(legacyShiftLead, 'manage_restaurant_settings'), false);
+});
+
+test('legacy manager permission data is expanded only when editing protected manager defaults', () => {
+  assert.deepEqual(
+    parsePermissionsForRole('["manage_staff","view_orders"]', 'manager'),
+    [
+      'view_orders',
+      'manage_restaurant_settings',
+      'manage_invites',
+      'manage_members',
+      'manage_roles',
+      'view_audit_log',
+    ],
+  );
+  assert.deepEqual(
+    parsePermissionsForRole('["manage_staff","view_orders"]', 'custom_shift_lead'),
+    ['view_orders'],
   );
 });
 
