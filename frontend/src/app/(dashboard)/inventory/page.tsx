@@ -46,7 +46,6 @@ import {
   getRestockAmount,
   getStatus,
   getStockPercent,
-  getTargetStock,
   inputCls,
   SectionCard,
   STORAGE_TYPES,
@@ -460,20 +459,6 @@ export default function InventoryPage() {
       });
   }, [ingredients, search, statusFilter]);
 
-  const priorityItems = useMemo(
-    () =>
-      [...ingredients]
-        .filter((item) => getStatus(item) !== "ok")
-        .sort((a, b) => {
-          const statusRank = { out: 0, low: 1, ok: 2 };
-          const byStatus = statusRank[getStatus(a)] - statusRank[getStatus(b)];
-          if (byStatus !== 0) return byStatus;
-          return getStockPercent(a) - getStockPercent(b);
-        })
-        .slice(0, 4),
-    [ingredients],
-  );
-
   const adjustPreview = useMemo(() => {
     if (!adjustTarget || !adjustQty) return null;
     const qty = parseFloat(adjustQty);
@@ -861,7 +846,7 @@ export default function InventoryPage() {
               />
         </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-4">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
                 <div className="flex items-center justify-between">
@@ -961,72 +946,6 @@ export default function InventoryPage() {
                 )}
               </div>
             </section>
-
-            <aside className="rounded-md border border-slate-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.priorityTitle}</p>
-                  <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">{copy.prioritySubtitle}</h2>
-                </div>
-                <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-gray-900 dark:text-slate-300">
-                  {formatNumber(priorityItems.length, lang)}
-                </span>
-              </div>
-
-              {priorityItems.length === 0 ? (
-                <div className="mt-5 rounded-md border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-gray-800">
-                  {copy.noPriority}
-                </div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  {priorityItems.map((item) => {
-                    const status = getStatus(item);
-                    const meta = statusMeta(status, copy);
-                    const refill = getRestockAmount(item);
-                    return (
-                      <div key={item.ID} className={`rounded-md border p-4 ${meta.accent}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
-                              <p className="truncate font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                            </div>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                              {copy.current} {formatNumber(item.stock, lang)} {item.unit} • {copy.target} {formatNumber(getTargetStock(item), lang)} {item.unit}
-                            </p>
-                          </div>
-                          <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
-                            {meta.label}
-                          </span>
-                        </div>
-
-                        <div className="mt-3 h-2 rounded-full bg-slate-200/70 dark:bg-gray-800">
-                          <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${getStockPercent(item)}%` }} />
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{copy.recommendedTopup}</p>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                              {formatNumber(refill, lang)} {item.unit}
-                            </p>
-                          </div>
-                          {canManage && (
-                            <button
-                              onClick={() => openAdjust(item)}
-                              className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              {copy.adjust}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </aside>
           </div>
 
           <div className="hidden">
