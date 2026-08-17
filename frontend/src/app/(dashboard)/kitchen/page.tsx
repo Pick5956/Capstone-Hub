@@ -537,17 +537,17 @@ export default function KitchenPage() {
               <div className="min-w-0">
                 {isReadyLane ? (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <h3 className="text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
-                    <span className="text-[14px] font-bold text-gray-500 dark:text-gray-400">{copy.kitchenBatch(kitchenBatch)}</span>
+                    <p className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{order.order_number}</p>
+                    <span className="text-[13px] font-medium text-gray-400 dark:text-gray-500">{copy.kitchenBatch(kitchenBatch)}</span>
                   </div>
                 ) : (
                   <>
-                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px] font-bold text-gray-500 dark:text-gray-400">
-                      <span>{locationLabel}</span>
+                    <h3 className="text-2xl font-bold leading-tight text-gray-950 dark:text-white">{locationLabel}</h3>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-gray-500 dark:text-gray-400">
+                      <span>{order.order_number}</span>
                       <span aria-hidden="true">·</span>
                       <span>{copy.kitchenBatch(kitchenBatch)}</span>
                     </p>
-                    <h3 className="mt-1 text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
                   </>
                 )}
               </div>
@@ -716,11 +716,7 @@ export default function KitchenPage() {
     return (
       <section
         aria-label={label}
-        className={`overflow-hidden rounded-md border-2 ${
-          isReadyLane
-            ? "border-emerald-800 bg-emerald-50/50 dark:border-emerald-500 dark:bg-emerald-950/10"
-            : "border-amber-800 bg-amber-50/50 dark:border-amber-500 dark:bg-amber-950/10"
-        }`}
+        className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
       >
         <button
           type="button"
@@ -728,11 +724,7 @@ export default function KitchenPage() {
           aria-controls={contentId}
           onPointerDown={(event) => startZoneRipple(lane, event)}
           onClick={() => setOpen((current) => !current)}
-          className={`kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden px-4 py-1.5 text-left transition-colors ${
-            isReadyLane
-              ? "bg-emerald-700 text-white hover:bg-emerald-600"
-              : "bg-amber-700 text-white hover:bg-amber-600"
-          }`}
+          className="kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden bg-gray-100 px-4 py-1.5 text-left text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
         >
           {zoneRipple?.lane === lane ? (
             <span
@@ -753,11 +745,13 @@ export default function KitchenPage() {
           <span className="relative z-10 flex shrink-0 items-center gap-2">
             <span
               aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
-              className="min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums text-white drop-shadow-[0_1px_0_rgba(3,7,18,0.35)]"
+              className={`min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums ${
+                isReadyLane ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"
+              }`}
             >
               {count}
             </span>
-            <span className="grid h-9 w-9 place-items-center text-white">
+            <span className="grid h-9 w-9 place-items-center text-gray-500 dark:text-gray-300">
               <ChevronDown
                 className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
                 strokeWidth={3}
@@ -774,7 +768,7 @@ export default function KitchenPage() {
           className={`kitchen-zone-collapse grid ${open ? "kitchen-zone-collapse-open" : ""}`}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="kitchen-zone-collapse-content border-t border-white/20 p-3 sm:p-4">
+            <div className="kitchen-zone-collapse-content border-t border-gray-200 p-3 sm:p-4 dark:border-gray-800">
               {loading ? (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <Skeleton className="h-52" />

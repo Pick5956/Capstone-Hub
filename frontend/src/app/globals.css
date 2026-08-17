@@ -505,7 +505,7 @@ html[data-font-size="extra-large"] {
   position: absolute;
   inset: 0;
   content: "";
-  border: 1px solid rgb(255 255 255 / 0.28);
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 999px;
   opacity: 0;
   transform: scale(0.02);
@@ -514,12 +514,12 @@ html[data-font-size="extra-large"] {
 }
 
 .kitchen-zone-ripple::before {
-  background: rgb(255 255 255 / 0.025);
-  box-shadow: 0 0 8px rgb(255 255 255 / 0.08);
+  background: color-mix(in srgb, currentColor 3%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .kitchen-zone-ripple::after {
-  border-color: rgb(255 255 255 / 0.16);
+  border-color: color-mix(in srgb, currentColor 16%, transparent);
   animation-delay: 45ms;
   animation-duration: 500ms;
 }

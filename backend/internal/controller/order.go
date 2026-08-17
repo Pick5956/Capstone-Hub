@@ -499,6 +499,48 @@ func (ctrl *OrderController) UpdateItemStatus(c *gin.Context) {
 	ctrl.publishOrderChange(restaurantID, "item.status_updated", order)
 }
 
+func (ctrl *OrderController) VoidItemUnits(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	itemID, ok := parseUintParam(c, "itemId")
+	if !ok {
+		return
+	}
+	var req service.VoidItemUnitsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	// Voiding is a front-of-house checkout step (take_order); kitchen managers
+	// may also void. Reuse the same actor resolution as a "cancelled" status.
+	actor, ok := requireOrderItemStatusAccess(c, entity.OrderItemStatusCancelled)
+	if !ok {
+		return
+	}
+	resolved, ok := ctrl.resolveOrder(c, restaurantID)
+	if !ok {
+		return
+	}
+	order, err := ctrl.orderSvc.VoidItemUnits(restaurantID, userID, resolved.ID, itemID, req.Quantity, req.Reason, actor)
+	if err != nil {
+		if errors.Is(err, service.ErrOrderItemStatusForbidden) {
+			respondAPIError(c, http.StatusForbidden, err)
+			return
+		}
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, order)
+	ctrl.publishOrderChange(restaurantID, "item.status_updated", order)
+}
+
 func (ctrl *OrderController) KitchenQueue(c *gin.Context) {
 	restaurantID, ok := requireRestaurant(c)
 	if !ok {

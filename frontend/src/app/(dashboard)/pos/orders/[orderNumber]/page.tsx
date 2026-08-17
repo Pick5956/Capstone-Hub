@@ -12,7 +12,7 @@ import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups"
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
 import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
+import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus, voidOrderItemUnits } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
 import type { Bill, Order, OrderItem, OrderPayment } from "@/src/types/order";
@@ -104,6 +104,8 @@ export default function PosOrderDetailPage() {
   const [billAddOpen, setBillAddOpen] = useState(false);
   const [billCancelTarget, setBillCancelTarget] = useState<OrderItemGroup | null>(null);
   const [billCancelReason, setBillCancelReason] = useState("");
+  // "line" voids the whole group; "unit" voids a single unit (from the stepper).
+  const [billCancelMode, setBillCancelMode] = useState<"line" | "unit">("line");
 
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
@@ -163,6 +165,10 @@ export default function PosOrderDetailPage() {
       reasonRequired: "กรุณาระบุเหตุผล",
       itemCancelledToast: "ยกเลิกรายการแล้ว",
       itemAddedToast: "เพิ่มรายการแล้ว",
+      voidUnitTitle: "ยกเลิก 1 หน่วย?",
+      voidUnitDescription: (name: string) => `ยกเลิก 1 หน่วยของ “${name}” (ต้องระบุเหตุผลเพื่อเก็บประวัติ)`,
+      decreaseQty: "ลดจำนวน",
+      increaseQty: "เพิ่มจำนวน",
       notServed: "ยังไม่เสิร์ฟ",
       undeliveredWarn: "มีรายการที่ยังไม่ได้เสิร์ฟ — ยกเลิก (ครัวทำไม่ทัน) หรือรอครัวก่อนชำระเงิน",
       closeEmptyTable: "ปิดโต๊ะ",
@@ -227,6 +233,10 @@ export default function PosOrderDetailPage() {
       reasonRequired: "Enter a reason",
       itemCancelledToast: "Item voided",
       itemAddedToast: "Item added",
+      voidUnitTitle: "Void one unit?",
+      voidUnitDescription: (name: string) => `Void 1 unit of “${name}” (reason required for the record)`,
+      decreaseQty: "Decrease quantity",
+      increaseQty: "Increase quantity",
       notServed: "Not served",
       undeliveredWarn: "Some items haven't been served — void them (kitchen too slow) or wait before payment.",
       closeEmptyTable: "Close table",
@@ -678,6 +688,78 @@ export default function PosOrderDetailPage() {
     }
   };
 
+  // A bill group can be all pending (not yet sent to kitchen) or already
+  // served/cooking. Pending lines are edited freely; served lines can only be
+  // voided (with a reason), so the stepper routes decreases accordingly.
+  const isPendingOnlyGroup = (group: OrderItemGroup) =>
+    group.items.length > 0 && group.items.every((it) => it.status === "pending");
+
+  const adjustBillPendingGroup = async (group: OrderItemGroup, delta: -1 | 1) => {
+    if (!order || submitting) return;
+    const item = group.pendingItems[0] ?? group.firstItem;
+    setSubmitting(true);
+    setError("");
+    try {
+      if (delta < 0 && item.quantity === 1) {
+        await deleteOrderItem(order.ID, item.ID);
+      } else {
+        await updateOrderItem(order.ID, item.ID, { quantity: item.quantity + delta, note: item.note });
+      }
+      await reloadBill();
+      void load({ background: true });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const addServedUnit = async (group: OrderItemGroup) => {
+    if (!order || submitting) return;
+    const item = group.firstItem;
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await addOrderItem(order.ID, {
+        menu_id: item.menu_id,
+        quantity: 1,
+        note: item.note,
+        serve_immediately: true,
+        fulfillment_type: item.fulfillment_type ?? (order.order_type === "takeaway" ? "takeaway" : "dine_in"),
+        selected_option_ids: item.selected_options?.map((option) => option.menu_option_id) ?? [],
+      });
+      setOrder(response.data);
+      await reloadBill();
+      showToast({ title: copy.itemAddedToast });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const decreaseBillGroup = (group: OrderItemGroup) => {
+    if (submitting) return;
+    if (isPendingOnlyGroup(group)) {
+      void adjustBillPendingGroup(group, -1);
+      return;
+    }
+    // Removing a served/cooking unit at checkout is a void — capture a reason.
+    setError("");
+    setBillCancelReason("");
+    setBillCancelMode("unit");
+    setBillCancelTarget(group);
+  };
+
+  const increaseBillGroup = (group: OrderItemGroup) => {
+    if (submitting) return;
+    if (isPendingOnlyGroup(group)) {
+      void adjustBillPendingGroup(group, 1);
+      return;
+    }
+    void addServedUnit(group);
+  };
+
   const confirmCancelBillItem = async () => {
     if (!order || !billCancelTarget || submitting) return;
     const reason = billCancelReason.trim();
@@ -688,12 +770,17 @@ export default function PosOrderDetailPage() {
     setSubmitting(true);
     setError("");
     try {
-      const targets = billCancelTarget.items.filter((it) => it.status !== "cancelled");
-      for (const target of targets) {
-        await updateOrderItemStatus(order.ID, target.ID, "cancelled", reason);
+      if (billCancelMode === "unit") {
+        await voidOrderItemUnits(order.ID, billCancelTarget.firstItem.ID, 1, reason);
+      } else {
+        const targets = billCancelTarget.items.filter((it) => it.status !== "cancelled");
+        for (const target of targets) {
+          await updateOrderItemStatus(order.ID, target.ID, "cancelled", reason);
+        }
       }
       setBillCancelTarget(null);
       setBillCancelReason("");
+      setBillCancelMode("line");
       await reloadBill();
       void load({ background: true });
       showToast({ title: copy.itemCancelledToast });
@@ -1081,11 +1168,16 @@ export default function PosOrderDetailPage() {
                 </div>
               </div>
               {billEditMode ? (
-                <div data-screen-only className="mt-2 flex justify-end border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
+                <div data-screen-only className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
+                  <div className="inline-grid grid-cols-[2.5rem_2.75rem_2.5rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+                    <button type="button" disabled={submitting} onClick={() => decreaseBillGroup(group)} aria-label={copy.decreaseQty} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
+                    <span className="inline-flex h-9 items-center justify-center font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{group.quantity}</span>
+                    <button type="button" disabled={submitting} onClick={() => increaseBillGroup(group)} aria-label={copy.increaseQty} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                  </div>
                   <button
                     type="button"
                     disabled={submitting}
-                    onClick={() => { setError(""); setBillCancelReason(""); setBillCancelTarget(group); }}
+                    onClick={() => { setError(""); setBillCancelReason(""); setBillCancelMode("line"); setBillCancelTarget(group); }}
                     className="ui-press inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-[12px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1282,8 +1374,8 @@ export default function PosOrderDetailPage() {
       {billCancelTarget ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/50 p-4 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" aria-labelledby="bill-cancel-title" className="w-full max-w-sm rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950">
-            <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.cancelItemTitle}</h2>
-            <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelTarget.firstItem.menu_name} · x{billCancelTarget.quantity}</p>
+            <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{billCancelMode === "unit" ? copy.voidUnitTitle : copy.cancelItemTitle}</h2>
+            <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelMode === "unit" ? copy.voidUnitDescription(billCancelTarget.firstItem.menu_name) : `${billCancelTarget.firstItem.menu_name} · x${billCancelTarget.quantity}`}</p>
             <label htmlFor="bill-cancel-reason" className="mt-3 block text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.cancelItemReason}</label>
             <textarea
               id="bill-cancel-reason"
@@ -1296,7 +1388,7 @@ export default function PosOrderDetailPage() {
               className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
+              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); setBillCancelMode("line"); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
               <button type="button" disabled={submitting || !billCancelReason.trim()} onClick={() => { void confirmCancelBillItem(); }} className="h-10 rounded-md bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-400">{copy.confirmCancelItem}</button>
             </div>
           </div>
