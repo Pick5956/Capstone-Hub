@@ -1230,7 +1230,7 @@ export default function PosOrderDetailPage() {
                     <button type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
                   </div>
                 </div>
-                <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+                <div data-screen-receipt data-receipt-scroll data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
                   {billAddOpen ? (
                     <section data-screen-only className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
                       <div className="mb-2 flex items-center justify-between gap-3">
