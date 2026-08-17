@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 11
+	CurrentSchemaVersion int64 = 12
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -209,6 +209,22 @@ func schemaMigrationPlan() []SchemaMigration {
 			Up: func(ctx *MigrationContext) error {
 				if err := migrateRoleDisplayNameOverrides(ctx.DB); err != nil {
 					return fmt.Errorf("migrate restaurant role display-name overrides: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 12,
+			Name:    "add_ai_operating_calendar",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only: the AI feature's own operating calendar (closed
+				// weekdays + one-off closures/holidays) used by the sales forecast.
+				// It links by restaurant_id and never touches the shared restaurant
+				// table, so disabling the forecast leaves this table unused as the
+				// rollback. Numbered after main's 10 and 11 — the same pattern as the
+				// earlier AI migrations that moved to 8 and 9.
+				if err := ctx.DB.AutoMigrate(&entity.AIOperatingCalendarRule{}); err != nil {
+					return fmt.Errorf("migrate AI operating calendar: %w", err)
 				}
 				return nil
 			},

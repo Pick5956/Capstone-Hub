@@ -77,6 +77,10 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		9:  "6ef6936c4f2e182a3e37a64d9addcfc9b4a80869cc546d324666041e826cc343",
 		10: "6ef6936c4f2e182a3e37a64d9addcfc9b4a80869cc546d324666041e826cc343",
 		11: "ff8fe0c5b93334a83a0d0595008a4dbab6c27986148edff3dfb6dd4445395b0f",
+		// Version 12 (AI operating calendar) registers its table inside the
+		// migration and touches no baseline model, so the frozen registry
+		// fingerprint is unchanged from version 11.
+		12: "ff8fe0c5b93334a83a0d0595008a4dbab6c27986148edff3dfb6dd4445395b0f",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
@@ -154,11 +158,12 @@ func TestGranularPermissionDefaultsAreReseededInVersionTen(t *testing.T) {
 
 func TestRoleDisplayNameOverrideMigrationIsAdditiveVersionEleven(t *testing.T) {
 	plan := schemaMigrationPlan()
-	latest := plan[len(plan)-1]
-	if latest.Version != 11 || latest.Name != "add_restaurant_role_display_name_overrides" {
-		t.Fatalf("latest migration = %d %q, want scoped role display names", latest.Version, latest.Name)
+	// v11 is no longer the latest (v12 AI calendar follows), so index it directly.
+	displayNameMigration := plan[10]
+	if displayNameMigration.Version != 11 || displayNameMigration.Name != "add_restaurant_role_display_name_overrides" {
+		t.Fatalf("migration 11 = %d %q, want scoped role display names", displayNameMigration.Version, displayNameMigration.Name)
 	}
-	if latest.Up == nil {
+	if displayNameMigration.Up == nil {
 		t.Fatal("role display-name override migration has no up function")
 	}
 	for _, model := range SchemaModels() {
@@ -169,6 +174,24 @@ func TestRoleDisplayNameOverrideMigrationIsAdditiveVersionEleven(t *testing.T) {
 	wantForeignKeys := []string{"Restaurant", "Role"}
 	if !reflect.DeepEqual(roleDisplayNameOverrideForeignKeys, wantForeignKeys) {
 		t.Fatalf("role display-name override foreign keys = %#v, want %#v", roleDisplayNameOverrideForeignKeys, wantForeignKeys)
+	}
+}
+
+func TestAIOperatingCalendarMigrationIsAdditiveVersionTwelve(t *testing.T) {
+	plan := schemaMigrationPlan()
+	calendarMigration := plan[len(plan)-1]
+	if calendarMigration.Version != 12 || calendarMigration.Name != "add_ai_operating_calendar" {
+		t.Fatalf("latest migration = %d %q, want version 12 AI operating calendar migration", calendarMigration.Version, calendarMigration.Name)
+	}
+	if calendarMigration.Up == nil {
+		t.Fatal("AI operating calendar migration has no up function")
+	}
+	// The migration-1 registry stays frozen. The calendar table is registered
+	// only in the numbered migration, so disabling the forecast leaves it unused.
+	for _, model := range SchemaModels() {
+		if reflect.TypeOf(model).Elem().Name() == "AIOperatingCalendarRule" {
+			t.Fatal("AIOperatingCalendarRule must not be added to the frozen SchemaModels baseline")
+		}
 	}
 }
 
