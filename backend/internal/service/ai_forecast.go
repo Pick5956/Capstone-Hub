@@ -301,20 +301,33 @@ func formatForecastAnswer(r AIForecastResult) string {
 		return "ยังทำนายไม่ได้ครับ — ข้อมูลไม่พอให้จับรูปแบบรายวัน"
 	}
 	var b strings.Builder
-	b.WriteString("คาดการณ์ยอดขาย 7 วันข้างหน้า (อิงค่าเฉลี่ยรายวันในสัปดาห์ + แนวโน้มล่าสุด)ครับ:")
+	// The frontend renderer (AIResponseContent) understands **bold**, "---" rules
+	// and emoji, so the answer is laid out for scanning: title, one line per day,
+	// a rule, then the accuracy and the warning — the two things that matter most.
+	b.WriteString("📈 **คาดการณ์ยอดขาย 7 วันข้างหน้า**\n")
+	b.WriteString("อิงค่าเฉลี่ยยอดขายรายวันในสัปดาห์ + แนวโน้มล่าสุด")
 	for _, f := range r.Forecast {
 		if f.Closed {
-			b.WriteString(fmt.Sprintf("\n- %s %s: ร้านปิด", formatThaiDate(f.Date), f.Weekday))
+			b.WriteString(fmt.Sprintf("\n- **%s %s** — ร้านปิด 🔒", formatThaiDate(f.Date), f.Weekday))
 			continue
 		}
-		b.WriteString(fmt.Sprintf("\n- %s %s: ประมาณ %s บาท (ช่วง %s–%s)",
-			formatThaiDate(f.Date), f.Weekday, formatMoney(f.Predicted), formatMoney(f.Lower), formatMoney(f.Upper)))
+		// A forecast is an estimate — whole baht, no fake ".00" precision.
+		b.WriteString(fmt.Sprintf("\n- **%s %s** — ประมาณ %s บาท (ช่วง %s–%s)",
+			formatThaiDate(f.Date), f.Weekday, formatBaht(f.Predicted), formatBaht(f.Lower), formatBaht(f.Upper)))
 	}
+	b.WriteString("\n\n---\n")
 	if r.BacktestN >= 5 {
-		b.WriteString(fmt.Sprintf("\n\nความแม่น: ทดสอบย้อนหลัง %d วัน พลาดเฉลี่ย ±%.0f%% (±%s บาท)", r.BacktestN, r.MAPE, formatMoney(r.MAE)))
+		b.WriteString(fmt.Sprintf("\n🎯 **ความแม่น** — ทดสอบย้อนหลัง %d วัน พลาดเฉลี่ย ±%.0f%% (±%s บาท)", r.BacktestN, r.MAPE, formatBaht(r.MAE)))
 	} else {
-		b.WriteString("\n\n(ข้อมูลยังไม่พอทดสอบความแม่นให้ชัด ใช้ช่วงกว้างไว้ก่อน)")
+		b.WriteString("\n🎯 **ความแม่น** — ข้อมูลยังไม่พอทดสอบให้ชัด ใช้ช่วงกว้างไว้ก่อน")
 	}
 	b.WriteString("\n\n⚠️ นี่คือการ \"คาดการณ์\" ไม่ใช่ตัวเลขจริง — ใช้เป็นแนวทางวางแผน อย่ายึดเป็นคำมั่นครับ")
 	return b.String()
+}
+
+// formatBaht renders an estimated amount as whole baht with thousand separators.
+// Forecasts carry no real sub-baht precision, so the ".00" of formatMoney would
+// be a lie about how exact the number is.
+func formatBaht(value float64) string {
+	return formatInt(int64(math.Round(value)))
 }
