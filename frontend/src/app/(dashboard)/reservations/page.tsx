@@ -113,7 +113,7 @@ export default function ReservationsPage() {
   ];
 
   return (
-    <OperationalPageShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle}>
+    <OperationalPageShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} hideHeaderText>
       <div className="mb-4 flex flex-wrap gap-2">
         {filters.map((item) => (
           <button
@@ -127,9 +127,6 @@ export default function ReservationsPage() {
             }`}
           >
             {item.label}
-            {typeof item.count === "number" && (
-              <span className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${filter === item.value ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"}`}>{item.count}</span>
-            )}
           </button>
         ))}
       </div>

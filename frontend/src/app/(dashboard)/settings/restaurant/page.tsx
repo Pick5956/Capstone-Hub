@@ -500,6 +500,7 @@ export default function RestaurantSettingsPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       backLabel={copy.back}
+      hideHeader
     >
       <form id="restaurant-settings-form" onSubmit={save} className="space-y-4 pb-20 sm:pb-0">
         {loading ? (

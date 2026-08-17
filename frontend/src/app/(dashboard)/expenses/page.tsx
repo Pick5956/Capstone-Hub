@@ -45,13 +45,20 @@ const EMPTY_EXPENSE_DATA: ExpensePageData = {
   hasMore: false,
 };
 
-const categoryBadgeClass: Record<ExpenseCategory, string> = {
-  ingredient: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300",
-  labor: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-900/20 dark:text-sky-300",
-  rent: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300",
-  utilities: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/50 dark:bg-violet-900/20 dark:text-violet-300",
-  equipment: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/20 dark:text-rose-300",
-  other: "border-gray-200 bg-gray-50 text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300",
+// Category chips stay neutral so six of them don't compete for attention on one
+// page; the category reads from a small colour dot instead. Dot hues sit within
+// the app's palette — utilities/equipment were pulled back from the off-system
+// violet/rose to indigo/red.
+const categoryBadgeClass =
+  "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200";
+
+const categoryDotClass: Record<ExpenseCategory, string> = {
+  ingredient: "bg-emerald-500",
+  labor: "bg-sky-500",
+  rent: "bg-amber-500",
+  utilities: "bg-indigo-500",
+  equipment: "bg-red-500",
+  other: "bg-gray-400",
 };
 
 function emptyForm(restaurantId: number | null): FormState {
@@ -304,6 +311,7 @@ export default function ExpensesPage() {
     <OperationalPageShell
       eyebrow={copy.eyebrow}
       title={copy.title}
+      hideHeaderText
       actions={
         <>
           <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
@@ -464,7 +472,10 @@ export default function ExpensesPage() {
                   {new Date(expense.spent_at).toLocaleDateString(locale, { day: "2-digit", month: "short" })}
                 </span>
                 <span>
-                  <span className={`inline-flex rounded-md border px-2 py-1 text-[12px] font-semibold ${categoryBadgeClass[expense.category]}`}>{copy.categories[expense.category]}</span>
+                  <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] font-semibold ${categoryBadgeClass}`}>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${categoryDotClass[expense.category]}`} aria-hidden="true" />
+                    {copy.categories[expense.category]}
+                  </span>
                 </span>
                 <span className="min-w-0 text-gray-700 dark:text-gray-200">
                   <span className="block truncate">{expense.note || "-"}</span>
