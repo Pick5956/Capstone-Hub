@@ -17,47 +17,6 @@ func nextWeekday(from time.Time, wd time.Weekday) time.Time {
 	return from
 }
 
-// A weekday the shop never sells on is inferred closed; weekdays with sales are
-// not — and a barely-seen weekday is left open (too little evidence).
-func TestInferClosedWeekdays(t *testing.T) {
-	loc := bangkokLocation()
-	start := time.Date(2026, time.May, 1, 0, 0, 0, 0, loc)
-	var pts []forecastDailyPoint
-	for i := 0; i < 84; i++ { // 12 weeks, ascending
-		d := start.AddDate(0, 0, i)
-		if d.Weekday() == time.Monday {
-			continue // closed Mondays → no sales record at all
-		}
-		pts = append(pts, forecastDailyPoint{date: d, rev: 8000})
-	}
-	closed := inferClosedWeekdays(pts)
-	if !closed[time.Monday] {
-		t.Fatal("Monday (never any sales) should be inferred closed")
-	}
-	if closed[time.Saturday] || closed[time.Tuesday] {
-		t.Fatal("weekdays that do sell must not be inferred closed")
-	}
-}
-
-// A slow-but-open weekday (present most weeks, just low sales) must stay open —
-// the test is a ratio of days-present, not sales size.
-func TestInferKeepsSlowWeekdayOpen(t *testing.T) {
-	loc := bangkokLocation()
-	start := time.Date(2026, time.May, 1, 0, 0, 0, 0, loc)
-	var pts []forecastDailyPoint
-	for i := 0; i < 84; i++ {
-		d := start.AddDate(0, 0, i)
-		rev := 8000.0
-		if d.Weekday() == time.Tuesday {
-			rev = 300 // open, tiny sales
-		}
-		pts = append(pts, forecastDailyPoint{date: d, rev: rev})
-	}
-	if inferClosedWeekdays(pts)[time.Tuesday] {
-		t.Fatal("a low-but-present weekday must not be flagged closed")
-	}
-}
-
 // isOpen resolves layers in order: one-off date rule, then weekly rule.
 func TestOperatingCalendarLayers(t *testing.T) {
 	loc := bangkokLocation()
@@ -69,7 +28,7 @@ func TestOperatingCalendarLayers(t *testing.T) {
 		{RuleType: "date_open", Date: mon.Format("2006-01-02")}, // this Monday is open (one-off)
 		{RuleType: "date_closed", Date: tue.Format("2006-01-02")},
 	}
-	cal := buildOperatingCalendar(rules, nil)
+	cal := buildOperatingCalendar(rules)
 
 	if !cal.isOpen(mon) {
 		t.Fatal("date_open override must beat the weekly_closed Monday rule")
@@ -82,21 +41,17 @@ func TestOperatingCalendarLayers(t *testing.T) {
 	}
 }
 
-// With no explicit rules, isOpen falls back to inference.
-func TestOperatingCalendarFallsBackToInference(t *testing.T) {
+// With no rules set, every day is open. The calendar trusts the settings modal
+// outright and never guesses a closure from the sales history — an unmarked day
+// is open by design, even one that historically sold nothing.
+func TestOperatingCalendarDefaultsOpen(t *testing.T) {
+	cal := buildOperatingCalendar(nil)
 	loc := bangkokLocation()
-	start := time.Date(2026, time.May, 1, 0, 0, 0, 0, loc)
-	var pts []forecastDailyPoint
-	for i := 0; i < 84; i++ {
-		d := start.AddDate(0, 0, i)
-		if d.Weekday() == time.Monday {
-			continue
+	d := time.Date(2026, time.August, 17, 0, 0, 0, 0, loc) // a Monday
+	for i := 0; i < 7; i++ {                               // a full week, nothing marked
+		day := d.AddDate(0, 0, i)
+		if !cal.isOpen(day) {
+			t.Fatalf("with no rules, %s must be open", day.Weekday())
 		}
-		pts = append(pts, forecastDailyPoint{date: d, rev: 8000})
-	}
-	cal := buildOperatingCalendar(nil, pts) // no explicit rules → inference
-	mon := nextWeekday(time.Date(2026, time.August, 17, 0, 0, 0, 0, loc), time.Monday)
-	if cal.isOpen(mon) {
-		t.Fatal("with no rules, an inferred-closed Monday should be closed")
 	}
 }

@@ -109,11 +109,11 @@ func (s *AIService) answerSalesForecast(restaurantID uint, question string) (*AI
 		anchor = lastData
 	}
 
-	// Operating calendar: explicit rules if the shop set any, otherwise inferred
-	// from the sales history. A read failure just means "no rules" → fall back to
-	// inference, never a broken forecast.
+	// Operating calendar: only the days the owner explicitly marked closed (in the
+	// settings modal). A read failure just means "no rules" → everything open,
+	// never a broken forecast. Unmarked days are treated as open by design.
 	rules, _ := s.repo.OperatingCalendarRules(restaurantID)
-	cal := buildOperatingCalendar(rules, points)
+	cal := buildOperatingCalendar(rules)
 
 	result := buildForecast(points, cal, anchor, forecastHorizonDays, forecastBacktestDays)
 	if staleDays := int(today.Sub(lastData).Hours() / 24); staleDays > 0 {
