@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ArrowUp,
   Boxes,
+  Check,
   Filter,
   History,
   PackageOpen,
@@ -24,10 +25,12 @@ import {
   createIngredient,
   createIngredientCategory,
   deleteIngredient,
+  deleteIngredientCategory,
   listIngredientCategories,
   listIngredients,
   listTransactions,
   updateIngredient,
+  updateIngredientCategory,
 } from "@/src/lib/ingredient";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import type { Ingredient, IngredientCategory, IngredientInput, IngredientTransaction } from "@/src/types/ingredient";
@@ -102,7 +105,7 @@ function buildCopy(language: "th" | "en") {
         unit: "หน่วย",
         stock: "สต็อก",
         level: "ระดับสต็อก",
-        minStock: "ขั้นต่ำ",
+        minStock: "แจ้งเตือนเมื่อเหลือ",
         costPerUnit: "ราคา/หน่วย",
         save: "บันทึก",
         cancel: "ยกเลิก",
@@ -148,7 +151,7 @@ function buildCopy(language: "th" | "en") {
         rowValue: "มูลค่า",
         updatedAt: "อัปเดตล่าสุด",
         coverage: "ความพร้อม",
-        noMinimum: "ยังไม่กำหนดขั้นต่ำ",
+        noMinimum: "ยังไม่ตั้งแจ้งเตือน",
         totalItemsLabel: "รายการ",
         tableSummary: "รายการที่แสดง",
         loading: "กำลังโหลด...",
@@ -164,6 +167,14 @@ function buildCopy(language: "th" | "en") {
         uncategorized: "ยังไม่จัดหมวด",
         noCategories: "ยังไม่มีหมวดวัตถุดิบ",
         addCategory: "เพิ่มหมวด",
+        manageCategories: "จัดการหมวด",
+        categoryPlaceholder: "ชื่อหมวดใหม่",
+        editCategory: "แก้ไขหมวด",
+        deleteCategory: "ลบหมวด",
+        categoryInUse: "หมวดนี้มีวัตถุดิบใช้อยู่ ย้ายวัตถุดิบออกก่อนจึงจะลบได้",
+        categoryUpdated: "แก้ไขหมวดแล้ว",
+        categoryDeleted: "ลบหมวดแล้ว",
+        confirmDeleteCategory: (name: string) => `ลบหมวด "${name}"?`,
         categoryName: "ชื่อหมวดหมู่",
         ingredientCreated: "เพิ่มวัตถุดิบแล้ว",
         ingredientUpdated: "อัปเดตวัตถุดิบแล้ว",
@@ -195,7 +206,7 @@ function buildCopy(language: "th" | "en") {
         unit: "Unit",
         stock: "Stock",
         level: "Level",
-        minStock: "Min",
+        minStock: "Alert at",
         costPerUnit: "Cost/unit",
         save: "Save",
         cancel: "Cancel",
@@ -241,7 +252,7 @@ function buildCopy(language: "th" | "en") {
         rowValue: "Value",
         updatedAt: "Updated",
         coverage: "Coverage",
-        noMinimum: "No minimum set",
+        noMinimum: "No alert set",
         totalItemsLabel: "items",
         tableSummary: "Visible items",
         loading: "Loading...",
@@ -257,6 +268,14 @@ function buildCopy(language: "th" | "en") {
         uncategorized: "Uncategorized",
         noCategories: "No ingredient categories yet",
         addCategory: "Add category",
+        manageCategories: "Manage categories",
+        categoryPlaceholder: "New category name",
+        editCategory: "Edit category",
+        deleteCategory: "Delete category",
+        categoryInUse: "This category is in use. Move its ingredients out before deleting.",
+        categoryUpdated: "Category updated",
+        categoryDeleted: "Category deleted",
+        confirmDeleteCategory: (name: string) => `Delete category "${name}"?`,
         categoryName: "Category name",
         ingredientCreated: "Ingredient added",
         ingredientUpdated: "Ingredient updated",
@@ -334,6 +353,8 @@ export default function InventoryPage() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [categorySubmitting, setCategorySubmitting] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null);
   const [deleteClosing, setDeleteClosing] = useState(false);
@@ -423,15 +444,21 @@ export default function InventoryPage() {
     [categories],
   );
 
-  const filtered = useMemo(
-    () =>
-      ingredients.filter((item) => {
+  const filtered = useMemo(() => {
+    // Out-of-stock first, then low, then ok — so the items that need action lead
+    // the list. Alphabetical within the same status keeps it stable.
+    const statusRank = { out: 0, low: 1, ok: 2 } as const;
+    return ingredients
+      .filter((item) => {
         if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
         if (statusFilter !== "all" && getStatus(item) !== statusFilter) return false;
         return true;
-      }),
-    [ingredients, search, statusFilter],
-  );
+      })
+      .sort((a, b) => {
+        const byStatus = statusRank[getStatus(a)] - statusRank[getStatus(b)];
+        return byStatus !== 0 ? byStatus : a.name.localeCompare(b.name);
+      });
+  }, [ingredients, search, statusFilter]);
 
   const priorityItems = useMemo(
     () =>
@@ -526,13 +553,58 @@ export default function InventoryPage() {
       setCategories((prev) => [...prev, response.data].sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)));
       setForm((current) => ({ ...current, category_id: response.data.ID }));
       setCategoryName("");
-      closeCategoryModal();
       showToast({ title: copy.categoryCreated });
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       setCategoryError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
     } finally {
       setCategorySubmitting(false);
+    }
+  }
+
+  async function handleUpdateCategory(id: number) {
+    const name = editingCategoryName.trim();
+    if (!name) {
+      setCategoryError(lang === "th" ? "กรุณาระบุชื่อหมวดหมู่" : "Category name is required");
+      return;
+    }
+    setCategoryError("");
+    setCategorySubmitting(true);
+    try {
+      const response = await updateIngredientCategory(id, { name });
+      setCategories((prev) =>
+        prev
+          .map((cat) => (cat.ID === id ? response.data : cat))
+          .sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name)),
+      );
+      setEditingCategoryId(null);
+      setEditingCategoryName("");
+      showToast({ title: copy.categoryUpdated });
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      setCategoryError(err?.response?.data?.error ?? (lang === "th" ? "เกิดข้อผิดพลาด" : "An error occurred"));
+    } finally {
+      setCategorySubmitting(false);
+    }
+  }
+
+  async function handleDeleteCategory(category: IngredientCategory) {
+    const confirmed = await confirm({
+      title: copy.confirmDeleteCategory(category.name),
+      confirmLabel: copy.deleteCategory,
+      cancelLabel: copy.cancel,
+      tone: "danger",
+    });
+    if (!confirmed) return;
+    try {
+      await deleteIngredientCategory(category.ID);
+      setCategories((prev) => prev.filter((cat) => cat.ID !== category.ID));
+      setForm((current) => (current.category_id === category.ID ? { ...current, category_id: 0 } : current));
+      if (editingCategoryId === category.ID) setEditingCategoryId(null);
+      showToast({ title: copy.categoryDeleted });
+    } catch {
+      // The backend blocks deletion while ingredients still use the category.
+      showToast({ title: copy.categoryInUse, tone: "error" });
     }
   }
 
@@ -687,43 +759,35 @@ export default function InventoryPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
-        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="min-w-0">
-            <span className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300">
-              {formatNumber(totalItems, lang)} {copy.total}
-            </span>
+        <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder={copy.searchPlaceholder}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className={`${inputCls} pl-10 pr-3`}
+            />
           </div>
-
-          <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px] md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder={copy.searchPlaceholder}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className={`${inputCls} pl-10 pr-3`}
-              />
-            </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((value) => !value)}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+          >
+            <Filter className="h-4 w-4" />
+            {copy.filter}
+          </button>
+          {canManage && (
             <button
               type="button"
-              onClick={() => setFiltersOpen((value) => !value)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              onClick={openCreate}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
             >
-              <Filter className="h-4 w-4" />
-              {copy.filter}
+              <Plus className="h-4 w-4" />
+              {copy.add}
             </button>
-            {canManage && (
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
-              >
-                <Plus className="h-4 w-4" />
-                {copy.add}
-              </button>
-            )}
-          </div>
+          )}
         </header>
 
         {(outCount > 0 || lowCount > 0) && (
@@ -751,7 +815,7 @@ export default function InventoryPage() {
           </div>
         )}
 
-        <div className={`${filtersOpen ? "flex" : "hidden sm:flex"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
+        <div className={`${filtersOpen ? "flex" : "hidden"} flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
             {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
               <button
                 key={status}
@@ -844,7 +908,6 @@ export default function InventoryPage() {
                               <span className={`font-semibold tabular-nums ${meta.value}`}>
                                 {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
                               </span>
-                              <span className="text-slate-400">/ {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "-"}</span>
                             </div>
                             <div className="mt-1 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
                               <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
@@ -1143,17 +1206,6 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.sku}</label>
-                    <input
-                      type="text"
-                      value={form.sku ?? ""}
-                      onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</label>
                       {canManage && (
@@ -1167,7 +1219,7 @@ export default function InventoryPage() {
                           }}
                           className="text-xs font-semibold text-orange-600 transition hover:text-orange-500 dark:text-orange-300"
                         >
-                          {copy.addCategory}
+                          {copy.manageCategories}
                         </button>
                       )}
                     </div>
@@ -1175,15 +1227,6 @@ export default function InventoryPage() {
                       value={String(form.category_id ?? 0)}
                       onChange={(value) => setForm((current) => ({ ...current, category_id: parseInt(value, 10) || 0 }))}
                       options={categoryOptions}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.imageUrl}</label>
-                    <input
-                      type="text"
-                      value={form.image_url ?? ""}
-                      onChange={(event) => setForm((current) => ({ ...current, image_url: event.target.value }))}
-                      className={inputCls}
                     />
                   </div>
                 </div>
@@ -1308,38 +1351,110 @@ export default function InventoryPage() {
       {categoryModalOpen && (
         <div {...categoryBackdrop} className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
           <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
-            <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.addCategory}</h2>
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-gray-800">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.manageCategories}</h2>
+              <button
+                type="button"
+                onClick={closeCategoryModal}
+                aria-label={copy.cancel}
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-gray-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <div className="space-y-4 px-6 py-5">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.categoryName}</label>
+
+            <div className="max-h-[46vh] space-y-1 overflow-y-auto px-4 py-3">
+              {categories.length === 0 ? (
+                <p className="px-2 py-6 text-center text-sm text-slate-400">{copy.noCategories}</p>
+              ) : (
+                categories.map((cat) =>
+                  editingCategoryId === cat.ID ? (
+                    <div key={cat.ID} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editingCategoryName}
+                        onChange={(event) => setEditingCategoryName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") handleUpdateCategory(cat.ID);
+                          if (event.key === "Escape") setEditingCategoryId(null);
+                        }}
+                        className={inputCls}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCategory(cat.ID)}
+                        disabled={categorySubmitting}
+                        aria-label={copy.save}
+                        className="shrink-0 rounded-md p-2 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-50 dark:hover:bg-emerald-950/30"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingCategoryId(null)}
+                        aria-label={copy.cancel}
+                        className="shrink-0 rounded-md p-2 text-slate-400 transition hover:bg-slate-100 dark:hover:bg-gray-800"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      key={cat.ID}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-slate-50 dark:hover:bg-gray-900"
+                    >
+                      <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{cat.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryError("");
+                          setEditingCategoryId(cat.ID);
+                          setEditingCategoryName(cat.name);
+                        }}
+                        aria-label={copy.editCategory}
+                        className="shrink-0 rounded-md p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-gray-800"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategory(cat)}
+                        aria-label={copy.deleteCategory}
+                        className="shrink-0 rounded-md p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ),
+                )
+              )}
+            </div>
+
+            <div className="border-t border-slate-200 px-6 py-4 dark:border-gray-800">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.categoryName}</label>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={categoryName}
                   onChange={(event) => setCategoryName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleCreateCategory();
+                  }}
+                  placeholder={copy.categoryPlaceholder}
                   className={inputCls}
-                  autoFocus
                 />
+                <button
+                  type="button"
+                  onClick={handleCreateCategory}
+                  disabled={categorySubmitting}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                >
+                  <Plus className="h-4 w-4" />
+                  {copy.add}
+                </button>
               </div>
-              {categoryError && <p className="text-xs text-red-500">{categoryError}</p>}
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={closeCategoryModal}
-                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:hover:bg-gray-800"
-              >
-                {copy.cancel}
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateCategory}
-                disabled={categorySubmitting}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
-              >
-                {categorySubmitting ? "..." : copy.save}
-              </button>
+              {categoryError && <p className="mt-2 text-xs text-red-500">{categoryError}</p>}
             </div>
           </div>
         </div>
