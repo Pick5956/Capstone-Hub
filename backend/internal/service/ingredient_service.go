@@ -55,6 +55,10 @@ func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error)
 	return s.repo.List(restaurantID)
 }
 
+func (s *IngredientService) ListFiltered(restaurantID uint, q repository.IngredientListQuery) ([]entity.Ingredient, int64, error) {
+	return s.repo.ListFiltered(restaurantID, q)
+}
+
 func (s *IngredientService) ListCategories(restaurantID uint, includeInactive bool) ([]entity.IngredientCategory, error) {
 	return s.repo.ListCategories(restaurantID, includeInactive)
 }

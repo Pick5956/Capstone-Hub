@@ -1,11 +1,25 @@
 package repository
 
 import (
+	"strings"
+
 	"Project-M/internal/entity"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// IngredientListQuery describes an optional filtered/paged read of the inventory.
+// A zero Limit means "return everything" — the historical behaviour — so small
+// inventories stay one fast request and only large ones opt into paging.
+type IngredientListQuery struct {
+	Search string // case-insensitive match on name
+	Status string // "", "ok", "low", "out" (computed from stock vs min_stock)
+	Sort   string // "", "name", "stock", "priority" (out→low→ok)
+	Desc   bool
+	Limit  int // 0 = no limit
+	Offset int
+}
 
 type IngredientRepository struct {
 	db *gorm.DB
@@ -25,6 +39,58 @@ func (r *IngredientRepository) List(restaurantID uint) ([]entity.Ingredient, err
 	var ingredients []entity.Ingredient
 	err := r.db.Preload("Category").Where("restaurant_id = ?", restaurantID).Order("name asc").Find(&ingredients).Error
 	return ingredients, err
+}
+
+// ingredientListBaseQuery holds the restaurant + search + status conditions shared
+// by the count and the page query, so both see the exact same filtered set.
+func ingredientListBaseQuery(db *gorm.DB, restaurantID uint, q IngredientListQuery) *gorm.DB {
+	base := db.Model(&entity.Ingredient{}).Where("restaurant_id = ?", restaurantID)
+	if search := strings.TrimSpace(q.Search); search != "" {
+		base = base.Where("name ILIKE ?", "%"+search+"%")
+	}
+	switch q.Status {
+	case "out":
+		base = base.Where("stock = 0")
+	case "low":
+		base = base.Where("stock > 0 AND min_stock > 0 AND stock <= min_stock")
+	case "ok":
+		base = base.Where("stock > 0 AND (min_stock = 0 OR stock > min_stock)")
+	}
+	return base
+}
+
+// ListFiltered returns a filtered, optionally paged slice plus the total matching
+// count (for page controls). Ordering, search and status are resolved in SQL so a
+// large inventory never has to be shipped whole and filtered in the browser.
+func (r *IngredientRepository) ListFiltered(restaurantID uint, q IngredientListQuery) ([]entity.Ingredient, int64, error) {
+	var total int64
+	if err := ingredientListBaseQuery(r.db, restaurantID, q).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	query := ingredientListBaseQuery(r.db, restaurantID, q).Preload("Category")
+	direction := "asc"
+	if q.Desc {
+		direction = "desc"
+	}
+	switch q.Sort {
+	case "stock":
+		query = query.Order("stock " + direction).Order("name asc")
+	case "priority":
+		// Out first, then low, then ok — the list's default attention order.
+		query = query.Order("CASE WHEN stock = 0 THEN 0 WHEN min_stock > 0 AND stock <= min_stock THEN 1 ELSE 2 END").Order("name asc")
+	default:
+		query = query.Order("name " + direction)
+	}
+	if q.Limit > 0 {
+		query = query.Limit(q.Limit).Offset(q.Offset)
+	}
+
+	var items []entity.Ingredient
+	if err := query.Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (r *IngredientRepository) FindByID(restaurantID, ingredientID uint) (*entity.Ingredient, error) {

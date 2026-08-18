@@ -26,12 +26,26 @@ func (ctrl *IngredientController) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, err := ctrl.svc.List(restaurantID)
+	// Pagination is opt-in: with no `limit` the full list is returned (the historical
+	// behaviour), so a small inventory stays one fast request. `limit` caps at 200.
+	limit := boundedQueryInt(c, "limit", 0, 0, 200)
+	page := boundedQueryInt(c, "page", 1, 1, 1_000_000)
+	query := repository.IngredientListQuery{
+		Search: c.Query("search"),
+		Status: c.Query("status"),
+		Sort:   c.Query("sort"),
+		Desc:   c.Query("order") == "desc",
+		Limit:  limit,
+	}
+	if limit > 0 {
+		query.Offset = (page - 1) * limit
+	}
+	items, total, err := ctrl.svc.ListFiltered(restaurantID, query)
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ingredients": items})
+	c.JSON(http.StatusOK, gin.H{"ingredients": items, "total": total, "page": page, "limit": limit})
 }
 
 func (ctrl *IngredientController) ListCategories(c *gin.Context) {
