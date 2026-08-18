@@ -9,7 +9,6 @@ import {
   Check,
   Filter,
   History,
-  PackageOpen,
   Pencil,
   Plus,
   Search,
@@ -41,9 +40,7 @@ import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import {
   emptyForm,
   buildAdjustStockPayload,
-  formatDateTime,
   getInventoryValue,
-  getRestockAmount,
   getStatus,
   getStockPercent,
   inputCls,
@@ -858,9 +855,9 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              <div className="p-2">
+              <div className="overflow-x-auto">
                 {filtered.length === 0 ? (
-                  <div className="flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
+                  <div className="m-2 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
                     <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
                       <Boxes className="h-6 w-6" />
                     </div>
@@ -869,213 +866,99 @@ export default function InventoryPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100 dark:divide-gray-800">
-                    {filtered.map((item) => {
-                      const status = getStatus(item);
-                      const meta = statusMeta(status, copy);
-                      const percent = getStockPercent(item);
-                      const value = getInventoryValue(item);
+                  <table className="w-full min-w-[640px] border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
+                        <th className="px-4 py-2.5 font-semibold">{copy.name}</th>
+                        <th className="px-4 py-2.5 font-semibold">{copy.category}</th>
+                        <th className="px-4 py-2.5 font-semibold">{copy.current}</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">{copy.costPerUnit}</th>
+                        <th className="px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
+                      {filtered.map((item) => {
+                        const status = getStatus(item);
+                        const meta = statusMeta(status, copy);
+                        const percent = getStockPercent(item);
 
-                      return (
-                        <div key={item.ID} className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-gray-900/40">
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                              <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${meta.badge}`}>{meta.label}</span>
-                            </div>
-                            <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">
-                              {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
-                            </p>
-                          </div>
-                          <div className="hidden w-40 shrink-0 sm:block">
-                            <div className="flex items-baseline justify-between text-[13px]">
-                              <span className={`font-semibold tabular-nums ${meta.value}`}>
-                                {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
+                        return (
+                          <tr key={item.ID} className="transition-colors hover:bg-slate-50 dark:hover:bg-gray-900/40">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
+                                <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-gray-800 dark:text-slate-300">
+                                {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
                               </span>
-                            </div>
-                            <div className="mt-1 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
-                              <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
-                            </div>
-                          </div>
-                          <div className="hidden w-20 shrink-0 text-right text-[13px] font-semibold tabular-nums text-slate-700 dark:text-slate-200 md:block">
-                            {value > 0 ? formatCurrency(value, lang) : "-"}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openTransactions(item)}
-                              title={copy.history}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
-                            >
-                              <History className="h-4 w-4" />
-                            </button>
-                            {canManage && (
-                              <>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="w-44">
+                                <div className="flex items-center gap-2 text-[13px]">
+                                  <span className={`font-semibold tabular-nums ${meta.value}`}>
+                                    {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
+                                  </span>
+                                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${meta.badge}`}>{meta.label}</span>
+                                </div>
+                                <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                                  <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                              {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => openAdjust(item)}
-                                  title={copy.adjust}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
+                                  onClick={() => openTransactions(item)}
+                                  title={copy.history}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
                                 >
-                                  <Plus className="h-4 w-4" />
+                                  <History className="h-4 w-4" />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openEdit(item)}
-                                  title={copy.edit}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setDeleteTarget(item)}
-                                  title={copy.delete}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                                {canManage && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openAdjust(item)}
+                                      title={copy.adjust}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-orange-200 bg-orange-50 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openEdit(item)}
+                                      title={copy.edit}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteTarget(item)}
+                                      title={copy.delete}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
             </section>
-          </div>
-
-          <div className="hidden">
-            {filtered.length === 0 ? (
-              <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
-                  <Boxes className="h-6 w-6" />
-                </div>
-                <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
-                  {ingredients.length === 0 ? copy.noIngredients : copy.noResults}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-[980px] w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/90 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-slate-400">
-                      <th className="px-5 py-4">{copy.name}</th>
-                      <th className="px-5 py-4">{copy.level}</th>
-                      <th className="px-5 py-4 text-right">{copy.stock}</th>
-                      <th className="px-5 py-4 text-right">{copy.minStock}</th>
-                      <th className="px-5 py-4 text-right">{copy.rowValue}</th>
-                      <th className="px-5 py-4">{copy.updatedAt}</th>
-                      <th className="px-5 py-4 text-right">{copy.quickActions}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                    {filtered.map((item) => {
-                      const status = getStatus(item);
-                      const meta = statusMeta(status, copy);
-                      const percent = getStockPercent(item);
-                      const value = getInventoryValue(item);
-                      const refill = getRestockAmount(item);
-
-                      return (
-                        <tr key={item.ID} className="align-top transition hover:bg-slate-50/70 dark:hover:bg-gray-900/35">
-                          <td className="px-5 py-4">
-                            <div className="flex items-start gap-3">
-                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300">
-                                <PackageOpen className="h-4 w-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
-                                  <span className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold ${meta.badge}`}>
-                                    {meta.label}
-                                  </span>
-                                </div>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {copy.sku} {item.sku || "—"} • {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {copy.stockUnit} {item.unit} • {copy.costPerUnit}{" "}
-                                  {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="min-w-[220px]">
-                              <div className="flex items-center gap-3">
-                                <div className="h-2 flex-1 rounded-full bg-slate-200/80 dark:bg-gray-800">
-                                  <div className={`h-2 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
-                                </div>
-                                <span className={`w-12 text-right text-xs font-semibold ${meta.value}`}>{percent}%</span>
-                              </div>
-                              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                {item.min_stock > 0
-                                  ? `${copy.recommendedTopup} ${formatNumber(refill, lang)} ${item.unit}`
-                                  : copy.noMinimum}
-                              </p>
-                            </div>
-                          </td>
-                          <td className={`px-5 py-4 text-right text-base font-semibold tabular-nums ${meta.value}`}>
-                            {formatNumber(item.stock, lang)}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-slate-500 dark:text-slate-400">
-                            {item.min_stock > 0 ? formatNumber(item.min_stock, lang) : "—"}
-                          </td>
-                          <td className="px-5 py-4 text-right">
-                            <p className="font-semibold text-slate-900 dark:text-white">{value > 0 ? formatCurrency(value, lang) : "—"}</p>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{copy.coverage}</p>
-                          </td>
-                          <td className="px-5 py-4">
-                            <p className="text-sm text-slate-700 dark:text-slate-200">{formatDateTime(item.UpdatedAt ?? item.CreatedAt, lang)}</p>
-                          </td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => openTransactions(item)}
-                                title={copy.history}
-                                className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
-                              >
-                                <History className="h-4 w-4" />
-                              </button>
-                              {canManage && (
-                                <>
-                                  <button
-                                    onClick={() => openAdjust(item)}
-                                    title={copy.adjust}
-                                    className="rounded-md border border-orange-200 bg-orange-50 p-2 text-orange-600 transition hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => openEdit(item)}
-                                    title={copy.edit}
-                                    className="rounded-md border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-700 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => setDeleteTarget(item)}
-                                    title={copy.delete}
-                                    className="rounded-md border border-red-200 bg-red-50 p-2 text-red-600 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
           </div>
         </div>
 
