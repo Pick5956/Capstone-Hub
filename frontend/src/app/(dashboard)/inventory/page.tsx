@@ -104,7 +104,7 @@ function buildCopy(language: "th" | "en") {
         unit: "หน่วย",
         stock: "สต็อก",
         level: "ระดับสต็อก",
-        minStock: "แจ้งเตือนเมื่อเหลือ",
+        minStock: "แจ้งเตือนเมื่อต่ำกว่า",
         costPerUnit: "ราคา/หน่วย",
         save: "บันทึก",
         cancel: "ยกเลิก",
@@ -206,7 +206,7 @@ function buildCopy(language: "th" | "en") {
         unit: "Unit",
         stock: "Stock",
         level: "Level",
-        minStock: "Alert at",
+        minStock: "Alert below",
         costPerUnit: "Cost/unit",
         save: "Save",
         cancel: "Cancel",
@@ -919,8 +919,8 @@ export default function InventoryPage() {
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
                         {sortableTh("name", copy.name)}
-                        {sortableTh("category", copy.category)}
                         {sortableTh("stock", copy.current)}
+                        {sortableTh("category", copy.category)}
                         {sortableTh("price", copy.costPerUnit, true)}
                         <th className="px-4 py-2.5" />
                       </tr>
@@ -940,11 +940,6 @@ export default function InventoryPage() {
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-gray-800 dark:text-slate-300">
-                                {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
                               <div className="w-44">
                                 <div className="flex items-center gap-2 text-[13px]">
                                   <span className={`font-semibold tabular-nums ${meta.value}`}>
@@ -956,6 +951,11 @@ export default function InventoryPage() {
                                   <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-gray-800 dark:text-slate-300">
+                                {item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized}
+                              </span>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-200">
                               {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
