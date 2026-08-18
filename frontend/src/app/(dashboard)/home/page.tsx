@@ -433,7 +433,7 @@ const rowTint = {
 const cardToneTile: Record<CardTone, string> = {
   revenue: "border-sky-400 bg-sky-200 text-sky-900 dark:border-sky-600 dark:bg-sky-900/70 dark:text-sky-100",
   profit: "border-emerald-400 bg-emerald-200 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-900/70 dark:text-emerald-100",
-  cost: "border-rose-400 bg-rose-200 text-rose-900 dark:border-rose-600 dark:bg-rose-900/70 dark:text-rose-100",
+  cost: "border-red-400 bg-red-200 text-red-900 dark:border-red-600 dark:bg-red-900/70 dark:text-red-100",
 };
 const cardToneRow = cardToneTile;
 const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";
@@ -549,7 +549,7 @@ function CollapsibleCard({
             the tile instead of sitting on top of empty space. */}
         <div className={`text-center ${hasFaceTable ? "" : "my-auto"}`}>
           <h2 className={`text-[22px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-900" : ""}`}>{title}</h2>
-          {subtitle ? <p className="mt-1 text-[13px] text-gray-400 dark:text-gray-500">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-500">{subtitle}</p> : null}
         </div>
         {rows?.length ? (
           // Partitioned like the money card's tiles: one little table per
@@ -579,9 +579,9 @@ function CollapsibleCard({
                     <div key={item.key} style={{ fontSize: rowText }} className="flex items-baseline gap-1.5 px-2 py-0.5 leading-tight">
                       {/* A row with no figure is not data, it is the "nothing
                           here" line — muted so it never reads as an entry. */}
-                      <span className={`truncate ${item.value ? "text-gray-600 dark:text-gray-300" : "text-gray-400"}`}>
+                      <span className={`truncate ${item.value ? "text-gray-600 dark:text-gray-300" : "text-gray-500"}`}>
                         {item.label}
-                        {item.helper ? <span style={{ fontSize: rowSmallText }} className="ml-1 font-mono text-gray-400">{item.helper}</span> : null}
+                        {item.helper ? <span style={{ fontSize: rowSmallText }} className="ml-1 font-mono text-gray-500">{item.helper}</span> : null}
                       </span>
                       <span className={`ml-auto shrink-0 font-mono tabular-nums ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}>{item.value}</span>
                     </div>
@@ -635,9 +635,9 @@ function CollapsibleCard({
       >
         <span className="min-w-0">
           <span className="block truncate text-[13px] font-semibold text-gray-950 dark:text-white">{title}</span>
-          {subtitle ? <span className="mt-0.5 block truncate text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</span> : null}
+          {subtitle ? <span className="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-500">{subtitle}</span> : null}
         </span>
-        <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+        <ChevronUp className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
       </button>
       {/* Only the corner the tab actually lands on is squared off — the
           leftmost tab gives the folder its L, any other tab notches the top
@@ -658,7 +658,7 @@ function CollapsibleCard({
                 <>
                   <p className="text-[13px] font-bold uppercase tracking-wide">{item.label}</p>
                   <p className={`mt-1 truncate font-mono text-[24px] font-bold tabular-nums sm:text-[28px] ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
-                  {item.helper ? <p className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{item.helper}</p> : null}
+                  {item.helper ? <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-500">{item.helper}</p> : null}
                 </>
               );
               return item.href ? (
@@ -1353,7 +1353,7 @@ export default function Home() {
   // height as its neighbours no matter how bad service gets.
   // An empty lane says so in words: a table of blank lines leaves you
   // wondering whether it is empty or still loading.
-  const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-400" });
+  const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-500" });
   const attentionRows: CardRow[] = [
     ...lanes.flatMap((lane) => {
       const worst = [...lane.items].sort((a, b) => b.waited - a.waited).slice(0, 2);
@@ -1487,7 +1487,7 @@ export default function Home() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">{copy.title}</h1>
-              {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-400" aria-label={copy.loading} /> : null}
+              {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" aria-label={copy.loading} /> : null}
             </div>
           </div>
 
@@ -1501,7 +1501,7 @@ export default function Home() {
                   numeric format, so it sits transparent on top and the readable
                   weekday/date is drawn underneath it. */}
               <label className="relative inline-flex h-10 min-w-0 cursor-pointer items-center gap-2 px-3 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
-                <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
+                <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
                 <span className="sr-only">{copy.chooseDate}</span>
                 {/* Fixed width: the label is a long weekday and month name, so
                     letting it size to its content shifts the arrows either side
@@ -1665,7 +1665,7 @@ export default function Home() {
                                     <td className="px-3 py-1.5 font-mono font-semibold text-gray-950 dark:text-white">#{order.order_number}</td>
                                     <td className="px-3 py-1.5 truncate text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</td>
                                     <td className="px-3 py-1.5 text-gray-600 dark:text-gray-300">{orderStatusLabel(order.status, copy)}</td>
-                                    <td className="px-3 py-1.5 text-right font-mono text-gray-400">
+                                    <td className="px-3 py-1.5 text-right font-mono text-gray-500">
                                       {new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                                     </td>
                                     <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums text-gray-950 dark:text-white">
@@ -1683,7 +1683,7 @@ export default function Home() {
                             </table>
                           </div>
                         ) : (
-                          <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.noOrders}</p>
+                          <p className="px-3 py-8 text-center text-[12px] text-gray-500">{copy.noOrders}</p>
                         )}
                       </div>
                     </div>
@@ -1691,7 +1691,7 @@ export default function Home() {
 
                   <h3 className="mt-4 border-t border-gray-200 pt-4 text-[12px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">{copy.peakHours}</h3>
                   {salesHoursLoading && !salesHours.length ? (
-                    <div className="flex h-20 items-center justify-center text-[12px] text-gray-400">
+                    <div className="flex h-20 items-center justify-center text-[12px] text-gray-500">
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     </div>
                   ) : peakHours.length ? (
@@ -1710,13 +1710,13 @@ export default function Home() {
                             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                               <div className="h-full rounded-full bg-orange-500" style={{ width: `${peakHourTop > 0 ? (entry.revenue / peakHourTop) * 100 : 0}%` }} />
                             </div>
-                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-gray-400">{entry.orders.toLocaleString()} {copy.bills}</span>
+                            <span className="shrink-0 font-mono text-[10px] tabular-nums text-gray-500">{entry.orders.toLocaleString()} {copy.bills}</span>
                           </div>
                         </li>
                       ))}
                     </ol>
                   ) : (
-                    <p className={`py-6 text-center text-[12px] ${salesHoursFailed ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                    <p className={`py-6 text-center text-[12px] ${salesHoursFailed ? "text-red-600 dark:text-red-400" : "text-gray-500"}`}>
                       {salesHoursFailed ? copy.loadError : copy.peakHoursEmpty}
                     </p>
                   )}
@@ -1807,7 +1807,7 @@ export default function Home() {
 
                       <div className="mt-2 flex justify-center">
                         {topItemsLoading ? (
-                          <div className="flex h-36 w-36 items-center justify-center text-[12px] text-gray-400">
+                          <div className="flex h-36 w-36 items-center justify-center text-[12px] text-gray-500">
                             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                           </div>
                         ) : topItemsPie.length ? (
@@ -1822,11 +1822,11 @@ export default function Home() {
                             </PieChart>
                             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                               <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
-                              <span className="text-[9px] text-gray-400">{copy.dishes}</span>
+                              <span className="text-[9px] text-gray-500">{copy.dishes}</span>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex h-36 items-center justify-center text-[12px] text-gray-400">{copy.noSalesMonth}</div>
+                          <div className="flex h-36 items-center justify-center text-[12px] text-gray-500">{copy.noSalesMonth}</div>
                         )}
                       </div>
 
@@ -1921,7 +1921,7 @@ export default function Home() {
                               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: topItemColors[index % topItemColors.length] }} aria-hidden="true" />
                               <span className="min-w-0 flex-1 truncate font-medium text-gray-700 dark:text-gray-300">{item.name}</span>
                               <span className="shrink-0 font-mono text-gray-500 dark:text-gray-400">{item.sold} {copy.dishes}</span>
-                              <span className="w-9 shrink-0 text-right font-mono text-[10px] text-gray-400">{totalItemsSold ? Math.round((item.sold / totalItemsSold) * 100) : 0}%</span>
+                              <span className="w-9 shrink-0 text-right font-mono text-[10px] text-gray-500">{totalItemsSold ? Math.round((item.sold / totalItemsSold) * 100) : 0}%</span>
                             </li>
                           ))}
                         </ul>
@@ -1965,7 +1965,7 @@ export default function Home() {
                       </div>
                       <div className="mt-2">
                       {activeChartLoading ? (
-                        <div className="flex h-56 items-center justify-center text-[12px] text-gray-400">
+                        <div className="flex h-56 items-center justify-center text-[12px] text-gray-500">
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           {copy.loading}
                         </div>
@@ -1979,7 +1979,7 @@ export default function Home() {
                           onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
                         />
                       ) : (
-                        <div className="flex h-56 items-center justify-center px-3 text-center text-[12px] text-gray-400">
+                        <div className="flex h-56 items-center justify-center px-3 text-center text-[12px] text-gray-500">
                           {copy.noSales}
                         </div>
                       )}
@@ -2015,7 +2015,7 @@ export default function Home() {
                           </div>
 
                           {detailLoading && !matchedDetail ? (
-                            <div className="flex items-center justify-center px-3 py-8 text-[12px] text-gray-400">
+                            <div className="flex items-center justify-center px-3 py-8 text-[12px] text-gray-500">
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               {copy.loading}
                             </div>
@@ -2036,7 +2036,7 @@ export default function Home() {
                                 ))}
                               </div>
                               {shownExpensesHaveMore ? (
-                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-500 dark:border-gray-800">{copy.drillCapped}</p>
                               ) : null}
                             </div>
                           ) : shownSales?.orders.length ? (
@@ -2061,7 +2061,7 @@ export default function Home() {
                                     <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
                                       {row.table_label || row.customer_name || (row.order_type === "takeaway" ? (language === "th" ? "กลับบ้าน" : "Takeaway") : "-")}
                                     </span>
-                                    <span className="text-right font-mono text-[10px] text-gray-400">
+                                    <span className="text-right font-mono text-[10px] text-gray-500">
                                       {new Date(row.completed_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                                     </span>
                                     <span className="text-right font-mono text-[11px] tabular-nums text-gray-700 dark:text-gray-200">{formatCurrency(row.revenue, language)}</span>
@@ -2073,19 +2073,19 @@ export default function Home() {
                                 ))}
                               </div>
                               {shownSales.has_more ? (
-                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-400 dark:border-gray-800">{copy.drillCapped}</p>
+                                <p className="border-t border-gray-100 px-3 py-1.5 text-center text-[10px] text-gray-500 dark:border-gray-800">{copy.drillCapped}</p>
                               ) : null}
                             </div>
                           ) : detailKind === "cost" && shownExpensesEntries > 0 && shownExpensesHaveMore ? (
-                            <p className="px-3 py-8 text-center text-[12px] text-gray-400">{copy.drillCapped}</p>
+                            <p className="px-3 py-8 text-center text-[12px] text-gray-500">{copy.drillCapped}</p>
                           ) : (
-                            <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-400"}`}>
+                            <p className={`px-3 py-8 text-center text-[12px] ${detailFailed && detailKind === "sales" ? "text-red-600 dark:text-red-400" : "text-gray-500"}`}>
                               {detailFailed && detailKind === "sales" ? copy.loadError : copy.drillEmpty}
                             </p>
                           )}
                         </div>
                       ) : activeChartHasData ? (
-                        <p className="mt-2 text-center text-[10px] text-gray-400 dark:text-gray-500">{copy.drillHint}</p>
+                        <p className="mt-2 text-center text-[10px] text-gray-500 dark:text-gray-500">{copy.drillHint}</p>
                       ) : null}
                     </div>
                   </div>
@@ -2172,7 +2172,7 @@ export default function Home() {
                           ))}
                         </tbody>
                       </table>
-                    ) : <p className="py-6 text-center text-[12px] text-gray-400">{copy.noSalesMonth}</p>}
+                    ) : <p className="py-6 text-center text-[12px] text-gray-500">{copy.noSalesMonth}</p>}
                   </section>
                   ) : null}
 
@@ -2183,7 +2183,7 @@ export default function Home() {
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                           {monthTopItems.slice(0, 8).map((item, index) => (
                             <tr key={item.menu_id}>
-                              <td className="py-1.5 pr-3 font-mono text-gray-400">{index + 1}</td>
+                              <td className="py-1.5 pr-3 font-mono text-gray-500">{index + 1}</td>
                               <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{item.menu_name}</td>
                               <td className="py-1.5 pl-3 text-right font-mono font-semibold tabular-nums text-gray-950 dark:text-white">{formatNumber(item.quantity, language, 0)} {copy.dishes}</td>
                             </tr>
@@ -2234,7 +2234,7 @@ export default function Home() {
                 }
               >
                 <CalendarDays
-                  className={`shrink-0 text-gray-400 ${openCard !== null ? "h-3.5 w-3.5" : "h-8 w-8 text-gray-300 dark:text-gray-700"}`}
+                  className={`shrink-0 text-gray-500 ${openCard !== null ? "h-3.5 w-3.5" : "h-8 w-8 text-gray-300 dark:text-gray-700"}`}
                   aria-hidden="true"
                 />
                 <span className={openCard !== null ? "truncate" : ""}>{copy.historyNotice}</span>
@@ -2282,7 +2282,7 @@ export default function Home() {
                                   <button key={`${lane.key}-${ticket.id}`} type="button" onClick={() => router.push(orderPosHref({ ID: ticket.id, order_number: ticket.orderNumber }))} className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
                                     <div className="flex items-center justify-between gap-3">
                                       <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{ticket.table}</span>
-                                      <span className="font-mono text-[11px] text-gray-400">#{ticket.orderNumber}</span>
+                                      <span className="font-mono text-[11px] text-gray-500">#{ticket.orderNumber}</span>
                                     </div>
                                     <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-400">{ticket.items.join(" · ")}</p>
                                     <div className="mt-2 flex items-center justify-between gap-3 text-[11px]">
@@ -2290,13 +2290,13 @@ export default function Home() {
                                       <span className="font-mono text-gray-500 dark:text-gray-400">{formatCurrency(ticket.total, language)}</span>
                                     </div>
                                   </button>
-                                )) : <p className="px-4 py-8 text-center text-[12px] text-gray-400">{copy.noKitchen}</p>}
+                                )) : <p className="px-4 py-8 text-center text-[12px] text-gray-500">{copy.noKitchen}</p>}
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    ) : <p className="px-4 py-10 text-center text-[12px] text-gray-400">{copy.noKitchen}</p>}
+                    ) : <p className="px-4 py-10 text-center text-[12px] text-gray-500">{copy.noKitchen}</p>}
                   </div>
 
                 {/* Orders and stock risks sit side by side on a wide screen —
@@ -2327,11 +2327,11 @@ export default function Home() {
                           <span className="truncate text-[12px] text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</span>
                           <span><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-semibold ${orderStatusClass(order.status)}`}>{orderStatusLabel(order.status, copy)}</span></span>
                           <span className="font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white md:text-right">{formatCurrency(order.grand_total || order.total_amount, language)}</span>
-                          <span className="font-mono text-[11px] text-gray-400 md:text-right">{new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="font-mono text-[11px] text-gray-500 md:text-right">{new Date(order.opened_at).toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</span>
                         </button>
                       ))}
                     </div>
-                  ) : <div className="flex flex-col items-center justify-center px-4 py-12 text-center"><ReceiptText className="h-5 w-5 text-gray-300" /><p className="mt-2 text-[12px] text-gray-400">{copy.noOrders}</p></div>}
+                  ) : <div className="flex flex-col items-center justify-center px-4 py-12 text-center"><ReceiptText className="h-5 w-5 text-gray-300" /><p className="mt-2 text-[12px] text-gray-500">{copy.noOrders}</p></div>}
                 </div>
 
                 {/* Moved off the reports page: an ingredient about to run out
@@ -2359,7 +2359,7 @@ export default function Home() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="truncate text-[13px] font-semibold text-gray-950 dark:text-white">{risk.name}</p>
-                              <p className="mt-0.5 text-[11px] text-gray-400">{risk.category || "-"}</p>
+                              <p className="mt-0.5 text-[11px] text-gray-500">{risk.category || "-"}</p>
                             </div>
                             <span className={`shrink-0 rounded px-2 py-1 text-[10px] font-semibold ${risk.status === "out" ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"}`}>
                               {risk.status}
@@ -2371,7 +2371,7 @@ export default function Home() {
                         </button>
                       ))}
                     </div>
-                  ) : <p className="px-4 pb-10 pt-2 text-center text-[12px] text-gray-400">{copy.noStockRisks}</p>}
+                  ) : <p className="px-4 pb-10 pt-2 text-center text-[12px] text-gray-500">{copy.noStockRisks}</p>}
                 </div>
                 </div>
               </CollapsibleCard>
@@ -2396,10 +2396,10 @@ export default function Home() {
                       <button key={table.key} type="button" onClick={() => router.push("/pos/tables")} className="ui-press min-h-24 bg-white p-3 text-left hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13px] font-semibold text-gray-950 dark:text-white">{table.label}</span>
-                          <span className={`text-[10px] font-semibold ${table.status === "occupied" ? "text-amber-600" : table.status === "available" ? "text-emerald-600" : table.status === "reserved" ? "text-sky-600" : "text-gray-400"}`}>{copy[table.status]}</span>
+                          <span className={`text-[10px] font-semibold ${table.status === "occupied" ? "text-amber-600" : table.status === "available" ? "text-emerald-600" : table.status === "reserved" ? "text-sky-600" : "text-gray-500"}`}>{copy[table.status]}</span>
                         </div>
                         <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{table.guests ? `${table.guests} ${copy.people}` : table.zone || ""}</p>
-                        {table.minutes !== undefined ? <p className="mt-1 inline-flex items-center gap-1 font-mono text-[10px] text-gray-400"><Clock className="h-3 w-3" />{table.minutes} {copy.minutes}</p> : null}
+                        {table.minutes !== undefined ? <p className="mt-1 inline-flex items-center gap-1 font-mono text-[10px] text-gray-500"><Clock className="h-3 w-3" />{table.minutes} {copy.minutes}</p> : null}
                       </button>
                     ))}
                   </div>
@@ -2410,7 +2410,7 @@ export default function Home() {
           </>
         )}
 
-        {lastUpdated ? <p className="pb-1 text-right text-[10px] text-gray-400 dark:text-gray-500">{copy.updated} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</p> : null}
+        {lastUpdated ? <p className="pb-1 text-right text-[10px] text-gray-500 dark:text-gray-500">{copy.updated} {lastUpdated.toLocaleTimeString(language === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}</p> : null}
       </div>
 
       {orderBill ? (

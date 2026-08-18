@@ -28,8 +28,8 @@ export default function ManualInviteScreen() {
     <AuthScreen
       title={copy('รับคำเชิญเข้าร่วมร้าน', 'Join a restaurant')}
       subtitle={copy(
-        'วางลิงก์ Dishy ที่เจ้าของร้านหรือผู้จัดการส่งให้',
-        'Paste the Dishy link sent by the restaurant owner or manager',
+        'วางลิงก์ที่ได้รับจากร้าน',
+        'Paste the link sent by the restaurant',
       )}
       showBack
     >
@@ -47,8 +47,10 @@ export default function ManualInviteScreen() {
           onChangeText={setValue}
           placeholder="https://dishy.pro/invitations/..."
           multiline
+          icon="link-outline"
         />
         <Button
+          icon="arrow-forward"
           label={copy('ตรวจคำเชิญ', 'Check invitation')}
           onPress={submit}
         />

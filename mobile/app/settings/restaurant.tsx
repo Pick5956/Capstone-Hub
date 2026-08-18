@@ -1,12 +1,16 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { deleteRestaurant, getRestaurant, updateRestaurant } from '@/src/api/restaurant';
+import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppScreen } from '@/src/components/app-shell';
 import {
+  ActionDock,
   Button,
   ChipGroup,
+  EdgeRow,
+  EdgeSection,
   Feedback,
   SectionHeader,
   Surface,
@@ -22,15 +26,68 @@ import {
 } from '@/src/lib/restaurant-types';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, spacing } from '@/src/theme';
+import { breakpoints, palette, spacing } from '@/src/theme';
+
+type RestaurantSection = 'general' | 'hours' | 'ordering' | 'billing' | 'promptpay';
+
+function SettingsSection({
+  children,
+  collapsible,
+  detail,
+  expanded,
+  icon,
+  onToggle,
+  title,
+}: {
+  children: React.ReactNode;
+  collapsible: boolean;
+  detail?: string;
+  expanded: boolean;
+  icon: AppIconName;
+  onToggle: () => void;
+  title: string;
+}) {
+  const { copy } = useDisplayPreferences();
+  const content = (
+    <>
+      <EdgeRow
+        accessibilityLabel={collapsible
+          ? copy(`${title}, ${expanded ? 'เปิดอยู่' : 'ปิดอยู่'}`, `${title}, ${expanded ? 'expanded' : 'collapsed'}`)
+          : title}
+        detail={detail}
+        icon={icon}
+        onPress={collapsible ? onToggle : undefined}
+        showChevron={false}
+        title={title}
+        trailing={collapsible ? (
+          <AppIcon color={palette.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} />
+        ) : undefined}
+      />
+      {expanded ? (
+        <View style={{ gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg }}>
+          {children}
+        </View>
+      ) : null}
+    </>
+  );
+
+  if (collapsible) return <EdgeSection>{content}</EdgeSection>;
+
+  return (
+    <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+      {content}
+    </Surface>
+  );
+}
 
 export default function RestaurantSettingsScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership, refreshMemberships } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const restaurantId = activeMembership?.restaurant_id;
-  const managementRole = activeMembership?.role?.name === 'owner'
-    || activeMembership?.role?.name === 'manager';
-  const canManageRestaurant = managementRole && can(activeMembership, 'manage_staff');
+  const canManageRestaurant = can(activeMembership, 'manage_restaurant_settings');
+  const isOwner = activeMembership?.role?.name === 'owner';
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   const [name, setName] = useState('');
   const [branch, setBranch] = useState('');
@@ -57,6 +114,15 @@ export default function RestaurantSettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<RestaurantSection>('general');
+
+  function sectionProps(section: RestaurantSection) {
+    return {
+      collapsible: !tabletWorkspace,
+      expanded: tabletWorkspace || expandedSection === section,
+      onToggle: () => setExpandedSection((current) => current === section ? 'general' : section),
+    };
+  }
 
   useEffect(() => {
     if (!restaurantId || !canManageRestaurant) {
@@ -103,6 +169,7 @@ export default function RestaurantSettingsScreen() {
   async function save() {
     if (!restaurantId || !canManageRestaurant || saving) return;
     if (!name.trim() || !branch.trim()) {
+      setExpandedSection('general');
       setError(copy(
         'กรอกชื่อร้านและชื่อสาขาให้ครบ',
         'Enter both the restaurant and branch names',
@@ -116,6 +183,7 @@ export default function RestaurantSettingsScreen() {
       orderRadius,
     );
     if (geofence.error) {
+      setExpandedSection('ordering');
       setError(geofence.error === 'coordinates'
         ? copy(
           'ละติจูดหรือลองจิจูดไม่ถูกต้อง',
@@ -163,7 +231,7 @@ export default function RestaurantSettingsScreen() {
   }
 
   async function remove() {
-    if (!restaurantId || saving) return;
+    if (!restaurantId || !isOwner || saving) return;
     if (!confirmDelete) {
       setConfirmDelete(true);
       return;
@@ -203,11 +271,13 @@ export default function RestaurantSettingsScreen() {
   return (
     <AppScreen
       title={copy('ข้อมูลร้าน', 'Restaurant information')}
-      subtitle={copy(
-        'ค่าที่ใช้ร่วมกันในงานรับออเดอร์ บิล และ QR สั่งอาหาร',
-        'Shared settings for order taking, bills, and QR ordering',
-      )}
+      subtitle={copy('ใช้กับออเดอร์ บิล และ QR', 'Used for orders, bills and QR ordering')}
       topLevel={false}
+      footer={!tabletWorkspace && !confirmDelete ? (
+        <ActionDock>
+          <Button icon="checkmark" label={copy('บันทึกข้อมูลร้าน', 'Save restaurant')} onPress={save} loading={saving} />
+        </ActionDock>
+      ) : undefined}
     >
       {error ? (
         <Feedback
@@ -224,8 +294,13 @@ export default function RestaurantSettingsScreen() {
         />
       ) : null}
 
-      <Surface>
-        <SectionHeader title={copy('ข้อมูลทั่วไป', 'General information')} />
+      <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1 : undefined, gap: spacing.lg }}>
+      <SettingsSection
+        title={copy('ข้อมูลทั่วไป', 'General information')}
+        icon="storefront-outline"
+        {...sectionProps('general')}
+      >
         <TextField
           label={copy('ชื่อร้าน', 'Restaurant name')}
           value={name}
@@ -264,10 +339,13 @@ export default function RestaurantSettingsScreen() {
           value={coverImage}
           onChangeText={setCoverImage}
         />
-      </Surface>
+      </SettingsSection>
 
-      <Surface>
-        <SectionHeader title={copy('เวลาและโต๊ะ', 'Hours and tables')} />
+      <SettingsSection
+        title={copy('เวลาและโต๊ะ', 'Hours and tables')}
+        icon="time-outline"
+        {...sectionProps('hours')}
+      >
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <TextField
@@ -292,16 +370,14 @@ export default function RestaurantSettingsScreen() {
           onChangeText={setTableCount}
           keyboardType="number-pad"
         />
-      </Surface>
+      </SettingsSection>
 
-      <Surface>
-        <SectionHeader
-          title={copy('QR สั่งอาหารในร้าน', 'In-store QR ordering')}
-          detail={copy(
-            'เปิดใช้เพื่อจำกัดการส่งออเดอร์ให้อยู่ใกล้พิกัดร้าน',
-            'Enable this to accept customer orders only near the restaurant location.',
-          )}
-        />
+      <SettingsSection
+        title={copy('QR สั่งอาหารในร้าน', 'In-store QR ordering')}
+        detail={copy('จำกัดการส่งออเดอร์ให้อยู่ใกล้ร้าน', 'Limit customer orders to the restaurant area.')}
+        icon="qr-code-outline"
+        {...sectionProps('ordering')}
+      >
         <ChipGroup
           label={copy('ตรวจตำแหน่งลูกค้า', 'Check customer location')}
           value={geofenceEnabled}
@@ -341,16 +417,17 @@ export default function RestaurantSettingsScreen() {
             />
           </>
         ) : null}
-      </Surface>
+      </SettingsSection>
+        </View>
 
-      <Surface>
-        <SectionHeader
-          title={copy('ค่าบริการและ VAT', 'Service charge and VAT')}
-          detail={copy(
-            'ระบบเก็บ snapshot ลงบิลเมื่อรับชำระเงิน',
-            'Dishy saves a snapshot of these rates on the bill when payment is taken.',
-          )}
-        />
+        <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1 : undefined, gap: spacing.lg }}>
+
+      <SettingsSection
+        title={copy('ค่าบริการและ VAT', 'Service charge and VAT')}
+        detail={copy('อัตราจะถูกบันทึกกับบิลเมื่อรับชำระ', 'Rates are saved with the bill when payment is taken.')}
+        icon="receipt-outline"
+        {...sectionProps('billing')}
+      >
         <ChipGroup
           label={copy('ค่าบริการ', 'Service charge')}
           value={serviceEnabled}
@@ -385,10 +462,13 @@ export default function RestaurantSettingsScreen() {
             keyboardType="decimal-pad"
           />
         ) : null}
-      </Surface>
+      </SettingsSection>
 
-      <Surface>
-        <SectionHeader title={copy('PromptPay', 'PromptPay')} />
+      <SettingsSection
+        title={copy('PromptPay', 'PromptPay')}
+        icon="wallet-outline"
+        {...sectionProps('promptpay')}
+      >
         <TextField
           label={copy('ชื่อบัญชี', 'Account name')}
           value={promptpayName}
@@ -399,17 +479,18 @@ export default function RestaurantSettingsScreen() {
           value={promptpayQr}
           onChangeText={setPromptpayQr}
         />
-      </Surface>
+      </SettingsSection>
 
-      <Surface>
+      {tabletWorkspace ? <Surface>
         <Button
+          icon="checkmark"
           label={copy('บันทึกข้อมูลร้าน', 'Save restaurant information')}
           onPress={save}
           loading={saving}
         />
-      </Surface>
+      </Surface> : null}
 
-      {activeMembership?.role?.name === 'owner' ? (
+      {isOwner ? (
         <Surface style={{ borderColor: confirmDelete ? palette.danger : palette.border }}>
           <SectionHeader
             title={copy('ลบร้าน', 'Delete restaurant')}
@@ -444,6 +525,8 @@ export default function RestaurantSettingsScreen() {
           </View>
         </Surface>
       ) : null}
+        </View>
+      </View>
     </AppScreen>
   );
 }

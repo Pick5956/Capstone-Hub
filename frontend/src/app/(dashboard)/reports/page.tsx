@@ -166,13 +166,9 @@ export default function ReportsPage() {
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-screen bg-gray-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-500">{copy.eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{copy.subtitle}</p>
-        </div>
+        <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
         <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           {copy.back}
@@ -197,8 +193,8 @@ export default function ReportsPage() {
               { label: copy.profit, value: formatCurrency(report.summary.profit, lang), icon: <TrendingUp className="h-4 w-4" /> },
               { label: copy.margin, value: `${formatNumber(report.summary.margin, lang)}%`, icon: <TrendingUp className="h-4 w-4" /> },
             ].map((card) => (
-              <div key={card.label} className="rounded-md border border-slate-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-                <div className="flex items-center justify-between gap-3 text-slate-400">
+              <div key={card.label} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+                <div className="flex items-center justify-between gap-3 text-gray-500">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">{card.label}</span>
                   {card.icon}
                 </div>
@@ -208,8 +204,8 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
-            <section className="overflow-hidden rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+            <section className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.salesDays}</h2>
               </div>
               {report.sales_days.length ? (
@@ -219,9 +215,9 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto overflow-y-hidden">
                   {/* border-separate so a hovered row can cast a shadow; the
                       dividers move onto the cells to survive it. */}
-                  <table className="w-full min-w-[420px] border-separate border-spacing-0 text-left text-sm [&_tbody_td]:border-b [&_tbody_td]:border-slate-100 dark:[&_tbody_td]:border-gray-800">
-                    <thead className="text-xs text-slate-400">
-                      <tr className="[&_th]:border-b [&_th]:border-slate-200 dark:[&_th]:border-gray-800">
+                  <table className="w-full min-w-[420px] border-separate border-spacing-0 text-left text-sm [&_tbody_td]:border-b [&_tbody_td]:border-gray-100 dark:[&_tbody_td]:border-gray-800">
+                    <thead className="text-xs text-gray-500">
+                      <tr className="[&_th]:border-b [&_th]:border-gray-200 dark:[&_th]:border-gray-800">
                         <th className="px-4 py-2 font-medium">{copy.date}</th>
                         <th className="px-4 py-2 text-right font-medium">{copy.orders}</th>
                         <th className="px-4 py-2 text-right font-medium">{copy.revenue}</th>
@@ -236,15 +232,15 @@ export default function ReportsPage() {
                             key={day.order_date}
                             onClick={() => toggleDay(day.order_date)}
                             aria-haspopup="dialog"
-                            className={`ui-row-lift cursor-pointer ${open ? "bg-slate-100 dark:bg-gray-900" : "bg-white hover:bg-slate-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
+                            className={`ui-row-lift cursor-pointer ${open ? "bg-gray-100 dark:bg-gray-900" : "bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
                           >
                             <td className="px-4 py-2.5 font-medium">
                               <span className="inline-flex items-center gap-1.5">
-                                <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true" />
+                                <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-gray-500 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden="true" />
                                 {day.order_date}
                               </span>
                             </td>
-                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">{formatNumber(day.orders, lang)}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-gray-500">{formatNumber(day.orders, lang)}</td>
                             <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{formatCurrency(day.revenue, lang)}</td>
                             <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${day.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                               {formatCurrency(day.profit, lang)}
@@ -256,17 +252,17 @@ export default function ReportsPage() {
                   </table>
                 </div>
               ) : (
-                <p className="px-4 py-8 text-center text-sm text-slate-400">{copy.noData}</p>
+                <p className="px-4 py-8 text-center text-sm text-gray-500">{copy.noData}</p>
               )}
             </section>
 
-            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
+            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+              <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.menuMargins}</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead className="text-xs text-slate-400">
+                  <thead className="text-xs text-gray-500">
                     <tr>
                       <th className="px-4 py-3">{copy.menu}</th>
                       <th className="px-4 py-3 text-right">{copy.qty}</th>
@@ -275,7 +271,7 @@ export default function ReportsPage() {
                       <th className="px-4 py-3 text-right">{copy.margin}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {report.menu_margins.length ? report.menu_margins.map((item) => (
                       <tr key={`${item.menu_id}-${item.menu_name}`}>
                         <td className="px-4 py-3 font-medium">{item.menu_name}</td>
@@ -284,7 +280,7 @@ export default function ReportsPage() {
                         <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.cost, lang)}</td>
                         <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatNumber(item.margin, lang)}%</td>
                       </tr>
-                    )) : <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">{copy.noData}</td></tr>}
+                    )) : <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">{copy.noData}</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -308,12 +304,12 @@ export default function ReportsPage() {
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
               {receiptError ? <p className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{receiptError}</p> : null}
               {dayDetailLoading ? (
-                <p className="py-8 text-center text-xs text-slate-400">{copy.loadingDay}</p>
+                <p className="py-8 text-center text-xs text-gray-500">{copy.loadingDay}</p>
               ) : dayDetail?.orders.length ? (
                 <>
                   <div className="overflow-x-auto overflow-y-hidden">
-                  <table className="w-full min-w-[520px] border-separate border-spacing-0 text-left text-xs [&_tbody_td]:border-b [&_tbody_td]:border-slate-200 dark:[&_tbody_td]:border-gray-800">
-                    <thead className="text-slate-400">
+                  <table className="w-full min-w-[520px] border-separate border-spacing-0 text-left text-xs [&_tbody_td]:border-b [&_tbody_td]:border-gray-200 dark:[&_tbody_td]:border-gray-800">
+                    <thead className="text-gray-500">
                       <tr>
                         <th className="py-1 font-medium">{copy.order}</th>
                         <th className="py-1 font-medium">{copy.table}</th>
@@ -330,15 +326,15 @@ export default function ReportsPage() {
                           onClick={() => void openReceipt(order.order_id)}
                           aria-haspopup="dialog"
                           aria-busy={receiptLoadingId === order.order_id}
-                          className={`ui-row-lift cursor-pointer bg-white hover:bg-slate-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
+                          className={`ui-row-lift cursor-pointer bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
                         >
                           <td className="py-1.5 font-mono">{order.order_number}</td>
                           <td className="py-1.5 truncate">{order.table_label || order.customer_name || "-"}</td>
-                          <td className="py-1.5 text-right font-mono text-slate-400">
+                          <td className="py-1.5 text-right font-mono text-gray-500">
                             {new Date(order.completed_at).toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", { hour: "2-digit", minute: "2-digit" })}
                           </td>
                           <td className="py-1.5 text-right tabular-nums">{formatCurrency(order.revenue, lang)}</td>
-                          <td className="py-1.5 text-right tabular-nums text-slate-500">{formatCurrency(order.cost, lang)}</td>
+                          <td className="py-1.5 text-right tabular-nums text-gray-500">{formatCurrency(order.cost, lang)}</td>
                           <td className={`py-1.5 text-right font-semibold tabular-nums ${order.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                             {formatCurrency(order.profit, lang)}
                           </td>
@@ -347,10 +343,10 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                   </div>
-                  {dayDetail.has_more ? <p className="pt-2 text-center text-[11px] text-slate-400">{copy.dayCapped}</p> : null}
+                  {dayDetail.has_more ? <p className="pt-2 text-center text-[11px] text-gray-500">{copy.dayCapped}</p> : null}
                 </>
               ) : (
-                <p className="py-8 text-center text-xs text-slate-400">{dayDetailFailed ? copy.loadError : copy.noData}</p>
+                <p className="py-8 text-center text-xs text-gray-500">{dayDetailFailed ? copy.loadError : copy.noData}</p>
               )}
             </div>
           </div>

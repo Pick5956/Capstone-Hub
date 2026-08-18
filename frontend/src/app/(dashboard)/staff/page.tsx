@@ -3,21 +3,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import { createRole, deleteRole, getRoles, updateRolePermissions } from "@/src/lib/auth";
+import { createRole, deleteRole, getRoles, updateRole, updateRolePermissions } from "@/src/lib/auth";
 import { createInvitation, listPendingInvitations, revokeInvitation } from "@/src/lib/invitation";
 import { listAuditLogs, listMembers, updateMemberPermissions, updateMemberRole, updateMemberStatus } from "@/src/lib/restaurant";
 import type { Invitation, Membership, MembershipStatus, RestaurantAuditLog } from "@/src/types/restaurant";
 import type { Role } from "@/src/types/role";
+import type { Permission } from "@/src/types/auth";
 import { RestaurantCardSkeleton, Skeleton } from "@/src/components/shared/Skeleton";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import UserAvatar from "@/src/components/shared/UserAvatar";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Pencil, X } from "lucide-react";
 import {
-  ALL_PERMISSION_KEYS,
+  PERMISSION_DEPENDENCIES,
   PERMISSION_SECTIONS,
+  applyPermissionDependencies,
   STATUS_LABELS,
   actorName,
   auditMessage,
@@ -31,22 +33,49 @@ import {
   parsePermissions,
   permissionSummary,
   roleLabel,
+  replaceGrantablePermissionSelection,
   stripHiddenPermissions,
   type PermissionTarget,
 } from "./staffPageConfig";
-import { allowedRoleOptions, canManageTarget, canManageTeam, replaceMember, statusTone } from "./staffPageUtils";
+import {
+  canManageTarget,
+  getRoleDialogInteractionPolicy,
+  getTeamCapabilities,
+  grantablePermissionKeys,
+  grantableRoleOptions,
+  replaceMember,
+  shouldRefreshMembershipsAfterRoleRename,
+  statusTone,
+} from "./staffPageUtils";
 
 const AUDIT_PAGE_SIZE = 20;
 const MOBILE_AUDIT_PAGE_SIZE = 5;
 
 export default function StaffPage() {
-  const { activeMembership, user } = useAuth();
+  const { activeMembership, refreshMemberships, user } = useAuth();
   const { language } = useLanguage();
   const { showToast } = useToast();
   const confirm = useConfirm();
   const restaurantId = activeMembership?.restaurant_id;
   const activeRole = activeMembership?.role?.name;
-  const allowed = canManageTeam(activeMembership);
+  const {
+    canViewTeam: allowed,
+    canManageInvites,
+    canManageMembers,
+    canManageRoles,
+    canViewAuditLog,
+  } = getTeamCapabilities(activeMembership);
+  const grantablePermissions = useMemo(() => grantablePermissionKeys(activeMembership), [activeMembership]);
+  const grantablePermissionSet = useMemo(() => new Set<string>(grantablePermissions), [grantablePermissions]);
+  const visiblePermissionSections = useMemo(() => PERMISSION_SECTIONS
+    .map((section) => ({
+      ...section,
+      rows: section.rows.filter((row) => row.permissions.every((permission) =>
+        grantablePermissionSet.has(permission)
+        && (PERMISSION_DEPENDENCIES[permission] ?? []).every((required) => grantablePermissionSet.has(required)),
+      )),
+    }))
+    .filter((section) => section.rows.length > 0), [grantablePermissionSet]);
   const [members, setMembers] = useState<Membership[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [auditLogs, setAuditLogs] = useState<RestaurantAuditLog[]>([]);
@@ -59,6 +88,10 @@ export default function StaffPage() {
   const [newRoleName, setNewRoleName] = useState("");
   const [roleActionIds, setRoleActionIds] = useState<number[]>([]);
   const [creatingRole, setCreatingRole] = useState(false);
+  const [roleRenameDraft, setRoleRenameDraft] = useState("");
+  const [roleRenameError, setRoleRenameError] = useState("");
+  const [renamingRole, setRenamingRole] = useState(false);
+  const [editingRoleName, setEditingRoleName] = useState(false);
   const [expiresInDays, setExpiresInDays] = useState("7");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -100,14 +133,17 @@ export default function StaffPage() {
         roleDeleted: "ลบบทบาทแล้ว",
         roleError: "จัดการบทบาทไม่สำเร็จ",
         roleRequired: "กรอกชื่อบทบาทก่อน",
-        rolePanelTitle: "บทบาทในร้าน",
+        rolePanelTitle: "บทบาทที่จัดการได้",
         rolePanelAction: "เปิดการจัดการบทบาท",
-        rolePanelSummary: "ตรวจสอบและปรับบทบาทมาตรฐานของร้านก่อนส่งคำเชิญพนักงาน",
+        rolePanelSummary: "แสดงเฉพาะบทบาทที่มีสิทธิ์ไม่เกินขอบเขตของบัญชีนี้",
         roleManagerTitle: "จัดการบทบาทและสิทธิ์",
-        roleManagerHint: "เพิ่มบทบาทใหม่ แก้ชื่อบทบาทที่ปรับแต่งได้ และกำหนดชุดสิทธิ์ให้แต่ละบทบาท",
+        roleManagerHint: "เพิ่มบทบาท แก้ชื่อบทบาทที่ร้านใช้ และกำหนดชุดสิทธิ์ให้แต่ละบทบาท",
         customRoleTitle: "สร้างบทบาทใหม่",
         roleNameLabel: "ชื่อบทบาท",
         roleNamePlaceholder: "เช่น หัวหน้ากะ",
+        editRoleName: "แก้ชื่อบทบาท",
+        saveRoleName: "บันทึกชื่อบทบาท",
+        cancelRoleName: "ยกเลิกการแก้ชื่อ",
         createRole: "เพิ่มบทบาท",
         creatingRole: "กำลังเพิ่ม...",
         editPermissions: "สิทธิ์",
@@ -120,13 +156,14 @@ export default function StaffPage() {
         confirmRevokeBody: "ลิงก์นี้จะใช้งานไม่ได้ทันที และพนักงานต้องขอลิงก์ใหม่หากยังต้องเข้าร่วมร้าน",
         confirmMemberTitle: "ยืนยันการเปลี่ยนแปลงพนักงาน?",
         confirmMemberBody: "การเปลี่ยนบทบาทหรือสถานะจะมีผลกับสิทธิ์การใช้งานของพนักงานทันที",
+        confirmRoleChangeBody: "การเปลี่ยนบทบาทจะล้างสิทธิ์ที่กำหนดเฉพาะคน แล้วกลับไปใช้สิทธิ์ของบทบาทใหม่ทันที",
         confirmAction: "ยืนยัน",
         cancelAction: "กลับไปก่อน",
         cancelRevokeAction: "ไม่ยกเลิก",
-        noPermissionTitle: "บัญชีนี้ดูทีมได้ แต่จัดการคำเชิญหรือเปลี่ยนสถานะสมาชิกไม่ได้",
-        noPermissionBody: "เฉพาะเจ้าของร้านหรือผู้จัดการเท่านั้นที่เชิญ ยกเลิกคำเชิญ และจัดการ member lifecycle ได้",
+        noPermissionTitle: "บัญชีนี้ไม่มีสิทธิ์เข้าถึงการจัดการทีม",
+        noPermissionBody: "ผู้ดูแลที่มีสิทธิ์สูงกว่าสามารถเปิดสิทธิ์คำเชิญ สมาชิก บทบาท หรือประวัติการเปลี่ยนแปลงให้บัญชีนี้ได้",
         membersTitle: "สมาชิกในร้าน",
-        membersHint: "เจ้าของร้านและผู้จัดการจะเห็นสมาชิกที่ถูกระงับหรือนำออกแล้วด้วย",
+        membersHint: "แสดงสมาชิกและสถานะตามขอบเขตสิทธิ์การจัดการทีมของบัญชีนี้",
         name: "ชื่อ",
         role: "บทบาท",
         permission: "สิทธิ์",
@@ -155,7 +192,7 @@ export default function StaffPage() {
         by: "โดย",
         target: "เป้าหมาย",
         noAudit: "ยังไม่มีประวัติในช่วงนี้",
-        auditDenied: "เฉพาะเจ้าของร้านหรือผู้จัดการเท่านั้นที่ดู audit log ได้",
+        auditDenied: "บัญชีนี้ยังไม่มีสิทธิ์ดูประวัติการเปลี่ยนแปลงทีม",
         loadMoreAudit: "โหลดประวัติเพิ่ม",
         loadingMoreAudit: "กำลังโหลด...",
         previousAuditPage: "ก่อนหน้า",
@@ -172,7 +209,7 @@ export default function StaffPage() {
         createLink: "สร้างลิงก์เชิญ",
         flowTitle: "ขั้นตอนรับคำเชิญ",
         flow: [
-          "เจ้าของหรือผู้จัดการกำหนดบทบาทและสร้างลิงก์คำเชิญ",
+          "ผู้ที่ได้รับสิทธิ์จัดการคำเชิญกำหนดบทบาทและสร้างลิงก์คำเชิญ",
           "พนักงานเปิดลิงก์เพื่อตรวจสอบร้าน อีเมล และวันหมดอายุ",
           "เข้าสู่ระบบหรือสมัครบัญชีในหน้าเดียวกันหากยังไม่ได้ login",
           "กดรับคำเชิญแล้วระบบเพิ่มสมาชิกและเลือกร้านให้อัตโนมัติ",
@@ -197,14 +234,17 @@ export default function StaffPage() {
         roleDeleted: "Role deleted",
         roleError: "Could not manage role.",
         roleRequired: "Enter a role name first.",
-        rolePanelTitle: "Restaurant roles",
+        rolePanelTitle: "Roles you can manage",
         rolePanelAction: "Open role management",
-        rolePanelSummary: "Review and adjust restaurant roles before sending staff invitations.",
+        rolePanelSummary: "Only roles within this account's grant scope are shown.",
         roleManagerTitle: "Manage roles and permissions",
-        roleManagerHint: "Add roles, rename custom roles, and set the default permissions for each role.",
+        roleManagerHint: "Add roles, rename the roles used by this restaurant, and set each role's default permissions.",
         customRoleTitle: "Create new role",
         roleNameLabel: "Role name",
         roleNamePlaceholder: "e.g. Shift lead",
+        editRoleName: "Edit role name",
+        saveRoleName: "Save role name",
+        cancelRoleName: "Cancel role name edit",
         createRole: "Add role",
         creatingRole: "Adding...",
         editPermissions: "Permissions",
@@ -217,13 +257,14 @@ export default function StaffPage() {
         confirmRevokeBody: "This link will stop working immediately. The staff member will need a new link to join.",
         confirmMemberTitle: "Confirm staff change?",
         confirmMemberBody: "Role or status changes apply to this staff member's access immediately.",
+        confirmRoleChangeBody: "Changing the role clears this staff member's custom permissions and immediately applies the new role defaults.",
         confirmAction: "Confirm",
         cancelAction: "Cancel",
         cancelRevokeAction: "Keep invitation",
-        noPermissionTitle: "This account can view the team but cannot manage invitations or member status.",
-        noPermissionBody: "Only owners and managers can invite people, revoke invitations, and manage the member lifecycle.",
+        noPermissionTitle: "This account cannot access team management.",
+        noPermissionBody: "A higher-privileged administrator can grant invitation, member, role, or audit-log access to this account.",
         membersTitle: "Restaurant members",
-        membersHint: "Owners and managers can also see suspended and removed members.",
+        membersHint: "Members and statuses are shown within this account's team-management scope.",
         name: "Name",
         role: "Role",
         permission: "Permissions",
@@ -252,7 +293,7 @@ export default function StaffPage() {
         by: "By",
         target: "Target",
         noAudit: "No recent activity yet.",
-        auditDenied: "Only owners and managers can view the audit log.",
+        auditDenied: "This account does not have permission to view the team audit log.",
         loadMoreAudit: "Load more history",
         loadingMoreAudit: "Loading...",
         previousAuditPage: "Previous",
@@ -269,36 +310,69 @@ export default function StaffPage() {
         createLink: "Create invitation link",
         flowTitle: "Invitation acceptance steps",
         flow: [
-          "Owner or manager sets the role and creates an invitation link.",
+          "A staff administrator with invitation permission selects the role and creates the link.",
           "Staff opens the link to review the restaurant, email, and expiry.",
           "Staff signs in or registers on the same screen if needed.",
           "Accepting the invitation adds the membership and selects the restaurant automatically.",
         ],
       };
 
-  const inviteRoles = useMemo(() => allowedRoleOptions(activeRole, roles), [activeRole, roles]);
+  const manageableRoles = useMemo(() => grantableRoleOptions(activeMembership, roles), [activeMembership, roles]);
+  const inviteRoles = manageableRoles;
+  const roleNameDirty = permissionTarget?.type === "role"
+    && editingRoleName
+    && roleRenameDraft.trim() !== roleLabel(permissionTarget.role, language);
+  const deletingPermissionRole = permissionTarget?.type === "role"
+    && roleActionIds.includes(permissionTarget.role.ID);
+  const roleDialogPolicy = getRoleDialogInteractionPolicy({
+    renamingRole,
+    permissionSaving,
+    deletingRole: deletingPermissionRole,
+    permissionClosing,
+    editingRoleName: permissionTarget?.type === "role" && editingRoleName,
+    roleNameDirty,
+  });
+  const roleRenameErrorId = permissionTarget?.type === "role"
+    ? `role-name-error-${permissionTarget.role.ID}`
+    : undefined;
+
+  useEffect(() => {
+    if (!canManageInvites) return;
+    if (roleId && inviteRoles.some((role) => role.ID === roleId)) return;
+    const nextDefault = inviteRoles.find((role) => role.name === "waiter") ?? inviteRoles[0];
+    setRoleId(nextDefault?.ID ?? "");
+  }, [canManageInvites, inviteRoles, roleId]);
 
   const refresh = async () => {
     if (!restaurantId) return;
     setLoading(true);
     setError("");
+    if (!allowed) {
+      setMembers([]);
+      setRoles([]);
+      setInvitations([]);
+      setAuditLogs([]);
+      setAuditHasMore(false);
+      setLoading(false);
+      return;
+    }
     try {
       const [membersRes, rolesRes, invitationsRes, logsRes] = await Promise.all([
         listMembers(restaurantId),
         getRoles(),
-        allowed ? listPendingInvitations(restaurantId) : Promise.resolve({ data: { invitations: [] } }),
-        allowed ? listAuditLogs(restaurantId, AUDIT_PAGE_SIZE) : Promise.resolve({ data: { logs: [], has_more: false } }),
+        canManageInvites ? listPendingInvitations(restaurantId) : Promise.resolve({ data: { invitations: [] } }),
+        canViewAuditLog ? listAuditLogs(restaurantId, AUDIT_PAGE_SIZE) : Promise.resolve({ data: { logs: [], has_more: false } }),
       ]);
 
       const roleList = (rolesRes?.data?.data ?? []) as Role[];
-      const nextInviteRoles = allowedRoleOptions(activeRole, roleList);
+      const nextInviteRoles = grantableRoleOptions(activeMembership, roleList);
       setMembers(membersRes.data.members ?? []);
       setInvitations(invitationsRes.data.invitations ?? []);
       setAuditLogs(logsRes.data.logs ?? []);
       setAuditHasMore(Boolean(logsRes.data.has_more));
       setAuditMobilePage(0);
       setRoles(roleList);
-      if (!roleId) {
+      if (canManageInvites && !roleId) {
         const nextDefault = nextInviteRoles.find((role) => role.name === "waiter") ?? nextInviteRoles[0];
         if (nextDefault) setRoleId(nextDefault.ID);
       }
@@ -313,10 +387,10 @@ export default function StaffPage() {
     const loadTimer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurantId, allowed, language]);
+  }, [restaurantId, allowed, canManageInvites, canViewAuditLog, language]);
 
   const loadMoreAuditLogs = async () => {
-    if (!restaurantId || !allowed || auditLoadingMore || !auditHasMore) return false;
+    if (!restaurantId || !canViewAuditLog || auditLoadingMore || !auditHasMore) return false;
     setAuditLoadingMore(true);
     setError("");
     try {
@@ -354,6 +428,7 @@ export default function StaffPage() {
   };
 
   const openInviteModal = () => {
+    if (!canManageInvites) return;
     setInviteModalClosing(false);
     setInviteModalOpen(true);
   };
@@ -369,7 +444,7 @@ export default function StaffPage() {
 
   const createInvite = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!restaurantId || !allowed || !roleId) return;
+    if (!restaurantId || !canManageInvites || !roleId) return;
 
     const trimmedEmail = email.trim().toLowerCase();
     if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
@@ -426,7 +501,7 @@ export default function StaffPage() {
   };
 
   const revokeInvite = async (invitationId: number) => {
-    if (!restaurantId || revokeLocksRef.current.has(invitationId)) return;
+    if (!restaurantId || !canManageInvites || revokeLocksRef.current.has(invitationId)) return;
     const confirmed = await confirm({
       title: copy.confirmRevokeTitle,
       message: copy.confirmRevokeBody,
@@ -481,7 +556,7 @@ export default function StaffPage() {
 
   const createCustomRole = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!allowed || creatingRole) return;
+    if (!canManageRoles || creatingRole) return;
     const displayName = newRoleName.trim();
     if (!displayName) {
       setError(copy.roleRequired);
@@ -506,6 +581,7 @@ export default function StaffPage() {
   };
 
   const removeRole = async (role: Role) => {
+    if (!canManageRoles || !roleDialogPolicy.canDeleteRole) return;
     const confirmed = await confirm({
       title: copy.confirmRoleDeleteTitle,
       message: copy.confirmRoleDeleteBody,
@@ -530,8 +606,48 @@ export default function StaffPage() {
     });
   };
 
+  const renameRole = async () => {
+    if (
+      !canManageRoles
+      || permissionTarget?.type !== "role"
+      || !editingRoleName
+      || !roleDialogPolicy.canEditRoleName
+    ) return;
+    const displayName = roleRenameDraft.trim();
+    if (!displayName) {
+      setRoleRenameError(copy.roleRequired);
+      return;
+    }
+    if (displayName === roleLabel(permissionTarget.role, language)) {
+      setRoleRenameError("");
+      setEditingRoleName(false);
+      return;
+    }
+    setRenamingRole(true);
+    setRoleRenameError("");
+    try {
+      const res = await updateRole(permissionTarget.role.ID, { display_name: displayName });
+      const nextRole = res.data.role;
+      setRoles((current) => current.map((role) => role.ID === nextRole.ID ? nextRole : role));
+      setMembers((current) => current.map((member) => member.role_id === nextRole.ID ? { ...member, role: nextRole } : member));
+      setPermissionTarget({ type: "role", role: nextRole });
+      setRoleRenameDraft(roleLabel(nextRole, language));
+      setRoleRenameError("");
+      setEditingRoleName(false);
+      showToast({ title: copy.roleUpdated });
+      if (shouldRefreshMembershipsAfterRoleRename(activeMembership, nextRole.ID)) {
+        void refreshMemberships();
+      }
+      await refresh();
+    } catch {
+      setRoleRenameError(copy.roleError);
+    } finally {
+      setRenamingRole(false);
+    }
+  };
+
   const changeMemberStatus = async (memberId: number, status: MembershipStatus) => {
-    if (!restaurantId) return;
+    if (!restaurantId || !canManageMembers) return;
     const confirmed = await confirm({
       title: copy.confirmMemberTitle,
       message: copy.confirmMemberBody,
@@ -549,12 +665,12 @@ export default function StaffPage() {
   };
 
   const changeMemberRole = async (memberId: number, nextRoleId: string) => {
-    if (!restaurantId) return;
+    if (!restaurantId || !canManageRoles) return;
     const parsed = Number.parseInt(nextRoleId, 10);
     if (!Number.isFinite(parsed)) return;
     const confirmed = await confirm({
       title: copy.confirmMemberTitle,
-      message: copy.confirmMemberBody,
+      message: copy.confirmRoleChangeBody,
       confirmLabel: copy.confirmAction,
       cancelLabel: copy.cancelAction,
       tone: "warning",
@@ -569,29 +685,39 @@ export default function StaffPage() {
   };
 
   const openRolePermissions = (role: Role) => {
+    if (!canManageRoles) return;
     setPermissionClosing(false);
     setPermissionTarget({ type: "role", role });
-    setPermissionDraft(parsePermissions(role.permissions));
+    setPermissionDraft(parsePermissions(role.permissions, role.name));
+    setRoleRenameDraft(roleLabel(role, language));
+    setRoleRenameError("");
+    setEditingRoleName(false);
     setUseRolePermissions(false);
   };
 
   const openMemberPermissions = (member: Membership) => {
+    if (!canManageRoles) return;
     setPermissionClosing(false);
     setPermissionTarget({ type: "member", member });
     setPermissionDraft(effectiveMemberPermissions(member));
     setUseRolePermissions(member.permissions_override == null);
+    setRoleRenameError("");
+    setEditingRoleName(false);
   };
 
   const closePermissionModal = (force = false) => {
-    if (!force && (permissionSaving || permissionClosing)) return;
+    if (!force && !roleDialogPolicy.canDismiss) return;
     setPermissionClosing(true);
     window.setTimeout(() => {
       setPermissionTarget(null);
       setPermissionClosing(false);
+      setRoleRenameError("");
+      setEditingRoleName(false);
     }, 180);
   };
 
   const openRoleManager = () => {
+    if (!canManageRoles) return;
     setRoleManagerClosing(false);
     setRoleManagerOpen(true);
   };
@@ -605,22 +731,32 @@ export default function StaffPage() {
     }, 180);
   };
 
-  const setPermissionRow = (permissions: string[], enabled: boolean) => {
+  const setPermissionRow = (permissions: Permission[], enabled: boolean) => {
     setPermissionDraft((current) => {
-      const next = new Set(current);
+      let next = current;
       permissions.forEach((permission) => {
-        if (enabled) {
-          next.add(permission);
-        } else {
-          next.delete(permission);
-        }
+        next = applyPermissionDependencies(next, permission, enabled);
       });
-      return Array.from(next);
+      return next;
     });
   };
 
   const savePermissions = async () => {
-    if (!permissionTarget || !restaurantId) return;
+    if (
+      !permissionTarget
+      || !restaurantId
+      || !canManageRoles
+      || permissionSaving
+      || permissionClosing
+      || (permissionTarget.type === "role" && !roleDialogPolicy.canSavePermissions)
+    ) return;
+    const hasOutOfScopePermissions = permissionDraft.some((permission) => !grantablePermissionSet.has(permission));
+    if (hasOutOfScopePermissions && !(permissionTarget.type === "member" && useRolePermissions)) {
+      setError(language === "th"
+        ? "บันทึกไม่ได้ เพราะรายการนี้มีสิทธิ์ที่บัญชีของคุณมอบไม่ได้ ต้องให้ผู้มีสิทธิ์สูงกว่าเป็นผู้แก้ไข"
+        : "This item contains permissions outside your grant scope. Ask a higher-privileged account to edit it.");
+      return;
+    }
     setPermissionSaving(true);
     setError("");
     try {
@@ -648,6 +784,8 @@ export default function StaffPage() {
   const auditMobileLogs = auditLogs.slice(auditMobileStart, auditMobileStart + MOBILE_AUDIT_PAGE_SIZE);
   const auditCanGoBack = auditMobilePage > 0;
   const auditCanGoNext = auditMobileStart + MOBILE_AUDIT_PAGE_SIZE < auditLogs.length || auditHasMore;
+  const preservedPermissionCount = permissionDraft.filter((permission) => !grantablePermissionSet.has(permission)).length;
+  const permissionEditBlocked = preservedPermissionCount > 0 && !(permissionTarget?.type === "member" && useRolePermissions);
   const permissionBackdrop = useBackdropClose(closePermissionModal);
   const roleManagerBackdrop = useBackdropClose(closeRoleManager);
   const inviteModalBackdrop = useBackdropClose(closeInviteModal);
@@ -656,13 +794,7 @@ export default function StaffPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{copy.eyebrow}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{copy.title}</h1>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{copy.subtitle}</p>
-        </div>
-      </div>
+      <h1 className="sr-only">{copy.title}</h1>
 
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
@@ -679,44 +811,48 @@ export default function StaffPage() {
 
       <div className="space-y-4">
         <section className="space-y-4">
-          {allowed && (
+          {(canManageInvites || canManageRoles) && (
             <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                 <div className="min-w-0">
-                  <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
-                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
+                  <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{canManageInvites ? copy.inviteTitle : copy.roleManagerTitle}</h2>
+                  <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{canManageInvites ? copy.inviteHint : copy.roleManagerHint}</p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
-                  <button
-                    type="button"
-                    onClick={openInviteModal}
-                    className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
-                  >
-                    {copy.createLink}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openRoleManager}
-                    className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
-                  >
-                    {copy.rolePanelAction}
-                  </button>
+                  {canManageInvites && (
+                    <button
+                      type="button"
+                      onClick={openInviteModal}
+                      className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+                    >
+                      {copy.createLink}
+                    </button>
+                  )}
+                  {canManageRoles && (
+                    <button
+                      type="button"
+                      onClick={openRoleManager}
+                      className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+                    >
+                      {copy.rolePanelAction}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="grid border-t border-gray-200 dark:border-gray-800 sm:grid-cols-2 sm:divide-x sm:divide-gray-200 sm:dark:divide-gray-800">
                 <div className="px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.rolePanelTitle}</p>
                   <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.rolePanelSummary}</p>
                 </div>
                 <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 dark:divide-gray-800 dark:border-gray-800 sm:border-t-0">
                   <div className="px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.role}</p>
-                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">{allowedRoleOptions(activeRole, roles).length}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.role}</p>
+                    <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">{manageableRoles.length}</p>
                   </div>
                   <div className="px-4 py-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.customRoleBadge}</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.customRoleBadge}</p>
                     <p className="mt-1 text-[18px] font-semibold tabular-nums text-gray-950 dark:text-white">
-                      {allowedRoleOptions(activeRole, roles).filter(isCustomRole).length}
+                      {manageableRoles.filter(isCustomRole).length}
                     </p>
                   </div>
                 </div>
@@ -737,7 +873,7 @@ export default function StaffPage() {
                 </div>
               ) : members.length ? (
                 <div className="space-y-2">
-                  <div className="hidden grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] gap-3 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800 lg:grid">
+                  <div className="hidden grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] gap-3 border-b border-gray-100 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-800 lg:grid">
                     <span>{copy.name}</span>
                     <span>{copy.role}</span>
                     <span>{copy.status}</span>
@@ -745,8 +881,11 @@ export default function StaffPage() {
                     <span className="text-right">{copy.actions}</span>
                   </div>
                   {members.map((member) => {
-                    const manageable = allowed && canManageTarget(activeRole, member.role?.name, member.user_id === user?.ID);
-                    const roleOptions = allowedRoleOptions(activeRole, roles);
+                    const targetManageable = canManageTarget(activeRole, member.role?.name, member.user_id === user?.ID);
+                    const canEditMemberRole = canManageRoles && targetManageable && manageableRoles.some((role) => role.ID === member.role_id);
+                    const canEditMemberStatus = canManageMembers && targetManageable;
+                    const hasMemberActions = canEditMemberRole || canEditMemberStatus;
+                    const roleOptions = manageableRoles;
                     const busy = updatingMemberIds.includes(member.ID);
 
                     return (
@@ -755,63 +894,73 @@ export default function StaffPage() {
                           <UserAvatar src={member.user?.profile_image} name={displayUserName(member, language)} size={40} className="h-10 w-10 text-[12px]" />
                           <div className="min-w-0">
                             <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{displayUserName(member, language)}</p>
-                            <p className="truncate text-[11px] text-gray-400">{member.user?.email}</p>
+                            <p className="truncate text-[11px] text-gray-500">{member.user?.email}</p>
                           </div>
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.role}</p>
-                          {manageable ? (
-                            <ThemedSelect
-                              className="max-w-full lg:w-full xl:w-[220px]"
-                              value={String(member.role_id)}
-                              onChange={(next) => void changeMemberRole(member.ID, next)}
-                              disabled={busy}
-                              options={roleOptions.map((role) => ({
-                                value: String(role.ID),
-                                label: roleLabel(role, language),
-                              }))}
-                            />
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.role}</p>
+                          {canEditMemberRole ? (
+                            <div>
+                              <ThemedSelect
+                                className="max-w-full lg:w-full xl:w-[220px]"
+                                value={String(member.role_id)}
+                                onChange={(next) => void changeMemberRole(member.ID, next)}
+                                disabled={busy}
+                                options={roleOptions.map((role) => ({
+                                  value: String(role.ID),
+                                  label: roleLabel(role, language),
+                                }))}
+                              />
+                              <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{memberPermissionSummary(member, language)}</p>
+                            </div>
                           ) : (
                             <div>
                               <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">{roleLabel(member.role, language)}</p>
+                              <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">{memberPermissionSummary(member, language)}</p>
                             </div>
                           )}
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.status}</p>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.status}</p>
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-medium ${statusTone(member.status)}`}>
                             {STATUS_LABELS[language][member.status] ?? member.status}
                           </span>
                         </div>
 
                         <div className="min-w-0">
-                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:hidden">{copy.joined}</p>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:hidden">{copy.joined}</p>
                           <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">{formatDate(member.joined_at, language)}</p>
                         </div>
 
                         <div className="min-w-0">
-                          {manageable ? (
+                          {hasMemberActions ? (
                             <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-1 xl:grid-cols-2">
-                              <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 xl:col-span-2">
-                                {language === "th" ? "สิทธิ์" : "Permissions"}
-                              </button>
-                              {member.status !== "active" ? (
-                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-8 min-w-0 rounded-md border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
-                                  {copy.restore}
-                                </button>
-                              ) : (
-                                <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-8 min-w-0 rounded-md border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-950 dark:text-amber-300 dark:hover:bg-amber-900/20">
-                                  {copy.suspend}
+                              {canEditMemberRole && (
+                                <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 xl:col-span-2">
+                                  {language === "th" ? "สิทธิ์" : "Permissions"}
                                 </button>
                               )}
-                              <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-8 min-w-0 rounded-md border border-red-200 bg-white px-2 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
-                                {copy.remove}
-                              </button>
+                              {canEditMemberStatus && (
+                                <>
+                                  {member.status !== "active" ? (
+                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-8 min-w-0 rounded-md border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                                      {copy.restore}
+                                    </button>
+                                  ) : (
+                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-8 min-w-0 rounded-md border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-950 dark:text-amber-300 dark:hover:bg-amber-900/20">
+                                      {copy.suspend}
+                                    </button>
+                                  )}
+                                  <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-8 min-w-0 rounded-md border border-red-200 bg-white px-2 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
+                                    {copy.remove}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           ) : (
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 lg:text-right">
+                            <p className="text-[11px] text-gray-500 dark:text-gray-500 lg:text-right">
                               {member.user_id === user?.ID ? copy.yourAccount : "-"}
                             </p>
                           )}
@@ -828,6 +977,7 @@ export default function StaffPage() {
             </div>
           </div>
 
+          {canManageInvites && (
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.pendingTitle}</h2>
@@ -849,9 +999,9 @@ export default function StaffPage() {
                           <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                             {copy.rolePrefix} {roleLabel(invitation.role, language)} · {copy.expiresPrefix} {formatDate(invitation.expires_at, language)}
                           </p>
-                          <p className="mt-1 truncate font-mono text-[11px] text-gray-400">{inviteUrl(invitation.token)}</p>
+                          <p className="mt-1 truncate font-mono text-[11px] text-gray-500">{inviteUrl(invitation.token)}</p>
                         </div>
-                        {allowed && (
+                        {canManageInvites && (
                           <div className="flex shrink-0 flex-wrap gap-2">
                             <button type="button" onClick={() => void copyInvite(invitation.token)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800">
                               {copiedToken === invitation.token ? copy.copied : copy.copy}
@@ -878,7 +1028,9 @@ export default function StaffPage() {
               )}
             </div>
           </div>
+          )}
 
+          {canViewAuditLog && (
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.auditTitle}</h2>
@@ -890,8 +1042,7 @@ export default function StaffPage() {
                   <Skeleton className="h-14" />
                   <Skeleton className="h-14" />
                 </div>
-              ) : allowed ? (
-                auditLogs.length ? (
+              ) : auditLogs.length ? (
                   <div className="space-y-3">
                     <div className="space-y-3 sm:hidden">
                       <div className="space-y-2">
@@ -903,7 +1054,7 @@ export default function StaffPage() {
                                 {copy.by} {actorName(log, language)}
                                 {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
                               </p>
-                              <p className="text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</p>
+                              <p className="text-[10px] text-gray-500">{formatDate(log.CreatedAt, language)}</p>
                             </div>
                           </div>
                         ))}
@@ -939,7 +1090,7 @@ export default function StaffPage() {
                               {log.target_user ? ` · ${copy.target} ${log.target_user.email}` : ""}
                             </p>
                           </div>
-                          <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">{formatDate(log.CreatedAt, language)}</span>
+                          <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-500">{formatDate(log.CreatedAt, language)}</span>
                         </div>
                       </div>
                         ))}
@@ -960,18 +1111,14 @@ export default function StaffPage() {
                   <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
                     {copy.noAudit}
                   </div>
-                )
-              ) : (
-                <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
-                  {copy.auditDenied}
-                </div>
               )}
             </div>
           </div>
+          )}
         </section>
       </div>
 
-      {inviteModalOpen && (
+      {inviteModalOpen && canManageInvites && (
         <div
           {...inviteModalBackdrop}
           className={`${inviteModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed left-0 top-0 z-50 flex h-dvh w-dvw items-center justify-center overflow-y-auto bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}
@@ -985,7 +1132,7 @@ export default function StaffPage() {
                 <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
               </div>
-              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1000,13 +1147,13 @@ export default function StaffPage() {
                       setInviteError("");
                     }}
                     placeholder={copy.emailPlaceholder}
-                    disabled={!allowed}
+                    disabled={!canManageInvites}
                     aria-invalid={Boolean(inviteError)}
                     className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-900 ${
                       inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
                     }`}
                   />
-                  <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-400 dark:text-gray-500"}`}>
+                  <p className={`mt-1 text-[11px] ${inviteError ? "font-medium text-red-600 dark:text-red-300" : "text-gray-500 dark:text-gray-500"}`}>
                     {inviteError || copy.emailHelp}
                   </p>
                 </label>
@@ -1016,7 +1163,7 @@ export default function StaffPage() {
                   <ThemedSelect
                     value={String(roleId || inviteRoles[0]?.ID || "")}
                     onChange={(next) => setRoleId(Number(next))}
-                    disabled={!allowed}
+                    disabled={!canManageInvites}
                     options={inviteRoles.map((role) => ({
                       value: String(role.ID),
                       label: roleLabel(role, language),
@@ -1029,7 +1176,7 @@ export default function StaffPage() {
                   <ThemedSelect
                     value={expiresInDays}
                     onChange={setExpiresInDays}
-                    disabled={!allowed}
+                    disabled={!canManageInvites}
                     options={[
                       { value: "1", label: `1 ${copy.day}` },
                       { value: "3", label: `3 ${copy.day}` },
@@ -1065,7 +1212,7 @@ export default function StaffPage() {
               >
                 {copy.cancelAction}
               </button>
-              <button type="submit" disabled={!allowed || !roleId || submitting} className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="submit" disabled={!canManageInvites || !roleId || submitting} className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">
                 {submitting ? copy.creating : copy.createLink}
               </button>
             </div>
@@ -1073,7 +1220,7 @@ export default function StaffPage() {
         </div>
       )}
 
-      {roleManagerOpen && (
+      {roleManagerOpen && canManageRoles && (
         <>
           <button
             type="button"
@@ -1084,11 +1231,11 @@ export default function StaffPage() {
           <aside className={`${roleManagerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{copy.rolePanelTitle}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.rolePanelTitle}</p>
                 <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{copy.roleManagerTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.roleManagerHint}</p>
               </div>
-              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1101,13 +1248,13 @@ export default function StaffPage() {
                     value={newRoleName}
                     onChange={(event) => setNewRoleName(event.target.value)}
                     placeholder={copy.roleNamePlaceholder}
-                    disabled={!allowed || creatingRole}
+                    disabled={!canManageRoles || creatingRole}
                     className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
                   />
                 </label>
                 <button
                   type="submit"
-                  disabled={!allowed || creatingRole}
+                  disabled={!canManageRoles || creatingRole}
                   className="mt-3 h-10 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
                 >
                   {creatingRole ? copy.creatingRole : copy.createRole}
@@ -1115,9 +1262,9 @@ export default function StaffPage() {
               </form>
 
               <div className="mt-4 space-y-2">
-                {allowedRoleOptions(activeRole, roles).map((role) => {
+                {manageableRoles.map((role) => {
                   const busy = roleActionIds.includes(role.ID);
-                  const roleCardDisabled = !allowed || busy;
+                  const roleCardDisabled = !canManageRoles || busy;
 
                   return (
                     <div
@@ -1148,7 +1295,7 @@ export default function StaffPage() {
                           <span className="mt-0.5 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{permissionSummary(role, language)}</span>
                         </div>
                         <div className="flex shrink-0 items-center justify-center">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-400 transition-colors group-hover/card:bg-gray-100 group-hover/card:text-gray-700 dark:group-hover/card:bg-gray-800 dark:group-hover/card:text-gray-200">
+                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors group-hover/card:bg-gray-100 group-hover/card:text-gray-700 dark:group-hover/card:bg-gray-800 dark:group-hover/card:text-gray-200">
                             <ChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                           </span>
                         </div>
@@ -1162,23 +1309,117 @@ export default function StaffPage() {
         </>
       )}
 
-      {permissionTarget && (
+      {permissionTarget && canManageRoles && (
         <div {...permissionBackdrop} className={`${permissionClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-stretch justify-center bg-gray-950/45 p-2 backdrop-blur-sm sm:p-4 lg:p-6`}>
           <div className={`${permissionClosing ? "motion-dialog-exit" : "motion-dialog"} flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-6">
-              <div className="min-w-0">
-                <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">
-                  {permissionTarget.type === "role"
-                    ? `${language === "th" ? "สิทธิ์บทบาท" : "Role permissions"} · ${roleLabel(permissionTarget.role, language)}`
-                    : `${language === "th" ? "สิทธิ์พนักงาน" : "Staff permissions"} · ${displayUserName(permissionTarget.member, language)}`}
-                </h2>
-                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  {permissionTarget.type === "member"
-                    ? memberPermissionSummary(permissionTarget.member, language)
-                    : permissionSummary(permissionTarget.role, language)}
-                </p>
+              <div className="min-w-0 flex-1">
+                {permissionTarget.type === "role" ? (
+                  <>
+                    {editingRoleName ? (
+                      <form
+                        className="min-w-0"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void renameRole();
+                        }}
+                      >
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <label className="sr-only" htmlFor={`role-name-${permissionTarget.role.ID}`}>{copy.roleNameLabel}</label>
+                          <input
+                            autoFocus
+                            id={`role-name-${permissionTarget.role.ID}`}
+                            type="text"
+                            value={roleRenameDraft}
+                            onChange={(event) => {
+                              setRoleRenameDraft(event.target.value);
+                              setRoleRenameError("");
+                            }}
+                            aria-invalid={Boolean(roleRenameError)}
+                            aria-describedby={roleRenameError ? roleRenameErrorId : undefined}
+                            disabled={roleDialogPolicy.busy}
+                            className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2.5 text-[14px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+                          />
+                          <button
+                            type="submit"
+                            aria-label={copy.saveRoleName}
+                            title={copy.saveRoleName}
+                            disabled={roleDialogPolicy.busy || !roleRenameDraft.trim() || !roleNameDirty}
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-900 text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-white dark:text-gray-900"
+                          >
+                            <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={copy.cancelRoleName}
+                            title={copy.cancelRoleName}
+                            disabled={roleDialogPolicy.busy}
+                            onClick={() => {
+                              setRoleRenameDraft(roleLabel(permissionTarget.role, language));
+                              setRoleRenameError("");
+                              setEditingRoleName(false);
+                            }}
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                          >
+                            <X className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+                          </button>
+                        </div>
+                        {roleRenameError && (
+                          <p
+                            id={roleRenameErrorId}
+                            aria-live="polite"
+                            aria-atomic="true"
+                            className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300"
+                          >
+                            {roleRenameError}
+                          </p>
+                        )}
+                      </form>
+                    ) : (
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h2 className="truncate text-[14px] font-semibold text-gray-900 dark:text-white">
+                          {roleLabel(permissionTarget.role, language)}
+                        </h2>
+                        <button
+                          type="button"
+                          aria-label={copy.editRoleName}
+                          title={copy.editRoleName}
+                          disabled={!roleDialogPolicy.canEditRoleName}
+                          onClick={() => {
+                            setRoleRenameDraft(roleLabel(permissionTarget.role, language));
+                            setRoleRenameError("");
+                            setEditingRoleName(true);
+                          }}
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                        >
+                          <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      {language === "th" ? "สิทธิ์บทบาท" : "Role permissions"} · {permissionSummary(permissionTarget.role, language)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="truncate text-[14px] font-semibold text-gray-900 dark:text-white">
+                      {language === "th" ? "สิทธิ์พนักงาน" : "Staff permissions"} · {displayUserName(permissionTarget.member, language)}
+                    </h2>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                      {memberPermissionSummary(permissionTarget.member, language)}
+                    </p>
+                  </>
+                )}
               </div>
-              <button type="button" onClick={() => closePermissionModal()} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button
+                type="button"
+                aria-label={copy.cancelAction}
+                disabled={!roleDialogPolicy.canDismiss}
+                onClick={() => closePermissionModal()}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+              >
+                <X className="h-4.5 w-4.5" strokeWidth={2.1} aria-hidden="true" />
+              </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
               {permissionTarget.type === "member" && (
@@ -1189,18 +1430,25 @@ export default function StaffPage() {
                     onChange={(event) => {
                       setUseRolePermissions(event.target.checked);
                       if (event.target.checked) {
-                        setPermissionDraft(parsePermissions(permissionTarget.member.role?.permissions));
+                        setPermissionDraft(parsePermissions(permissionTarget.member.role?.permissions, permissionTarget.member.role?.name));
                       }
                     }}
                   />
                   {language === "th" ? "ใช้สิทธิ์ตามบทบาทนี้" : "Use this role's default permissions"}
                 </label>
               )}
+              {preservedPermissionCount > 0 && (
+                <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-5 text-sky-800 dark:border-sky-900/50 dark:bg-sky-900/15 dark:text-sky-200">
+                  {language === "th"
+                    ? `มี ${preservedPermissionCount} สิทธิ์ที่บัญชีนี้มอบไม่ได้ ระบบจะเก็บค่าเดิมไว้ แต่ต้องให้ผู้มีสิทธิ์สูงกว่าเป็นผู้บันทึกการแก้ไข`
+                    : `${preservedPermissionCount} permission${preservedPermissionCount === 1 ? " is" : "s are"} outside this account's grant scope. The existing value is preserved; a higher-privileged account must save changes.`}
+                </div>
+              )}
               <div className="mb-5 flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={permissionTarget.type === "member" && useRolePermissions}
-                  onClick={() => setPermissionDraft(ALL_PERMISSION_KEYS)}
+                  onClick={() => setPermissionDraft((current) => replaceGrantablePermissionSelection(current, grantablePermissions, true))}
                   className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
                 >
                   {language === "th" ? "เลือกทั้งหมด" : "Select all"}
@@ -1208,14 +1456,14 @@ export default function StaffPage() {
                 <button
                   type="button"
                   disabled={permissionTarget.type === "member" && useRolePermissions}
-                  onClick={() => setPermissionDraft([])}
+                  onClick={() => setPermissionDraft((current) => replaceGrantablePermissionSelection(current, grantablePermissions, false))}
                   className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
                 >
                   {language === "th" ? "เอาที่เลือกออกทั้งหมด" : "Clear selected"}
                 </button>
               </div>
               <div className="space-y-5">
-                {PERMISSION_SECTIONS.map((section) => (
+                {visiblePermissionSections.map((section) => (
                   <section key={section.id} className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
                     <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/70">
                       <h3 className="text-[15px] font-semibold text-gray-950 dark:text-white">{language === "th" ? section.th : section.en}</h3>
@@ -1223,11 +1471,24 @@ export default function StaffPage() {
                     <div>
                       {section.rows.map((row) => {
                         const disabled = permissionTarget.type === "member" && useRolePermissions;
+                        const prerequisites = row.permissions.flatMap((permission) => PERMISSION_DEPENDENCIES[permission] ?? []);
+                        const prerequisiteLabels = prerequisites.map((permission) => {
+                          const requiredRow = PERMISSION_SECTIONS.flatMap((item) => item.rows)
+                            .find((item) => item.permissions.includes(permission));
+                          return requiredRow ? (language === "th" ? requiredRow.th : requiredRow.en) : permission;
+                        });
                         return (
                           <div key={row.id} className="grid gap-4 border-b border-dashed border-gray-200 px-4 py-4 last:border-b-0 dark:border-gray-800 md:grid-cols-[minmax(0,1fr)_minmax(260px,auto)] md:items-center">
                             <div className="grid gap-1 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-5">
                               <p className="text-[13px] font-medium text-gray-900 dark:text-white">{language === "th" ? row.th : row.en}</p>
-                              <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">{language === "th" ? row.descriptionTh : row.descriptionEn}</p>
+                              <div>
+                                <p className="text-[12px] leading-5 text-gray-500 dark:text-gray-400">{language === "th" ? row.descriptionTh : row.descriptionEn}</p>
+                                {prerequisiteLabels.length > 0 && (
+                                  <p className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-500">
+                                    {language === "th" ? "เปิดพร้อม: " : "Also enables: "}{prerequisiteLabels.join(", ")}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                             <div className="flex md:justify-end">
                               {(() => {
@@ -1280,14 +1541,14 @@ export default function StaffPage() {
                   <button
                     type="button"
                     onClick={() => void removeRole(permissionTarget.role)}
-                    disabled={roleActionIds.includes(permissionTarget.role.ID) || permissionSaving}
+                    disabled={!roleDialogPolicy.canDeleteRole}
                     className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
                   >
                     {copy.deleteRole}
                   </button>
                 )}
               </div>
-              <button type="button" onClick={() => void savePermissions()} disabled={permissionSaving} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+              <button type="button" onClick={() => void savePermissions()} disabled={!roleDialogPolicy.canSavePermissions || permissionEditBlocked} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900">
                 {permissionSaving ? (language === "th" ? "กำลังบันทึก..." : "Saving...") : (language === "th" ? "บันทึกสิทธิ์" : "Save permissions")}
               </button>
             </div>

@@ -94,14 +94,14 @@ function ArticleSection({
             </summary>
             <ul className="border-t border-gray-200 px-4 py-3 pl-9 text-[14px] leading-7 text-gray-700 dark:border-gray-800 dark:text-gray-300">
               {section.bullets.map((bullet, index) => (
-                <li key={`${anchor}-bullet-${index}`} className="list-disc pl-1 marker:text-gray-400 dark:marker:text-gray-600">
+                <li key={`${anchor}-bullet-${index}`} className="list-disc pl-1 marker:text-gray-500 dark:marker:text-gray-600">
                   {localized(bullet, language)}
                 </li>
               ))}
             </ul>
           </details>
         ) : (
-          <ul className="mt-5 max-w-[72ch] list-disc space-y-2.5 pl-5 text-[15px] leading-7 text-gray-700 marker:text-gray-400 dark:text-gray-300 dark:marker:text-gray-600">
+          <ul className="mt-5 max-w-[72ch] list-disc space-y-2.5 pl-5 text-[15px] leading-7 text-gray-700 marker:text-gray-500 dark:text-gray-300 dark:marker:text-gray-600">
             {section.bullets.map((bullet, index) => (
               <li key={`${anchor}-bullet-${index}`} className="pl-1">
                 {localized(bullet, language)}
@@ -256,7 +256,7 @@ export function DocsArticleContent({ article, language }: { article: DocArticle;
             href={docArticleHref(previousArticle)}
             className="group flex min-h-20 items-center gap-3 rounded-md border border-gray-200 px-4 py-3 hover:border-gray-300 hover:bg-slate-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/70"
           >
-            <ArrowLeft className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
+            <ArrowLeft className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-hover:-translate-x-0.5" aria-hidden="true" />
             <span className="min-w-0">
               <span className="block text-[11px] text-gray-500 dark:text-gray-400">{copy.previous}</span>
               <span className="mt-1 block text-[13px] font-semibold leading-5 text-gray-900 dark:text-white">
@@ -277,7 +277,7 @@ export function DocsArticleContent({ article, language }: { article: DocArticle;
                 {localized(nextArticle.title, language)}
               </span>
             </span>
-            <ArrowRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            <ArrowRight className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </Link>
         ) : <span aria-hidden="true" />}
       </nav>

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 9
+	CurrentSchemaVersion int64 = 12
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -190,10 +190,72 @@ func schemaMigrationPlan() []SchemaMigration {
 				return nil
 			},
 		},
+		{
+			Version: 10,
+			Name:    "reseed_granular_role_permissions",
+			Up: func(ctx *MigrationContext) error {
+				// No schema changes: refresh only the global system-role defaults.
+				// Existing tenant overrides remain intact and use runtime legacy
+				// compatibility until an administrator saves the granular model.
+				if err := seed.SeedRoles(ctx.DB); err != nil {
+					return fmt.Errorf("reseed granular role permissions: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 11,
+			Name:    "add_restaurant_role_display_name_overrides",
+			Up: func(ctx *MigrationContext) error {
+				if err := migrateRoleDisplayNameOverrides(ctx.DB); err != nil {
+					return fmt.Errorf("migrate restaurant role display-name overrides: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 12,
+			Name:    "add_ai_operating_calendar",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only: the AI feature's own operating calendar (closed
+				// weekdays + one-off closures/holidays) used by the sales forecast.
+				// It links by restaurant_id and never touches the shared restaurant
+				// table, so disabling the forecast leaves this table unused as the
+				// rollback. Numbered after main's 10 and 11 — the same pattern as the
+				// earlier AI migrations that moved to 8 and 9.
+				if err := ctx.DB.AutoMigrate(&entity.AIOperatingCalendarRule{}); err != nil {
+					return fmt.Errorf("migrate AI operating calendar: %w", err)
+				}
+				return nil
+			},
+		},
 	}
 }
 
 var aiActionPreviewForeignKeys = []string{"Restaurant", "Owner", "Conversation", "Turn", "TargetMenuItem"}
+
+var roleDisplayNameOverrideForeignKeys = []string{"Restaurant", "Role"}
+
+func migrateRoleDisplayNameOverrides(database *gorm.DB) error {
+	// Keep migration 11 additive: create only the new override table, then add
+	// its reviewed links to the already-migrated restaurant and role tables.
+	migrationDB := database.Session(&gorm.Session{NewDB: true})
+	configCopy := *migrationDB.Config
+	configCopy.IgnoreRelationshipsWhenMigrating = true
+	migrationDB.Config = &configCopy
+	if err := migrationDB.AutoMigrate(&entity.RestaurantRoleDisplayNameOverride{}); err != nil {
+		return err
+	}
+	for _, relationship := range roleDisplayNameOverrideForeignKeys {
+		if database.Migrator().HasConstraint(&entity.RestaurantRoleDisplayNameOverride{}, relationship) {
+			continue
+		}
+		if err := database.Migrator().CreateConstraint(&entity.RestaurantRoleDisplayNameOverride{}, relationship); err != nil {
+			return fmt.Errorf("create role display-name override %s constraint: %w", relationship, err)
+		}
+	}
+	return nil
+}
 
 func migrateAIActionPreviews(database *gorm.DB) error {
 	// AutoMigrate normally walks relationship dependencies and can migrate the

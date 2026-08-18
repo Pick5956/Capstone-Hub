@@ -5,29 +5,15 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
+import { useLanguage } from "@/src/providers/LanguageProvider";
 import { restaurantRepository } from "../repositories/restaurantRepository";
 import type { Membership } from "@/src/types/restaurant";
 import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUser } from "./restaurantWorkspaceUi";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
+import { roleLabel } from "@/src/lib/roleLabels";
 import { Plus, LogIn, Clock, Grid, ChevronRight, Phone } from "lucide-react";
-
-const ROLE_LABEL: Record<string, Record<Language, string>> = {
-  owner: { th: "เจ้าของร้าน", en: "Owner" },
-  manager: { th: "ผู้จัดการ", en: "Manager" },
-  cashier: { th: "แคชเชียร์", en: "Cashier" },
-  waiter: { th: "พนักงานเสิร์ฟ", en: "Waiter" },
-  chef: { th: "ครัว", en: "Kitchen" },
-};
-
-function roleNameOf(membership: Membership) {
-  return membership.role?.name ?? "waiter";
-}
-
-function roleLabelOf(membership: Membership, language: Language) {
-  return ROLE_LABEL[roleNameOf(membership)]?.[language] ?? roleNameOf(membership);
-}
+import AppWordmark from "@/src/components/shared/AppWordmark";
 
 export function getRestaurantCoverPath(type: string | undefined) {
   const normalized = type?.trim().toLowerCase() || "";
@@ -54,7 +40,7 @@ function RestaurantCard({
 }) {
   const { language } = useLanguage();
   const restaurant = membership.restaurant;
-  const roleLabel = roleLabelOf(membership, language);
+  const displayRoleName = roleLabel(membership.role, language);
   const restaurantName = restaurant?.name ?? (language === "th" ? "ร้านอาหาร" : "Restaurant");
   const branchName = restaurant?.branch_name?.trim() || (language === "th" ? "สาขาหลัก" : "Main branch");
   const restaurantType = getRestaurantTypeLabel(restaurant?.restaurant_type?.trim() || "ร้านอาหาร", language);
@@ -109,7 +95,7 @@ function RestaurantCard({
               {restaurantName}
             </h3>
             <span className="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
-              {roleLabel}
+              {displayRoleName}
             </span>
           </div>
           <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
@@ -118,11 +104,11 @@ function RestaurantCard({
 
           <div className="mt-4 space-y-2 text-xs text-gray-600 dark:text-gray-300 border-t border-gray-100 dark:border-gray-800/60 pt-3">
             <div className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-gray-400 shrink-0" />
+              <Clock className="h-4 w-4 text-gray-500 shrink-0" />
               <span className="font-mono">{hours}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Grid className="h-4 w-4 text-gray-400 shrink-0" />
+              <Grid className="h-4 w-4 text-gray-500 shrink-0" />
               <span>
                 {restaurant?.table_count ? (
                   language === "th" ? (
@@ -137,7 +123,7 @@ function RestaurantCard({
             </div>
             {restaurant?.phone && (
               <div className="flex items-center gap-1.5">
-                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                <Phone className="h-4 w-4 text-gray-500 shrink-0" />
                 <span className="font-mono">{restaurant.phone}</span>
               </div>
             )}
@@ -175,7 +161,7 @@ function EmptyRestaurantsState() {
             ? "เลือกช่องทางเริ่มต้นใช้งานระบบจัดการร้านอาหารเพื่อดำเนินการต่อ"
             : "Choose how you would like to get started with the restaurant management system."}
         </p>
-        <p className="mt-4 text-xs text-gray-400">
+        <p className="mt-4 text-xs text-gray-500">
           {language === "th" ? (
             <>ต้องการความช่วยเหลือ? <Link href="/docs" className="text-orange-600 hover:underline font-medium">ดูคู่มือการใช้งาน</Link></>
           ) : (
@@ -259,7 +245,7 @@ export default function RestaurantsPage() {
     <WorkspaceShell hideIntro={true} maxWidthClass="max-w-[1400px]">
       <div className="mb-7 flex flex-col gap-5 border-b border-gray-200 pb-6 sm:flex-row sm:items-end sm:justify-between dark:border-gray-800">
         <div>
-          <p className="text-[12px] font-semibold tracking-[0.12em] text-orange-600 dark:text-orange-400">DISHY</p>
+          <AppWordmark height={13} className="text-orange-600 dark:text-orange-400" />
           <h1 className="mt-2 text-2xl font-bold tracking-[-0.025em] text-gray-950 dark:text-white sm:text-3xl">
             {language === "th" ? "เลือกร้านเพื่อเริ่มงาน" : "Choose a restaurant to start"}
           </h1>
@@ -320,7 +306,7 @@ export default function RestaurantsPage() {
       </div>
 
       {/* Help Link Footnote */}
-      <div className="mt-12 text-center text-xs text-gray-400">
+      <div className="mt-12 text-center text-xs text-gray-500">
         {language === "th" ? (
           <>พบปัญหาการใช้งานหรือต้องการเรียนรู้เพิ่มเติม? <Link href="/docs" className="text-orange-600 hover:underline font-medium">ดูคู่มือการใช้งาน</Link></>
         ) : (

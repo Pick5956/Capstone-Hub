@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildReservationActionPath,
@@ -13,6 +16,8 @@ import {
   tableEditorSaveStatus,
   tableEntryAction,
 } from './table-workflow.ts';
+
+const mobileRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('inactive tables cannot open a new order', () => {
   assert.equal(tableEntryAction('inactive', false), 'blocked');
@@ -79,4 +84,14 @@ test('a dine-in order cannot be submitted for an invalid or missing table', () =
   assert.equal(canOpenDineInOrder(42, false), false);
   assert.equal(canOpenDineInOrder(0, true), false);
   assert.equal(canOpenDineInOrder(Number.NaN, true), false);
+});
+
+test('iPad order taking gives the full workspace to the table grid without changing phone cards', async () => {
+  const source = await readFile(path.join(mobileRoot, 'app', '(primary)', 'tables.tsx'), 'utf8');
+
+  assert.doesNotMatch(source, /\battentionTables\b|โต๊ะที่ต้องดูต่อ|Tables in progress/);
+  assert.equal(source.match(/onPress=\{\(\) => open\(table\)\}/g)?.length, 1);
+  assert.match(source, /width:\s*tabletWorkspace \? undefined : '48%'/);
+  assert.match(source, /minWidth:\s*tabletWorkspace \? 164 : 0/);
+  assert.match(source, /flexBasis:\s*tabletWorkspace \? 176 : 150/);
 });

@@ -3,9 +3,13 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
+    "expo-font": "~14.0.12",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
     "expo-secure-store": "~15.0.8",
@@ -19,6 +23,7 @@
     "react-native-nitro-modules": "^0.36.3",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.16.0",
+    "react-native-view-shot": "4.0.3",
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
@@ -27,13 +32,15 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:go:lan": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-expo-go-lan.ps1",
+    "generate:brand-assets": "node scripts/generate-brand-assets.cjs",
     "start:dev-client": "expo start --dev-client --lan",
     "start:dev-client:local": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-local-dev-client.ps1",
     "build:android:development": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-android-development.ps1",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/ai-actions.test.mjs src/lib/ai-conversation.test.mjs src/lib/ai-response.test.mjs src/lib/auth-state.test.mjs src/lib/auth-validation.test.mjs src/lib/display-preferences.test.mjs src/lib/format.test.mjs src/lib/google-sign-in-flow.test.mjs src/lib/home-dashboard.test.mjs src/lib/inventory-form.test.mjs src/lib/menu-editor.test.mjs src/lib/navigation-runtime.test.mjs src/lib/order-detail-runtime.test.mjs src/lib/order-query.test.mjs src/lib/order-workflow.test.mjs src/lib/permission-parity.test.mjs src/lib/public-web-url.test.mjs src/lib/receipt.test.mjs src/lib/registration-flow.test.mjs src/lib/report-query.test.mjs src/lib/restaurant-settings.test.mjs src/lib/restaurant-types.test.mjs src/lib/session-runtime.test.mjs src/lib/staff-workflow.test.mjs src/lib/table-workflow.test.mjs src/lib/work-mode.test.mjs src/storage/session-store.web.test.mjs",
+    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/ai-actions.test.mjs src/lib/ai-conversation.test.mjs src/lib/ai-response.test.mjs src/lib/app-font.test.mjs src/lib/app-shell-runtime.test.mjs src/lib/auth-state.test.mjs src/lib/auth-validation.test.mjs src/lib/brand-assets.test.mjs src/lib/display-preferences.test.mjs src/lib/format.test.mjs src/lib/google-sign-in-flow.test.mjs src/lib/home-dashboard.test.mjs src/lib/inventory-form.test.mjs src/lib/menu-editor.test.mjs src/lib/navigation-runtime.test.mjs src/lib/order-detail-runtime.test.mjs src/lib/order-query.test.mjs src/lib/order-workflow.test.mjs src/lib/permission-parity.test.mjs src/lib/public-web-url.test.mjs src/lib/receipt.test.mjs src/lib/registration-flow.test.mjs src/lib/report-query.test.mjs src/lib/restaurant-settings.test.mjs src/lib/restaurant-types.test.mjs src/lib/session-runtime.test.mjs src/lib/staff-workflow.test.mjs src/lib/table-workflow.test.mjs src/lib/work-mode.test.mjs src/storage/session-store.web.test.mjs",
     "typecheck": "tsc --noEmit",
     "tunnel:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-tunnel.ps1"
   },

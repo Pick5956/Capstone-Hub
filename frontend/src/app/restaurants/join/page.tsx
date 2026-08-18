@@ -26,7 +26,7 @@ function InvitePreview() {
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">{copy.preview}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">{copy.preview}</p>
       <div className="mt-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
         <div className="flex items-start justify-between gap-3">
           <div>

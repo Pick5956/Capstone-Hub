@@ -24,6 +24,39 @@ export interface CropPositionInput {
   offsetRangeY: number;
 }
 
+export const MENU_IMAGE_OUTPUT_MIME_TYPE = "image/webp";
+export const MENU_IMAGE_OUTPUT_QUALITY = 0.9;
+export const MENU_BACKGROUND_PROCESSING_MIME_TYPE = "image/png";
+export const MENU_BACKGROUND_REMOVAL_DEFAULT = false;
+export const MENU_BACKGROUND_DEFAULT_STRENGTH = 50;
+
+export interface MenuBackgroundPreviewResult {
+  can_remove: boolean;
+  preview_data_url: string;
+  removed_ratio: number;
+  strength: number;
+}
+
+export interface MenuImageUploadOptions {
+  removeBackground: boolean;
+  backgroundStrength: number;
+}
+
+export function clampMenuBackgroundStrength(value: number) {
+  if (!Number.isFinite(value)) return MENU_BACKGROUND_DEFAULT_STRENGTH;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+export function menuImageOutputName(sourceName?: string | null, removeBackground = false) {
+  const baseName = String(sourceName || "")
+    .trim()
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/\.[^.]+$/, "")
+    .trim();
+  return `${baseName || "menu-image"}-cropped.${removeBackground ? "png" : "webp"}`;
+}
+
 const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
 const clampZoomPercent = (value: number) => Math.min(100, Math.max(-100, value));
 

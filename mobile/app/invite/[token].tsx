@@ -1,8 +1,9 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { acceptInvitation, getInvitationByToken } from '@/src/api/restaurant';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AuthScreen } from '@/src/components/auth-screen';
 import {
@@ -21,7 +22,7 @@ import {
 import { getDefaultWorkspaceRoute } from '@/src/lib/work-mode';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type { Invitation } from '@/src/types/restaurant';
 
 type Copy = (thai: string, english: string) => string;
@@ -62,17 +63,11 @@ function localizedRoleLabel(
   role: Invitation['role'],
   language: 'th' | 'en',
 ): string {
-  if (language === 'th') return roleLabel(role);
-  const roleName = role?.name;
-  if (roleName === 'owner') return 'Owner';
-  if (roleName === 'manager') return 'Manager';
-  if (roleName === 'cashier') return 'Cashier';
-  if (roleName === 'waiter') return 'Server';
-  if (roleName === 'chef') return 'Kitchen';
-  return role?.display_name?.trim() || roleName || 'Staff';
+  return roleLabel(role, language);
 }
 
 export default function InviteTokenScreen() {
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ token: string }>();
   const token = useMemo(() => invitationTokenFrom(params.token || ''), [params.token]);
   const {
@@ -82,6 +77,7 @@ export default function InviteTokenScreen() {
     user,
   } = useAuth();
   const { copy, language } = useDisplayPreferences();
+  const tabletWorkspace = width >= breakpoints.tabletWorkspace;
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [usable, setUsable] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -155,8 +151,8 @@ export default function InviteTokenScreen() {
     <AuthScreen
       title={copy('คำเชิญเข้าร่วมร้าน', 'Restaurant invitation')}
       subtitle={copy(
-        'ตรวจรายละเอียดและบัญชีก่อนยืนยันเข้าร่วมทีมบน Dishy',
-        'Review the details and account before joining this team on Dishy',
+        'ตรวจร้าน บทบาท และบัญชีก่อนเข้าร่วม',
+        'Check the restaurant, role and account before joining',
       )}
       showBack
     >
@@ -186,14 +182,18 @@ export default function InviteTokenScreen() {
             detail={invitation.restaurant?.address
               || copy('ยังไม่ระบุที่อยู่', 'Address not provided')}
             action={(
-              <StatusBadge
-                label={invitationStatusLabel(invitation, usable, copy)}
-                tone={usable ? 'success' : invitation.status === 'revoked' ? 'danger' : 'warning'}
-              />
+              <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
+                <AppIcon color={palette.muted} name="storefront-outline" size={21} />
+                <StatusBadge
+                  label={invitationStatusLabel(invitation, usable, copy)}
+                  tone={usable ? 'success' : invitation.status === 'revoked' ? 'danger' : 'warning'}
+                />
+              </View>
             )}
           />
 
-          <View style={{ gap: spacing.md }}>
+          <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', alignItems: 'flex-start', gap: spacing.lg }}>
+          <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 0.9 : undefined, gap: spacing.md }}>
             {[
               {
                 label: copy('บทบาท', 'Role'),
@@ -218,6 +218,7 @@ export default function InviteTokenScreen() {
             ))}
           </View>
 
+          <View style={{ width: tabletWorkspace ? undefined : '100%', minWidth: 0, flex: tabletWorkspace ? 1.1 : undefined, gap: spacing.md }}>
           {user ? (
             <Feedback
               title={emailMismatch
@@ -252,6 +253,7 @@ export default function InviteTokenScreen() {
           )}
 
           <Button
+            icon={user ? 'checkmark-circle-outline' : 'log-in-outline'}
             label={accepting
               ? copy('กำลังรับคำเชิญ', 'Accepting invitation')
               : user
@@ -264,6 +266,7 @@ export default function InviteTokenScreen() {
           {!user ? (
             <Button
               variant="secondary"
+              icon="person-add-outline"
               label={copy('สร้างบัญชีใหม่', 'Create an account')}
               onPress={() => router.push({
                 pathname: '/register',
@@ -271,6 +274,8 @@ export default function InviteTokenScreen() {
               } as never)}
             />
           ) : null}
+          </View>
+          </View>
         </Surface>
       ) : null}
     </AuthScreen>

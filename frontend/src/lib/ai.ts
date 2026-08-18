@@ -3,6 +3,7 @@ import type {
   AIActionConfirmation,
   AIAskRequest,
   AIAskResponse,
+  AICalendarView,
   AIConversationMessage,
   AIInsight,
   AIReceiptDraft,
@@ -43,6 +44,12 @@ export const getOperationsSnapshot = () =>
 
 export const getProactiveInsights = () =>
   apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");
+
+export const getOperatingCalendar = () =>
+  apiClient.get<AICalendarView>("/api/v1/ai/operations/calendar");
+
+export const updateOperatingCalendar = (view: AICalendarView) =>
+  apiClient.put<AICalendarView>("/api/v1/ai/operations/calendar", view);
 
 export const extractReceipt = (imageBase64: string, mimeType: string) =>
   apiClient.post<{ draft: AIReceiptDraft }>(

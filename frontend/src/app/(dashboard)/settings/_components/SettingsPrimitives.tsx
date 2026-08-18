@@ -22,7 +22,11 @@ export function SettingsShell({
 }) {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      {!hideHeader && (
+      {hideHeader ? (
+        // The sidebar already names the page; keep only a visually-hidden
+        // heading so the document outline and screen readers are unaffected.
+        <h1 className="sr-only">{title}</h1>
+      ) : (
         <div className="px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6 mb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
@@ -105,7 +109,7 @@ export function Field({
             disabled={disabled}
             readOnly={!onChange}
             onChange={(event) => onChange?.(event.target.value)}
-            className={`h-11 w-full min-w-0 rounded-md border bg-white px-3 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:h-10 sm:text-[13px] ${
+            className={`h-11 w-full min-w-0 rounded-md border bg-white px-3 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:h-10 sm:text-[13px] ${
               error
                 ? "border-red-300 focus:border-red-500 focus:ring-red-500/15 dark:border-red-900/60"
                 : "border-gray-200 focus:border-orange-500 focus:ring-orange-500/15 dark:border-gray-700"
@@ -149,7 +153,7 @@ export function TextAreaField({
         disabled={disabled}
         readOnly={!onChange}
         onChange={(event) => onChange?.(event.target.value)}
-        className={`w-full min-w-0 rounded-md border bg-white px-3 py-2 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:text-[13px] ${
+        className={`w-full min-w-0 rounded-md border bg-white px-3 py-2 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:text-[13px] ${
           error
             ? "border-red-300 focus:border-red-500 focus:ring-red-500/15 dark:border-red-900/60"
             : "border-gray-200 focus:border-orange-500 focus:ring-orange-500/15 dark:border-gray-700"

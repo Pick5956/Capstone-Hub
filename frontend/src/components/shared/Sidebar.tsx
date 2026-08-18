@@ -8,7 +8,7 @@ import { useAuth } from '@/src/providers/AuthProvider';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import AppLogo from '@/src/components/shared/AppLogo';
 import { useBackdropClose } from '@/src/hooks/useBackdropClose';
-import { can } from '@/src/lib/rbac';
+import { can, TEAM_MANAGEMENT_PERMISSIONS } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
 
 type SubItem = {
@@ -106,7 +106,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
         {
           label: language === 'th' ? 'พนักงาน' : 'Staff',
           href: '/staff',
-          permission: 'manage_staff',
+          permission: [...TEAM_MANAGEMENT_PERMISSIONS],
           icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
         },
         {
@@ -132,7 +132,7 @@ function buildNav(language: 'th' | 'en'): NavGroup[] {
             {
               label: language === 'th' ? 'จัดการร้านและภาษี' : 'Restaurant & Taxes',
               href: '/settings/restaurant',
-              permission: 'manage_staff',
+              permission: 'manage_restaurant_settings',
             },
             {
               label: language === 'th' ? 'ภาษาและการแสดงผล' : 'Display settings',
@@ -183,7 +183,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
             <div
               role="separator"
               aria-orientation="horizontal"
-              className="mx-1 my-2 border-t border-[#dfe3e8] dark:border-[#253142] [@media(max-height:760px)]:my-1.5"
+              className="mx-1 my-2 border-t border-[color:var(--dashboard-shell-border)] [@media(max-height:760px)]:my-1.5"
             />
           )}
           <div className="space-y-0.5">
@@ -200,7 +200,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
               const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
                 active
                   ? 'border border-transparent bg-orange-50 text-orange-700 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
-                  : 'border border-transparent text-gray-800 hover:border-[#dfe3e8] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:border-[#253142] dark:hover:bg-gray-900 dark:hover:text-white'
+                  : 'border border-transparent text-gray-800 hover:border-[color:var(--dashboard-shell-border)] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 dark:hover:text-white'
               } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
 
               const content = (
@@ -212,7 +212,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                     }`}
                   >
                     <span className="truncate">{label}</span>
-                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-500 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
                     {hasSubItems && (
                       <svg
                         viewBox="0 0 24 24"
@@ -220,7 +220,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         stroke="currentColor"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-600 dark:text-orange-300' : 'text-gray-400'} ${isExpanded ? 'rotate-90' : ''}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-600 dark:text-orange-300' : 'text-gray-500'} ${isExpanded ? 'rotate-90' : ''}`}
                       >
                         <polyline points="9 18 15 12 9 6"/>
                       </svg>
@@ -325,7 +325,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
         className={`flex min-w-0 items-center rounded-md border border-transparent transition-[background-color,border-color,gap,padding] duration-300 ${
           collapsed 
             ? 'justify-center gap-0 p-1 hover:bg-transparent' 
-            : 'gap-2.5 px-1.5 py-1.5 hover:border-[#dfe3e8] hover:bg-white dark:hover:border-[#253142] dark:hover:bg-gray-900'
+            : 'gap-2.5 px-1.5 py-1.5 hover:border-[color:var(--dashboard-shell-border)] hover:bg-white dark:hover:bg-gray-900'
         }`}
       >
         <AppLogo size={32} />
@@ -380,7 +380,7 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-[#dfe3e8] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:border-[#253142] dark:bg-gray-950 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-[color:var(--dashboard-shell-border)] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-gray-950 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
@@ -390,7 +390,7 @@ export default function Sidebar() {
             <button
               onClick={() => setMobileOpen(false)}
               aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
-              className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-5 w-5">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -415,7 +415,7 @@ export default function Sidebar() {
             <div className="flex items-center">
               <button
                 onClick={() => setCollapsed(!collapsed)}
-                className="shrink-0 rounded-md p-2 text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="shrink-0 rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
                 title={collapseTitle}
               >
                 {collapsed ? (

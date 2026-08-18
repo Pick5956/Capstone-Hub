@@ -5,6 +5,7 @@ export interface Role {
   restaurant_id?: number | null;
   name: string;
   display_name: string;
+  display_name_override?: string;
   permissions: string;
   is_system: boolean;
 }
@@ -76,6 +77,7 @@ export interface InvitationRoleSummary {
   restaurant_id?: number | null;
   name: string;
   display_name: string;
+  display_name_override?: string;
   is_system: boolean;
 }
 

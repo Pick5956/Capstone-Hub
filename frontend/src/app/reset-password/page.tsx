@@ -94,7 +94,7 @@ export default function ResetPasswordPage() {
           <div className="border-b border-white/10 px-5 py-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-400">{copy.eyebrow}</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">{copy.title}</h1>
-            <p className="mt-2 text-sm leading-6 text-gray-400">{copy.subtitle}</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">{copy.subtitle}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">

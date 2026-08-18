@@ -3,11 +3,12 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { AppText as Text } from '@/src/components/app-text';
 import { AuthScreen } from '@/src/components/auth-screen';
-import { Button, Feedback, Surface } from '@/src/components/ui';
+import { BrandMark } from '@/src/components/brand-mark';
+import { Button, Feedback } from '@/src/components/ui';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { getDefaultWorkspaceRoute } from '@/src/lib/work-mode';
-import { colors, layout, typeScale } from '@/src/theme';
+import { colors, layout, spacing, typeScale } from '@/src/theme';
 
 export default function IndexScreen() {
   const {
@@ -22,7 +23,8 @@ export default function IndexScreen() {
 
   if (status === 'loading') {
     return (
-      <View style={layout.centered}>
+      <View style={[layout.centered, { backgroundColor: colors.surface }]}>
+        <BrandMark size={46} />
         <ActivityIndicator color={colors.primary} />
         <Text selectable style={[typeScale.caption, { color: colors.muted }]}>
           {copy('กำลังเปิด Dishy', 'Opening Dishy')}
@@ -34,26 +36,23 @@ export default function IndexScreen() {
   if (status === 'recoverable-error' && sessionRestoreError) {
     return (
       <AuthScreen
-        title={copy('เชื่อมต่อบัญชีไม่ได้ชั่วคราว', 'Could not reconnect your account')}
-        subtitle={copy(
-          'ข้อมูลเข้าสู่ระบบเดิมยังถูกเก็บไว้อย่างปลอดภัย',
-          'Your existing sign-in is still stored safely.',
-        )}
+        title={copy('เชื่อมต่อไม่ได้', 'Connection problem')}
       >
-        <Surface>
+        <View style={{ gap: spacing.xl }}>
           <Feedback
-            title={copy('ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง', 'Check your connection and try again')}
+            title={copy('ตรวจสอบอินเทอร์เน็ต', 'Check your connection')}
             detail={copy(
-              'Dishy จะไม่ออกจากระบบเพราะปัญหาเครือข่ายชั่วคราว',
-              'Dishy will not sign you out because of a temporary network problem.',
+              'ยังเปิดบัญชีนี้ไม่ได้ในตอนนี้',
+              'This account cannot be opened right now.',
             )}
             tone="warning"
           />
           <Button
+            icon="wifi-outline"
             label={copy('ลองอีกครั้ง', 'Try again')}
             onPress={() => void retrySessionRestore()}
           />
-        </Surface>
+        </View>
       </AuthScreen>
     );
   }

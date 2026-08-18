@@ -36,6 +36,9 @@ type AIAskResponse struct {
 	// not ask for ("ยอดขายเท่าไหร่" → last 30 days). The client uses it to offer
 	// period-pivot chips, without re-deriving the "no scope stated" test itself.
 	ScopeAssumed   bool                     `json:"scope_assumed,omitempty"`
+	// Forecast carries the chart-ready sales prediction (history + bounded future +
+	// measured error) when the question asked for a forecast.
+	Forecast       *AIForecastResult        `json:"forecast,omitempty"`
 	ConversationID string                   `json:"conversation_id,omitempty"`
 	TurnID         string                   `json:"turn_id,omitempty"`
 	ResolvedPlan   *ResolvedPlan            `json:"resolved_plan,omitempty"`

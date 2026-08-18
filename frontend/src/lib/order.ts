@@ -59,6 +59,12 @@ export const deleteOrderItem = (orderId: number, itemId: number) =>
 export const updateOrderItemStatus = (orderId: number, itemId: number, status: OrderItemStatus, reason?: string) =>
   apiClient.patch<Order>(`/api/v1/orders/${orderId}/items/${itemId}/status`, { status, reason });
 
+// Void a number of units from a single served/cooking line, with an audit
+// reason. Voiding the whole quantity cancels the line; a smaller count splits
+// it, keeping the remaining units billable.
+export const voidOrderItemUnits = (orderId: number, itemId: number, quantity: number, reason: string) =>
+  apiClient.post<Order>(`/api/v1/orders/${orderId}/items/${itemId}/void`, { quantity, reason });
+
 export const sendOrderToKitchen = (orderId: number) =>
   apiClient.post<Order>(`/api/v1/orders/${orderId}/send-to-kitchen`);
 

@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 
 import { scaleTextMetric } from '@/src/lib/display-preferences';
+import { resolveAppFontFamily } from '@/src/lib/app-font';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 
 export const AppTextInput = forwardRef<NativeTextInput, TextInputProps>(
@@ -25,8 +26,11 @@ export const AppTextInput = forwardRef<NativeTextInput, TextInputProps>(
         {...props}
         ref={ref}
         style={[
+          { includeFontPadding: false },
           style,
           {
+            fontFamily: resolveAppFontFamily(flattened?.fontWeight),
+            fontWeight: 'normal',
             fontSize: scaleTextMetric(fontSize, textSize),
             lineHeight:
               lineHeight === undefined

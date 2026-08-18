@@ -11,19 +11,7 @@ import { restaurantRepository } from "../../repositories/restaurantRepository";
 import type { Invitation } from "@/src/types/restaurant";
 import { Skeleton, SkeletonText } from "@/src/components/shared/Skeleton";
 import { createSingleFlight } from "@/src/lib/singleFlight";
-
-const ROLE_LABELS = {
-  owner: { th: "เจ้าของร้าน", en: "Owner" },
-  manager: { th: "ผู้จัดการ", en: "Manager" },
-  cashier: { th: "แคชเชียร์", en: "Cashier" },
-  waiter: { th: "พนักงานเสิร์ฟ", en: "Waiter" },
-  chef: { th: "ครัว", en: "Kitchen" },
-};
-
-function roleLabel(invitation: Invitation | null, language: "th" | "en") {
-  const name = invitation?.role?.name ?? "";
-  return ROLE_LABELS[name as keyof typeof ROLE_LABELS]?.[language] ?? (name || (language === "th" ? "พนักงาน" : "Staff"));
-}
+import { roleLabel } from "@/src/lib/roleLabels";
 
 function formatExpiry(value: string | undefined | null, language: "th" | "en") {
   if (!value) return language === "th" ? "ไม่กำหนด" : "No expiry";
@@ -236,15 +224,15 @@ export default function InvitationAcceptPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-3 text-[12px] sm:grid-cols-3">
                   <div>
-                    <p className="text-gray-400">{copy.roleLabel}</p>
-                    <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{roleLabel(invitation, language)}</p>
+                    <p className="text-gray-500">{copy.roleLabel}</p>
+                    <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{roleLabel(invitation.role, language)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">{copy.expiryLabel}</p>
+                    <p className="text-gray-500">{copy.expiryLabel}</p>
                     <p className="mt-0.5 font-medium text-gray-800 dark:text-gray-200">{formatExpiry(invitation.expires_at, language)}</p>
                   </div>
                   <div>
-                    <p className="text-gray-400">{copy.emailLabel}</p>
+                    <p className="text-gray-500">{copy.emailLabel}</p>
                     <p className="mt-0.5 truncate font-medium text-gray-800 dark:text-gray-200">{invitation.email || copy.anyEmail}</p>
                   </div>
                 </div>

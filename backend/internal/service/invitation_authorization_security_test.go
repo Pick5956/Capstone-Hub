@@ -29,3 +29,29 @@ func TestInvitationManagerAuthorizationIsRestaurantSpecific(t *testing.T) {
 		t.Fatal("suspended manager was authorized to manage invitations")
 	}
 }
+
+func TestInvitationCapabilityWorksForCustomRoleButLegacyManageStaffDoesNot(t *testing.T) {
+	explicit := &entity.RestaurantMember{
+		RestaurantID: 12,
+		Status:       "active",
+		Role: &entity.Role{
+			Name:        "custom_12_hiring",
+			Permissions: `["manage_invites"]`,
+		},
+	}
+	if !invitationManagerCanAct(explicit, 12) {
+		t.Fatal("custom role with manage_invites could not manage invitations")
+	}
+
+	legacyCustom := &entity.RestaurantMember{
+		RestaurantID: 12,
+		Status:       "active",
+		Role: &entity.Role{
+			Name:        "custom_12_legacy",
+			Permissions: `["manage_staff"]`,
+		},
+	}
+	if invitationManagerCanAct(legacyCustom, 12) {
+		t.Fatal("legacy manage_staff empowered a custom role")
+	}
+}

@@ -1,14 +1,16 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listIngredients } from '@/src/api/ingredient';
 import { kitchenQueue, listOrders } from '@/src/api/order';
 import { getManagerReport, getTopMenuItemsByMonth } from '@/src/api/report';
 import { listTables } from '@/src/api/table';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppIcon, type AppIconName } from '@/src/components/app-icon';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { AppText as Text } from '@/src/components/app-text';
-import { Button, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
+import { Button, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import {
   buildHomeAttention,
   buildHomeOperationalMetrics,
@@ -26,6 +28,7 @@ import {
   type HomeOperationalMetricKey,
   type HomePriority,
 } from '@/src/lib/home-dashboard';
+import { resolveHomeRestaurantIdentity } from '@/src/lib/app-shell-runtime';
 import { formatBangkokDate } from '@/src/lib/order-query';
 import { can } from '@/src/lib/rbac';
 import { getBangkokReportMonth } from '@/src/lib/report-query';
@@ -77,6 +80,17 @@ function reportMonthLabel(report: TopMenuItemsReport, language: 'th' | 'en') {
   }).format(date);
 }
 
+function formatBangkokTime(value: string | null | undefined, language: 'th' | 'en') {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-US', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function operationalMetricLabel(key: HomeOperationalMetricKey, copy: Copy) {
   const labels: Record<HomeOperationalMetricKey, [string, string]> = {
     'orders-active': ['ออเดอร์กำลังดำเนินการ', 'Active orders'],
@@ -87,6 +101,27 @@ function operationalMetricLabel(key: HomeOperationalMetricKey, copy: Copy) {
     'kitchen-ready': ['คิวพร้อมเสิร์ฟ', 'Ready to serve'],
   };
   return copy(...labels[key]);
+}
+
+function operationalMetricPresentation(key: HomeOperationalMetricKey): {
+  href: '/orders' | '/tables' | '/kitchen';
+  icon: AppIconName;
+  tone: 'success' | 'warning' | 'info' | 'neutral';
+} {
+  switch (key) {
+    case 'orders-active':
+      return { href: '/orders', icon: 'receipt-outline', tone: 'neutral' };
+    case 'tables-occupied':
+      return { href: '/tables', icon: 'people-outline', tone: 'warning' };
+    case 'tables-free':
+      return { href: '/tables', icon: 'restaurant-outline', tone: 'success' };
+    case 'tables-reserved':
+      return { href: '/tables', icon: 'time-outline', tone: 'info' };
+    case 'kitchen-active':
+      return { href: '/kitchen', icon: 'flame-outline', tone: 'warning' };
+    case 'kitchen-ready':
+      return { href: '/kitchen', icon: 'checkmark-circle-outline', tone: 'success' };
+  }
 }
 
 function localizedOrderStatus(status: OrderStatus, copy: Copy) {
@@ -113,22 +148,8 @@ function localizedWorkMode(
     โหมดเจ้าของร้าน: 'Owner mode',
     โหมดทำงาน: 'Work mode',
   };
-  const hints: Record<string, string> = {
-    'เปิดคิวครัวไว้เพื่อดูออเดอร์ที่ส่งเข้ามาและอัปเดตสถานะอาหาร':
-      'Keep the kitchen queue open to receive orders and update item statuses.',
-    'เริ่มจากเลือกโต๊ะ เปิดออเดอร์ เพิ่มเมนู แล้วส่งเข้าครัว':
-      'Choose a table, open an order, add items, then send it to the kitchen.',
-    'ติดตามออเดอร์ ออกบิล และบันทึกการชำระเงินจากมือถือ':
-      'Track orders, issue bills, and record payments from your phone.',
-    'ดูภาพรวมร้าน จัดการเมนู โต๊ะ พนักงาน และรายงานจากแอพเดียว':
-      'Monitor the restaurant and manage menus, tables, staff, and reports in one app.',
-    'ระบบจะแสดงเครื่องมือที่ตรงกับสิทธิ์ของบัญชีนี้':
-      'The app shows the tools available to this account.',
-  };
-
   return {
     title: copy(workMode.title, titles[workMode.title] || workMode.title),
-    hint: copy(workMode.hint, hints[workMode.hint] || workMode.hint),
   };
 }
 
@@ -239,12 +260,111 @@ function attentionLabel(priority: HomePriority, copy: Copy) {
   }
 }
 
-function priorityBackground(priority: HomePriority) {
-  if (priority.tone === 'danger') return palette.dangerSoft;
-  if (priority.tone === 'success') return palette.successSoft;
-  if (priority.tone === 'warning') return palette.warningSoft;
-  if (priority.tone === 'info') return palette.infoSoft;
-  return palette.neutralSoft;
+function priorityPresentation(priority: HomePriority): {
+  backgroundColor: string;
+  borderColor: string;
+  color: string;
+  icon: AppIconName;
+} {
+  if (priority.key === 'take-order') {
+    return {
+      backgroundColor: palette.accentSoft,
+      borderColor: palette.accentMuted,
+      color: palette.accent,
+      icon: 'restaurant-outline',
+    };
+  }
+
+  const tone = statusTone(priority.tone);
+  const icons: Record<HomePriority['key'], AppIconName> = {
+    'kitchen-overdue': 'timer-outline',
+    'kitchen-ready': 'checkmark-circle-outline',
+    'stock-out': 'alert-circle-outline',
+    'stock-low': 'cube-outline',
+    'kitchen-active': 'flame-outline',
+    'take-order': 'restaurant-outline',
+    orders: 'receipt-outline',
+    overview: 'checkmark-circle-outline',
+  };
+  return { ...tone, icon: icons[priority.key] };
+}
+
+function orderStatusPresentation(status: OrderStatus) {
+  if (status === 'completed' || status === 'ready' || status === 'served') return statusTone('success');
+  if (status === 'sent_to_kitchen' || status === 'cooking') return statusTone('warning');
+  if (status === 'cancelled') return statusTone('danger');
+  return statusTone('info');
+}
+
+function HomeRestaurantIdentity() {
+  const { activeMembership, user } = useAuth();
+  const { copy } = useDisplayPreferences();
+  const identity = resolveHomeRestaurantIdentity({
+    restaurantName: activeMembership?.restaurant?.name,
+    branchName: activeMembership?.restaurant?.branch_name,
+    roleDisplayNameOverride: activeMembership?.role?.display_name_override,
+    roleDisplayName: activeMembership?.role?.display_name,
+    roleName: activeMembership?.role?.name,
+    nickname: user?.nickname,
+    firstName: user?.first_name,
+    email: user?.email,
+  });
+  const detail = identity.detail || copy('เลือกร้าน', 'Choose restaurant');
+
+  return (
+    <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+      <Pressable
+        accessibilityLabel={copy(
+          `เปลี่ยนร้าน ร้านปัจจุบัน ${identity.restaurantName} ${detail}`,
+          `Change restaurant. Current restaurant: ${identity.restaurantName}, ${detail}`,
+        )}
+        accessibilityRole="button"
+        onPress={() => router.push('/restaurants')}
+        style={({ pressed }) => ({
+          minWidth: 0,
+          minHeight: 48,
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+          opacity: pressed ? 0.68 : 1,
+        })}
+      >
+        <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.accentSoft }}>
+          <AppIcon color={palette.accent} name="storefront-outline" size={20} />
+        </View>
+        <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
+          <Text numberOfLines={1} style={{ color: palette.textStrong, fontSize: 15, fontWeight: '800' }}>
+            {identity.restaurantName}
+          </Text>
+          <Text numberOfLines={1} style={{ color: palette.muted, fontSize: 12 }}>
+            {detail}
+          </Text>
+        </View>
+        <AppIcon color={palette.muted} name="chevron-down" size={17} />
+      </Pressable>
+      <Pressable
+        accessibilityLabel={copy('เปิดบัญชีและการตั้งค่า', 'Open account and settings')}
+        accessibilityRole="button"
+        onPress={() => router.push('/settings')}
+        style={({ pressed }) => ({
+          width: 44,
+          height: 44,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: palette.accentMuted,
+          borderRadius: radius.full,
+          backgroundColor: palette.accentSoft,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <Text allowFontScaling={false} style={{ color: palette.accent, fontSize: 14, fontWeight: '800' }}>
+          {identity.userInitial}
+        </Text>
+      </Pressable>
+    </View>
+  );
 }
 
 export default function HomeScreen() {
@@ -253,6 +373,8 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const requestIdRef = useRef(0);
   const foregroundRequestIdRef = useRef<number | null>(null);
+  const adjacentWarmRequestedRef = useRef(false);
+  const primaryTabSceneStatus = usePrimaryTabSceneStatus();
   const [selectedDate, setSelectedDate] = useState(() => formatBangkokDate());
   const [loadedDate, setLoadedDate] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -267,7 +389,6 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const workMode = localizedWorkMode(getWorkModeCopy(activeMembership), copy);
-  const restaurant = activeMembership?.restaurant;
   const canViewDashboard = can(activeMembership, 'view_dashboard');
   const canTakeOrder = can(activeMembership, 'take_order');
   const canViewOrders = can(activeMembership, 'view_orders');
@@ -403,13 +524,27 @@ export default function HomeScreen() {
     selectedDate,
   ]);
 
+  useEffect(() => {
+    if (
+      primaryTabSceneStatus !== 'adjacent' ||
+      adjacentWarmRequestedRef.current
+    ) return;
+    adjacentWarmRequestedRef.current = true;
+    void load();
+  }, [load, primaryTabSceneStatus]);
+
   useFocusEffect(useCallback(() => {
-    load();
+    if (adjacentWarmRequestedRef.current) {
+      adjacentWarmRequestedRef.current = false;
+    } else {
+      void load();
+    }
     const timer = isToday ? setInterval(() => load(true), 15000) : null;
     return () => {
       if (timer) clearInterval(timer);
       requestIdRef.current += 1;
       foregroundRequestIdRef.current = null;
+      setLoading(false);
     };
   }, [isToday, load]));
 
@@ -426,6 +561,8 @@ export default function HomeScreen() {
   const kitchenSummary = useMemo(() => summarizeKitchenQueue(kitchenOrders), [kitchenOrders]);
   const inventorySummary = useMemo(() => summarizeInventory(ingredients), [ingredients]);
   const compactStats = width < 390;
+  const tabletWorkspace = width >= 900;
+  const summaryColumns = tabletWorkspace ? 4 : compactStats ? 1 : 2;
   const counts = useMemo(() => ({
     ...kitchenSummary,
     ...inventorySummary,
@@ -469,6 +606,9 @@ export default function HomeScreen() {
     [topMenuReport],
   );
   const priorityText = priorityCopy(priority, copy);
+  const priorityVisual = priorityPresentation(priority);
+  const priorityNeedsAttention = attention.some((item) => item.key === priority.key);
+  const secondaryAttention = attention.filter((item) => item.key !== priority.key);
   const optionalFailureLabels = optionalFailures.map((failure) =>
     failure === 'kitchen'
       ? copy('คิวครัว', 'kitchen queue')
@@ -484,7 +624,11 @@ export default function HomeScreen() {
 
   if (!canViewDashboard) {
     return (
-      <AppScreen title={copy('ภาพรวมร้าน', 'Restaurant overview')} topLevel>
+      <AppScreen
+        beforeHeading={<HomeRestaurantIdentity />}
+        title={copy('ภาพรวมร้าน', 'Restaurant overview')}
+        topLevel
+      >
         <EmptyState
           title={copy('ไม่มีสิทธิ์ดูภาพรวมร้าน', 'You cannot view the restaurant overview')}
           detail={copy('ต้องมีสิทธิ์ view_dashboard', 'The view_dashboard permission is required')}
@@ -495,68 +639,57 @@ export default function HomeScreen() {
 
   return (
     <AppScreen
-      title={restaurant?.name || copy('ภาพรวมร้าน', 'Restaurant overview')}
-      subtitle={`${restaurant?.branch_name || copy('สาขาหลัก', 'Main branch')} · ${workMode.title}`}
+      beforeHeading={<HomeRestaurantIdentity />}
+      title={copy('ภาพรวมร้าน', 'Restaurant overview')}
+      subtitle={workMode.title}
       topLevel
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => load()} />}
+      refreshControl={<AppRefreshControl onRefresh={() => load()} />}
       action={(
         <StatusBadge
           label={
             error
               ? copy('ต้องตรวจสอบ', 'Needs attention')
               : isToday
-                ? copy('อัปเดตอัตโนมัติ', 'Auto-updating')
+                ? copy('ข้อมูลสด', 'Live data')
                 : copy('ข้อมูลย้อนหลัง', 'History')
           }
           tone={error ? 'danger' : isToday ? 'success' : 'info'}
         />
       )}
     >
-      <Surface style={{ gap: spacing.md }}>
-        <SectionHeader
-          title={
-            isToday
-              ? copy('ภาพรวมวันนี้', 'Today’s overview')
-              : copy('ข้อมูลย้อนหลัง', 'Historical data')
-          }
-          detail={
-            isToday
-              ? copy(
-                'ข้อมูลสดตามวันทำการของกรุงเทพฯ',
-                'Live data based on the Bangkok business day',
-              )
-              : copy(
-                'ข้อมูลครัว โต๊ะ และคลังจะแสดงเฉพาะวันนี้',
-                'Kitchen, table, and inventory status is available for today only',
-              )
-          }
-        />
-        <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
+      <View style={{ gap: spacing.md }}>
+        <View style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: isToday ? palette.accentSoft : palette.infoSoft }}>
+            <AppIcon color={isToday ? palette.accent : palette.info} name="calendar-outline" size={20} />
+          </View>
+          <View style={{ minWidth: 0, flex: 1, gap: 1 }}>
+            <Text selectable numberOfLines={1} adjustsFontSizeToFit style={{ color: palette.textStrong, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+              {dashboardDateLabel(selectedDate, language)}
+            </Text>
+            <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+              {isToday
+                ? copy('วันนี้ · อัปเดตอัตโนมัติ', 'Today · Updates automatically')
+                : copy('กำลังดูวันที่เลือก', 'Viewing selected date')}
+            </Text>
+          </View>
           <Pressable
             accessibilityLabel={copy('วันก่อนหน้า', 'Previous day')}
             accessibilityRole="button"
             onPress={() => selectDate(shiftDashboardDate(selectedDate, -1))}
             style={({ pressed }) => ({
-              width: 46,
-              minHeight: 46,
+              width: 44,
+              height: 44,
               alignItems: 'center',
               justifyContent: 'center',
               borderWidth: 1,
               borderColor: palette.borderStrong,
-              borderTopLeftRadius: radius.md,
-              borderBottomLeftRadius: radius.md,
+              borderRadius: radius.md,
               backgroundColor: palette.surface,
               opacity: pressed ? 0.72 : 1,
             })}
           >
-            <Text style={{ color: palette.text, fontSize: 24, fontWeight: '700' }}>‹</Text>
+            <AppIcon color={palette.text} name="chevron-back" size={20} />
           </Pressable>
-          <View style={{ minWidth: 0, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, borderTopWidth: 1, borderBottomWidth: 1, borderColor: palette.borderStrong, backgroundColor: palette.surface, paddingHorizontal: spacing.sm }}>
-            <Text selectable numberOfLines={1} adjustsFontSizeToFit style={{ color: palette.textStrong, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{dashboardDateLabel(selectedDate, language)}</Text>
-            <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-              {isToday ? copy('วันนี้', 'Today') : copy('วันที่เลือก', 'Selected date')}
-            </Text>
-          </View>
           <Pressable
             accessibilityLabel={copy('วันถัดไป', 'Next day')}
             accessibilityRole="button"
@@ -564,19 +697,18 @@ export default function HomeScreen() {
             disabled={selectedDate >= today}
             onPress={() => selectDate(shiftDashboardDate(selectedDate, 1))}
             style={({ pressed }) => ({
-              width: 46,
-              minHeight: 46,
+              width: 44,
+              height: 44,
               alignItems: 'center',
               justifyContent: 'center',
               borderWidth: 1,
               borderColor: palette.borderStrong,
-              borderTopRightRadius: radius.md,
-              borderBottomRightRadius: radius.md,
+              borderRadius: radius.md,
               backgroundColor: palette.surface,
               opacity: selectedDate >= today ? 0.35 : pressed ? 0.72 : 1,
             })}
           >
-            <Text style={{ color: palette.text, fontSize: 24, fontWeight: '700' }}>›</Text>
+            <AppIcon color={palette.text} name="chevron-forward" size={20} />
           </Pressable>
         </View>
         {!isToday ? (
@@ -587,7 +719,7 @@ export default function HomeScreen() {
             onPress={() => selectDate(today)}
           />
         ) : null}
-      </Surface>
+      </View>
 
       {error ? (
         <Feedback
@@ -609,7 +741,7 @@ export default function HomeScreen() {
       ) : (
         <>
           {!isToday ? (
-            <Surface style={{ backgroundColor: palette.infoSoft }}>
+            <Surface style={{ borderColor: statusTone('info').borderColor, backgroundColor: palette.infoSoft }}>
               <SectionHeader
                 title={copy('กำลังดูสรุปย้อนหลัง', 'Viewing a historical summary')}
                 detail={copy(
@@ -619,222 +751,179 @@ export default function HomeScreen() {
               />
             </Surface>
           ) : (
-            <Surface style={{ backgroundColor: priorityBackground(priority) }}>
-              <SectionHeader
-                title={priorityText.title}
-                detail={priorityText.detail}
-                action={priority.href && priorityText.label
-                  ? <Button compact label={priorityText.label} onPress={() => router.push(priority.href as never)} />
-                  : undefined}
-              />
-            </Surface>
+            <Pressable
+              accessibilityLabel={[priorityText.title, priorityText.detail, priorityText.label].filter(Boolean).join('. ')}
+              accessibilityRole={priority.href ? 'button' : undefined}
+              disabled={!priority.href}
+              onPress={() => priority.href && router.push(priority.href as never)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                borderWidth: 1,
+                borderColor: priorityVisual.borderColor,
+                borderRadius: radius.md,
+                backgroundColor: priorityVisual.backgroundColor,
+                padding: spacing.lg,
+                opacity: pressed ? 0.76 : 1,
+              })}
+            >
+              <View style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: palette.surface }}>
+                <AppIcon color={priorityVisual.color} name={priorityVisual.icon} size={23} />
+              </View>
+              <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
+                <Text selectable style={[typeScale.caption, { color: priorityVisual.color, fontWeight: '700' }]}>
+                  {priorityNeedsAttention
+                    ? copy('ต้องจัดการตอนนี้', 'Needs attention now')
+                    : priority.key === 'overview'
+                      ? copy('สถานะกะ', 'Shift status')
+                      : copy('งานถัดไป', 'Next action')}
+                </Text>
+                <Text selectable style={[typeScale.title, { fontSize: 17 }]}>{priorityText.title}</Text>
+                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{priorityText.detail}</Text>
+                {priorityText.label ? (
+                  <Text selectable style={[typeScale.caption, { color: priorityVisual.color, fontWeight: '700' }]}>
+                    {priorityText.label}
+                  </Text>
+                ) : null}
+              </View>
+              {priority.href ? <AppIcon color={priorityVisual.color} name="chevron-forward" size={20} /> : null}
+            </Pressable>
           )}
 
           {isToday && operationalMetrics.length ? (
-            <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
-              <View style={{ padding: spacing.lg }}>
-                <SectionHeader
-                  title={copy('สถานะหน้าร้านและงานสด', 'Floor and live operations')}
-                  detail={copy(
-                    'แสดงเฉพาะข้อมูลที่บัญชีนี้มีสิทธิ์ดู',
-                    'Only operational counts available to this account are shown',
-                  )}
-                />
-              </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-                {operationalMetrics.map((metric, index) => (
-                  <View
-                    key={metric.key}
-                    style={{
-                      width: '50%',
-                      minHeight: 72,
-                      justifyContent: 'center',
-                      gap: spacing.xs,
-                      borderTopWidth: 1,
-                      borderRightWidth: index % 2 === 0 ? 1 : 0,
-                      borderColor: palette.border,
-                      paddingHorizontal: spacing.lg,
-                      paddingVertical: spacing.md,
-                    }}
-                  >
-                    <Text selectable style={[typeScale.number, { fontSize: 19 }]}>{metric.count}</Text>
-                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                      {operationalMetricLabel(metric.key, copy)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </Surface>
+            <View style={{ gap: spacing.md }}>
+              <EdgeSectionHeader
+                title={copy('สถานะระหว่างกะ', 'Live shift status')}
+                detail={copy('แสดงเฉพาะข้อมูลที่บัญชีนี้มีสิทธิ์ดู', 'Only permitted live counts are shown')}
+              />
+              <EdgeSection>
+                {operationalMetrics.map((metric) => {
+                  const presentation = operationalMetricPresentation(metric.key);
+                  const tone = statusTone(presentation.tone);
+                  const canOpenMetric = presentation.href !== '/tables' || canTakeOrder;
+                  return (
+                    <EdgeRow
+                      accessibilityLabel={`${operationalMetricLabel(metric.key, copy)}: ${metric.count}`}
+                      icon={presentation.icon}
+                      iconColor={tone.color}
+                      key={metric.key}
+                      onPress={canOpenMetric ? () => router.push(presentation.href) : undefined}
+                      showChevron={canOpenMetric}
+                      title={operationalMetricLabel(metric.key, copy)}
+                      trailing={<Text selectable style={[typeScale.number, { fontSize: 20 }]}>{metric.count}</Text>}
+                    />
+                  );
+                })}
+              </EdgeSection>
+            </View>
           ) : null}
 
-          {isToday && (canViewKitchen || canViewInventory) ? (
-            <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
-              <View style={{ padding: spacing.lg }}>
-                <SectionHeader
-                  title={copy('ต้องดูตอนนี้', 'Needs attention now')}
-                  detail={optionalFailures.length
-                    ? copy(
-                      `ยังอัปเดตบางส่วนไม่ได้: ${optionalFailureLabels.join(', ')}`,
-                      `Some sections could not update: ${optionalFailureLabels.join(', ')}`,
-                    )
-                    : copy(
-                      'งานครัวและสต็อกที่อาจกระทบกะปัจจุบัน',
-                      'Kitchen and stock issues that may affect the current shift',
-                    )}
-                />
-              </View>
-              {attention.length ? attention.map((item) => {
-                const tone = statusTone(item.tone);
-                const label = attentionLabel(item, copy);
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label}: ${item.count}`}
-                    key={item.key}
-                    onPress={() => item.href && router.push(item.href as never)}
-                    style={({ pressed }) => ({
-                      minHeight: 54,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.md,
-                      borderTopWidth: 1,
-                      borderColor: palette.border,
-                      backgroundColor: pressed ? tone.backgroundColor : palette.surface,
-                      paddingHorizontal: spacing.lg,
-                      paddingVertical: spacing.md,
-                    })}
-                  >
-                    <View style={{ width: 8, height: 8, borderRadius: radius.full, backgroundColor: tone.color }} />
-                    <Text selectable style={[typeScale.body, { flex: 1, color: palette.textStrong, fontWeight: '700' }]}>{label}</Text>
-                    <StatusBadge label={String(item.count)} tone={item.tone} />
-                    <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
-                  </Pressable>
-                );
-              }) : optionalFailures.length ? (
-                <View style={{ gap: spacing.xs, borderTopWidth: 1, borderColor: palette.border, padding: spacing.lg }}>
-                  <Text selectable style={[typeScale.cardTitle, { color: palette.warning }]}>
-                    {copy('ข้อมูลแจ้งเตือนยังไม่ครบ', 'Alert data is incomplete')}
-                  </Text>
-                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                    {copy(
-                      'ภาพรวมส่วนอื่นยังใช้งานได้ ระบบจะลองอัปเดตส่วนนี้ให้อัตโนมัติ',
-                      'The rest of the overview is still available. The app will retry these updates automatically.',
-                    )}
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ gap: spacing.xs, borderTopWidth: 1, borderColor: palette.border, padding: spacing.lg }}>
-                  <Text selectable style={[typeScale.cardTitle, { color: palette.success }]}>
-                    {copy('ยังไม่มีงานเร่งด่วน', 'Nothing urgent right now')}
-                  </Text>
-                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                    {copy(
-                      'คิวครัวและสต็อกที่คุณมีสิทธิ์ดูยังอยู่ในเกณฑ์ปกติ',
-                      'The kitchen queue and stock levels available to you are within normal limits.',
-                    )}
-                  </Text>
-                </View>
+          {isToday && optionalFailures.length ? (
+            <Feedback
+              title={copy('ข้อมูลบางส่วนยังไม่ครบ', 'Some live data is unavailable')}
+              detail={copy(
+                `ระบบยังอัปเดตไม่ได้: ${optionalFailureLabels.join(', ')} และจะลองใหม่อัตโนมัติ`,
+                `Could not update: ${optionalFailureLabels.join(', ')}. The app will retry automatically.`,
               )}
-            </Surface>
+              tone="warning"
+            />
+          ) : null}
+
+          {isToday && secondaryAttention.length ? (
+            <View style={{ gap: spacing.md }}>
+              <EdgeSectionHeader title={copy('งานอื่นที่ต้องดู', 'Other items to review')} />
+              <EdgeSection>
+                {secondaryAttention.map((item) => {
+                  const tone = statusTone(item.tone);
+                  const label = attentionLabel(item, copy);
+                  return (
+                    <EdgeRow
+                      accessibilityLabel={`${label}: ${item.count}`}
+                      key={item.key}
+                      onPress={() => item.href && router.push(item.href as never)}
+                      leading={<View style={{ width: 9, height: 9, borderRadius: radius.full, backgroundColor: tone.color }} />}
+                      title={label}
+                      trailing={<Text selectable style={[typeScale.number, { color: tone.color, fontSize: 18 }]}>{item.count}</Text>}
+                    />
+                  );
+                })}
+              </EdgeSection>
+            </View>
           ) : null}
 
           {canViewOrders ? (
-            <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
-              <View style={{ flexDirection: compactStats ? 'column' : 'row' }}>
-                {[
-                  {
-                    value: String(orderSummary.totalOrders),
-                    label: copy('ออเดอร์ทั้งหมด', 'Total orders'),
-                  },
-                  {
-                    value: formatMoney(orderSummary.paidRevenue, language),
-                    label: copy('ยอดรับเงิน', 'Payments received'),
-                  },
-                  {
-                    value: formatMoney(orderSummary.averageBill, language),
-                    label: copy('ยอดเฉลี่ยต่อบิล', 'Average bill'),
-                  },
-                  {
-                    value: String(orderSummary.guests),
-                    label: copy('จำนวนลูกค้า', 'Guests'),
-                  },
-                ].map((item, index) => (
-                  <View
-                    key={item.label}
-                    style={{
-                      minHeight: 82,
-                      flex: 1,
-                      justifyContent: 'center',
-                      gap: spacing.xs,
-                      borderLeftWidth: !compactStats && index ? 1 : 0,
-                      borderTopWidth: compactStats && index ? 1 : 0,
-                      borderColor: palette.border,
-                      paddingHorizontal: spacing.lg,
-                    }}
-                  >
-                    <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 19 }]}>
-                      {item.value}
-                    </Text>
-                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </Surface>
-          ) : null}
-
-          {isToday ? (
-            <Surface>
-              <SectionHeader title={copy('งานระหว่างกะ', 'Shift actions')} detail={workMode.hint} />
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                {canTakeOrder ? (
-                  <Button
-                    label={copy('รับออเดอร์', 'Take order')}
-                    onPress={() => router.push('/tables')}
-                    style={{ flexGrow: 1 }}
-                  />
-                ) : null}
-                {canViewOrders ? (
-                  <Button
-                    variant="secondary"
-                    label={copy('ดูออเดอร์', 'View orders')}
-                    onPress={() => router.push('/orders')}
-                    style={{ flexGrow: 1 }}
-                  />
-                ) : null}
-                {canViewKitchen ? (
-                  <Button
-                    variant="secondary"
-                    label={copy('เปิดคิวครัว', 'Open kitchen queue')}
-                    onPress={() => router.push('/kitchen')}
-                    style={{ flexGrow: 1 }}
-                  />
-                ) : null}
-              </View>
-            </Surface>
+            <View style={{ gap: spacing.md }}>
+              <SectionHeader
+                title={isToday ? copy('สรุปวันนี้', 'Today’s summary') : copy('สรุปวันที่เลือก', 'Selected date summary')}
+                detail={dashboardDateLabel(selectedDate, language)}
+              />
+              <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                  {[
+                    {
+                      value: String(orderSummary.totalOrders),
+                      label: copy('ออเดอร์ทั้งหมด', 'Total orders'),
+                    },
+                    {
+                      value: formatMoney(orderSummary.paidRevenue, language),
+                      label: copy('ยอดรับเงิน', 'Payments received'),
+                    },
+                    {
+                      value: formatMoney(orderSummary.averageBill, language),
+                      label: copy('ยอดเฉลี่ยต่อบิล', 'Average bill'),
+                    },
+                    {
+                      value: String(orderSummary.guests),
+                      label: copy('จำนวนลูกค้า', 'Guests'),
+                    },
+                  ].map((item, index) => (
+                    <View
+                      key={item.label}
+                      style={{
+                        width: `${100 / summaryColumns}%`,
+                        minHeight: 82,
+                        justifyContent: 'center',
+                        gap: spacing.xs,
+                        borderLeftWidth: index % summaryColumns ? 1 : 0,
+                        borderTopWidth: index >= summaryColumns ? 1 : 0,
+                        borderColor: palette.border,
+                        paddingHorizontal: spacing.lg,
+                        paddingVertical: spacing.md,
+                      }}
+                    >
+                      <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 19 }]}>
+                        {item.value}
+                      </Text>
+                      <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{item.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </Surface>
+            </View>
           ) : null}
 
           {isToday && canViewReports ? (
-            <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
-              <View style={{ padding: spacing.lg }}>
-                <SectionHeader
-                  title={copy('สรุปสำหรับผู้จัดการ', 'Manager summary')}
-                  detail={copy(
-                    'แนวโน้ม 7 วันล่าสุดเทียบกับ 7 วันก่อนหน้า',
-                    'Latest 7 days compared with the previous 7 days',
-                  )}
-                  action={(
-                    <Button
-                      compact
-                      variant="secondary"
-                      label={copy('ดูรายงาน', 'View reports')}
-                      onPress={() => router.push('/reports')}
-                    />
-                  )}
-                />
-              </View>
+            <View style={{ gap: spacing.md }}>
+              <SectionHeader
+                title={copy('สรุปสำหรับผู้จัดการ', 'Manager summary')}
+                detail={copy(
+                  'แนวโน้ม 7 วันล่าสุดเทียบกับ 7 วันก่อนหน้า',
+                  'Latest 7 days compared with the previous 7 days',
+                )}
+                action={(
+                  <Button
+                    compact
+                    variant="secondary"
+                    label={copy('ดูรายงาน', 'View reports')}
+                    onPress={() => router.push('/reports')}
+                  />
+                )}
+              />
+              <Surface style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
 
               {salesTrend ? (
-                <View style={{ flexDirection: compactStats ? 'column' : 'row', borderTopWidth: 1, borderColor: palette.border }}>
+                <View style={{ flexDirection: compactStats ? 'column' : 'row' }}>
                   {[
                     {
                       key: 'revenue',
@@ -964,14 +1053,15 @@ export default function HomeScreen() {
                   </View>
                 )}
               </View>
-            </Surface>
+              </Surface>
+            </View>
           ) : null}
 
           <View style={{ gap: spacing.md }}>
-            <SectionHeader
+            <EdgeSectionHeader
               title={
                 isToday
-                  ? copy('ออเดอร์ของวันนี้', 'Today’s orders')
+                  ? copy('ความเคลื่อนไหวล่าสุด', 'Recent activity')
                   : copy('ออเดอร์ของวันที่เลือก', 'Orders for the selected date')
               }
               detail={
@@ -983,22 +1073,34 @@ export default function HomeScreen() {
                   : dashboardDateLabel(selectedDate, language)
               }
             />
-            {displayOrders.length ? displayOrders.slice(0, 6).map((order) => (
-              <Pressable
-                accessibilityLabel={`${order.table?.display_label || order.order_number}, ${localizedOrderStatus(order.status, copy)}, ${formatMoney(order.grand_total, language)}`}
-                key={order.ID}
-                onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, backgroundColor: palette.surface, padding: spacing.lg, opacity: pressed ? 0.78 : 1 })}
-              >
-                <View style={{ minWidth: 0, flex: 1, gap: spacing.xs }}>
-                  <Text selectable numberOfLines={1} style={typeScale.cardTitle}>{order.table?.display_label || order.order_number}</Text>
-                  <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>
-                    {order.order_number} · {localizedOrderStatus(order.status, copy)}
-                  </Text>
-                </View>
-                <Text selectable style={typeScale.number}>{formatMoney(order.grand_total, language)}</Text>
-              </Pressable>
-            )) : (
+            {displayOrders.length ? (
+              <EdgeSection>
+                {displayOrders.slice(0, 6).map((order) => {
+                  const orderTone = orderStatusPresentation(order.status);
+                  const orderTime = formatBangkokTime(order.closed_at || order.opened_at, language);
+                  return (
+                    <EdgeRow
+                      accessibilityLabel={`${order.table?.display_label || order.order_number}, ${localizedOrderStatus(order.status, copy)}, ${formatMoney(order.grand_total, language)}`}
+                      detail={`${order.order_number} · ${localizedOrderStatus(order.status, copy)}`}
+                      key={order.ID}
+                      leading={(
+                        <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: orderTone.backgroundColor }}>
+                          <AppIcon color={orderTone.color} name={order.payment_status === 'paid' ? 'checkmark' : 'receipt-outline'} size={18} />
+                        </View>
+                      )}
+                      onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
+                      title={order.table?.display_label || order.order_number}
+                      trailing={(
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                        <Text selectable style={[typeScale.number, { fontSize: 16 }]}>{formatMoney(order.grand_total, language)}</Text>
+                        {orderTime ? <Text selectable style={[typeScale.caption, { color: palette.muted, fontVariant: ['tabular-nums'] }]}>{orderTime}</Text> : null}
+                        </View>
+                      )}
+                    />
+                  );
+                })}
+              </EdgeSection>
+            ) : (
               <EmptyState
                 title={
                   canViewOrders

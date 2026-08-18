@@ -307,3 +307,113 @@ func TestCancellingLastTakeawayItemClosesOrderTransactionally(t *testing.T) {
 		t.Fatalf("takeaway cancellation status logs = %d, want 1", logs)
 	}
 }
+
+func TestVoidItemUnitsSplitsServedLine(t *testing.T) {
+	db := orderVoidIntegrationDBOrSkip(t)
+	scenario := newOrderVoidDBScenario(t, db)
+
+	now := repository.BangkokNow()
+	order := entity.Order{
+		RestaurantID:  scenario.restaurant.ID,
+		OrderType:     entity.OrderTypeDineIn,
+		OrderNumber:   fmt.Sprintf("VOID-SPLIT-%d", now.UnixNano()),
+		OrderDate:     now.Format("2006-01-02"),
+		StaffID:       scenario.user.ID,
+		CustomerCount: 1,
+		Status:        entity.OrderStatusServed,
+		Subtotal:      2 * scenario.menu.Price,
+		TotalAmount:   2 * scenario.menu.Price,
+		GrandTotal:    2 * scenario.menu.Price,
+		PaymentStatus: entity.PaymentStatusUnpaid,
+		OpenedAt:      now,
+		Version:       1,
+	}
+	mustCreateOrderVoidRow(t, scenario.db, &order)
+
+	item := entity.OrderItem{
+		OrderID:         order.ID,
+		RestaurantID:    scenario.restaurant.ID,
+		MenuID:          scenario.menu.ID,
+		MenuName:        "Moo kratha set",
+		UnitPrice:       scenario.menu.Price,
+		Quantity:        2,
+		Subtotal:        2 * scenario.menu.Price,
+		FulfillmentType: entity.OrderItemFulfillmentDineIn,
+		Status:          entity.OrderItemStatusServed,
+		SentAt:          &now,
+		ServedAt:        &now,
+		KitchenBatch:    1,
+	}
+	mustCreateOrderVoidRow(t, scenario.db, &item)
+
+	updated, err := scenario.service.VoidItemUnits(
+		scenario.restaurant.ID,
+		scenario.user.ID,
+		order.ID,
+		item.ID,
+		1,
+		"staff over-ordered",
+		OrderItemStatusActorFrontOfHouse,
+	)
+	if err != nil {
+		t.Fatalf("void one unit of served line: %v", err)
+	}
+
+	// The original line keeps the remaining unit; a cancelled clone captures
+	// the voided unit with its reason.
+	var live, voided *entity.OrderItem
+	for i := range updated.Items {
+		switch updated.Items[i].Status {
+		case entity.OrderItemStatusServed:
+			live = &updated.Items[i]
+		case entity.OrderItemStatusCancelled:
+			voided = &updated.Items[i]
+		}
+	}
+	if live == nil || voided == nil {
+		t.Fatalf("expected one served and one cancelled item, got %d items", len(updated.Items))
+	}
+	if live.ID != item.ID {
+		t.Fatalf("live line id = %d, want original %d", live.ID, item.ID)
+	}
+	if live.Quantity != 1 || live.Subtotal != scenario.menu.Price {
+		t.Fatalf("live line = qty %d subtotal %.2f, want qty 1 subtotal %.2f", live.Quantity, live.Subtotal, scenario.menu.Price)
+	}
+	if voided.Quantity != 1 || voided.CancelledReason != "staff over-ordered" {
+		t.Fatalf("voided clone = qty %d reason %q, want qty 1 with a reason", voided.Quantity, voided.CancelledReason)
+	}
+	// Totals reflect only the remaining served unit.
+	if updated.Subtotal != scenario.menu.Price || updated.GrandTotal != scenario.menu.Price {
+		t.Fatalf("order totals = subtotal %.2f grand %.2f, want %.2f", updated.Subtotal, updated.GrandTotal, scenario.menu.Price)
+	}
+}
+
+func TestVoidItemUnitsWholeLineCancelsItem(t *testing.T) {
+	db := orderVoidIntegrationDBOrSkip(t)
+	scenario := newOrderVoidDBScenario(t, db)
+	order, items := scenario.orderWithItems(t, entity.OrderTypeDineIn, entity.OrderItemStatusServed)
+
+	updated, err := scenario.service.VoidItemUnits(
+		scenario.restaurant.ID,
+		scenario.user.ID,
+		order.ID,
+		items[0].ID,
+		1,
+		"guest never received it",
+		OrderItemStatusActorFrontOfHouse,
+	)
+	if err != nil {
+		t.Fatalf("void the only unit of a line: %v", err)
+	}
+
+	// Voiding every unit must not create a clone — it cancels the line in place.
+	if len(updated.Items) != 1 {
+		t.Fatalf("item count = %d, want 1 (no clone when the whole line is voided)", len(updated.Items))
+	}
+	if updated.Items[0].Status != entity.OrderItemStatusCancelled {
+		t.Fatalf("item status = %q, want cancelled", updated.Items[0].Status)
+	}
+	if updated.Items[0].CancelledReason != "guest never received it" {
+		t.Fatalf("cancel reason = %q, want the supplied reason", updated.Items[0].CancelledReason)
+	}
+}

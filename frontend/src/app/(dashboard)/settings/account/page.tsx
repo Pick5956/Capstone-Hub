@@ -161,7 +161,7 @@ export default function AccountSettingsPage() {
   };
 
   return (
-    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back}>
+    <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <form onSubmit={saveProfile} className="space-y-4">
           <SettingsPanel title={copy.profile} hint={copy.profileHint}>
@@ -205,7 +205,7 @@ export default function AccountSettingsPage() {
               { label: copy.local, connected: !isGoogleAccount, mark: "@" },
             ].map((account) => {
               const connectedAccountClassName = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
-              const disconnectedMarkClassName = "bg-gray-100 text-gray-400 dark:bg-gray-900 dark:text-gray-500";
+              const disconnectedMarkClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-500";
               const disconnectedBadgeClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
 
               return (

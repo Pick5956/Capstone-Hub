@@ -12,7 +12,7 @@ import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups"
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
 import { printThermalReceipt } from "@/src/lib/thermalReceiptPrint";
 import { can } from "@/src/lib/rbac";
-import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus } from "@/src/lib/order";
+import { addOrderItem, closeEmptyTableOrder, deleteOrderItem, getOrder, getOrderBill, payOrder, sendOrderToKitchen, updateOrderItem, updateOrderItemStatus, voidOrderItemUnits } from "@/src/lib/order";
 import { listCategories, listMenuItems } from "@/src/lib/menu";
 import type { Category, MenuItem } from "@/src/types/menu";
 import type { Bill, Order, OrderItem, OrderPayment } from "@/src/types/order";
@@ -104,6 +104,8 @@ export default function PosOrderDetailPage() {
   const [billAddOpen, setBillAddOpen] = useState(false);
   const [billCancelTarget, setBillCancelTarget] = useState<OrderItemGroup | null>(null);
   const [billCancelReason, setBillCancelReason] = useState("");
+  // "line" voids the whole group; "unit" voids a single unit (from the stepper).
+  const [billCancelMode, setBillCancelMode] = useState<"line" | "unit">("line");
 
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
@@ -163,11 +165,15 @@ export default function PosOrderDetailPage() {
       reasonRequired: "กรุณาระบุเหตุผล",
       itemCancelledToast: "ยกเลิกรายการแล้ว",
       itemAddedToast: "เพิ่มรายการแล้ว",
+      voidUnitTitle: "ยกเลิก 1 หน่วย?",
+      voidUnitDescription: (name: string) => `ยกเลิก 1 หน่วยของ “${name}” (ต้องระบุเหตุผลเพื่อเก็บประวัติ)`,
+      decreaseQty: "ลดจำนวน",
+      increaseQty: "เพิ่มจำนวน",
       notServed: "ยังไม่เสิร์ฟ",
       undeliveredWarn: "มีรายการที่ยังไม่ได้เสิร์ฟ — ยกเลิก (ครัวทำไม่ทัน) หรือรอครัวก่อนชำระเงิน",
       closeEmptyTable: "ปิดโต๊ะ",
       closeEmptyTableTitle: "ปิดโต๊ะที่เปิดผิด?",
-      closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะยกเลิกออเดอร์ว่างและเปลี่ยนโต๊ะกลับเป็นว่าง",
+      closeEmptyTableBody: "โต๊ะนี้ยังไม่มีรายการอาหาร ระบบจะไม่บันทึกออเดอร์ว่างนี้ (ไม่ขึ้นในประวัติ) และเปลี่ยนโต๊ะกลับเป็นว่าง",
       keepTableOpen: "เปิดโต๊ะไว้",
       tableClosed: "ปิดโต๊ะแล้ว",
       remove: "ลบ",
@@ -227,11 +233,15 @@ export default function PosOrderDetailPage() {
       reasonRequired: "Enter a reason",
       itemCancelledToast: "Item voided",
       itemAddedToast: "Item added",
+      voidUnitTitle: "Void one unit?",
+      voidUnitDescription: (name: string) => `Void 1 unit of “${name}” (reason required for the record)`,
+      decreaseQty: "Decrease quantity",
+      increaseQty: "Increase quantity",
       notServed: "Not served",
       undeliveredWarn: "Some items haven't been served — void them (kitchen too slow) or wait before payment.",
       closeEmptyTable: "Close table",
       closeEmptyTableTitle: "Close this table opened by mistake?",
-      closeEmptyTableBody: "This table has no items. The empty order will be cancelled and the table will become available again.",
+      closeEmptyTableBody: "This table has no items. The empty order won't be recorded (it won't appear in the archive) and the table becomes available again.",
       keepTableOpen: "Keep table open",
       tableClosed: "Table closed",
       remove: "Remove",
@@ -678,6 +688,78 @@ export default function PosOrderDetailPage() {
     }
   };
 
+  // A bill group can be all pending (not yet sent to kitchen) or already
+  // served/cooking. Pending lines are edited freely; served lines can only be
+  // voided (with a reason), so the stepper routes decreases accordingly.
+  const isPendingOnlyGroup = (group: OrderItemGroup) =>
+    group.items.length > 0 && group.items.every((it) => it.status === "pending");
+
+  const adjustBillPendingGroup = async (group: OrderItemGroup, delta: -1 | 1) => {
+    if (!order || submitting) return;
+    const item = group.pendingItems[0] ?? group.firstItem;
+    setSubmitting(true);
+    setError("");
+    try {
+      if (delta < 0 && item.quantity === 1) {
+        await deleteOrderItem(order.ID, item.ID);
+      } else {
+        await updateOrderItem(order.ID, item.ID, { quantity: item.quantity + delta, note: item.note });
+      }
+      await reloadBill();
+      void load({ background: true });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const addServedUnit = async (group: OrderItemGroup) => {
+    if (!order || submitting) return;
+    const item = group.firstItem;
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await addOrderItem(order.ID, {
+        menu_id: item.menu_id,
+        quantity: 1,
+        note: item.note,
+        serve_immediately: true,
+        fulfillment_type: item.fulfillment_type ?? (order.order_type === "takeaway" ? "takeaway" : "dine_in"),
+        selected_option_ids: item.selected_options?.map((option) => option.menu_option_id) ?? [],
+      });
+      setOrder(response.data);
+      await reloadBill();
+      showToast({ title: copy.itemAddedToast });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const decreaseBillGroup = (group: OrderItemGroup) => {
+    if (submitting) return;
+    if (isPendingOnlyGroup(group)) {
+      void adjustBillPendingGroup(group, -1);
+      return;
+    }
+    // Removing a served/cooking unit at checkout is a void — capture a reason.
+    setError("");
+    setBillCancelReason("");
+    setBillCancelMode("unit");
+    setBillCancelTarget(group);
+  };
+
+  const increaseBillGroup = (group: OrderItemGroup) => {
+    if (submitting) return;
+    if (isPendingOnlyGroup(group)) {
+      void adjustBillPendingGroup(group, 1);
+      return;
+    }
+    void addServedUnit(group);
+  };
+
   const confirmCancelBillItem = async () => {
     if (!order || !billCancelTarget || submitting) return;
     const reason = billCancelReason.trim();
@@ -688,12 +770,17 @@ export default function PosOrderDetailPage() {
     setSubmitting(true);
     setError("");
     try {
-      const targets = billCancelTarget.items.filter((it) => it.status !== "cancelled");
-      for (const target of targets) {
-        await updateOrderItemStatus(order.ID, target.ID, "cancelled", reason);
+      if (billCancelMode === "unit") {
+        await voidOrderItemUnits(order.ID, billCancelTarget.firstItem.ID, 1, reason);
+      } else {
+        const targets = billCancelTarget.items.filter((it) => it.status !== "cancelled");
+        for (const target of targets) {
+          await updateOrderItemStatus(order.ID, target.ID, "cancelled", reason);
+        }
       }
       setBillCancelTarget(null);
       setBillCancelReason("");
+      setBillCancelMode("line");
       await reloadBill();
       void load({ background: true });
       showToast({ title: copy.itemCancelledToast });
@@ -742,12 +829,12 @@ export default function PosOrderDetailPage() {
       <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
         <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
-            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[#dfe3e8] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[12px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.tableLabel}</span>
@@ -755,13 +842,13 @@ export default function PosOrderDetailPage() {
                   </span>
                   <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
-                    <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden="true" />
+                    <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.orderLabel}</span>
                     <span className="truncate">{order.order_number}</span>
                   </span>
                   <span className="h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-800" aria-hidden="true" />
                   <span className="flex shrink-0 items-center gap-1.5 px-2">
-                    <UtensilsCrossed className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+                    <UtensilsCrossed className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
                     <span className="font-mono tabular-nums">{orderItemCount}</span>
                     <span>{copy.itemsLabel}</span>
                   </span>
@@ -789,8 +876,8 @@ export default function PosOrderDetailPage() {
                 options={categoryOptions}
               />
               <div className="relative min-w-0 lg:order-3">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[#dfe3e8] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-[#253142] dark:bg-gray-900" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900" />
               </div>
             </div>
           )}
@@ -830,12 +917,12 @@ export default function PosOrderDetailPage() {
         // ── Menu grid (normal order-taking mode) ─────────────────────────────
         <div className="px-3 py-3 sm:px-4 lg:px-5">
           <section className="min-w-0">
-            <div className="grid auto-rows-max grid-cols-2 content-start items-start gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid auto-rows-max grid-cols-3 content-start items-start gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
                     {!item.is_available && (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
@@ -854,7 +941,7 @@ export default function PosOrderDetailPage() {
                     <div className="flex min-w-0 flex-1 flex-col p-3">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                      <p className="mt-2 truncate text-[11px] text-gray-400">{item.category?.name ?? ""}</p>
+                      <p className="mt-2 truncate text-[11px] text-gray-500">{item.category?.name ?? ""}</p>
                     </div>
                   </button>
                 );
@@ -1081,11 +1168,16 @@ export default function PosOrderDetailPage() {
                 </div>
               </div>
               {billEditMode ? (
-                <div data-screen-only className="mt-2 flex justify-end border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
+                <div data-screen-only className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
+                  <div className="inline-grid grid-cols-[2.5rem_2.75rem_2.5rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
+                    <button type="button" disabled={submitting} onClick={() => decreaseBillGroup(group)} aria-label={copy.decreaseQty} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
+                    <span className="inline-flex h-9 items-center justify-center font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{group.quantity}</span>
+                    <button type="button" disabled={submitting} onClick={() => increaseBillGroup(group)} aria-label={copy.increaseQty} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                  </div>
                   <button
                     type="button"
                     disabled={submitting}
-                    onClick={() => { setError(""); setBillCancelReason(""); setBillCancelTarget(group); }}
+                    onClick={() => { setError(""); setBillCancelReason(""); setBillCancelMode("line"); setBillCancelTarget(group); }}
                     className="ui-press inline-flex h-8 items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 text-[12px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1104,7 +1196,7 @@ export default function PosOrderDetailPage() {
                 #print-bill { position: static !important; width: 48mm !important; margin: 0 auto !important; padding: 3mm 0 !important; color: #111827; background: white; display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; transform: none !important; }
                 #print-bill [data-receipt-scroll] { overflow: visible !important; }
                 #print-bill [data-receipt-section] { display: block !important; }
-                #print-bill .dark\\:text-white, #print-bill .dark\\:text-gray-300, #print-bill .dark\\:text-gray-400 { color: #111827 !important; }
+                #print-bill .dark\\:text-white, #print-bill .dark\\:text-gray-300, #print-bill .dark\\:text-gray-500 { color: #111827 !important; }
                 #print-bill .dark\\:bg-gray-950 { background: #fff !important; }
                 #print-bill .dark\\:border-gray-800 { border-color: #d1d5db !important; }
                 #print-bill [data-screen-only] { display: none !important; }
@@ -1138,7 +1230,7 @@ export default function PosOrderDetailPage() {
                     <button type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
                   </div>
                 </div>
-                <div data-screen-receipt data-receipt-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+                <div data-screen-receipt data-receipt-scroll data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
                   {billAddOpen ? (
                     <section data-screen-only className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
                       <div className="mb-2 flex items-center justify-between gap-3">
@@ -1282,8 +1374,8 @@ export default function PosOrderDetailPage() {
       {billCancelTarget ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/50 p-4 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" aria-labelledby="bill-cancel-title" className="w-full max-w-sm rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950">
-            <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{copy.cancelItemTitle}</h2>
-            <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelTarget.firstItem.menu_name} · x{billCancelTarget.quantity}</p>
+            <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{billCancelMode === "unit" ? copy.voidUnitTitle : copy.cancelItemTitle}</h2>
+            <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelMode === "unit" ? copy.voidUnitDescription(billCancelTarget.firstItem.menu_name) : `${billCancelTarget.firstItem.menu_name} · x${billCancelTarget.quantity}`}</p>
             <label htmlFor="bill-cancel-reason" className="mt-3 block text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.cancelItemReason}</label>
             <textarea
               id="bill-cancel-reason"
@@ -1296,7 +1388,7 @@ export default function PosOrderDetailPage() {
               className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
+              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); setBillCancelMode("line"); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
               <button type="button" disabled={submitting || !billCancelReason.trim()} onClick={() => { void confirmCancelBillItem(); }} className="h-10 rounded-md bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-400">{copy.confirmCancelItem}</button>
             </div>
           </div>

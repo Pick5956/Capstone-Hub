@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock3, Undo2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock3, History, Undo2, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
-import { listMenuItems } from "@/src/lib/menu";
 import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -41,10 +40,20 @@ function minutesSince(value?: string | null) {
   return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
 }
 
-function urgencyClass(minutes: number) {
-  if (minutes >= 10) return "border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20";
-  if (minutes >= 5) return "border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-900/20";
-  return "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
+// Whole seconds between two timestamps, or null if either is missing. Used by
+// the recall modal to show how long a finished item took.
+function durationSeconds(from?: string | null, to?: string | null) {
+  if (!from || !to) return null;
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 1000));
+}
+
+// Ticket aging: the cooking-ticket header bar shifts colour with elapsed time —
+// emerald when fresh, amber as it ages, red once it is late. Header text is
+// theme-based (white in dark, near-black in light), not tied to the bar colour.
+function cookingBarClass(minutes: number) {
+  if (minutes >= 10) return "bg-red-600";
+  if (minutes >= 5) return "bg-amber-500";
+  return "bg-emerald-600";
 }
 
 function ticketKey(order: Order) {
@@ -86,7 +95,6 @@ export default function KitchenPage() {
   const canView = can(activeMembership, "view_kitchen");
   const canUpdate = can(activeMembership, "update_order_status");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuImageById, setMenuImageById] = useState<Map<number, string>>(() => new Map());
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -102,6 +110,7 @@ export default function KitchenPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelReasonError, setCancelReasonError] = useState("");
   const [cancelDialogClosing, setCancelDialogClosing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const hasLoadedRef = useRef(false);
   const ticketIdsRef = useRef<Set<string>>(new Set());
   const zoneRippleIdRef = useRef(0);
@@ -126,7 +135,7 @@ export default function KitchenPage() {
         markAllReady: "เสร็จทั้งหมด",
         ready: "เสร็จแล้ว",
         cooking: "กำลังทำ",
-        cookingZone: "โซนกำลังทำ",
+        cookingZone: "กำลังปรุงอาหาร",
         readyZone: "โซนเสร็จแล้ว",
         cookingEmpty: "ยังไม่มีรายการกำลังทำ",
         readyEmpty: "ยังไม่มีรายการที่ทำเสร็จ",
@@ -151,6 +160,12 @@ export default function KitchenPage() {
         cancelSuccess: "ยกเลิกรายการแล้ว",
         loadError: "โหลดคิวครัวไม่สำเร็จ",
         saveError: "อัปเดตสถานะไม่สำเร็จ",
+        recall: "รายการที่เสร็จสิ้น",
+        recallEmpty: "ยังไม่มีรายการที่ครัวทำเสร็จ",
+        finishedAt: "เสร็จเมื่อ",
+        timeTaken: "ใช้เวลา",
+        recallDuration: (m: number, s: number) => `${m} นาที ${s} วินาที`,
+        recallClose: "ปิด",
       }
     : {
         denied: "You do not have permission to view the kitchen.",
@@ -191,6 +206,12 @@ export default function KitchenPage() {
         cancelSuccess: "Item cancelled",
         loadError: "Could not load kitchen queue.",
         saveError: "Could not update item status.",
+        recall: "Completed",
+        recallEmpty: "No items finished yet",
+        finishedAt: "Finished",
+        timeTaken: "Took",
+        recallDuration: (m: number, s: number) => `${m}m ${s}s`,
+        recallClose: "Close",
       };
 
   const visibleOrders = useMemo(
@@ -278,27 +299,6 @@ export default function KitchenPage() {
     eventFilter: { kind: "kitchen" },
   });
   useVisiblePolling(load, { enabled: canView, intervalMs: 60_000 });
-
-  // The kitchen queue payload does not embed each item's menu, so fetch the menu
-  // catalogue once and resolve thumbnails by menu_id (mirrors the POS order page).
-  useEffect(() => {
-    if (!canView) return;
-    let active = true;
-    listMenuItems()
-      .then((res) => {
-        if (!active) return;
-        setMenuImageById(new Map(res.data.menu_items.map((item) => [item.ID, item.image_url])));
-      })
-      .catch(() => {
-        // Kitchen-only roles may lack menu access; fall back to the placeholder image.
-      });
-    return () => {
-      active = false;
-    };
-  }, [canView]);
-
-  const orderItemImageUrl = (item: OrderItem) =>
-    item.menu?.image_url || menuImageById.get(item.menu_id) || "/menu-placeholder-v2.webp";
 
   const markReady = async (order: Order, itemId: number) => {
     setSubmittingId(itemId);
@@ -393,6 +393,28 @@ export default function KitchenPage() {
     }
   };
 
+  // Recall a whole finished round back to cooking (for a quick correctness check).
+  // Purely a status revert — it does not touch billing or any other flow.
+  const recallOrder = async (order: Order) => {
+    if (!canUpdate || submittingId !== null) return;
+    const readyItems = (order.items ?? []).filter((item) => item.status === "ready");
+    if (!readyItems.length) return;
+    const itemIds = readyItems.map((item) => item.ID);
+    setSubmittingId(order.ID);
+    setError("");
+    itemIds.forEach((id) => transitioningItemIdsRef.current.add(id));
+    try {
+      await Promise.all(readyItems.map((item) => updateOrderItemStatus(order.ID, item.ID, "cooking")));
+      applyItemStatuses(order, itemIds, "cooking");
+      showToast({ title: copy.undoSuccess, tone: "info" });
+    } catch (error) {
+      setError(apiErrorMessage(error) || copy.saveError);
+    } finally {
+      itemIds.forEach((id) => transitioningItemIdsRef.current.delete(id));
+      setSubmittingId(null);
+    }
+  };
+
   const openCancelDialog = (order: Order, item: OrderItem) => {
     if (!canUpdate || submittingId !== null) return;
     setCancelTarget({ order, item });
@@ -414,6 +436,17 @@ export default function KitchenPage() {
   const cancelBackdrop = useBackdropClose(() => {
     if (submittingId === null) closeCancelDialog();
   });
+
+  const historyBackdrop = useBackdropClose(() => setHistoryOpen(false));
+
+  useEffect(() => {
+    if (!historyOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setHistoryOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [historyOpen]);
 
   useEffect(() => {
     submittingIdRef.current = submittingId;
@@ -500,6 +533,7 @@ export default function KitchenPage() {
       return oldest;
     }, order.kitchen_sent_at ?? null);
     const elapsed = minutesSince(oldestStatusAt ?? order.opened_at);
+    const cookingBar = cookingBarClass(elapsed);
     const isReadyLane = lane === "ready";
     const locationLabel = orderLocationLabel(order, language);
     const readyCornerValue = order.order_type === "takeaway"
@@ -520,7 +554,7 @@ export default function KitchenPage() {
             className={`relative overflow-hidden rounded-md border ${
               isReadyLane
                 ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/60 dark:bg-emerald-950/20"
-                : urgencyClass(elapsed)
+                : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
             }`}
           >
             {isCompletingTicket ? (
@@ -533,21 +567,21 @@ export default function KitchenPage() {
                 </div>
               </div>
             ) : null}
-            <div className={`flex items-start justify-between gap-3 px-4 ${isReadyLane ? "py-3" : "py-4"}`}>
+            <div className={`flex items-start justify-between gap-3 px-4 ${isReadyLane ? "py-2.5" : `py-3 ${cookingBar}`}`}>
               <div className="min-w-0">
                 {isReadyLane ? (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <h3 className="text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
-                    <span className="text-[14px] font-bold text-gray-500 dark:text-gray-400">{copy.kitchenBatch(kitchenBatch)}</span>
+                    <p className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{order.order_number}</p>
+                    <span className="text-[13px] font-medium text-gray-400 dark:text-gray-500">{copy.kitchenBatch(kitchenBatch)}</span>
                   </div>
                 ) : (
                   <>
-                    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[14px] font-bold text-gray-500 dark:text-gray-400">
-                      <span>{locationLabel}</span>
+                    <h3 className="text-2xl font-bold leading-tight text-gray-950 dark:text-white">{locationLabel}</h3>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] font-medium text-gray-800 dark:text-gray-100">
+                      <span>{order.order_number}</span>
                       <span aria-hidden="true">·</span>
                       <span>{copy.kitchenBatch(kitchenBatch)}</span>
                     </p>
-                    <h3 className="mt-1 text-xl font-semibold text-gray-950 dark:text-white">{order.order_number}</h3>
                   </>
                 )}
               </div>
@@ -563,15 +597,15 @@ export default function KitchenPage() {
                   )
                 ) : (
                   <>
-                    <p className="font-mono text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{elapsed}</p>
-                    <p className="text-[11px] text-gray-500">{copy.elapsed}</p>
+                    <p className="font-mono text-2xl font-semibold tabular-nums text-gray-950 dark:text-white">{elapsed}</p>
+                    <p className="text-[11px] text-gray-800 dark:text-gray-100">{copy.elapsed}</p>
                   </>
                 )}
               </div>
             </div>
 
             {!isReadyLane ? (
-              <div className="flex min-h-14 items-center justify-between gap-3 border-y border-black/5 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
+              <div className="flex min-h-11 items-center justify-between gap-3 border-y border-black/5 bg-white/60 px-3 py-1.5 dark:border-white/10 dark:bg-gray-950/35 sm:px-4">
                 <p className="text-[12px] font-medium tabular-nums text-gray-600 dark:text-gray-300">
                   {copy.remaining(laneItems.length)}
                 </p>
@@ -580,7 +614,7 @@ export default function KitchenPage() {
                     type="button"
                     disabled={submittingId !== null}
                     onClick={() => markAllReady(order)}
-                    className="ui-press inline-flex h-11 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
+                    className="ui-press inline-flex h-9 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
                   >
                     {copy.markAllReady}
                   </button>
@@ -596,18 +630,12 @@ export default function KitchenPage() {
                 >
                   <div className="min-h-0 overflow-hidden">
                     <div
-                      className={`flex min-h-[72px] items-center gap-3 px-3 py-3 sm:px-4 ${
+                      className={`flex min-h-[52px] items-center gap-3 px-3 py-2.5 sm:px-4 ${
                         isReadyLane ? "bg-emerald-50/35 dark:bg-emerald-950/10" : ""
                       } ${completingItemIds.has(item.ID) ? "kitchen-item-complete" : ""} ${
                         isReadyLane && enteringReadyItemIds.has(item.ID) ? "kitchen-item-ready-enter" : ""
                       }`}
                     >
-                      <div
-                        role="img"
-                        aria-label={`${language === "th" ? "รูปเมนู" : "Menu image"} ${item.menu_name}`}
-                        className="h-14 w-14 shrink-0 rounded-md bg-transparent bg-contain bg-center bg-no-repeat sm:h-16 sm:w-16"
-                        style={{ backgroundImage: `url(${orderItemImageUrl(item)})` }}
-                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <p className={`font-semibold leading-5 ${isReadyLane ? "text-gray-700 dark:text-gray-200" : "text-gray-900 dark:text-white"}`}>{item.quantity}x {item.menu_name}</p>
@@ -627,7 +655,7 @@ export default function KitchenPage() {
                         {item.note && <p className="mt-1 text-[12px] text-gray-500">{item.note}</p>}
                       </div>
                       {!canUpdate && isReadyLane ? (
-                        <span className="inline-flex h-11 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        <span className="inline-flex h-10 min-w-[82px] shrink-0 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
                           <Check className="h-4 w-4" aria-hidden="true" />
                           {copy.ready}
                         </span>
@@ -640,7 +668,7 @@ export default function KitchenPage() {
                               title={copy.undo}
                               disabled={submittingId !== null}
                               onClick={() => revertToCooking(order, item)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
                             >
                               <Undo2 className="h-[18px] w-[18px]" aria-hidden="true" />
                             </button>
@@ -651,7 +679,7 @@ export default function KitchenPage() {
                               title={copy.markReady}
                               disabled={submittingId !== null}
                               onClick={() => markReady(order, item.ID)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
                             >
                               <Check className="h-5 w-5" strokeWidth={3} aria-hidden="true" />
                             </button>
@@ -663,7 +691,7 @@ export default function KitchenPage() {
                               title={copy.cancelItem}
                               disabled={submittingId !== null}
                               onClick={() => openCancelDialog(order, item)}
-                              className="ui-press inline-flex h-11 w-11 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
                             >
                               <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />
                             </button>
@@ -712,78 +740,99 @@ export default function KitchenPage() {
     const label = isReadyLane ? copy.readyZone : copy.cookingZone;
     const emptyLabel = isReadyLane ? copy.readyEmpty : copy.cookingEmpty;
     const Icon = isReadyLane ? CheckCircle2 : Clock3;
+    // Only the "done" zone can be collapsed; the cooking zone always stays open.
+    const collapsible = isReadyLane;
+    const isOpen = collapsible ? open : true;
+
+    const zoneIconLabel = (
+      <span className="relative z-10 flex min-w-0 items-center gap-3">
+        {/* <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
+          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+        </span> */}
+        <span className="min-w-0">
+          <span className="block text-[21px] font-semibold leading-tight">{label}</span>
+        </span>
+      </span>
+    );
+    const zoneCount = (
+      <span
+        aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
+        className="min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums text-gray-950 dark:text-white"
+      >
+        {count}
+      </span>
+    );
 
     return (
       <section
         aria-label={label}
-        className={`overflow-hidden rounded-md border-2 ${
-          isReadyLane
-            ? "border-emerald-800 bg-emerald-50/50 dark:border-emerald-500 dark:bg-emerald-950/10"
-            : "border-amber-800 bg-amber-50/50 dark:border-amber-500 dark:bg-amber-950/10"
-        }`}
+        className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
       >
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={contentId}
-          onPointerDown={(event) => startZoneRipple(lane, event)}
-          onClick={() => setOpen((current) => !current)}
-          className={`kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden px-4 py-1.5 text-left transition-colors ${
-            isReadyLane
-              ? "bg-emerald-700 text-white hover:bg-emerald-600"
-              : "bg-amber-700 text-white hover:bg-amber-600"
-          }`}
-        >
-          {zoneRipple?.lane === lane ? (
-            <span
-              key={zoneRipple.id}
-              aria-hidden="true"
-              className="kitchen-zone-ripple"
-              style={{ height: zoneRipple.size, left: zoneRipple.x, top: zoneRipple.y, width: zoneRipple.size }}
-            />
-          ) : null}
-          <span className="relative z-10 flex min-w-0 items-center gap-3">
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
-              <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[21px] font-semibold leading-tight">{label}</span>
-            </span>
-          </span>
-          <span className="relative z-10 flex shrink-0 items-center gap-2">
-            <span
-              aria-label={language === "th" ? `${count} รายการ` : `${count} items`}
-              className="min-w-8 text-center font-mono text-[24px] font-bold leading-none tabular-nums text-white drop-shadow-[0_1px_0_rgba(3,7,18,0.35)]"
-            >
-              {count}
-            </span>
-            <span className="grid h-9 w-9 place-items-center text-white">
-              <ChevronDown
-                className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
-                strokeWidth={3}
+        {collapsible ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={contentId}
+            onPointerDown={(event) => startZoneRipple(lane, event)}
+            onClick={() => setOpen((current) => !current)}
+            className="kitchen-zone-trigger relative isolate flex min-h-[52px] w-full items-center justify-between gap-3 overflow-hidden bg-gray-100 px-4 py-1.5 text-left text-gray-900 transition-colors hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
+          >
+            {zoneRipple?.lane === lane ? (
+              <span
+                key={zoneRipple.id}
                 aria-hidden="true"
+                className="kitchen-zone-ripple"
+                style={{ height: zoneRipple.size, left: zoneRipple.x, top: zoneRipple.y, width: zoneRipple.size }}
               />
+            ) : null}
+            {zoneIconLabel}
+            <span className="relative z-10 flex shrink-0 items-center gap-2">
+              {zoneCount}
+              <span className="grid h-9 w-9 place-items-center text-gray-500 dark:text-gray-300">
+                <ChevronDown
+                  className={`h-6 w-6 transition-transform duration-200 motion-reduce:transition-none ${open ? "" : "-rotate-90"}`}
+                  strokeWidth={3}
+                  aria-hidden="true"
+                />
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+        ) : (
+          <div className="flex min-h-[52px] w-full items-center justify-between gap-3 bg-gray-100 px-4 py-1.5 text-gray-900 dark:bg-gray-800 dark:text-white">
+            {zoneIconLabel}
+            <span className="flex shrink-0 items-center gap-2 pr-1">
+              {zoneCount}
+            </span>
+          </div>
+        )}
 
         <div
           id={contentId}
-          aria-hidden={!open}
-          inert={open ? undefined : true}
-          className={`kitchen-zone-collapse grid ${open ? "kitchen-zone-collapse-open" : ""}`}
+          aria-hidden={!isOpen}
+          inert={isOpen ? undefined : true}
+          className={`kitchen-zone-collapse grid ${isOpen ? "kitchen-zone-collapse-open" : ""}`}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="kitchen-zone-collapse-content border-t border-white/20 p-3 sm:p-4">
+            <div className="kitchen-zone-collapse-content border-t border-gray-200 p-3 sm:p-4 dark:border-gray-800">
               {loading ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <Skeleton className="h-52" />
-                  <Skeleton className="h-52" />
-                  <Skeleton className="h-52" />
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {[0, 1, 2, 3].map((index) => (
+                    <Skeleton key={index} className="h-52 w-72 shrink-0" />
+                  ))}
                 </div>
               ) : laneOrders.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {laneOrders.map((order) => renderTicket(order, lane))}
+                // Carousel: show ~4 cards across, scroll horizontally for the rest
+                // instead of wrapping onto new rows.
+                <div className="flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-2">
+                  {laneOrders.map((order) => (
+                    <div
+                      key={`${lane}:${ticketKey(order)}`}
+                      className="min-w-[260px] shrink-0 snap-start"
+                      style={{ flexBasis: "calc((100% - 2.25rem) / 4)" }}
+                    >
+                      {renderTicket(order, lane)}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="flex min-h-24 items-center justify-center px-4 py-6 text-center text-[13px] font-semibold text-gray-600 dark:text-gray-300">
@@ -799,6 +848,25 @@ export default function KitchenPage() {
 
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
+  const recallLocale = language === "th" ? "th-TH" : "en-US";
+  const formatClock = (value?: string | null) =>
+    value
+      ? new Intl.DateTimeFormat(recallLocale, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(value))
+      : "-";
+  const roundFinishAt = (order: Order) =>
+    (order.items ?? [])
+      .filter((it) => it.status === "ready")
+      .reduce<string | null>((latest, it) => {
+        const value = it.ready_at ?? it.UpdatedAt ?? null;
+        if (!value) return latest;
+        if (!latest || new Date(value) > new Date(latest)) return value;
+        return latest;
+      }, null);
+  // Most recently finished round on top; rounds that finished earlier sink down.
+  const recallRounds = [...readyOrders].sort(
+    (a, b) => new Date(roundFinishAt(b) ?? 0).getTime() - new Date(roundFinishAt(a) ?? 0).getTime(),
+  );
+
   return (
     <OperationalPageShell
       eyebrow={copy.eyebrow}
@@ -806,14 +874,23 @@ export default function KitchenPage() {
       subtitle={copy.subtitle}
       showHeader={false}
     >
+      <div style={{ fontFamily: "var(--font-latin), var(--font-kitchen), var(--font-kanit), sans-serif" }}>
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      <div className="space-y-5">
-        {renderZone("cooking")}
-        {renderZone("ready")}
+      <div className="mb-3 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+        >
+          <History className="h-4 w-4" aria-hidden="true" />
+          {copy.recall}
+        </button>
       </div>
+
+      {renderZone("cooking")}
 
       {cancelTarget ? (
         <div
@@ -891,7 +968,7 @@ export default function KitchenPage() {
                   setCancelReason(event.target.value);
                   if (cancelReasonError) setCancelReasonError("");
                 }}
-                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:ring-2 disabled:opacity-60 dark:bg-gray-950 dark:text-white ${
+                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:opacity-60 dark:bg-gray-950 dark:text-white ${
                   cancelReasonError
                     ? "border-red-400 focus:border-red-500 focus:ring-red-500/15 dark:border-red-700"
                     : "border-gray-300 focus:border-gray-500 focus:ring-gray-500/15 dark:border-gray-700 dark:focus:border-gray-500"
@@ -903,7 +980,7 @@ export default function KitchenPage() {
                     {cancelReasonError}
                   </p>
                 ) : <span />}
-                <span className="shrink-0 text-[11px] tabular-nums text-gray-400">{cancelReason.length}/500</span>
+                <span className="shrink-0 text-[11px] tabular-nums text-gray-500">{cancelReason.length}/500</span>
               </div>
             </div>
 
@@ -927,6 +1004,80 @@ export default function KitchenPage() {
           </form>
         </div>
       ) : null}
+
+      {historyOpen ? (
+        <div
+          {...historyBackdrop}
+          className="motion-overlay fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kitchen-recall-title"
+            className="motion-bottom-sheet flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+              <h2 id="kitchen-recall-title" className="text-[16px] font-semibold text-gray-950 dark:text-white">{copy.recall}</h2>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                aria-label={copy.recallClose}
+                className="ui-press grid h-9 w-9 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-900 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {recallRounds.length ? (
+                <div className="divide-y divide-gray-100 dark:divide-gray-900">
+                  {recallRounds.map((order) => {
+                    const readyItems = (order.items ?? []).filter((it) => it.status === "ready");
+                    const finishAt = roundFinishAt(order);
+                    const startAt = readyItems.reduce<string | null>((earliest, it) => {
+                      const value = it.sent_at ?? null;
+                      if (!value) return earliest;
+                      if (!earliest || new Date(value) < new Date(earliest)) return value;
+                      return earliest;
+                    }, order.kitchen_sent_at ?? null);
+                    const secs = durationSeconds(startAt, finishAt);
+                    return (
+                      <div key={ticketKey(order)} className="flex items-center gap-3 px-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-semibold text-gray-950 dark:text-white">{orderLocationLabel(order, language)}</p>
+                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.kitchenBatch(order.kitchen_batch || 1)}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-mono text-[13px] tabular-nums text-gray-700 dark:text-gray-200">{copy.finishedAt} {formatClock(finishAt)}</p>
+                          <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                            {copy.timeTaken} {secs != null ? copy.recallDuration(Math.floor(secs / 60), secs % 60) : "-"}
+                          </p>
+                        </div>
+                        {canUpdate ? (
+                          <button
+                            type="button"
+                            title={copy.undo}
+                            aria-label={copy.undo}
+                            disabled={submittingId !== null}
+                            onClick={() => recallOrder(order)}
+                            className="ui-press grid h-10 w-10 shrink-0 place-items-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
+                          >
+                            <Undo2 className="h-[18px] w-[18px]" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex min-h-40 items-center justify-center px-4 py-10 text-center text-[13px] font-semibold text-gray-600 dark:text-gray-300">
+                  {copy.recallEmpty}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      </div>
     </OperationalPageShell>
   );
 }

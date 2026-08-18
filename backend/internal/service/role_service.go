@@ -13,11 +13,16 @@ import (
 )
 
 type RoleService struct {
-	roleRepo *repository.RoleRepository
+	roleRepo  *repository.RoleRepository
+	auditRepo *repository.RestaurantAuditLogRepository
 }
 
-func ProvideRoleService(roleRepo *repository.RoleRepository) *RoleService {
-	return &RoleService{roleRepo: roleRepo}
+func ProvideRoleService(roleRepo *repository.RoleRepository, auditRepos ...*repository.RestaurantAuditLogRepository) *RoleService {
+	service := &RoleService{roleRepo: roleRepo}
+	if len(auditRepos) > 0 {
+		service.auditRepo = auditRepos[0]
+	}
+	return service
 }
 
 func (s *RoleService) GetAssignableRoles(restaurantID uint) ([]entity.Role, error) {
@@ -36,29 +41,41 @@ const (
 	rolePermissionRestaurantOverride
 )
 
+type roleDisplayNameMutationKind int
+
+const (
+	roleDisplayNameDirect roleDisplayNameMutationKind = iota
+	roleDisplayNameRestaurantOverride
+)
+
 var editablePermissionKeys = map[string]bool{
-	"view_dashboard":      true,
-	"manage_menu":         true,
-	"view_tables":         true,
-	"manage_table":        true,
-	"take_order":          true,
-	"view_orders":         true,
-	"take_payment":        true,
-	"view_kitchen":        true,
-	"update_order_status": true,
-	"view_inventory":      true,
-	"manage_inventory":    true,
-	"manage_expenses":     true,
-	"view_reports":        true,
-	"manage_staff":        true,
+	"view_dashboard":                   true,
+	"manage_menu":                      true,
+	"view_tables":                      true,
+	"manage_table":                     true,
+	"take_order":                       true,
+	"view_orders":                      true,
+	"take_payment":                     true,
+	"view_kitchen":                     true,
+	"update_order_status":              true,
+	"view_inventory":                   true,
+	"manage_inventory":                 true,
+	"manage_expenses":                  true,
+	"view_reports":                     true,
+	PermissionManageInvites:            true,
+	PermissionManageMembers:            true,
+	PermissionManageRoles:              true,
+	PermissionViewAuditLog:             true,
+	PermissionManageRestaurantSettings: true,
 }
 
 var deprecatedPermissionKeys = map[string]bool{
-	"view_menu": true,
+	"view_menu":    true,
+	"manage_staff": true,
 }
 
-func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, actorRoleName string, permissions []string) (*entity.Role, error) {
-	role, err := s.roleRepo.FindByID(roleID)
+func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, actor *entity.RestaurantMember, permissions []string) (*entity.Role, error) {
+	role, err := s.roleRepo.FindByIDForRestaurant(roleID, restaurantID)
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
@@ -75,12 +92,20 @@ func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, acto
 			return nil, errors.New("role is not available for this restaurant")
 		}
 	}
-	if !canEditRolePermissions(actorRoleName, role.Name) {
+	if !canManageRole(actor, role) {
 		return nil, errors.New("you do not have permission to edit this role")
 	}
 	normalized, err := normalizePermissions(permissions)
 	if err != nil {
 		return nil, err
+	}
+	if !permissionsWithinGrantCeiling(actor, normalized) {
+		return nil, errors.New("cannot grant permissions you do not possess")
+	}
+	previousPermissions := role.Permissions
+	var previousPermissionList []string
+	if err := json.Unmarshal([]byte(previousPermissions), &previousPermissionList); err != nil {
+		previousPermissionList = []string{}
 	}
 	raw, err := json.Marshal(normalized)
 	if err != nil {
@@ -96,6 +121,21 @@ func (s *RoleService) UpdateRolePermissions(roleID uint, restaurantID uint, acto
 			return nil, err
 		}
 	}
+	actorID := actor.UserID
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionRolePermissionsChanged,
+		&actorID,
+		nil,
+		nil,
+		map[string]any{
+			"role_id":          role.ID,
+			"role_name":        roleName(role),
+			"from_permissions": previousPermissionList,
+			"to_permissions":   normalized,
+		},
+	)
 	return role, nil
 }
 
@@ -112,8 +152,32 @@ func rolePermissionMutationTargetForRole(role *entity.Role, restaurantID uint) (
 	return rolePermissionDirect, nil
 }
 
-func (s *RoleService) CreateCustomRole(restaurantID uint, actorRoleName string, req *RoleRequest) (*entity.Role, error) {
-	if !canEditRolePermissions(actorRoleName, "custom") {
+func roleDisplayNameMutationTargetForRole(role *entity.Role, restaurantID uint) (roleDisplayNameMutationKind, error) {
+	if role == nil {
+		return roleDisplayNameDirect, errors.New("role not found")
+	}
+	if role.RestaurantID == nil {
+		return roleDisplayNameRestaurantOverride, nil
+	}
+	if *role.RestaurantID != restaurantID {
+		return roleDisplayNameDirect, errors.New("role does not belong to this restaurant")
+	}
+	return roleDisplayNameDirect, nil
+}
+
+func roleDisplayNameUpdateIsNoOp(role *entity.Role, target roleDisplayNameMutationKind, displayName string) bool {
+	if role == nil {
+		return false
+	}
+	if target == roleDisplayNameRestaurantOverride {
+		return role.DisplayNameOverride != nil &&
+			normalizeRoleDisplayName(*role.DisplayNameOverride) == displayName
+	}
+	return normalizeRoleDisplayName(roleName(role)) == displayName
+}
+
+func (s *RoleService) CreateCustomRole(restaurantID uint, actor *entity.RestaurantMember, req *RoleRequest) (*entity.Role, error) {
+	if !memberHasPermission(actor, PermissionManageRoles) {
 		return nil, errors.New("you do not have permission to create roles")
 	}
 	displayName := normalizeRoleDisplayName(req.DisplayName)
@@ -123,6 +187,9 @@ func (s *RoleService) CreateCustomRole(restaurantID uint, actorRoleName string, 
 	normalized, err := normalizePermissions(req.Permissions)
 	if err != nil {
 		return nil, err
+	}
+	if !permissionsWithinGrantCeiling(actor, normalized) {
+		return nil, errors.New("cannot grant permissions you do not possess")
 	}
 	raw, err := json.Marshal(normalized)
 	if err != nil {
@@ -142,40 +209,94 @@ func (s *RoleService) CreateCustomRole(restaurantID uint, actorRoleName string, 
 	if err := s.roleRepo.Create(role); err != nil {
 		return nil, err
 	}
+	actorID := actor.UserID
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionRoleCreated,
+		&actorID,
+		nil,
+		nil,
+		map[string]any{
+			"role_id":     role.ID,
+			"role_name":   roleName(role),
+			"permissions": normalized,
+		},
+	)
 	return role, nil
 }
 
-func (s *RoleService) UpdateCustomRole(roleID uint, restaurantID uint, actorRoleName string, req *RoleRequest) (*entity.Role, error) {
-	role, err := s.roleRepo.FindByID(roleID)
+func (s *RoleService) UpdateRoleDisplayName(roleID uint, restaurantID uint, actor *entity.RestaurantMember, req *RoleRequest) (*entity.Role, error) {
+	role, err := s.roleRepo.FindByIDForRestaurant(roleID, restaurantID)
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
-	if !roleBelongsToRestaurant(role, restaurantID) || role.IsSystem {
-		return nil, errors.New("only custom roles can be edited here")
+	target, err := roleDisplayNameMutationTargetForRole(role, restaurantID)
+	if err != nil {
+		return nil, err
 	}
-	if !canEditRolePermissions(actorRoleName, role.Name) {
+	if target == roleDisplayNameRestaurantOverride {
+		hidden, err := s.roleRepo.IsRoleHiddenForRestaurant(restaurantID, role.ID)
+		if err != nil {
+			return nil, err
+		}
+		if hidden {
+			return nil, errors.New("role is not available for this restaurant")
+		}
+	}
+	if !canManageRole(actor, role) {
 		return nil, errors.New("you do not have permission to edit this role")
 	}
 	displayName := normalizeRoleDisplayName(req.DisplayName)
 	if displayName == "" {
 		return nil, errors.New("role name is required")
 	}
-	role.DisplayName = displayName
-	if err := s.roleRepo.Update(role); err != nil {
-		return nil, err
+	previousDisplayName := roleName(role)
+	if roleDisplayNameUpdateIsNoOp(role, target, displayName) {
+		return role, nil
 	}
+	if target == roleDisplayNameRestaurantOverride {
+		if err := s.roleRepo.UpsertRestaurantDisplayNameOverride(restaurantID, role.ID, displayName); err != nil {
+			return nil, err
+		}
+		override := displayName
+		role.DisplayName = displayName
+		role.DisplayNameOverride = &override
+	} else {
+		role.DisplayName = displayName
+		role.DisplayNameOverride = nil
+		if err := s.roleRepo.Update(role); err != nil {
+			return nil, err
+		}
+	}
+	actorID := actor.UserID
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionRoleRenamed,
+		&actorID,
+		nil,
+		nil,
+		map[string]any{
+			"role_id":   role.ID,
+			"role_key":  role.Name,
+			"is_system": role.IsSystem,
+			"from_name": previousDisplayName,
+			"to_name":   roleName(role),
+		},
+	)
 	return role, nil
 }
 
-func (s *RoleService) DeleteCustomRole(roleID uint, restaurantID uint, actorRoleName string) error {
-	role, err := s.roleRepo.FindByID(roleID)
+func (s *RoleService) DeleteCustomRole(roleID uint, restaurantID uint, actor *entity.RestaurantMember) error {
+	role, err := s.roleRepo.FindByIDForRestaurant(roleID, restaurantID)
 	if err != nil {
 		return errors.New("role not found")
 	}
 	if !roleAssignableToRestaurant(role, restaurantID) {
 		return errors.New("role does not belong to this restaurant")
 	}
-	if !canEditRolePermissions(actorRoleName, role.Name) {
+	if !canManageRole(actor, role) {
 		return errors.New("you do not have permission to delete this role")
 	}
 	memberCount, err := s.roleRepo.CountMembersForRestaurant(role.ID, restaurantID)
@@ -193,24 +314,27 @@ func (s *RoleService) DeleteCustomRole(roleID uint, restaurantID uint, actorRole
 		return errors.New("role is used by pending invitations")
 	}
 	if role.RestaurantID == nil {
-		return s.roleRepo.HideSystemRoleForRestaurant(restaurantID, role.ID)
+		if err := s.roleRepo.HideSystemRoleForRestaurant(restaurantID, role.ID); err != nil {
+			return err
+		}
+	} else if err := s.roleRepo.Delete(role); err != nil {
+		return err
 	}
-	return s.roleRepo.Delete(role)
-}
-
-func canEditRolePermissions(actorRoleName string, targetRoleName string) bool {
-	switch actorRoleName {
-	case "owner":
-		return targetRoleName != "owner"
-	case "manager":
-		return targetRoleName != "owner" && targetRoleName != "manager"
-	default:
-		return false
-	}
-}
-
-func roleBelongsToRestaurant(role *entity.Role, restaurantID uint) bool {
-	return role != nil && role.RestaurantID != nil && *role.RestaurantID == restaurantID
+	actorID := actor.UserID
+	writeAuditEvent(
+		s.auditRepo,
+		restaurantID,
+		entity.AuditActionRoleDeleted,
+		&actorID,
+		nil,
+		nil,
+		map[string]any{
+			"role_id":   role.ID,
+			"role_name": roleName(role),
+			"is_system": role.IsSystem,
+		},
+	)
+	return nil
 }
 
 func normalizeRoleDisplayName(value string) string {
@@ -240,6 +364,15 @@ func normalizePermissions(permissions []string) ([]string, error) {
 		}
 		seen[permission] = true
 		result = append(result, permission)
+	}
+	for _, permission := range append([]string(nil), result...) {
+		for _, dependency := range permissionDependencies[permission] {
+			if seen[dependency] {
+				continue
+			}
+			seen[dependency] = true
+			result = append(result, dependency)
+		}
 	}
 	return result, nil
 }

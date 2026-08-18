@@ -272,7 +272,10 @@ func (s *RestaurantService) ListMembersForActor(actorUserID, restaurantID uint) 
 	if err != nil {
 		return nil, err
 	}
-	return s.ListMembersWithStatus(restaurantID, canManageTeam(actor))
+	if !canViewTeam(actor) {
+		return nil, errors.New("missing team management permission")
+	}
+	return s.ListMembersWithStatus(restaurantID, true)
 }
 
 func (s *RestaurantService) ListMembersWithStatus(restaurantID uint, includeInactive bool) ([]entity.RestaurantMember, error) {
@@ -297,11 +300,11 @@ func (s *RestaurantService) UpdateMemberStatus(actorUserID, restaurantID, member
 		return nil, errors.New("invalid member status")
 	}
 
-	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID)
+	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID, PermissionManageMembers)
 	if err != nil {
 		return nil, err
 	}
-	if !canManageMember(actor, target) {
+	if !canManageMemberWithPermission(actor, target, PermissionManageMembers) {
 		return nil, errors.New("you do not have permission to manage this member")
 	}
 
@@ -340,15 +343,15 @@ func (s *RestaurantService) UpdateMemberStatus(actorUserID, restaurantID, member
 }
 
 func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID, roleID uint) (*entity.RestaurantMember, error) {
-	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID)
+	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID, PermissionManageRoles)
 	if err != nil {
 		return nil, err
 	}
-	if !canManageMember(actor, target) {
+	if !canManageMemberWithPermission(actor, target, PermissionManageRoles) {
 		return nil, errors.New("you do not have permission to manage this member")
 	}
 
-	role, err := s.roleRepo.FindByID(roleID)
+	role, err := s.roleRepo.FindByIDForRestaurant(roleID, restaurantID)
 	if err != nil {
 		return nil, errors.New("role not found")
 	}
@@ -369,7 +372,7 @@ func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID
 	}
 
 	previousRole := roleName(target.Role)
-	target.RoleID = role.ID
+	assignMemberRole(target, role)
 	if err := s.memberRepo.Update(target); err != nil {
 		return nil, err
 	}
@@ -399,21 +402,27 @@ func (s *RestaurantService) UpdateMemberRole(actorUserID, restaurantID, memberID
 }
 
 func (s *RestaurantService) UpdateMemberPermissions(actorUserID, restaurantID, memberID uint, permissionsOverride *([]string)) (*entity.RestaurantMember, error) {
-	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID)
+	actor, target, err := s.loadManagedMemberPair(actorUserID, restaurantID, memberID, PermissionManageRoles)
 	if err != nil {
 		return nil, err
 	}
-	if !canManageMember(actor, target) {
+	if !canManageMemberWithPermission(actor, target, PermissionManageRoles) {
 		return nil, errors.New("you do not have permission to manage this member")
 	}
 
 	previous := target.PermissionsOverride
 	if permissionsOverride == nil {
+		if target.Role == nil || !roleWithinGrantCeiling(actor, target.Role) {
+			return nil, errors.New("cannot grant permissions you do not possess")
+		}
 		target.PermissionsOverride = nil
 	} else {
 		normalized, err := normalizePermissions(*permissionsOverride)
 		if err != nil {
 			return nil, err
+		}
+		if !permissionsWithinGrantCeiling(actor, normalized) {
+			return nil, errors.New("cannot grant permissions you do not possess")
 		}
 		raw, err := json.Marshal(normalized)
 		if err != nil {
@@ -465,8 +474,8 @@ func (s *RestaurantService) ListAuditLogs(actorUserID, restaurantID uint, limit 
 	if err != nil {
 		return nil, err
 	}
-	if !canManageTeam(actor) {
-		return nil, errors.New("only owner or manager can view audit logs")
+	if !memberHasPermission(actor, PermissionViewAuditLog) {
+		return nil, errors.New("missing view_audit_log permission")
 	}
 	return s.auditRepo.ListByRestaurant(restaurantID, limit, offset)
 }

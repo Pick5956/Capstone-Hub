@@ -55,7 +55,7 @@ export default function ThemedSelect({
   const firstEnabledIndex = options.findIndex((option) => !option.disabled);
   const buttonState = open
     ? "border-[#d6dbe2] bg-gray-50 shadow-[inset_0_0_0_1px_rgba(17,24,39,0.04)] dark:border-[#2c3848] dark:bg-gray-800/60"
-    : "border-[#dfe3e8] bg-white hover:border-[#d6dbe2] hover:bg-gray-50 dark:border-[#253142] dark:bg-gray-900 dark:hover:border-[#2c3848] dark:hover:bg-gray-800/60";
+    : "border-[color:var(--dashboard-shell-border)] bg-white hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-900 dark:hover:border-[#2c3848] dark:hover:bg-gray-800/60";
 
   const enabledIndexFrom = useCallback((start: number, direction: 1 | -1) => {
     if (!options.length) return -1;
@@ -218,7 +218,7 @@ export default function ThemedSelect({
           strokeWidth="2.3"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
         >
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -231,7 +231,7 @@ export default function ThemedSelect({
             id={listboxId}
             role="listbox"
             aria-labelledby={buttonId}
-            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[#dfe3e8] bg-white p-1.5 shadow-lg dark:border-[#253142] dark:bg-gray-900 dark:shadow-black/30`}
+            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[color:var(--dashboard-shell-border)] bg-white p-1.5 shadow-lg dark:bg-gray-900 dark:shadow-black/30`}
             style={{
               left: menuPosition.left,
               top: menuPosition.top,

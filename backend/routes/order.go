@@ -24,6 +24,7 @@ func SetupOrderRoutes(v1 *gin.RouterGroup, orderEvents *realtime.OrderHub) {
 	v1.PATCH("/orders/:id/items/:itemId", ctrl.UpdateItem)
 	v1.DELETE("/orders/:id/items/:itemId", ctrl.DeleteItem)
 	v1.PATCH("/orders/:id/items/:itemId/status", ctrl.UpdateItemStatus)
+	v1.POST("/orders/:id/items/:itemId/void", ctrl.VoidItemUnits)
 	v1.POST("/orders/:id/send-to-kitchen", ctrl.SendToKitchen)
 
 	v1.GET("/kitchen/queue", ctrl.KitchenQueue)

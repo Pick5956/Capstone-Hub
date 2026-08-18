@@ -54,6 +54,16 @@ type UpdateOrderItemRequest struct {
 	Note     string `json:"note" binding:"max=500"`
 }
 
+// VoidItemUnitsRequest voids a chosen number of units from a single order item
+// line. It is the checkout-time counterpart to editing a pending item: a
+// pending line is edited freely, but a line already sent to the kitchen can
+// only be voided (with a reason) for audit — this lets the cashier void part of
+// a multi-unit line instead of the whole thing.
+type VoidItemUnitsRequest struct {
+	Quantity int    `json:"quantity" binding:"required,gte=1,lte=100"`
+	Reason   string `json:"reason" binding:"required,max=500"`
+}
+
 type StatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=pending cooking ready served cancelled"`
 	Reason string `json:"reason" binding:"max=500"`
@@ -645,6 +655,115 @@ func (s *OrderService) UpdateItemStatus(
 	return s.repo.FindOrder(restaurantID, changed)
 }
 
+// VoidItemUnits voids `count` units from a single order item line, capturing a
+// reason for audit. When count covers the whole line it behaves exactly like a
+// full void; otherwise the line is split — the remaining units stay live and
+// the voided units are moved to a cancelled clone so totals and void reporting
+// stay correct. Inventory is never restocked (the food may already be made),
+// matching the existing full-line void.
+func (s *OrderService) VoidItemUnits(
+	restaurantID, userID, orderID, itemID uint,
+	count int,
+	reason string,
+	actor OrderItemStatusActor,
+) (*entity.Order, error) {
+	if err := validateOrderItemStatusActor(actor, entity.OrderItemStatusCancelled); err != nil {
+		return nil, err
+	}
+	if count <= 0 {
+		return nil, errors.New("quantity must be greater than zero")
+	}
+	cancelReason, err := normalizeItemCancellationReason(entity.OrderItemStatusCancelled, reason)
+	if err != nil {
+		return nil, err
+	}
+	var changed uint
+	err = s.repo.Transaction(func(tx *repository.OrderRepository) error {
+		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
+		if err != nil {
+			return err
+		}
+		if isTerminalOrder(order.Status) {
+			return errors.New("cannot update item status on closed order")
+		}
+		if actor == OrderItemStatusActorFrontOfHouse {
+			// Mirror the whole-line void rule: a cashier may only void once every
+			// item is sent, so an unsent line is never voided behind the kitchen.
+			hasPending, err := tx.HasPendingItems(restaurantID, order.ID)
+			if err != nil {
+				return err
+			}
+			if hasPending {
+				return fmt.Errorf("front-of-house void requires every item to be sent: %w", ErrOrderItemStatusForbidden)
+			}
+		}
+		item, err := tx.FindItemForUpdate(restaurantID, order.ID, itemID)
+		if err != nil {
+			return err
+		}
+		if !canTransitionItem(item.Status, entity.OrderItemStatusCancelled) {
+			return fmt.Errorf("invalid item status transition from %s to %s", item.Status, entity.OrderItemStatusCancelled)
+		}
+		if count >= item.Quantity {
+			// Voiding the whole line — identical outcome to a full cancel.
+			item.Status = entity.OrderItemStatusCancelled
+			item.CancelledReason = cancelReason
+			if err := tx.SaveItem(item); err != nil {
+				return err
+			}
+		} else {
+			// Keep the remaining units on the live line and split the voided
+			// units onto a cancelled clone that records the reason.
+			voided := cloneOrderItemForVoid(item, count, cancelReason)
+			item.Quantity -= count
+			item.Subtotal = (item.UnitPrice + item.OptionsTotal) * float64(item.Quantity)
+			if err := tx.SaveItem(item); err != nil {
+				return err
+			}
+			if err := tx.CreateItem(voided); err != nil {
+				return err
+			}
+		}
+		if err := recalcOrderTotals(tx, order); err != nil {
+			return err
+		}
+		if err := refreshOrderStatusFromItems(tx, order, userID); err != nil {
+			return err
+		}
+		changed = order.ID
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.FindOrder(restaurantID, changed)
+}
+
+// cloneOrderItemForVoid builds a cancelled copy of src holding `count` units. It
+// carries the descriptive and kitchen fields so the void reads coherently in
+// history; per-unit option rows are not duplicated (the price is preserved via
+// OptionsTotal). It intentionally creates no inventory deductions.
+func cloneOrderItemForVoid(src *entity.OrderItem, count int, reason string) *entity.OrderItem {
+	return &entity.OrderItem{
+		OrderID:         src.OrderID,
+		RestaurantID:    src.RestaurantID,
+		MenuID:          src.MenuID,
+		MenuName:        src.MenuName,
+		UnitPrice:       src.UnitPrice,
+		OptionsTotal:    src.OptionsTotal,
+		Quantity:        count,
+		Subtotal:        (src.UnitPrice + src.OptionsTotal) * float64(count),
+		FulfillmentType: src.FulfillmentType,
+		Note:            src.Note,
+		Status:          entity.OrderItemStatusCancelled,
+		SentAt:          src.SentAt,
+		KitchenBatch:    src.KitchenBatch,
+		ReadyAt:         src.ReadyAt,
+		ServedAt:        src.ServedAt,
+		CancelledReason: reason,
+	}
+}
+
 func (s *OrderService) CancelOrder(restaurantID, userID, orderID uint, reason string) (*entity.Order, error) {
 	var changed uint
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
@@ -691,7 +810,7 @@ func validateEmptyTableClose(order *entity.Order) error {
 }
 
 func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*entity.Order, error) {
-	var changed uint
+	var closedEmpty *entity.Order
 	err := s.repo.Transaction(func(tx *repository.OrderRepository) error {
 		order, err := tx.FindOrderForUpdate(restaurantID, orderID)
 		if err != nil {
@@ -700,24 +819,40 @@ func (s *OrderService) CloseEmptyTable(restaurantID, userID, orderID uint) (*ent
 		if err := validateEmptyTableClose(order); err != nil {
 			return err
 		}
+		now := repository.BangkokNow()
 
+		if len(order.Items) == 0 {
+			// The table was opened but nothing was ever ordered. Delete the empty
+			// order outright so it is not archived — there is nothing to record.
+			if err := tx.DeleteOrder(order); err != nil {
+				return err
+			}
+			if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
+				return err
+			}
+			// The row is gone; reflect the close in the in-memory copy we return.
+			order.Status = entity.OrderStatusCancelled
+			order.ClosedAt = &now
+			closedEmpty = order
+			return nil
+		}
+
+		// Items were placed then all cancelled — keep a cancelled record.
 		const reason = "empty table closed"
 		order.CancelledReason = reason
-		now := repository.BangkokNow()
 		order.ClosedAt = &now
 		if err := setOrderStatus(tx, order, entity.OrderStatusCancelled, userID, reason); err != nil {
 			return err
 		}
-		if err := releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID); err != nil {
-			return err
-		}
-		changed = order.ID
-		return nil
+		return releaseTableIfNoOpenOrder(tx, restaurantID, order.TableID)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.FindOrder(restaurantID, changed)
+	if closedEmpty != nil {
+		return closedEmpty, nil
+	}
+	return s.repo.FindOrder(restaurantID, orderID)
 }
 
 func (s *OrderService) KitchenQueue(restaurantID uint) ([]entity.Order, error) {

@@ -1,13 +1,17 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { listReservations } from '@/src/api/reservation';
+import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
-import { AppScreen } from '@/src/components/app-shell';
+import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import {
   Button,
   ChipGroup,
+  EdgeRow,
+  EdgeSection,
+  EdgeSectionHeader,
   EmptyState,
   Feedback,
   SectionHeader,
@@ -20,7 +24,7 @@ import { createRequestGeneration } from '@/src/lib/request-generation';
 import { canViewReservationHistory } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, spacing, typeScale } from '@/src/theme';
+import { breakpoints, palette, spacing, typeScale } from '@/src/theme';
 import type {
   Reservation,
   ReservationStatus,
@@ -43,6 +47,7 @@ function formatDateTime(value: string | null | undefined, language: 'th' | 'en')
 }
 
 export default function ReservationsScreen() {
+  const { width } = useWindowDimensions();
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const canView = canViewReservationHistory(
@@ -168,18 +173,24 @@ export default function ReservationsScreen() {
     { label: copy(`รับแล้ว ${(counts.seated || 0).toLocaleString('th-TH')}`, `Seated ${(counts.seated || 0).toLocaleString('en-US')}`), value: 'seated' },
     { label: copy(`ยกเลิก ${(counts.cancelled || 0).toLocaleString('th-TH')}`, `Cancelled ${(counts.cancelled || 0).toLocaleString('en-US')}`), value: 'cancelled' },
   ];
+  const tabletLayout = width >= breakpoints.tablet;
+  const sectionTitle = filter === 'all' ? copy('รายการจองทั้งหมด', 'All reservations') : statusCopy[filter];
+  const sectionDetail = copy(
+    `แสดง ${reservations.length.toLocaleString('th-TH')} รายการ`,
+    `Showing ${reservations.length.toLocaleString('en-US')} reservations`,
+  );
 
   return (
     <AppScreen
       title={copy('ประวัติการจองโต๊ะ', 'Reservation history')}
       subtitle={copy(
-        'ตรวจสอบรายการที่ยังรอลูกค้า รับลูกค้าแล้ว และยกเลิกหรือไม่มา',
-        'Review active bookings, seated guests, cancellations, and no-shows.',
+        'รายการจอง รับลูกค้า และยกเลิก',
+        'Bookings, seated guests and cancellations',
       )}
       topLevel={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}
+      refreshControl={<AppRefreshControl onRefresh={load} />}
     >
-      <ChipGroup value={filter} onChange={setFilter} options={filterOptions} />
+      <ChipGroup value={filter} onChange={setFilter} options={filterOptions} scrollable />
       {error ? (
         <Feedback
           title={copy('โหลดประวัติการจองไม่ได้', 'Could not load reservation history')}
@@ -187,79 +198,116 @@ export default function ReservationsScreen() {
           tone="danger"
         />
       ) : null}
-      <Surface>
-        <SectionHeader
-          title={filter === 'all' ? copy('รายการจองทั้งหมด', 'All reservations') : statusCopy[filter]}
-          detail={copy(
-            `แสดง ${reservations.length.toLocaleString('th-TH')} รายการ`,
-            `Showing ${reservations.length.toLocaleString('en-US')} reservations`,
+      {tabletLayout ? (
+        <Surface>
+          <SectionHeader title={sectionTitle} detail={sectionDetail} />
+          {loading && !reservations.length ? (
+            <EmptyState title={copy('กำลังโหลดประวัติการจอง', 'Loading reservation history')} />
+          ) : reservations.length ? (
+            <View>
+              {reservations.map((reservation, index) => (
+                <View
+                  key={reservation.ID}
+                  style={{
+                    gap: spacing.sm,
+                    borderTopWidth: index ? 1 : 0,
+                    borderTopColor: palette.border,
+                    paddingVertical: spacing.lg,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+                    <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: palette.surfaceSubtle }}>
+                      <AppIcon color={palette.text} name="calendar-outline" size={20} />
+                    </View>
+                    <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
+                      <Text selectable style={typeScale.cardTitle}>
+                        {reservation.table_label
+                          || reservation.table?.display_label
+                          || reservation.table?.table_number
+                          || copy('ไม่ระบุโต๊ะ', 'Unknown table')}
+                      </Text>
+                      <Text selectable style={[typeScale.body, { color: palette.text }]}>
+                        {reservation.name || copy('ไม่ระบุชื่อ', 'No guest name')}
+                      </Text>
+                    </View>
+                    <StatusBadge label={statusCopy[reservation.status]} tone={statusTone[reservation.status]} />
+                  </View>
+                  <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                    {copy('เบอร์โทร', 'Phone')}: {reservation.phone || '−'}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }}>
+                    <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
+                      <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                        {copy('จองเมื่อ', 'Reserved at')}
+                      </Text>
+                      <Text selectable style={typeScale.caption}>
+                        {formatDateTime(reservation.CreatedAt, language)}
+                      </Text>
+                    </View>
+                    <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
+                      <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
+                        {copy('ปิดรายการเมื่อ', 'Closed at')}
+                      </Text>
+                      <Text selectable style={typeScale.caption}>
+                        {formatDateTime(reservation.resolved_at, language)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <EmptyState
+              title={copy('ยังไม่มีประวัติในสถานะนี้', 'No reservations in this status')}
+              detail={copy('รายการใหม่จะปรากฏหลังมีการจองโต๊ะ', 'New entries appear after a table is reserved.')}
+            />
           )}
-        />
-        {loading && !reservations.length ? (
-          <EmptyState title={copy('กำลังโหลดประวัติการจอง', 'Loading reservation history')} />
-        ) : reservations.length ? (
-          <View>
-            {reservations.map((reservation, index) => (
-              <View
-                key={reservation.ID}
-                style={{
-                  gap: spacing.sm,
-                  borderTopWidth: index ? 1 : 0,
-                  borderTopColor: palette.border,
-                  paddingVertical: spacing.lg,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-                  <View style={{ minWidth: 0, flex: 1, gap: 2 }}>
-                    <Text selectable style={typeScale.cardTitle}>
-                      {reservation.table_label
-                        || reservation.table?.display_label
-                        || reservation.table?.table_number
-                        || copy('ไม่ระบุโต๊ะ', 'Unknown table')}
-                    </Text>
-                    <Text selectable style={[typeScale.body, { color: palette.text }]}>
-                      {reservation.name || copy('ไม่ระบุชื่อ', 'No guest name')}
-                    </Text>
-                  </View>
-                  <StatusBadge label={statusCopy[reservation.status]} tone={statusTone[reservation.status]} />
-                </View>
-                <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                  {copy('เบอร์โทร', 'Phone')}: {reservation.phone || '−'}
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }}>
-                  <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
-                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                      {copy('จองเมื่อ', 'Reserved at')}
-                    </Text>
-                    <Text selectable style={typeScale.caption}>
-                      {formatDateTime(reservation.CreatedAt, language)}
-                    </Text>
-                  </View>
-                  <View style={{ minWidth: 130, flex: 1, gap: 2 }}>
-                    <Text selectable style={[typeScale.caption, { color: palette.muted }]}>
-                      {copy('ปิดรายการเมื่อ', 'Closed at')}
-                    </Text>
-                    <Text selectable style={typeScale.caption}>
-                      {formatDateTime(reservation.resolved_at, language)}
-                    </Text>
-                  </View>
-                </View>
+        </Surface>
+      ) : (
+        <View style={{ gap: spacing.md }}>
+          <EdgeSectionHeader title={sectionTitle} detail={sectionDetail} />
+          <EdgeSection>
+            {loading && !reservations.length ? (
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <EmptyState title={copy('กำลังโหลดประวัติการจอง', 'Loading reservation history')} />
               </View>
-            ))}
-          </View>
-        ) : (
-          <EmptyState
-            title={copy('ยังไม่มีประวัติในสถานะนี้', 'No reservations in this status')}
-            detail={copy(
-              'รายการใหม่จะปรากฏหลังมีการจองโต๊ะ',
-              'New entries appear after a table is reserved.',
+            ) : reservations.length ? reservations.map((reservation) => {
+              const tableLabel = reservation.table_label
+                || reservation.table?.display_label
+                || reservation.table?.table_number
+                || copy('ไม่ระบุโต๊ะ', 'Unknown table');
+              const guestName = reservation.name || copy('ไม่ระบุชื่อ', 'No guest name');
+              const detail = [
+                `${guestName} · ${copy('เบอร์โทร', 'Phone')}: ${reservation.phone || '−'}`,
+                `${copy('จองเมื่อ', 'Reserved at')}: ${formatDateTime(reservation.CreatedAt, language)}`,
+                `${copy('ปิดรายการเมื่อ', 'Closed at')}: ${formatDateTime(reservation.resolved_at, language)}`,
+              ].join('\n');
+
+              return (
+                <EdgeRow
+                  key={reservation.ID}
+                  title={tableLabel}
+                  detail={detail}
+                  icon="calendar-outline"
+                  style={{ minHeight: 104 }}
+                  trailing={<StatusBadge label={statusCopy[reservation.status]} tone={statusTone[reservation.status]} />}
+                />
+              );
+            }) : (
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <EmptyState
+                  title={copy('ยังไม่มีประวัติในสถานะนี้', 'No reservations in this status')}
+                  detail={copy('รายการใหม่จะปรากฏหลังมีการจองโต๊ะ', 'New entries appear after a table is reserved.')}
+                />
+              </View>
             )}
-          />
-        )}
-      </Surface>
+          </EdgeSection>
+        </View>
+      )}
       {hasMore ? (
         <Button
           variant="secondary"
+          icon="time-outline"
           label={copy('ดูรายการก่อนหน้าเพิ่ม', 'Load earlier reservations')}
           onPress={() => { void loadMore(); }}
           loading={loadingMore}

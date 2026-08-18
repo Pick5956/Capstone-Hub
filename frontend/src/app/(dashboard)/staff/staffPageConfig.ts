@@ -1,23 +1,10 @@
 import type { Language } from "@/src/providers/LanguageProvider";
+import type { Permission } from "@/src/types/auth";
 import type { Invitation, Membership, RestaurantAuditLog } from "@/src/types/restaurant";
 import type { Role } from "@/src/types/role";
+import { SYSTEM_ROLE_LABELS as ROLE_LABELS, roleLabel } from "@/src/lib/roleLabels";
 
-const ROLE_LABELS: Record<Language, Record<string, string>> = {
-  th: {
-    owner: "เจ้าของร้าน",
-    manager: "ผู้จัดการ",
-    cashier: "แคชเชียร์",
-    waiter: "พนักงานเสิร์ฟ",
-    chef: "ครัว",
-  },
-  en: {
-    owner: "Owner",
-    manager: "Manager",
-    cashier: "Cashier",
-    waiter: "Waiter",
-    chef: "Chef",
-  },
-};
+export { roleLabel };
 
 export const STATUS_LABELS: Record<Language, Record<string, string>> = {
   th: {
@@ -34,19 +21,43 @@ export const STATUS_LABELS: Record<Language, Record<string, string>> = {
   },
 };
 
-export const PERMISSION_SECTIONS = [
+type PermissionRow = {
+  id: string;
+  th: string;
+  en: string;
+  descriptionTh: string;
+  descriptionEn: string;
+  permissions: Permission[];
+};
+
+type PermissionSection = {
+  id: string;
+  th: string;
+  en: string;
+  rows: PermissionRow[];
+};
+
+export const PERMISSION_SECTIONS: PermissionSection[] = [
   {
     id: "service",
     th: "งานหน้าร้าน",
     en: "Service floor",
     rows: [
       {
-        id: "pos",
+        id: "order-taking",
         th: "รับออเดอร์",
         en: "Order taking",
-        descriptionTh: "อนุญาตให้เปิดโต๊ะ เพิ่มรายการอาหาร และชำระเงิน",
-        descriptionEn: "Allow opening tables, adding food items, and taking payments.",
-        permissions: ["take_order", "take_payment"],
+        descriptionTh: "อนุญาตให้เปิดโต๊ะและเพิ่มรายการอาหาร โดยไม่รวมการรับชำระเงิน",
+        descriptionEn: "Allow opening tables and adding food items, excluding payment collection.",
+        permissions: ["take_order"],
+      },
+      {
+        id: "payment",
+        th: "รับชำระเงิน",
+        en: "Take payments",
+        descriptionTh: "อนุญาตให้ออกบิลและรับชำระเงิน พร้อมสิทธิ์ดูคลังออเดอร์",
+        descriptionEn: "Allow billing and payment collection, including order archive access.",
+        permissions: ["take_payment"],
       },
       {
         id: "kitchen-view",
@@ -144,31 +155,114 @@ export const PERMISSION_SECTIONS = [
         permissions: ["view_reports"],
       },
       {
-        id: "staff-manage",
-        th: "จัดการทีม",
-        en: "Manage team",
-        descriptionTh: "อนุญาตให้เชิญพนักงาน เปลี่ยนบทบาท และจัดการสิทธิ์",
-        descriptionEn: "Allow inviting staff, changing roles, and managing permissions.",
-        permissions: ["manage_staff"],
+        id: "restaurant-settings",
+        th: "ตั้งค่าร้านและการคิดเงิน",
+        en: "Restaurant and billing settings",
+        descriptionTh: "อนุญาตให้แก้ข้อมูลร้าน ภาษี ค่าบริการ และ PromptPay",
+        descriptionEn: "Allow editing restaurant details, taxes, service charge, and PromptPay.",
+        permissions: ["manage_restaurant_settings"],
+      },
+    ],
+  },
+  {
+    id: "team",
+    th: "ทีมและสิทธิ์",
+    en: "Team and permissions",
+    rows: [
+      {
+        id: "team-invites",
+        th: "จัดการคำเชิญ",
+        en: "Manage invitations",
+        descriptionTh: "อนุญาตให้สร้าง ส่งต่อ และยกเลิกลิงก์เชิญ สำหรับบทบาทที่สิทธิ์ไม่เกินตนเอง",
+        descriptionEn: "Allow creating, sharing, and revoking invitation links for roles within the actor's grant scope.",
+        permissions: ["manage_invites"],
+      },
+      {
+        id: "team-members",
+        th: "จัดการสมาชิก",
+        en: "Manage members",
+        descriptionTh: "อนุญาตให้ระงับ นำออก หรือกู้คืนสมาชิกทั่วไป",
+        descriptionEn: "Allow suspending, removing, or restoring ordinary staff members.",
+        permissions: ["manage_members"],
+      },
+      {
+        id: "team-roles",
+        th: "จัดการบทบาทและสิทธิ์",
+        en: "Manage roles and permissions",
+        descriptionTh: "อนุญาตให้สร้างบทบาท เปลี่ยนบทบาท และกำหนดสิทธิ์ที่ตนเองมี",
+        descriptionEn: "Allow creating roles, assigning roles, and granting permissions the actor holds.",
+        permissions: ["manage_roles"],
+      },
+      {
+        id: "team-audit",
+        th: "ดูประวัติการเปลี่ยนแปลง",
+        en: "View audit log",
+        descriptionTh: "อนุญาตให้ดูว่าใครเปลี่ยนคำเชิญ สมาชิก บทบาท และสิทธิ์เมื่อใด",
+        descriptionEn: "Allow viewing who changed invitations, members, roles, and permissions.",
+        permissions: ["view_audit_log"],
       },
     ],
   },
 ];
 
-const HIDDEN_PERMISSION_KEYS = new Set(["view_menu"]);
-export const ALL_PERMISSION_KEYS = PERMISSION_SECTIONS.flatMap((section) => section.rows.flatMap((row) => row.permissions));
-const EDITABLE_PERMISSION_KEYS = new Set(ALL_PERMISSION_KEYS);
+const HIDDEN_PERMISSION_KEYS = new Set(["view_menu", "manage_staff"]);
+export const ALL_PERMISSION_KEYS: Permission[] = PERMISSION_SECTIONS.flatMap((section) => section.rows.flatMap((row) => row.permissions));
+const LEGACY_STAFF_CAPABILITIES: Permission[] = [
+  "manage_invites",
+  "manage_members",
+  "manage_roles",
+  "view_audit_log",
+  "manage_restaurant_settings",
+];
+
+export const PERMISSION_DEPENDENCIES: Partial<Record<Permission, Permission[]>> = {
+  update_order_status: ["view_kitchen"],
+  take_payment: ["view_orders"],
+  manage_table: ["view_tables"],
+  manage_inventory: ["view_inventory"],
+};
+
+function uniquePermissions(permissions: string[]) {
+  return permissions.filter((permission, index) => permission && permissions.indexOf(permission) === index);
+}
+
+export function applyPermissionDependencies(current: string[], permission: Permission, enabled: boolean) {
+  const next = new Set(current);
+  if (enabled) {
+    const addWithDependencies = (key: Permission) => {
+      next.add(key);
+      (PERMISSION_DEPENDENCIES[key] ?? []).forEach(addWithDependencies);
+    };
+    addWithDependencies(permission);
+  } else {
+    const removeWithDependents = (key: Permission) => {
+      next.delete(key);
+      (Object.entries(PERMISSION_DEPENDENCIES) as Array<[Permission, Permission[]]>).forEach(([dependent, prerequisites]) => {
+        if (prerequisites.includes(key)) removeWithDependents(dependent);
+      });
+    };
+    removeWithDependents(permission);
+  }
+  return Array.from(next);
+}
+
+export function normalizePermissionDependencies(current: string[]) {
+  let next = uniquePermissions(current);
+  (Object.keys(PERMISSION_DEPENDENCIES) as Permission[]).forEach((permission) => {
+    if (next.includes(permission)) next = applyPermissionDependencies(next, permission, true);
+  });
+  return next;
+}
+
+export function replaceGrantablePermissionSelection(current: string[], grantable: string[], enabled: boolean) {
+  const grantableSet = new Set(grantable);
+  if (!enabled) return current.filter((permission) => !grantableSet.has(permission));
+  return uniquePermissions([...current, ...grantable]);
+}
 
 export type PermissionTarget =
   | { type: "role"; role: Role }
   | { type: "member"; member: Membership };
-
-export function roleLabel(role: Role | string | null | undefined, language: Language) {
-  const roleName = typeof role === "string" ? role : role?.name;
-  if (!roleName) return language === "th" ? "พนักงาน" : "Staff";
-  const displayName = typeof role === "string" ? "" : role?.display_name?.trim();
-  return ROLE_LABELS[language][roleName] ?? (displayName || roleName);
-}
 
 export function isCustomRole(role: Role) {
   return !role.is_system && role.restaurant_id != null;
@@ -178,7 +272,7 @@ export function permissionSummary(role: Role | null | undefined, language: Langu
   if (!role) return language === "th" ? "พื้นฐาน" : "Basic";
   if (role.permissions === `["*"]`) return language === "th" ? "ทุกเมนู" : "All access";
   try {
-    const permissions = parsePermissions(role.permissions);
+    const permissions = parsePermissions(role.permissions, role.name);
     if (!permissions.length) return language === "th" ? "พื้นฐาน" : "Basic";
     return language === "th" ? `${permissions.length} สิทธิ์` : `${permissions.length} permissions`;
   } catch {
@@ -186,29 +280,34 @@ export function permissionSummary(role: Role | null | undefined, language: Langu
   }
 }
 
-export function parsePermissions(raw: string | null | undefined) {
+export function parsePermissions(raw: string | null | undefined, legacyRoleName?: string) {
   if (!raw) return [] as string[];
   try {
-    const parsed = JSON.parse(raw) as string[];
-    return Array.isArray(parsed) ? stripHiddenPermissions(parsed) : [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const permissions = parsed.filter((permission): permission is string => typeof permission === "string");
+    if ((legacyRoleName === "owner" || legacyRoleName === "manager") && permissions.includes("manage_staff")) {
+      permissions.push(...LEGACY_STAFF_CAPABILITIES);
+    }
+    return normalizePermissionDependencies(stripHiddenPermissions(permissions));
   } catch {
     return [];
   }
 }
 
 export function stripHiddenPermissions(permissions: string[]) {
-  return permissions.filter((permission) => EDITABLE_PERMISSION_KEYS.has(permission) && !HIDDEN_PERMISSION_KEYS.has(permission));
+  return uniquePermissions(permissions.filter((permission) => !HIDDEN_PERMISSION_KEYS.has(permission)));
 }
 
 export function effectiveMemberPermissions(member: Membership) {
-  return parsePermissions(member.permissions_override ?? member.role?.permissions);
+  return parsePermissions(member.permissions_override ?? member.role?.permissions, member.role?.name);
 }
 
 export function memberPermissionSummary(member: Membership, language: Language) {
   if (member.permissions_override == null) {
     return language === "th" ? "ใช้สิทธิ์ตามบทบาท" : "Uses role permissions";
   }
-  const permissions = parsePermissions(member.permissions_override);
+  const permissions = parsePermissions(member.permissions_override, member.role?.name);
   return language === "th" ? `กำหนดเอง ${permissions.length} สิทธิ์` : `Custom ${permissions.length} permissions`;
 }
 
@@ -277,6 +376,16 @@ export function auditMessage(log: RestaurantAuditLog, language: Language) {
   const toStatus = typeof details.to_status === "string" ? details.to_status : "";
   const fromRole = typeof details.from_role === "string" ? details.from_role : "";
   const toRole = typeof details.to_role === "string" ? details.to_role : "";
+  const roleDisplayName = [details.display_name, details.role_name, details.name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0) ?? "";
+  const fromName = [details.from_name, details.from, details.from_display_name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0) ?? "";
+  const toName = [details.to_name, details.to, details.to_display_name]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0) ?? "";
+  const auditPermissions = Array.isArray(details.to_permissions) ? details.to_permissions : details.permissions;
+  const permissionCount = Array.isArray(auditPermissions)
+    ? auditPermissions.filter((permission) => typeof permission === "string").length
+    : null;
 
   if (log.action === "invitation_created") {
     return language === "th"
@@ -300,6 +409,32 @@ export function auditMessage(log: RestaurantAuditLog, language: Language) {
     return language === "th"
       ? `เปลี่ยนบทบาท ${ROLE_LABELS.th[fromRole] ?? fromRole} -> ${ROLE_LABELS.th[toRole] ?? toRole}`
       : `Changed role ${ROLE_LABELS.en[fromRole] ?? fromRole} -> ${ROLE_LABELS.en[toRole] ?? toRole}`;
+  }
+  if (log.action === "member_permissions_changed") {
+    const usesRolePermissions = details.use_role_permissions === true;
+    return language === "th"
+      ? usesRolePermissions ? "คืนสิทธิ์สมาชิกให้ใช้ตามบทบาท" : "เปลี่ยนสิทธิ์เฉพาะสมาชิก"
+      : usesRolePermissions ? "Reset member permissions to role defaults" : "Changed member-specific permissions";
+  }
+  if (log.action === "role_created") {
+    return language === "th"
+      ? `สร้างบทบาท${roleDisplayName ? ` · ${roleDisplayName}` : ""}`
+      : `Created role${roleDisplayName ? ` · ${roleDisplayName}` : ""}`;
+  }
+  if (log.action === "role_renamed") {
+    return language === "th"
+      ? `เปลี่ยนชื่อบทบาท${fromName || toName ? ` ${fromName || "-"} -> ${toName || "-"}` : ""}`
+      : `Renamed role${fromName || toName ? ` ${fromName || "-"} -> ${toName || "-"}` : ""}`;
+  }
+  if (log.action === "role_deleted") {
+    return language === "th"
+      ? `ลบบทบาท${roleDisplayName ? ` · ${roleDisplayName}` : ""}`
+      : `Deleted role${roleDisplayName ? ` · ${roleDisplayName}` : ""}`;
+  }
+  if (log.action === "role_permissions_changed") {
+    return language === "th"
+      ? `เปลี่ยนสิทธิ์บทบาท${roleDisplayName ? ` · ${roleDisplayName}` : ""}${permissionCount == null ? "" : ` · ${permissionCount} สิทธิ์`}`
+      : `Changed role permissions${roleDisplayName ? ` · ${roleDisplayName}` : ""}${permissionCount == null ? "" : ` · ${permissionCount} permissions`}`;
   }
   return log.action;
 }

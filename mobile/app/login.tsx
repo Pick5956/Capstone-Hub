@@ -1,14 +1,14 @@
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AuthScreen } from '@/src/components/auth-screen';
 import { AppText as Text } from '@/src/components/app-text';
-import { Button, Feedback, Surface, TextField } from '@/src/components/ui';
+import { Button, Feedback, TextField } from '@/src/components/ui';
 import { invitationTokenFrom } from '@/src/lib/staff-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { palette, radius, spacing } from '@/src/theme';
+import { palette, spacing } from '@/src/theme';
 
 export default function LoginScreen() {
   const { inviteToken: rawInviteToken } = useLocalSearchParams<{ inviteToken?: string }>();
@@ -18,6 +18,8 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [emailMissing, setEmailMissing] = useState(false);
+  const [passwordMissing, setPasswordMissing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
 
@@ -28,8 +30,12 @@ export default function LoginScreen() {
   }
 
   async function submit() {
-    if (!email.trim() || !password) {
-      setError(copy('กรอกอีเมลและรหัสผ่านให้ครบ', 'Enter both your email and password'));
+    const nextEmailMissing = !email.trim();
+    const nextPasswordMissing = !password;
+    setEmailMissing(nextEmailMissing);
+    setPasswordMissing(nextPasswordMissing);
+    if (nextEmailMissing || nextPasswordMissing) {
+      setError(null);
       return;
     }
 
@@ -83,18 +89,15 @@ export default function LoginScreen() {
 
   return (
     <AuthScreen
-      title={copy('เข้าใช้งานร้าน', 'Sign in to your restaurant')}
+      title={copy('เข้าสู่ระบบ', 'Sign in')}
       subtitle={inviteToken
         ? copy(
-          'เข้าสู่ระบบแล้ว Dishy จะพากลับไปยืนยันคำเชิญนี้',
-          'After you sign in, Dishy will bring you back to accept this invitation.',
+          'เข้าสู่ระบบเพื่อเปิดคำเชิญนี้',
+          'Sign in to open this invitation.',
         )
-        : copy(
-          'ใช้บัญชีเดียวกับเว็บ ระบบจะโหลดร้านและสิทธิ์ของคุณโดยอัตโนมัติ',
-          'Use the same account as the web app. Your restaurants and permissions will load automatically.',
-        )}
+        : undefined}
     >
-      <Surface>
+      <View style={{ gap: spacing.xl }}>
         {error ? (
           <Feedback
             title={copy('เข้าสู่ระบบไม่ได้', 'Unable to sign in')}
@@ -103,75 +106,102 @@ export default function LoginScreen() {
           />
         ) : null}
 
+        <Button
+          icon="logo-google"
+          variant="secondary"
+          label={copy('ดำเนินการต่อด้วย Google', 'Continue with Google')}
+          onPress={submitGoogle}
+          loading={googleSubmitting}
+          disabled={busy && !googleSubmitting}
+        />
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <View style={{ height: 1, flex: 1, backgroundColor: palette.border }} />
+          <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>
+            {copy('หรือใช้อีเมล', 'or use email')}
+          </Text>
+          <View style={{ height: 1, flex: 1, backgroundColor: palette.border }} />
+        </View>
+
         <TextField
+          icon="mail-outline"
           label={copy('อีเมล', 'Email')}
+          autoComplete="email"
+          textContentType="emailAddress"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            setEmailMissing(false);
+          }}
           keyboardType="email-address"
           placeholder="you@example.com"
+          error={emailMissing ? copy('กรอกอีเมล', 'Enter your email') : null}
         />
         <TextField
+          icon="lock-closed-outline"
           label={copy('รหัสผ่าน', 'Password')}
+          autoComplete="current-password"
+          textContentType="password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setPassword(value);
+            setPasswordMissing(false);
+          }}
           secureTextEntry
+          revealLabel={copy('แสดง', 'Show')}
+          hideLabel={copy('ซ่อน', 'Hide')}
+          error={passwordMissing ? copy('กรอกรหัสผ่าน', 'Enter your password') : null}
         />
+
+        <Pressable
+          accessibilityRole="link"
+          disabled={busy}
+          onPress={() => router.push('/forgot-password' as never)}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            alignSelf: 'flex-end',
+            justifyContent: 'center',
+            marginTop: -spacing.md,
+            opacity: busy ? 0.42 : pressed ? 0.58 : 1,
+          })}
+        >
+          <Text style={{ color: palette.textStrong, fontSize: 13, fontWeight: '700' }}>
+            {copy('ลืมรหัสผ่าน?', 'Forgot password?')}
+          </Text>
+        </Pressable>
+
         <Button
+          icon="arrow-forward"
           label={copy('เข้าสู่ระบบ', 'Sign in')}
           onPress={submit}
           loading={submitting || status === 'loading'}
           disabled={googleSubmitting}
         />
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-          <View style={{ height: 1, flex: 1, backgroundColor: palette.border }} />
+        <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
           <Text style={{ color: palette.muted, fontSize: 13 }}>
-            {copy('หรือ', 'or')}
+            {copy('ยังไม่มีบัญชี?', 'New to Dishy?')}
           </Text>
-          <View style={{ height: 1, flex: 1, backgroundColor: palette.border }} />
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push(inviteToken
+              ? { pathname: '/register', params: { inviteToken } } as never
+              : '/register' as never)}
+            disabled={busy}
+            hitSlop={10}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              minWidth: 44,
+              justifyContent: 'center',
+              opacity: busy ? 0.42 : pressed ? 0.58 : 1,
+            })}
+          >
+            <Text style={{ color: palette.textStrong, fontSize: 13, fontWeight: '800' }}>
+              {copy('สร้างบัญชี', 'Create account')}
+            </Text>
+          </Pressable>
         </View>
-
-        <Button
-          variant="secondary"
-          label={copy('เข้าสู่ระบบด้วย Google', 'Sign in with Google')}
-          onPress={submitGoogle}
-          loading={googleSubmitting}
-          disabled={busy && !googleSubmitting}
-          leading={
-            <View
-              style={{
-                width: 22,
-                height: 22,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: palette.borderStrong,
-                borderRadius: radius.sm,
-                backgroundColor: palette.surface,
-              }}
-            >
-              <Text style={{ color: palette.textStrong, fontSize: 13, fontWeight: '800' }}>
-                G
-              </Text>
-            </View>
-          }
-        />
-
-        <Button
-          variant="ghost"
-          label={copy('ลืมรหัสผ่าน', 'Forgot password')}
-          onPress={() => router.push('/forgot-password' as never)}
-          disabled={busy}
-        />
-        <Button
-          variant="secondary"
-          label={copy('สร้างบัญชีใหม่', 'Create an account')}
-          onPress={() => router.push(inviteToken
-            ? { pathname: '/register', params: { inviteToken } } as never
-            : '/register' as never)}
-          disabled={busy}
-        />
-      </Surface>
+      </View>
     </AuthScreen>
   );
 }

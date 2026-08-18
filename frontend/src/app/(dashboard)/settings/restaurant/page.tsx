@@ -99,7 +99,7 @@ export default function RestaurantSettingsPage() {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
   const [locating, setLocating] = useState(false);
-  const canManageRestaurant = can(activeMembership, "manage_staff");
+  const canManageRestaurant = can(activeMembership, "manage_restaurant_settings");
   const restaurantId = activeMembership?.restaurant_id;
   const { showToast } = useToast();
   const isOwner = activeMembership?.role?.name === "owner";
@@ -150,9 +150,9 @@ export default function RestaurantSettingsPage() {
     ? {
         eyebrow: "Restaurant",
         title: "ข้อมูลร้านและการคิดเงิน",
-        subtitle: "สำหรับผู้จัดการหรือเจ้าของร้าน ใช้ตั้งค่าข้อมูลที่มีผลกับบิลและการทำงานหน้าร้าน",
+        subtitle: "ตั้งค่าข้อมูลร้านที่มีผลกับบิลและการทำงานหน้าร้าน สำหรับบัญชีที่ได้รับสิทธิ์",
         back: "ตั้งค่า",
-        denied: "เฉพาะผู้จัดการหรือเจ้าของร้านเท่านั้น",
+        denied: "บัญชีนี้ยังไม่มีสิทธิ์จัดการการตั้งค่าร้าน",
         loading: "กำลังโหลดข้อมูลร้าน...",
         noRestaurant: "ยังไม่มีร้านที่เลือกอยู่",
         goRestaurants: "ไปหน้าเลือกร้าน",
@@ -232,9 +232,9 @@ export default function RestaurantSettingsPage() {
     : {
         eyebrow: "Restaurant",
         title: "Restaurant and billing",
-        subtitle: "Manager-only settings that affect bills and live restaurant operations.",
+        subtitle: "Restaurant settings that affect bills and live operations, available to accounts with permission.",
         back: "Settings",
-        denied: "Only managers or owners can manage restaurant settings.",
+        denied: "This account does not have permission to manage restaurant settings.",
         loading: "Loading restaurant details...",
         noRestaurant: "No active restaurant selected",
         goRestaurants: "Go to restaurants",
@@ -500,6 +500,7 @@ export default function RestaurantSettingsPage() {
       title={copy.title}
       subtitle={copy.subtitle}
       backLabel={copy.back}
+      hideHeader
     >
       <form id="restaurant-settings-form" onSubmit={save} className="space-y-4 pb-20 sm:pb-0">
         {loading ? (
@@ -690,7 +691,7 @@ export default function RestaurantSettingsPage() {
           <div className={`${deleteModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-md flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-red-750 dark:text-red-400">{copy.confirmDeleteTitle}</h2>
-              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
             </div>
             <form onSubmit={handleDeleteRestaurant} className="p-4 space-y-4">
               <p className="text-[13px] text-gray-650 dark:text-gray-400 leading-relaxed">

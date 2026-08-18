@@ -4,11 +4,17 @@ type AppLogoProps = {
   size?: number;
   priority?: boolean;
   className?: string;
+  decorative?: boolean;
 };
 
 export const APP_LOGO_SRC = "/web-logo.png";
 
-export default function AppLogo({ size = 36, priority = false, className = "" }: AppLogoProps) {
+export default function AppLogo({
+  size = 36,
+  priority = false,
+  className = "",
+  decorative = false,
+}: AppLogoProps) {
   return (
     <span
       className={`relative inline-flex shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 ${className}`}
@@ -16,7 +22,7 @@ export default function AppLogo({ size = 36, priority = false, className = "" }:
     >
       <Image
         src={APP_LOGO_SRC}
-        alt="Dishy"
+        alt={decorative ? "" : "Dishy"}
         fill
         priority={priority}
         sizes={`${size}px`}

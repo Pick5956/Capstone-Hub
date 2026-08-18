@@ -1,10 +1,12 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { createRestaurant } from '@/src/api/restaurant';
+import { AppIcon } from '@/src/components/app-icon';
+import { AppText as Text } from '@/src/components/app-text';
 import { AuthScreen } from '@/src/components/auth-screen';
-import { Button, ChipGroup, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
+import { Button, ChipGroup, Feedback, SectionHeader, TextField } from '@/src/components/ui';
 import { timeOrDefault, toInt } from '@/src/lib/forms';
 import {
   DEFAULT_RESTAURANT_TYPE,
@@ -12,9 +14,10 @@ import {
 } from '@/src/lib/restaurant-types';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
-import { spacing } from '@/src/theme';
+import { palette, radius, spacing } from '@/src/theme';
 
 export default function CreateRestaurantScreen() {
+  const { width } = useWindowDimensions();
   const { refreshMemberships, setActiveRestaurantFromMembership, user } = useAuth();
   const { copy, language } = useDisplayPreferences();
   const [name, setName] = useState('');
@@ -26,6 +29,7 @@ export default function CreateRestaurantScreen() {
   const [close, setClose] = useState('22:00');
   const [tables, setTables] = useState('0');
   const [splitZones, setSplitZones] = useState<'yes' | 'no'>('yes');
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -74,11 +78,7 @@ export default function CreateRestaurantScreen() {
 
   return (
     <AuthScreen
-      title={copy('สร้างร้าน', 'Create a restaurant')}
-      subtitle={copy(
-        'ระบบจะตั้งคุณเป็นเจ้าของร้านและเตรียมข้อมูลเริ่มต้นตามประเภทร้าน',
-        'You will become the owner, and Dishy will prepare starter data for this restaurant type.',
-      )}
+      title={copy('สร้างร้าน', 'Create restaurant')}
       showBack
     >
       {error ? (
@@ -88,31 +88,65 @@ export default function CreateRestaurantScreen() {
           tone="danger"
         />
       ) : null}
-      <Surface>
-        <SectionHeader title={copy('ข้อมูลร้าน', 'Restaurant information')} />
-        <TextField label={copy('ชื่อร้าน', 'Restaurant name')} value={name} onChangeText={setName} />
-        <TextField label={copy('สาขา', 'Branch')} value={branch} onChangeText={setBranch} />
+      <View style={{ gap: spacing.xl }}>
+        <TextField icon="storefront-outline" label={copy('ชื่อร้าน', 'Restaurant name')} value={name} onChangeText={setName} />
+        <TextField icon="location-outline" label={copy('สาขา', 'Branch')} value={branch} onChangeText={setBranch} />
         <ChipGroup
           label={copy('ประเภทร้าน', 'Restaurant type')}
           value={type}
           onChange={setType}
           options={restaurantTypeOptions(language)}
+          scrollable
         />
-        <TextField
-          label={copy('เบอร์โทรร้าน', 'Restaurant phone')}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-        <TextField
-          label={copy('ที่อยู่', 'Address')}
-          value={address}
-          onChangeText={setAddress}
-          multiline
-        />
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: detailsOpen }}
+          onPress={() => setDetailsOpen((current) => !current)}
+          style={({ pressed }) => ({
+            minHeight: 48,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            borderWidth: 1,
+            borderColor: palette.border,
+            borderRadius: radius.md,
+            backgroundColor: pressed ? palette.surfaceStrong : palette.surfaceSubtle,
+            paddingHorizontal: spacing.md,
+          })}
+        >
+          <AppIcon color={palette.muted} name="information-circle-outline" size={19} />
+          <Text style={{ flex: 1, color: palette.text, fontSize: 13, fontWeight: '700' }}>
+            {copy('เพิ่มเบอร์โทรและที่อยู่', 'Add phone and address')}
+          </Text>
+          <Text style={{ color: palette.muted, fontSize: 12 }}>{copy('ไม่บังคับ', 'Optional')}</Text>
+          <AppIcon color={palette.muted} name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={17} />
+        </Pressable>
+
+        {detailsOpen ? (
+          <View style={{ gap: spacing.md }}>
+            <TextField
+              icon="call-outline"
+              label={copy('เบอร์โทรร้าน', 'Restaurant phone')}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+            />
+            <TextField
+              icon="navigate-outline"
+              label={copy('ที่อยู่', 'Address')}
+              value={address}
+              onChangeText={setAddress}
+              multiline
+            />
+          </View>
+        ) : null}
+
+        <SectionHeader title={copy('เวลาและโต๊ะ', 'Hours and tables')} />
+        <View style={{ flexDirection: width >= 360 ? 'row' : 'column', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <TextField
+              icon="time-outline"
               label={copy('เวลาเปิด', 'Opening time')}
               value={open}
               onChangeText={setOpen}
@@ -120,6 +154,7 @@ export default function CreateRestaurantScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <TextField
+              icon="moon-outline"
               label={copy('เวลาปิด', 'Closing time')}
               value={close}
               onChangeText={setClose}
@@ -127,6 +162,7 @@ export default function CreateRestaurantScreen() {
           </View>
         </View>
         <TextField
+          icon="grid-outline"
           label={copy('จำนวนโต๊ะเริ่มต้น', 'Initial table count')}
           value={tables}
           onChangeText={setTables}
@@ -145,11 +181,12 @@ export default function CreateRestaurantScreen() {
           ]}
         />
         <Button
-          label={copy('สร้างร้านและเริ่มใช้งาน', 'Create restaurant and get started')}
+          icon="arrow-forward"
+          label={copy('สร้างร้าน', 'Create restaurant')}
           onPress={submit}
           loading={saving}
         />
-      </Surface>
+      </View>
     </AuthScreen>
   );
 }
