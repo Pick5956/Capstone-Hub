@@ -12,6 +12,9 @@ export interface Ingredient {
   ID: number;
   restaurant_id: number;
   name: string;
+  // sku/image_url/yield_percent are no longer collected in the inventory form,
+  // but the API still returns them and the menu page reads yield_percent for
+  // per-dish cost — so the response type keeps them.
   sku?: string;
   category_id?: number | null;
   image_url?: string;
@@ -40,14 +43,11 @@ export interface IngredientTransaction {
 
 export interface IngredientInput {
   name: string;
-  sku?: string;
   category_id?: number;
-  image_url?: string;
   unit: string;
   stock: number;
   min_stock: number;
   cost_per_unit: number;
-  yield_percent?: number;
   storage_type?: string;
 }
 

@@ -539,14 +539,11 @@ export default function InventoryPage() {
     setEditingItem(item);
     setForm({
       name: item.name,
-      sku: item.sku ?? "",
       category_id: item.category_id ?? 0,
-      image_url: item.image_url ?? "",
       unit: item.unit,
       stock: item.stock,
       min_stock: item.min_stock,
       cost_per_unit: item.cost_per_unit,
-      yield_percent: item.yield_percent ?? 100,
       storage_type: item.storage_type ?? "room_temp",
     });
     setFormError("");
@@ -1184,37 +1181,6 @@ export default function InventoryPage() {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {copy.yieldPercent}
-                      <span className="group relative inline-flex">
-                        <span
-                          tabIndex={0}
-                          role="button"
-                          aria-label={copy.yieldHint}
-                          className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-400 transition hover:border-orange-400 hover:text-orange-500 focus-visible:border-orange-400 focus-visible:text-orange-500 focus:outline-none dark:border-gray-600 dark:text-gray-500"
-                        >
-                          i
-                        </span>
-                        <span
-                          role="tooltip"
-                          className="pointer-events-none absolute left-0 top-6 z-50 w-60 rounded-md border border-gray-200 bg-white px-3 py-2 text-[11px] font-normal leading-relaxed text-slate-600 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300"
-                        >
-                          {copy.yieldHint}
-                        </span>
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={form.yield_percent ?? 100}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, yield_percent: parseFloat(event.target.value) || 100 }))
-                      }
-                      className={inputCls}
-                    />
-                  </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
                     <ThemedSelect

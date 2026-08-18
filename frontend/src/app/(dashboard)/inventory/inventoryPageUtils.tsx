@@ -6,14 +6,11 @@ export const STORAGE_TYPES = ["room_temp", "chilled", "frozen", "dry"];
 
 export const emptyForm: IngredientInput = {
   name: "",
-  sku: "",
   category_id: 0,
-  image_url: "",
   unit: "กก.",
   stock: 0,
   min_stock: 0,
   cost_per_unit: 0,
-  yield_percent: 100,
   storage_type: "room_temp",
 };
 
