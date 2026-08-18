@@ -7,6 +7,8 @@ import {
   ArrowUp,
   Boxes,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   History,
   Pencil,
@@ -150,6 +152,7 @@ function buildCopy(language: "th" | "en") {
         noMinimum: "ยังไม่ตั้งแจ้งเตือน",
         totalItemsLabel: "รายการ",
         tableSummary: "รายการที่แสดง",
+        perPage: "ต่อหน้า",
         loading: "กำลังโหลด...",
         current: "คงเหลือ",
         quickActions: "การจัดการเร็ว",
@@ -251,6 +254,7 @@ function buildCopy(language: "th" | "en") {
         noMinimum: "No alert set",
         totalItemsLabel: "items",
         tableSummary: "Visible items",
+        perPage: "per page",
         loading: "Loading...",
         current: "current",
         quickActions: "Quick actions",
@@ -337,6 +341,8 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StockStatus>("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(25);
+  const [page, setPage] = useState(1);
 
   const [form, setForm] = useState<IngredientInput>(emptyForm);
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
@@ -455,6 +461,22 @@ export default function InventoryPage() {
         return byStatus !== 0 ? byStatus : a.name.localeCompare(b.name);
       });
   }, [ingredients, search, statusFilter]);
+
+  // Client-side paging of the already-loaded list — instant, no server round-trips.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageItems = filtered.slice(pageStart, pageStart + pageSize);
+
+  // Back to the first page whenever the result set or page size changes.
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, pageSize]);
+
+  // If deletions shrink the list past the current page, clamp back into range.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const adjustPreview = useMemo(() => {
     if (!adjustTarget || !adjustQty) return null;
@@ -877,7 +899,7 @@ export default function InventoryPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-gray-800">
-                      {filtered.map((item) => {
+                      {pageItems.map((item) => {
                         const status = getStatus(item);
                         const meta = statusMeta(status, copy);
                         const percent = getStockPercent(item);
@@ -958,6 +980,53 @@ export default function InventoryPage() {
                   </table>
                 )}
               </div>
+
+              {filtered.length > 0 && (
+                <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-gray-800 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>{copy.perPage}</span>
+                    <select
+                      value={pageSize}
+                      onChange={(event) => setPageSize(Number(event.target.value))}
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none transition focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200"
+                    >
+                      {[10, 25, 50, 100].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3 sm:justify-end">
+                    <span className="tabular-nums">
+                      {formatNumber(pageStart + 1, lang)}–{formatNumber(Math.min(pageStart + pageSize, filtered.length), lang)} / {formatNumber(filtered.length, lang)}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPage(safePage - 1)}
+                        disabled={safePage <= 1}
+                        aria-label="previous page"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="min-w-[3.5rem] text-center font-medium tabular-nums text-slate-600 dark:text-slate-300">
+                        {formatNumber(safePage, lang)} / {formatNumber(totalPages, lang)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setPage(safePage + 1)}
+                        disabled={safePage >= totalPages}
+                        aria-label="next page"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         </div>
