@@ -65,6 +65,7 @@ function statusMeta(status: ItemStatus, copy: Copy) {
       badge: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
       value: "text-red-600 dark:text-red-400",
       accent: "border-red-200/80 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/30",
+      row: "bg-red-50/70 hover:bg-red-100/60 dark:bg-red-950/25 dark:hover:bg-red-950/40",
     };
   }
   if (status === "low") {
@@ -75,6 +76,7 @@ function statusMeta(status: ItemStatus, copy: Copy) {
       badge: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
       value: "text-amber-600 dark:text-amber-400",
       accent: "border-amber-200/80 bg-amber-50/80 dark:border-amber-900/40 dark:bg-amber-950/20",
+      row: "bg-amber-50/60 hover:bg-amber-100/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30",
     };
   }
   return {
@@ -84,6 +86,7 @@ function statusMeta(status: ItemStatus, copy: Copy) {
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
     value: "text-slate-900 dark:text-white",
     accent: "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950",
+    row: "hover:bg-slate-50 dark:hover:bg-gray-900/40",
   };
 }
 
@@ -932,7 +935,7 @@ export default function InventoryPage() {
                         const percent = getStockPercent(item);
 
                         return (
-                          <tr key={item.ID} className="transition-colors hover:bg-slate-50 dark:hover:bg-gray-900/40">
+                          <tr key={item.ID} className={`transition-colors ${meta.row}`}>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
@@ -945,7 +948,6 @@ export default function InventoryPage() {
                                   <span className={`font-semibold tabular-nums ${meta.value}`}>
                                     {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
                                   </span>
-                                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${meta.badge}`}>{meta.label}</span>
                                 </div>
                                 <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
                                   <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
