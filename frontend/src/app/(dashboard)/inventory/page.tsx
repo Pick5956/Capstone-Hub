@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
+  ArrowUpDown,
   Boxes,
   Check,
   ChevronLeft,
@@ -343,6 +344,8 @@ export default function InventoryPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const [form, setForm] = useState<IngredientInput>(emptyForm);
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
@@ -447,9 +450,9 @@ export default function InventoryPage() {
   );
 
   const filtered = useMemo(() => {
-    // Out-of-stock first, then low, then ok — so the items that need action lead
-    // the list. Alphabetical within the same status keeps it stable.
     const statusRank = { out: 0, low: 1, ok: 2 } as const;
+    const catName = (item: Ingredient) =>
+      item.category?.name || categoryNameById.get(item.category_id ?? 0) || copy.uncategorized;
     return ingredients
       .filter((item) => {
         if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -457,10 +460,19 @@ export default function InventoryPage() {
         return true;
       })
       .sort((a, b) => {
-        const byStatus = statusRank[getStatus(a)] - statusRank[getStatus(b)];
-        return byStatus !== 0 ? byStatus : a.name.localeCompare(b.name);
+        // No column picked → default attention order: out → low → ok, then name.
+        if (sortKey === "") {
+          const byStatus = statusRank[getStatus(a)] - statusRank[getStatus(b)];
+          return byStatus !== 0 ? byStatus : a.name.localeCompare(b.name);
+        }
+        let cmp = 0;
+        if (sortKey === "name") cmp = a.name.localeCompare(b.name);
+        else if (sortKey === "category") cmp = catName(a).localeCompare(catName(b));
+        else if (sortKey === "stock") cmp = a.stock - b.stock;
+        else if (sortKey === "price") cmp = a.cost_per_unit - b.cost_per_unit;
+        return sortDir === "asc" ? cmp : -cmp;
       });
-  }, [ingredients, search, statusFilter]);
+  }, [ingredients, search, statusFilter, sortKey, sortDir, categoryNameById, copy]);
 
   // Client-side paging of the already-loaded list — instant, no server round-trips.
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -477,6 +489,33 @@ export default function InventoryPage() {
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+
+  // Clicking a header sorts by it; clicking the active one flips direction.
+  function toggleSort(key: "name" | "category" | "stock" | "price") {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortableTh = (key: "name" | "category" | "stock" | "price", label: string, alignRight = false) => {
+    const active = sortKey === key;
+    const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <th className={`px-4 py-2.5 ${alignRight ? "text-right" : ""}`}>
+        <button
+          type="button"
+          onClick={() => toggleSort(key)}
+          className={`inline-flex items-center gap-1 transition hover:text-slate-700 dark:hover:text-slate-200 ${active ? "text-slate-600 dark:text-slate-200" : ""}`}
+        >
+          <span>{label}</span>
+          <Icon className={`h-3 w-3 ${active ? "" : "opacity-30"}`} />
+        </button>
+      </th>
+    );
+  };
 
   const adjustPreview = useMemo(() => {
     if (!adjustTarget || !adjustQty) return null;
@@ -867,15 +906,6 @@ export default function InventoryPage() {
 
           <div className="grid gap-4">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              <div className="border-b border-slate-200 px-4 py-3 dark:border-gray-800">
-                <div className="flex items-center justify-between">
-                  <p className="text-[12px] font-semibold text-slate-600 dark:text-slate-300">{copy.tableSummary}</p>
-                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
-                    {formatNumber(filtered.length, lang)} {lang === "th" ? "รายการ" : "items"}
-                    {ingredients.length !== filtered.length ? ` / ${formatNumber(ingredients.length, lang)}` : ""}
-                  </p>
-                </div>
-              </div>
 
               <div className="overflow-x-auto">
                 {filtered.length === 0 ? (
@@ -891,10 +921,10 @@ export default function InventoryPage() {
                   <table className="w-full min-w-[640px] border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
-                        <th className="px-4 py-2.5 font-semibold">{copy.name}</th>
-                        <th className="px-4 py-2.5 font-semibold">{copy.category}</th>
-                        <th className="px-4 py-2.5 font-semibold">{copy.current}</th>
-                        <th className="px-4 py-2.5 text-right font-semibold">{copy.costPerUnit}</th>
+                        {sortableTh("name", copy.name)}
+                        {sortableTh("category", copy.category)}
+                        {sortableTh("stock", copy.current)}
+                        {sortableTh("price", copy.costPerUnit, true)}
                         <th className="px-4 py-2.5" />
                       </tr>
                     </thead>
@@ -1221,7 +1251,7 @@ export default function InventoryPage() {
 
       {categoryModalOpen && (
         <div {...categoryBackdrop} className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${categoryModalClosing ? "motion-dialog-exit" : "motion-dialog"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.manageCategories}</h2>
               <button
@@ -1333,7 +1363,7 @@ export default function InventoryPage() {
 
       {deleteTarget && (
         <div {...deleteBackdrop} className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${deleteClosing ? "motion-dialog-exit" : "motion-dialog"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="px-6 py-5">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300">
                 <Trash2 className="h-5 w-5" />
@@ -1361,7 +1391,7 @@ export default function InventoryPage() {
 
       {adjustTarget && (
         <div {...adjustBackdrop} className={`${adjustClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${adjustClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${adjustClosing ? "motion-dialog-exit" : "motion-dialog"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.adjustTitle}</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
