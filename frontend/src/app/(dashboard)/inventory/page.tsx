@@ -56,6 +56,17 @@ import {
 
 type Copy = ReturnType<typeof buildCopy>;
 
+// One editable row in the "add multiple ingredients" table.
+type BulkRow = {
+  name: string;
+  category_id: number;
+  unit: string;
+  stock: number;
+  min_stock: number;
+  cost_per_unit: number;
+};
+const bulkEmptyRow: BulkRow = { name: "", category_id: 0, unit: "กก.", stock: 0, min_stock: 0, cost_per_unit: 0 };
+
 function statusMeta(status: ItemStatus, copy: Copy) {
   if (status === "out") {
     return {
@@ -351,6 +362,11 @@ export default function InventoryPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkClosing, setBulkClosing] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ ...bulkEmptyRow }]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkError, setBulkError] = useState("");
 
   const [form, setForm] = useState<IngredientInput>(emptyForm);
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
@@ -723,6 +739,68 @@ export default function InventoryPage() {
     }
   }
 
+  function openBulk() {
+    setBulkRows([{ ...bulkEmptyRow }, { ...bulkEmptyRow }, { ...bulkEmptyRow }]);
+    setBulkError("");
+    setBulkClosing(false);
+    setBulkOpen(true);
+  }
+
+  function closeBulk() {
+    if (bulkClosing) return;
+    setBulkClosing(true);
+    window.setTimeout(() => {
+      setBulkOpen(false);
+      setBulkClosing(false);
+    }, 180);
+  }
+
+  function updateBulkRow(index: number, patch: Partial<BulkRow>) {
+    setBulkRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  async function handleBulkSave() {
+    const rows = bulkRows.filter((row) => row.name.trim() !== "");
+    if (rows.length === 0) {
+      setBulkError(lang === "th" ? "กรอกชื่อวัตถุดิบอย่างน้อย 1 รายการ" : "Enter at least one ingredient name");
+      return;
+    }
+    setBulkError("");
+    setBulkSaving(true);
+    // Create all rows in parallel; keep whatever succeeded and report the rest.
+    const results = await Promise.allSettled(
+      rows.map((row) =>
+        createIngredient({
+          name: row.name.trim(),
+          category_id: row.category_id || undefined,
+          unit: row.unit,
+          stock: row.stock,
+          min_stock: row.min_stock,
+          cost_per_unit: row.cost_per_unit,
+          storage_type: "room_temp",
+        }),
+      ),
+    );
+    const created: Ingredient[] = [];
+    let failed = 0;
+    results.forEach((res) => {
+      if (res.status === "fulfilled") created.push(res.value.data);
+      else failed += 1;
+    });
+    if (created.length > 0) setIngredients((prev) => [...prev, ...created]);
+    setBulkSaving(false);
+    if (failed === 0) {
+      showToast({ title: lang === "th" ? `เพิ่ม ${created.length} รายการแล้ว` : `Added ${created.length} items` });
+      closeBulk();
+    } else {
+      setBulkError(
+        lang === "th"
+          ? `เพิ่มสำเร็จ ${created.length} รายการ • ล้มเหลว ${failed} (เช็คชื่อซ้ำ/ข้อมูล)`
+          : `Added ${created.length} • ${failed} failed (check for duplicate names)`,
+      );
+    }
+  }
+
   function openAdjust(item: Ingredient) {
     setAdjustClosing(false);
     setAdjustTarget(item);
@@ -880,6 +958,16 @@ export default function InventoryPage() {
             <Filter className="h-4 w-4" />
             {copy.filter}
           </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={openBulk}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+            >
+              <Plus className="h-4 w-4" />
+              {lang === "th" ? "หลายรายการ" : "Bulk add"}
+            </button>
+          )}
           {canManage && (
             <button
               type="button"
@@ -1323,6 +1411,160 @@ export default function InventoryPage() {
             </div>
           </form>
         </>
+      )}
+
+      {bulkOpen && (
+        <div
+          onClick={closeBulk}
+          className={`${bulkClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:items-center sm:p-4`}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={`${bulkClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-gray-800">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+                {lang === "th" ? "เพิ่มวัตถุดิบหลายรายการ" : "Add multiple ingredients"}
+              </h2>
+              <button
+                type="button"
+                onClick={closeBulk}
+                aria-label={copy.cancel}
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-gray-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              <table className="w-full min-w-[760px] border-separate border-spacing-x-1 border-spacing-y-1 text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <th className="px-1 pb-1 font-semibold">{copy.name} *</th>
+                    <th className="px-1 pb-1 font-semibold">{copy.category}</th>
+                    <th className="px-1 pb-1 font-semibold">{copy.stockUnit}</th>
+                    <th className="px-1 pb-1 text-right font-semibold">{copy.initialStock}</th>
+                    <th className="px-1 pb-1 text-right font-semibold">{copy.minStock}</th>
+                    <th className="px-1 pb-1 text-right font-semibold">{copy.costPerUnit}</th>
+                    <th className="w-9" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkRows.map((row, index) => (
+                    <tr key={index}>
+                      <td className="min-w-[160px]">
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={(event) => updateBulkRow(index, { name: event.target.value })}
+                          placeholder={lang === "th" ? "ชื่อวัตถุดิบ..." : "Name..."}
+                          className={`${inputCls} h-9`}
+                        />
+                      </td>
+                      <td className="min-w-[130px]">
+                        <select
+                          value={row.category_id}
+                          onChange={(event) => updateBulkRow(index, { category_id: Number(event.target.value) })}
+                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        >
+                          <option value={0}>{copy.uncategorized}</option>
+                          {categories.map((category) => (
+                            <option key={category.ID} value={category.ID}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="min-w-[90px]">
+                        <select
+                          value={row.unit}
+                          onChange={(event) => updateBulkRow(index, { unit: event.target.value })}
+                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                        >
+                          {UNITS.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {unit}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="w-24">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.stock}
+                          onChange={(event) => updateBulkRow(index, { stock: parseFloat(event.target.value) || 0 })}
+                          className={`${inputCls} h-9 text-right`}
+                        />
+                      </td>
+                      <td className="w-24">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.min_stock}
+                          onChange={(event) => updateBulkRow(index, { min_stock: parseFloat(event.target.value) || 0 })}
+                          className={`${inputCls} h-9 text-right`}
+                        />
+                      </td>
+                      <td className="w-24">
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.cost_per_unit}
+                          onChange={(event) => updateBulkRow(index, { cost_per_unit: parseFloat(event.target.value) || 0 })}
+                          className={`${inputCls} h-9 text-right`}
+                        />
+                      </td>
+                      <td className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setBulkRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))}
+                          disabled={bulkRows.length <= 1}
+                          aria-label="remove row"
+                          className="rounded-md p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/30"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <button
+                type="button"
+                onClick={() => setBulkRows((prev) => [...prev, { ...bulkEmptyRow }])}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-orange-400 hover:text-orange-600 dark:border-gray-700 dark:text-slate-300 dark:hover:border-orange-500"
+              >
+                <Plus className="h-4 w-4" />
+                {lang === "th" ? "เพิ่มแถว" : "Add row"}
+              </button>
+              {bulkError && <p className="mt-2 text-xs text-red-500">{bulkError}</p>}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={closeBulk}
+                className="rounded-md px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-gray-800"
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkSave}
+                disabled={bulkSaving}
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              >
+                {bulkSaving
+                  ? "..."
+                  : lang === "th"
+                    ? `บันทึกทั้งหมด (${bulkRows.filter((row) => row.name.trim()).length})`
+                    : `Save all (${bulkRows.filter((row) => row.name.trim()).length})`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {categoryModalOpen && (
