@@ -370,6 +370,7 @@ export default function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState<StockStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<number>(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersClosing, setFiltersClosing] = useState(false);
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
@@ -932,6 +933,15 @@ export default function InventoryPage() {
       setTxClosing(false);
     }, 180);
   }
+
+  function closeFilters() {
+    if (filtersClosing) return;
+    setFiltersClosing(true);
+    window.setTimeout(() => {
+      setFiltersOpen(false);
+      setFiltersClosing(false);
+    }, 160);
+  }
   const modalBackdrop = useBackdropClose(closeModal);
   const categoryBackdrop = useBackdropClose(closeCategoryModal);
   const deleteBackdrop = useBackdropClose(closeDeleteModal);
@@ -964,14 +974,97 @@ export default function InventoryPage() {
               className={`${inputCls} !h-9 pl-10 pr-3`}
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((value) => !value)}
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
-          >
-            <Filter className="h-4 w-4" />
-            {copy.filter}
-          </button>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => (filtersOpen ? closeFilters() : setFiltersOpen(true))}
+              className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-[12px] font-semibold transition ${
+                statusFilter !== "all" || categoryFilter !== 0
+                  ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              {copy.filter}
+              {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== 0 ? 1 : 0) > 0 && (
+                <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white">
+                  {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== 0 ? 1 : 0)}
+                </span>
+              )}
+            </button>
+            {filtersOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={closeFilters} />
+                <div className={`${filtersClosing ? "motion-dialog-exit" : "motion-dialog"} absolute right-0 top-full z-50 mt-2 w-80 origin-top-right rounded-md border border-slate-200 bg-white p-4 text-left shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{copy.filter}</p>
+                    <button
+                      type="button"
+                      onClick={closeFilters}
+                      aria-label={copy.cancel}
+                      className="rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-gray-800"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{lang === "th" ? "สถานะ" : "Status"}</p>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
+                        className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
+                          statusFilter === status
+                            ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                        }`}
+                      >
+                        {status === "all" ? copy.filterAll : status === "ok" ? copy.filterOk : status === "low" ? copy.filterLow : copy.filterOut}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</p>
+                  <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+                    <button
+                      onClick={() => setCategoryFilter(0)}
+                      className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
+                        categoryFilter === 0
+                          ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                      }`}
+                    >
+                      {lang === "th" ? "ทุกหมวด" : "All"}
+                    </button>
+                    {categories.map((category) => (
+                      <button
+                        key={category.ID}
+                        onClick={() => setCategoryFilter(category.ID)}
+                        className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
+                          categoryFilter === category.ID
+                            ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                  {(statusFilter !== "all" || categoryFilter !== 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter("all");
+                        setCategoryFilter(0);
+                      }}
+                      className="mt-3 text-xs font-semibold text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    >
+                      {lang === "th" ? "ล้างตัวกรอง" : "Clear filters"}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           {canManage && (
             <button
               type="button"
@@ -1047,60 +1140,6 @@ export default function InventoryPage() {
         )}
 
 
-        <div className={`${filtersOpen ? "flex" : "hidden"} flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{lang === "th" ? "สถานะ" : "Status"}</p>
-            <div className="flex flex-wrap gap-2">
-              {(["all", "ok", "low", "out"] as StockStatus[]).map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
-                    statusFilter === status
-                      ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
-                >
-                  {status === "all"
-                    ? copy.filterAll
-                    : status === "ok"
-                      ? copy.filterOk
-                      : status === "low"
-                        ? copy.filterLow
-                        : copy.filterOut}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.category}</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setCategoryFilter(0)}
-                className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
-                  categoryFilter === 0
-                    ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                    : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
-                }`}
-              >
-                {lang === "th" ? "ทุกหมวด" : "All"}
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category.ID}
-                  onClick={() => setCategoryFilter(category.ID)}
-                  className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${
-                    categoryFilter === category.ID
-                      ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
-                >
-                  {category.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <SectionCard
@@ -1559,32 +1598,19 @@ export default function InventoryPage() {
                           className={`${inputCls} h-9`}
                         />
                       </td>
-                      <td className="min-w-[130px]">
-                        <select
-                          value={row.category_id}
-                          onChange={(event) => updateBulkRow(index, { category_id: Number(event.target.value) })}
-                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                        >
-                          <option value={0}>{copy.uncategorized}</option>
-                          {categories.map((category) => (
-                            <option key={category.ID} value={category.ID}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
+                      <td className="min-w-[150px]">
+                        <ThemedSelect
+                          value={String(row.category_id)}
+                          onChange={(value) => updateBulkRow(index, { category_id: Number(value) || 0 })}
+                          options={categoryOptions}
+                        />
                       </td>
-                      <td className="min-w-[90px]">
-                        <select
+                      <td className="min-w-[110px]">
+                        <ThemedSelect
                           value={row.unit}
-                          onChange={(event) => updateBulkRow(index, { unit: event.target.value })}
-                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 outline-none focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                        >
-                          {UNITS.map((unit) => (
-                            <option key={unit} value={unit}>
-                              {unit}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => updateBulkRow(index, { unit: value })}
+                          options={unitOptions}
+                        />
                       </td>
                       <td className="w-24">
                         <input
