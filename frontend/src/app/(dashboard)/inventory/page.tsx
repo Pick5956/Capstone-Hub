@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Tags,
   Trash2,
   X,
 } from "lucide-react";
@@ -960,13 +961,13 @@ export default function InventoryPage() {
               placeholder={copy.searchPlaceholder}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className={`${inputCls} pl-10 pr-3`}
+              className={`${inputCls} !h-9 pl-10 pr-3`}
             />
           </div>
           <button
             type="button"
             onClick={() => setFiltersOpen((value) => !value)}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
           >
             <Filter className="h-4 w-4" />
             {copy.filter}
@@ -974,8 +975,23 @@ export default function InventoryPage() {
           {canManage && (
             <button
               type="button"
+              onClick={() => {
+                setCategoryError("");
+                setCategoryName("");
+                setCategoryModalClosing(false);
+                setCategoryModalOpen(true);
+              }}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+            >
+              <Tags className="h-4 w-4" />
+              {lang === "th" ? "จัดการหมวด" : "Categories"}
+            </button>
+          )}
+          {canManage && (
+            <button
+              type="button"
               onClick={openBulk}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
             >
               <Plus className="h-4 w-4" />
               {lang === "th" ? "หลายรายการ" : "Bulk add"}
@@ -985,7 +1001,7 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-[12px] font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
             >
               <Plus className="h-4 w-4" />
               {copy.add}
@@ -1030,30 +1046,6 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {(outCount > 0 || lowCount > 0) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {outCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter("out")}
-                className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300"
-              >
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                {copy.alertOut(outCount)}
-              </button>
-            )}
-            {lowCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setStatusFilter("low")}
-                className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
-              >
-                <span className="h-2 w-2 rounded-full bg-amber-400" />
-                {copy.alertLow(lowCount)}
-              </button>
-            )}
-          </div>
-        )}
 
         <div className={`${filtersOpen ? "flex" : "hidden"} flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950`}>
           <div>
@@ -1121,11 +1113,34 @@ export default function InventoryPage() {
                 helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
                 tone="warm"
               />
-              <SectionCard
-                label={copy.urgentItems}
-                value={formatNumber(lowCount + outCount, lang)}
-                tone={lowCount + outCount > 0 ? "danger" : "default"}
-              />
+              <div className="flex flex-col justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-gray-950">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("out")}
+                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    {lang === "th" ? "หมดสต็อก" : "Out of stock"}
+                  </span>
+                  <span className={`text-base font-semibold tabular-nums ${outCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-300 dark:text-gray-600"}`}>
+                    {formatNumber(outCount, lang)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("low")}
+                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                >
+                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="h-2 w-2 rounded-full bg-amber-400" />
+                    {lang === "th" ? "ต่ำกว่าเกณฑ์" : "Below alert"}
+                  </span>
+                  <span className={`text-base font-semibold tabular-nums ${lowCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-300 dark:text-gray-600"}`}>
+                    {formatNumber(lowCount, lang)}
+                  </span>
+                </button>
+              </div>
               <SectionCard
                 label={copy.averageCoverage}
                 value={`${formatNumber(averageCoverage, lang)}%`}
@@ -1176,7 +1191,7 @@ export default function InventoryPage() {
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
                         {canManage && (
-                          <th className="w-10 px-4 py-2.5">
+                          <th className="w-12 px-4 py-2.5 text-center align-middle">
                             <input
                               type="checkbox"
                               aria-label="select all"
@@ -1205,7 +1220,7 @@ export default function InventoryPage() {
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
                             {canManage && (
-                              <td className="w-10 px-4 py-3">
+                              <td className="w-12 px-4 py-3 text-center align-middle">
                                 <input
                                   type="checkbox"
                                   aria-label={`select ${item.name}`}
