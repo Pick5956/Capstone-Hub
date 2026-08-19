@@ -457,6 +457,37 @@ html[data-font-size="extra-large"] {
   will-change: transform, opacity;
 }
 
+/* Smoother, longer-eased variants used by the inventory page. Kept separate so
+   other pages' motion-* timings are untouched. Exits run <=240ms; consumers
+   should unmount at ~260ms so the animation finishes before it disappears. */
+.smooth-overlay {
+  animation: modal-fade-in 260ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.smooth-overlay-exit {
+  animation: modal-fade-out 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.smooth-pop {
+  animation: dialog-enter 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.smooth-pop-exit {
+  animation: dialog-exit 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+.smooth-drawer {
+  animation: drawer-enter-right 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.smooth-drawer-exit {
+  animation: drawer-exit-right 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
 .kitchen-ticket-shell,
 .kitchen-item-shell {
   grid-template-rows: minmax(0, 1fr);
