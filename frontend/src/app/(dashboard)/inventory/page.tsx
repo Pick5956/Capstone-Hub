@@ -1055,9 +1055,6 @@ export default function InventoryPage() {
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
               {canManage && selectedIds.size > 0 && (
                 <div className="flex items-center justify-between gap-3 border-b border-orange-200 bg-orange-50 px-4 py-2.5 text-sm dark:border-orange-900/40 dark:bg-orange-950/20">
-                  <span className="font-medium text-orange-800 dark:text-orange-200">
-                    {lang === "th" ? `เลือก ${selectedIds.size} รายการ` : `${selectedIds.size} selected`}
-                  </span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1076,6 +1073,9 @@ export default function InventoryPage() {
                       {lang === "th" ? "ลบที่เลือก" : "Delete selected"}
                     </button>
                   </div>
+                  <span className="font-medium text-orange-800 dark:text-orange-200">
+                    {lang === "th" ? `เลือก ${selectedIds.size} รายการ` : `${selectedIds.size} selected`}
+                  </span>
                 </div>
               )}
               <div className="overflow-x-auto">
