@@ -692,7 +692,10 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		if toolErr != nil {
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
 		} else if answer, ok := localToolAnswer(result); ok {
-			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
+			aiStage("flow", "deterministic-first: %s (numbers computed locally)", toolToRun)
+			// The figures are already final; the LLM only writes a lead-in and is
+			// dropped if it touches a number it was not given.
+			answer = s.narrateDeterministicAnswer(question, answer)
 			hinted, assumed := appendScopeHint(question, answer, todayHasNoSales(snapshot))
 			return &AIAskResponse{
 				Answer:       hinted,
