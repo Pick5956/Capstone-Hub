@@ -85,7 +85,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   if (status === "out") {
     return {
       label: copy.outOfStock,
-      dot: "bg-red-500",
       bar: "from-red-500 to-red-400",
       badge: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
       value: "text-red-600 dark:text-red-400",
@@ -96,7 +95,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   if (status === "low") {
     return {
       label: copy.lowStock,
-      dot: "bg-amber-400",
       bar: "from-amber-400 to-orange-400",
       badge: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
       value: "text-amber-600 dark:text-amber-400",
@@ -106,7 +104,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   }
   return {
     label: copy.inGoodShape,
-    dot: "bg-emerald-500",
     bar: "from-emerald-500 to-teal-400",
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
     value: "text-slate-900 dark:text-white",
@@ -1238,10 +1235,7 @@ export default function InventoryPage() {
                               </td>
                             )}
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
-                                <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
-                              </div>
+                              <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="w-44">
