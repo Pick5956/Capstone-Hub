@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mic, Receipt, X } from "lucide-react";
 import { extractReceipt } from "@/src/lib/ai";
+import HoverTip from "@/src/components/shared/HoverTip";
 
 // Two optional AI input helpers, kept in ONE self-contained component so they are
 // trivially removable — drop <AIInputTools/> into any chat input bar, delete the
@@ -229,30 +230,32 @@ export default function AIInputTools({
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5">
-      <button
-        type="button"
-        onClick={toggleVoice}
-        disabled={disabled}
-        aria-label={t("พูดเพื่อพิมพ์", "Speak to type")}
-        title={t("พูดเพื่อพิมพ์", "Speak to type")}
-        className={
-          listening
-            ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-500/40 animate-pulse"
-            : iconBtn
-        }
-      >
-        <Mic className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={disabled || scanning}
-        aria-label={t("สแกนบิลไปหน้ารายจ่าย", "Scan a bill into Expenses")}
-        title={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}
-        className={iconBtn}
-      >
-        {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
-      </button>
+      <HoverTip label={t("พูดเพื่อพิมพ์", "Speak to type")}>
+        <button
+          type="button"
+          onClick={toggleVoice}
+          disabled={disabled}
+          aria-label={t("พูดเพื่อพิมพ์", "Speak to type")}
+          className={
+            listening
+              ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-500/40 animate-pulse"
+              : iconBtn
+          }
+        >
+          <Mic className="h-4 w-4" />
+        </button>
+      </HoverTip>
+      <HoverTip label={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={disabled || scanning}
+          aria-label={t("สแกนบิลไปหน้ารายจ่าย", "Scan a bill into Expenses")}
+          className={iconBtn}
+        >
+          {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
+        </button>
+      </HoverTip>
       </div>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
 

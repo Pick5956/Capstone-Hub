@@ -36,6 +36,7 @@ import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
+import HoverTip from "@/src/components/shared/HoverTip";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import VoiceWaveform from "@/src/components/shared/VoiceWaveform";
 import SiriOrb from "@/src/components/ui/siri-orb";
@@ -535,39 +536,53 @@ export default function AIAssistantPage() {
                 </span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleClearChat()}
-              disabled={loading || actionConfirming || actionCancelling}
-              aria-label={copy.newChat}
-              title={copy.newChat}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+            <HoverTip label={copy.newChat} placement="bottom">
+              <button
+                type="button"
+                onClick={() => void handleClearChat()}
+                disabled={loading || actionConfirming || actionCancelling}
+                aria-label={copy.newChat}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            </HoverTip>
+            <HoverTip
+              label={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
+              placement="bottom"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
-              title={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+              >
+                <Settings2 className="h-3.5 w-3.5" />
+              </button>
+            </HoverTip>
           </div>
           <AISettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} language={language} />
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
-          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
+          <div
+            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
+              /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
+              isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
+            }`}
+          >
             {isEmpty && !loading ? (
-              <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
+              /* Absolute fill, not h-full: h-full resolves against the scroll box's
+                 content area, so this container's own padding pushed it 72px past
+                 the viewport — which both squashed the orb and created a scrollbar
+                 on a fresh chat. */
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-6 text-center">
                 <SiriOrb
                   size="128px"
-                  className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
+                  className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
                   active={voiceListening}
                   level={voiceLevel}
                 />
-                <div>
+                <div className="shrink-0">
                   <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
                   <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                     {copy.welcome}
@@ -667,7 +682,7 @@ export default function AIAssistantPage() {
               <div className="flex flex-col items-center gap-4">
                 <SiriOrb
                   size="150px"
-                  className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.45)]"
+                  className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.45)]"
                   active
                   level={voiceLevel}
                 />
@@ -713,15 +728,16 @@ export default function AIAssistantPage() {
             >
               {/* Discard the take — left slot, like a voice memo's cancel */}
               {voiceListening && (
-                <button
-                  type="button"
-                  onClick={() => voiceControlsRef.current?.cancel()}
-                  aria-label={language === "th" ? "ยกเลิกการอัด" : "Cancel recording"}
-                  title={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <HoverTip label={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}>
+                  <button
+                    type="button"
+                    onClick={() => voiceControlsRef.current?.cancel()}
+                    aria-label={language === "th" ? "ยกเลิกการอัด" : "Cancel recording"}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </HoverTip>
               )}
               {voiceListening ? (
                 /* Dictation mode: the live waveform takes over the text field */
@@ -754,27 +770,29 @@ export default function AIAssistantPage() {
               </div>
               {voiceListening ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => voiceControlsRef.current?.stop()}
-                    aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
-                    title={language === "th" ? "หยุด แล้วเอาข้อความไปแก้ก่อนส่ง" : "Stop and review before sending"}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
-                  >
-                    <Square className="h-3 w-3 fill-current" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sendAfterVoiceRef.current = true;
-                      voiceControlsRef.current?.stop();
-                    }}
-                    aria-label={language === "th" ? "หยุดแล้วส่งเลย" : "Stop and send"}
-                    title={language === "th" ? "หยุดแล้วส่งให้ AI ทันที" : "Stop and send to AI right away"}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md active:scale-95"
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </button>
+                  <HoverTip label={language === "th" ? "หยุด แล้วเอาข้อความไปแก้ก่อนส่ง" : "Stop and review before sending"}>
+                    <button
+                      type="button"
+                      onClick={() => voiceControlsRef.current?.stop()}
+                      aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                    </button>
+                  </HoverTip>
+                  <HoverTip label={language === "th" ? "หยุดแล้วส่งให้ AI ทันที" : "Stop and send to AI right away"}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sendAfterVoiceRef.current = true;
+                        voiceControlsRef.current?.stop();
+                      }}
+                      aria-label={language === "th" ? "หยุดแล้วส่งเลย" : "Stop and send"}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md active:scale-95"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                  </HoverTip>
                 </>
               ) : (
                 <button
