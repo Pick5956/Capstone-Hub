@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -167,7 +167,8 @@ export default function AIAssistantPage() {
   const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const stopVoiceRef = useRef<(() => void) | null>(null);
+  const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
+  const sendAfterVoiceRef = useRef(false);
   const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
@@ -371,6 +372,26 @@ export default function AIAssistantPage() {
     } finally {
       if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
+  };
+
+  // Dictated text lands here. The send button sets a flag before stopping, so the
+  // transcript can go straight out instead of waiting in the box for a second click.
+  const handleVoiceText = (text: string) => {
+    const merged = input.trim() ? `${input.trim()} ${text}` : text;
+    if (sendAfterVoiceRef.current) {
+      sendAfterVoiceRef.current = false;
+      setInput("");
+      void submitQuestion(merged);
+      return;
+    }
+    setInput(merged);
+  };
+
+  const handleListeningChange = (listening: boolean) => {
+    setVoiceListening(listening);
+    // Runs after the transcript callback, so this only clears an unused flag
+    // (e.g. send was pressed but nothing was recognised).
+    if (!listening) sendAfterVoiceRef.current = false;
   };
 
   const handleConfirmActionPreview = async () => {
@@ -683,16 +704,28 @@ export default function AIAssistantPage() {
               submitQuestion();
             }}
           >
-            <div className="flex items-end gap-2 rounded-[1.75rem] border border-gray-200 bg-white p-2 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+            <div
+              className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
+                voiceListening
+                  ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
+                  : "border-gray-200 bg-white pl-4 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
+              }`}
+            >
+              {/* Discard the take — left slot, like a voice memo's cancel */}
+              {voiceListening && (
+                <button
+                  type="button"
+                  onClick={() => voiceControlsRef.current?.cancel()}
+                  aria-label={language === "th" ? "ยกเลิกการอัด" : "Cancel recording"}
+                  title={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
               {voiceListening ? (
                 /* Dictation mode: the live waveform takes over the text field */
-                <div className="flex min-h-[2.25rem] min-w-0 flex-1 items-center gap-3 py-1.5">
-                  <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-                    {language === "th" ? "กำลังฟัง" : "Listening"}
-                  </span>
-                  <VoiceWaveform level={voiceLevel} className="min-w-0 flex-1" />
-                </div>
+                <VoiceWaveform level={voiceLevel} className="min-h-[2.25rem] min-w-0 flex-1 px-1" />
               ) : (
                 <textarea
                   value={input}
@@ -708,24 +741,41 @@ export default function AIAssistantPage() {
                   className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
                 />
               )}
-              <AIInputTools
-                language={language}
-                disabled={loading || actionConfirming || actionCancelling}
-                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
-                onListeningChange={setVoiceListening}
-                onVoiceLevel={setVoiceLevel}
-                stopVoiceRef={stopVoiceRef}
-              />
+              {/* Kept mounted while dictating (it owns the mic session), just hidden */}
+              <div className={voiceListening ? "hidden" : "contents"}>
+                <AIInputTools
+                  language={language}
+                  disabled={loading || actionConfirming || actionCancelling}
+                  onInsertText={handleVoiceText}
+                  onListeningChange={handleListeningChange}
+                  onVoiceLevel={setVoiceLevel}
+                  voiceControlsRef={voiceControlsRef}
+                />
+              </div>
               {voiceListening ? (
-                <button
-                  type="button"
-                  onClick={() => stopVoiceRef.current?.()}
-                  aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-4 text-sm font-semibold text-white shadow-sm shadow-red-500/30 transition-all hover:bg-red-700 hover:shadow-md"
-                >
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                  <span className="hidden sm:inline">{language === "th" ? "หยุด" : "Stop"}</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => voiceControlsRef.current?.stop()}
+                    aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
+                    title={language === "th" ? "หยุด แล้วเอาข้อความไปแก้ก่อนส่ง" : "Stop and review before sending"}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
+                  >
+                    <Square className="h-3 w-3 fill-current" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sendAfterVoiceRef.current = true;
+                      voiceControlsRef.current?.stop();
+                    }}
+                    aria-label={language === "th" ? "หยุดแล้วส่งเลย" : "Stop and send"}
+                    title={language === "th" ? "หยุดแล้วส่งให้ AI ทันที" : "Stop and send to AI right away"}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md active:scale-95"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                </>
               ) : (
                 <button
                   type="submit"

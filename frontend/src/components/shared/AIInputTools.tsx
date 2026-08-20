@@ -26,9 +26,9 @@ type Props = {
   onListeningChange?: (listening: boolean) => void;
   /** Live voice loudness 0..1 while listening; 0 once it stops. */
   onVoiceLevel?: (level: number) => void;
-  /** Filled with a "stop dictating" callback while listening, so a caller can
-   *  offer its own stop control (e.g. next to the input bar). Null when idle. */
-  stopVoiceRef?: React.RefObject<(() => void) | null>;
+  /** Filled while listening so a caller can drive its own controls next to the
+   *  input bar: `stop` keeps what was said, `cancel` throws it away. Null when idle. */
+  voiceControlsRef?: React.RefObject<{ stop: () => void; cancel: () => void } | null>;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -65,7 +65,7 @@ export default function AIInputTools({
   disabled,
   onListeningChange,
   onVoiceLevel,
-  stopVoiceRef,
+  voiceControlsRef,
 }: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
@@ -164,13 +164,16 @@ export default function AIInputTools({
     const finish = () => {
       setListening(false);
       onListeningChange?.(false);
-      if (stopVoiceRef) stopVoiceRef.current = null;
+      if (voiceControlsRef) voiceControlsRef.current = null;
       stopMeter();
     };
     rec.onstart = () => {
       setListening(true);
       onListeningChange?.(true);
-      if (stopVoiceRef) stopVoiceRef.current = () => rec.stop();
+      if (voiceControlsRef) {
+        // stop() still delivers the transcript; abort() drops it on the floor.
+        voiceControlsRef.current = { stop: () => rec.stop(), cancel: () => rec.abort() };
+      }
       void startMeter();
     };
     rec.onerror = finish;
