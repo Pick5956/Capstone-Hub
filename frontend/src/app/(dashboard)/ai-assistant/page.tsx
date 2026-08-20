@@ -152,6 +152,8 @@ export default function AIAssistantPage() {
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsCount, setInsightsCount] = useState(0);
@@ -487,10 +489,13 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+      {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
+      <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
+      <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
       <section className="relative flex min-h-0 flex-1">
         {/* Conversation — full width */}
-        <div className="relative flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-950">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
             <button
@@ -533,7 +538,12 @@ export default function AIAssistantPage() {
           <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
             {isEmpty && !loading ? (
               <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
-                <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
+                <SiriOrb
+                  size="128px"
+                  className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
+                  active={voiceListening}
+                  level={voiceLevel}
+                />
                 <div>
                   <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
                   <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
@@ -671,6 +681,8 @@ export default function AIAssistantPage() {
                 language={language}
                 disabled={loading || actionConfirming || actionCancelling}
                 onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
+                onListeningChange={setVoiceListening}
+                onVoiceLevel={setVoiceLevel}
               />
               <button
                 type="submit"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mic, Receipt, X } from "lucide-react";
 import { extractReceipt } from "@/src/lib/ai";
@@ -22,6 +22,10 @@ type Props = {
   onInsertText: (text: string) => void;
   language: "th" | "en";
   disabled?: boolean;
+  /** Fires when the mic starts/stops so the caller can react (e.g. wake the orb). */
+  onListeningChange?: (listening: boolean) => void;
+  /** Live voice loudness 0..1 while listening; 0 once it stops. */
+  onVoiceLevel?: (level: number) => void;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -52,7 +56,7 @@ async function fileToDownscaledBase64(file: File, maxDim = 1400): Promise<{ base
   return { base64: out.split(",")[1] ?? "", mime: "image/jpeg" };
 }
 
-export default function AIInputTools({ onInsertText, language, disabled }: Props) {
+export default function AIInputTools({ onInsertText, language, disabled, onListeningChange, onVoiceLevel }: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -60,6 +64,62 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
   const fileRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  // The loudness meter is a second, decorative mic tap alongside Web Speech —
+  // it only drives the orb, so every failure path is silently ignored.
+  const stopMeter = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    void audioCtxRef.current?.close().catch(() => undefined);
+    audioCtxRef.current = null;
+    onVoiceLevel?.(0);
+  }, [onVoiceLevel]);
+
+  const startMeter = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const AudioContextCtor =
+        window.AudioContext
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ?? ((window as any).webkitAudioContext as typeof AudioContext | undefined);
+      if (!AudioContextCtor) return;
+      const context = new AudioContextCtor();
+      audioCtxRef.current = context;
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      context.createMediaStreamSource(stream).connect(analyser);
+
+      const samples = new Uint8Array(analyser.fftSize);
+      let smoothed = 0;
+      const tick = () => {
+        analyser.getByteTimeDomainData(samples);
+        let sumSquares = 0;
+        for (let i = 0; i < samples.length; i += 1) {
+          const deviation = (samples[i] - 128) / 128;
+          sumSquares += deviation * deviation;
+        }
+        // Speech RMS sits low, so scale it up before clamping to 0..1.
+        const loudness = Math.min(1, Math.sqrt(sumSquares / samples.length) * 4.5);
+        smoothed += (loudness - smoothed) * 0.28;
+        onVoiceLevel?.(smoothed);
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch {
+      /* no mic permission or no meter — the orb still reacts to the listening state */
+    }
+  }, [onVoiceLevel]);
+
+  useEffect(() => stopMeter, [stopMeter]);
 
   if (!AI_TOOLS_ENABLED) return null;
 
@@ -85,9 +145,18 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
     rec.lang = language === "th" ? "th-TH" : "en-US";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
+    const finish = () => {
+      setListening(false);
+      onListeningChange?.(false);
+      stopMeter();
+    };
+    rec.onstart = () => {
+      setListening(true);
+      onListeningChange?.(true);
+      void startMeter();
+    };
+    rec.onerror = finish;
+    rec.onend = finish;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       const text = e?.results?.[0]?.[0]?.transcript?.trim();
