@@ -40,7 +40,7 @@ x-backend-environment: &backend-environment
   AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-0}
   AI_LATENCY_WARN_MS: ${AI_LATENCY_WARN_MS:-5000}
   GROQ_API_KEYS: ${GROQ_API_KEYS:-}
-  GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+  GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
   GROQ_PLANNER_MODEL: ${GROQ_PLANNER_MODEL:-openai/gpt-oss-20b}
   GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}

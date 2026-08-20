@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 // aiProviderAnswerMode describes the current response path without exposing a
@@ -55,12 +55,16 @@ func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) 
 		return AIRouterResult{}, errors.New("GROQ_API_KEYS is not configured")
 	}
 
+	attempts, releaseAt := nextProviderAttempts(&a.service.keyHealth, "groq", keys, &a.service.groqKeyIndex)
+	if len(attempts) == 0 {
+		return AIRouterResult{}, allKeysRateLimitedError("Groq classifier", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	for i := 0; i < len(keys); i++ {
-		idx := atomic.AddUint32(&a.service.groqKeyIndex, 1) - 1
-		keyPosition := idx % uint32(len(keys))
-		raw, err := a.service.executeClassifierGroq(question, keys[keyPosition])
+	for _, attempt := range attempts {
+		raw, err := a.service.executeClassifierGroq(question, attempt.Key)
 		if err == nil {
+			a.service.keyHealth.clear("groq", attempt.Index)
 			result, parseErr := parseRouterJSON(raw)
 			if parseErr == nil {
 				return result, nil
@@ -70,7 +74,19 @@ func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) 
 			continue
 		}
 		lastErr = err
-		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+		// A withdrawn model answers 404 for every key, so stop instead of spending
+		// the remaining keys rediscovering the same failure.
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Groq classifier: %v — skipping remaining keys", err)
+			return AIRouterResult{}, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			a.service.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Groq classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			continue
+		}
+		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Groq classifier exhausted configured keys: %w", lastErr)
 }
@@ -109,12 +125,16 @@ func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error
 		return AIRouterResult{}, errors.New("GEMINI_API_KEYS is not configured")
 	}
 
+	attempts, releaseAt := nextProviderAttempts(&a.service.keyHealth, "gemini", keys, &a.service.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return AIRouterResult{}, allKeysRateLimitedError("Gemini classifier", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	for i := 0; i < len(keys); i++ {
-		idx := atomic.AddUint32(&a.service.geminiKeyIndex, 1) - 1
-		keyPosition := idx % uint32(len(keys))
-		raw, err := a.service.executeClassifierGemini(question, keys[keyPosition])
+	for _, attempt := range attempts {
+		raw, err := a.service.executeClassifierGemini(question, attempt.Key)
 		if err == nil {
+			a.service.keyHealth.clear("gemini", attempt.Index)
 			result, parseErr := parseRouterJSON(raw)
 			if parseErr == nil {
 				return result, nil
@@ -124,7 +144,19 @@ func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error
 			continue
 		}
 		lastErr = err
-		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+		// A withdrawn model answers 404 for every key, so stop instead of spending
+		// the remaining keys rediscovering the same failure.
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini classifier: %v — skipping remaining keys", err)
+			return AIRouterResult{}, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			a.service.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			continue
+		}
+		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Gemini classifier exhausted configured keys: %w", lastErr)
 }

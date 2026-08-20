@@ -32,6 +32,9 @@ type AIService struct {
 	// across requests. Runtime mode and provider ordering are resolved per ask.
 	structuredPlannerProviders []StructuredPlannerProvider
 	observability              *aiObservability
+	// keyHealth parks rate-limited API keys until their window resets so the next
+	// request skips them instead of spending a round trip rediscovering the 429.
+	keyHealth providerKeyHealth
 }
 
 func ProvideAIService(repo *repository.AIRepository) *AIService {

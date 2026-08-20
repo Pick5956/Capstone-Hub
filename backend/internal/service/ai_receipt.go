@@ -16,7 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 // ReceiptDraft is the proposed expense parsed from a bill photo. Every value is a
@@ -143,11 +143,8 @@ func (s *AIService) executeReceiptGemini(imageBase64, mimeType, apiKey string) (
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return nil, errRateLimit
-		}
-		return nil, newAIProviderHTTPError("Gemini", "receipt scan", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "receipt scan", model, resp); statusErr != nil {
+		return nil, statusErr
 	}
 
 	var parsed geminiGenerateResponse
@@ -198,26 +195,33 @@ func (s *AIService) extractReceiptWithRotation(imageBase64, mimeType string) (*R
 	if len(keys) == 0 {
 		return nil, errors.New("GEMINI_API_KEY is not configured")
 	}
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "gemini", keys, &s.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return nil, allKeysRateLimitedError("Gemini receipt", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	numKeys := len(keys)
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
-		draft, err := s.executeReceiptGemini(imageBase64, mimeType, currentKey)
+	for _, attempt := range attempts {
+		draft, err := s.executeReceiptGemini(imageBase64, mimeType, attempt.Key)
 		if err == nil {
+			s.keyHealth.clear("gemini", attempt.Index)
 			return draft, nil
 		}
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Gemini receipt key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini receipt: %v — skipping remaining keys", err)
+			return nil, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini receipt key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini receipt key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini receipt key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
-	// All keys exhausted while rate limited → surface as a quota error so the API
-	// returns 429 and the UI can tell the owner to retry shortly.
 	if errors.Is(lastErr, errRateLimit) {
-		return nil, ErrAIQuotaExceeded
+		return nil, allKeysRateLimitedError("Gemini receipt", len(keys), s.keyHealth.earliestRelease("gemini", len(keys)))
 	}
 	return nil, lastErr
 }
