@@ -972,14 +972,6 @@ export default function InventoryPage() {
               className={`${inputCls} !h-9 pl-10 pr-3`}
             />
           </div>
-          {/* Inventory value moved out of the removed summary cards */}
-          <div className="flex h-9 shrink-0 items-baseline gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 dark:border-orange-900/40 dark:bg-orange-950/20">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">{copy.totalValue}</span>
-            <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
-              {formatCurrency(totalValue, lang)}
-            </span>
-          </div>
-          <div className="flex-1" />
           <div className="relative shrink-0">
             <button
               type="button"
@@ -1072,6 +1064,14 @@ export default function InventoryPage() {
               </>
             )}
           </div>
+          {/* Inventory value — took over from the removed summary cards */}
+          <div className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 text-center dark:border-orange-900/40 dark:bg-orange-950/20">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">{lang === "th" ? "มูลค่า" : "Value"}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
+              {formatCurrency(totalValue, lang)}
+            </span>
+          </div>
+          <div className="flex-1" />
           {canManage && (
             <button
               type="button"
