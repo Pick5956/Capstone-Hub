@@ -968,6 +968,53 @@ export default function InventoryPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <SectionCard
+                label={copy.total}
+                value={formatNumber(totalItems, lang)}
+              />
+              <SectionCard
+                label={copy.totalValue}
+                value={formatCurrency(totalValue, lang)}
+                helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
+                tone="warm"
+              />
+              <div className="flex flex-col justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-gray-800 dark:bg-gray-950">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("out")}
+                  className="flex items-center justify-between rounded px-1.5 py-0.5 transition hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                    {lang === "th" ? "หมดสต็อก" : "Out of stock"}
+                  </span>
+                  <span className={`text-[15px] font-semibold leading-tight tabular-nums ${outCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-300 dark:text-gray-600"}`}>
+                    {formatNumber(outCount, lang)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("low")}
+                  className="flex items-center justify-between rounded px-1.5 py-0.5 transition hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                >
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    {lang === "th" ? "ต่ำกว่าเกณฑ์" : "Below alert"}
+                  </span>
+                  <span className={`text-[15px] font-semibold leading-tight tabular-nums ${lowCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-300 dark:text-gray-600"}`}>
+                    {formatNumber(lowCount, lang)}
+                  </span>
+                </button>
+              </div>
+              <SectionCard
+                label={copy.averageCoverage}
+                value={`${formatNumber(averageCoverage, lang)}%`}
+                helper={`${formatNumber(okCount, lang)} ${copy.healthyItems.toLowerCase()}`}
+                tone="success"
+              />
+        </div>
+
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1147,52 +1194,6 @@ export default function InventoryPage() {
 
 
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <SectionCard
-                label={copy.total}
-                value={formatNumber(totalItems, lang)}
-              />
-              <SectionCard
-                label={copy.totalValue}
-                value={formatCurrency(totalValue, lang)}
-                helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
-                tone="warm"
-              />
-              <div className="flex flex-col justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-gray-950">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("out")}
-                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-red-50 dark:hover:bg-red-950/30"
-                >
-                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                    {lang === "th" ? "หมดสต็อก" : "Out of stock"}
-                  </span>
-                  <span className={`text-base font-semibold tabular-nums ${outCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(outCount, lang)}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("low")}
-                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                >
-                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" />
-                    {lang === "th" ? "ต่ำกว่าเกณฑ์" : "Below alert"}
-                  </span>
-                  <span className={`text-base font-semibold tabular-nums ${lowCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(lowCount, lang)}
-                  </span>
-                </button>
-              </div>
-              <SectionCard
-                label={copy.averageCoverage}
-                value={`${formatNumber(averageCoverage, lang)}%`}
-                helper={`${formatNumber(okCount, lang)} ${copy.healthyItems.toLowerCase()}`}
-                tone="success"
-              />
-        </div>
 
           <div className="grid gap-4">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
