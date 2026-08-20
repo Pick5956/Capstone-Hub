@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -557,7 +557,7 @@ export default function AIAssistantPage() {
                 aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
               >
-                <Settings2 className="h-3.5 w-3.5" />
+                <Settings className="h-3.5 w-3.5" />
               </button>
             </HoverTip>
           </div>
