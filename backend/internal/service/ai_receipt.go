@@ -8,6 +8,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,66 @@ type ReceiptDraft struct {
 
 var receiptExpenseCategories = map[string]struct{}{
 	"ingredient": {}, "labor": {}, "rent": {}, "utilities": {}, "equipment": {}, "other": {},
+}
+
+// The frontend downscales a photo to roughly 200 KB before upload, so this is
+// generous for a real bill while keeping a direct API caller from pushing the
+// global 8 MB body limit straight through to the vision provider.
+const maxReceiptImageBytes = 1_500_000
+
+var receiptAllowedMimeTypes = map[string]struct{}{
+	"image/jpeg": {}, "image/png": {}, "image/webp": {},
+}
+
+// validateReceiptImage checks the upload before any provider call and returns the
+// mime type to send. The client-declared type is only a hint: the bytes are
+// sniffed and that result wins, so a PDF labelled "image/jpeg" is rejected.
+func validateReceiptImage(imageBase64, mimeType string) (string, error) {
+	claimed := normalizeMimeType(mimeType)
+	if claimed == "" {
+		claimed = "image/jpeg"
+	}
+	if _, ok := receiptAllowedMimeTypes[claimed]; !ok {
+		return "", fmt.Errorf("unsupported image type %q: use JPEG, PNG or WebP", claimed)
+	}
+
+	encoded := strings.TrimSpace(imageBase64)
+	// Tolerate a full data URL ("data:image/jpeg;base64,....") as well as raw base64.
+	if marker := strings.Index(encoded, ";base64,"); strings.HasPrefix(encoded, "data:") && marker >= 0 {
+		encoded = encoded[marker+len(";base64,"):]
+	}
+	if encoded == "" {
+		return "", errors.New("an image is required")
+	}
+	// Reject on the encoded length first: decoding is ~3/4 of it, so this refuses
+	// an oversized payload without allocating the decoded copy.
+	if len(encoded) > base64.StdEncoding.EncodedLen(maxReceiptImageBytes) {
+		return "", fmt.Errorf("image is too large: keep it under %d KB", maxReceiptImageBytes/1000)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", errors.New("image must be valid base64")
+	}
+	if len(raw) == 0 {
+		return "", errors.New("an image is required")
+	}
+	if len(raw) > maxReceiptImageBytes {
+		return "", fmt.Errorf("image is too large: keep it under %d KB", maxReceiptImageBytes/1000)
+	}
+
+	detected := normalizeMimeType(http.DetectContentType(raw))
+	if _, ok := receiptAllowedMimeTypes[detected]; !ok {
+		return "", fmt.Errorf("the upload is not a JPEG, PNG or WebP image (detected %q)", detected)
+	}
+	return detected, nil
+}
+
+func normalizeMimeType(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if semicolon := strings.Index(normalized, ";"); semicolon >= 0 {
+		normalized = strings.TrimSpace(normalized[:semicolon])
+	}
+	return normalized
 }
 
 const receiptExtractPrompt = `You are reading a photo of an expense receipt/bill for a Thai restaurant.
@@ -166,11 +227,9 @@ func (s *AIService) ExtractReceiptForOwner(actor AIActorContext, imageBase64, mi
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("authenticated restaurant owner context is required")
 	}
-	if strings.TrimSpace(imageBase64) == "" {
-		return nil, errors.New("an image is required")
+	verifiedMimeType, err := validateReceiptImage(imageBase64, mimeType)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(mimeType) == "" {
-		mimeType = "image/jpeg"
-	}
-	return s.extractReceiptWithRotation(imageBase64, mimeType)
+	return s.extractReceiptWithRotation(strings.TrimSpace(imageBase64), verifiedMimeType)
 }

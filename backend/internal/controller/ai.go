@@ -35,6 +35,10 @@ type AIOperationsService interface {
 
 const maxAIActionConfirmationBodyBytes int64 = 1024
 
+// A 1.5 MB image is ~2 MB of base64 plus JSON overhead. Capping here stops an
+// oversized upload before it is parsed, instead of leaning on the global 8 MB limit.
+const maxReceiptRequestBodyBytes int64 = 3 << 20
+
 func requireAIOwner(c *gin.Context) bool {
 	member, ok := contextMember(c)
 	if !ok || member.Role == nil || member.Role.Name != "owner" {
@@ -225,6 +229,7 @@ func (ctrl *AIController) ExtractReceipt(c *gin.Context) {
 		Image    string `json:"image"`
 		MimeType string `json:"mime_type"`
 	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxReceiptRequestBodyBytes)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondInvalidRequest(c)
 		return
