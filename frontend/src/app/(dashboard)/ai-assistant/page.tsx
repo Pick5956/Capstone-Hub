@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
@@ -37,6 +37,7 @@ import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import VoiceWaveform from "@/src/components/shared/VoiceWaveform";
 import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
@@ -166,6 +167,7 @@ export default function AIAssistantPage() {
   const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const stopVoiceRef = useRef<(() => void) | null>(null);
   const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
@@ -637,6 +639,24 @@ export default function AIAssistantPage() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Dictation spotlight — the big orb rises over the conversation while
+              the mic is live, so the empty state isn't the only place it reacts. */}
+          {voiceListening && !isEmpty && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/45 backdrop-blur-[2px] dark:bg-gray-950/55">
+              <div className="flex flex-col items-center gap-4">
+                <SiriOrb
+                  size="150px"
+                  className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.45)]"
+                  active
+                  level={voiceLevel}
+                />
+                <span className="rounded-full bg-white/85 px-3.5 py-1.5 text-xs font-semibold text-orange-600 shadow-sm dark:bg-gray-900/85 dark:text-orange-400">
+                  {language === "th" ? "กำลังฟัง… พูดได้เลยครับ" : "Listening… go ahead"}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Quick questions (only before the conversation starts) — rounded pills */}
           {isEmpty && !loading && (
             <div className="px-3 pb-2">
@@ -664,41 +684,65 @@ export default function AIAssistantPage() {
             }}
           >
             <div className="flex items-end gap-2 rounded-[1.75rem] border border-gray-200 bg-white p-2 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    submitQuestion();
-                  }
-                }}
-                placeholder={copy.askPlaceholder}
-                rows={1}
-                className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
-              />
+              {voiceListening ? (
+                /* Dictation mode: the live waveform takes over the text field */
+                <div className="flex min-h-[2.25rem] min-w-0 flex-1 items-center gap-3 py-1.5">
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                    {language === "th" ? "กำลังฟัง" : "Listening"}
+                  </span>
+                  <VoiceWaveform level={voiceLevel} className="min-w-0 flex-1" />
+                </div>
+              ) : (
+                <textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submitQuestion();
+                    }
+                  }}
+                  placeholder={copy.askPlaceholder}
+                  rows={1}
+                  className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
+                />
+              )}
               <AIInputTools
                 language={language}
                 disabled={loading || actionConfirming || actionCancelling}
                 onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
                 onListeningChange={setVoiceListening}
                 onVoiceLevel={setVoiceLevel}
+                stopVoiceRef={stopVoiceRef}
               />
-              <button
-                type="submit"
-                disabled={loading || actionConfirming || actionCancelling || !input.trim()}
-                aria-label={copy.ask}
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span className="hidden sm:inline">{copy.ask}</span>
-                  </>
-                )}
-              </button>
+              {voiceListening ? (
+                <button
+                  type="button"
+                  onClick={() => stopVoiceRef.current?.()}
+                  aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-red-600 px-4 text-sm font-semibold text-white shadow-sm shadow-red-500/30 transition-all hover:bg-red-700 hover:shadow-md"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                  <span className="hidden sm:inline">{language === "th" ? "หยุด" : "Stop"}</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={loading || actionConfirming || actionCancelling || !input.trim()}
+                  aria-label={copy.ask}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span className="hidden sm:inline">{copy.ask}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </form>
         </div>

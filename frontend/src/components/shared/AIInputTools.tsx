@@ -26,6 +26,9 @@ type Props = {
   onListeningChange?: (listening: boolean) => void;
   /** Live voice loudness 0..1 while listening; 0 once it stops. */
   onVoiceLevel?: (level: number) => void;
+  /** Filled with a "stop dictating" callback while listening, so a caller can
+   *  offer its own stop control (e.g. next to the input bar). Null when idle. */
+  stopVoiceRef?: React.RefObject<(() => void) | null>;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -56,7 +59,14 @@ async function fileToDownscaledBase64(file: File, maxDim = 1400): Promise<{ base
   return { base64: out.split(",")[1] ?? "", mime: "image/jpeg" };
 }
 
-export default function AIInputTools({ onInsertText, language, disabled, onListeningChange, onVoiceLevel }: Props) {
+export default function AIInputTools({
+  onInsertText,
+  language,
+  disabled,
+  onListeningChange,
+  onVoiceLevel,
+  stopVoiceRef,
+}: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -100,7 +110,8 @@ export default function AIInputTools({ onInsertText, language, disabled, onListe
 
       const samples = new Uint8Array(analyser.fftSize);
       let smoothed = 0;
-      const tick = () => {
+      let lastReportedAt = 0;
+      const tick = (timestamp: number) => {
         analyser.getByteTimeDomainData(samples);
         let sumSquares = 0;
         for (let i = 0; i < samples.length; i += 1) {
@@ -110,7 +121,12 @@ export default function AIInputTools({ onInsertText, language, disabled, onListe
         // Speech RMS sits low, so scale it up before clamping to 0..1.
         const loudness = Math.min(1, Math.sqrt(sumSquares / samples.length) * 4.5);
         smoothed += (loudness - smoothed) * 0.28;
-        onVoiceLevel?.(smoothed);
+        // ~22 samples/sec: smooth enough for the orb and the waveform without
+        // re-rendering the whole chat on every animation frame.
+        if (timestamp - lastReportedAt >= 45) {
+          lastReportedAt = timestamp;
+          onVoiceLevel?.(smoothed);
+        }
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
@@ -148,11 +164,13 @@ export default function AIInputTools({ onInsertText, language, disabled, onListe
     const finish = () => {
       setListening(false);
       onListeningChange?.(false);
+      if (stopVoiceRef) stopVoiceRef.current = null;
       stopMeter();
     };
     rec.onstart = () => {
       setListening(true);
       onListeningChange?.(true);
+      if (stopVoiceRef) stopVoiceRef.current = () => rec.stop();
       void startMeter();
     };
     rec.onerror = finish;
