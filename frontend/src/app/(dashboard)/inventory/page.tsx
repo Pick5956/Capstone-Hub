@@ -48,7 +48,6 @@ import {
   getStatus,
   getStockPercent,
   inputCls,
-  SectionCard,
   STORAGE_TYPES,
   UNITS,
   type ItemStatus,
@@ -476,13 +475,7 @@ export default function InventoryPage() {
   }, [ingredients]);
 
   const totalItems = ingredients.length;
-  const lowCount = ingredients.filter((item) => getStatus(item) === "low").length;
-  const outCount = ingredients.filter((item) => getStatus(item) === "out").length;
-  const okCount = ingredients.filter((item) => getStatus(item) === "ok").length;
   const totalValue = ingredients.reduce((sum, item) => sum + getInventoryValue(item), 0);
-  const averageCoverage = ingredients.length
-    ? Math.round(ingredients.reduce((sum, item) => sum + getStockPercent(item), 0) / ingredients.length)
-    : 0;
   const categoryNameById = useMemo(
     () => new Map(categories.map((category) => [category.ID, category.name])),
     [categories],
@@ -968,55 +961,8 @@ export default function InventoryPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <SectionCard
-                label={copy.total}
-                value={formatNumber(totalItems, lang)}
-              />
-              <SectionCard
-                label={copy.totalValue}
-                value={formatCurrency(totalValue, lang)}
-                helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
-                tone="warm"
-              />
-              <div className="flex flex-col justify-center gap-0.5 rounded-md border border-slate-200 bg-white px-2 py-1 dark:border-gray-800 dark:bg-gray-950">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("out")}
-                  className="flex items-center justify-between rounded px-1.5 py-0.5 transition hover:bg-red-50 dark:hover:bg-red-950/30"
-                >
-                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                    {lang === "th" ? "หมดสต็อก" : "Out of stock"}
-                  </span>
-                  <span className={`text-[15px] font-semibold leading-tight tabular-nums ${outCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(outCount, lang)}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("low")}
-                  className="flex items-center justify-between rounded px-1.5 py-0.5 transition hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                >
-                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    {lang === "th" ? "ต่ำกว่าเกณฑ์" : "Below alert"}
-                  </span>
-                  <span className={`text-[15px] font-semibold leading-tight tabular-nums ${lowCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(lowCount, lang)}
-                  </span>
-                </button>
-              </div>
-              <SectionCard
-                label={copy.averageCoverage}
-                value={`${formatNumber(averageCoverage, lang)}%`}
-                helper={`${formatNumber(okCount, lang)} ${copy.healthyItems.toLowerCase()}`}
-                tone="success"
-              />
-        </div>
-
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
+          <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -1026,6 +972,14 @@ export default function InventoryPage() {
               className={`${inputCls} !h-9 pl-10 pr-3`}
             />
           </div>
+          {/* Inventory value moved out of the removed summary cards */}
+          <div className="flex h-9 shrink-0 items-baseline gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 dark:border-orange-900/40 dark:bg-orange-950/20">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">{copy.totalValue}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
+              {formatCurrency(totalValue, lang)}
+            </span>
+          </div>
+          <div className="flex-1" />
           <div className="relative shrink-0">
             <button
               type="button"
@@ -1250,7 +1204,14 @@ export default function InventoryPage() {
                             />
                           </th>
                         )}
-                        {sortableTh("name", copy.name)}
+                        {sortableTh(
+                          "name",
+                          // Count lives here now that the summary cards are gone.
+                          // Show "shown / total" while a filter or search narrows the list.
+                          filtered.length === totalItems
+                            ? `${copy.name} (${formatNumber(totalItems, lang)})`
+                            : `${copy.name} (${formatNumber(filtered.length, lang)}/${formatNumber(totalItems, lang)})`,
+                        )}
                         {sortableTh("stock", copy.current)}
                         {sortableTh("category", copy.category)}
                         {sortableTh("price", copy.costPerUnit, true)}
