@@ -65,6 +65,7 @@ type BulkRow = {
   stock: number;
   min_stock: number;
   cost_per_unit: number;
+  costText?: string;
 };
 const bulkEmptyRow: BulkRow = { name: "", category_id: 0, unit: "กก.", stock: 0, min_stock: 0, cost_per_unit: 0 };
 
@@ -385,6 +386,7 @@ export default function InventoryPage() {
   const [bulkError, setBulkError] = useState("");
 
   const [form, setForm] = useState<IngredientInput>(emptyForm);
+  const [costText, setCostText] = useState("");
   const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalClosing, setModalClosing] = useState(false);
@@ -574,6 +576,7 @@ export default function InventoryPage() {
     setModalClosing(false);
     setEditingItem(null);
     setForm(emptyForm);
+    setCostText("");
     setFormError("");
     setModalOpen(true);
   }
@@ -590,6 +593,7 @@ export default function InventoryPage() {
       cost_per_unit: item.cost_per_unit,
       storage_type: item.storage_type ?? "room_temp",
     });
+    setCostText(item.cost_per_unit ? String(item.cost_per_unit) : "");
     setFormError("");
     setModalOpen(true);
   }
@@ -1295,7 +1299,7 @@ export default function InventoryPage() {
                               </span>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-slate-700 dark:text-slate-200">
-                              {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang) : "—"}
+                              {item.cost_per_unit > 0 ? formatCurrency(item.cost_per_unit, lang, 2) : "—"}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-end gap-1.5">
@@ -1509,10 +1513,14 @@ export default function InventoryPage() {
                     <input
                       type="number"
                       min={0}
-                      value={form.cost_per_unit}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, cost_per_unit: parseFloat(event.target.value) || 0 }))
-                      }
+                      step="0.01"
+                      inputMode="decimal"
+                      value={costText}
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        setCostText(raw);
+                        setForm((current) => ({ ...current, cost_per_unit: parseFloat(raw) || 0 }));
+                      }}
                       className={inputCls}
                     />
                   </div>
@@ -1555,7 +1563,7 @@ export default function InventoryPage() {
       {bulkOpen && (
         <div
           onClick={closeBulk}
-          className={`${bulkClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:items-center sm:p-4`}
+          className={`${bulkClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:items-center sm:p-4`}
         >
           <div
             onClick={(event) => event.stopPropagation()}
@@ -1636,8 +1644,13 @@ export default function InventoryPage() {
                         <input
                           type="number"
                           min={0}
-                          value={row.cost_per_unit}
-                          onChange={(event) => updateBulkRow(index, { cost_per_unit: parseFloat(event.target.value) || 0 })}
+                          step="0.01"
+                          inputMode="decimal"
+                          value={row.costText ?? (row.cost_per_unit ? String(row.cost_per_unit) : "")}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+                            updateBulkRow(index, { costText: raw, cost_per_unit: parseFloat(raw) || 0 });
+                          }}
                           className={`${inputCls} h-9 text-right`}
                         />
                       </td>
@@ -1694,7 +1707,7 @@ export default function InventoryPage() {
       )}
 
       {categoryModalOpen && (
-        <div {...categoryBackdrop} className={`${categoryModalClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-[60] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
+        <div {...categoryBackdrop} className={`${categoryModalClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
           <div className={`${categoryModalClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.manageCategories}</h2>
@@ -1796,7 +1809,7 @@ export default function InventoryPage() {
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
                 >
                   <Plus className="h-4 w-4" />
-                  {copy.add}
+                  {lang === "th" ? "เพิ่มหมวดหมู่" : "Add category"}
                 </button>
               </div>
               {categoryError && <p className="mt-2 text-xs text-red-500">{categoryError}</p>}
