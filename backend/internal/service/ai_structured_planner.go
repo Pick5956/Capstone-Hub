@@ -207,6 +207,16 @@ func (p *StructuredPlanner) Plan(ctx context.Context, request StructuredPlannerR
 			} else {
 				attempt.FailureStage = StructuredPlannerFailureParse
 			}
+		}
+		recordStructuredPlannerRaw(StructuredPlannerRawRecord{
+			Provider:     provider.Name(),
+			Model:        attempt.Model,
+			Question:     normalized.Question,
+			RawJSON:      providerResponse.RawJSON,
+			FailureStage: attempt.FailureStage,
+			Error:        errorText(parseErr),
+		})
+		if parseErr != nil {
 			attempts = append(attempts, attempt)
 			continue
 		}

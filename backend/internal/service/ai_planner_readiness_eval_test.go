@@ -119,6 +119,10 @@ func selectReadinessCases(cases []goldenCase, limit int) []goldenCase {
 
 func TestPlannerReadiness(t *testing.T) {
 	svc := liveAIServiceOrSkip(t)
+	// This run is the only place the raw provider answers exist. Recording them
+	// lets TestPlannerReplayCorpus re-check the contract against them for free,
+	// instead of a second paid run every time a validation rule moves.
+	installPlannerCorpusRecorder(t)
 	planner, err := svc.runtimeStructuredPlanner()
 	if err != nil {
 		t.Skipf("structured planner unavailable: %v", err)
