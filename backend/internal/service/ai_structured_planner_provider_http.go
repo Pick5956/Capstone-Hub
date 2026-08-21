@@ -18,7 +18,11 @@ const (
 	groqStructuredPlannerEndpoint    = "https://api.groq.com/openai/v1/chat/completions"
 	geminiStructuredPlannerBaseURL   = "https://generativelanguage.googleapis.com/v1beta/models"
 	defaultGroqPlannerModel          = "openai/gpt-oss-20b"
-	defaultGeminiPlannerModel        = "gemini-2.5-flash"
+	// gemini-2.5-flash is being retired: a newly issued key answers
+	// 404 "no longer available to new users ... use models/gemini-3.6-flash",
+	// and the two models bill against separate quota buckets, so the switch also
+	// restored capacity on keys that were already exhausted.
+	defaultGeminiPlannerModel        = "gemini-3.6-flash"
 	structuredPlannerHTTPBodyLimit   = 1 << 20
 	structuredPlannerHTTPTimeout     = 30 * time.Second
 	// The plan itself is about 300 tokens, but reasoning-style models spend a far

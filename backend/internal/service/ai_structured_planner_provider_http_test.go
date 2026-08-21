@@ -206,8 +206,11 @@ func TestGeminiStructuredPlannerProviderUsesResponseJSONSchema(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/v1beta/models/gemini-2.5-flash:generateContent" {
-			t.Errorf("path = %q", r.URL.Path)
+		// Derived from the constant so a model change never breaks this test for
+		// the wrong reason — what matters here is the shape of the path.
+		wantPath := "/v1beta/models/" + defaultGeminiPlannerModel + ":generateContent"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 		}
 		if apiKey := r.Header.Get("x-goog-api-key"); apiKey != "gemini-test-key" {
 			t.Errorf("x-goog-api-key = %q", apiKey)
