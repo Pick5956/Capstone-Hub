@@ -22,15 +22,26 @@ const (
 	defaultGeminiPlannerModel        = "gemini-2.5-flash"
 	structuredPlannerHTTPBodyLimit   = 1 << 20
 	structuredPlannerHTTPTimeout     = 30 * time.Second
-	structuredPlannerMaxOutputTokens = 2048
+	// The plan itself is about 300 tokens, but reasoning-style models spend a far
+	// larger budget before emitting it. Live runs showed gpt-oss-20b stopping at
+	// exactly 2048 output tokens and returning truncated JSON, which the parser
+	// then rejected — the provider looked broken when it had simply run out of
+	// room. Only tokens actually produced are billed, so the headroom is free.
+	structuredPlannerMaxOutputTokens = 4096
 )
 
 // groqStrictStructuredPlannerModels lists the Groq models that accept
 // response_format=json_schema with strict:true. Models outside this list still
 // work through JSON object mode, where the schema is carried in the prompt
 // instead of enforced by the provider.
+//
+// openai/gpt-oss-20b was removed after measurement: Groq accepts the schema but
+// the model cannot generate output that satisfies it, so every planner request
+// came back as HTTP 400 json_validate_failed and the provider never produced a
+// plan at all. The same request in JSON object mode answers 200, and the backend
+// still runs Normalize/Validate over the result, so nothing is trusted that was
+// not checked here.
 var groqStrictStructuredPlannerModels = map[string]struct{}{
-	"openai/gpt-oss-20b":                        {},
 	"openai/gpt-oss-120b":                       {},
 	"moonshotai/kimi-k2-instruct-0905":          {},
 	"meta-llama/llama-4-scout-17b-16e-instruct":  {},
@@ -109,7 +120,7 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 			JSONSchema: &groqStructuredPlannerSchema{
 				Name:   strings.TrimSpace(request.SchemaName),
 				Strict: true,
-				Schema: request.JSONSchema,
+				Schema: sanitizeSchemaForGroqStrict(request.JSONSchema),
 			},
 		}
 	} else {
@@ -583,6 +594,49 @@ func stripGeminiUnsupportedSchemaKeywords(value any) any {
 			result[index] = stripGeminiUnsupportedSchemaKeywords(child)
 		}
 		return result
+	default:
+		return value
+	}
+}
+
+// groqUnsupportedSchemaKeywords are JSON Schema keywords that Groq's strict
+// json_schema mode rejects with HTTP 400 ("uniqueItems is not supported"),
+// failing the whole provider before the model is ever reached. Every keyword
+// here is a constraint the backend re-checks after parsing — Normalize/Validate
+// already reject duplicate metrics, group_by, entities and filters — so dropping
+// them from the wire schema changes what the provider is asked to enforce, not
+// what the backend accepts.
+var groqUnsupportedSchemaKeywords = map[string]struct{}{
+	"uniqueItems": {},
+}
+
+// sanitizeSchemaForGroqStrict deep-copies the schema without the keywords Groq
+// refuses. The copy matters: the same schema value is handed to the next
+// provider in the fallback chain, which must still see the full contract.
+func sanitizeSchemaForGroqStrict(schema map[string]any) map[string]any {
+	if schema == nil {
+		return nil
+	}
+	sanitized := make(map[string]any, len(schema))
+	for key, value := range schema {
+		if _, unsupported := groqUnsupportedSchemaKeywords[key]; unsupported {
+			continue
+		}
+		sanitized[key] = sanitizeSchemaValueForGroqStrict(value)
+	}
+	return sanitized
+}
+
+func sanitizeSchemaValueForGroqStrict(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeSchemaForGroqStrict(typed)
+	case []any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, sanitizeSchemaValueForGroqStrict(item))
+		}
+		return items
 	default:
 		return value
 	}

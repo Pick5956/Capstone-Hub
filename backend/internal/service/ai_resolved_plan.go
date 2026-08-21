@@ -440,12 +440,16 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 
 	p.Parameters.Metrics = normalizeUniqueEnums(p.Parameters.Metrics)
 	p.Parameters.GroupBy = normalizeUniqueEnums(p.Parameters.GroupBy)
+	p.Parameters.GroupBy = fillImpliedGroupBy(p.Domain, p.Operation, p.Parameters.GroupBy)
 	p.Parameters.Entities = normalizeEntities(p.Parameters.Entities)
 	p.Parameters.TimeRange = normalizeTimeRange(p.Parameters.TimeRange)
 	p.Parameters.CompareTimeRange = normalizeTimeRange(p.Parameters.CompareTimeRange)
 	p.Parameters.DayPart = normalizeDayPart(p.Parameters.DayPart)
 	p.Parameters.Filters = normalizeFilters(p.Parameters.Filters)
 	p.Parameters.Ranking = normalizeRanking(p.Parameters.Ranking)
+	if p.Parameters.Ranking != nil && !operationSupportsRanking(p.Operation) {
+		p.Parameters.Ranking = nil
+	}
 	p.Resolution.InheritedFields = normalizeInheritedFields(p.Resolution.InheritedFields)
 	p.Resolution.MissingFields = normalizeUniqueEnums(p.Resolution.MissingFields)
 	// A field cannot be both carried over from an earlier turn and still missing.
@@ -515,8 +519,8 @@ func (p ResolvedPlan) Validate() error {
 		if len(p.Parameters.GroupBy) == 0 {
 			return errors.New("resolved plan: operation=rank requires parameters.group_by")
 		}
-	} else if p.Parameters.Ranking != nil {
-		return errors.New("resolved plan: parameters.ranking is only allowed for operation=rank")
+	} else if p.Parameters.Ranking != nil && !operationSupportsRanking(p.Operation) {
+		return fmt.Errorf("resolved plan: parameters.ranking is not allowed for operation %q", p.Operation)
 	}
 	if p.Operation == ResolvedPlanOperationBreakdown && len(p.Parameters.GroupBy) == 0 {
 		return errors.New("resolved plan: operation=breakdown requires parameters.group_by")
@@ -870,9 +874,14 @@ func taskAllowsOperation(task AITask, operation ResolvedPlanOperation) bool {
 			ResolvedPlanOperationBreakdown, ResolvedPlanOperationTrend, ResolvedPlanOperationForecast,
 		}, operation)
 	case AITaskAnalyzeData:
+		// rank belongs here for the same reason compare and breakdown do: "which
+		// menu earns the best margin" is analysis that happens to be ordered.
+		// retrieve_fact already allowed it, so excluding it here only decided the
+		// outcome by which of two interchangeable labels the model picked.
 		return containsValue([]ResolvedPlanOperation{
 			ResolvedPlanOperationAnalyze, ResolvedPlanOperationCompare, ResolvedPlanOperationSummarize,
 			ResolvedPlanOperationBreakdown, ResolvedPlanOperationTrend, ResolvedPlanOperationForecast,
+			ResolvedPlanOperationRank,
 		}, operation)
 	case AITaskRecommendAction, AITaskRestaurantAdvice:
 		return operation == ResolvedPlanOperationRecommend || operation == ResolvedPlanOperationDraftAction
@@ -1110,4 +1119,53 @@ func containsValue[T comparable](values []T, target T) bool {
 		}
 	}
 	return false
+}
+
+// impliedGroupDimensions maps the domains where a ranking has exactly one
+// sensible dimension. "Which menu has the best margin" can only be grouped by
+// menu, so requiring the model to restate it turned a correct plan into a
+// rejection. Domains where a ranking is genuinely ambiguous — sales could be
+// ranked by menu, weekday or hour — are deliberately absent, so those still have
+// to say what they are ranking.
+var impliedGroupDimensions = map[ResolvedPlanDomain]ResolvedPlanGroupDimension{
+	ResolvedPlanDomainMenu:      ResolvedPlanGroupMenu,
+	ResolvedPlanDomainInventory: ResolvedPlanGroupIngredient,
+	ResolvedPlanDomainTable:     ResolvedPlanGroupTable,
+	ResolvedPlanDomainStaff:     ResolvedPlanGroupStaffMember,
+}
+
+// fillImpliedGroupBy supplies the grouping a ranking or breakdown implies when
+// the plan left it empty. It never overrides a stated grouping and never invents
+// one for an ambiguous domain.
+func fillImpliedGroupBy(
+	domain ResolvedPlanDomain,
+	operation ResolvedPlanOperation,
+	groupBy []ResolvedPlanGroupDimension,
+) []ResolvedPlanGroupDimension {
+	if len(groupBy) > 0 {
+		return groupBy
+	}
+	if operation != ResolvedPlanOperationRank && operation != ResolvedPlanOperationBreakdown {
+		return groupBy
+	}
+	implied, ok := impliedGroupDimensions[domain]
+	if !ok {
+		return groupBy
+	}
+	return []ResolvedPlanGroupDimension{implied}
+}
+
+// operationSupportsRanking lists the operations where an ordered result is part
+// of the request rather than stray output. "Recommend the five ingredients with
+// the fewest days left" is a recommendation that is inherently ranked, and
+// rejecting it cost a correct plan from the provider; the same is true of a list
+// that asks for the lowest or highest few. Operations that cannot use an order
+// have their ranking dropped during Normalize instead of failing the plan.
+func operationSupportsRanking(operation ResolvedPlanOperation) bool {
+	switch operation {
+	case ResolvedPlanOperationRank, ResolvedPlanOperationRecommend, ResolvedPlanOperationList:
+		return true
+	default:
+		return false
+	}
 }

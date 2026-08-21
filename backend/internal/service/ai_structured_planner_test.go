@@ -163,7 +163,6 @@ func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T)
 		"missing action arg":   string(missingActionArgumentJSON),
 		"missing nested field": string(missingNestedJSON),
 		"unknown root field":   string(unknownRootJSON),
-		"null required array":  strings.Replace(validJSON, `"metrics":[]`, `"metrics":null`, 1),
 	}
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -365,5 +364,40 @@ func TestNewStructuredPlannerValidatesProviderSet(t *testing.T) {
 	unsupported := &structuredPlannerMockProvider{name: "unsupported_local_provider"}
 	if _, err := NewStructuredPlanner(unsupported); err == nil {
 		t.Fatal("constructor accepted an unsupported provider")
+	}
+}
+
+// Providers write null where the contract asks for an empty list often enough
+// that rejecting it cost correct routing in live measurement: a plan that was
+// right in every other respect was thrown away over the spelling of "nothing".
+// Null and [] are folded together at the wire boundary; every other malformed
+// shape is still rejected.
+func TestParseStructuredPlannerResolvedPlanAcceptsNullForEmptyLists(t *testing.T) {
+	validJSON := structuredPlannerTestJSON(t, structuredPlannerTestPlan("hello"))
+	for _, field := range []string{"metrics", "group_by", "entities", "filters"} {
+		raw := strings.Replace(string(validJSON), `"`+field+`":[]`, `"`+field+`":null`, 1)
+		if raw == string(validJSON) {
+			t.Fatalf("fixture does not contain an empty %q list to replace", field)
+		}
+		plan, err := ParseStructuredPlannerResolvedPlan(raw, "hello")
+		if err != nil {
+			t.Fatalf("null %s should be read as an empty list, got: %v", field, err)
+		}
+		switch field {
+		case "metrics":
+			if plan.Parameters.Metrics == nil {
+				continue // nil and empty both mean "none specified"
+			}
+		case "group_by":
+			if len(plan.Parameters.GroupBy) > 1 {
+				t.Fatalf("null group_by produced %v", plan.Parameters.GroupBy)
+			}
+		}
+	}
+
+	// A null where a value is genuinely required must still fail.
+	broken := strings.Replace(string(validJSON), `"task":`, `"task":null,"ignored":`, 1)
+	if _, err := ParseStructuredPlannerResolvedPlan(broken, "hello"); err == nil {
+		t.Fatal("a null on a required scalar field must still be rejected")
 	}
 }

@@ -37,6 +37,11 @@ func ParseStructuredPlannerResolvedPlan(rawJSON string, trustedOriginalQuestion 
 	if err := requireStructuredPlannerEOF(shapeDecoder); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
+	// Models routinely write null where the contract asks for an empty list, and
+	// both say the same thing: nothing was specified. Rejecting the whole plan
+	// over that spelling cost correct routing in live measurement, so the two are
+	// folded together here, at the wire boundary, before anything is validated.
+	rawJSON, shape = coerceStructuredPlannerNullArrays(rawJSON, shape)
 	if err := validateStructuredPlannerWireShape(shape); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
@@ -238,4 +243,44 @@ func structuredPlannerNullableObjectWithRequired(value any, path string, keys ..
 		return nil
 	}
 	return structuredPlannerObjectWithRequired(value, path, keys...)
+}
+
+// structuredPlannerListFields are the contract's array-valued fields, addressed
+// as "<parent>.<key>" where the parent is the object that holds them.
+var structuredPlannerListFields = map[string][]string{
+	"parameters": {"metrics", "group_by", "entities", "filters"},
+	"resolution": {"inherited_fields", "missing_fields"},
+}
+
+// coerceStructuredPlannerNullArrays rewrites null list fields to empty lists and
+// returns both the patched JSON (for the typed decode) and the patched shape
+// (for wire validation), so the two views can never disagree.
+func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	changed := false
+	for parent, keys := range structuredPlannerListFields {
+		nested, nestedOK := root[parent].(map[string]any)
+		if !nestedOK {
+			continue
+		}
+		for _, key := range keys {
+			value, exists := nested[key]
+			if !exists || value != nil {
+				continue
+			}
+			nested[key] = []any{}
+			changed = true
+		}
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
 }
