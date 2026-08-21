@@ -29,3 +29,31 @@ func TestExpenseDailyTotalsUseBangkokBucketsWithoutRowLimit(t *testing.T) {
 		t.Fatalf("daily expense aggregate must not inherit the ledger row cap:\n%s", joined)
 	}
 }
+
+// The expenses filter row prints every category's month total at once, so the
+// service asks for the facets with Category cleared. That only works if an
+// empty Category really means "no category clause".
+func TestExpenseCategoryTotalsScopeCategoryOnlyWhenFiltered(t *testing.T) {
+	db, capture := dryRunRepositoryDB(t)
+	repo := NewExpenseRepository(db)
+	from := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.FixedZone("Asia/Bangkok", 7*60*60))
+	window := ExpenseFilter{From: from, Until: from.AddDate(0, 1, 0)}
+
+	run := func(filter ExpenseFilter) string {
+		capture.statements = nil
+		if _, err := repo.TotalsByCategory(7, filter); err != nil &&
+			!errors.Is(err, gorm.ErrDryRunModeUnsupported) {
+			t.Fatalf("TotalsByCategory() error = %v", err)
+		}
+		return strings.ToLower(strings.Join(capture.statements, " ; "))
+	}
+
+	if joined := run(window); strings.Contains(joined, "category = ") {
+		t.Fatalf("unfiltered facets must not narrow to one category: %s", joined)
+	}
+	narrowed := window
+	narrowed.Category = "labor"
+	if joined := run(narrowed); !strings.Contains(joined, "category = ") {
+		t.Fatalf("filtered totals must narrow to the requested category: %s", joined)
+	}
+}

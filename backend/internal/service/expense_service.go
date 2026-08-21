@@ -123,7 +123,23 @@ func (s *ExpenseService) List(restaurantID uint, from, until, category string) (
 		daily = []repository.ExpenseDayTotal{}
 	}
 
-	return buildExpenseListResponse(expenses, totals, daily), nil
+	response := buildExpenseListResponse(expenses, totals, daily)
+
+	// The chip row shows every category's month total side by side, so the facet
+	// counts deliberately ignore the category filter - narrowing to "labor" must
+	// not zero out the other five chips. Total/Entries stay filtered: they
+	// describe the rows actually listed.
+	if filter.Category != "" {
+		facets, err := s.repo.TotalsByCategory(restaurantID, repository.ExpenseFilter{From: filter.From, Until: filter.Until})
+		if err != nil {
+			return nil, err
+		}
+		for i := range facets {
+			facets[i].Amount = roundMoney(facets[i].Amount)
+		}
+		response.Categories = facets
+	}
+	return response, nil
 }
 
 func buildExpenseListResponse(
