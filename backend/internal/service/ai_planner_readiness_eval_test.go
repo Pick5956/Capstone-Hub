@@ -146,19 +146,27 @@ func TestPlannerReadiness(t *testing.T) {
 		outcome.PlannerMillis = time.Since(start).Milliseconds()
 		cancel()
 
+		// Usage is read for every result, success or not: reading it only on the
+		// success path made every failure look like it never reached a model,
+		// which sent an earlier investigation chasing quota instead of the real
+		// validation errors.
+		for _, attempt := range result.Attempts {
+			outcome.PlannerInput += attempt.InputTokens
+			outcome.PlannerOutput += attempt.OutputTokens
+			if !attempt.Succeeded && attempt.FailureStage != "" {
+				outcome.PlannerNote = strings.TrimSpace(outcome.PlannerNote + " " +
+					string(attempt.Provider) + ":" + string(attempt.FailureStage))
+			}
+		}
+
 		switch {
 		case planErr != nil:
 			outcome.PlannerFailed = true
 			outcome.PlannerNote = "plan error"
 		case result.UsedLocalFallback:
 			outcome.PlannerFailed = true
-			outcome.PlannerNote = "ทุก provider ล้ม → ข้อความขอโทษ"
 		default:
 			outcome.PlannerProvider = result.Provider
-			for _, attempt := range result.Attempts {
-				outcome.PlannerInput += attempt.InputTokens
-				outcome.PlannerOutput += attempt.OutputTokens
-			}
 			prepared, prepErr := prepareAuthorizedPlannerResult(result, actor)
 			switch {
 			case prepErr != nil:

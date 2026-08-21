@@ -231,3 +231,53 @@ func TestMissingFieldsCoercionLeavesOtherShapesAlone(t *testing.T) {
 		t.Fatal("an object with no field name must still be rejected")
 	}
 }
+
+// Providers write the bare field name for nested contract fields — "metrics"
+// instead of "parameters.metrics" — which failed an otherwise correct plan with
+// "unsupported missing field". Both spellings name the same field.
+func TestBareFieldNamesAreQualified(t *testing.T) {
+	pairs := map[string]ResolvedPlanField{
+		"metrics":    ResolvedPlanFieldMetrics,
+		"time_range": ResolvedPlanFieldTimeRange,
+		"group_by":   ResolvedPlanFieldGroupBy,
+		"ranking":    ResolvedPlanFieldRanking,
+	}
+	for bare, want := range pairs {
+		if got := qualifyPlanField(ResolvedPlanField(bare)); got != want {
+			t.Fatalf("%q should qualify to %q, got %q", bare, want, got)
+		}
+	}
+	// Already-qualified and top-level names pass through untouched.
+	for _, unchanged := range []ResolvedPlanField{
+		ResolvedPlanFieldMetrics, ResolvedPlanFieldTask, ResolvedPlanFieldDomain,
+	} {
+		if got := qualifyPlanField(unchanged); got != unchanged {
+			t.Fatalf("%q must not change, got %q", unchanged, got)
+		}
+	}
+	// An unknown name is left alone so validation still rejects it.
+	if got := qualifyPlanField(ResolvedPlanField("not_a_field")); got != ResolvedPlanField("not_a_field") {
+		t.Fatalf("unknown fields must pass through, got %q", got)
+	}
+}
+
+// The plan Groq returned for "เช็คสต๊อกให้หน่อย": correct except that it listed
+// the missing field by its bare name.
+func TestPlanWithBareMissingFieldNameValidates(t *testing.T) {
+	raw := `{"schema_version":"1.1","original_question":"เช็คสต๊อกให้หน่อย",` +
+		`"resolved_question":"เช็คสต๊อกให้หน่อย","task":"unclear","domain":"inventory",` +
+		`"operation":"clarify","action":null,"parameters":{"metrics":[],"group_by":[],` +
+		`"entities":[],"time_range":null,"compare_time_range":null,"day_part":null,` +
+		`"filters":[],"ranking":null},"tool_hint":"","resolution":{"inherited_fields":[],` +
+		`"missing_fields":["metrics"],"needs_clarification":true,` +
+		`"clarification_question":"อยากดูสต๊อกด้านไหนครับ","confidence":0.5},` +
+		`"policy":{"risk":"low","read_only":true,"requires_confirmation":false},"response_style":"normal"}`
+
+	plan, err := ParseStructuredPlannerResolvedPlan(raw, "เช็คสต๊อกให้หน่อย")
+	if err != nil {
+		t.Fatalf("a bare field name should be accepted, got: %v", err)
+	}
+	if len(plan.Resolution.MissingFields) != 1 || plan.Resolution.MissingFields[0] != ResolvedPlanFieldMetrics {
+		t.Fatalf("expected the qualified field name, got %v", plan.Resolution.MissingFields)
+	}
+}

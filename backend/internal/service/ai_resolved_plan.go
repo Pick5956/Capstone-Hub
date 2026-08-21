@@ -451,7 +451,13 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 		p.Parameters.Ranking = nil
 	}
 	p.Resolution.InheritedFields = normalizeInheritedFields(p.Resolution.InheritedFields)
+	for i := range p.Resolution.InheritedFields {
+		p.Resolution.InheritedFields[i].Field = qualifyPlanField(p.Resolution.InheritedFields[i].Field)
+	}
 	p.Resolution.MissingFields = normalizeUniqueEnums(p.Resolution.MissingFields)
+	for i, field := range p.Resolution.MissingFields {
+		p.Resolution.MissingFields[i] = qualifyPlanField(field)
+	}
 	// A field cannot be both carried over from an earlier turn and still missing.
 	// Models sometimes list the same field in both; the inherited entry carries a
 	// value, so it wins and the contradictory "missing" entry is dropped.
@@ -1137,6 +1143,31 @@ var impliedGroupDimensions = map[ResolvedPlanDomain]ResolvedPlanGroupDimension{
 // fillImpliedGroupBy supplies the grouping a ranking or breakdown implies when
 // the plan left it empty. It never overrides a stated grouping and never invents
 // one for an ambiguous domain.
+// qualifiedPlanFields maps the bare names models write for nested fields onto
+// the qualified names the contract uses. Providers wrote "metrics" where the
+// contract says "parameters.metrics" often enough to fail otherwise-correct
+// plans; the two name the same field, so the short form is accepted and
+// rewritten rather than rejected.
+var qualifiedPlanFields = map[string]ResolvedPlanField{
+	"metrics":            ResolvedPlanFieldMetrics,
+	"entities":           ResolvedPlanFieldEntities,
+	"time_range":         ResolvedPlanFieldTimeRange,
+	"compare_time_range": ResolvedPlanFieldCompareTimeRange,
+	"day_part":           ResolvedPlanFieldDayPart,
+	"filters":            ResolvedPlanFieldFilters,
+	"ranking":            ResolvedPlanFieldRanking,
+	"group_by":           ResolvedPlanFieldGroupBy,
+}
+
+// qualifyPlanField expands a bare nested field name; anything else is returned
+// unchanged so an unknown field still fails validation.
+func qualifyPlanField(field ResolvedPlanField) ResolvedPlanField {
+	if qualified, ok := qualifiedPlanFields[strings.TrimSpace(string(field))]; ok {
+		return qualified
+	}
+	return field
+}
+
 func fillImpliedGroupBy(
 	domain ResolvedPlanDomain,
 	operation ResolvedPlanOperation,
