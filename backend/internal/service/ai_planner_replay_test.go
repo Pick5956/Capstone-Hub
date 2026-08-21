@@ -32,6 +32,7 @@ package service
 // Provenance needs the live context items, which the corpus does not carry.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,4 +222,66 @@ func installPlannerCorpusRecorder(t *testing.T) {
 		absolute, _ := filepath.Abs(path)
 		t.Logf("เก็บคำตอบดิบไว้ %d รายการที่ %s (ใช้ replay ซ้ำได้ฟรี)", count, absolute)
 	})
+}
+
+// TestPlannerCorpusRoundTrip proves the two halves fit: what the recorder writes
+// during a paid run is exactly what the replay can read back afterwards. Without
+// this, a recording bug would only surface a day later, after the quota that
+// produced the corpus was already spent.
+func TestPlannerCorpusRoundTrip(t *testing.T) {
+	corpus := filepath.Join(t.TempDir(), "corpus.jsonl")
+	t.Setenv("AI_PLANNER_REPLAY_CORPUS", corpus)
+	installPlannerCorpusRecorder(t)
+
+	question := "เมื่อวานร้านขายได้เท่าไหร่"
+	valid, err := json.Marshal(structuredPlannerTestPlan(question))
+	if err != nil {
+		t.Fatalf("encode plan: %v", err)
+	}
+	planner, err := NewStructuredPlanner(
+		&structuredPlannerMockProvider{
+			name:     StructuredPlannerProviderGroq,
+			response: StructuredPlannerProviderResponse{RawJSON: `{"schema_version":"1.1"`, Model: "mock-groq"},
+		},
+		&structuredPlannerMockProvider{
+			name:     StructuredPlannerProviderGemini,
+			response: StructuredPlannerProviderResponse{RawJSON: string(valid), Model: "mock-gemini"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("build planner: %v", err)
+	}
+	if _, err := planner.Plan(context.Background(), StructuredPlannerRequest{Question: question}); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+
+	records := loadPlannerReplayCorpus(t, corpus, true)
+	if len(records) != 2 {
+		t.Fatalf("ต้องบันทึกทั้งคำตอบที่พังและที่ใช้ได้ ได้ %d รายการ", len(records))
+	}
+	if records[0].FailureStage != StructuredPlannerFailureParse || records[0].Provider != StructuredPlannerProviderGroq {
+		t.Fatalf("รายการแรกต้องเป็น groq ที่ล้มตอน parse: %+v", records[0])
+	}
+	if records[1].FailureStage != "" || records[1].Provider != StructuredPlannerProviderGemini {
+		t.Fatalf("รายการที่สองต้องเป็น gemini ที่ผ่าน: %+v", records[1])
+	}
+
+	// The recorded verdicts must reproduce exactly: that equivalence is what lets
+	// the replay stand in for a live run.
+	for index, record := range records {
+		stage, replayErr := replayPlannerRecord(record)
+		if stage != record.FailureStage {
+			t.Fatalf("รายการที่ %d replay ได้ชั้น %q แต่ตอนบันทึกเป็น %q: %v",
+				index+1, stage, record.FailureStage, replayErr)
+		}
+	}
+}
+
+// The recorder must stay off unless a test installs it: raw model output carries
+// the question and any restaurant data quoted into it.
+func TestPlannerRawRecorderIsOffByDefault(t *testing.T) {
+	if structuredPlannerRawRecorder != nil {
+		t.Fatal("มี recorder ค้างอยู่ — production จะเขียน JSON ดิบทิ้งไว้")
+	}
+	recordStructuredPlannerRaw(StructuredPlannerRawRecord{Question: "x", RawJSON: "{}"})
 }
