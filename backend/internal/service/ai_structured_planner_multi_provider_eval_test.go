@@ -87,8 +87,8 @@ func TestLiveMultiProviderStructuredPlanner(t *testing.T) {
 		t.Fatal("multi-provider evaluation requires both GROQ_API_KEYS and GEMINI_API_KEYS")
 	}
 	providers := []structuredPlannerEvalProvider{
-		{name: StructuredPlannerProviderGroq, provider: NewGroqStructuredPlannerProvider(httpClient, []string{groqKey})},
-		{name: StructuredPlannerProviderGemini, provider: NewGeminiStructuredPlannerProvider(httpClient, []string{geminiKey})},
+		{name: StructuredPlannerProviderGroq, provider: NewGroqStructuredPlannerProvider(httpClient, []string{groqKey}, nil)},
+		{name: StructuredPlannerProviderGemini, provider: NewGeminiStructuredPlannerProvider(httpClient, []string{geminiKey}, nil)},
 	}
 
 	totalCalls := 0

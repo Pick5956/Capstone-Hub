@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -61,16 +60,20 @@ and no property outside "properties" is allowed):
 // NewGroqStructuredPlannerProvider creates the hosted Groq implementation of
 // StructuredPlannerProvider. Keys are copied so callers may safely reuse or
 // clear their input slice after construction.
-func NewGroqStructuredPlannerProvider(client *http.Client, apiKeys []string) StructuredPlannerProvider {
-	return newGroqStructuredPlannerProvider(client, apiKeys, groqStructuredPlannerEndpoint)
+func NewGroqStructuredPlannerProvider(client *http.Client, apiKeys []string, health *providerKeyHealth) StructuredPlannerProvider {
+	provider := newGroqStructuredPlannerProvider(client, apiKeys, groqStructuredPlannerEndpoint)
+	provider.health = health
+	return provider
 }
 
 // NewGeminiStructuredPlannerProvider creates the hosted Gemini implementation
 // of StructuredPlannerProvider. It is intentionally not connected to
 // AIService yet; the planner can be integrated after its evaluation gate is in
 // place.
-func NewGeminiStructuredPlannerProvider(client *http.Client, apiKeys []string) StructuredPlannerProvider {
-	return newGeminiStructuredPlannerProvider(client, apiKeys, geminiStructuredPlannerBaseURL)
+func NewGeminiStructuredPlannerProvider(client *http.Client, apiKeys []string, health *providerKeyHealth) StructuredPlannerProvider {
+	provider := newGeminiStructuredPlannerProvider(client, apiKeys, geminiStructuredPlannerBaseURL)
+	provider.health = health
+	return provider
 }
 
 type groqStructuredPlannerProvider struct {
@@ -78,6 +81,10 @@ type groqStructuredPlannerProvider struct {
 	apiKeys  []string
 	endpoint string
 	keyIndex uint32
+	// health is shared with the rest of the assistant so a key parked by one
+	// flow is skipped by the other. Nil is valid: the provider then behaves as
+	// it did before, trying every key on every call.
+	health *providerKeyHealth
 }
 
 var _ StructuredPlannerProvider = (*groqStructuredPlannerProvider)(nil)
@@ -146,38 +153,17 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner request could not be encoded")
 	}
 
-	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
-	var lastErr error
-	stats := StructuredPlannerProviderResponse{Model: model}
-	for offset := range p.apiKeys {
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
-		stats.HTTPAttempts++
-		response, callErr := p.generateWithKey(ctx, payload, key, model)
-		if callErr == nil {
-			response.HTTPAttempts = stats.HTTPAttempts
-			response.KeyFallbacks = stats.KeyFallbacks
-			response.RateLimits = stats.RateLimits
-			return response, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		lastErr = callErr
-		if errors.Is(callErr, errRateLimit) {
-			stats.RateLimits++
-		}
-		if !structuredPlannerShouldTryNextKey(callErr) {
-			break
-		}
-		if offset+1 < len(p.apiKeys) {
-			stats.KeyFallbacks++
-		}
-	}
-
-	return stats, fmt.Errorf("Groq structured planner exhausted configured API keys: %w", lastErr)
+	return runPlannerKeyRotation(ctx, plannerRotation{
+		provider: "groq",
+		label:    "Groq structured planner",
+		health:   p.health,
+		keys:     p.apiKeys,
+		cursor:   &p.keyIndex,
+		model:    model,
+		call: func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error) {
+			return p.generateWithKey(ctx, payload, key, model)
+		},
+	})
 }
 
 func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, model string) (StructuredPlannerProviderResponse, error) {
@@ -201,8 +187,11 @@ func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, pay
 	if err != nil {
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner response could not be read")
 	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return StructuredPlannerProviderResponse{}, structuredPlannerHTTPStatusError("Groq", resp.StatusCode)
+	// Share the assistant's status vocabulary: a 404 means the configured model
+	// is gone (no key can fix it) and a 429 carries the wait the provider asked
+	// for, so the rotation below can park that key instead of rediscovering it.
+	if statusErr := classifyProviderResponse("Groq", "structured planner", model, resp); statusErr != nil {
+		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner response exceeded the size limit")
@@ -269,6 +258,7 @@ type geminiStructuredPlannerProvider struct {
 	apiKeys  []string
 	baseURL  string
 	keyIndex uint32
+	health   *providerKeyHealth
 }
 
 var _ StructuredPlannerProvider = (*geminiStructuredPlannerProvider)(nil)
@@ -331,38 +321,17 @@ func (p *geminiStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Conte
 	}
 
 	endpoint := p.baseURL + "/" + url.PathEscape(model) + ":generateContent"
-	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
-	var lastErr error
-	stats := StructuredPlannerProviderResponse{Model: model}
-	for offset := range p.apiKeys {
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
-		stats.HTTPAttempts++
-		response, callErr := p.generateWithKey(ctx, payload, key, endpoint, model)
-		if callErr == nil {
-			response.HTTPAttempts = stats.HTTPAttempts
-			response.KeyFallbacks = stats.KeyFallbacks
-			response.RateLimits = stats.RateLimits
-			return response, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		lastErr = callErr
-		if errors.Is(callErr, errRateLimit) {
-			stats.RateLimits++
-		}
-		if !structuredPlannerShouldTryNextKey(callErr) {
-			break
-		}
-		if offset+1 < len(p.apiKeys) {
-			stats.KeyFallbacks++
-		}
-	}
-
-	return stats, fmt.Errorf("Gemini structured planner exhausted configured API keys: %w", lastErr)
+	return runPlannerKeyRotation(ctx, plannerRotation{
+		provider: "gemini",
+		label:    "Gemini structured planner",
+		health:   p.health,
+		keys:     p.apiKeys,
+		cursor:   &p.keyIndex,
+		model:    model,
+		call: func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error) {
+			return p.generateWithKey(ctx, payload, key, endpoint, model)
+		},
+	})
 }
 
 func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, endpoint string, model string) (StructuredPlannerProviderResponse, error) {
@@ -386,8 +355,8 @@ func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, p
 	if err != nil {
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner response could not be read")
 	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return StructuredPlannerProviderResponse{}, structuredPlannerHTTPStatusError("Gemini", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "structured planner", model, resp); statusErr != nil {
+		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner response exceeded the size limit")
@@ -640,4 +609,80 @@ func sanitizeSchemaValueForGroqStrict(value any) any {
 	default:
 		return value
 	}
+}
+
+// plannerRotation describes one provider's attempt at producing a plan. It exists
+// so both planner adapters share the assistant's key handling instead of each
+// keeping a private copy: a key parked after a 429 anywhere is skipped here too,
+// and a withdrawn model stops the rotation instead of being retried per key.
+type plannerRotation struct {
+	provider string // key-health namespace, shared with the chat flows
+	label    string // human-readable name for errors
+	health   *providerKeyHealth
+	keys     []string
+	cursor   *uint32
+	model    string
+	call     func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error)
+}
+
+func runPlannerKeyRotation(ctx context.Context, rotation plannerRotation) (StructuredPlannerProviderResponse, error) {
+	stats := StructuredPlannerProviderResponse{Model: rotation.model}
+	if len(rotation.keys) == 0 {
+		return stats, fmt.Errorf("%s has no configured API keys", rotation.label)
+	}
+
+	health := rotation.health
+	if health == nil {
+		// Without a shared tracker the provider still works; it simply cannot
+		// remember which keys are cooling down between calls.
+		health = &providerKeyHealth{}
+	}
+
+	attempts, releaseAt := nextProviderAttempts(health, rotation.provider, rotation.keys, rotation.cursor)
+	if len(attempts) == 0 {
+		return stats, allKeysRateLimitedError(rotation.label, len(rotation.keys), releaseAt)
+	}
+
+	var lastErr error
+	for _, attempt := range attempts {
+		if err := ctx.Err(); err != nil {
+			return StructuredPlannerProviderResponse{}, err
+		}
+		stats.HTTPAttempts++
+		response, callErr := rotation.call(ctx, attempt.Key)
+		if callErr == nil {
+			health.clear(rotation.provider, attempt.Index)
+			response.HTTPAttempts = stats.HTTPAttempts
+			response.KeyFallbacks = stats.KeyFallbacks
+			response.RateLimits = stats.RateLimits
+			return response, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return StructuredPlannerProviderResponse{}, err
+		}
+		lastErr = callErr
+
+		// A withdrawn model answers the same way on every key.
+		if errors.Is(callErr, errModelUnavailable) {
+			aiStage("error", "%s: %v — skipping remaining keys", rotation.label, callErr)
+			return stats, callErr
+		}
+		if errors.Is(callErr, errRateLimit) {
+			wait := retryAfterOf(callErr)
+			health.park(rotation.provider, attempt.Index, time.Now().Add(wait))
+			stats.RateLimits++
+			aiStage("warn", "%s key %d/%d rate limited → parked for %s",
+				rotation.label, attempt.Position, attempt.Total, wait.Round(time.Second))
+			if attempt.Position < attempt.Total {
+				stats.KeyFallbacks++
+			}
+			continue
+		}
+		if !structuredPlannerShouldTryNextKey(callErr) {
+			break
+		}
+		stats.KeyFallbacks++
+	}
+
+	return stats, fmt.Errorf("%s exhausted configured API keys: %w", rotation.label, lastErr)
 }

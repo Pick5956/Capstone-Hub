@@ -548,8 +548,8 @@ func TestStructuredPlannerProvidersHonorCancellation(t *testing.T) {
 
 func TestStructuredPlannerProvidersRejectMissingKeys(t *testing.T) {
 	providers := []StructuredPlannerProvider{
-		NewGroqStructuredPlannerProvider(nil, []string{" ", ""}),
-		NewGeminiStructuredPlannerProvider(nil, nil),
+		NewGroqStructuredPlannerProvider(nil, []string{" ", ""}, nil),
+		NewGeminiStructuredPlannerProvider(nil, nil, nil),
 	}
 	for _, provider := range providers {
 		t.Run(string(provider.Name()), func(t *testing.T) {

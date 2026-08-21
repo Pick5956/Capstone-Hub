@@ -45,8 +45,10 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 		},
 	}
 	service.structuredPlannerProviders = []StructuredPlannerProvider{
-		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys()),
-		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys()),
+		// The same key-health tracker the chat flows use, so a key parked after a
+		// 429 in one path is skipped in the other instead of being rediscovered.
+		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys(), &service.keyHealth),
+		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys(), &service.keyHealth),
 	}
 	service.observability = newAIObservability()
 	return service

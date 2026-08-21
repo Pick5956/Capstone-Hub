@@ -54,8 +54,8 @@ func TestPlannerDiagnoseProviders(t *testing.T) {
 		name     string
 		provider StructuredPlannerProvider
 	}{
-		{"groq", NewGroqStructuredPlannerProvider(svc.httpClient, svc.getGroqKeys())},
-		{"gemini", NewGeminiStructuredPlannerProvider(svc.httpClient, svc.getGeminiKeys())},
+		{"groq", NewGroqStructuredPlannerProvider(svc.httpClient, svc.getGroqKeys(), &svc.keyHealth)},
+		{"gemini", NewGeminiStructuredPlannerProvider(svc.httpClient, svc.getGeminiKeys(), &svc.keyHealth)},
 	}
 
 	for _, entry := range providers {
