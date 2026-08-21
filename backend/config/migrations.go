@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 12
+	CurrentSchemaVersion int64 = 13
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -225,6 +225,30 @@ func schemaMigrationPlan() []SchemaMigration {
 				// earlier AI migrations that moved to 8 and 9.
 				if err := ctx.DB.AutoMigrate(&entity.AIOperatingCalendarRule{}); err != nil {
 					return fmt.Errorf("migrate AI operating calendar: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 13,
+			Name:    "partial_unique_order_day_number",
+			Up: func(ctx *MigrationContext) error {
+				// Closing an empty table soft-deletes its order (deleted_at set) but
+				// leaves the row in place. The daily order-number sequence counts only
+				// live rows, so reopening the same table that day regenerates the same
+				// number — which collided with the soft-deleted ghost because
+				// idx_orders_restaurant_day_number_v2 was a plain (non-partial) unique
+				// index. Rebuild it as a partial unique index scoped to live rows, the
+				// same pattern idx_orders_one_active_table already uses, so a reused
+				// number can coexist with the soft-deleted order it replaces.
+				statements := []string{
+					"DROP INDEX IF EXISTS idx_orders_restaurant_day_number_v2",
+					"CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_restaurant_day_number_v2 ON orders (restaurant_id, order_date, order_number) WHERE deleted_at IS NULL",
+				}
+				for _, statement := range statements {
+					if err := ctx.DB.Exec(statement).Error; err != nil {
+						return fmt.Errorf("rebuild partial order day-number index: %w", err)
+					}
 				}
 				return nil
 			},
