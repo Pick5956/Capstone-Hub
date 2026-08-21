@@ -30,7 +30,15 @@ const (
 	// exactly 2048 output tokens and returning truncated JSON, which the parser
 	// then rejected — the provider looked broken when it had simply run out of
 	// room. Only tokens actually produced are billed, so the headroom is free.
-	structuredPlannerMaxOutputTokens = 4096
+	// Groq reserves prompt + max_completion_tokens against the daily token
+	// budget before the call runs: a 429 body states "Requested 8675" for a
+	// 4,580-token prompt asking for 4,095 completion tokens. The budget is
+	// 200,000 tokens per DAY for the whole organisation, so every unused
+	// completion token asked for is a planning call that cannot happen today.
+	// The largest plan measured across every live run is 2,111 tokens, so this
+	// keeps a wide margin over that while buying back roughly a sixth of the
+	// day's calls. Raising it again is a capacity decision, not a free one.
+	structuredPlannerMaxOutputTokens = 3072
 )
 
 // groqStrictStructuredPlannerModels lists the Groq models that accept
@@ -195,6 +203,7 @@ func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, pay
 	// is gone (no key can fix it) and a 429 carries the wait the provider asked
 	// for, so the rotation below can park that key instead of rediscovering it.
 	if statusErr := classifyProviderResponse("Groq", "structured planner", model, resp); statusErr != nil {
+		logProviderRejection("Groq", model, resp.StatusCode, body)
 		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
@@ -360,6 +369,7 @@ func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, p
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner response could not be read")
 	}
 	if statusErr := classifyProviderResponse("Gemini", "structured planner", model, resp); statusErr != nil {
+		logProviderRejection("Gemini", model, resp.StatusCode, body)
 		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
@@ -689,4 +699,40 @@ func runPlannerKeyRotation(ctx context.Context, rotation plannerRotation) (Struc
 	}
 
 	return stats, fmt.Errorf("%s exhausted configured API keys: %w", rotation.label, lastErr)
+}
+
+// logProviderRejection prints the reason the provider gave for refusing the
+// call. Without it a rejection reads as a bare "provider_call failed": an
+// exhausted daily token budget, a withdrawn model and a malformed request all
+// look the same, and an investigation into the last one cost hours before the
+// message turned out to say "tokens per day (TPD): Limit 200000, Used 198085".
+// Only the provider status line is logged, never the prompt or the plan.
+func logProviderRejection(provider, model string, status int, body []byte) {
+	message := providerErrorMessage(body)
+	if message == "" {
+		message = "(ไม่มีรายละเอียดจาก provider)"
+	}
+	aiStage("warn", "%s structured planner ปฏิเสธคำขอ (HTTP %d, model=%s): %s", provider, status, model, message)
+}
+
+// providerErrorMessage pulls the human-readable reason out of an OpenAI-shaped
+// or Gemini-shaped error body.
+func providerErrorMessage(body []byte) string {
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	message := strings.TrimSpace(payload.Error.Message)
+	if message == "" {
+		message = strings.TrimSpace(payload.Error.Status)
+	}
+	if runes := []rune(message); len(runes) > 300 {
+		message = string(runes[:300]) + "…"
+	}
+	return message
 }

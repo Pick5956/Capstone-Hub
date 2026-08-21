@@ -162,9 +162,15 @@ func (h *providerKeyHealth) earliestRelease(provider string, keyCount int) time.
 // on a 429; x-ratelimit-reset-tokens ("7.66s") covers the per-minute window and
 // is present on every response.
 func retryAfterFromHeaders(header http.Header) time.Duration {
+	// An explicit retry-after is the provider stating the wait, not a guess, and
+	// it is the only signal that distinguishes a per-minute window from a daily
+	// one. Groq answers 429 with "tokens per day (TPD): Limit 200000 ... try again
+	// in 48m38s" once the org budget is gone; clamping that to 90 seconds turned
+	// one exhausted budget into twenty pointless retries that all looked like
+	// unexplained provider failures.
 	if raw := strings.TrimSpace(header.Get("retry-after")); raw != "" {
 		if seconds, err := strconv.ParseFloat(raw, 64); err == nil && seconds > 0 {
-			return capKeyCooldown(time.Duration(seconds * float64(time.Second)))
+			return capStatedCooldown(time.Duration(seconds * float64(time.Second)))
 		}
 	}
 	// Only the per-minute reset is a useful stand-in. x-ratelimit-reset-requests
@@ -183,6 +189,24 @@ func retryAfterFromHeaders(header http.Header) time.Duration {
 // run of evaluations lost most of its keys this way and looked like a broken
 // planner rather than a starved one.
 const maxKeyCooldown = 90 * time.Second
+
+// maxStatedCooldown bounds a wait the provider stated outright. It is far higher
+// than maxKeyCooldown because the two answer different questions: 90 seconds is
+// how long to trust our own inference from a per-minute header, while this is how
+// long to believe the provider when it names the wait itself. A daily budget that
+// is genuinely gone frees up in tens of minutes, and retrying through it wastes
+// the requests-per-day budget as well.
+const maxStatedCooldown = 30 * time.Minute
+
+func capStatedCooldown(d time.Duration) time.Duration {
+	if d > maxStatedCooldown {
+		return maxStatedCooldown
+	}
+	if d <= 0 {
+		return defaultKeyCooldown
+	}
+	return d
+}
 
 func capKeyCooldown(d time.Duration) time.Duration {
 	if d > maxKeyCooldown {

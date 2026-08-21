@@ -175,10 +175,30 @@ func indexOf(haystack, needle string) int {
 // The daily reset header reads 24-46 minutes on these keys, and using it as the
 // cooldown starved the rotation for the rest of an evaluation run.
 func TestKeyCooldownIsBounded(t *testing.T) {
+	// A wait the provider states outright is believed, because it is the only
+	// signal that separates a per-minute window from an exhausted daily budget.
+	// Groq answers 429 with retry-after 2919 ("tokens per day (TPD): Limit
+	// 200000") once the organisation budget is gone; capping that to 90 seconds
+	// produced twenty retries that could not have succeeded.
 	explicit := http.Header{}
 	explicit.Set("retry-after", "397") // 6m37s, as a provider actually returned
-	if got := retryAfterFromHeaders(explicit); got != maxKeyCooldown {
-		t.Fatalf("a long retry-after must be capped at %s, got %s", maxKeyCooldown, got)
+	if got := retryAfterFromHeaders(explicit); got != 397*time.Second {
+		t.Fatalf("a stated retry-after must be honoured, got %s", got)
+	}
+
+	// It is still bounded: a stated wait longer than the cap is trimmed.
+	veryLong := http.Header{}
+	veryLong.Set("retry-after", "7200")
+	if got := retryAfterFromHeaders(veryLong); got != maxStatedCooldown {
+		t.Fatalf("a stated wait beyond the cap must be trimmed to %s, got %s", maxStatedCooldown, got)
+	}
+
+	// A wait we inferred ourselves stays on the short leash: it is a guess, and
+	// holding a key back wrongly removes a quarter of the capacity.
+	inferred := http.Header{}
+	inferred.Set("x-ratelimit-reset-tokens", "5m")
+	if got := retryAfterFromHeaders(inferred); got != maxKeyCooldown {
+		t.Fatalf("an inferred wait must stay capped at %s, got %s", maxKeyCooldown, got)
 	}
 
 	// A short, honest wait is used as given.
