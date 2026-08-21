@@ -14,7 +14,12 @@ package service
 //
 // Run:
 //   AI_EVAL_ENABLED=1 AI_READINESS_CASES=20 \
-//     go test -tags ai_eval ./internal/service/ -run TestPlannerReadiness -v -timeout 3600s
+//     go test -tags ai_eval -count=1 ./internal/service/ -run TestPlannerReadiness -v -timeout 3600s
+//
+// -count=1 is required. Without it Go serves the cached result of the previous
+// run: the numbers come back byte for byte identical, down to the millisecond
+// timings, without a single provider call. An evaluation that silently replays
+// stale results is worse than none, because it still looks valid.
 
 import (
 	"context"

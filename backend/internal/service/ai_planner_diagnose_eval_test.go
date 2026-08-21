@@ -10,7 +10,9 @@ package service
 // validation failure.
 //
 // Run:
-//   AI_EVAL_ENABLED=1 go test -tags ai_eval ./internal/service/ -run TestPlannerDiagnose -v
+//   AI_EVAL_ENABLED=1 go test -tags ai_eval -count=1 ./internal/service/ -run TestPlannerDiagnose -v
+//
+// -count=1 keeps Go from replaying a cached result instead of calling providers.
 
 import (
 	"bytes"
