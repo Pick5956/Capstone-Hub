@@ -17,6 +17,11 @@ export interface MenuItem {
   image_url: string;
   description: string;
   is_available: boolean;
+  /**
+   * Portions still makeable from current stock after subtracting what queued orders
+   * have already claimed. Undefined/null means no recipe (not stock-limited); 0 = sold out.
+   */
+  remaining_servings?: number | null;
   display_order: number;
   category?: Category;
   categories?: MenuItemCategory[];

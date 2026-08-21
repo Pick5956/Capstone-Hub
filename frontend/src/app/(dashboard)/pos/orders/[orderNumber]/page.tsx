@@ -182,6 +182,8 @@ export default function PosOrderDetailPage() {
       saveError: "ทำรายการไม่สำเร็จ",
       noMenu: "ยังไม่มีเมนู",
       soldOut: "หมด",
+      lowStockLeft: "เหลือ",
+      servingUnit: "ที่",
     }
     : {
       denied: "You do not have permission to take orders.",
@@ -250,6 +252,8 @@ export default function PosOrderDetailPage() {
       saveError: "Could not complete the action.",
       noMenu: "No menu items.",
       soldOut: "Sold out",
+      lowStockLeft: "Only",
+      servingUnit: "left",
     };
 
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
@@ -920,14 +924,22 @@ export default function PosOrderDetailPage() {
             <div className="grid auto-rows-max grid-cols-3 content-start items-start gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
+                // remaining_servings === 0 means the queue already claimed the last
+                // portion, so block ordering even before the kitchen cooks it.
+                const soldOut = !item.is_available || item.remaining_servings === 0;
+                const lowStock = !soldOut && typeof item.remaining_servings === "number" && item.remaining_servings > 0 && item.remaining_servings <= 10;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || !item.is_available} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
-                    {!item.is_available && (
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
+                    {soldOut ? (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
                       </span>
-                    )}
+                    ) : lowStock ? (
+                      <span className="absolute left-2 top-2 z-10 rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-amber-400 dark:text-gray-950">
+                        {copy.lowStockLeft} {item.remaining_servings} {copy.servingUnit}
+                      </span>
+                    ) : null}
                     {orderedQuantity > 0 && (
                       <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
                         {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
@@ -1262,7 +1274,7 @@ export default function PosOrderDetailPage() {
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {filteredMenu.map((menu) => {
                           const needsOptions = hasRequiredOptions(menu);
-                          const disabled = submitting || !menu.is_available || needsOptions;
+                          const disabled = submitting || !menu.is_available || menu.remaining_servings === 0 || needsOptions;
                           return (
                             <button
                               key={menu.ID}

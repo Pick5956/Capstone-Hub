@@ -591,7 +591,7 @@ func TestPublicCustomerDTOsOmitSensitiveFields(t *testing.T) {
 		Order     *CustomerOrderDTO     `json:"order"`
 	}{
 		Table:     customerTableDTO(table),
-		MenuItems: customerMenuItemDTOs([]entity.MenuItem{menu}),
+		MenuItems: customerMenuItemDTOs([]entity.MenuItem{menu}, nil),
 		Order:     customerOrderDTO(order),
 	}
 	data, err := json.Marshal(payload)

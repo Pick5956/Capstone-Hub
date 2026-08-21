@@ -13,6 +13,11 @@ type MenuItem struct {
 	IsAvailable  bool    `json:"is_available" gorm:"default:true;index;index:idx_menu_items_catalog,priority:2"`
 	DisplayOrder int     `json:"display_order" gorm:"default:0;index:idx_menu_items_catalog,priority:3"`
 
+	// RemainingServings is computed at read time (not stored): how many more
+	// portions can still be made given current stock minus what queued orders have
+	// already claimed. nil means the item has no recipe, so it is not stock-limited.
+	RemainingServings *int `json:"remaining_servings,omitempty" gorm:"-"`
+
 	Restaurant   *Restaurant          `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 	Category     *Category            `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
 	Categories   []MenuItemCategory   `json:"categories,omitempty" gorm:"foreignKey:MenuItemID"`

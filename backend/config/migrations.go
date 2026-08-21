@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 13
+	CurrentSchemaVersion int64 = 14
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -249,6 +249,23 @@ func schemaMigrationPlan() []SchemaMigration {
 					if err := ctx.DB.Exec(statement).Error; err != nil {
 						return fmt.Errorf("rebuild partial order day-number index: %w", err)
 					}
+				}
+				return nil
+			},
+		},
+		{
+			Version: 14,
+			Name:    "waiter_default_drop_dashboard_tables",
+			Up: func(ctx *MigrationContext) error {
+				// The waiter default no longer grants view_dashboard or view_tables.
+				// Order-taking is unaffected: ListTables/UpdateTableStatus also accept
+				// take_order, and waiters land on /pos/tables. Update the global system
+				// waiter role in place; per-member permission overrides are untouched.
+				result := ctx.DB.Model(&entity.Role{}).
+					Where("name = ? AND restaurant_id IS NULL AND is_system = ?", "waiter", true).
+					Update("permissions", `["take_order","take_payment","view_orders"]`)
+				if result.Error != nil {
+					return fmt.Errorf("update waiter default permissions: %w", result.Error)
 				}
 				return nil
 			},

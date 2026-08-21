@@ -635,11 +635,11 @@ export default function PosTablesPage() {
                         <div className="mt-auto">
                           {order ? (
                             <div className="flex min-h-[22px] items-end justify-between gap-2">
-                              <p className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[12px] font-semibold tabular-nums text-gray-950 dark:text-white">
-                                <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden="true" />
+                              <p className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[12px] font-medium tabular-nums text-gray-500 dark:text-gray-400">
+                                <ReceiptText className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                                 <span className="truncate">{order.order_number}</span>
                               </p>
-                              <p className="shrink-0 text-[12px] font-semibold text-gray-600 dark:text-gray-300">฿{order.total_amount.toLocaleString()}</p>
+                              <p className="shrink-0 text-[12px] font-bold tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
                             </div>
                           ) : status === "reserved" && table.reservation_phone ? (
                             <p className="truncate text-[12px] font-semibold text-sky-700 dark:text-sky-200">{table.reservation_name ? `${table.reservation_name} · ` : ""}{copy.reservationInfo}: {table.reservation_phone}</p>
