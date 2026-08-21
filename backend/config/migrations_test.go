@@ -81,6 +81,14 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// migration and touches no baseline model, so the frozen registry
 		// fingerprint is unchanged from version 11.
 		12: "ff8fe0c5b93334a83a0d0595008a4dbab6c27986148edff3dfb6dd4445395b0f",
+		// Version 13 rebuilt idx_orders_restaurant_day_number_v2 as a partial unique
+		// index, which changed the Order model's gorm index tag — so the registry
+		// fingerprint advances here.
+		13: "fdad3196f5a6414532f5d5aa0236e815d0ec8970e1c69412c0cb000797fa0235",
+		// Version 14 reseeds the waiter role (data only). The menu availability read
+		// model also added a computed gorm:"-" field to MenuItem (no DB change); the
+		// fingerprint reflects the current models.
+		14: "fdad3196f5a6414532f5d5aa0236e815d0ec8970e1c69412c0cb000797fa0235",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
@@ -179,9 +187,10 @@ func TestRoleDisplayNameOverrideMigrationIsAdditiveVersionEleven(t *testing.T) {
 
 func TestAIOperatingCalendarMigrationIsAdditiveVersionTwelve(t *testing.T) {
 	plan := schemaMigrationPlan()
-	calendarMigration := plan[len(plan)-1]
+	// v12 is no longer the latest (v13/v14 follow), so index it directly.
+	calendarMigration := plan[11]
 	if calendarMigration.Version != 12 || calendarMigration.Name != "add_ai_operating_calendar" {
-		t.Fatalf("latest migration = %d %q, want version 12 AI operating calendar migration", calendarMigration.Version, calendarMigration.Name)
+		t.Fatalf("migration 12 = %d %q, want version 12 AI operating calendar migration", calendarMigration.Version, calendarMigration.Name)
 	}
 	if calendarMigration.Up == nil {
 		t.Fatal("AI operating calendar migration has no up function")

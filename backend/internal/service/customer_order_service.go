@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -222,6 +221,13 @@ func (s *CustomerOrderService) SubmitOrder(
 		if findErr != nil || lockedTable.ID != table.ID || lockedTable.RestaurantID != table.RestaurantID {
 			return errors.New("table QR code is no longer valid")
 		}
+		// Serialize order writes per restaurant so the per-item capacity checks in
+		// addCustomerItem can't race another table into overselling the same
+		// ingredient. Taken after the order/table row locks for a consistent lock
+		// order with the staff order flow (rows then advisory).
+		if err := tx.LockRestaurantOrderCounter(lockedTable.RestaurantID); err != nil {
+			return err
+		}
 		if order.PaymentStatus == entity.PaymentStatusPaid || isTerminalOrder(order.Status) {
 			return errors.New("order is already closed")
 		}
@@ -382,15 +388,10 @@ func addCustomerItem(
 	// Block the order the moment the queue has claimed the last portion, instead of
 	// letting the customer wait until the kitchen discovers the shortage. remaining
 	// already subtracts every queued item, including ones added earlier in this cart.
-	remaining, err := tx.MenuRemainingServings(restaurantID)
-	if err != nil {
+	// The submit transaction holds the per-restaurant order lock, so this check is
+	// safe against a concurrent order claiming the same stock.
+	if err := ensureMenuCapacity(tx, restaurantID, menu.ID, menu.Name, req.Quantity); err != nil {
 		return 0, err
-	}
-	if left, ok := remaining[menu.ID]; ok && req.Quantity > left {
-		if left <= 0 {
-			return 0, errors.New("menu item is sold out")
-		}
-		return 0, fmt.Errorf("only %d left for %s", left, menu.Name)
 	}
 	selectedOptions, optionsTotal, err := validateSelectedMenuOptions(menu, req.SelectedOptionIDs)
 	if err != nil {
