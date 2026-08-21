@@ -91,6 +91,14 @@ func readinessCaseLimit() int {
 	return limit
 }
 
+// skipLegacyRouter leaves the legacy comparison out of a run. The legacy score
+// does not move when only planner code changed, and asking for it again costs
+// another 3.3k tokens per question against the same 8k-per-minute key windows,
+// which halves how many questions fit in one run.
+func skipLegacyRouter() bool {
+	return strings.TrimSpace(os.Getenv("AI_READINESS_SKIP_LEGACY")) == "1"
+}
+
 func readinessPause() time.Duration {
 	raw := strings.TrimSpace(os.Getenv("AI_READINESS_PAUSE_SECONDS"))
 	if raw == "" {
@@ -186,6 +194,14 @@ func TestPlannerReadiness(t *testing.T) {
 			default:
 				outcome.PlannerTool = prepared.router.SuggestedTool
 			}
+		}
+
+		if skipLegacyRouter() {
+			outcome.LegacyFailed = true
+			outcomes = append(outcomes, outcome)
+			t.Logf("[%2d/%d] %-46s planner=%-32s legacy=(ข้าม)",
+				index+1, len(cases), truncateForLog(testCase.Question, 44), describeReadinessPlanner(outcome))
+			continue
 		}
 
 		legacyStart := time.Now()
@@ -314,7 +330,11 @@ func buildReadinessReport(outcomes []readinessOutcome) string {
 
 	fmt.Fprintf(&b, "ความถูกต้อง (เทียบกับเฉลยใน golden set)\n")
 	fmt.Fprintf(&b, "  planner      : %d/%d (%.1f%%)\n", plannerCorrect, total, percent(plannerCorrect))
-	fmt.Fprintf(&b, "  legacy       : %d/%d (%.1f%%)\n\n", legacyCorrect, total, percent(legacyCorrect))
+	if skipLegacyRouter() {
+		fmt.Fprintf(&b, "  legacy       : (ไม่ได้วัดรอบนี้ — ใช้ baseline เดิม 17/20)\n\n")
+	} else {
+		fmt.Fprintf(&b, "  legacy       : %d/%d (%.1f%%)\n\n", legacyCorrect, total, percent(legacyCorrect))
+	}
 
 	fmt.Fprintf(&b, "เทียบรายเคส\n")
 	fmt.Fprintf(&b, "  ถูกทั้งคู่        : %d\n", both)
