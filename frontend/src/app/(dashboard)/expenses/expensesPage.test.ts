@@ -34,6 +34,22 @@ describe("expenses page integration guards", () => {
     expect(pageSource).toMatch(/setForm\(\{\s*restaurantId,\s*id: expense\.ID,/);
   });
 
+  it("pages only the on-screen rows, never the exported ones", () => {
+    // The ledger list is the one place that slices; the PDF body, the print
+    // table and the row-cap notice all have to keep the whole month.
+    expect(pageSource).toContain("{visibleExpenses.map((expense) => (");
+    expect(pageSource).toContain("body: sortedExpenses.map((expense, index) => [");
+    expect(pageSource).toContain("{sortedExpenses.map((expense, index) => (");
+    expect(pageSource).not.toContain("visibleExpenses.length");
+  });
+
+  it("clamps the page instead of resetting it, so a shrinking list cannot strand the view", () => {
+    expect(pageSource).toContain(
+      "const pageCount = Math.max(1, Math.ceil(scopedData.expenses.length / pageSize));",
+    );
+    expect(pageSource).toContain("const currentPage = Math.min(page, pageCount);");
+  });
+
   it("gives the ledger row and its delete action meaningful accessible names", () => {
     // Edit is the row itself now, so the row carries the name a button used to.
     expect(pageSource).toContain('"aria-label": `${copy.edit}: ${expense.note || copy.categories[expense.category]}`');
