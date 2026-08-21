@@ -61,6 +61,19 @@ const categoryDotClass: Record<ExpenseCategory, string> = {
   other: "bg-gray-400",
 };
 
+// Filter chips carry a light tint of the same hue as the row dot, so the six
+// categories are told apart at a glance. Selection is a neutral ring, not a
+// solid fill - a filled chip would bury the tint it is supposed to show.
+const categoryChipClass: Record<"all" | ExpenseCategory, string> = {
+  all: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900",
+  ingredient: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200 dark:hover:bg-emerald-900/50",
+  labor: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/50 dark:text-sky-200 dark:hover:bg-sky-900/50",
+  rent: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50",
+  utilities: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/50 dark:text-indigo-200 dark:hover:bg-indigo-900/50",
+  equipment: "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/50",
+  other: "border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200 dark:hover:bg-gray-800",
+};
+
 function emptyForm(restaurantId: number | null): FormState {
   return { restaurantId, id: null, category: "ingredient", amount: "", spent_at: toDashboardDate(new Date()), note: "" };
 }
@@ -152,8 +165,6 @@ export default function ExpensesPage() {
             denied: "ไม่มีสิทธิ์ดูรายจ่าย",
             categories: { ingredient: "วัตถุดิบ", labor: "ค่าแรง", rent: "ค่าเช่า", utilities: "ค่าน้ำ/ไฟ", equipment: "อุปกรณ์", other: "อื่นๆ" } as Record<ExpenseCategory, string>,
             all: "ทั้งหมด",
-            previousMonth: "เดือนก่อน",
-            nextMonth: "เดือนถัดไป",
             monthTotal: "รวมทั้งเดือน",
             entries: "รายการ",
             add: "เพิ่มรายจ่าย",
@@ -184,8 +195,6 @@ export default function ExpensesPage() {
             denied: "You do not have permission to view expenses.",
             categories: { ingredient: "Supplies", labor: "Wages", rent: "Rent", utilities: "Utilities", equipment: "Equipment", other: "Other" } as Record<ExpenseCategory, string>,
             all: "All",
-            previousMonth: "Previous month",
-            nextMonth: "Next month",
             monthTotal: "Month total",
             entries: "entries",
             add: "Add expense",
@@ -218,9 +227,27 @@ export default function ExpensesPage() {
   const locale = language === "th" ? "th-TH" : "en-US";
   const monthStart = toDashboardDate(monthDate);
   const monthEnd = toDashboardDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
-  const monthLabel = monthDate.toLocaleDateString(locale, { month: "long", year: "numeric" });
-  const canGoNextMonth = monthDate.getTime() < new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const monthLabel = monthDate.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  const monthValue = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`;
+  // ponytail: a fixed two-year window back from today rather than the
+  // restaurant's real first expense - the list endpoint never reports one.
+  // Widen the count if anyone needs to look further back.
+  const monthOptions = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, offset) => {
+        const date = new Date(new Date().getFullYear(), new Date().getMonth() - offset, 1);
+        return {
+          value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+          label: date.toLocaleDateString(locale, { month: "short", year: "numeric" }),
+        };
+      }),
+    [locale],
+  );
   const scopedData = canView && data.restaurantId === restaurantId ? data : EMPTY_EXPENSE_DATA;
+  // Category totals come back month-wide even while a filter is on, so the "all"
+  // chip sums them rather than reading scopedData.total, which tracks the
+  // filtered rows and would collapse to one category's number.
+  const monthTotal = scopedData.categories.reduce((sum, item) => sum + item.amount, 0);
 
   const load = useCallback(async () => {
     const requestedRestaurantId = restaurantId;
@@ -303,7 +330,10 @@ export default function ExpensesPage() {
 
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
-  const shiftMonth = (delta: number) => setMonthDate((date) => new Date(date.getFullYear(), date.getMonth() + delta, 1));
+  const selectMonth = (value: string) => {
+    const [year, month] = value.split("-").map(Number);
+    setMonthDate(new Date(year, month - 1, 1));
+  };
   const inputClass =
     "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:focus:border-white";
 
@@ -312,18 +342,6 @@ export default function ExpensesPage() {
       eyebrow={copy.eyebrow}
       title={copy.title}
       hideHeaderText
-      actions={
-        <>
-          <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            {copy.back}
-          </Link>
-          <button type="button" onClick={() => window.print()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            <Printer className="h-4 w-4" aria-hidden="true" />
-            {copy.exportPdf}
-          </button>
-        </>
-      }
     >
       {/* Print = the browser's own "Save as PDF". No PDF library. */}
       <style>{`@media print {
@@ -351,54 +369,51 @@ export default function ExpensesPage() {
       }`}</style>
 
       <div id="expense-print">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 print:border-0">
-          <button type="button" onClick={() => shiftMonth(-1)} aria-label={copy.previousMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">‹</button>
-          <span className="min-w-[150px] px-3 py-2 text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100 print:px-0 print:text-left print:text-[16px]">{monthLabel}</span>
-          <button type="button" disabled={!canGoNextMonth} onClick={() => shiftMonth(1)} aria-label={copy.nextMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">›</button>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
-          <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(scopedData.total, language)}</p>
-          <p className="text-[11px] text-gray-500">{scopedData.entries} {copy.entries}</p>
-        </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {canEdit ? (
+          <button type="button" onClick={openAdd} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 print:hidden">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            {copy.add}
+          </button>
+        ) : (
+          <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
+        )}
+        <ThemedSelect value={monthValue} onChange={selectMonth} options={monthOptions} className="w-[140px] print:hidden" />
+        {/* The picker itself is screen-only, so the PDF keeps a plain month heading. */}
+        <span className="hidden text-[16px] font-semibold print:block">{monthLabel}</span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400 print:hidden">{scopedData.entries} {copy.entries}</span>
+        {/* Icon-only, so the label has to survive as an accessible name. */}
+        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <button type="button" onClick={() => window.print()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+          <Printer className="h-4 w-4" aria-hidden="true" />
+          {copy.exportPdf}
+        </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
+      <div className="mb-4 flex flex-wrap gap-1.5 print:hidden">
         {(["all", ...expenseCategories] as const).map((value) => {
-          const total = scopedData.categories.find((item) => item.category === value);
+          const amount = value === "all" ? monthTotal : scopedData.categories.find((item) => item.category === value)?.amount ?? 0;
           return (
             <button
               key={value}
               type="button"
               onClick={() => setCategoryFilter(value)}
-              className={`ui-press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                categoryFilter === value
-                  ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+              className={`ui-press inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-colors ${categoryChipClass[value]} ${
+                categoryFilter === value ? "ring-2 ring-gray-900 dark:ring-white" : ""
               }`}
             >
               {value === "all" ? copy.all : copy.categories[value]}
-              {total ? (
-                <span className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${categoryFilter === value ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"}`}>
-                  {formatCurrency(total.amount, language)}
-                </span>
-              ) : null}
+              <span className="rounded-full bg-white/70 px-1.5 text-[10px] tabular-nums dark:bg-black/30">
+                {formatCurrency(amount, language)}
+              </span>
             </button>
           );
         })}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300 print:hidden">{error}</div>}
-
-      {canEdit ? (
-        <button type="button" onClick={openAdd} className="ui-press mb-4 inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 print:hidden">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {copy.add}
-        </button>
-      ) : (
-        <p className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
-      )}
 
       {/* Print-only ledger. A real <table> so the browser repeats <thead> on every page. */}
       <table className="hidden print:table">
