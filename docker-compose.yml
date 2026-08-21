@@ -43,8 +43,8 @@ x-backend-environment: &backend-environment
   GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
   GROQ_PLANNER_MODEL: ${GROQ_PLANNER_MODEL:-openai/gpt-oss-20b}
   GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
-  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-  GEMINI_PLANNER_MODEL: ${GEMINI_PLANNER_MODEL:-gemini-3.6-flash}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+  GEMINI_PLANNER_MODEL: ${GEMINI_PLANNER_MODEL:-gemini-3.5-flash-lite}
 
 services:
   postgres:

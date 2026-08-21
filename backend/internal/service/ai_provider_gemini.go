@@ -86,7 +86,7 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 func (s *AIService) executeClassifierGemini(question string, apiKey string) (string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini classifier model=%s", model)
 
@@ -138,7 +138,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 func (s *AIService) executeGemini(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string, candidateTools []AIToolName) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini analytical model=%s", model)
 
@@ -211,7 +211,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 func (s *AIService) executeGeminiConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini conversation model=%s", model)
 
@@ -406,7 +406,7 @@ func (s *AIService) getGeminiToolsForCandidates(candidates []AIToolName) []gemin
 func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini second-round model=%s", model)
 	payload := geminiGenerateRequest{

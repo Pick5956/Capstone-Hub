@@ -111,7 +111,7 @@ Return ONLY the JSON object.`
 func (s *AIService) executeReceiptGemini(imageBase64, mimeType, apiKey string) (*ReceiptDraft, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini receipt-scan model=%s", model)
 
