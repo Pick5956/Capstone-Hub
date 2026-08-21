@@ -164,15 +164,34 @@ func (h *providerKeyHealth) earliestRelease(provider string, keyCount int) time.
 func retryAfterFromHeaders(header http.Header) time.Duration {
 	if raw := strings.TrimSpace(header.Get("retry-after")); raw != "" {
 		if seconds, err := strconv.ParseFloat(raw, 64); err == nil && seconds > 0 {
-			return time.Duration(seconds * float64(time.Second))
+			return capKeyCooldown(time.Duration(seconds * float64(time.Second)))
 		}
 	}
-	for _, name := range []string{"x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"} {
-		if d, ok := parseGoDurationHeader(header.Get(name)); ok {
-			return d
-		}
+	// Only the per-minute reset is a useful stand-in. x-ratelimit-reset-requests
+	// is the daily window — measured at 24 to 46 minutes on these keys — so using
+	// it would retire a key for most of an hour over a limit that clears in one.
+	if d, ok := parseGoDurationHeader(header.Get("x-ratelimit-reset-tokens")); ok {
+		return capKeyCooldown(d)
 	}
 	return defaultKeyCooldown
+}
+
+// maxKeyCooldown bounds how long one 429 can take a key out of rotation.
+// Parking too long is far more expensive than parking too briefly: a key that is
+// still limited costs one cheap failed request and is parked again, while a key
+// wrongly held back removes a quarter of the capacity for the whole window. A
+// run of evaluations lost most of its keys this way and looked like a broken
+// planner rather than a starved one.
+const maxKeyCooldown = 90 * time.Second
+
+func capKeyCooldown(d time.Duration) time.Duration {
+	if d > maxKeyCooldown {
+		return maxKeyCooldown
+	}
+	if d <= 0 {
+		return defaultKeyCooldown
+	}
+	return d
 }
 
 // parseGoDurationHeader reads Groq's "2m59.56s" / "7.66s" reset values.

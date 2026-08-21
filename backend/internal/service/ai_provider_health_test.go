@@ -170,3 +170,35 @@ func indexOf(haystack, needle string) int {
 	}
 	return -1
 }
+
+// One 429 must never retire a key for longer than the window it is waiting on.
+// The daily reset header reads 24-46 minutes on these keys, and using it as the
+// cooldown starved the rotation for the rest of an evaluation run.
+func TestKeyCooldownIsBounded(t *testing.T) {
+	explicit := http.Header{}
+	explicit.Set("retry-after", "397") // 6m37s, as a provider actually returned
+	if got := retryAfterFromHeaders(explicit); got != maxKeyCooldown {
+		t.Fatalf("a long retry-after must be capped at %s, got %s", maxKeyCooldown, got)
+	}
+
+	// A short, honest wait is used as given.
+	short := http.Header{}
+	short.Set("retry-after", "7")
+	if got := retryAfterFromHeaders(short); got != 7*time.Second {
+		t.Fatalf("a short retry-after must be honoured, got %s", got)
+	}
+
+	// The daily reset window must not be mistaken for the per-minute one.
+	daily := http.Header{}
+	daily.Set("x-ratelimit-reset-requests", "24m28.8s")
+	if got := retryAfterFromHeaders(daily); got != defaultKeyCooldown {
+		t.Fatalf("the daily reset must not become the cooldown, got %s", got)
+	}
+
+	// The per-minute reset still drives the wait.
+	perMinute := http.Header{}
+	perMinute.Set("x-ratelimit-reset-tokens", "7.66s")
+	if got := retryAfterFromHeaders(perMinute); got < 7*time.Second || got > 8*time.Second {
+		t.Fatalf("expected roughly 7.66s from the per-minute reset, got %s", got)
+	}
+}
