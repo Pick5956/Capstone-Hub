@@ -114,16 +114,6 @@ func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T)
 		t.Fatal(err)
 	}
 
-	var unknownRoot map[string]any
-	if err := json.Unmarshal([]byte(validJSON), &unknownRoot); err != nil {
-		t.Fatal(err)
-	}
-	unknownRoot["unexpected"] = true
-	unknownRootJSON, err := json.Marshal(unknownRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var missingAction map[string]any
 	if err := json.Unmarshal([]byte(validJSON), &missingAction); err != nil {
 		t.Fatal(err)
@@ -162,7 +152,6 @@ func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T)
 		"missing root action":  string(missingActionJSON),
 		"missing action arg":   string(missingActionArgumentJSON),
 		"missing nested field": string(missingNestedJSON),
-		"unknown root field":   string(unknownRootJSON),
 	}
 	for name, raw := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -399,5 +388,42 @@ func TestParseStructuredPlannerResolvedPlanAcceptsNullForEmptyLists(t *testing.T
 	broken := strings.Replace(string(validJSON), `"task":`, `"task":null,"ignored":`, 1)
 	if _, err := ParseStructuredPlannerResolvedPlan(broken, "hello"); err == nil {
 		t.Fatal("a null on a required scalar field must still be rejected")
+	}
+}
+
+// An unknown field is ignored, not fatal. Groq's gpt-oss-20b wrote a whole
+// correct plan and then appended one stray "resolved_plan" key; rejecting the
+// answer over it lost the plan and the user got an apology. Nothing unknown
+// reaches any code, and a renamed field is still caught, because the name the
+// contract requires would then be missing.
+func TestParseStructuredPlannerIgnoresUnknownFields(t *testing.T) {
+	validJSON := structuredPlannerTestJSON(t, structuredPlannerTestPlan("hello"))
+	var withExtra map[string]any
+	if err := json.Unmarshal([]byte(validJSON), &withExtra); err != nil {
+		t.Fatal(err)
+	}
+	withExtra["unexpected"] = true
+	withExtra["resolved_plan"] = "{\"metrics\":[]}"
+	encoded, err := json.Marshal(withExtra)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := ParseStructuredPlannerResolvedPlan(string(encoded), "hello")
+	if err != nil {
+		t.Fatalf("คีย์นอกสัญญาไม่ควรทำให้แผนที่ถูกต้องถูกทิ้ง: %v", err)
+	}
+	if plan.Task != AITaskGeneralChat {
+		t.Fatalf("task = %q, want %q", plan.Task, AITaskGeneralChat)
+	}
+
+	// A missing required field must still fail: that is what strictness was for.
+	delete(withExtra, "tool_hint")
+	encoded, err = json.Marshal(withExtra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseStructuredPlannerResolvedPlan(string(encoded), "hello"); err == nil {
+		t.Fatal("ฟิลด์ที่สัญญาบังคับหายไป ต้องยังถูกปฏิเสธ")
 	}
 }

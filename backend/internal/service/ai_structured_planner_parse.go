@@ -47,12 +47,22 @@ func ParseStructuredPlannerResolvedPlan(rawJSON string, trustedOriginalQuestion 
 	// both often enough that it cost a whole plan in live measurement, so an entry
 	// written as {"field":"task",...} is read as the name it already carries.
 	rawJSON, shape = coerceStructuredPlannerMissingFields(rawJSON, shape)
+	// The nullable object fields get the same treatment as the lists above, for
+	// the same reason: gpt-oss-20b writes "ranking": [] to say there is no
+	// ranking. An empty list and null say the same thing here, and rejecting the
+	// spelling threw away two complete, correct plans in live measurement.
+	rawJSON, shape = coerceStructuredPlannerEmptyObjects(rawJSON, shape)
 	if err := validateStructuredPlannerWireShape(shape); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
 
+	// Unknown fields are ignored rather than fatal. Every field the contract needs
+	// has already been checked for presence and type above, so an extra key adds
+	// nothing and reaches no code: it cannot be a renamed field slipping through,
+	// because the real name would then be missing. Being strict here cost a
+	// complete and correct plan in live measurement, where the model appended one
+	// stray "resolved_plan" key after writing the whole plan correctly.
 	decoder := json.NewDecoder(bytes.NewBufferString(rawJSON))
-	decoder.DisallowUnknownFields()
 	var plan ResolvedPlan
 	if err := decoder.Decode(&plan); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
@@ -277,6 +287,44 @@ func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) 
 				continue
 			}
 			nested[key] = []any{}
+			changed = true
+		}
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// structuredPlannerNullableObjectFields are the contract's object-or-null fields.
+var structuredPlannerNullableObjectFields = map[string][]string{
+	"parameters": {"time_range", "compare_time_range", "day_part", "ranking"},
+}
+
+// coerceStructuredPlannerEmptyObjects rewrites an empty list written in place of
+// a nullable object to null. A non-empty list is left alone, so a model that
+// genuinely sent the wrong shape still fails validation.
+func coerceStructuredPlannerEmptyObjects(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	changed := false
+	for parent, keys := range structuredPlannerNullableObjectFields {
+		nested, nestedOK := root[parent].(map[string]any)
+		if !nestedOK {
+			continue
+		}
+		for _, key := range keys {
+			list, isList := nested[key].([]any)
+			if !isList || len(list) != 0 {
+				continue
+			}
+			nested[key] = nil
 			changed = true
 		}
 	}
