@@ -31,37 +31,47 @@ type aiReadCapability struct {
 	Domain  ResolvedPlanDomain
 	Metrics []ResolvedPlanMetric
 	Order   int
+	// Direction is set only where two tools read the same metric from opposite
+	// ends: best sellers against slow movers, best margin against worst. Without
+	// it the two are scored identically and the one listed first always wins, so
+	// "which dish has the worst margin" could not be answered at all.
+	Direction ResolvedPlanRankDirection
+	// Operation is the question shape this tool is built to answer. Several tools
+	// in a domain read the same metric and differ only in what is being asked of
+	// it: revenue summarised for a period, revenue retrieved for one day, revenue
+	// compared over time. Without it the first tool listed answered all three.
+	Operation ResolvedPlanOperation
 }
 
 var aiReadCapabilities = []aiReadCapability{
 	// Public documentation tools read the embedded catalog only. They never
 	// receive a restaurant ID or act as authorization for a write operation.
-	{AIToolSearchSystemDocs, ResolvedPlanDomainProduct, nil, 0},
-	{AIToolReadSystemDoc, ResolvedPlanDomainProduct, nil, 1},
+	{AIToolSearchSystemDocs, ResolvedPlanDomainProduct, nil, 0, "", ""},
+	{AIToolReadSystemDoc, ResolvedPlanDomainProduct, nil, 1, "", ""},
 
-	{AIToolGetStoreSummary, ResolvedPlanDomainRestaurant, []ResolvedPlanMetric{ResolvedPlanMetricOverview}, 0},
+	{AIToolGetStoreSummary, ResolvedPlanDomainRestaurant, []ResolvedPlanMetric{ResolvedPlanMetricOverview}, 0, "", ResolvedPlanOperationSummarize},
 
-	{AIToolGetSalesSummary, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricOverview, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount}, 0},
-	{AIToolGetSalesForPeriod, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount, ResolvedPlanMetricDataCoverage}, 1},
-	{AIToolGetSalesTrend, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricSalesTrend, ResolvedPlanMetricRevenue}, 2},
-	{AIToolGetAverageOrderValue, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricAverageOrder}, 3},
-	{AIToolGetOrderTypeBreakdown, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricOrderTypeShare, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount}, 4},
-	{AIToolGetPeakPeriods, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricPeakPeriod}, 5},
+	{AIToolGetSalesSummary, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricOverview, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount}, 0, "", ResolvedPlanOperationSummarize},
+	{AIToolGetSalesForPeriod, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount, ResolvedPlanMetricDataCoverage}, 1, "", ResolvedPlanOperationRetrieve},
+	{AIToolGetSalesTrend, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricSalesTrend, ResolvedPlanMetricRevenue}, 2, "", ResolvedPlanOperationTrend},
+	{AIToolGetAverageOrderValue, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricAverageOrder}, 3, "", ResolvedPlanOperationRetrieve},
+	{AIToolGetOrderTypeBreakdown, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricOrderTypeShare, ResolvedPlanMetricRevenue, ResolvedPlanMetricOrderCount}, 4, "", ResolvedPlanOperationBreakdown},
+	{AIToolGetPeakPeriods, ResolvedPlanDomainSales, []ResolvedPlanMetric{ResolvedPlanMetricPeakPeriod}, 5, "", ResolvedPlanOperationBreakdown},
 
-	{AIToolGetTopSellingMenus, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricQuantity, ResolvedPlanMetricOverview}, 0},
-	{AIToolGetMenuRevenueRanking, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricRevenue}, 1},
-	{AIToolGetHighestMarginMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricMargin, ResolvedPlanMetricProfit}, 2},
-	{AIToolGetLowestMarginMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricMargin}, 3},
-	{AIToolGetLowestCostMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricCost}, 4},
-	{AIToolGetMostExpensiveMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricPrice}, 5},
-	{AIToolGetSlowMovingMenus, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricQuantity}, 6},
-	{AIToolGetMenuEngineering, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricOverview, ResolvedPlanMetricMargin, ResolvedPlanMetricQuantity}, 7},
+	{AIToolGetTopSellingMenus, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricQuantity, ResolvedPlanMetricOverview}, 0, ResolvedPlanRankHigh, ResolvedPlanOperationRank},
+	{AIToolGetMenuRevenueRanking, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricRevenue}, 1, "", ResolvedPlanOperationRank},
+	{AIToolGetHighestMarginMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricMargin, ResolvedPlanMetricProfit}, 2, ResolvedPlanRankHigh, ResolvedPlanOperationRank},
+	{AIToolGetLowestMarginMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricMargin}, 3, ResolvedPlanRankLow, ResolvedPlanOperationRank},
+	{AIToolGetLowestCostMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricCost}, 4, ResolvedPlanRankLow, ResolvedPlanOperationRank},
+	{AIToolGetMostExpensiveMenu, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricPrice}, 5, "", ResolvedPlanOperationRank},
+	{AIToolGetSlowMovingMenus, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricQuantity}, 6, ResolvedPlanRankLow, ResolvedPlanOperationRank},
+	{AIToolGetMenuEngineering, ResolvedPlanDomainMenu, []ResolvedPlanMetric{ResolvedPlanMetricOverview, ResolvedPlanMetricMargin, ResolvedPlanMetricQuantity}, 7, "", ResolvedPlanOperationAnalyze},
 
-	{AIToolGetLowStockIngredients, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricStockLevel, ResolvedPlanMetricStatus, ResolvedPlanMetricOverview}, 0},
-	{AIToolGetInventoryValuation, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricInventoryValue, ResolvedPlanMetricOverview}, 1},
-	{AIToolGetIngredientReorderForecast, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricDaysLeft, ResolvedPlanMetricUsage}, 2},
-	{AIToolGetDeadStock, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricDeadStock, ResolvedPlanMetricUsage}, 3},
-	{AIToolGetTopCostIngredients, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricCost, ResolvedPlanMetricUsage}, 4},
+	{AIToolGetLowStockIngredients, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricStockLevel, ResolvedPlanMetricStatus, ResolvedPlanMetricOverview}, 0, "", ResolvedPlanOperationList},
+	{AIToolGetInventoryValuation, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricInventoryValue, ResolvedPlanMetricOverview}, 1, "", ResolvedPlanOperationRetrieve},
+	{AIToolGetIngredientReorderForecast, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricDaysLeft, ResolvedPlanMetricUsage}, 2, "", ResolvedPlanOperationForecast},
+	{AIToolGetDeadStock, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricDeadStock, ResolvedPlanMetricUsage}, 3, "", ResolvedPlanOperationList},
+	{AIToolGetTopCostIngredients, ResolvedPlanDomainInventory, []ResolvedPlanMetric{ResolvedPlanMetricCost, ResolvedPlanMetricUsage}, 4, ResolvedPlanRankHigh, ResolvedPlanOperationRank},
 }
 
 // AuthorizeResolvedPlan enforces tenant, owner, read-only, argument and tool
@@ -129,6 +139,23 @@ func CandidateToolsForResolvedPlan(plan ResolvedPlan) []AIToolName {
 		for _, metric := range capability.Metrics {
 			if _, ok := metrics[metric]; ok {
 				score += 100
+			}
+		}
+		// Direction and operation refine a choice the metrics already narrowed;
+		// they never make a tool that reads none of the requested metrics win.
+		// Ungated, "which menu earns the most" went to the best-seller tool purely
+		// because that question ranks from the top.
+		if score > 10 {
+			// Which end of the ranking is asked for is part of the question, not
+			// decoration: it is the only thing separating best sellers from slow
+			// movers. It outranks one shared metric so the pair is decided by the
+			// direction, and stays well below tool_hint.
+			if capability.Direction != "" && plan.Parameters.Ranking != nil &&
+				capability.Direction == plan.Parameters.Ranking.Direction {
+				score += 150
+			}
+			if capability.Operation != "" && capability.Operation == plan.Operation {
+				score += 150
 			}
 		}
 		scored = append(scored, scoredCapability{capability: capability, score: score})

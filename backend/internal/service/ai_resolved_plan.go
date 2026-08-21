@@ -441,6 +441,7 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.Parameters.Metrics = normalizeUniqueEnums(p.Parameters.Metrics)
 	p.Parameters.GroupBy = normalizeUniqueEnums(p.Parameters.GroupBy)
 	p.Parameters.GroupBy = fillImpliedGroupBy(p.Domain, p.Operation, p.Parameters.GroupBy)
+	p.Parameters.Metrics = fillImpliedMetrics(p.Domain, p.Operation, p.Parameters.Metrics)
 	p.Parameters.Entities = normalizeEntities(p.Parameters.Entities)
 	p.Parameters.TimeRange = normalizeTimeRange(p.Parameters.TimeRange)
 	p.Parameters.CompareTimeRange = normalizeTimeRange(p.Parameters.CompareTimeRange)
@@ -884,10 +885,17 @@ func taskAllowsOperation(task AITask, operation ResolvedPlanOperation) bool {
 		// menu earns the best margin" is analysis that happens to be ordered.
 		// retrieve_fact already allowed it, so excluding it here only decided the
 		// outcome by which of two interchangeable labels the model picked.
+		//
+		// retrieve, list and detail are here for exactly that reason too. The
+		// golden set labels "how much did we sell yesterday" and "what is running
+		// low in stock" as analyze_data, and their natural operations are retrieve
+		// and list; rejecting the pair threw away the whole plan and the user saw
+		// an apology, decided by nothing but which of two labels the model chose.
 		return containsValue([]ResolvedPlanOperation{
 			ResolvedPlanOperationAnalyze, ResolvedPlanOperationCompare, ResolvedPlanOperationSummarize,
 			ResolvedPlanOperationBreakdown, ResolvedPlanOperationTrend, ResolvedPlanOperationForecast,
-			ResolvedPlanOperationRank,
+			ResolvedPlanOperationRank, ResolvedPlanOperationRetrieve, ResolvedPlanOperationList,
+			ResolvedPlanOperationDetail,
 		}, operation)
 	case AITaskRecommendAction, AITaskRestaurantAdvice:
 		return operation == ResolvedPlanOperationRecommend || operation == ResolvedPlanOperationDraftAction
@@ -1166,6 +1174,25 @@ func qualifyPlanField(field ResolvedPlanField) ResolvedPlanField {
 		return qualified
 	}
 	return field
+}
+
+// fillImpliedMetrics supplies the metric an operation states outright. A sales
+// question asking for a trend is a sales_trend question whether or not the model
+// also wrote the metric down, and without it the plan scores identically to a
+// plain revenue total and is routed to the summary tool - which is what happened
+// to "is revenue up or down against last week" in live measurement.
+func fillImpliedMetrics(
+	domain ResolvedPlanDomain,
+	operation ResolvedPlanOperation,
+	metrics []ResolvedPlanMetric,
+) []ResolvedPlanMetric {
+	if domain != ResolvedPlanDomainSales || operation != ResolvedPlanOperationTrend {
+		return metrics
+	}
+	if containsValue(metrics, ResolvedPlanMetricSalesTrend) {
+		return metrics
+	}
+	return append([]ResolvedPlanMetric{ResolvedPlanMetricSalesTrend}, metrics...)
 }
 
 func fillImpliedGroupBy(
