@@ -182,3 +182,52 @@ func TestNormalizeDropsRankingForOperationsThatCannotOrder(t *testing.T) {
 		t.Fatal("a ranking on a recommendation must be preserved")
 	}
 }
+
+// Groq returned this exact plan for "วัตถุดิบไหนใกล้หมด": correct in every
+// respect except that resolution.missing_fields copied the object shape of its
+// neighbour inherited_fields. The name it carries is what the contract wants.
+func TestMissingFieldsWrittenAsObjectsAreReadAsNames(t *testing.T) {
+	raw := `{"schema_version":"1.1","original_question":"วัตถุดิบไหนใกล้หมด",` +
+		`"resolved_question":"Which ingredients are near depletion?","task":"unclear",` +
+		`"domain":"inventory","operation":"clarify","action":null,` +
+		`"parameters":{"metrics":[],"group_by":[],"entities":[],"time_range":null,` +
+		`"compare_time_range":null,"day_part":null,"filters":[],"ranking":null},` +
+		`"tool_hint":"","resolution":{"inherited_fields":[],` +
+		`"missing_fields":[{"field":"task","source":"conversation_history","source_turn_id":"1"},` +
+		`{"field":"domain","source":"conversation_history","source_turn_id":"1"}],` +
+		`"needs_clarification":true,"clarification_question":"ช่วยระบุช่วงเวลาด้วยครับ","confidence":0.6},` +
+		`"policy":{"risk":"low","read_only":true,"requires_confirmation":false},"response_style":"normal"}`
+
+	plan, err := ParseStructuredPlannerResolvedPlan(raw, "วัตถุดิบไหนใกล้หมด")
+	if err != nil {
+		t.Fatalf("object-shaped missing_fields should be read as names, got: %v", err)
+	}
+	if len(plan.Resolution.MissingFields) != 2 {
+		t.Fatalf("expected both names to survive, got %v", plan.Resolution.MissingFields)
+	}
+	if plan.Resolution.MissingFields[0] != ResolvedPlanField("task") {
+		t.Fatalf("expected the field name, got %q", plan.Resolution.MissingFields[0])
+	}
+}
+
+// Plain names keep working, and an object with no usable name is still refused.
+func TestMissingFieldsCoercionLeavesOtherShapesAlone(t *testing.T) {
+	base := `{"schema_version":"1.1","original_question":"q","resolved_question":"q",` +
+		`"task":"unclear","domain":"inventory","operation":"clarify","action":null,` +
+		`"parameters":{"metrics":[],"group_by":[],"entities":[],"time_range":null,` +
+		`"compare_time_range":null,"day_part":null,"filters":[],"ranking":null},` +
+		`"tool_hint":"","resolution":{"inherited_fields":[],` +
+		`"missing_fields":%s,"needs_clarification":true,` +
+		`"clarification_question":"ระบุเพิ่มหน่อยครับ","confidence":0.5},` +
+		`"policy":{"risk":"low","read_only":true,"requires_confirmation":false},"response_style":"normal"}`
+
+	plain := strings.Replace(base, "%s", `["task"]`, 1)
+	if _, err := ParseStructuredPlannerResolvedPlan(plain, "q"); err != nil {
+		t.Fatalf("a plain list of names must still parse: %v", err)
+	}
+
+	nameless := strings.Replace(base, "%s", `[{"source":"conversation_history"}]`, 1)
+	if _, err := ParseStructuredPlannerResolvedPlan(nameless, "q"); err == nil {
+		t.Fatal("an object with no field name must still be rejected")
+	}
+}

@@ -42,6 +42,11 @@ func ParseStructuredPlannerResolvedPlan(rawJSON string, trustedOriginalQuestion 
 	// over that spelling cost correct routing in live measurement, so the two are
 	// folded together here, at the wire boundary, before anything is validated.
 	rawJSON, shape = coerceStructuredPlannerNullArrays(rawJSON, shape)
+	// resolution.missing_fields is a list of field names, while the neighbouring
+	// inherited_fields is a list of objects. Models copy the object shape into
+	// both often enough that it cost a whole plan in live measurement, so an entry
+	// written as {"field":"task",...} is read as the name it already carries.
+	rawJSON, shape = coerceStructuredPlannerMissingFields(rawJSON, shape)
 	if err := validateStructuredPlannerWireShape(shape); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
@@ -278,6 +283,51 @@ func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) 
 	if !changed {
 		return rawJSON, shape
 	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// coerceStructuredPlannerMissingFields flattens objects in
+// resolution.missing_fields down to the field name they name. Anything that is
+// not an object with a string "field" is left untouched, so a genuinely
+// malformed value still fails validation.
+func coerceStructuredPlannerMissingFields(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	resolution, ok := root["resolution"].(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	entries, ok := resolution["missing_fields"].([]any)
+	if !ok {
+		return rawJSON, shape
+	}
+
+	changed := false
+	flattened := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		object, isObject := entry.(map[string]any)
+		if !isObject {
+			flattened = append(flattened, entry)
+			continue
+		}
+		name, isString := object["field"].(string)
+		if !isString || strings.TrimSpace(name) == "" {
+			flattened = append(flattened, entry)
+			continue
+		}
+		flattened = append(flattened, name)
+		changed = true
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	resolution["missing_fields"] = flattened
 	patched, err := json.Marshal(root)
 	if err != nil {
 		return rawJSON, shape
