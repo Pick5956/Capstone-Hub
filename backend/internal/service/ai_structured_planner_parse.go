@@ -267,9 +267,13 @@ var structuredPlannerListFields = map[string][]string{
 	"resolution": {"inherited_fields", "missing_fields"},
 }
 
-// coerceStructuredPlannerNullArrays rewrites null list fields to empty lists and
-// returns both the patched JSON (for the typed decode) and the patched shape
-// (for wire validation), so the two views can never disagree.
+// coerceStructuredPlannerNullArrays rewrites null and absent list fields to
+// empty lists and returns both the patched JSON (for the typed decode) and the
+// patched shape (for wire validation), so the two views can never disagree.
+// Absent is folded in with null for the same reason null was folded in with
+// empty: a model that writes no "entities" key is saying no entity was named,
+// which is exactly what an empty list says, and demanding the ceremony cost two
+// complete plans in live measurement.
 func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) {
 	root, ok := shape.(map[string]any)
 	if !ok {
@@ -282,8 +286,7 @@ func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) 
 			continue
 		}
 		for _, key := range keys {
-			value, exists := nested[key]
-			if !exists || value != nil {
+			if value, exists := nested[key]; exists && value != nil {
 				continue
 			}
 			nested[key] = []any{}
@@ -305,9 +308,9 @@ var structuredPlannerNullableObjectFields = map[string][]string{
 	"parameters": {"time_range", "compare_time_range", "day_part", "ranking"},
 }
 
-// coerceStructuredPlannerEmptyObjects rewrites an empty list written in place of
-// a nullable object to null. A non-empty list is left alone, so a model that
-// genuinely sent the wrong shape still fails validation.
+// coerceStructuredPlannerEmptyObjects repairs the three ways a model spells an
+// optional object: absent, an empty list, and the object wrapped in a
+// single-element list. Every other shape is left alone and still fails.
 func coerceStructuredPlannerEmptyObjects(rawJSON string, shape any) (string, any) {
 	root, ok := shape.(map[string]any)
 	if !ok {
@@ -320,11 +323,33 @@ func coerceStructuredPlannerEmptyObjects(rawJSON string, shape any) (string, any
 			continue
 		}
 		for _, key := range keys {
-			list, isList := nested[key].([]any)
-			if !isList || len(list) != 0 {
+			value, exists := nested[key]
+			if !exists {
+				// An absent optional object says the same thing an explicit null
+				// says: this part of the question was not specified.
+				nested[key] = nil
+				changed = true
 				continue
 			}
-			nested[key] = nil
+			list, isList := value.([]any)
+			if !isList {
+				continue
+			}
+			switch len(list) {
+			case 0:
+				nested[key] = nil
+			case 1:
+				// Models wrap the single object in a list: "ranking":[{...}]. The
+				// intent is unambiguous, and rejecting it lost a correct plan.
+				// Anything longer is a genuinely different shape and still fails.
+				object, isObject := list[0].(map[string]any)
+				if !isObject {
+					continue
+				}
+				nested[key] = object
+			default:
+				continue
+			}
 			changed = true
 		}
 	}

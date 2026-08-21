@@ -1186,6 +1186,13 @@ func fillImpliedMetrics(
 	operation ResolvedPlanOperation,
 	metrics []ResolvedPlanMetric,
 ) []ResolvedPlanMetric {
+	// A summary or an analysis with no metric named is a request for the broad
+	// picture, which is what overview means. Providers leave the list out for
+	// exactly those two operations, and the plan was thrown away for it.
+	if len(metrics) == 0 &&
+		(operation == ResolvedPlanOperationSummarize || operation == ResolvedPlanOperationAnalyze) {
+		return []ResolvedPlanMetric{ResolvedPlanMetricOverview}
+	}
 	if domain != ResolvedPlanDomainSales || operation != ResolvedPlanOperationTrend {
 		return metrics
 	}

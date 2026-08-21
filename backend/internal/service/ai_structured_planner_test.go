@@ -108,7 +108,9 @@ func TestParseStructuredPlannerResolvedPlanRejectsInvalidWireShape(t *testing.T)
 	if err := json.Unmarshal([]byte(validJSON), &missingNested); err != nil {
 		t.Fatal(err)
 	}
-	delete(missingNested["parameters"].(map[string]any), "filters")
+	// A required scalar, not a list: absent lists and absent optional objects are
+	// now read as "nothing specified", which is what the models mean by them.
+	delete(missingNested["policy"].(map[string]any), "risk")
 	missingNestedJSON, err := json.Marshal(missingNested)
 	if err != nil {
 		t.Fatal(err)
