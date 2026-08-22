@@ -50,7 +50,8 @@ const narrationPromptTemplate = `คุณคือผู้ช่วยร้�
 กฎเหล็ก:
 - ห้ามสร้างตัวเลขใหม่ ห้ามปัดเศษ ห้ามประมาณค่า ห้ามบวกลบเอง
   ถ้าจะพูดถึงตัวเลขต้องคัดลอกมาตรง ๆ จากข้อมูลข้างบนเท่านั้น
-- ห้ามไล่ซ้ำทั้งรายการ เพราะระบบจะแสดงรายการต่อจากข้อความของคุณอยู่แล้ว
+- เอ่ยตัวเลขได้ไม่เกิน 3 ตัว เลือกเฉพาะตัวที่ตอบคำถามหรือน่าห่วงที่สุด
+  ระบบจะแสดงรายการเต็มต่อจากข้อความของคุณอยู่แล้ว การไล่ซ้ำทั้งรายการทำให้ผู้ใช้ต้องอ่านสองรอบ
 - ข้อสังเกตเพิ่มเติมข้างบน (ถ้ามี) หยิบมาพูดเฉพาะข้อที่เกี่ยวกับคำถามนี้จริง ๆ ที่เหลือไม่ต้องพูดถึง
 - ห้ามใส่หัวข้อ ห้ามใส่เครื่องหมาย - นำหน้า ห้ามใส่ markdown
 - ห้ามขึ้นย่อหน้าใหม่ เขียนติดกันเป็นย่อหน้าเดียว`
@@ -146,6 +147,13 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string, i
 	}
 	// The observations were computed by the same deterministic code, so a figure
 	// quoted from them is as trustworthy as one from the answer itself.
+	if narrationRestatesTheList(narration, deterministic) {
+		// Measured against gpt-oss-20b: told not to repeat the list, it repeated the
+		// list anyway on half the questions, and the owner then read the same figures
+		// twice - once in prose, once in the block printed directly underneath.
+		aiStage("warn", "narration restated the whole list → discarded")
+		return deterministic
+	}
 	if !narrationUsesOnlyKnownNumbers(narration, allowedNumbers(deterministic+" "+observations)) {
 		// The whole point of the lock: a reworded figure is a wrong figure.
 		aiStage("warn", "narration mentioned a number that was not computed → discarded")
@@ -186,4 +194,26 @@ func (s *AIService) narrateLocalAnswer(question string, response *AIAskResponse)
 	}
 	response.Answer = s.narrateDeterministicAnswer(question, response.Answer, nil)
 	return response
+}
+
+// maxNarrationEchoes is how many figures a reading may repeat from the block
+// printed directly underneath it before it stops being a reading. Two or three
+// name what matters; beyond that the model is reciting the table.
+//
+// Only echoes count. A figure that appears solely in the observations - a
+// week-on-week fall, the days of stock left - is information the owner cannot
+// read anywhere else on the screen, and the best narration measured was one that
+// quoted three of them to explain why a healthy-looking total was not healthy.
+// Counting every figure alike threw that answer away along with the recitals.
+const maxNarrationEchoes = 3
+
+func narrationRestatesTheList(narration, deterministic string) bool {
+	printed := allowedNumbers(deterministic)
+	echoes := 0
+	for _, match := range numberToken.FindAllString(narration, -1) {
+		if _, shown := printed[normalizeNumberToken(match)]; shown {
+			echoes++
+		}
+	}
+	return echoes > maxNarrationEchoes
 }
