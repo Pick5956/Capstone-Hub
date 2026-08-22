@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -107,14 +106,15 @@ func TestPlannerModeFallsBackToLegacyWhenAllProvidersFail(t *testing.T) {
 		Question: "แล้วอันดับสองล่ะ",
 		History:  []AIConversationMessage{{Role: "user", Content: "เมนูไหนขายดี"}},
 	})
-	// The legacy flow runs; with no repository wired in this fixture it stops at
-	// the snapshot, which is proof the request left the planner path rather than
-	// returning the canned apology.
+	// The legacy flow runs and reports its own failure. In this fixture the legacy
+	// classifier is not stubbed either, so what comes back is the outage error —
+	// which is the point: with every provider down the owner is told so, instead
+	// of being handed a keyword guess dressed up as an answer.
 	if err == nil {
 		t.Fatal("expected the legacy flow to run and report its own error")
 	}
-	if !strings.Contains(err.Error(), "repository") {
-		t.Fatalf("error = %v, want the legacy snapshot path", err)
+	if !errors.Is(err, ErrAIProviderUnavailable) {
+		t.Fatalf("error = %v, want ErrAIProviderUnavailable", err)
 	}
 	if answerProvider.classifyCalls == 0 {
 		t.Fatal("legacy router was never reached, so the planner did not fall back")

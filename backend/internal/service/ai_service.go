@@ -91,6 +91,7 @@ const clarifyConfidenceFloor = 0.65
 
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	provider := s.getAIProvider()
+	var lastErr error
 	for _, adapter := range s.orderedProviderAdapters() {
 		if !adapter.Configured() {
 			if provider != "auto" {
@@ -102,16 +103,24 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 		if err == nil {
 			return result, nil
 		}
+		lastErr = err
 		aiStage("warn", "%s classifier failed: %v", adapter.DisplayName(), err)
 	}
 
-	// Preserve analytical usefulness if provider classification is unavailable.
+	if lastErr == nil {
+		lastErr = errors.New("no AI provider is configured")
+	}
+	// The reason travels with the error. It used to be replaced by a generic
+	// sentence here, which erased the difference between an exhausted daily
+	// budget, an unreachable provider and a missing key - and the caller needs
+	// exactly that difference to tell the owner what happened and when to come
+	// back.
 	return AIRouterResult{
 		Task:                AITaskAnalyzeData,
 		Confidence:          0.5,
 		NeedsRestaurantData: true,
 		Risk:                "low",
-	}, errors.New("failed to classify via any model, falling back to default analysis")
+	}, fmt.Errorf("failed to classify via any model: %w", lastErr)
 }
 
 func parseRouterJSON(raw string) (AIRouterResult, error) {
@@ -293,8 +302,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		// immediate rollback path while the structured planner is evaluated.
 		routerResult, err = s.classifyIntent(question)
 		if err != nil {
-			aiStage("route", "classifier unavailable (%v) → default to analysis", err)
-			err = nil
+			// The classifier is the one step nothing downstream can replace: without it
+			// there is no reading of the question at all, only a keyword guess. Carrying
+			// on used to hide an outage behind an answer that looked ordinary, so the
+			// owner could not tell a full answer from a fallback one. Say what happened
+			// instead.
+			aiStage("warn", "classifier unavailable (%v) → telling the owner instead of guessing", err)
+			return nil, aiProviderOutageError(err)
 		} else {
 			aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
 				routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
@@ -487,11 +501,15 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			History:  history,
 			Mode:     aiProviderAnswerConversation,
 		}
+		var lastProviderErr error
 		for _, adapter := range s.orderedProviderAdapters() {
 			if !adapter.Configured() {
 				continue
 			}
 			answer, adapterErr := adapter.Answer(request)
+			if adapterErr != nil {
+				lastProviderErr = adapterErr
+			}
 			if adapterErr == nil {
 				return &AIAskResponse{
 					Answer:   answer.Text,
@@ -504,7 +522,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("warn", "conversational %s failed: %v", adapter.DisplayName(), adapterErr)
 		}
 
-		return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
+		return nil, aiProviderOutageError(lastProviderErr)
 	}
 
 	// Step 6: Analytical Flow (Needs Data = True, DB snapshot load)
@@ -805,13 +823,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}, nil
 	}
 
+	var analyticalErr error
 	for _, adapter := range s.orderedProviderAdapters() {
 		if !adapter.Configured() {
 			continue
 		}
-		if resp, err := executeAnalytical(adapter); err == nil {
+		resp, adapterErr := executeAnalytical(adapter)
+		if adapterErr == nil {
 			return resp, nil
 		}
+		analyticalErr = adapterErr
 	}
 
 	// Fallback to local hardcoded tool template only if the LLM analytical loop fails
@@ -832,7 +853,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
-	return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
+	return nil, aiProviderOutageError(analyticalErr)
 }
 
 func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,8 +86,18 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		Role:         "owner",
 	}, &req)
 	if err != nil {
+		// An outage is reported as an outage. The assistant can still read the
+		// database without a provider, and answering from it anyway would hide the
+		// failure behind something that looks like an ordinary answer: the owner
+		// could not tell the two apart, nor know the day's budget was gone. 429
+		// says come back later and when; 503 says the provider is out, not the
+		// budget.
 		if errors.Is(err, service.ErrAIQuotaExceeded) {
-			respondAPIError(c, http.StatusTooManyRequests, err)
+			respondAIOutage(c, http.StatusTooManyRequests, "ai_quota_exceeded", err)
+			return
+		}
+		if errors.Is(err, service.ErrAIProviderUnavailable) {
+			respondAIOutage(c, http.StatusServiceUnavailable, "ai_provider_unavailable", err)
 			return
 		}
 		if errors.Is(err, repository.ErrAIConversationConflict) {
@@ -455,4 +466,17 @@ func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// respondAIOutage answers with the reason and, when the provider named one,
+// how long to wait, so the screen can say "back in 42 minutes" instead of a
+// generic failure. The message is owner-facing Thai written by the service.
+func respondAIOutage(c *gin.Context, status int, code string, err error) {
+	body := gin.H{"error": err.Error(), "code": code}
+	if seconds := service.AIRetryAfterSeconds(err); seconds > 0 {
+		body["retry_after_seconds"] = seconds
+		c.Header("Retry-After", strconv.Itoa(seconds))
+	}
+	c.Header("Cache-Control", "no-store, private")
+	c.JSON(status, body)
 }
