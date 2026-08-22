@@ -481,7 +481,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// an error measured on this shop's own history, and is always framed as a guess.
 	if fcResp, handled, fErr := s.answerSalesForecast(restaurantID, question); handled {
 		aiStage("flow", "sales forecast — seasonal moving average + backtest")
-		return fcResp, nil
+		return s.narrateLocalAnswer(question, fcResp), nil
 	} else if fErr != nil {
 		aiStage("warn", "sales forecast failed (%v) → snapshot flow", fErr)
 	}
@@ -491,13 +491,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// single-metric tool can give, so they run before those tools.
 	if cmpResp, handled, cErr := s.answerWeekdayComparison(restaurantID, question); handled {
 		aiStage("flow", "weekday comparison — per-weekday range query")
-		return cmpResp, nil
+		return s.narrateLocalAnswer(question, cmpResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "weekday comparison failed (%v) → snapshot flow", cErr)
 	}
 	if cmpResp, handled, cErr := s.answerMenuComparison(restaurantID, question); handled {
 		aiStage("flow", "menu comparison — per-menu range query")
-		return cmpResp, nil
+		return s.narrateLocalAnswer(question, cmpResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "menu comparison failed (%v) → snapshot flow", cErr)
 	}
@@ -506,7 +506,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// within a day, finer than anything the day-level snapshot holds.
 	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
 		aiStage("flow", "day-part sales query — hour-scoped range query")
-		return partResp, nil
+		return s.narrateLocalAnswer(question, partResp), nil
 	} else if pErr != nil {
 		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
 	}
@@ -516,7 +516,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// is not siphoned off as a plain sales question.
 	if profitResp, handled, prErr := s.answerTotalProfitQuery(restaurantID, question); handled {
 		aiStage("flow", "total-profit query — range-scoped revenue minus cost")
-		return profitResp, nil
+		return s.narrateLocalAnswer(question, profitResp), nil
 	} else if prErr != nil {
 		aiStage("warn", "total-profit query failed (%v) → snapshot flow", prErr)
 	}
@@ -525,7 +525,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// from the baht totals below.
 	if qtyResp, handled, qErr := s.answerTotalQuantityQuery(restaurantID, question); handled {
 		aiStage("flow", "total-quantity query — units sold across the period")
-		return qtyResp, nil
+		return s.narrateLocalAnswer(question, qtyResp), nil
 	} else if qErr != nil {
 		aiStage("warn", "total-quantity query failed (%v) → snapshot flow", qErr)
 	}
@@ -535,7 +535,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// not limited to the rolling snapshot window.
 	if datedResp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
 		aiStage("flow", "dated-sales — range query (bypassing rolling window)")
-		return datedResp, nil
+		return s.narrateLocalAnswer(question, datedResp), nil
 	} else if derr != nil {
 		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
@@ -544,7 +544,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// rolling window, so it works even when today has no sales.
 	if covResp, handled, cErr := s.answerDataCoverage(restaurantID, question); handled {
 		aiStage("flow", "data-coverage query")
-		return covResp, nil
+		return s.narrateLocalAnswer(question, covResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "data-coverage query failed (%v) → snapshot flow", cErr)
 	}
@@ -553,7 +553,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// own numbers, instead of the rolling analysis window.
 	if menuResp, handled, mErr := s.answerPeriodMenuQuery(restaurantID, question, askedQuestion); handled {
 		aiStage("flow", "menu-period query — range query (bypassing rolling window)")
-		return menuResp, nil
+		return s.narrateLocalAnswer(question, menuResp), nil
 	} else if mErr != nil {
 		aiStage("warn", "menu-period query failed (%v) → snapshot flow", mErr)
 	}
@@ -697,7 +697,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("flow", "deterministic-first: %s (numbers computed locally)", toolToRun)
 			// The figures are already final; the LLM only writes a lead-in and is
 			// dropped if it touches a number it was not given.
-			answer = s.narrateDeterministicAnswer(question, answer)
+			answer = s.narrateDeterministicAnswer(question, answer, computeProactiveInsights(snapshot))
 			hinted, assumed := appendScopeHint(question, answer, todayHasNoSales(snapshot))
 			return &AIAskResponse{
 				Answer:       hinted,

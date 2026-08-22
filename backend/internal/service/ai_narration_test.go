@@ -91,7 +91,7 @@ func TestNarrateFallsBackToDeterministicAnswer(t *testing.T) {
 	t.Setenv("GROQ_API_KEYS", "")
 	t.Setenv("GEMINI_API_KEYS", "")
 	service := &AIService{}
-	if got := service.narrateDeterministicAnswer("พรุ่งนี้เตรียมอะไร", deterministicSample); got != deterministicSample {
+	if got := service.narrateDeterministicAnswer("พรุ่งนี้เตรียมอะไร", deterministicSample, nil); got != deterministicSample {
 		t.Fatal("expected the deterministic answer to be returned unchanged")
 	}
 }
@@ -102,7 +102,31 @@ func TestNarrationCanBeDisabled(t *testing.T) {
 		t.Fatal("AI_NARRATION=off must disable the extra provider call")
 	}
 	service := &AIService{}
-	if got := service.narrateDeterministicAnswer("คำถาม", deterministicSample); got != deterministicSample {
+	if got := service.narrateDeterministicAnswer("คำถาม", deterministicSample, nil); got != deterministicSample {
 		t.Fatal("disabled narration must return the deterministic answer unchanged")
+	}
+}
+
+// The observations handed to the model are computed by the same deterministic
+// code as the answer, so quoting a figure out of them is allowed - that is what
+// lets the narration say why a number matters instead of only introducing it.
+func TestNarrationMayQuoteComputedObservations(t *testing.T) {
+	observations := formatNarrationInsights([]AIInsight{{
+		Title: "ยอดขายตก (7 วัน)", Metric: "-18%",
+		Detail: "7 วันล่าสุด 12,400 บาท เทียบ 7 วันก่อนหน้า 15,100 บาท",
+	}})
+	if observations == "" {
+		t.Fatal("an observation was dropped before it reached the model")
+	}
+	allowed := allowedNumbers(deterministicSample + " " + observations)
+
+	if !narrationUsesOnlyKnownNumbers("ยอดขาย 7 วันล่าสุดลดลง 18% ครับ", allowed) {
+		t.Fatal("a figure taken from the observations was rejected")
+	}
+	if narrationUsesOnlyKnownNumbers("ยอดขายลดลง 23% ครับ", allowed) {
+		t.Fatal("an invented figure passed the lock")
+	}
+	if formatNarrationInsights(nil) != "" {
+		t.Fatal("no observations must add nothing to the prompt")
 	}
 }

@@ -29,22 +29,31 @@ func narrationEnabled() bool {
 	return !strings.EqualFold(strings.TrimSpace(os.Getenv("AI_NARRATION")), "off")
 }
 
-const maxNarrationRunes = 180
+// maxNarrationRunes bounds what the model may add. It was 180, which fits one
+// sentence and nothing else, and one sentence over an unchanging block of Go
+// template is what made every answer read the same. Two or three sentences is
+// enough to say what the figures mean; more than that and the model starts
+// restating the list that is printed directly underneath it.
+const maxNarrationRunes = 420
 
-const narrationPromptTemplate = `คุณคือผู้ช่วยร้านอาหาร กำลังจะเกริ่นนำก่อนแสดงข้อมูลที่คำนวณมาแล้ว
+const narrationPromptTemplate = `คุณคือผู้ช่วยร้านอาหาร กำลังจะพูดนำก่อนที่ระบบจะแสดงตัวเลขที่คำนวณมาแล้ว
 
 คำถามของเจ้าของร้าน:
 %s
 
-ข้อมูลที่ระบบคำนวณมาแล้ว (ห้ามแก้ ห้ามคำนวณเพิ่ม):
+ตัวเลขที่ระบบคำนวณมาแล้ว (ห้ามแก้ ห้ามคำนวณเพิ่ม):
 %s
+%s
+เขียนภาษาไทย 2-3 ประโยค ที่ "อ่านตัวเลขให้ฟัง" ไม่ใช่แค่เกริ่นว่ากำลังจะแสดงข้อมูล
+พูดให้ตรงกับคำถามที่ถูกถาม และชี้จุดที่น่าสนใจในตัวเลขชุดนี้ เช่นตัวไหนเด่น ตัวไหนน่าห่วง
 
-เขียน "ประโยคเกริ่มนำ" ภาษาไทย 1 ประโยคสั้น ๆ (ไม่เกิน 2 บรรทัด) ที่ตอบรับคำถามข้างต้นโดยตรง
 กฎเหล็ก:
-- ห้ามสร้างตัวเลขใหม่ ห้ามปัดเศษ ห้ามประมาณค่า ถ้าจะพูดถึงตัวเลขต้องคัดลอกมาตรง ๆ จากข้อมูลข้างบนเท่านั้น
-- ห้ามสรุปซ้ำทั้งรายการ เพราะระบบจะแสดงรายการต่อจากประโยคของคุณอยู่แล้ว
+- ห้ามสร้างตัวเลขใหม่ ห้ามปัดเศษ ห้ามประมาณค่า ห้ามบวกลบเอง
+  ถ้าจะพูดถึงตัวเลขต้องคัดลอกมาตรง ๆ จากข้อมูลข้างบนเท่านั้น
+- ห้ามไล่ซ้ำทั้งรายการ เพราะระบบจะแสดงรายการต่อจากข้อความของคุณอยู่แล้ว
+- ข้อสังเกตเพิ่มเติมข้างบน (ถ้ามี) หยิบมาพูดเฉพาะข้อที่เกี่ยวกับคำถามนี้จริง ๆ ที่เหลือไม่ต้องพูดถึง
 - ห้ามใส่หัวข้อ ห้ามใส่เครื่องหมาย - นำหน้า ห้ามใส่ markdown
-- ตอบเป็นประโยคเกริ่นนำอย่างเดียว ไม่ต้องมีคำอธิบายอื่น`
+- ห้ามขึ้นย่อหน้าใหม่ เขียนติดกันเป็นย่อหน้าเดียว`
 
 // numberToken matches figures as they appear in answers: 1,950 / 0.00 / 21.71%
 var numberToken = regexp.MustCompile(`\d[\d,]*(?:\.\d+)?`)
@@ -110,12 +119,13 @@ func sanitizeNarration(raw string) string {
 
 // narrateDeterministicAnswer returns the finished answer. When narration is off,
 // unavailable, or fails its checks, the deterministic answer is returned as-is.
-func (s *AIService) narrateDeterministicAnswer(question, deterministic string) string {
+func (s *AIService) narrateDeterministicAnswer(question, deterministic string, insights []AIInsight) string {
 	if !narrationEnabled() || strings.TrimSpace(deterministic) == "" {
 		return deterministic
 	}
 
-	prompt := fmt.Sprintf(narrationPromptTemplate, question, deterministic)
+	observations := formatNarrationInsights(insights)
+	prompt := fmt.Sprintf(narrationPromptTemplate, question, deterministic, observations)
 	var raw string
 	for _, adapter := range s.orderedProviderAdapters() {
 		if adapter == nil || !adapter.Configured() {
@@ -134,7 +144,9 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string) s
 	if narration == "" {
 		return deterministic
 	}
-	if !narrationUsesOnlyKnownNumbers(narration, allowedNumbers(deterministic)) {
+	// The observations were computed by the same deterministic code, so a figure
+	// quoted from them is as trustworthy as one from the answer itself.
+	if !narrationUsesOnlyKnownNumbers(narration, allowedNumbers(deterministic+" "+observations)) {
 		// The whole point of the lock: a reworded figure is a wrong figure.
 		aiStage("warn", "narration mentioned a number that was not computed → discarded")
 		return deterministic
@@ -142,4 +154,36 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string) s
 
 	aiStage("flow", "narration added over deterministic answer (numbers locked)")
 	return narration + "\n\n" + deterministic
+}
+
+// formatNarrationInsights hands the model the derived facts Go already computed
+// for the dashboard - a week-on-week move, an ingredient about to run out, a
+// popular dish with a thin margin. Without them the model has only the figures
+// it is about to introduce, so the best it can write is an introduction; with
+// them it can say which figure matters and why. It stays optional: the prompt
+// tells the model to use only what the question is actually about.
+func formatNarrationInsights(insights []AIInsight) string {
+	if len(insights) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nข้อสังเกตที่ระบบคำนวณไว้แล้ว (หยิบมาใช้เฉพาะข้อที่เกี่ยวกับคำถาม):\n")
+	for _, insight := range insights {
+		fmt.Fprintf(&b, "- %s %s: %s\n", insight.Title, insight.Metric, insight.Detail)
+	}
+	return b.String()
+}
+
+// narrateLocalAnswer puts the deterministic intercepts on the same footing as
+// the tool path. Nine of them - dated sales, day parts, comparisons, profit,
+// coverage - answer straight from a range query and returned their Go template
+// verbatim, so the questions people ask most often were the ones that read most
+// like a form letter. They compute no snapshot, so there are no observations to
+// offer; the figures in the answer are still the only ones the model may use.
+func (s *AIService) narrateLocalAnswer(question string, response *AIAskResponse) *AIAskResponse {
+	if response == nil || strings.TrimSpace(response.Answer) == "" {
+		return response
+	}
+	response.Answer = s.narrateDeterministicAnswer(question, response.Answer, nil)
+	return response
 }
