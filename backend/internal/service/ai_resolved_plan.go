@@ -430,9 +430,10 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.SchemaVersion = strings.TrimSpace(p.SchemaVersion)
 	p.OriginalQuestion = strings.TrimSpace(p.OriginalQuestion)
 	p.ResolvedQuestion = strings.TrimSpace(p.ResolvedQuestion)
-	p.Task = AITask(normalizeEnum(string(p.Task)))
+	p.Task = resolveTaskAlias(AITask(normalizeEnum(string(p.Task))))
 	p.Domain = ResolvedPlanDomain(normalizeEnum(string(p.Domain)))
 	p.Operation = ResolvedPlanOperation(normalizeEnum(string(p.Operation)))
+	p.Operation = alignOperationWithTask(p.Task, p.Operation)
 	p.Action = normalizeResolvedPlanAction(p.Action)
 	p.ToolHint = AIToolName(normalizeEnum(string(p.ToolHint)))
 	p.ResponseStyle = ResolvedPlanResponseStyle(normalizeEnum(string(p.ResponseStyle)))
@@ -449,8 +450,32 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.Parameters.Filters = normalizeFilters(p.Parameters.Filters)
 	p.Parameters.Ranking = normalizeRanking(p.Parameters.Ranking)
 	if p.Parameters.Ranking != nil && !operationSupportsRanking(p.Operation) {
-		p.Parameters.Ranking = nil
+		// Asking for the top one by quantity IS a ranking, whatever the operation
+		// field was set to. "which menu sells best" came back as operation=retrieve
+		// carrying a complete ranking, and dropping the ranking left a plan with
+		// nothing to retrieve, which was then refused. The ranking is the more
+		// specific statement of what was asked, so it decides - but only where the
+		// task already allows ranking, and only where there is something to rank
+		// BY: a sales total carrying a stray ranking has no grouping and never
+		// will, so there the ranking is still the stray field and is dropped.
+		promoted := fillImpliedGroupBy(p.Domain, ResolvedPlanOperationRank, p.Parameters.GroupBy)
+		if len(promoted) > 0 && taskAllowsOperation(p.Task, ResolvedPlanOperationRank) {
+			p.Operation = ResolvedPlanOperationRank
+		} else {
+			p.Parameters.Ranking = nil
+		}
 	}
+	// A ranking names the metric it orders by, and the contract already insists
+	// that metric appears in the list. When the model filled in the ranking and
+	// left the list empty it said the same thing twice over, once; taking it from
+	// there beats refusing a plan that is not actually ambiguous.
+	if len(p.Parameters.Metrics) == 0 && p.Parameters.Ranking != nil && p.Parameters.Ranking.Metric != "" {
+		p.Parameters.Metrics = []ResolvedPlanMetric{p.Parameters.Ranking.Metric}
+	}
+	// The grouping was filled in above against the operation as written. A
+	// ranking may have changed it since, and rank needs a grouping, so the same
+	// rule is applied once more; it does nothing when a grouping already exists.
+	p.Parameters.GroupBy = fillImpliedGroupBy(p.Domain, p.Operation, p.Parameters.GroupBy)
 	p.Resolution.InheritedFields = normalizeInheritedFields(p.Resolution.InheritedFields)
 	for i := range p.Resolution.InheritedFields {
 		p.Resolution.InheritedFields[i].Field = qualifyPlanField(p.Resolution.InheritedFields[i].Field)
@@ -862,6 +887,76 @@ func (p ResolvedPlanPolicy) validate(task AITask, operation ResolvedPlanOperatio
 		return errors.New("resolved plan: read-only operations must not require confirmation")
 	}
 	return nil
+}
+
+// taskAliases maps the names providers write for a task onto the names the
+// contract uses. Every entry is a real answer that was thrown away: the model
+// wrote the OPERATION where the task belongs - "retrieve", "recommend",
+// "refuse" - and the whole plan was discarded over a label, while the rest of it
+// described the question correctly.
+//
+// "refuse" resolves to risky_action rather than out_of_scope on purpose. Both
+// refuse, so the user sees a refusal either way, and risky_action is the more
+// cautious reading: it keeps the plan inside the write-safety path instead of
+// filing a write command away as an unrelated question.
+var taskAliases = map[AITask]AITask{
+	"retrieve":  AITaskRetrieveFact,
+	"analyze":   AITaskAnalyzeData,
+	"recommend": AITaskRecommendAction,
+	"refuse":    AITaskRiskyAction,
+	"clarify":   AITaskUnclear,
+	"chat":      AITaskGeneralChat,
+	"generate":  AITaskRestaurantContent,
+	"explain":   AITaskExplainConcept,
+	"help":      AITaskScopeQuestion,
+}
+
+func resolveTaskAlias(task AITask) AITask {
+	if isSupportedResolvedPlanTask(task) {
+		return task
+	}
+	if aliased, ok := taskAliases[task]; ok {
+		return aliased
+	}
+	return task
+}
+
+// soleOperationForTask reports the one operation a task can carry, when it has
+// exactly one. These are all the non-analytical tasks, where the task alone
+// decides what happens: an out_of_scope plan refuses, an unclear plan asks.
+func soleOperationForTask(task AITask) (ResolvedPlanOperation, bool) {
+	switch task {
+	case AITaskExplainConcept:
+		return ResolvedPlanOperationExplain, true
+	case AITaskScopeQuestion:
+		return ResolvedPlanOperationHelp, true
+	case AITaskGeneralChat:
+		return ResolvedPlanOperationChat, true
+	case AITaskRestaurantContent:
+		return ResolvedPlanOperationGenerate, true
+	case AITaskUnclear:
+		return ResolvedPlanOperationClarify, true
+	case AITaskOutOfScope:
+		return ResolvedPlanOperationRefuse, true
+	default:
+		return "", false
+	}
+}
+
+// alignOperationWithTask settles a disagreement between the two fields in favour
+// of the task, but only where the task leaves no choice. A model that answered
+// out_of_scope with operation=chat still means "do not do this"; discarding the
+// plan for the mismatch replaced a refusal with an apology. Analytical tasks
+// allow several operations, so a mismatch there is left to fail rather than
+// guessed at.
+func alignOperationWithTask(task AITask, operation ResolvedPlanOperation) ResolvedPlanOperation {
+	if taskAllowsOperation(task, operation) {
+		return operation
+	}
+	if sole, ok := soleOperationForTask(task); ok {
+		return sole
+	}
+	return operation
 }
 
 func isSupportedResolvedPlanTask(task AITask) bool {

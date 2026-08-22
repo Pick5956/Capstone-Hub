@@ -52,6 +52,7 @@ func ParseStructuredPlannerResolvedPlan(rawJSON string, trustedOriginalQuestion 
 	// ranking. An empty list and null say the same thing here, and rejecting the
 	// spelling threw away two complete, correct plans in live measurement.
 	rawJSON, shape = coerceStructuredPlannerEmptyObjects(rawJSON, shape)
+	rawJSON, shape = coerceStructuredPlannerConfidence(rawJSON, shape)
 	if err := validateStructuredPlannerWireShape(shape); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
@@ -296,6 +297,39 @@ func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) 
 	if !changed {
 		return rawJSON, shape
 	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// coerceStructuredPlannerConfidence moves a confidence written at the root into
+// the resolution object it belongs to. Providers put it one level too high often
+// enough to lose whole plans, and the value they wrote is the value they meant.
+//
+// A confidence that is missing entirely is deliberately NOT filled in. It is the
+// field the assistant checks before it dares to answer at all - below 0.65 the
+// question is handed back to the user - so inventing one would be inventing
+// permission to answer.
+func coerceStructuredPlannerConfidence(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	stray, exists := root["confidence"]
+	if !exists {
+		return rawJSON, shape
+	}
+	resolution, ok := root["resolution"].(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	if _, alreadySet := resolution["confidence"]; alreadySet {
+		return rawJSON, shape
+	}
+	resolution["confidence"] = stray
+	delete(root, "confidence")
 	patched, err := json.Marshal(root)
 	if err != nil {
 		return rawJSON, shape
