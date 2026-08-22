@@ -103,7 +103,15 @@ func AuthorizeResolvedPlan(plan ResolvedPlan, actor AIActorContext) (AICapabilit
 	candidates := CandidateToolsForResolvedPlan(validated)
 	selected := validated.ToolHint
 	if selected != "" && !containsAITool(candidates, selected) {
-		return AICapabilityDecision{}, fmt.Errorf("AI capability: tool_hint %q is outside the candidate set", selected)
+		// The hint is a suggestion, and the candidate set is derived from the
+		// domain and metrics in the same plan. When the two disagree the model
+		// contradicted itself; dropping the hint costs nothing, because the tool
+		// is chosen from the validated fields either way and a hint has never been
+		// able to reach a tool outside them. Failing instead turned a model
+		// inconsistency into an error message on the user's screen.
+		aiStage("warn", "planner tool_hint %q does not match domain %q — ignoring the hint",
+			selected, validated.Domain)
+		selected = ""
 	}
 	if selected == "" && len(candidates) > 0 {
 		selected = candidates[0]

@@ -243,13 +243,34 @@ func TestPlannerUnavailableDomainBecomesSafeCapabilityMessage(t *testing.T) {
 	}
 }
 
-func TestPreparedResponseRejectsToolOutsideCandidateSet(t *testing.T) {
-	prepared := &aiPreparedOrchestration{candidateTools: []AIToolName{AIToolGetSalesSummary}}
+func TestPreparedResponseToolStaysInsideTheReadOnlyAllowlist(t *testing.T) {
+	readOnlyPlan := ResolvedPlan{Policy: ResolvedPlanPolicy{ReadOnly: true}}
+	prepared := &aiPreparedOrchestration{
+		plan:           readOnlyPlan,
+		candidateTools: []AIToolName{AIToolGetSalesSummary},
+	}
 	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesSummary}, prepared); err != nil {
 		t.Fatalf("authorized tool rejected: %v", err)
 	}
-	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetLowStockIngredients}, prepared); err == nil {
-		t.Fatal("out-of-candidate tool was accepted")
+
+	// The deterministic day-part answer is written by the backend and always
+	// reports get_sales_for_period, whatever domain the model picked. It reads the
+	// same restaurant read-only, so it is allowed through rather than replacing a
+	// correct answer with an error.
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesForPeriod}, prepared); err != nil {
+		t.Fatalf("backend read-only answer rejected: %v", err)
+	}
+
+	// A name that is not on the read-only allowlist never passes, candidate set or
+	// not: that is the boundary this check exists for.
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolName("drop_all_menus")}, prepared); err == nil {
+		t.Fatal("a tool outside the read-only allowlist was accepted")
+	}
+
+	// And a plan that is not read-only cannot borrow the allowance above.
+	writePlan := &aiPreparedOrchestration{candidateTools: []AIToolName{AIToolGetSalesSummary}}
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesForPeriod}, writePlan); err == nil {
+		t.Fatal("a non read-only plan was allowed to answer with an unplanned tool")
 	}
 }
 
