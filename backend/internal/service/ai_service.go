@@ -83,6 +83,12 @@ func ProvideAIServiceWithStores(
 	return service
 }
 
+// clarifyConfidenceFloor is the line under which the assistant hands the
+// question back instead of guessing. It gates the second-chance rewrite as well,
+// so the two can never drift apart and leave a question rewritten but still
+// turned away, or turned away without the rewrite being tried.
+const clarifyConfidenceFloor = 0.65
+
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	provider := s.getAIProvider()
 	for _, adapter := range s.orderedProviderAdapters() {
@@ -262,6 +268,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// structured path still needs (an ordinal such as "รองลงมา").
 	askedQuestion := question
 	var routerResult AIRouterResult
+	usedHistory := false
 	if prepared != nil {
 		question = prepared.plan.ResolvedQuestion
 		routerResult = prepared.router
@@ -275,9 +282,11 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("route", "comparison continuation resolved from history")
 			aiDebug("continuation → %q", resolved)
 			question = resolved
+			usedHistory = true
 		} else if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
 			aiStage("route", "context_rewritten=true resolved_question_length=%d", len([]rune(resolved)))
 			question = resolved
+			usedHistory = true
 		}
 
 		// Legacy mode: context rewrite and JSON router remain available as an
@@ -349,8 +358,36 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// Second chance before giving up. The classifier only ever sees the question,
+	// so a follow-up whose wording the keyword detector did not recognise arrives
+	// here looking vague rather than referential — which is how "ขอวิธีทำสามรายการ
+	// นี้หน่อย" was answered with "please rephrase" while the three items sat in
+	// the previous turn. That word list can never be finished, so the trigger is
+	// the classifier's own uncertainty instead: rewrite against history and ask
+	// once more. It costs one extra call, and only on questions that were about to
+	// be turned away.
+	if prepared == nil && !usedHistory && !structuredFollowUp && len(history) > 0 &&
+		(routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) {
+		if resolved, rewritten := s.rewriteQuestionWithHistory(question, history); rewritten {
+			aiStage("route", "classifier unsure (conf=%.2f) → rewrote from history, asking again", routerResult.Confidence)
+			aiDebug("second chance → %q", resolved)
+			question = resolved
+			usedHistory = true
+			if retried, retryErr := s.classifyIntent(question); retryErr != nil {
+				aiStage("warn", "second-chance classify failed (%v) → keeping the first result", retryErr)
+			} else {
+				routerResult = retried
+				if rescued, ok := applyKeywordBackstop(routerResult, question); ok {
+					routerResult = rescued
+				}
+				aiStage("route", "second chance task=%s tool=%s conf=%.2f",
+					routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence)
+			}
+		}
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
-	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
+	if (routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
 		clarification := "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ"
 		model := "local-router-fallback"
