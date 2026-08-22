@@ -285,3 +285,87 @@ func TestPlannerRawRecorderIsOffByDefault(t *testing.T) {
 	}
 	recordStructuredPlannerRaw(StructuredPlannerRawRecord{Question: "x", RawJSON: "{}"})
 }
+
+// TestPlannerReplayRouting scores the recorded answers the way the live run
+// scored them: parse, authorise, and see which tool comes out. It is an estimate
+// and not a measurement — the answers were written by whichever model and
+// contract version was current when they were captured, and a model asked the
+// same question twice does not answer the same way twice. What it does show,
+// for free, is how much of the last live score was lost to our own contract
+// rather than to the model, which is the number that decides whether another
+// paid run is worth its quota.
+func TestPlannerReplayRouting(t *testing.T) {
+	expected := make(map[string]AIToolName)
+	clarify := make(map[string]bool)
+	for _, goldenCase := range loadGoldenCases(t) {
+		expected[goldenCase.Question] = goldenCase.ExpectedTool
+		clarify[goldenCase.Question] = goldenCase.ExpectClarify
+	}
+
+	// One entry per question, keeping the most recent answer.
+	latest := make(map[string]StructuredPlannerRawRecord)
+	order := make([]string, 0, 32)
+	for _, record := range loadPlannerReplayCorpus(t, plannerCapturedCorpusPath(), false) {
+		if _, known := expected[record.Question]; !known {
+			continue
+		}
+		if _, seen := latest[record.Question]; !seen {
+			order = append(order, record.Question)
+		}
+		latest[record.Question] = record
+	}
+	if len(order) == 0 {
+		t.Skip("ยังไม่มีคำตอบจริงที่บันทึกไว้ — รันชุดวัดผลจริงก่อน")
+	}
+
+	actor := AIActorContext{RestaurantID: 1, OwnerUserID: 1, Role: "owner"}
+	var correct, rejected int
+	for _, question := range order {
+		record := latest[question]
+		plan, err := ParseStructuredPlannerResolvedPlan(record.RawJSON, question)
+		if err != nil {
+			rejected++
+			t.Logf("✗ %-44s สัญญายังปฏิเสธ: %s", truncateRunes(question, 42), plannerFailureReason(err))
+			continue
+		}
+		prepared, prepErr := prepareAuthorizedPlannerResult(StructuredPlannerResult{Plan: plan}, actor)
+		got := AIToolName("")
+		asked := false
+		switch {
+		case prepErr != nil:
+			rejected++
+			t.Logf("✗ %-44s อนุญาตไม่ผ่าน: %v", truncateRunes(question, 42), prepErr)
+			continue
+		case prepared.clarification != "" || prepared.router.Task == AITaskUnclear:
+			asked = true
+		default:
+			got = prepared.router.SuggestedTool
+		}
+
+		want := expected[question]
+		ok := got == want
+		if clarify[question] {
+			ok = asked
+		}
+		if ok {
+			correct++
+			continue
+		}
+		t.Logf("✗ %-44s ควรได้ %-26s ได้ %s", truncateRunes(question, 42),
+			plannerToolLabel(want, clarify[question]), plannerToolLabel(got, asked))
+	}
+
+	t.Logf("ประเมินจากคำตอบที่บันทึกไว้ %d คำถาม: ถูก %d, สัญญายังปฏิเสธ %d",
+		len(order), correct, rejected)
+}
+
+func plannerToolLabel(tool AIToolName, asked bool) string {
+	switch {
+	case asked:
+		return "(ถามกลับ)"
+	case tool == "":
+		return "(ไม่มี tool)"
+	default:
+		return string(tool)
+	}
+}
