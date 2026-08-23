@@ -373,8 +373,6 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkClosing, setBulkClosing] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ ...bulkEmptyRow }]);
@@ -509,18 +507,11 @@ export default function InventoryPage() {
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pageItems = filtered.slice(pageStart, pageStart + pageSize);
-  const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.ID));
 
   // Back to the first page whenever the result set or page size changes.
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, categoryFilter, pageSize]);
-
-  // A new filter is a new context — drop any selection so you never bulk-delete
-  // rows you can no longer see.
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [search, statusFilter, categoryFilter]);
 
   // If deletions shrink the list past the current page, clamp back into range.
   useEffect(() => {
@@ -697,56 +688,6 @@ export default function InventoryPage() {
         closeDeleteModal();
       }
     });
-  }
-
-  function toggleSelect(id: number) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAll() {
-    setSelectedIds((prev) =>
-      filtered.length > 0 && filtered.every((item) => prev.has(item.ID))
-        ? new Set()
-        : new Set(filtered.map((item) => item.ID)),
-    );
-  }
-
-  async function handleBulkDelete() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    const confirmed = await confirm({
-      title: lang === "th" ? `ลบ ${ids.length} รายการที่เลือก?` : `Delete ${ids.length} selected items?`,
-      message: lang === "th" ? "ลบออกจากคลังวัตถุดิบถาวร" : "This permanently removes them from inventory.",
-      confirmLabel: copy.delete,
-      cancelLabel: copy.cancel,
-      tone: "danger",
-    });
-    if (!confirmed) return;
-    setBulkDeleting(true);
-    // Delete in parallel; some may be blocked (used by a menu recipe) — keep the
-    // ones that succeeded and report how many could not go.
-    const results = await Promise.allSettled(ids.map((id) => deleteIngredient(id)));
-    const okIds = new Set(ids.filter((_, index) => results[index].status === "fulfilled"));
-    setIngredients((prev) => prev.filter((item) => !okIds.has(item.ID)));
-    setSelectedIds(new Set());
-    setBulkDeleting(false);
-    const failed = ids.length - okIds.size;
-    if (failed === 0) {
-      showToast({ title: lang === "th" ? `ลบ ${okIds.size} รายการแล้ว` : `Deleted ${okIds.size} items` });
-    } else {
-      showToast({
-        title:
-          lang === "th"
-            ? `ลบ ${okIds.size} รายการ • ${failed} รายการลบไม่ได้ (มีเมนูใช้อยู่)`
-            : `Deleted ${okIds.size} • ${failed} could not be deleted (in use by a menu)`,
-        tone: "warning",
-      });
-    }
   }
 
   function openBulk() {
@@ -1148,31 +1089,6 @@ export default function InventoryPage() {
 
           <div className="grid gap-4">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              {canManage && selectedIds.size > 0 && (
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm dark:border-gray-800 dark:bg-gray-900/40">
-                  <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300">
-                    {lang === "th" ? `เลือก ${selectedIds.size} รายการ` : `${selectedIds.size} selected`}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds(new Set())}
-                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-200/60 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-gray-800 dark:hover:text-slate-200"
-                    >
-                      {lang === "th" ? "ล้าง" : "Clear"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBulkDelete}
-                      disabled={bulkDeleting}
-                      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {lang === "th" ? "ลบ" : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              )}
               <div className="overflow-x-auto">
                 {filtered.length === 0 ? (
                   <div className="m-2 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
@@ -1187,20 +1103,6 @@ export default function InventoryPage() {
                   <table className="w-full min-w-[640px] border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
-                        {canManage && (
-                          <th className="w-12 px-4 py-2.5 text-center align-middle">
-                            <input
-                              type="checkbox"
-                              aria-label="select all"
-                              checked={allSelected}
-                              ref={(el) => {
-                                if (el) el.indeterminate = selectedIds.size > 0 && !allSelected;
-                              }}
-                              onChange={toggleSelectAll}
-                              className="h-4 w-4 cursor-pointer accent-orange-500"
-                            />
-                          </th>
-                        )}
                         {sortableTh(
                           "name",
                           // Count lives here now that the summary cards are gone.
@@ -1223,17 +1125,6 @@ export default function InventoryPage() {
 
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
-                            {canManage && (
-                              <td className="w-12 px-4 py-3 text-center align-middle">
-                                <input
-                                  type="checkbox"
-                                  aria-label={`select ${item.name}`}
-                                  checked={selectedIds.has(item.ID)}
-                                  onChange={() => toggleSelect(item.ID)}
-                                  className="h-4 w-4 cursor-pointer accent-orange-500"
-                                />
-                              </td>
-                            )}
                             <td className="px-4 py-3">
                               <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
                             </td>
