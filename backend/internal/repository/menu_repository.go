@@ -134,6 +134,23 @@ func (r *MenuRepository) ListMenuItems(restaurantID uint, includeInactive bool, 
 	return items, err
 }
 
+// AttachRemainingServings fills in RemainingServings on each stock-limited menu item
+// so the ordering UIs can show a live "sold out / N left" signal. Items without a
+// recipe are left as nil (unlimited).
+func (r *MenuRepository) AttachRemainingServings(restaurantID uint, items []entity.MenuItem) error {
+	remaining, err := MenuRemainingServings(r.db, restaurantID)
+	if err != nil {
+		return err
+	}
+	for index := range items {
+		if value, ok := remaining[items[index].ID]; ok {
+			count := value
+			items[index].RemainingServings = &count
+		}
+	}
+	return nil
+}
+
 func (r *MenuRepository) CreateMenuItem(item *entity.MenuItem) error {
 	return r.db.Create(item).Error
 }

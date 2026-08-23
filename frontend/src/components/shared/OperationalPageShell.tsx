@@ -46,7 +46,10 @@ export default function OperationalPageShell({
       className={`w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${
         edgeToEdge
           ? "flex h-[calc(100dvh-3.5rem)] min-h-0 overflow-y-hidden lg:h-[calc(100dvh-var(--dashboard-shell-row))]"
-          : "min-h-screen px-4 py-4 sm:px-6 lg:px-8 lg:py-6"
+          // The dashboard header is already accounted for above <main> - pt-14 on
+          // mobile, DashboardTopBar's spacer row on lg - so a full 100dvh here
+          // overflows the viewport by exactly the header's height.
+          : "min-h-[calc(100dvh-3.5rem)] px-4 py-4 sm:px-6 lg:min-h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:py-6"
       }`}
     >
       <div className={edgeToEdge ? "flex min-h-0 w-full flex-1 flex-col" : "w-full space-y-5"}>

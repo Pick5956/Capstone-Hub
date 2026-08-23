@@ -98,6 +98,10 @@ type CustomerMenuItemDTO struct {
 	DisplayOrder int                          `json:"display_order"`
 	Categories   []CustomerMenuCategoryDTO    `json:"categories"`
 	OptionGroups []CustomerMenuOptionGroupDTO `json:"option_groups"`
+	// RemainingServings is how many portions can still be made from current stock
+	// after subtracting what queued orders have already claimed. nil = no recipe
+	// (not stock-limited); 0 = sold out.
+	RemainingServings *int `json:"remaining_servings,omitempty"`
 }
 
 type CustomerOrderItemOptionDTO struct {
@@ -216,6 +220,13 @@ func (s *CustomerOrderService) SubmitOrder(
 		lockedTable, findErr := tx.FindTableByCustomerTokenForUpdate(normalizedToken)
 		if findErr != nil || lockedTable.ID != table.ID || lockedTable.RestaurantID != table.RestaurantID {
 			return errors.New("table QR code is no longer valid")
+		}
+		// Serialize order writes per restaurant so the per-item capacity checks in
+		// addCustomerItem can't race another table into overselling the same
+		// ingredient. Taken after the order/table row locks for a consistent lock
+		// order with the staff order flow (rows then advisory).
+		if err := tx.LockRestaurantOrderCounter(lockedTable.RestaurantID); err != nil {
+			return err
 		}
 		if order.PaymentStatus == entity.PaymentStatusPaid || isTerminalOrder(order.Status) {
 			return errors.New("order is already closed")
@@ -342,6 +353,10 @@ func customerTableResponse(
 	if err != nil {
 		return nil, err
 	}
+	remaining, err := repo.MenuRemainingServings(table.RestaurantID)
+	if err != nil {
+		return nil, err
+	}
 	var order *CustomerOrderDTO
 	if current, findErr := repo.FindCustomerOpenOrderByTable(table.RestaurantID, table.ID); findErr == nil {
 		order = customerOrderDTO(current)
@@ -352,7 +367,7 @@ func customerTableResponse(
 		Restaurant: customerRestaurantDTO(restaurant),
 		Table:      customerTableDTO(table),
 		Categories: customerCategoryDTOs(categories),
-		MenuItems:  customerMenuItemDTOs(menuItems),
+		MenuItems:  customerMenuItemDTOs(menuItems, remaining),
 		Order:      order,
 	}, nil
 }
@@ -369,6 +384,14 @@ func addCustomerItem(
 	}
 	if !menu.IsAvailable {
 		return 0, errors.New("menu item is unavailable")
+	}
+	// Block the order the moment the queue has claimed the last portion, instead of
+	// letting the customer wait until the kitchen discovers the shortage. remaining
+	// already subtracts every queued item, including ones added earlier in this cart.
+	// The submit transaction holds the per-restaurant order lock, so this check is
+	// safe against a concurrent order claiming the same stock.
+	if err := ensureMenuCapacity(tx, restaurantID, menu.ID, menu.Name, req.Quantity); err != nil {
+		return 0, err
 	}
 	selectedOptions, optionsTotal, err := validateSelectedMenuOptions(menu, req.SelectedOptionIDs)
 	if err != nil {
@@ -568,7 +591,7 @@ func customerCategoryDTOs(categories []entity.Category) []CustomerCategoryDTO {
 	return result
 }
 
-func customerMenuItemDTOs(items []entity.MenuItem) []CustomerMenuItemDTO {
+func customerMenuItemDTOs(items []entity.MenuItem, remaining map[uint]int) []CustomerMenuItemDTO {
 	result := make([]CustomerMenuItemDTO, 0, len(items))
 	for _, item := range items {
 		var category *CustomerCategoryDTO
@@ -609,7 +632,7 @@ func customerMenuItemDTOs(items []entity.MenuItem) []CustomerMenuItemDTO {
 				Options:      options,
 			})
 		}
-		result = append(result, CustomerMenuItemDTO{
+		dto := CustomerMenuItemDTO{
 			ID:           item.ID,
 			CategoryID:   item.CategoryID,
 			Category:     category,
@@ -621,7 +644,12 @@ func customerMenuItemDTOs(items []entity.MenuItem) []CustomerMenuItemDTO {
 			DisplayOrder: item.DisplayOrder,
 			Categories:   categoryLinks,
 			OptionGroups: optionGroups,
-		})
+		}
+		if count, ok := remaining[item.ID]; ok {
+			value := count
+			dto.RemainingServings = &value
+		}
+		result = append(result, dto)
 	}
 	return result
 }

@@ -514,6 +514,12 @@ func (r *OrderRepository) ListPublicMenuItems(restaurantID uint) ([]entity.MenuI
 	return items, err
 }
 
+// MenuRemainingServings exposes the available-to-promise portion count per menu
+// item for the customer-facing ordering flow (see repository.MenuRemainingServings).
+func (r *OrderRepository) MenuRemainingServings(restaurantID uint) (map[uint]int, error) {
+	return MenuRemainingServings(r.db, restaurantID)
+}
+
 func (r *OrderRepository) FindTable(restaurantID, tableID uint) (*entity.RestaurantTable, error) {
 	var table entity.RestaurantTable
 	err := r.db.Where("restaurant_id = ? AND id = ?", restaurantID, tableID).First(&table).Error

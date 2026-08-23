@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Printer } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, Printer } from "lucide-react";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -25,6 +25,8 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
+
+type SortKey = "spent_at" | "category" | "note" | "amount" | "created_by";
 
 type FormState = { restaurantId: number | null; id: number | null; category: ExpenseCategory; amount: string; spent_at: string; note: string };
 type ExpensePageData = {
@@ -61,6 +63,34 @@ const categoryDotClass: Record<ExpenseCategory, string> = {
   other: "bg-gray-400",
 };
 
+// Filter chips carry a light tint of the same hue as the row dot, so the six
+// categories are told apart at a glance. Selection is a neutral ring, not a
+// solid fill - a filled chip would bury the tint it is supposed to show.
+const categoryChipClass: Record<"all" | ExpenseCategory, string> = {
+  all: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900",
+  ingredient: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200 dark:hover:bg-emerald-900/50",
+  labor: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/50 dark:text-sky-200 dark:hover:bg-sky-900/50",
+  rent: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50",
+  utilities: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/50 dark:text-indigo-200 dark:hover:bg-indigo-900/50",
+  equipment: "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/50",
+  other: "border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200 dark:hover:bg-gray-800",
+};
+
+// First entry doubles as the threshold for showing the pager at all.
+const pageSizes = [10, 25, 50, 100];
+
+let sarabunBase64: string | null = null;
+
+async function loadSarabun() {
+  if (sarabunBase64) return sarabunBase64;
+  const response = await fetch("/fonts/Sarabun-Regular.ttf");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
+  sarabunBase64 = btoa(binary);
+  return sarabunBase64;
+}
+
 function emptyForm(restaurantId: number | null): FormState {
   return { restaurantId, id: null, category: "ingredient", amount: "", spent_at: toDashboardDate(new Date()), note: "" };
 }
@@ -78,6 +108,11 @@ export default function ExpensesPage() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [categoryFilter, setCategoryFilter] = useState<"all" | ExpenseCategory>("all");
+  const [pageSize, setPageSize] = useState(pageSizes[0]);
+  const [page, setPage] = useState(1);
+  // Matches the server's "spent_at desc, id desc", so the first paint is
+  // identical to the unsorted list.
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "spent_at", dir: "desc" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [storedForm, setForm] = useState<FormState>(() => emptyForm(restaurantId));
@@ -152,9 +187,12 @@ export default function ExpensesPage() {
             denied: "ไม่มีสิทธิ์ดูรายจ่าย",
             categories: { ingredient: "วัตถุดิบ", labor: "ค่าแรง", rent: "ค่าเช่า", utilities: "ค่าน้ำ/ไฟ", equipment: "อุปกรณ์", other: "อื่นๆ" } as Record<ExpenseCategory, string>,
             all: "ทั้งหมด",
-            previousMonth: "เดือนก่อน",
-            nextMonth: "เดือนถัดไป",
             monthTotal: "รวมทั้งเดือน",
+            exportError: "สร้างไฟล์ PDF ไม่สำเร็จ",
+            perPage: "ต่อหน้า",
+            previousPage: "หน้าก่อน",
+            nextPage: "หน้าถัดไป",
+            pageOf: (current: number, total: number) => `หน้า ${current} / ${total}`,
             entries: "รายการ",
             add: "เพิ่มรายจ่าย",
             edit: "แก้ไขรายจ่าย",
@@ -184,9 +222,12 @@ export default function ExpensesPage() {
             denied: "You do not have permission to view expenses.",
             categories: { ingredient: "Supplies", labor: "Wages", rent: "Rent", utilities: "Utilities", equipment: "Equipment", other: "Other" } as Record<ExpenseCategory, string>,
             all: "All",
-            previousMonth: "Previous month",
-            nextMonth: "Next month",
             monthTotal: "Month total",
+            exportError: "Could not create the PDF",
+            perPage: "per page",
+            previousPage: "Previous page",
+            nextPage: "Next page",
+            pageOf: (current: number, total: number) => `Page ${current} of ${total}`,
             entries: "entries",
             add: "Add expense",
             edit: "Edit expense",
@@ -218,9 +259,54 @@ export default function ExpensesPage() {
   const locale = language === "th" ? "th-TH" : "en-US";
   const monthStart = toDashboardDate(monthDate);
   const monthEnd = toDashboardDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
-  const monthLabel = monthDate.toLocaleDateString(locale, { month: "long", year: "numeric" });
-  const canGoNextMonth = monthDate.getTime() < new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const monthLabel = monthDate.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  const monthValue = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`;
+  // ponytail: a fixed two-year window back from today rather than the
+  // restaurant's real first expense - the list endpoint never reports one.
+  // Widen the count if anyone needs to look further back.
+  const monthOptions = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, offset) => {
+        const date = new Date(new Date().getFullYear(), new Date().getMonth() - offset, 1);
+        return {
+          value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+          label: date.toLocaleDateString(locale, { month: "short", year: "numeric" }),
+        };
+      }),
+    [locale],
+  );
   const scopedData = canView && data.restaurantId === restaurantId ? data : EMPTY_EXPENSE_DATA;
+  // Category totals come back month-wide even while a filter is on, so the "all"
+  // chip sums them rather than reading scopedData.total, which tracks the
+  // filtered rows and would collapse to one category's number.
+  const monthTotal = scopedData.categories.reduce((sum, item) => sum + item.amount, 0);
+  const sortedExpenses = useMemo(() => {
+    const sortValue = (expense: Expense) => {
+      switch (sort.key) {
+        case "amount": return expense.amount;
+        case "category": return copy.categories[expense.category];
+        case "note": return expense.note || "";
+        case "created_by": return expense.created_by ? `${expense.created_by.first_name} ${expense.created_by.last_name}`.trim() : "";
+        default: return expense.spent_at;
+      }
+    };
+    const direction = sort.dir === "asc" ? 1 : -1;
+    return [...scopedData.expenses].sort((left, right) => {
+      const leftValue = sortValue(left);
+      const rightValue = sortValue(right);
+      const compared = typeof leftValue === "number" && typeof rightValue === "number"
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue), locale);
+      // Ties fall back to newest-first, the order the endpoint already returns.
+      return compared !== 0 ? compared * direction : right.ID - left.ID;
+    });
+  }, [copy, locale, scopedData.expenses, sort]);
+
+  // Clamped rather than reset, so a shrinking list cannot strand the view on a
+  // page that no longer exists.
+  const pageCount = Math.max(1, Math.ceil(scopedData.expenses.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleExpenses = sortedExpenses.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const load = useCallback(async () => {
     const requestedRestaurantId = restaurantId;
@@ -301,9 +387,80 @@ export default function ExpensesPage() {
     }
   };
 
+  const exportPdf = async () => {
+    setError("");
+    try {
+      const [font, { jsPDF }, autoTable] = await Promise.all([
+        loadSarabun(),
+        import("jspdf"),
+        import("jspdf-autotable").then((module) => module.default),
+      ]);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      doc.addFileToVFS("Sarabun.ttf", font);
+      doc.addFont("Sarabun.ttf", "Sarabun", "normal");
+      doc.setFont("Sarabun");
+      doc.setFontSize(14);
+      doc.text(`${copy.title} ${monthLabel}`, 10, 14);
+
+      // Only the regular weight is embedded, so every cell asks for "normal";
+      // a bold request would silently fall back to Helvetica and drop the Thai.
+      const cell = { font: "Sarabun", fontStyle: "normal" as const };
+      autoTable(doc, {
+        startY: 19,
+        margin: { left: 10, right: 10 },
+        head: [["#", copy.date, copy.category, copy.note, copy.amount, copy.recordedBy]],
+        body: sortedExpenses.map((expense, index) => [
+          String(index + 1),
+          expense.spent_at.slice(0, 10),
+          copy.categories[expense.category],
+          expense.note || (expense.ingredient_transaction_id != null ? copy.generatedStockIn : "-"),
+          formatCurrency(expense.amount, language),
+          expense.created_by ? `${expense.created_by.first_name} ${expense.created_by.last_name}`.trim() : "-",
+        ]),
+        foot: [
+          [
+            { content: copy.monthTotal, colSpan: 4 },
+            formatCurrency(scopedData.total, language),
+            `${scopedData.entries} ${copy.entries}`,
+          ],
+          ...(scopedData.hasMore
+            ? [[{ content: copy.partialList(scopedData.expenses.length, scopedData.entries), colSpan: 6 }]]
+            : []),
+        ],
+        styles: { ...cell, fontSize: 9, cellPadding: 1.5, lineColor: 0, lineWidth: 0.1, textColor: 0 },
+        headStyles: { ...cell, fillColor: [223, 227, 230] },
+        footStyles: { ...cell, fillColor: [238, 241, 243] },
+        columnStyles: {
+          0: { cellWidth: 8, halign: "right" },
+          1: { cellWidth: 22 },
+          2: { cellWidth: 26 },
+          4: { cellWidth: 26, halign: "right" },
+          5: { cellWidth: 32 },
+        },
+      });
+      doc.save(`expenses-${monthValue}.pdf`);
+    } catch (err) {
+      setError(apiErrorMessage(err) || copy.exportError);
+    }
+  };
+
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
-  const shiftMonth = (delta: number) => setMonthDate((date) => new Date(date.getFullYear(), date.getMonth() + delta, 1));
+  const toggleSort = (key: SortKey) => {
+    setSort((current) =>
+      current.key === key
+        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
+        // Money and dates are most useful largest-first; text reads better a-z.
+        : { key, dir: key === "amount" || key === "spent_at" ? "desc" : "asc" },
+    );
+    setPage(1);
+  };
+
+  const selectMonth = (value: string) => {
+    const [year, month] = value.split("-").map(Number);
+    setMonthDate(new Date(year, month - 1, 1));
+    setPage(1);
+  };
   const inputClass =
     "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:focus:border-white";
 
@@ -312,18 +469,6 @@ export default function ExpensesPage() {
       eyebrow={copy.eyebrow}
       title={copy.title}
       hideHeaderText
-      actions={
-        <>
-          <Link href="/home" className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            {copy.back}
-          </Link>
-          <button type="button" onClick={() => window.print()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
-            <Printer className="h-4 w-4" aria-hidden="true" />
-            {copy.exportPdf}
-          </button>
-        </>
-      }
     >
       {/* Print = the browser's own "Save as PDF". No PDF library. */}
       <style>{`@media print {
@@ -351,54 +496,51 @@ export default function ExpensesPage() {
       }`}</style>
 
       <div id="expense-print">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 print:border-0">
-          <button type="button" onClick={() => shiftMonth(-1)} aria-label={copy.previousMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">‹</button>
-          <span className="min-w-[150px] px-3 py-2 text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100 print:px-0 print:text-left print:text-[16px]">{monthLabel}</span>
-          <button type="button" disabled={!canGoNextMonth} onClick={() => shiftMonth(1)} aria-label={copy.nextMonth} className="ui-press px-3 py-2 text-[13px] text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">›</button>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.monthTotal}</p>
-          <p className="font-mono text-[22px] font-bold tabular-nums text-gray-950 dark:text-white">{formatCurrency(scopedData.total, language)}</p>
-          <p className="text-[11px] text-gray-500">{scopedData.entries} {copy.entries}</p>
-        </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {canEdit ? (
+          <button type="button" onClick={openAdd} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 print:hidden">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            {copy.add}
+          </button>
+        ) : (
+          <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
+        )}
+        <ThemedSelect value={monthValue} onChange={selectMonth} options={monthOptions} className="w-[140px] print:hidden" />
+        {/* The picker itself is screen-only, so the PDF keeps a plain month heading. */}
+        <span className="hidden text-[16px] font-semibold print:block">{monthLabel}</span>
+        <span className="text-[11px] text-gray-500 dark:text-gray-400 print:hidden">{scopedData.entries} {copy.entries}</span>
+        {/* Icon-only, so the label has to survive as an accessible name. */}
+        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Link>
+        <button type="button" onClick={() => void exportPdf()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+          <Printer className="h-4 w-4" aria-hidden="true" />
+          {copy.exportPdf}
+        </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2 print:hidden">
+      <div className="mb-4 flex flex-wrap gap-1.5 print:hidden">
         {(["all", ...expenseCategories] as const).map((value) => {
-          const total = scopedData.categories.find((item) => item.category === value);
+          const amount = value === "all" ? monthTotal : scopedData.categories.find((item) => item.category === value)?.amount ?? 0;
           return (
             <button
               key={value}
               type="button"
-              onClick={() => setCategoryFilter(value)}
-              className={`ui-press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                categoryFilter === value
-                  ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+              onClick={() => { setCategoryFilter(value); setPage(1); }}
+              className={`ui-press inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-colors ${categoryChipClass[value]} ${
+                categoryFilter === value ? "ring-2 ring-gray-900 dark:ring-white" : ""
               }`}
             >
               {value === "all" ? copy.all : copy.categories[value]}
-              {total ? (
-                <span className={`rounded px-1.5 py-0.5 text-[11px] tabular-nums ${categoryFilter === value ? "bg-white/20" : "bg-gray-100 dark:bg-gray-800"}`}>
-                  {formatCurrency(total.amount, language)}
-                </span>
-              ) : null}
+              <span className="rounded-full bg-white/70 px-1.5 text-[10px] tabular-nums dark:bg-black/30">
+                {formatCurrency(amount, language)}
+              </span>
             </button>
           );
         })}
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300 print:hidden">{error}</div>}
-
-      {canEdit ? (
-        <button type="button" onClick={openAdd} className="ui-press mb-4 inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 print:hidden">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {copy.add}
-        </button>
-      ) : (
-        <p className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
-      )}
 
       {/* Print-only ledger. A real <table> so the browser repeats <thead> on every page. */}
       <table className="hidden print:table">
@@ -413,7 +555,7 @@ export default function ExpensesPage() {
           </tr>
         </thead>
         <tbody>
-          {scopedData.expenses.map((expense, index) => (
+          {sortedExpenses.map((expense, index) => (
             <tr key={expense.ID}>
               <td className="num">{index + 1}</td>
               <td>{expense.spent_at.slice(0, 10)}</td>
@@ -438,11 +580,27 @@ export default function ExpensesPage() {
 
       <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 print:hidden">
         <div className="hidden grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 lg:grid">
-          <span>{copy.date}</span>
-          <span>{copy.category}</span>
-          <span>{copy.note}</span>
-          <span className="text-right">{copy.amount}</span>
-          <span className="text-right">{copy.recordedBy}</span>
+          {([
+            { key: "spent_at", label: copy.date, end: false },
+            { key: "category", label: copy.category, end: false },
+            { key: "note", label: copy.note, end: false },
+            { key: "amount", label: copy.amount, end: true },
+            { key: "created_by", label: copy.recordedBy, end: true },
+          ] as const).map((column) => (
+            <button
+              key={column.key}
+              type="button"
+              onClick={() => toggleSort(column.key)}
+              className={`ui-press inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-gray-900 dark:hover:text-white ${column.end ? "justify-end" : ""}`}
+            >
+              {column.label}
+              {sort.key === column.key ? (
+                sort.dir === "asc"
+                  ? <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  : <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+              ) : null}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -451,7 +609,7 @@ export default function ExpensesPage() {
           </div>
         ) : scopedData.expenses.length ? (
           <div className="divide-y divide-gray-100 dark:divide-gray-900">
-            {scopedData.expenses.map((expense) => (
+            {visibleExpenses.map((expense) => (
               <div
                 key={expense.ID}
                 // Auto-generated stock-in rows are not editable, so only the
@@ -508,6 +666,28 @@ export default function ExpensesPage() {
           <p className="border-t border-gray-100 px-4 py-2.5 text-[11px] text-gray-500 dark:border-gray-900 dark:text-gray-400">
             {copy.partialList(scopedData.expenses.length, scopedData.entries)}
           </p>
+        ) : null}
+        {!loading && scopedData.expenses.length > pageSizes[0] ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-2.5 dark:border-gray-900 print:hidden">
+            <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+              <ThemedSelect
+                value={String(pageSize)}
+                onChange={(value) => { setPageSize(Number(value)); setPage(1); }}
+                options={pageSizes.map((size) => ({ value: String(size), label: String(size) }))}
+                className="w-[80px]"
+              />
+              {copy.perPage}
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} aria-label={copy.previousPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <span className="px-2 text-[12px] tabular-nums text-gray-600 dark:text-gray-300">{copy.pageOf(currentPage, pageCount)}</span>
+              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount} aria-label={copy.nextPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         ) : null}
       </div>
       </div>

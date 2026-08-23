@@ -404,6 +404,12 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 		if isTerminalOrder(order.Status) {
 			return errors.New("cannot add item to a closed order")
 		}
+		// Serialize order writes per restaurant so the capacity check below can't race
+		// another order into overselling the same ingredient. Taken after the order
+		// row lock to keep a consistent lock order with OpenOrder (row then advisory).
+		if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
+			return err
+		}
 		menu, err := tx.FindMenuItem(restaurantID, req.MenuID)
 		if err != nil {
 			return errors.New("menu item not found")
@@ -418,6 +424,9 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 		qty := req.Quantity
 		if qty <= 0 {
 			qty = 1
+		}
+		if err := ensureMenuCapacity(tx, restaurantID, menu.ID, menu.Name, qty); err != nil {
+			return err
 		}
 		selectedOptions, optionsTotal, err := validateSelectedMenuOptions(menu, req.SelectedOptionIDs)
 		if err != nil {
@@ -508,6 +517,17 @@ func (s *OrderService) UpdateItem(restaurantID, orderID, itemID uint, req *Updat
 		qty := req.Quantity
 		if qty <= 0 {
 			return errors.New("quantity must be greater than zero")
+		}
+		// Raising the quantity claims more stock, so gate the increase the same way a
+		// new item is gated. The item's current quantity is already counted in the
+		// committed usage, so only the delta needs fresh capacity.
+		if delta := qty - item.Quantity; delta > 0 {
+			if err := tx.LockRestaurantOrderCounter(restaurantID); err != nil {
+				return err
+			}
+			if err := ensureMenuCapacity(tx, restaurantID, item.MenuID, item.MenuName, delta); err != nil {
+				return err
+			}
 		}
 		item.Quantity = qty
 		item.Note = strings.TrimSpace(req.Note)

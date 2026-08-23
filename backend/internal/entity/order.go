@@ -33,7 +33,7 @@ const (
 
 type Order struct {
 	gorm.Model
-	RestaurantID                 uint       `json:"restaurant_id" gorm:"not null;index:idx_orders_restaurant_status_opened,priority:1;index:idx_orders_restaurant_table,priority:1;index:idx_orders_restaurant_table_opened,priority:1;index:idx_orders_restaurant_number_date,priority:1;index:idx_orders_reporting,priority:1;uniqueIndex:idx_orders_restaurant_day_number_v2,priority:1;uniqueIndex:idx_orders_one_active_table,priority:1,where:table_id IS NOT NULL AND deleted_at IS NULL AND status <> 'completed' AND status <> 'cancelled'"`
+	RestaurantID                 uint       `json:"restaurant_id" gorm:"not null;index:idx_orders_restaurant_status_opened,priority:1;index:idx_orders_restaurant_table,priority:1;index:idx_orders_restaurant_table_opened,priority:1;index:idx_orders_restaurant_number_date,priority:1;index:idx_orders_reporting,priority:1;uniqueIndex:idx_orders_restaurant_day_number_v2,priority:1,where:deleted_at IS NULL;uniqueIndex:idx_orders_one_active_table,priority:1,where:table_id IS NOT NULL AND deleted_at IS NULL AND status <> 'completed' AND status <> 'cancelled'"`
 	TableID                      *uint      `json:"table_id" gorm:"index:idx_orders_restaurant_table,priority:2;index:idx_orders_restaurant_table_opened,priority:2;uniqueIndex:idx_orders_one_active_table,priority:2"`
 	OrderType                    string     `json:"order_type" gorm:"size:32;not null;default:'dine_in';index;check:chk_orders_type,order_type IN ('dine_in','takeaway')"`
 	OrderNumber                  string     `json:"order_number" gorm:"size:32;not null;index:idx_orders_restaurant_number_date,priority:2;uniqueIndex:idx_orders_restaurant_day_number_v2,priority:3"`

@@ -14,6 +14,30 @@ func roundMoney(value float64) float64 {
 	return math.Round(value*100) / 100
 }
 
+// ensureMenuCapacity blocks an order that would claim more portions than current
+// stock can still promise for a recipe-limited menu. addQty is the extra portions
+// being placed. Menus without a recipe are unlimited and always pass. It must run
+// inside a transaction that already holds the per-restaurant order lock
+// (LockRestaurantOrderCounter) so two concurrent orders cannot both pass this check
+// and oversell the same ingredient.
+func ensureMenuCapacity(tx *repository.OrderRepository, restaurantID, menuID uint, menuName string, addQty int) error {
+	if addQty <= 0 {
+		return nil
+	}
+	remaining, err := tx.MenuRemainingServings(restaurantID)
+	if err != nil {
+		return err
+	}
+	left, ok := remaining[menuID]
+	if !ok || addQty <= left {
+		return nil
+	}
+	if left <= 0 {
+		return fmt.Errorf("%s is sold out", menuName)
+	}
+	return fmt.Errorf("only %d left for %s", left, menuName)
+}
+
 func refreshOrderStatusFromItems(tx *repository.OrderRepository, order *entity.Order, userID uint) error {
 	if order == nil || isTerminalOrder(order.Status) {
 		return nil

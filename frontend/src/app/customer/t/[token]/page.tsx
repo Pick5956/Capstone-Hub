@@ -79,6 +79,8 @@ export default function CustomerTableOrderPage() {
         added: "เพิ่มแล้ว",
         noImage: "ไม่มีรูป",
         soldOut: "สินค้าหมด",
+        lowStockLeft: "เหลือ",
+        servingUnit: "ที่",
         total: "รวม",
         close: "ปิด",
         remove: "ลบ",
@@ -116,6 +118,8 @@ export default function CustomerTableOrderPage() {
         added: "Added",
         noImage: "No image",
         soldOut: "Sold out",
+        lowStockLeft: "Only",
+        servingUnit: "left",
         total: "Total",
         close: "Close",
         remove: "Remove",
@@ -402,14 +406,23 @@ export default function CustomerTableOrderPage() {
           <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredMenu.map((item) => {
               const orderedQuantity = cartMenuQuantities.get(item.ID) ?? 0;
+              // remaining_servings === 0 means the queue has claimed the last portion,
+              // so treat it as sold out even while is_available is still true.
+              const soldOut = !item.is_available || item.remaining_servings === 0;
+              // Nudge when only a few portions are left so guests order before they run out.
+              const lowStock = !soldOut && typeof item.remaining_servings === "number" && item.remaining_servings > 0 && item.remaining_servings <= 10;
 
               return (
-                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || !item.is_available} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
-                  {!item.is_available && (
+                <button key={item.ID} type="button" onClick={() => openMenu(item)} disabled={!canOrder || soldOut} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform disabled:cursor-not-allowed disabled:opacity-55 dark:bg-transparent sm:min-h-[214px] sm:hover:-translate-y-0.5">
+                  {soldOut ? (
                     <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                       {copy.soldOut}
                     </span>
-                  )}
+                  ) : lowStock ? (
+                    <span className="absolute left-2 top-2 z-10 rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-amber-400 dark:text-gray-950">
+                      {copy.lowStockLeft} {item.remaining_servings} {copy.servingUnit}
+                    </span>
+                  ) : null}
                   {orderedQuantity > 0 && (
                     <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-gray-950 dark:shadow-black/30">
                       {copy.added} x{orderedQuantity}

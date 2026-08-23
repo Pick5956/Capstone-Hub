@@ -158,7 +158,14 @@ func (s *MenuService) DeleteCategory(restaurantID, categoryID uint) error {
 }
 
 func (s *MenuService) ListMenuItems(restaurantID uint, includeInactive bool, categoryID uint) ([]entity.MenuItem, error) {
-	return s.repo.ListMenuItems(restaurantID, includeInactive, categoryID)
+	items, err := s.repo.ListMenuItems(restaurantID, includeInactive, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.AttachRemainingServings(restaurantID, items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*entity.MenuItem, error) {
