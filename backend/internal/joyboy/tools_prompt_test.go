@@ -1,0 +1,76 @@
+package joyboy
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// selectionPrompt renders what the model is shown when it picks tools, the same
+// way Ask does.
+func selectionPrompt(question string, history []Turn, catalogue []ToolSpec) string {
+	return fmt.Sprintf(selectToolsTemplate, question, formatHistory(history), renderCatalogue(catalogue))
+}
+
+// The four topics are the floor for a store overview. Without them the model
+// re-decided what an overview meant on every ask — four runs of the identical
+// question produced margins once, the average bill once, and neither twice.
+// They are asserted as topics because the rule deliberately names topics rather
+// than tools, so that renaming a tool cannot silently empty the rule.
+func TestTheSelectionPromptFixesWhatAStoreOverviewContains(t *testing.T) {
+	prompt := selectionPrompt("สรุปสถานการณ์ร้าน 30 วันล่าสุด", nil, []ToolSpec{
+		{Name: "get_sales_summary", Description: "ยอดขายรวม"},
+	})
+	for _, topic := range []string{"ยอดขาย", "เมนูขายดี", "วัตถุดิบที่ใกล้หมด", "มูลค่าคงคลัง"} {
+		if !strings.Contains(prompt, topic) {
+			t.Fatalf("a store overview no longer requires %q", topic)
+		}
+	}
+	if !strings.Contains(prompt, "ห้ามขาด") {
+		t.Fatal("the four topics stopped being mandatory")
+	}
+}
+
+// Owners do not type the phrase from the spec. The rule fires on the wording
+// they actually use, which is the same finding that fixed tool selection in
+// round four: descriptions written in the owner's words picked correctly twice
+// out of two, the English quadrant wording once out of two.
+func TestTheStoreOverviewRuleListsHowOwnersActuallyAsk(t *testing.T) {
+	prompt := selectionPrompt("ร้านเป็นไงบ้าง", nil, nil)
+	for _, phrasing := range []string{"สรุปสถานการณ์ร้าน", "ร้านเป็นไงบ้าง", "ช่วงนี้เป็นยังไง", "สรุปให้หน่อย"} {
+		if !strings.Contains(prompt, phrasing) {
+			t.Fatalf("the rule no longer recognises %q", phrasing)
+		}
+	}
+}
+
+// A floor, not a ceiling. Capping the selection would cost the behaviour joyboy
+// exists for: asked "แล้วทำไมถึงขึ้นล่ะ" it reached for four extra tools to find
+// the cause, which is the point legacy could not reach.
+func TestTheStoreOverviewRuleStillAllowsReachingForMore(t *testing.T) {
+	prompt := selectionPrompt("สรุปสถานการณ์ร้าน", nil, nil)
+	if !strings.Contains(prompt, "หยิบเรื่องอื่นเพิ่มได้") {
+		t.Fatal("the rule turned into a ceiling")
+	}
+	// The greeting path has to survive a rule about overviews: a question that
+	// needs no data at all still selects nothing.
+	if !strings.Contains(prompt, "ให้ตอบ []") {
+		t.Fatal("the no-tools escape was lost")
+	}
+}
+
+// The template is a format string with three verbs in a fixed order. Adding the
+// rule above them is exactly the edit that would break the pairing, and a
+// mismatched verb prints "%!s(MISSING)" into the instructions rather than
+// failing, producing a worse selection instead of an error.
+func TestTheSelectionPromptRendersWithoutFormatArtifacts(t *testing.T) {
+	prompt := selectionPrompt("เมนูไหนขายดี", []Turn{{Role: "user", Content: "สวัสดี"}}, []ToolSpec{
+		{Name: "get_top_selling_menus", Description: "เมนูขายดี"},
+	})
+	if strings.Contains(prompt, "%!") || strings.Contains(prompt, "(MISSING)") || strings.Contains(prompt, "(EXTRA") {
+		t.Fatalf("a format verb did not match its argument:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "เมนูไหนขายดี") || !strings.Contains(prompt, "get_top_selling_menus") {
+		t.Fatal("the question or the catalogue was lost from the selection prompt")
+	}
+}

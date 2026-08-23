@@ -6,6 +6,23 @@ import (
 	"strings"
 )
 
+// selectToolsTemplate carries one selection rule, and it is here rather than in
+// the tool descriptions for a reason. Asked "สรุปสถานการณ์ร้าน" four times the
+// model reached for six tools, then four, then four, then five: the same four
+// every time plus a different extra each round, so one run reported margins,
+// another the average bill, and two neither. Nothing in the system said what a
+// store overview has to contain — get_store_summary used to, and was dropped in
+// round four for bundling its five topics lossily, with nothing put in its place.
+//
+// Marking each tool "one of the main sources for a store overview" would say it
+// in four places and still never state the full set, so the model could not tell
+// whether it had them all. It would also leave that sentence in front of the
+// model when someone asks only about stock. One list, in one place, read once
+// per question.
+//
+// The rule names topics rather than tools, so renaming a tool cannot break it,
+// and it is a floor rather than a ceiling: reaching for more is what makes this
+// worth having over legacy's single fixed bundle.
 const selectToolsTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร กำลังจะตอบคำถามด้านล่าง
 
 คำถาม:
@@ -13,6 +30,11 @@ const selectToolsTemplate = `คุณคือผู้ช่วยของเ
 %s
 เครื่องมือที่เรียกได้:
 %s
+
+ถ้าคำถามขอภาพรวมของร้าน เช่น "สรุปสถานการณ์ร้าน" "ร้านเป็นไงบ้าง" "ช่วงนี้เป็นยังไง"
+"สรุปให้หน่อย" ให้เลือกเครื่องมือที่ครอบคลุมทั้งสี่เรื่องนี้เสมอ
+ยอดขาย · เมนูขายดี · วัตถุดิบที่ใกล้หมด · มูลค่าคงคลัง
+หยิบเรื่องอื่นเพิ่มได้ถ้าเห็นว่าเกี่ยวกับคำถาม แต่สี่เรื่องนี้ห้ามขาด
 
 ตอบกลับเป็น JSON array ของชื่อเครื่องมือที่ต้องใช้เท่านั้น ห้ามมีข้อความอื่น
 เลือกได้หลายตัว เช่น ["get_top_selling_menus","get_low_stock_ingredients"]
