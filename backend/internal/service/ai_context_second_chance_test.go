@@ -126,3 +126,64 @@ func TestSecondChanceOnlyRunsWhenItCanHelp(t *testing.T) {
 		t.Fatalf("with nothing to resolve against, the question must still be handed back, got task %q", response.Task)
 	}
 }
+
+// A question the classifier understands but no tool can serve.
+//
+// Measured on 23 Aug: after "เมนูไหนกำไรดีสุด" the owner asked "ถ้าขายเพิ่ม 20%
+// จะได้กำไรเท่าไหร่". The rewrite resolved it correctly against history, and the
+// classifier still answered 0.40 with no tool - because every tool reads what
+// already happened and none of them projects. The owner was then handed the
+// generic "did you mean top sellers, margins, sales or stock" message, which
+// says "I did not understand you" about a question that was understood.
+func TestResolvedQuestionWithNoToolIsAnsweredNotHandedBack(t *testing.T) {
+	t.Setenv("AI_CONVERSATION_MEMORY_ENABLED", "false")
+	t.Setenv("AI_NARRATION", "off")
+
+	const asked = "ถ้าขายเพิ่ม 20% จะได้กำไรเท่าไหร่"
+	const rewritten = "ถ้าขายข้าวกะเพราไก่ไข่ดาวเพิ่ม 20% จะได้กำไรเท่าไหร่"
+
+	provider := &stubAIProviderAdapter{
+		id: "groq", displayName: "Groq", configured: true,
+		classify: func(string) (AIRouterResult, error) {
+			// What the live classifier answered for both the original and the rewrite.
+			return AIRouterResult{Task: AITaskAnalyzeData, Confidence: 0.40}, nil
+		},
+		complete: func(string) (aiProviderAnswer, error) {
+			return aiProviderAnswer{Text: rewritten, Model: "rewrite-model"}, nil
+		},
+	}
+	service := &AIService{providerAdapters: []aiProviderAdapter{provider}}
+
+	_, err := service.AskOperationsForOwner(context.Background(), ownerActor(), &AIAskRequest{
+		Question: asked,
+		History: []AIConversationMessage{
+			{Role: "user", Content: "เมนูไหนกำไรดีสุด"},
+			{Role: "assistant", Content: "ข้าวกะเพราไก่ไข่ดาว กำไรรวม 4,083.32 บาท"},
+		},
+	})
+
+	// With no repository wired in this fixture the analytical path stops at the
+	// snapshot. Reaching that error is the proof: the question was no longer
+	// turned away at the clarify gate.
+	if err == nil {
+		t.Fatal("expected the analytical path to run and report its own error")
+	}
+	if !strings.Contains(err.Error(), "repository") {
+		t.Fatalf("error = %v, want the analytical snapshot path", err)
+	}
+}
+
+// The bypass is only for questions about this shop's numbers. A vague opener
+// with no history behind it must still be handed back.
+func TestOnlyAnalyticalTasksSkipTheClarifyGate(t *testing.T) {
+	for _, task := range []AITask{AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction, AITaskRestaurantAdvice} {
+		if !isAnalyticalTask(task) {
+			t.Errorf("%s should be treated as analytical", task)
+		}
+	}
+	for _, task := range []AITask{AITaskUnclear, AITaskOutOfScope, AITaskRiskyAction, AITaskGeneralChat} {
+		if isAnalyticalTask(task) {
+			t.Errorf("%s must keep reaching its own gate", task)
+		}
+	}
+}

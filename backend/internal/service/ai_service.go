@@ -89,6 +89,18 @@ func ProvideAIServiceWithStores(
 // turned away, or turned away without the rewrite being tried.
 const clarifyConfidenceFloor = 0.65
 
+// isAnalyticalTask lists the labels that mean "a question about this shop's
+// own numbers". Deliberately excludes unclear, out_of_scope and risky_action:
+// those have gates of their own further down and must keep reaching them.
+func isAnalyticalTask(task AITask) bool {
+	switch task {
+	case AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction, AITaskRestaurantAdvice:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	provider := s.getAIProvider()
 	var lastErr error
@@ -278,6 +290,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	askedQuestion := question
 	var routerResult AIRouterResult
 	usedHistory := false
+	rewroteFromHistory := false
 	if prepared != nil {
 		question = prepared.plan.ResolvedQuestion
 		routerResult = prepared.router
@@ -387,6 +400,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiDebug("second chance → %q", resolved)
 			question = resolved
 			usedHistory = true
+			rewroteFromHistory = true
 			if retried, retryErr := s.classifyIntent(question); retryErr != nil {
 				aiStage("warn", "second-chance classify failed (%v) → keeping the first result", retryErr)
 			} else {
@@ -400,8 +414,26 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// The classifier answers 0.40 for two situations that need opposite
+	// treatment: it did not understand the question, and it understood the
+	// question perfectly but no tool can serve it. "If I sell 20% more, what do I
+	// earn" is the second - a clear question with no tool behind it, because
+	// every tool reads what already happened. Handing it back with a menu of
+	// unrelated suggestions reads as "I did not understand you", which is false
+	// and is what the owner sees.
+	//
+	// Once the rewrite has resolved the question against history, the first
+	// situation is ruled out: we know what is being asked. So an analytical
+	// question goes on to the free-form path, where the model answers from the
+	// snapshot instead of being turned away.
+	answeredFromContext := rewroteFromHistory && isAnalyticalTask(routerResult.Task)
+	if answeredFromContext {
+		aiStage("route", "resolved from history but no tool fits → answering free-form instead of asking back")
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
-	if (routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
+	if (routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) &&
+		!structuredFollowUp && !answeredFromContext {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
 		clarification := "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ"
 		model := "local-router-fallback"
@@ -473,8 +505,8 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 
 	intent = mapTaskToIntent(routerResult.Task)
 	needsData := routerResult.NeedsRestaurantData || intent == AIIntentAnalysis
-	if structuredFollowUp {
-		// It is a read-only ranking question regardless of how the router labelled it.
+	if structuredFollowUp || answeredFromContext {
+		// A read-only question about this shop, whatever label the router put on it.
 		intent = AIIntentAnalysis
 		needsData = true
 	}
