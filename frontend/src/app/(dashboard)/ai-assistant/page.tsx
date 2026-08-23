@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -151,6 +152,8 @@ export default function AIAssistantPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [outage, setOutage] = useState<AIOutage | null>(null);
+  const [lastQuestion, setLastQuestion] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
@@ -294,6 +297,8 @@ export default function AIAssistantPage() {
     if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     setInput("");
     setError("");
+    setOutage(null);
+    setLastQuestion(trimmed);
     setPendingAction(null);
     setPendingActionPreview(null);
     setActionPreviewError("");
@@ -365,6 +370,13 @@ export default function AIAssistantPage() {
       ]);
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
+      // An outage gets its own card with the wait and a retry button, instead of
+      // the generic red strip that reads as though the question was at fault.
+      const reportedOutage = readAIOutage(err);
+      if (reportedOutage) {
+        setOutage(reportedOutage);
+        return;
+      }
       const message =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
@@ -652,6 +664,19 @@ export default function AIAssistantPage() {
                   <span className="ai-shimmer-text text-sm font-medium">{copy.thinking}</span>
                 </div>
               </div>
+            )}
+
+            {outage && (
+              <AIOutageNotice
+                language={language}
+                outage={outage}
+                retrying={loading}
+                onRetry={() => {
+                  const question = lastQuestion;
+                  setOutage(null);
+                  if (question) void submitQuestion(question);
+                }}
+              />
             )}
 
             {error && (

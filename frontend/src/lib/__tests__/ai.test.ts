@@ -8,7 +8,7 @@ const apiClient = vi.hoisted(() => ({
 
 vi.mock("../apiClient", () => ({ apiClient }));
 
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, normalizeAIAnswer } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 
 describe("AI conversation API", () => {
   beforeEach(() => {
@@ -69,5 +69,44 @@ describe("AI conversation API", () => {
     expect(apiClient.delete).toHaveBeenCalledWith(
       "/api/v1/ai/operations/actions/preview%2F123",
     );
+  });
+});
+
+// The assistant refuses to answer from the database once a provider is down, so
+// these two shapes are the only thing standing between the owner and a blank
+// failure. They have to survive the trip through axios intact.
+describe("AI outage reporting", () => {
+  const responseError = (status: number, data: unknown) => ({ response: { status, data } });
+
+  it("reads a spent quota together with the wait the provider named", () => {
+    const outage = readAIOutage(
+      responseError(429, {
+        error: "โควตา AI ถูกใช้จนหมดแล้วครับ ลองใหม่อีกครั้งใน 42 นาที",
+        code: "ai_quota_exceeded",
+        retry_after_seconds: 2520,
+      }),
+    );
+    expect(outage).toEqual({
+      kind: "quota",
+      message: "โควตา AI ถูกใช้จนหมดแล้วครับ ลองใหม่อีกครั้งใน 42 นาที",
+      retryAfterSeconds: 2520,
+    });
+  });
+
+  it("reads an unreachable provider and invents no countdown", () => {
+    const outage = readAIOutage(
+      responseError(503, {
+        error: "ตอนนี้เชื่อมต่อผู้ช่วย AI ไม่ได้ครับ",
+        code: "ai_provider_unavailable",
+      }),
+    );
+    expect(outage?.kind).toBe("provider");
+    expect(outage?.retryAfterSeconds).toBeUndefined();
+  });
+
+  it("leaves ordinary failures to the ordinary error strip", () => {
+    expect(readAIOutage(responseError(400, { error: "question is required" }))).toBeNull();
+    expect(readAIOutage(new Error("network down"))).toBeNull();
+    expect(readAIOutage(null)).toBeNull();
   });
 });
