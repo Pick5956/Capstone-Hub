@@ -373,6 +373,7 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkClosing, setBulkClosing] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ ...bulkEmptyRow }]);
@@ -507,11 +508,18 @@ export default function InventoryPage() {
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pageItems = filtered.slice(pageStart, pageStart + pageSize);
+  const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.ID));
 
   // Back to the first page whenever the result set or page size changes.
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, categoryFilter, pageSize]);
+
+  // A new filter is a new context — drop any selection so a stale selection
+  // never refers to rows you can no longer see.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, statusFilter, categoryFilter]);
 
   // If deletions shrink the list past the current page, clamp back into range.
   useEffect(() => {
@@ -688,6 +696,21 @@ export default function InventoryPage() {
         closeDeleteModal();
       }
     });
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Header checkbox: with nothing selected it selects every filtered row;
+  // with anything selected — even a single row — one press clears it all.
+  function toggleSelectAll() {
+    setSelectedIds((prev) => (prev.size > 0 ? new Set() : new Set(filtered.map((item) => item.ID))));
   }
 
   function openBulk() {
@@ -1103,6 +1126,20 @@ export default function InventoryPage() {
                   <table className="w-full min-w-[640px] border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-gray-800 dark:text-slate-500">
+                        {canManage && (
+                          <th className="w-12 px-4 py-2.5 text-center align-middle">
+                            <input
+                              type="checkbox"
+                              aria-label="select all"
+                              checked={allSelected}
+                              ref={(el) => {
+                                if (el) el.indeterminate = selectedIds.size > 0 && !allSelected;
+                              }}
+                              onChange={toggleSelectAll}
+                              className="h-4 w-4 cursor-pointer accent-orange-500"
+                            />
+                          </th>
+                        )}
                         {sortableTh(
                           "name",
                           // Count lives here now that the summary cards are gone.
@@ -1125,6 +1162,17 @@ export default function InventoryPage() {
 
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
+                            {canManage && (
+                              <td className="w-12 px-4 py-3 text-center align-middle">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`select ${item.name}`}
+                                  checked={selectedIds.has(item.ID)}
+                                  onChange={() => toggleSelect(item.ID)}
+                                  className="h-4 w-4 cursor-pointer accent-orange-500"
+                                />
+                              </td>
+                            )}
                             <td className="px-4 py-3">
                               <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
                             </td>
