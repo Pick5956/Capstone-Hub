@@ -2,32 +2,38 @@ package joyboy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 )
 
+// fakeChat answers the tool-selection prompt with selected, then hands out
+// replies one per writing attempt.
 type fakeChat struct {
-	selected      []string
-	selectErr     error
-	replies       []string
-	writeErr      error
-	writeCalls    int
-	lastPrompt    string
-	lastSelectAsk string
+	selected   []string
+	selectErr  error
+	replies    []string
+	writeCalls int
+	lastPrompt string
+	selectAsk  string
 }
 
-func (c *fakeChat) SelectTools(_ context.Context, prompt string, _ []ToolSpec) ([]string, error) {
-	c.lastSelectAsk = prompt
-	return c.selected, c.selectErr
-}
+func (c *fakeChat) Complete(_ context.Context, prompt string) (string, error) {
+	if strings.Contains(prompt, "ตอบกลับเป็น JSON array") {
+		c.selectAsk = prompt
+		if c.selectErr != nil {
+			return "", c.selectErr
+		}
+		encoded, err := json.Marshal(c.selected)
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
 
-func (c *fakeChat) Write(_ context.Context, prompt string) (string, error) {
 	c.writeCalls++
 	c.lastPrompt = prompt
-	if c.writeErr != nil {
-		return "", c.writeErr
-	}
 	if len(c.replies) == 0 {
 		return "", nil
 	}
@@ -227,5 +233,25 @@ func TestNewRefusesMissingDependencies(t *testing.T) {
 	}
 	if _, err := New(&fakeChat{}, nil, nil); err == nil {
 		t.Fatal("a missing tool runner should be refused")
+	}
+}
+
+// The model names tools in prose. Anything it invents is dropped, and a reply
+// that cannot be read at all selects nothing — which answers without data
+// rather than failing the question.
+func TestToolSelectionKeepsOnlyRealToolNames(t *testing.T) {
+	catalogue := (&fakeTools{}).Catalogue()
+
+	selected := parseToolSelection(
+		"```json\n[\"get_top_selling_menus\", \"get_menu_horoscope\"]\n```", catalogue)
+	if len(selected) != 1 || selected[0] != "get_top_selling_menus" {
+		t.Fatalf("selected = %v, want only the real tool", selected)
+	}
+
+	if got := parseToolSelection("ผมขอดูเมนูขายดีครับ", catalogue); len(got) != 0 {
+		t.Fatalf("prose reply selected %v, want nothing", got)
+	}
+	if got := parseToolSelection("[]", catalogue); len(got) != 0 {
+		t.Fatalf("empty array selected %v", got)
 	}
 }

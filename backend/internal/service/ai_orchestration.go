@@ -18,6 +18,7 @@ const (
 	aiOrchestratorLegacy  aiOrchestratorMode = "legacy"
 	aiOrchestratorShadow  aiOrchestratorMode = "shadow"
 	aiOrchestratorPlanner aiOrchestratorMode = "planner"
+	aiOrchestratorJoyboy  aiOrchestratorMode = "joyboy"
 )
 
 type aiPreparedOrchestration struct {
@@ -38,6 +39,8 @@ func aiOrchestrationMode() aiOrchestratorMode {
 		return aiOrchestratorShadow
 	case string(aiOrchestratorPlanner):
 		return aiOrchestratorPlanner
+	case string(aiOrchestratorJoyboy):
+		return aiOrchestratorJoyboy
 	default:
 		return aiOrchestratorLegacy
 	}

@@ -195,6 +195,23 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 	}
 	request.History = history
 
+	if aiOrchestrationMode() == aiOrchestratorJoyboy {
+		aiStage("input", "joyboy | question_length=%d history_turns=%d",
+			len([]rune(request.Question)), len(history))
+		response, joyboyErr := s.askJoyboy(ctx, actor, &request)
+		if joyboyErr != nil {
+			return nil, joyboyErr
+		}
+		if session == nil {
+			return response, nil
+		}
+		response.ConversationID = session.conversation.ID
+		if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
+			return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
+		}
+		return response, nil
+	}
+
 	questionParts := splitSystemDocsAndLiveQuestion(originalQuestion)
 	var docsResponse *AIAskResponse
 	if questionParts.DocsQuestion != "" {

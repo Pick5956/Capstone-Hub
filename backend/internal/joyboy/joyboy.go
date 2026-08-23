@@ -43,10 +43,12 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	catalogue := a.tools.Catalogue()
-	requested, err := a.chat.SelectTools(ctx, selectToolsPrompt(question, request.History), catalogue)
+	selection, err := a.chat.Complete(ctx, fmt.Sprintf(
+		selectToolsTemplate, question, formatHistory(request.History), renderCatalogue(catalogue)))
 	if err != nil {
 		return Answer{}, fmt.Errorf("%w: choosing tools: %w", ErrUnavailable, err)
 	}
+	requested := parseToolSelection(selection, catalogue)
 
 	// A model that asks for the same tool twice gets it once. Nothing is capped
 	// beyond that: how many tools it really reaches for is one of the things
@@ -75,7 +77,7 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 	prompt := answerPrompt(question, history, sheet)
 	var lastErr error
 	for attempt := 1; attempt <= 2; attempt++ {
-		raw, err := a.chat.Write(ctx, prompt)
+		raw, err := a.chat.Complete(ctx, prompt)
 		if err != nil {
 			lastErr = err
 			a.log("joyboy: writing the answer failed on attempt %d: %v", attempt, err)

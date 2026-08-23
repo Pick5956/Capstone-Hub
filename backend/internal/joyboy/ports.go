@@ -4,7 +4,7 @@ import "context"
 
 // The interfaces here are the entire surface between Joyboy and the rest of the
 // backend. They are written from Joyboy's side — what it needs, not what the
-// service happens to expose — so that the wiring can change without this package
+// service happens to expose — so the wiring can change without this package
 // noticing, and so the package can be exercised with fakes.
 
 // ToolSpec is one capability offered to the model: a stable name and a sentence
@@ -15,17 +15,15 @@ type ToolSpec struct {
 	Description string
 }
 
-// Chat is one turn with a language model.
+// Chat is one turn with a language model: a prompt in, text out.
 //
-// SelectTools offers the catalogue and reports which tools the model asked for;
-// an empty result means it wants to answer without data, which is the right
-// call for "สวัสดีครับ". Write asks for prose and returns it verbatim.
-//
-// Both are expected to handle provider fallback and key rotation internally —
-// Joyboy does not know that Groq or Gemini exist.
+// Deliberately not a tool-calling interface. Joyboy asks for tools by naming
+// them in the prompt and reading the names back out of the reply, which works
+// the same on every provider, keeps the protocol in this package where it can
+// be tested, and leaves the implementation with one job — call a model, with
+// whatever key rotation and provider fallback the backend already has.
 type Chat interface {
-	SelectTools(ctx context.Context, prompt string, tools []ToolSpec) ([]string, error)
-	Write(ctx context.Context, prompt string) (string, error)
+	Complete(ctx context.Context, prompt string) (string, error)
 }
 
 // ToolResult is what one tool produced, already rendered as text by the code
@@ -40,13 +38,13 @@ type ToolResult struct {
 
 // Tools runs the read-only capabilities against one restaurant's data.
 //
-// Catalogue is the full list offered to the model. Run is given names the model
-// asked for and returns only the ones it recognises and could execute; an
-// unknown or non-read-only name is dropped rather than failing the question,
-// because a model guessing a tool name should cost the owner nothing.
+// Catalogue is the full list offered to the model. Run is given the names the
+// model asked for and returns only those it recognises and could execute; an
+// unknown name is dropped rather than failing the question, because a model
+// guessing should cost the owner nothing.
 //
-// Implementations must bind the restaurant themselves. Joyboy passes no
-// identity because it holds none.
+// Implementations bind the restaurant themselves. Joyboy passes no identity
+// because it holds none.
 type Tools interface {
 	Catalogue() []ToolSpec
 	Run(ctx context.Context, names []string) ([]ToolResult, error)
@@ -64,7 +62,7 @@ type Request struct {
 	History  []Turn
 }
 
-// Answer is what the owner reads, plus what the tools were asked for, which the
+// Answer is what the owner reads, plus the tools that produced it, which the
 // caller logs. Tools is empty when the model chose to answer without data.
 type Answer struct {
 	Text  string

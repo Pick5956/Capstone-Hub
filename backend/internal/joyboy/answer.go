@@ -14,14 +14,6 @@ const maxAnswerRunes = 1600
 // conversation into every prompt.
 const historyTurns = 4
 
-const selectToolsTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร กำลังจะตอบคำถามด้านล่าง
-
-คำถาม:
-%s
-%s
-เลือกเครื่องมือที่ต้องใช้เพื่อตอบคำถามนี้ เรียกได้หลายตัวพร้อมกัน
-ถ้าคำถามไม่ต้องใช้ข้อมูลของร้านเลย เช่นทักทายหรือถามความหมายของศัพท์ ก็ไม่ต้องเรียกเครื่องมือ`
-
 const answerTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร ตอบคำถามจากข้อมูลที่ระบบคำนวณมาแล้วด้านล่าง
 
 คำถาม:
@@ -50,10 +42,6 @@ const noDataAnswerTemplate = `คุณคือผู้ช่วยของ�
 - ห้ามอ้างค่าเฉลี่ยของร้านอื่น ราคาตลาด หรือสถิติอุตสาหกรรม เพราะตรวจสอบไม่ได้
 - ถ้าคำถามต้องใช้ข้อมูลของร้าน ให้บอกว่าขอดูข้อมูลส่วนไหนเพิ่ม
 - ตอบเป็นภาษาไทย กระชับ`
-
-func selectToolsPrompt(question string, history []Turn) string {
-	return fmt.Sprintf(selectToolsTemplate, question, formatHistory(history))
-}
 
 func answerPrompt(question string, history []Turn, sheet string) string {
 	if strings.TrimSpace(sheet) == "" {
