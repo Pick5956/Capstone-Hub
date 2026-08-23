@@ -2,6 +2,7 @@ package joyboy
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -19,17 +20,23 @@ const answerTemplate = `คุณคือผู้ช่วยของเจ�
 คำถาม:
 %s
 %s
-ข้อมูลที่ระบบคำนวณมาแล้ว:
+ข้อมูลที่ระบบคำนวณมาแล้ว (หนึ่งบรรทัดต่อหนึ่งรายการ เขียนเป็น ชื่อค่า=ค่า):
 %s
 
 กฎ:
-- ตัวเลขทุกตัวต้องคัดลอกจากข้อมูลข้างบนเท่านั้น ห้ามสร้างใหม่ ห้ามคำนวณเพิ่ม ห้ามปัดเศษ
+- ตัวเลขทุกตัวต้องคัดลอกจากข้อมูลข้างบนเท่านั้น ห้ามสร้างใหม่ ห้ามคำนวณเพิ่ม
+- ห้ามตั้งเกณฑ์ตัดสินขึ้นเองแล้วสรุปจากเกณฑ์นั้น เช่น "ขายดี" หรือ "กำไรน้อย"
+  ให้ยึดลำดับและค่าที่ข้อมูลข้างบนให้มา ไม่ใช่เส้นแบ่งที่คุณคิดขึ้น
 - ห้ามเพิ่มข้อเท็จจริงจากความรู้ของคุณเอง เช่นค่าเฉลี่ยของร้านอื่นหรือราคาตลาด
   ถ้าข้อมูลข้างบนไม่พอจะตอบ ให้บอกตรง ๆ ว่าไม่มีข้อมูลส่วนนั้น
-- แต่ละบล็อกในข้อมูลมีป้ายบอกว่ามาจากไหนและครอบคลุมช่วงเวลาใด
-  ถ้าเอ่ยตัวเลข ให้บอกช่วงเวลาที่ตัวเลขนั้นครอบคลุมด้วย
+- บรรทัด period= บอกช่วงเวลาที่ตัวเลขในบล็อกนั้นครอบคลุม ถ้าเอ่ยตัวเลข ให้บอกช่วงเวลาด้วย
+- status=no_data แปลว่าเครื่องมือนั้นไม่มีข้อมูล ให้อธิบายตามเหตุผลที่ reason= ระบุไว้
+- ชื่อในวงเล็บเหลี่ยม เช่น [get_sales_trend] เป็นชื่อเครื่องมือภายในระบบ
+  ห้ามเอ่ยถึงหรือเขียนลงในคำตอบ
+- ตัวเลขในข้อมูลเป็นเลขดิบ ให้จัดรูปแบบให้คนอ่านง่ายเอง และใช้รูปแบบเดียวกันทั้งคำตอบ
 - ข้อมูลที่ไม่เกี่ยวกับคำถาม ไม่ต้องพูดถึง ไม่ต้องไล่ให้ครบ
-- ตอบเป็นภาษาไทย กระชับ ไม่ต้องทวนคำถาม ไม่ต้องใส่หัวข้อ`
+- ตอบเป็นภาษาไทย กระชับ ลงท้ายสุภาพด้วย "ครับ" ไม่ต้องทวนคำถาม ไม่ต้องใส่หัวข้อ
+- ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX เขียนสูตรเป็นข้อความธรรมดา`
 
 const noDataAnswerTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร ตอบคำถามด้านล่าง
 
@@ -41,7 +48,8 @@ const noDataAnswerTemplate = `คุณคือผู้ช่วยของ�
 - ห้ามอ้างตัวเลขใด ๆ เกี่ยวกับร้านนี้ เพราะคุณไม่ได้รับข้อมูลของร้านมาเลย
 - ห้ามอ้างค่าเฉลี่ยของร้านอื่น ราคาตลาด หรือสถิติอุตสาหกรรม เพราะตรวจสอบไม่ได้
 - ถ้าคำถามต้องใช้ข้อมูลของร้าน ให้บอกว่าขอดูข้อมูลส่วนไหนเพิ่ม
-- ตอบเป็นภาษาไทย กระชับ`
+- ตอบเป็นภาษาไทย กระชับ ลงท้ายสุภาพด้วย "ครับ"
+- ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX เขียนสูตรเป็นข้อความธรรมดา`
 
 func answerPrompt(question string, history []Turn, sheet string) string {
 	if strings.TrimSpace(sheet) == "" {
@@ -74,6 +82,21 @@ func formatHistory(history []Turn) string {
 	return "\nบทสนทนาก่อนหน้า:\n" + strings.Join(lines, "\n") + "\n"
 }
 
+// toolLabelInAnswer matches a fact sheet label that survived into the answer.
+// The prompt asks the model not to write these and it mostly complies, but it
+// cited them as sources often enough that the owner was reading tool names.
+// Nothing an owner writes looks like this, so removing it on sight is safe.
+var toolLabelInAnswer = regexp.MustCompile(`\s*\[[a-z][a-z0-9_]*\]`)
+
+// latexDelimiters matches the wrappers a model reaches for when it decides a
+// formula deserves typesetting. The chat window renders none of it, so the
+// owner sees the raw backslashes.
+var latexDelimiters = regexp.MustCompile(`\\[\[\]()]`)
+
+// latexText matches \text{...}, which wraps the only readable part of such a
+// formula. The braces go and the words stay.
+var latexText = regexp.MustCompile(`\\(?:text|mathrm|mathit)\{([^{}]*)\}`)
+
 // cleanAnswer removes the wrappers a model adds despite being told not to, and
 // rejects a reply that is empty or has run away. Line breaks and bullets are
 // kept: they are part of a readable answer here, not formatting noise.
@@ -84,6 +107,10 @@ func cleanAnswer(raw string) string {
 	if text == "" {
 		return ""
 	}
+
+	text = toolLabelInAnswer.ReplaceAllString(text, "")
+	text = latexText.ReplaceAllString(text, "$1")
+	text = latexDelimiters.ReplaceAllString(text, "")
 
 	kept := make([]string, 0, 16)
 	for _, line := range strings.Split(text, "\n") {

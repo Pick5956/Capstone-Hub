@@ -80,14 +80,17 @@ func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolRes
 			aiStage("warn", "joyboy: tool %s failed (%v) → leaving it out", tool, runErr)
 			continue
 		}
-		body, ok := localToolAnswer(result)
+		// joyboyFactBody, not localToolAnswer: the model is given figures to
+		// interpret, not legacy's finished Thai answer to reword.
+		body, ok := joyboyFactBody(result)
 		if !ok || strings.TrimSpace(body) == "" {
+			aiStage("warn", "joyboy: %s has no fact sheet rendering → leaving it out", tool)
 			continue
 		}
 		results = append(results, joyboy.ToolResult{
 			Tool: string(tool),
-			// The body already opens with the Thai sentence naming the period,
-			// so the label only has to say which tool produced the block.
+			// The body is figures only, so the label carries the one piece of
+			// context the figures cannot: which tool produced them.
 			Label: string(tool),
 			Body:  body,
 		})
@@ -126,6 +129,10 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		task = AITaskRetrieveFact
 	}
 	aiStage("done", "joyboy answered with %d tool(s)", len(answer.Tools))
+	// The answer itself only under AI_DEBUG: it is the owner's data, and
+	// without it the log shows every decision except the one being judged.
+	aiDebug("joyboy question: %s", request.Question)
+	aiDebug("joyboy answer: %s", answer.Text)
 	return &AIAskResponse{
 		Answer: answer.Text,
 		Intent: intent,
