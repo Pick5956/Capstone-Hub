@@ -47,6 +47,14 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
 // thing left to it: copied the shape of the fact sheet, key names and all. The
 // fix is not another prohibition — it is telling it what the answer looks like
 // without handing it a sentence to fill in.
+//
+// The thousand-separator rule is on its third wording. The first two stated the
+// right form and left it there; round three came out clean and round four wrote
+// "15 012" and "6,958" a minute apart. Every other rule here is one decision per
+// answer, which the model gets right; this one is a decision at every figure,
+// and a single slip is visible. So it now names the wrong form as well as the
+// right one, and ends with a pass over the figures already written — the only
+// way to turn eight decisions back into one.
 const answerTemplate = joyboyPersona + `
 
 ตอบคำถามจากข้อมูลที่ระบบคำนวณมาแล้วด้านล่าง
@@ -63,10 +71,13 @@ const answerTemplate = joyboyPersona + `
 - เขียนเป็นประโยคที่คนพูดกันจริง ไม่ใช่ไล่ค่าทีละบรรทัด
 - ห้ามเขียนชื่อค่าจากข้อมูลลงในคำตอบ เช่น period= revenue= orders= qty= rank= menu= margin_pct=
   ให้แปลงเป็นคำพูด เช่น revenue=77340.00 เขียนว่า "ยอดขาย 77,340 บาท"
-- เขียนตัวเลขให้อ่านง่าย คั่นหลักพันด้วยจุลภาค ตัด .00 ที่ไม่มีเศษทิ้ง
-  และใช้รูปแบบเดียวกันทุกตัวเลขในคำตอบ
+- ตัวเลขตั้งแต่สี่หลักขึ้นไป คั่นหลักพันด้วยจุลภาคเท่านั้น เช่น 15012.00 เขียนว่า 15,012
+  ห้ามคั่นด้วยช่องว่าง "15 012" ผิด "15,012" ถูก
+- ตัด .00 ที่ไม่มีเศษทิ้ง เช่น 6825.00 เขียนว่า 6,825
 - เปอร์เซ็นต์ที่เกิน 100 ให้ตัดทศนิยมทิ้ง เช่น 1,704.06 เขียนว่า 1,704%%
   ที่ต่ำกว่า 100 เก็บทศนิยมได้ไม่เกินสองตำแหน่ง
+- ก่อนตอบ ให้ไล่ดูตัวเลขทุกตัวที่เขียนไปอีกครั้ง ว่าคั่นหลักแบบเดียวกันทุกตัว
+  ตัวไหนไม่เหมือนตัวอื่นให้แก้ก่อนส่ง
 - มีหลายรายการที่ต้องเทียบกัน ใช้รายการสั้น ๆ ได้ · มีรายการเดียว เขียนเป็นประโยค
 - ลงท้ายคำตอบด้วย "ครับ" ครั้งเดียว ต้องอยู่ท้ายประโยคที่เป็นข้อความ
   ถ้าคำตอบจบด้วยรายการ ให้ปิดท้ายด้วยประโยคสั้น ๆ แล้วค่อยลงท้ายด้วย "ครับ"
