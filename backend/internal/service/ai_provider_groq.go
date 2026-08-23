@@ -479,7 +479,20 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		return "", "", err
 	}
 	if len(parsed.Choices) > 0 {
-		return parsed.Choices[0].Message.Content, model, nil
+		choice := parsed.Choices[0]
+		// Reported, not acted on. No ceiling is sent yet, so this is the
+		// measurement that has to come first: how much a reply actually costs,
+		// and how often the provider default cuts one off. Counts only, no
+		// content, so it is safe outside AI_DEBUG.
+		if choice.FinishReason == "length" {
+			aiStage("warn", "Groq second-round hit the output ceiling → the answer is cut off (completion_tokens=%d reasoning_tokens=%d)",
+				parsed.Usage.CompletionTokens, parsed.Usage.CompletionTokensDetails.ReasoningTokens)
+		} else {
+			aiStage("usage", "Groq second-round finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d",
+				choice.FinishReason, parsed.Usage.CompletionTokens,
+				parsed.Usage.CompletionTokensDetails.ReasoningTokens, parsed.Usage.PromptTokens)
+		}
+		return choice.Message.Content, model, nil
 	}
 	return "", "", errors.New("groq second round returned empty response")
 }

@@ -209,6 +209,12 @@ type groqRequest struct {
 	// Temperature is a pointer so 0 is actually sent (omitempty would drop a 0
 	// value). Used to pin the classifier to deterministic routing.
 	Temperature *float64 `json:"temperature,omitempty"`
+	// MaxTokens caps what the model may generate for one reply. It is a pointer
+	// for the same reason Temperature is, and every existing caller leaves it
+	// nil, so omitempty drops the key and their request bytes are unchanged.
+	// Nothing sets it yet: the ceiling has to be measured before it is chosen,
+	// which is what FinishReason and Usage below are for.
+	MaxTokens *int `json:"max_tokens,omitempty"`
 }
 
 // zeroTemperature returns a pointer to 0 for deterministic calls (the intent
@@ -237,5 +243,27 @@ type groqParameters struct {
 type groqResponse struct {
 	Choices []struct {
 		Message groqMessage `json:"message"`
+		// FinishReason is "stop" when the model ended on its own and "length"
+		// when the provider cut it off. Reading it is the only way to tell the
+		// two apart: a cut reply parses fine, is not empty, and reaches the
+		// owner with its last word half written — which is exactly what
+		// happened to "สรุปสถานการณ์ร้าน" on 23 Aug, ending at "มูลค่ารวมของสิน".
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage groqUsage `json:"usage"`
+}
+
+// groqUsage is what the reply cost. It is recorded because the output ceiling
+// cannot be set sensibly by guesswork: too low truncates more often than today,
+// too high guards nothing. ReasoningTokens separates a model that thought for
+// too long from one that wrote for too long, which need opposite fixes — it
+// stays zero when the provider does not report it, so zero means "not reported"
+// rather than "did not think".
+type groqUsage struct {
+	PromptTokens            int `json:"prompt_tokens"`
+	CompletionTokens        int `json:"completion_tokens"`
+	TotalTokens             int `json:"total_tokens"`
+	CompletionTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"completion_tokens_details"`
 }
