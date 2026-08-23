@@ -15,6 +15,26 @@ type ToolSpec struct {
 	Description string
 }
 
+// CallKind says which of the two calls in a question this is. The two want
+// opposite things from a model that can be asked how hard to think, and the
+// caller is the only place that knows which one is being made — by the time the
+// prompt reaches a provider it is just text.
+//
+// Measured on gpt-oss-20b at low effort: choosing tools got worse, picking
+// get_lowest_margin_menu for "เมนูไหนขายดีแต่กำไรน้อย" — a tool that reports one
+// margin and nothing about sales — and then answering from it rather than saying
+// so. Writing got better: no reply hit the output ceiling again, and five of
+// eight calls thought for under twenty tokens because there is nothing to decide,
+// only figures to put into sentences.
+type CallKind uint8
+
+const (
+	// CallSelectTools is the judgement: which capabilities answer this question.
+	CallSelectTools CallKind = iota + 1
+	// CallWriteAnswer is the transcription: these figures, in Thai, for an owner.
+	CallWriteAnswer
+)
+
 // Chat is one turn with a language model: a prompt in, text out.
 //
 // Deliberately not a tool-calling interface. Joyboy asks for tools by naming
@@ -22,8 +42,11 @@ type ToolSpec struct {
 // the same on every provider, keeps the protocol in this package where it can
 // be tested, and leaves the implementation with one job — call a model, with
 // whatever key rotation and provider fallback the backend already has.
+//
+// The kind is a hint about the call, not an instruction to any provider. An
+// implementation that cannot act on it must still answer.
 type Chat interface {
-	Complete(ctx context.Context, prompt string) (string, error)
+	Complete(ctx context.Context, prompt string, kind CallKind) (string, error)
 }
 
 // ToolResult is what one tool produced, already rendered as text by the code

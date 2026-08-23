@@ -19,7 +19,7 @@ type fakeChat struct {
 	selectAsk  string
 }
 
-func (c *fakeChat) Complete(_ context.Context, prompt string) (string, error) {
+func (c *fakeChat) Complete(_ context.Context, prompt string, _ CallKind) (string, error) {
 	if strings.Contains(prompt, "ตอบกลับเป็น JSON array") {
 		c.selectAsk = prompt
 		if c.selectErr != nil {

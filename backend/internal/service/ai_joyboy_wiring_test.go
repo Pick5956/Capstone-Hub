@@ -106,3 +106,23 @@ func TestJoyboyHistoryCarriesRoleAndContent(t *testing.T) {
 		t.Fatalf("no history should stay empty, got %+v", got)
 	}
 }
+
+// The two calls in a question want opposite settings, and the split is the whole
+// reason CallKind exists. Choosing tools stays at medium because low picked
+// get_lowest_margin_menu for a question about selling well, then answered from
+// it; writing drops to low because two replies out of four had spent so long
+// thinking they ran out of room mid-word. Collapse these to one value and one of
+// those two failures comes back.
+func TestJoyboySpendsThinkingWhereTheDecisionIs(t *testing.T) {
+	if got := joyboyCompleteOptions(joyboy.CallSelectTools).ReasoningEffort; got != "medium" {
+		t.Fatalf("choosing tools runs at %q, want \"medium\"", got)
+	}
+	if got := joyboyCompleteOptions(joyboy.CallWriteAnswer).ReasoningEffort; got != "low" {
+		t.Fatalf("writing the answer runs at %q, want \"low\"", got)
+	}
+	// An unrecognised kind must not silently become the cheap setting: a new
+	// call added later is far more likely to be a decision than a transcription.
+	if got := joyboyCompleteOptions(joyboy.CallKind(99)).ReasoningEffort; got == "low" {
+		t.Fatal("an unknown call kind defaulted to the setting that hurt judgement")
+	}
+}

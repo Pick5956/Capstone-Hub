@@ -18,17 +18,39 @@ import (
 )
 
 // joyboyChat calls a model through the existing rotation, which already handles
-// provider fallback, key rotation and parked keys.
+// provider fallback, key rotation and parked keys. It stays on that path rather
+// than calling Groq directly so that AI_PROVIDER keeps meaning the same thing
+// for joyboy as it does for everything else.
 type joyboyChat struct {
 	service *AIService
 }
 
-func (c joyboyChat) Complete(ctx context.Context, prompt string) (string, error) {
+func (c joyboyChat) Complete(ctx context.Context, prompt string, kind joyboy.CallKind) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	text, _, err := c.service.askSecondRoundWithRotation(prompt)
+	text, _, err := c.service.askSecondRoundWithOptions(prompt, joyboyCompleteOptions(kind))
 	return text, err
+}
+
+// joyboyCompleteOptions turns "which call is this" into what to ask the provider
+// for. Both settings are measured, not guessed.
+//
+// Choosing tools stays at medium because low made it worse: asked
+// "เมนูไหนขายดีแต่กำไรน้อย" twice it reached for get_menu_engineering once and
+// get_lowest_margin_menu the other time, and the second answer asserted a menu
+// sells well from a tool that only reports margins. At medium the same question
+// picked correctly twice out of two.
+//
+// Writing drops to low because there is nothing to decide there — the figures
+// are already computed and the job is to put them into Thai. At medium, two
+// replies out of four spent 1,857 and 1,917 tokens thinking and ran out of room
+// mid-word; at low none did, and answers came back in half the time.
+func joyboyCompleteOptions(kind joyboy.CallKind) aiProviderCompleteOptions {
+	if kind == joyboy.CallWriteAnswer {
+		return aiProviderCompleteOptions{ReasoningEffort: "low"}
+	}
+	return aiProviderCompleteOptions{ReasoningEffort: "medium"}
 }
 
 // joyboyTools runs read-only tools for one restaurant. The restaurant is fixed
