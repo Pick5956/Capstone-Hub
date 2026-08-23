@@ -40,15 +40,24 @@ type joyboyTools struct {
 }
 
 func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
-	// The same names and one-line descriptions the provider tool definitions
-	// already carry, so there is one place to edit when a tool is added.
+	// The tool names still come from the provider definitions, so adding a tool
+	// there is enough to make it runnable. The descriptions come from
+	// joyboyToolGuide instead: legacy's were written for a model that had
+	// already been narrowed down by a classifier, and joyboy has none.
 	definitions := t.service.getGroqTools()
 	catalogue := make([]joyboy.ToolSpec, 0, len(definitions))
 	for _, definition := range definitions {
-		catalogue = append(catalogue, joyboy.ToolSpec{
-			Name:        definition.Function.Name,
-			Description: definition.Function.Description,
-		})
+		name := AIToolName(definition.Function.Name)
+		if _, withheld := joyboyToolsNotOffered[name]; withheld {
+			continue
+		}
+		description, described := joyboyToolGuide[name]
+		if !described {
+			// Falling back keeps a newly added tool usable rather than
+			// invisible; the test insists it be described properly.
+			description = definition.Function.Description
+		}
+		catalogue = append(catalogue, joyboy.ToolSpec{Name: string(name), Description: description})
 	}
 	return catalogue
 }
