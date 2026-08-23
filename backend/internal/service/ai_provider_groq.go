@@ -452,26 +452,29 @@ var groqReasoningEffortModels = map[string]struct{}{
 	"openai/gpt-oss-120b": {},
 }
 
-// groqReasoningEffortFor asks the second round to think less. Measured over six
-// live answers, thinking took 63–94% of the output budget while the writing
-// itself never exceeded 326 tokens; twice the thinking ran so long that the
-// default 2,048-token ceiling arrived mid-sentence and the owner was shown half
-// a word. Groq's default is "medium", so every call so far ran at a setting
-// nobody picked.
+// groqReasoningEffortFor decides whether the caller's preference can be sent.
+// An empty preference, or a model that does not take the parameter, produces no
+// field at all — which is how every caller except joyboy reaches Groq, so their
+// requests carry exactly the bytes they carried before this existed.
 //
-// The alternative was raising the ceiling, which Groq charges for at request
-// time whether or not the tokens are used, out of 200,000 a day. This costs
-// nothing. What it risks is the first round, where the same budget is spent
-// choosing tools — that is what the next test run has to check.
-func groqReasoningEffortFor(model string) *string {
+// An earlier version pinned "low" here for everyone. That was measured as a win
+// on writing (no reply hit the ceiling again, and latency halved) and a loss on
+// judgement: asked "เมนูไหนขายดีแต่กำไรน้อย" twice the model picked the right tool
+// once, and the wrong run then asserted an answer the tool could not support.
+// Joyboy makes both kinds of call, so the choice belongs to the caller that
+// knows which one it is making, not to this function.
+func groqReasoningEffortFor(model, preference string) *string {
+	preference = strings.TrimSpace(preference)
+	if preference == "" {
+		return nil
+	}
 	if _, supported := groqReasoningEffortModels[strings.TrimSpace(model)]; !supported {
 		return nil
 	}
-	effort := "low"
-	return &effort
+	return &preference
 }
 
-func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string, string, error) {
+func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts aiProviderCompleteOptions) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
 		model = "openai/gpt-oss-20b"
@@ -482,7 +485,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		ReasoningEffort: groqReasoningEffortFor(model),
+		ReasoningEffort: groqReasoningEffortFor(model, opts.ReasoningEffort),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -527,7 +530,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	return "", "", errors.New("groq second round returned empty response")
 }
 
-func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, string, error) {
+func (s *AIService) askSecondRoundGroqWithRotation(prompt string, opts aiProviderCompleteOptions) (string, string, error) {
 	keys := s.getGroqKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GROQ_API_KEY is not configured")
@@ -538,7 +541,7 @@ func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, strin
 	}
 	var lastErr error
 	for _, attempt := range attempts {
-		answer, model, err := s.executeSecondRoundGroq(prompt, attempt.Key)
+		answer, model, err := s.executeSecondRoundGroq(prompt, attempt.Key, opts)
 		if err == nil {
 			s.keyHealth.clear("groq", attempt.Index)
 			return answer, model, nil

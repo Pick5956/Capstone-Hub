@@ -159,7 +159,7 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string, i
 		if adapter == nil || !adapter.Configured() {
 			continue
 		}
-		answer, err := adapter.Complete(prompt)
+		answer, err := adapter.Complete(prompt, aiProviderCompleteOptions{})
 		if err != nil {
 			aiStage("warn", "narration via %s failed (%v) → keeping deterministic answer", adapter.DisplayName(), err)
 			continue

@@ -46,24 +46,33 @@ func TestGroqRequestOmitsMaxCompletionTokensWhenUnset(t *testing.T) {
 // reasoning_effort is only valid on gpt-oss. GROQ_MODEL is an environment
 // variable, so pointing it at any other model must not start attaching a field
 // that model will reject — a config change would otherwise break every answer.
-func TestReasoningEffortIsSentOnlyToModelsThatAcceptIt(t *testing.T) {
-	effort := groqReasoningEffortFor("openai/gpt-oss-20b")
+// An empty preference is the other half: it is what every caller except joyboy
+// sends, and it has to produce no field at all.
+func TestReasoningEffortIsSentOnlyWhenAskedForAndSupported(t *testing.T) {
+	effort := groqReasoningEffortFor("openai/gpt-oss-20b", "low")
 	if effort == nil || *effort != "low" {
-		t.Fatalf("gpt-oss-20b effort = %v, want \"low\"", effort)
+		t.Fatalf("gpt-oss-20b low = %v, want \"low\"", effort)
 	}
-	if groqReasoningEffortFor("openai/gpt-oss-120b") == nil {
-		t.Fatal("gpt-oss-120b should accept reasoning_effort too")
+	if got := groqReasoningEffortFor("openai/gpt-oss-120b", "medium"); got == nil || *got != "medium" {
+		t.Fatalf("gpt-oss-120b medium = %v", got)
 	}
-	for _, other := range []string{"llama-3.3-70b-versatile", "qwen/qwen3-32b", "", "  "} {
-		if got := groqReasoningEffortFor(other); got != nil {
-			t.Fatalf("%q was sent reasoning_effort=%q", other, *got)
+	// No preference: no field, whatever the model.
+	for _, model := range []string{"openai/gpt-oss-20b", "llama-3.3-70b-versatile"} {
+		if got := groqReasoningEffortFor(model, ""); got != nil {
+			t.Fatalf("%q was sent reasoning_effort=%q without being asked", model, *got)
+		}
+	}
+	// A preference a model cannot take is dropped rather than sent.
+	for _, model := range []string{"llama-3.3-70b-versatile", "qwen/qwen3-32b", "", "  "} {
+		if got := groqReasoningEffortFor(model, "low"); got != nil {
+			t.Fatalf("%q was sent reasoning_effort=%q", model, *got)
 		}
 	}
 
 	body, err := json.Marshal(groqRequest{
 		Model:           "llama-3.3-70b-versatile",
 		Messages:        []groqMessage{{Role: "user", Content: "hi"}},
-		ReasoningEffort: groqReasoningEffortFor("llama-3.3-70b-versatile"),
+		ReasoningEffort: groqReasoningEffortFor("llama-3.3-70b-versatile", "low"),
 	})
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)

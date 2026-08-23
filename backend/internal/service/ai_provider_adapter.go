@@ -29,6 +29,28 @@ type aiProviderAnswer struct {
 	Model string
 }
 
+// aiProviderCompleteOptions carries per-call preferences to Complete. The zero
+// value means "whatever the provider does by default", which is what every
+// caller but joyboy passes, so adding a field here cannot change an existing
+// request.
+//
+// It exists because joyboy makes two calls per question that want opposite
+// things. Choosing tools is a judgement: at low effort it picked
+// get_lowest_margin_menu for "เมนูไหนขายดีแต่กำไรน้อย", a tool that says nothing
+// about how well anything sells, and then answered from it instead of saying the
+// data was insufficient. Writing the answer is transcription: five of eight
+// calls spent under twenty tokens thinking, and forcing more of it is what
+// pushed two replies into the output ceiling mid-word.
+//
+// The preference is expressed here rather than by calling Groq directly, so that
+// joyboy keeps going through this boundary. A path that named Groq would ignore
+// AI_PROVIDER, and the setting would quietly stop being true for one caller.
+type aiProviderCompleteOptions struct {
+	// ReasoningEffort is "low", "medium" or "high" for models that support it.
+	// Empty leaves the parameter out entirely.
+	ReasoningEffort string
+}
+
 // aiProviderAdapter is the provider-neutral boundary used by AIService.
 // Groq and Gemini keep their own HTTP payloads and response parsing behind this
 // interface, while routing, fallback order, and backend policy remain shared.
@@ -38,7 +60,7 @@ type aiProviderAdapter interface {
 	Configured() bool
 	Classify(question string) (AIRouterResult, error)
 	Answer(request aiProviderAnswerRequest) (aiProviderAnswer, error)
-	Complete(prompt string) (aiProviderAnswer, error)
+	Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error)
 }
 
 type groqProviderAdapter struct {
@@ -106,8 +128,8 @@ func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvide
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
-func (a *groqProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
-	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt)
+func (a *groqProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt, opts)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
@@ -176,7 +198,11 @@ func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
-func (a *geminiProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
+// Complete ignores opts. Gemini has no equivalent of reasoning_effort on this
+// path, and a preference that cannot be expressed is not a reason to refuse the
+// call — the reply is still a reply. Dropping it here is what keeps the option a
+// hint rather than a contract every provider has to honour.
+func (a *geminiProviderAdapter) Complete(prompt string, _ aiProviderCompleteOptions) (aiProviderAnswer, error) {
 	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }

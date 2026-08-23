@@ -94,7 +94,7 @@ func (s *AIService) composeAnswer(question, deterministic, observations string) 
 		if adapter == nil || !adapter.Configured() {
 			continue
 		}
-		answer, err := adapter.Complete(prompt)
+		answer, err := adapter.Complete(prompt, aiProviderCompleteOptions{})
 		if err != nil {
 			aiStage("warn", "compose via %s failed (%v) → keeping the rendered answer", adapter.DisplayName(), err)
 			continue

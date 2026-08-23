@@ -13,9 +13,12 @@ type stubAIProviderAdapter struct {
 	classifyCalls int
 	answerCalls   int
 	completeCalls int
-	classify      func(string) (AIRouterResult, error)
-	answer        func(aiProviderAnswerRequest) (aiProviderAnswer, error)
-	complete      func(string) (aiProviderAnswer, error)
+	// completeOpts records what the last Complete was asked for, so a test can
+	// prove a caller passed no preference rather than merely assuming it.
+	completeOpts aiProviderCompleteOptions
+	classify     func(string) (AIRouterResult, error)
+	answer       func(aiProviderAnswerRequest) (aiProviderAnswer, error)
+	complete     func(string) (aiProviderAnswer, error)
 }
 
 func (a *stubAIProviderAdapter) ID() string          { return a.id }
@@ -38,8 +41,9 @@ func (a *stubAIProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 	return a.answer(request)
 }
 
-func (a *stubAIProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
+func (a *stubAIProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
 	a.completeCalls++
+	a.completeOpts = opts
 	if a.complete == nil {
 		return aiProviderAnswer{}, errors.New("completion not stubbed")
 	}
@@ -79,7 +83,7 @@ func (a *scriptedAIProviderAdapter) Answer(aiProviderAnswerRequest) (aiProviderA
 	return aiProviderAnswer{Text: text, Model: "test-provider"}, err
 }
 
-func (a *scriptedAIProviderAdapter) Complete(string) (aiProviderAnswer, error) {
+func (a *scriptedAIProviderAdapter) Complete(string, aiProviderCompleteOptions) (aiProviderAnswer, error) {
 	text, err := a.next()
 	return aiProviderAnswer{Text: text, Model: "test-provider"}, err
 }
@@ -194,5 +198,49 @@ func TestCloudAdaptersRejectAnalyticalRequestWithoutSnapshot(t *testing.T) {
 		if _, err := adapter.Answer(request); err == nil {
 			t.Errorf("%s accepted analytical request without snapshot", adapter.ID())
 		}
+	}
+}
+
+// The three legacy callers of this boundary never had a preference to express,
+// and adding one to the interface must not invent one for them. askSecondRound
+// is the path joyboy shares with the context rewriter and the out-of-scope
+// reply, so an effort leaking in here would change two answers nobody asked to
+// change.
+func TestSecondRoundWithoutOptionsAsksForNoPreference(t *testing.T) {
+	t.Setenv("AI_PROVIDER", "groq")
+	groq := &stubAIProviderAdapter{
+		id: "groq", displayName: "Groq", configured: true,
+		complete: func(string) (aiProviderAnswer, error) {
+			return aiProviderAnswer{Text: "answer", Model: "test"}, nil
+		},
+	}
+	service := &AIService{providerAdapters: []aiProviderAdapter{groq}}
+
+	if _, _, err := service.askSecondRoundWithRotation("prompt"); err != nil {
+		t.Fatalf("second round failed: %v", err)
+	}
+	if groq.completeOpts != (aiProviderCompleteOptions{}) {
+		t.Fatalf("a preference was invented for a caller that has none: %+v", groq.completeOpts)
+	}
+}
+
+// And the caller that does have one must have it arrive intact, or joyboy would
+// silently keep running at the provider default it is trying to move off.
+func TestSecondRoundWithOptionsCarriesThePreferenceThrough(t *testing.T) {
+	t.Setenv("AI_PROVIDER", "groq")
+	groq := &stubAIProviderAdapter{
+		id: "groq", displayName: "Groq", configured: true,
+		complete: func(string) (aiProviderAnswer, error) {
+			return aiProviderAnswer{Text: "answer", Model: "test"}, nil
+		},
+	}
+	service := &AIService{providerAdapters: []aiProviderAdapter{groq}}
+
+	_, _, err := service.askSecondRoundWithOptions("prompt", aiProviderCompleteOptions{ReasoningEffort: "low"})
+	if err != nil {
+		t.Fatalf("second round failed: %v", err)
+	}
+	if groq.completeOpts.ReasoningEffort != "low" {
+		t.Fatalf("the preference was dropped on the way down: %+v", groq.completeOpts)
 	}
 }
