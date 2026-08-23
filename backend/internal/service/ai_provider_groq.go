@@ -442,6 +442,35 @@ func (s *AIService) getGroqToolsForCandidates(candidates []AIToolName) []groqToo
 	return filtered
 }
 
+// groqReasoningEffortModels lists the models that accept reasoning_effort with
+// low/medium/high. Only gpt-oss takes those three; qwen3 uses none/default and
+// everything else rejects the field, so the model has to be checked rather than
+// the parameter sent blindly — GROQ_MODEL is an environment variable and can be
+// pointed at anything.
+var groqReasoningEffortModels = map[string]struct{}{
+	"openai/gpt-oss-20b":  {},
+	"openai/gpt-oss-120b": {},
+}
+
+// groqReasoningEffortFor asks the second round to think less. Measured over six
+// live answers, thinking took 63–94% of the output budget while the writing
+// itself never exceeded 326 tokens; twice the thinking ran so long that the
+// default 2,048-token ceiling arrived mid-sentence and the owner was shown half
+// a word. Groq's default is "medium", so every call so far ran at a setting
+// nobody picked.
+//
+// The alternative was raising the ceiling, which Groq charges for at request
+// time whether or not the tokens are used, out of 200,000 a day. This costs
+// nothing. What it risks is the first round, where the same budget is spent
+// choosing tools — that is what the next test run has to check.
+func groqReasoningEffortFor(model string) *string {
+	if _, supported := groqReasoningEffortModels[strings.TrimSpace(model)]; !supported {
+		return nil
+	}
+	effort := "low"
+	return &effort
+}
+
 func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
@@ -453,6 +482,7 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		ReasoningEffort: groqReasoningEffortFor(model),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

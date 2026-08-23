@@ -6,11 +6,15 @@ import (
 	"testing"
 )
 
-// MaxTokens was added to a struct three legacy call sites already marshal. None
-// of them set it, and this proves that costs them nothing: the key has to be
-// absent from the JSON, so the bytes Groq receives are the same ones it
-// received before the field existed. Drop the omitempty and this fails.
-func TestGroqRequestOmitsMaxTokensWhenUnset(t *testing.T) {
+// MaxCompletionTokens was added to a struct three legacy call sites already
+// marshal. None of them set it, and this proves that costs them nothing: the key
+// has to be absent from the JSON, so the bytes Groq receives are the same ones
+// it received before the field existed. Drop the omitempty and this fails.
+//
+// It also pins the name. Groq deprecated max_tokens in favour of this one, and
+// a request carrying the deprecated key would be quietly ignored rather than
+// rejected — the ceiling would look set and would not be.
+func TestGroqRequestOmitsMaxCompletionTokensWhenUnset(t *testing.T) {
 	body, err := json.Marshal(groqRequest{
 		Model:    "openai/gpt-oss-20b",
 		Messages: []groqMessage{{Role: "user", Content: "สวัสดี"}},
@@ -18,21 +22,54 @@ func TestGroqRequestOmitsMaxTokensWhenUnset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
-	if strings.Contains(string(body), "max_tokens") {
+	if strings.Contains(string(body), "max_completion_tokens") {
 		t.Fatalf("an unset ceiling reached the provider: %s", body)
 	}
 
-	ceiling := 2048
+	ceiling := 3072
 	withCeiling, err := json.Marshal(groqRequest{
-		Model:     "openai/gpt-oss-20b",
-		Messages:  []groqMessage{{Role: "user", Content: "สวัสดี"}},
-		MaxTokens: &ceiling,
+		Model:               "openai/gpt-oss-20b",
+		Messages:            []groqMessage{{Role: "user", Content: "สวัสดี"}},
+		MaxCompletionTokens: &ceiling,
 	})
 	if err != nil {
 		t.Fatalf("marshal failed: %v", err)
 	}
-	if !strings.Contains(string(withCeiling), `"max_tokens":2048`) {
+	if !strings.Contains(string(withCeiling), `"max_completion_tokens":3072`) {
 		t.Fatalf("a set ceiling did not reach the provider: %s", withCeiling)
+	}
+	if strings.Contains(string(withCeiling), `"max_tokens"`) {
+		t.Fatalf("the deprecated key was sent instead: %s", withCeiling)
+	}
+}
+
+// reasoning_effort is only valid on gpt-oss. GROQ_MODEL is an environment
+// variable, so pointing it at any other model must not start attaching a field
+// that model will reject — a config change would otherwise break every answer.
+func TestReasoningEffortIsSentOnlyToModelsThatAcceptIt(t *testing.T) {
+	effort := groqReasoningEffortFor("openai/gpt-oss-20b")
+	if effort == nil || *effort != "low" {
+		t.Fatalf("gpt-oss-20b effort = %v, want \"low\"", effort)
+	}
+	if groqReasoningEffortFor("openai/gpt-oss-120b") == nil {
+		t.Fatal("gpt-oss-120b should accept reasoning_effort too")
+	}
+	for _, other := range []string{"llama-3.3-70b-versatile", "qwen/qwen3-32b", "", "  "} {
+		if got := groqReasoningEffortFor(other); got != nil {
+			t.Fatalf("%q was sent reasoning_effort=%q", other, *got)
+		}
+	}
+
+	body, err := json.Marshal(groqRequest{
+		Model:           "llama-3.3-70b-versatile",
+		Messages:        []groqMessage{{Role: "user", Content: "hi"}},
+		ReasoningEffort: groqReasoningEffortFor("llama-3.3-70b-versatile"),
+	})
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if strings.Contains(string(body), "reasoning_effort") {
+		t.Fatalf("an unsupported model was sent the field: %s", body)
 	}
 }
 
