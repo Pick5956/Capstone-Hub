@@ -126,6 +126,19 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string, i
 	}
 
 	observations := formatNarrationInsights(insights)
+
+	// Compose mode hands the whole answer to the model. The rendered text stays
+	// behind as the fact sheet it reads from and as the reference the number lock
+	// checks against, and is shown only if nothing trustworthy came back.
+	if aiAnswerComposeMode() {
+		if composed := s.composeAnswer(question, deterministic, observations); composed != "" {
+			aiStage("flow", "composed answer (numbers locked, template not shown)")
+			return composed
+		}
+		aiStage("warn", "compose produced nothing usable -> showing the rendered answer")
+		return deterministic
+	}
+
 	prompt := fmt.Sprintf(narrationPromptTemplate, question, deterministic, observations)
 	var raw string
 	for _, adapter := range s.orderedProviderAdapters() {
