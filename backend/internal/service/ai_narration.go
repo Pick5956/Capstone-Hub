@@ -34,6 +34,20 @@ func narrationEnabled() bool {
 // template is what made every answer read the same. Two or three sentences is
 // enough to say what the figures mean; more than that and the model starts
 // restating the list that is printed directly underneath it.
+// aiNumberLockEnabled reports whether a figure the model wrote is checked
+// against the figures Go computed. It is on unless someone turns it off, and
+// turning it off is a deliberate act with a visible log line, because the whole
+// claim this assistant makes about its numbers rests on this one check.
+func aiNumberLockEnabled() bool {
+	return !strings.EqualFold(strings.TrimSpace(os.Getenv("AI_NUMBER_LOCK")), "off")
+}
+
+// warnNumberLockDisabled marks every answer that went out unverified, so an
+// evening of experiments cannot quietly become the state of the demo.
+func warnNumberLockDisabled() {
+	aiStage("warn", "AI_NUMBER_LOCK=off — ตัวเลขในคำตอบนี้ไม่ได้ถูกตรวจสอบ")
+}
+
 const maxNarrationRunes = 420
 
 const narrationPromptTemplate = `คุณคือผู้ช่วยร้านอาหาร กำลังจะพูดนำก่อนที่ระบบจะแสดงตัวเลขที่คำนวณมาแล้ว
@@ -167,7 +181,9 @@ func (s *AIService) narrateDeterministicAnswer(question, deterministic string, i
 		aiStage("warn", "narration restated the whole list → discarded")
 		return deterministic
 	}
-	if !narrationUsesOnlyKnownNumbers(narration, allowedNumbers(deterministic+" "+observations)) {
+	if !aiNumberLockEnabled() {
+		warnNumberLockDisabled()
+	} else if !narrationUsesOnlyKnownNumbers(narration, allowedNumbers(deterministic+" "+observations)) {
 		// The whole point of the lock: a reworded figure is a wrong figure.
 		aiStage("warn", "narration mentioned a number that was not computed → discarded")
 		return deterministic

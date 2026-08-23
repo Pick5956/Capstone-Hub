@@ -97,3 +97,36 @@ func TestComposedAnswerDropsHeadingsAndOversizedReplies(t *testing.T) {
 		t.Fatal("an empty reply must be rejected")
 	}
 }
+
+// The lock can be turned off for an experiment. These pin what that costs, so
+// nobody has to rediscover it during a demo: the same invented figure that was
+// thrown away above now goes straight to the owner.
+func TestNumberLockCanBeTurnedOffAndItsAbsenceIsVisible(t *testing.T) {
+	t.Setenv("AI_ANSWER_MODE", "compose")
+	t.Setenv("AI_NUMBER_LOCK", "off")
+	invented := "Margin 69.85% ซึ่งสูงกว่าค่าเฉลี่ยร้านทั่วไปที่ 60% ครับ"
+	service := composeService(t, invented)
+
+	answer := service.narrateDeterministicAnswer("เมนูไหนกำไรดีสุด", composeFactSheet, nil)
+	if answer != invented {
+		t.Fatalf("answer = %q, want the unverified text to pass through", answer)
+	}
+	if aiNumberLockEnabled() {
+		t.Fatal("AI_NUMBER_LOCK=off must switch the check off")
+	}
+}
+
+// Anything other than "off" leaves the lock on, so a typo cannot silently
+// disable it.
+func TestNumberLockStaysOnForAnyOtherValue(t *testing.T) {
+	for _, value := range []string{"", "on", "true", "1", "OFFF", "ปิด"} {
+		t.Setenv("AI_NUMBER_LOCK", value)
+		if !aiNumberLockEnabled() {
+			t.Fatalf("AI_NUMBER_LOCK=%q switched the lock off", value)
+		}
+	}
+	t.Setenv("AI_NUMBER_LOCK", "OFF")
+	if aiNumberLockEnabled() {
+		t.Fatal("the value is meant to be case-insensitive")
+	}
+}

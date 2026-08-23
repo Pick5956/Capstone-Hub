@@ -107,8 +107,13 @@ func (s *AIService) composeAnswer(question, deterministic, observations string) 
 	if composed == "" {
 		return ""
 	}
-	// The one rule that does not move: a figure the model was not given is a
-	// figure it invented, whatever else the sentence around it says.
+	// A figure the model was not given is a figure it invented, whatever else the
+	// sentence around it says. This is the only check standing between the owner
+	// and a confident wrong number, which is why turning it off is loud.
+	if !aiNumberLockEnabled() {
+		warnNumberLockDisabled()
+		return composed
+	}
 	if !narrationUsesOnlyKnownNumbers(composed, allowedNumbers(deterministic+" "+observations)) {
 		aiStage("warn", "composed answer mentioned a number that was not computed → discarded")
 		return ""
