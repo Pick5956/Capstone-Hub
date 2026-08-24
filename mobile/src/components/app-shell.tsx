@@ -78,6 +78,7 @@ const managementNavigation: NavItem[] = [
   { key: 'reservations', label: 'ประวัติการจอง', labelEn: 'Reservations', shortLabel: 'การจอง', shortLabelEn: 'Bookings', href: '/reservations', icon: 'calendar-outline', activeIcon: 'calendar', permissions: ['view_tables', 'manage_table', 'take_order'] },
   { key: 'staff', label: 'พนักงาน', labelEn: 'Staff', shortLabel: 'ทีม', shortLabelEn: 'Team', href: '/staff', icon: 'people-outline', activeIcon: 'people', permissions: ['manage_invites', 'manage_members', 'manage_roles', 'view_audit_log'] },
   { key: 'reports', label: 'รายงาน', labelEn: 'Reports', shortLabel: 'รายงาน', shortLabelEn: 'Reports', href: '/reports', icon: 'bar-chart-outline', activeIcon: 'bar-chart', permission: 'view_reports' },
+  { key: 'expenses', label: 'ค่าใช้จ่าย', labelEn: 'Expenses', shortLabel: 'ค่าใช้จ่าย', shortLabelEn: 'Expenses', href: '/expenses', icon: 'cash-outline', activeIcon: 'cash', permissions: ['manage_expenses', 'view_reports'] },
   { key: 'ai', label: 'ผู้ช่วยวิเคราะห์', labelEn: 'AI assistant', shortLabel: 'AI', shortLabelEn: 'AI', href: '/ai-assistant', icon: 'sparkles-outline', activeIcon: 'sparkles', ownerOnly: true },
   { key: 'settings', label: 'ตั้งค่า', labelEn: 'Settings', shortLabel: 'ตั้งค่า', shortLabelEn: 'Settings', href: '/settings', icon: 'settings-outline', activeIcon: 'settings' },
 ];

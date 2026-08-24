@@ -91,6 +91,22 @@ function Invoke-LoggedNativeProcess {
 
 if ($Mode -eq "public") {
   $env:PUBLIC_BACKEND_URL = "https://api.dishy.pro"
+
+  # DISHY-03: serve the public backend in Gin *release* mode, not debug. In
+  # release mode the app intentionally skips auto-loading backend/.env, so load
+  # that file into the process environment first, then pin GIN_MODE=release.
+  # This also collapses CORS to the configured allow-list (no debug dev-origin
+  # wildcard).
+  $backendEnvFile = Join-Path $backendDir ".env"
+  if (Test-Path $backendEnvFile) {
+    Get-Content $backendEnvFile | ForEach-Object {
+      $line = $_.Trim()
+      if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
+      $pair = $line.Split("=", 2)
+      [Environment]::SetEnvironmentVariable($pair[0].Trim(), $pair[1].Trim(), "Process")
+    }
+  }
+  $env:GIN_MODE = "release"
 }
 
 Write-Host "Starting backend from source at http://localhost:8080"

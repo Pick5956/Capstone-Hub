@@ -120,6 +120,9 @@ func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
 	email := strings.TrimSpace(strings.ToLower(req.Email))
 	user, err := s.userRepo.FindByEmailProvider(email, "local")
 	if err != nil {
+		// Spend the same bcrypt cost as a real check so response timing does not
+		// reveal whether the email exists (DISHY-10).
+		auth.VerifyPasswordConstantWork(req.Password)
 		return nil, err
 	}
 
