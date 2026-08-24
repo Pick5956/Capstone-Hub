@@ -78,3 +78,30 @@ var joyboyToolGuide = map[AIToolName]string{
 var joyboyToolsNotOffered = map[AIToolName]struct{}{
 	AIToolGetStoreSummary: {},
 }
+
+// joyboyToolDataCoverage is a joyboy-only tool: legacy answers "how far back
+// does the data reach?" through its own keyword path (answerDataCoverage), but
+// joyboy exposes it as a tool the model can pick. It is not in getGroqTools(),
+// so Catalogue() appends it and Run() handles it directly rather than through
+// executeReadOnlyTool — it needs the full history, not the 30-day snapshot.
+const joyboyToolDataCoverage AIToolName = "get_data_coverage"
+
+// joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
+// Their names are not in getGroqTools(), so Catalogue() adds them and Run()
+// intercepts them.
+var joyboyExtraTools = []AIToolName{
+	joyboyToolDataCoverage,
+}
+
+// joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
+var joyboyExtraToolGuide = map[AIToolName]string{
+	joyboyToolDataCoverage: "ช่วงข้อมูลที่ระบบมีจริง วันเก่าสุดถึงวันใหม่สุดที่มีการขาย พร้อมจำนวนวันที่มีข้อมูล " +
+		"ใช้ตอบ: ระบบมีข้อมูลตั้งแต่เมื่อไหร่ ข้อมูลถึงช่วงไหน มีข้อมูลย้อนหลังกี่วัน",
+}
+
+// isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by
+// runJoyboyExtraTool, not through the snapshot / executeReadOnlyTool path).
+func isJoyboyExtraTool(name AIToolName) bool {
+	_, ok := joyboyExtraToolGuide[name]
+	return ok
+}

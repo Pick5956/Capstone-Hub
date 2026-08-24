@@ -3,6 +3,8 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"Project-M/internal/repository"
 )
 
 // Joyboy has no classifier, so a tool is only as findable as its description.
@@ -10,7 +12,11 @@ import (
 // the guess is silent when it goes wrong.
 func TestEveryOfferedToolIsDescribedForJoyboy(t *testing.T) {
 	for _, spec := range (&joyboyTools{service: &AIService{}, restaurantID: 1}).Catalogue() {
-		guide, described := joyboyToolGuide[AIToolName(spec.Name)]
+		name := AIToolName(spec.Name)
+		guide, described := joyboyToolGuide[name]
+		if !described {
+			guide, described = joyboyExtraToolGuide[name]
+		}
 		if !described {
 			t.Errorf("%s is offered with legacy's description, not joyboy's", spec.Name)
 			continue
@@ -34,6 +40,11 @@ func TestTheGuideDescribesNothingUnreachable(t *testing.T) {
 	for name := range joyboyToolGuide {
 		if _, ok := offered[string(name)]; !ok {
 			t.Errorf("%s is described but never offered", name)
+		}
+	}
+	for name := range joyboyExtraToolGuide {
+		if _, ok := offered[string(name)]; !ok {
+			t.Errorf("extra tool %s is described but never offered", name)
 		}
 	}
 }
@@ -68,5 +79,24 @@ func TestRevenueRankingDefersToCountForBareBestSeller(t *testing.T) {
 	}
 	if !strings.Contains(guide, "เงินหรือรายได้") {
 		t.Fatal("the revenue ranking stopped scoping itself to money questions")
+	}
+}
+
+// get_data_coverage is a joyboy-only tool answering "how far back does the data
+// reach?". Its fact sheet must carry the span as raw figures — first and last
+// day, plus the count — and fall back to no-data when there are no paid sales,
+// since "no sales at all" and "no sales today" are different answers.
+func TestDataCoverageBodyRendersTheSpan(t *testing.T) {
+	body := joyboyDataCoverageBody(repository.AISalesCoverage{
+		FirstDate: "2025-08-25", LastDate: "2026-08-24", Days: 300, Orders: 14362, Revenue: 3390000,
+	})
+	for _, want := range []string{"first_date=2025-08-25", "last_date=2026-08-24", "days_with_data=300", "total_orders=14362"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("data coverage body missing %q: %s", want, body)
+		}
+	}
+	empty := joyboyDataCoverageBody(repository.AISalesCoverage{})
+	if !strings.Contains(empty, "status=no_data") {
+		t.Errorf("empty coverage should report no_data, got %q", empty)
 	}
 }

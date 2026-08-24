@@ -13,6 +13,9 @@ import (
 // because the answer still arrives, just without the data that was asked for.
 func TestEveryOfferedToolRendersAFactSheetBlock(t *testing.T) {
 	for _, spec := range (&joyboyTools{service: &AIService{}, restaurantID: 1}).Catalogue() {
+		if isJoyboyExtraTool(AIToolName(spec.Name)) {
+			continue // joyboy-only tools render through their own path, tested separately
+		}
 		body, ok := joyboyFactBody(AIToolResult{Tool: AIToolName(spec.Name)})
 		if !ok {
 			t.Errorf("%s has no fact sheet rendering", spec.Name)

@@ -314,3 +314,20 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 
 	return "", false
 }
+
+// joyboyDataCoverageBody renders the full span of real data — first and last day
+// with paid sales — for "how far back does the data reach?" questions. Unlike the
+// snapshot tools it is not scoped to the 30-day window; it reports the whole
+// history, which is the point of the question.
+func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
+	if cov.FirstDate == "" || cov.Orders == 0 {
+		return joyboyNoData("no_paid_sales_recorded_at_all")
+	}
+	return joyboyJoin([]string{
+		"first_date=" + cov.FirstDate,
+		"last_date=" + cov.LastDate,
+		"days_with_data=" + strconv.FormatInt(cov.Days, 10),
+		"total_orders=" + strconv.FormatInt(cov.Orders, 10),
+		"total_revenue=" + joyboyNum(cov.Revenue),
+	})
+}

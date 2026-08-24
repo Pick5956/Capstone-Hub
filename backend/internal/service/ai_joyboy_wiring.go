@@ -91,7 +91,28 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 		}
 		catalogue = append(catalogue, joyboy.ToolSpec{Name: string(name), Description: description})
 	}
+	// joyboy-only tools are appended after legacy's list, described by their own
+	// guide. Run() handles these directly rather than through executeReadOnlyTool.
+	for _, name := range joyboyExtraTools {
+		catalogue = append(catalogue, joyboy.ToolSpec{Name: string(name), Description: joyboyExtraToolGuide[name]})
+	}
 	return catalogue
+}
+
+// runJoyboyExtraTool handles the joyboy-only tools that do not go through the
+// snapshot. handled is false for any other tool, so the caller falls through to
+// the normal read-only path.
+func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName) (body string, ok bool, handled bool) {
+	switch tool {
+	case joyboyToolDataCoverage:
+		coverage, err := t.service.repo.SalesCoverage(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyDataCoverageBody(coverage), true, true
+	}
+	return "", false, false
 }
 
 func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolResult, error) {
@@ -109,9 +130,21 @@ func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolRes
 		return nil, err
 	}
 
-	results := make([]joyboy.ToolResult, 0, len(names))
+	results := t.appendReadOnlyResults(make([]joyboy.ToolResult, 0, len(names)), names, snapshot)
+	return results, nil
+}
+
+// appendReadOnlyResults runs each requested tool and appends its fact sheet.
+func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names []string, snapshot AISnapshot) []joyboy.ToolResult {
 	for _, name := range names {
 		tool := AIToolName(strings.TrimSpace(name))
+		// joyboy-only tools are handled before the snapshot path.
+		if body, ok, handled := t.runJoyboyExtraTool(tool); handled {
+			if ok && strings.TrimSpace(body) != "" {
+				results = append(results, joyboy.ToolResult{Tool: string(tool), Label: string(tool), Body: body})
+			}
+			continue
+		}
 		if !isSupportedReadOnlyTool(tool) {
 			aiStage("warn", "joyboy: ignoring unsupported tool %q", name)
 			continue
@@ -136,7 +169,7 @@ func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolRes
 			Body:  body,
 		})
 	}
-	return results, nil
+	return results
 }
 
 // askJoyboy answers one question through joyboy and shapes the reply the way the

@@ -43,7 +43,8 @@ func TestJoyboyCatalogueOffersEveryReadOnlyToolWithADescription(t *testing.T) {
 		}
 		// A tool the executor does not recognise would be offered and then
 		// silently dropped, which reads to the model as a tool that never works.
-		if !isSupportedReadOnlyTool(AIToolName(spec.Name)) {
+		// joyboy-only tools are handled by runJoyboyExtraTool, not this path.
+		if !isJoyboyExtraTool(AIToolName(spec.Name)) && !isSupportedReadOnlyTool(AIToolName(spec.Name)) {
 			t.Fatalf("%s is offered but is not a supported read-only tool", spec.Name)
 		}
 	}
