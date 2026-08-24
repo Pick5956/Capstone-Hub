@@ -43,3 +43,26 @@ func TestBothPromptsCarryTheQuestion(t *testing.T) {
 		t.Fatal("a blank sheet was passed off as data")
 	}
 }
+
+// The client renders markdown, so the answer prompt now asks for it — bounded,
+// to avoid the sea-of-orange the bold rule would otherwise cause and the
+// per-answer inconsistency formatting is prone to. This pins the intent: bold
+// only the headline figure, real list rows, headings-with-emoji for overviews,
+// and plain prose for short answers. It also guards that the old blanket
+// heading ban did not creep back in.
+func TestTheAnswerPromptAsksForBoundedFormatting(t *testing.T) {
+	prompt := answerPrompt("สรุปสถานการณ์ร้าน", nil, "revenue=77340.00")
+	for _, want := range []string{
+		"ทำตัวหนาด้วย **",
+		"ตัวที่สำคัญที่สุดตัวเดียว",
+		"ใช้หัวข้อสั้น ๆ",
+		"อิโมจิ",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the formatting guidance lost %q", want)
+		}
+	}
+	if strings.Contains(prompt, "ห้ามใส่หัวข้อ") {
+		t.Fatal("the blanket heading ban is back and contradicts the formatting rules")
+	}
+}

@@ -213,8 +213,13 @@ func TestHistoryIsTrimmedAndOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestCleanAnswerDropsWrappersAndRunawayReplies(t *testing.T) {
-	if got := cleanAnswer("## สรุป\nกำไรรวม 4,469.58 บาท"); got != "กำไรรวม 4,469.58 บาท" {
-		t.Fatalf("cleaned = %q", got)
+	// A markdown heading is part of a formatted answer now and must survive, so
+	// the client can render it. Only a bare row of hashes with no text is noise.
+	if got := cleanAnswer("## สรุป\nกำไรรวม 4,469.58 บาท"); got != "## สรุป\nกำไรรวม 4,469.58 บาท" {
+		t.Fatalf("a heading was dropped: %q", got)
+	}
+	if got := cleanAnswer("###\nกำไรรวม 4,469.58 บาท"); got != "กำไรรวม 4,469.58 บาท" {
+		t.Fatalf("a bare row of hashes was kept: %q", got)
 	}
 	if got := cleanAnswer("- ต้มยำกุ้ง 112 จาน\n- ชาไทย 108 จาน"); !strings.Contains(got, "\n") {
 		t.Fatal("line breaks are part of the answer and must survive")
