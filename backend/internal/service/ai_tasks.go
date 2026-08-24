@@ -82,117 +82,19 @@ type AIRouterResult struct {
 	SuggestedTool       AIToolName `json:"suggested_tool,omitempty"`
 }
 
-type AIToolResult struct {
-	Tool                AIToolName
-	LowestMarginMenu    *repository.AIMenuMarginSummary
-	HighestMarginMenu   *repository.AIMenuMarginSummary
-	LowStockIngredients []AIStockRisk
-	TopSellingMenus     []repository.AIMenuSummary
-	InventoryValuation  *AIInventorySummary
-	SalesSummary        *AISalesSummary
-	LowestCostMenu      *repository.AIMenuMarginSummary
-	SalesTrend          *AISalesTrend
-	AverageOrderValue   *AIAverageOrderValue
-	OrderTypeBreakdown  []repository.AIOrderTypeSummary
-	MenuRevenueRanking  []repository.AIMenuSummary
-	PeakPeriods         *AIPeakPeriods
-	SlowMovingMenus     []repository.AIMenuSummary
-	MenuEngineering     *AIMenuEngineering
-	ReorderForecast     []AIReorderItem
-	DeadStock           []AIDeadStockItem
-	TopCostIngredients  []AICostIngredient
-	StoreSummary        *AIStoreSummary
-	SalesForPeriod      *AISalesPeriod
-	MostExpensiveMenus  []repository.AIMenuPrice
-}
-
-// AIStoreSummary is a backend-composed overview so open-ended "summarize the
-// store" questions get a deterministic answer instead of a free-form one.
-type AIStoreSummary struct {
-	Days          int
-	Revenue       float64
-	Orders        int64
-	Trend         *AISalesTrend
-	TopMenus      []repository.AIMenuSummary
-	BestMargin    *repository.AIMenuMarginSummary
-	LowStockCount int
-	MarginReady   bool
-}
-
-// AISalesPeriod holds sales scoped to a specific period the user named
-// (today / yesterday / this week / last week).
-type AISalesPeriod struct {
-	Label   string
-	Days    int
-	Revenue float64
-	Orders  int64
-	// LatestDate is the newest day in the snapshot that actually has sales
-	// ("2006-01-02"). Reporting it turns a bare "no orders today" into something
-	// the user can act on, since it says where the data does reach.
-	LatestDate string
-}
-
-type AIReorderItem struct {
-	Name     string
-	Unit     string
-	Stock    float64
-	DailyUse float64
-	DaysLeft float64
-}
-
-type AIDeadStockItem struct {
-	Name  string
-	Unit  string
-	Stock float64
-	Value float64
-}
-
-type AICostIngredient struct {
-	Name string
-	Unit string
-	Cost float64
-	Used float64
-}
-
-type AIPeakPeriods struct {
-	TopWeekday       int // 0..6 (Sun..Sat)
-	TopWeekdayOrders int64
-	TopHour          int // 0..23
-	TopHourOrders    int64
-	HasData          bool
-}
-
-// AIMenuEngineering classifies menus by popularity (quantity) and margin into
-// the classic four quadrants.
-type AIMenuEngineering struct {
-	Stars      []string // high popularity, high margin
-	Plowhorses []string // high popularity, low margin
-	Puzzles    []string // low popularity, high margin
-	Dogs       []string // low popularity, low margin
-}
-
-type AIAverageOrderValue struct {
-	Orders  int64
-	Revenue float64
-	AOV     float64
-	Days    int
-}
-
-type AISalesSummary struct {
-	Days    int
-	Orders  int64
-	Revenue float64
-}
-
-type AISalesTrend struct {
-	RecentDays       int
-	RecentRevenue    float64
-	RecentOrders     int64
-	PriorRevenue     float64
-	PriorOrders      int64
-	RevenueChangePct float64 // percentage change vs the prior 7-day period
-	HasPrior         bool    // false when there is no prior-period data to compare against
-}
+// The tool-result structs now live in the neutral aitools package. These
+// aliases keep every existing reference in this package compiling unchanged.
+type AIToolResult = aitools.AIToolResult
+type AIStoreSummary = aitools.AIStoreSummary
+type AISalesPeriod = aitools.AISalesPeriod
+type AIReorderItem = aitools.AIReorderItem
+type AIDeadStockItem = aitools.AIDeadStockItem
+type AICostIngredient = aitools.AICostIngredient
+type AIPeakPeriods = aitools.AIPeakPeriods
+type AIMenuEngineering = aitools.AIMenuEngineering
+type AIAverageOrderValue = aitools.AIAverageOrderValue
+type AISalesSummary = aitools.AISalesSummary
+type AISalesTrend = aitools.AISalesTrend
 
 func supportedReadOnlyToolNames() [22]AIToolName {
 	return [22]AIToolName{
