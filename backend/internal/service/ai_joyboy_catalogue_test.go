@@ -55,3 +55,18 @@ func TestWithheldToolsAreNotOfferedButStillWork(t *testing.T) {
 		}
 	}
 }
+
+// "เมนูขายดี" has two correct tools — top sellers by count and the revenue
+// ranking — and round 12 saw the model split three ways on the identical
+// question, once by count and twice by revenue. The tie is broken in the
+// revenue tool's guide: it defers to the count tool unless the question names
+// money, so a bare "ขายดี" resolves one way every time.
+func TestRevenueRankingDefersToCountForBareBestSeller(t *testing.T) {
+	guide := joyboyToolGuide[AIToolGetMenuRevenueRanking]
+	if !strings.Contains(guide, "get_top_selling_menus") {
+		t.Fatal("the revenue ranking no longer points a bare \"ขายดี\" at the count tool")
+	}
+	if !strings.Contains(guide, "เงินหรือรายได้") {
+		t.Fatal("the revenue ranking stopped scoping itself to money questions")
+	}
+}

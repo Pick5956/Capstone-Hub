@@ -67,3 +67,23 @@ func TestTheAnswerPromptRequiresEveryBlockOnAnOverview(t *testing.T) {
 		t.Fatal("the rule that keeps focused answers focused was lost")
 	}
 }
+
+// The ".00" rule left ".50" undefined, so 6957.50 came back as 6,957.50 one call
+// and 6,958 the next — the model rounded when nothing told it not to. Whole-baht
+// rounding cannot move into joyboyNum because that formatter also carries margins
+// like 68.33 that need their fraction, so the rule lives in the prompt: keep any
+// fraction that is not .00, do not round.
+func TestTheAnswerPromptKeepsNonZeroFractions(t *testing.T) {
+	prompt := answerPrompt("มูลค่าสต๊อกเท่าไหร่", nil, "total_value=6957.50")
+	if !strings.Contains(prompt, "ถ้ามีเศษที่ไม่ใช่ .00 ให้เก็บไว้") {
+		t.Fatal("the rule that keeps a non-zero fraction is missing")
+	}
+	if !strings.Contains(prompt, "ห้ามปัด") {
+		t.Fatal("the no-rounding instruction was lost")
+	}
+	// The .00-stripping rule must survive alongside it, or whole numbers grow a
+	// trailing .00 again.
+	if !strings.Contains(prompt, "ตัด .00 ที่ไม่มีเศษทิ้ง") {
+		t.Fatal("the .00-stripping rule was lost")
+	}
+}
