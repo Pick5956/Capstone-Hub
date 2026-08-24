@@ -41,3 +41,29 @@ func TestTheAnswerPromptPinsTheThousandSeparator(t *testing.T) {
 		}
 	}
 }
+
+// An overview question pulls four topics into the fact sheet and then, twice in
+// round 10, wrote about only two of them — inventory value and low stock were
+// fetched and silently dropped. The selection rule cannot fix this because it
+// governs fetching, not saying, so the answer prompt carries the twin rule. It
+// has to stay an exception to "don't list everything", or the two rules read as
+// a contradiction and the model picks whichever it saw last.
+func TestTheAnswerPromptRequiresEveryBlockOnAnOverview(t *testing.T) {
+	prompt := answerPrompt("สรุปสถานการณ์ร้าน 30 วันล่าสุด", nil,
+		"[get_inventory_valuation]\ntotal_value=6957.50")
+	for _, want := range []string{
+		"สรุปสถานการณ์ร้าน",
+		"ร้านเป็นไงบ้าง",
+		"ห้ามข้ามบล็อกไหนไป",
+		"เว้นแต่คำถามขอภาพรวมของร้าน",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the overview coverage rule lost %q", want)
+		}
+	}
+	// The general "don't list everything" rule must survive alongside it, or a
+	// focused question starts dumping the whole sheet again.
+	if !strings.Contains(prompt, "ไม่ต้องไล่ให้ครบ") {
+		t.Fatal("the rule that keeps focused answers focused was lost")
+	}
+}

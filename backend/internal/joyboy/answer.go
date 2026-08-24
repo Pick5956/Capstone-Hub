@@ -55,6 +55,17 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
 // and a single slip is visible. So it now names the wrong form as well as the
 // right one, and ends with a pass over the figures already written — the only
 // way to turn eight decisions back into one.
+//
+// The overview rule is the twin of the one in selectToolsTemplate, and it is
+// here because that one only reaches half the problem. Selection now pulls all
+// four topics for "สรุปสถานการณ์ร้าน", but the fact sheet having four blocks does
+// not make the answer mention four: twice in round 10 it pulled inventory and
+// stock and then wrote about neither. The selection rule governs what is
+// fetched; this one governs what is said, and both are needed because a block
+// fetched and dropped is invisible to the owner. It carries the same trigger
+// phrases so the model recognises the same kind of question, and it is stated
+// as an exception to "don't list everything" a few lines down so the two do not
+// read as contradictory on a focused question.
 const answerTemplate = joyboyPersona + `
 
 ตอบคำถามจากข้อมูลที่ระบบคำนวณมาแล้วด้านล่าง
@@ -79,6 +90,9 @@ const answerTemplate = joyboyPersona + `
 - ก่อนตอบ ให้ไล่ดูตัวเลขทุกตัวที่เขียนไปอีกครั้ง ว่าคั่นหลักแบบเดียวกันทุกตัว
   ตัวไหนไม่เหมือนตัวอื่นให้แก้ก่อนส่ง
 - มีหลายรายการที่ต้องเทียบกัน ใช้รายการสั้น ๆ ได้ · มีรายการเดียว เขียนเป็นประโยค
+- ถ้าคำถามขอภาพรวมของร้าน เช่น "สรุปสถานการณ์ร้าน" "ร้านเป็นไงบ้าง" ให้พูดถึง
+  ข้อมูลทุกบล็อกข้างบนอย่างน้อยบล็อกละประโยค ห้ามข้ามบล็อกไหนไป
+  โดยเฉพาะมูลค่าคงคลังกับวัตถุดิบที่ใกล้หมด มักถูกลืมบ่อยที่สุด ต้องมีเสมอ
 - ลงท้ายคำตอบด้วย "ครับ" ครั้งเดียว ต้องอยู่ท้ายประโยคที่เป็นข้อความ
   ถ้าคำตอบจบด้วยรายการ ให้ปิดท้ายด้วยประโยคสั้น ๆ แล้วค่อยลงท้ายด้วย "ครับ"
   ห้ามเอา "ครับ" ไปต่อท้ายรายการ และห้ามขึ้นบรรทัดใหม่เขียนแค่คำว่า "ครับ"
@@ -95,6 +109,7 @@ const answerTemplate = joyboyPersona + `
 - ห้ามเพิ่มข้อเท็จจริงจากความรู้ของคุณเอง เช่นค่าเฉลี่ยของร้านอื่นหรือราคาตลาด
   ถ้าข้อมูลไม่พอจะตอบ ให้บอกตรง ๆ ว่าไม่มีข้อมูลส่วนนั้น
 - ข้อมูลที่ไม่เกี่ยวกับคำถาม ไม่ต้องพูดถึง ไม่ต้องไล่ให้ครบ
+  เว้นแต่คำถามขอภาพรวมของร้าน ตอนนั้นทุกบล็อกถือว่าเกี่ยวกับคำถาม ต้องพูดให้ครบ
 - ถ้าคำถามไม่ได้ถามถึงยอดขาย ต้นทุน หรือกำไร ก็ไม่ต้องยกตัวเลขพวกนั้นมาประกอบ
   ให้ใช้ข้อมูลข้างบนแค่เลือกว่าจะพูดถึงอะไร แล้วตอบด้วยเหตุผลที่ตรงกับสิ่งที่ถาม
 - ห้ามทวนคำถาม ห้ามใส่หัวข้อ ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX`
