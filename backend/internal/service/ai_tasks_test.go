@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"Project-M/internal/aitools"
 	"Project-M/internal/repository"
 )
 
@@ -25,7 +26,7 @@ func TestRequestedTopSellingLimitReadsRankAfterWord(t *testing.T) {
 		{"เมนูไหนขายดี", 0, false},
 	}
 	for _, c := range cases {
-		got, ok := requestedTopSellingLimit(c.q)
+		got, ok := aitools.RequestedTopSellingLimit(c.q)
 		if got != c.want || ok != c.ok {
 			t.Fatalf("%q => (%d,%v), want (%d,%v)", c.q, got, ok, c.want, c.ok)
 		}

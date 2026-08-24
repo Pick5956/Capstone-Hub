@@ -2,6 +2,9 @@ package aitools
 
 import "Project-M/internal/repository"
 
+// AnalysisWindowDays is the rolling window the read-only tools summarise over.
+const AnalysisWindowDays = 30.0
+
 // AISnapshot is one read of a restaurant's analysis window: every figure the
 // read-only tools work from, computed once so asking for many tools costs one
 // database read. It carries repository rows for the raw aggregates and a few

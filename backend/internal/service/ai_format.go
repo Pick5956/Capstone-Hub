@@ -5,13 +5,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"Project-M/internal/aitools"
 )
 
 // analysisWindowDays is the single source of truth for the rolling window the
 // snapshot covers. buildSnapshot derives its start date from this, the reorder
 // forecast divides usage by it, and the Thai answers label themselves with it —
 // so the number, the data, and the wording can never drift apart.
-const analysisWindowDays = 30.0
+const analysisWindowDays = aitools.AnalysisWindowDays
 
 // analysisWindowLabel is how the window is described to the user. Being explicit
 // ("30 วันล่าสุด") beats a vague "ช่วงวิเคราะห์", which left people guessing which
