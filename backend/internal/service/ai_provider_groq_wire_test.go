@@ -137,3 +137,20 @@ func TestGroqResponseSurvivesAProviderThatReportsNeither(t *testing.T) {
 		t.Fatal("the reply text was lost when the extra fields were missing")
 	}
 }
+
+// positiveOrNil is what keeps "zero means default" true at the wire: an unset
+// ceiling has to become a nil pointer so omitempty drops the key, while a real
+// ceiling has to survive. Get this wrong and either every legacy call starts
+// sending max_completion_tokens=0 (which Groq would read as a zero-length reply)
+// or joyboy's ceiling never reaches the provider.
+func TestPositiveOrNilGatesTheCeiling(t *testing.T) {
+	for _, unset := range []int{0, -1, -3072} {
+		if positiveOrNil(unset) != nil {
+			t.Fatalf("%d produced a non-nil ceiling", unset)
+		}
+	}
+	got := positiveOrNil(3072)
+	if got == nil || *got != 3072 {
+		t.Fatalf("a real ceiling was dropped: %v", got)
+	}
+}

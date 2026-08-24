@@ -33,22 +33,32 @@ func (c joyboyChat) Complete(ctx context.Context, prompt string, kind joyboy.Cal
 	return text, err
 }
 
+// joyboyWriteCeiling is the output ceiling for the answer-writing round. Groq's
+// unset default is 2,048, and at medium effort the round's worst measured cost
+// was 1,917 tokens thinking plus 326 writing — 2,243, which overruns the default
+// mid-word. 3,072 clears that with roughly 800 to spare, matching what the
+// planner path settled on for the same reason. Groq reserves it against the
+// daily budget at request time, so it is spent only on the round that needs it.
+const joyboyWriteCeiling = 3072
+
 // joyboyCompleteOptions turns "which call is this" into what to ask the provider
-// for. Both settings are measured, not guessed.
+// for. Every value here is measured, not guessed.
 //
-// Choosing tools stays at medium because low made it worse: asked
-// "เมนูไหนขายดีแต่กำไรน้อย" twice it reached for get_menu_engineering once and
-// get_lowest_margin_menu the other time, and the second answer asserted a menu
-// sells well from a tool that only reports margins. At medium the same question
-// picked correctly twice out of two.
+// Both rounds run at medium. Choosing tools needs it because low made the choice
+// worse: asked "เมนูไหนขายดีแต่กำไรน้อย" twice, low reached for get_menu_engineering
+// once and get_lowest_margin_menu the other time, and then answered that a menu
+// sells well from a tool that only reports margins; at medium the same question
+// picked correctly twice out of two. Writing needs it too, for a reason low only
+// exposed once tested: at low the round transcribed 96 dishes as 95 and 9,504
+// baht as 9,405 on a repeat of the identical question — cheaper thinking started
+// getting the figures wrong. Medium buys that back.
 //
-// Writing drops to low because there is nothing to decide there — the figures
-// are already computed and the job is to put them into Thai. At medium, two
-// replies out of four spent 1,857 and 1,917 tokens thinking and ran out of room
-// mid-word; at low none did, and answers came back in half the time.
+// Only the write round carries a ceiling, because only it thinks long enough to
+// approach one; selection's output is a short JSON array and never came close to
+// 2,048.
 func joyboyCompleteOptions(kind joyboy.CallKind) aiProviderCompleteOptions {
 	if kind == joyboy.CallWriteAnswer {
-		return aiProviderCompleteOptions{ReasoningEffort: "low"}
+		return aiProviderCompleteOptions{ReasoningEffort: "medium", MaxCompletionTokens: joyboyWriteCeiling}
 	}
 	return aiProviderCompleteOptions{ReasoningEffort: "medium"}
 }

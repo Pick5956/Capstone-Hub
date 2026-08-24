@@ -107,22 +107,35 @@ func TestJoyboyHistoryCarriesRoleAndContent(t *testing.T) {
 	}
 }
 
-// The two calls in a question want opposite settings, and the split is the whole
-// reason CallKind exists. Choosing tools stays at medium because low picked
-// get_lowest_margin_menu for a question about selling well, then answered from
-// it; writing drops to low because two replies out of four had spent so long
-// thinking they ran out of room mid-word. Collapse these to one value and one of
-// those two failures comes back.
+// Both rounds run at medium — low was tried and lost twice, breaking tool
+// choice on the select round and drifting figures (96 dishes written as 95) on
+// the write round. What still differs is the ceiling: the write round thinks
+// long enough to hit the 2,048 default mid-word, so it carries 3,072, while the
+// select round emits a short array and needs no ceiling at all. Collapse either
+// difference and a measured failure returns.
 func TestJoyboySpendsThinkingWhereTheDecisionIs(t *testing.T) {
-	if got := joyboyCompleteOptions(joyboy.CallSelectTools).ReasoningEffort; got != "medium" {
-		t.Fatalf("choosing tools runs at %q, want \"medium\"", got)
+	sel := joyboyCompleteOptions(joyboy.CallSelectTools)
+	if sel.ReasoningEffort != "medium" {
+		t.Fatalf("choosing tools runs at %q, want \"medium\"", sel.ReasoningEffort)
 	}
-	if got := joyboyCompleteOptions(joyboy.CallWriteAnswer).ReasoningEffort; got != "low" {
-		t.Fatalf("writing the answer runs at %q, want \"low\"", got)
+	if sel.MaxCompletionTokens != 0 {
+		t.Fatalf("the select round carries a ceiling it does not need: %d", sel.MaxCompletionTokens)
 	}
-	// An unrecognised kind must not silently become the cheap setting: a new
-	// call added later is far more likely to be a decision than a transcription.
-	if got := joyboyCompleteOptions(joyboy.CallKind(99)).ReasoningEffort; got == "low" {
-		t.Fatal("an unknown call kind defaulted to the setting that hurt judgement")
+
+	write := joyboyCompleteOptions(joyboy.CallWriteAnswer)
+	if write.ReasoningEffort != "medium" {
+		t.Fatalf("writing the answer runs at %q, want \"medium\"", write.ReasoningEffort)
+	}
+	// The ceiling has to clear the worst measured medium cost of 1,917 thinking
+	// plus 326 writing, or the truncation it exists to prevent comes back.
+	if write.MaxCompletionTokens < 2243 {
+		t.Fatalf("the write ceiling %d does not clear the measured worst case of 2,243", write.MaxCompletionTokens)
+	}
+
+	// An unrecognised kind must not silently become the cheap path: a new call
+	// added later is more likely to be a decision, and it must not lose the
+	// ceiling either, since losing it is a silent truncation.
+	if got := joyboyCompleteOptions(joyboy.CallKind(99)); got.ReasoningEffort != "medium" {
+		t.Fatalf("an unknown call kind ran at %q instead of medium", got.ReasoningEffort)
 	}
 }

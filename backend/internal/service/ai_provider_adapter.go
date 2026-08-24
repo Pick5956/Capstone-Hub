@@ -49,6 +49,16 @@ type aiProviderCompleteOptions struct {
 	// ReasoningEffort is "low", "medium" or "high" for models that support it.
 	// Empty leaves the parameter out entirely.
 	ReasoningEffort string
+	// MaxCompletionTokens caps the reply — reasoning and written text together on
+	// gpt-oss. Zero leaves the parameter out, so the provider default applies.
+	//
+	// It is here because the two settings have to move together for the write
+	// round. Medium restores figure accuracy that low lost, but medium is also
+	// what once thought for 1,917 tokens and ran the answer into the 2,048-token
+	// provider default mid-word; a raised ceiling is what keeps that extra
+	// thinking from being cut off. Groq reserves this against the daily budget at
+	// request time, so it is set only where it is needed.
+	MaxCompletionTokens int
 }
 
 // aiProviderAdapter is the provider-neutral boundary used by AIService.

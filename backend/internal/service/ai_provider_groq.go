@@ -474,6 +474,17 @@ func groqReasoningEffortFor(model, preference string) *string {
 	return &preference
 }
 
+// positiveOrNil turns an unset ceiling (zero) into a nil pointer so omitempty
+// drops the key, and any positive value into a pointer that is sent. It keeps
+// the "zero means default" contract of aiProviderCompleteOptions intact at the
+// wire.
+func positiveOrNil(n int) *int {
+	if n <= 0 {
+		return nil
+	}
+	return &n
+}
+
 func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts aiProviderCompleteOptions) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
@@ -485,7 +496,8 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts ai
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
-		ReasoningEffort: groqReasoningEffortFor(model, opts.ReasoningEffort),
+		ReasoningEffort:     groqReasoningEffortFor(model, opts.ReasoningEffort),
+		MaxCompletionTokens: positiveOrNil(opts.MaxCompletionTokens),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
