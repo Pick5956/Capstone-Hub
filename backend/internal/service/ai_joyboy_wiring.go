@@ -102,7 +102,7 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 // runJoyboyExtraTool handles the joyboy-only tools that do not go through the
 // snapshot. handled is false for any other tool, so the caller falls through to
 // the normal read-only path.
-func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName) (body string, ok bool, handled bool) {
+func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body string, ok bool, handled bool) {
 	switch tool {
 	case joyboyToolDataCoverage:
 		coverage, err := t.service.repo.SalesCoverage(t.restaurantID)
@@ -111,11 +111,18 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName) (body string, ok bool,
 			return "", false, true
 		}
 		return joyboyDataCoverageBody(coverage), true, true
+	case AIToolSearchSystemDocs:
+		result, err := executeSystemDocsTool(AIToolSearchSystemDocs, AISystemDocsToolInput{Query: question})
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboySystemDocsBody(result), true, true
 	}
 	return "", false, false
 }
 
-func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolResult, error) {
+func (t *joyboyTools) Run(ctx context.Context, names []string, question string) ([]joyboy.ToolResult, error) {
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -130,16 +137,16 @@ func (t *joyboyTools) Run(ctx context.Context, names []string) ([]joyboy.ToolRes
 		return nil, err
 	}
 
-	results := t.appendReadOnlyResults(make([]joyboy.ToolResult, 0, len(names)), names, snapshot)
+	results := t.appendReadOnlyResults(make([]joyboy.ToolResult, 0, len(names)), names, snapshot, question)
 	return results, nil
 }
 
 // appendReadOnlyResults runs each requested tool and appends its fact sheet.
-func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names []string, snapshot AISnapshot) []joyboy.ToolResult {
+func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names []string, snapshot AISnapshot, question string) []joyboy.ToolResult {
 	for _, name := range names {
 		tool := AIToolName(strings.TrimSpace(name))
 		// joyboy-only tools are handled before the snapshot path.
-		if body, ok, handled := t.runJoyboyExtraTool(tool); handled {
+		if body, ok, handled := t.runJoyboyExtraTool(tool, question); handled {
 			if ok && strings.TrimSpace(body) != "" {
 				results = append(results, joyboy.ToolResult{Tool: string(tool), Label: string(tool), Body: body})
 			}

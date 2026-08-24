@@ -64,7 +64,7 @@ func TestJoyboyRunsNothingWhenNoToolWasAskedFor(t *testing.T) {
 	// No repository is wired, so any snapshot read would fail. Returning cleanly
 	// proves the greeting path never touches the database.
 	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
-	results, err := tools.Run(context.Background(), nil)
+	results, err := tools.Run(context.Background(), nil, "")
 	if err != nil || len(results) != 0 {
 		t.Fatalf("results = %v, err = %v", results, err)
 	}

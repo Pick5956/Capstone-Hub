@@ -100,3 +100,20 @@ func TestDataCoverageBodyRendersTheSpan(t *testing.T) {
 		t.Errorf("empty coverage should report no_data, got %q", empty)
 	}
 }
+
+// search_system_docs is the other joyboy-only tool. Its fact sheet is prose — the
+// manual text a hit carried — so the model can answer "how do I use X?" from the
+// docs instead of its own guess. No hits must read as no-data, not as silence.
+func TestSystemDocsBodyRendersHitsAndNoData(t *testing.T) {
+	body := joyboySystemDocsBody(AISystemDocsToolResult{SearchResults: []AISystemDocSearchResult{
+		{ArticleTitle: "เมนู", SectionTitle: "เพิ่มเมนูใหม่", RelevantContent: "ไปที่หน้าเมนู แล้วกดปุ่มเพิ่ม"},
+	}})
+	for _, want := range []string{"เมนู", "เพิ่มเมนูใหม่", "ไปที่หน้าเมนู"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("docs body missing %q: %s", want, body)
+		}
+	}
+	if empty := joyboySystemDocsBody(AISystemDocsToolResult{}); !strings.Contains(empty, "status=no_data") {
+		t.Errorf("no hits should report no_data, got %q", empty)
+	}
+}

@@ -91,12 +91,15 @@ const joyboyToolDataCoverage AIToolName = "get_data_coverage"
 // intercepts them.
 var joyboyExtraTools = []AIToolName{
 	joyboyToolDataCoverage,
+	AIToolSearchSystemDocs,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
 var joyboyExtraToolGuide = map[AIToolName]string{
 	joyboyToolDataCoverage: "ช่วงข้อมูลที่ระบบมีจริง วันเก่าสุดถึงวันใหม่สุดที่มีการขาย พร้อมจำนวนวันที่มีข้อมูล " +
 		"ใช้ตอบ: ระบบมีข้อมูลตั้งแต่เมื่อไหร่ ข้อมูลถึงช่วงไหน มีข้อมูลย้อนหลังกี่วัน",
+	AIToolSearchSystemDocs: "ค้นคู่มือการใช้งานเว็บ Dishy เพื่อตอบวิธีใช้ระบบ " +
+		"ใช้ตอบ: ใช้ระบบยังไง เมนูตรงไหน ตั้งค่าอะไรที่ไหน ทำอะไรได้บ้าง ระบบมีข้อจำกัดอะไร แก้ปัญหายังไง",
 }
 
 // isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by

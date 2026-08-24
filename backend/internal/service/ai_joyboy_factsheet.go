@@ -331,3 +331,26 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 		"total_revenue=" + joyboyNum(cov.Revenue),
 	})
 }
+
+// joyboySystemDocsBody renders documentation search hits for the model to answer
+// "how do I use X?" from. Unlike the figure tools this body is prose — the actual
+// manual text — because the answer is explaining the system, not reporting a
+// number. The model rewrites it to fit the question rather than pasting it.
+func joyboySystemDocsBody(result AISystemDocsToolResult) string {
+	if len(result.SearchResults) == 0 {
+		return joyboyNoData("no_matching_documentation")
+	}
+	lines := make([]string, 0, len(result.SearchResults)*2)
+	for _, hit := range result.SearchResults {
+		title := strings.TrimSpace(hit.ArticleTitle)
+		if section := strings.TrimSpace(hit.SectionTitle); section != "" {
+			title += " — " + section
+		}
+		lines = append(lines, "หัวข้อ: "+title)
+		if content := strings.TrimSpace(hit.RelevantContent); content != "" {
+			lines = append(lines, content)
+		}
+		lines = append(lines, "")
+	}
+	return joyboyJoin(lines)
+}

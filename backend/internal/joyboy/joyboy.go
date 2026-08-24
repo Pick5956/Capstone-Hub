@@ -56,7 +56,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	requested = dedupe(requested)
 	a.log("joyboy: model asked for %d tool(s): %s", len(requested), strings.Join(requested, ", "))
 
-	results, err := a.tools.Run(ctx, requested)
+	results, err := a.tools.Run(ctx, requested, question)
 	if err != nil {
 		return Answer{}, fmt.Errorf("%w: running tools: %w", ErrUnavailable, err)
 	}

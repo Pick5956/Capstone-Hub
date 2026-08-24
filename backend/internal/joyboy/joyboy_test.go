@@ -55,7 +55,7 @@ func (t *fakeTools) Catalogue() []ToolSpec {
 	}
 }
 
-func (t *fakeTools) Run(_ context.Context, names []string) ([]ToolResult, error) {
+func (t *fakeTools) Run(_ context.Context, names []string, _ string) ([]ToolResult, error) {
 	t.asked = names
 	return t.results, t.runErr
 }

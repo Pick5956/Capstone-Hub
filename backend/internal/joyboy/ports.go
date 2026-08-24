@@ -66,11 +66,15 @@ type ToolResult struct {
 // unknown name is dropped rather than failing the question, because a model
 // guessing should cost the owner nothing.
 //
+// question is the owner's original question. Most tools ignore it — they read
+// figures from the restaurant's data — but a documentation search needs the
+// words to search with, so the port carries it rather than a second method.
+//
 // Implementations bind the restaurant themselves. Joyboy passes no identity
 // because it holds none.
 type Tools interface {
 	Catalogue() []ToolSpec
-	Run(ctx context.Context, names []string) ([]ToolResult, error)
+	Run(ctx context.Context, names []string, question string) ([]ToolResult, error)
 }
 
 // Turn is one exchange already in the conversation, oldest first.
