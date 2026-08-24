@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"Project-M/internal/aitools"
 	"Project-M/internal/repository"
 )
 
@@ -33,34 +34,38 @@ const (
 	AITaskOutOfScope        AITask = "out_of_scope"
 )
 
-type AIToolName string
+// AIToolName and its identifiers now live in the neutral aitools package. The
+// alias and re-exports here keep every existing reference in this package
+// (service.AIToolName, service.AIToolGetX) compiling unchanged; new code should
+// reach for aitools directly.
+type AIToolName = aitools.AIToolName
 
 const (
-	AIToolGetLowestMarginMenu    AIToolName = "get_lowest_margin_menu"
-	AIToolGetHighestMarginMenu   AIToolName = "get_highest_margin_menu"
-	AIToolGetLowStockIngredients AIToolName = "get_low_stock_ingredients"
-	AIToolGetTopSellingMenus     AIToolName = "get_top_selling_menus"
-	AIToolGetInventoryValuation  AIToolName = "get_inventory_valuation"
-	AIToolGetSalesSummary        AIToolName = "get_sales_summary"
-	AIToolGetLowestCostMenu      AIToolName = "get_lowest_cost_menu"
-	AIToolGetSalesTrend          AIToolName = "get_sales_trend"
-	AIToolGetAverageOrderValue   AIToolName = "get_average_order_value"
-	AIToolGetOrderTypeBreakdown  AIToolName = "get_order_type_breakdown"
-	AIToolGetMenuRevenueRanking  AIToolName = "get_menu_revenue_ranking"
-	AIToolGetPeakPeriods         AIToolName = "get_peak_periods"
-	AIToolGetSlowMovingMenus     AIToolName = "get_slow_moving_menus"
-	AIToolGetMenuEngineering     AIToolName = "get_menu_engineering"
+	AIToolGetLowestMarginMenu    = aitools.AIToolGetLowestMarginMenu
+	AIToolGetHighestMarginMenu   = aitools.AIToolGetHighestMarginMenu
+	AIToolGetLowStockIngredients = aitools.AIToolGetLowStockIngredients
+	AIToolGetTopSellingMenus     = aitools.AIToolGetTopSellingMenus
+	AIToolGetInventoryValuation  = aitools.AIToolGetInventoryValuation
+	AIToolGetSalesSummary        = aitools.AIToolGetSalesSummary
+	AIToolGetLowestCostMenu      = aitools.AIToolGetLowestCostMenu
+	AIToolGetSalesTrend          = aitools.AIToolGetSalesTrend
+	AIToolGetAverageOrderValue   = aitools.AIToolGetAverageOrderValue
+	AIToolGetOrderTypeBreakdown  = aitools.AIToolGetOrderTypeBreakdown
+	AIToolGetMenuRevenueRanking  = aitools.AIToolGetMenuRevenueRanking
+	AIToolGetPeakPeriods         = aitools.AIToolGetPeakPeriods
+	AIToolGetSlowMovingMenus     = aitools.AIToolGetSlowMovingMenus
+	AIToolGetMenuEngineering     = aitools.AIToolGetMenuEngineering
 
-	AIToolGetIngredientReorderForecast AIToolName = "get_ingredient_reorder_forecast"
-	AIToolGetDeadStock                 AIToolName = "get_dead_stock"
-	AIToolGetTopCostIngredients        AIToolName = "get_top_cost_ingredients"
+	AIToolGetIngredientReorderForecast = aitools.AIToolGetIngredientReorderForecast
+	AIToolGetDeadStock                 = aitools.AIToolGetDeadStock
+	AIToolGetTopCostIngredients        = aitools.AIToolGetTopCostIngredients
 
-	AIToolGetStoreSummary      AIToolName = "get_store_summary"
-	AIToolGetSalesForPeriod    AIToolName = "get_sales_for_period"
-	AIToolGetMostExpensiveMenu AIToolName = "get_most_expensive_menu"
+	AIToolGetStoreSummary      = aitools.AIToolGetStoreSummary
+	AIToolGetSalesForPeriod    = aitools.AIToolGetSalesForPeriod
+	AIToolGetMostExpensiveMenu = aitools.AIToolGetMostExpensiveMenu
 
-	AIToolSearchSystemDocs AIToolName = "search_system_docs"
-	AIToolReadSystemDoc    AIToolName = "read_system_doc"
+	AIToolSearchSystemDocs = aitools.AIToolSearchSystemDocs
+	AIToolReadSystemDoc    = aitools.AIToolReadSystemDoc
 )
 
 type AITaskRoute struct {
