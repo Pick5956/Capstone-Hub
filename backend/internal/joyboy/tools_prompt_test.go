@@ -74,3 +74,16 @@ func TestTheSelectionPromptRendersWithoutFormatArtifacts(t *testing.T) {
 		t.Fatal("the question or the catalogue was lost from the selection prompt")
 	}
 }
+
+// "เพิ่มเมนูยังไง" asked once picked no tool at all — the model answered from its
+// own knowledge instead of the manual, which is the exact guess search_system_docs
+// exists to replace. The rule has to name the how-to phrasing and forbid the guess,
+// or the model keeps thinking it already knows.
+func TestSelectionPromptForcesDocsForHowToQuestions(t *testing.T) {
+	prompt := selectionPrompt("เพิ่มเมนูใหม่ยังไง", nil, nil)
+	for _, want := range []string{"วิธีใช้ระบบ Dishy", "search_system_docs", "ห้ามตอบจากความรู้ของตัวเอง"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the how-to rule lost %q", want)
+		}
+	}
+}
