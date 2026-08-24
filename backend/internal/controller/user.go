@@ -78,7 +78,9 @@ func (ctrl *UserController) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, created)
+	// Return a trimmed DTO, not the raw entity, so internal gorm bookkeeping
+	// fields are not exposed (DISHY-09).
+	c.JSON(http.StatusCreated, service.NewUserResponse(created))
 }
 
 func (ctrl *UserController) ForgotPassword(c *gin.Context) {

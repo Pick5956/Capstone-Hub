@@ -272,3 +272,41 @@ func newRestaurantResponse(restaurant *entity.Restaurant) *RestaurantResponse {
 		OwnerID:              restaurant.OwnerID,
 	}
 }
+
+// UserResponse is the public shape returned for a single user account. It omits
+// the embedded gorm.Model bookkeeping fields (CreatedAt/UpdatedAt/DeletedAt) so
+// endpoints such as register do not over-disclose internal record state
+// (DISHY-09). Password and other sensitive fields are already `json:"-"` on the
+// entity.
+type UserResponse struct {
+	ID           uint   `json:"ID"`
+	Email        string `json:"email"`
+	AuthProvider string `json:"auth_provider"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Nickname     string `json:"nickname"`
+	Phone        string `json:"phone"`
+	Address      string `json:"address"`
+	BirthDay     string `json:"birthday"`
+	ProfileImage string `json:"profile_image"`
+	Status       string `json:"status"`
+}
+
+func NewUserResponse(user *entity.User) *UserResponse {
+	if user == nil {
+		return nil
+	}
+	return &UserResponse{
+		ID:           user.ID,
+		Email:        user.Email,
+		AuthProvider: user.AuthProvider,
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
+		Nickname:     user.Nickname,
+		Phone:        user.Phone,
+		Address:      user.Address,
+		BirthDay:     user.BirthDay,
+		ProfileImage: user.ProfileImage,
+		Status:       user.Status,
+	}
+}
