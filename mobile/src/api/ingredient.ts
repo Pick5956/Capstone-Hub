@@ -10,6 +10,8 @@ import type {
 
 export const listIngredientCategories = () => apiRequest<{ categories: IngredientCategory[] }>('/api/v1/ingredient-categories');
 export const createIngredientCategory = (data: { name: string; display_order?: number; is_active?: boolean }) => apiRequest<IngredientCategory>('/api/v1/ingredient-categories', { method: 'POST', body: JSON.stringify(data) });
+export const updateIngredientCategory = (id: number, data: { name?: string; display_order?: number; is_active?: boolean }) => apiRequest<IngredientCategory>(`/api/v1/ingredient-categories/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteIngredientCategory = (id: number) => apiRequest<void>(`/api/v1/ingredient-categories/${id}`, { method: 'DELETE' });
 export const listIngredients = () => apiRequest<{ ingredients: Ingredient[] }>('/api/v1/ingredients');
 export const createIngredient = (data: IngredientInput) => apiRequest<Ingredient>('/api/v1/ingredients', { method: 'POST', body: JSON.stringify(data) });
 export const updateIngredient = (id: number, data: IngredientMetadataInput) => apiRequest<Ingredient>(`/api/v1/ingredients/${id}`, { method: 'PUT', body: JSON.stringify(data) });

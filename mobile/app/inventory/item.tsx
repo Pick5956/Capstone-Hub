@@ -113,12 +113,10 @@ export default function InventoryItemScreen() {
         : copy('อุณหภูมิห้อง', 'Room temperature');
   const readOnlyRows = [
     [copy('ชื่อวัตถุดิบ', 'Ingredient name'), name || '—'],
-    ['SKU', sku || '—'],
     [copy('หมวด', 'Category'), categoryName],
     [copy('สต็อกคงเหลือ', 'Stock on hand'), `${Number(stock).toLocaleString(locale)} ${unit}`],
     [copy('จุดเตือนขั้นต่ำ', 'Low-stock threshold'), `${Number(minStock).toLocaleString(locale)} ${unit}`],
     [copy('ต้นทุนต่อหน่วย', 'Cost per unit'), Number(cost).toLocaleString(locale)],
-    ['Yield', `${yieldPercent}%`],
     [copy('การจัดเก็บ', 'Storage'), storageLabel],
   ];
 
@@ -250,23 +248,12 @@ export default function InventoryItemScreen() {
           </View>
         </View>
       ))}
-      {imageUrl ? (
-        <>
-          <Divider />
-          <View style={{ gap: spacing.xs }}>
-            <Text selectable style={[typeScale.body, { color: palette.muted }]}>{copy('URL รูปภาพ', 'Image URL')}</Text>
-            <Text selectable style={typeScale.caption}>{imageUrl}</Text>
-          </View>
-        </>
-      ) : null}
     </Surface>
   ) : (
     <Surface>
       <SectionHeader title={copy('ข้อมูลวัตถุดิบ', 'Ingredient details')} />
       <TextField icon="cube-outline" label={copy('ชื่อวัตถุดิบ', 'Ingredient name')} value={name} onChangeText={setName} />
-      <TextField icon="barcode-outline" label={copy('SKU (ไม่บังคับ)', 'SKU (optional)')} value={sku} onChangeText={setSku} />
       <ChipGroup label={copy('หมวด', 'Category')} value={categoryId} options={categoryOptions} onChange={setCategoryId} />
-      <TextField icon="image-outline" label={copy('URL รูปภาพ (ไม่บังคับ)', 'Image URL (optional)')} value={imageUrl} onChangeText={setImageUrl} />
       <ChipGroup label={copy('หน่วยสต็อก', 'Stock unit')} value={unit} options={unitOptions} onChange={setUnit} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
         <View style={{ flex: 1, minWidth: 140 }}>
@@ -279,9 +266,6 @@ export default function InventoryItemScreen() {
         ) : null}
         <View style={{ flex: 1, minWidth: 140 }}>
           <TextField icon="alert-circle-outline" label={copy('จุดเตือนขั้นต่ำ', 'Low-stock threshold')} value={minStock} keyboardType="decimal-pad" onChangeText={setMinStock} />
-        </View>
-        <View style={{ flex: 1, minWidth: 140 }}>
-          <TextField icon="analytics-outline" label="Yield %" value={yieldPercent} keyboardType="decimal-pad" onChangeText={setYieldPercent} />
         </View>
       </View>
       <ChipGroup

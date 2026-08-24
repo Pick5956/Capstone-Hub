@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Alert, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { createIngredientCategory, listIngredientCategories } from '@/src/api/ingredient';
+import { createIngredientCategory, deleteIngredientCategory, listIngredientCategories, updateIngredientCategory } from '@/src/api/ingredient';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
-import { Button, Divider, EdgeRow, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { Button, Divider, EdgeSection, EdgeSectionHeader, EmptyState, Feedback, SectionHeader, Surface, TextField } from '@/src/components/ui';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -21,6 +21,9 @@ export default function IngredientCategoriesScreen() {
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [rowBusyId, setRowBusyId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = () => listIngredientCategories()
@@ -46,6 +49,70 @@ export default function IngredientCategoriesScreen() {
     }
   }
 
+  function startEdit(item: IngredientCategory) {
+    setEditingId(item.ID);
+    setEditName(item.name);
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName('');
+  }
+
+  async function saveEdit(item: IngredientCategory) {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed === item.name) { cancelEdit(); return; }
+    setRowBusyId(item.ID);
+    setError(null);
+    try {
+      await updateIngredientCategory(item.ID, { name: trimmed });
+      cancelEdit();
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy('แก้ชื่อหมวดไม่สำเร็จ', 'Could not rename the category'));
+    } finally {
+      setRowBusyId(null);
+    }
+  }
+
+  async function toggleActive(item: IngredientCategory) {
+    setRowBusyId(item.ID);
+    setError(null);
+    try {
+      await updateIngredientCategory(item.ID, { is_active: !item.is_active });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy('ปรับสถานะหมวดไม่สำเร็จ', 'Could not update the category status'));
+    } finally {
+      setRowBusyId(null);
+    }
+  }
+
+  async function runDelete(item: IngredientCategory) {
+    setRowBusyId(item.ID);
+    setError(null);
+    try {
+      await deleteIngredientCategory(item.ID);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : copy('ลบหมวดไม่สำเร็จ (อาจมีวัตถุดิบอยู่ในหมวดนี้)', 'Could not delete the category (it may still contain ingredients).'));
+    } finally {
+      setRowBusyId(null);
+    }
+  }
+
+  function confirmDelete(item: IngredientCategory) {
+    Alert.alert(
+      copy(`ลบหมวด "${item.name}"?`, `Delete category "${item.name}"?`),
+      copy('วัตถุดิบในหมวดนี้จะไม่มีหมวด', 'Ingredients in this category will become uncategorized.'),
+      [
+        { text: copy('ยกเลิก', 'Cancel'), style: 'cancel' },
+        { text: copy('ลบ', 'Delete'), style: 'destructive', onPress: () => { void runDelete(item); } },
+      ],
+    );
+  }
+
   if (!canManage) {
     return (
       <AppScreen title={copy('หมวดวัตถุดิบ', 'Ingredient categories')} topLevel={false}>
@@ -57,6 +124,68 @@ export default function IngredientCategoriesScreen() {
       </AppScreen>
     );
   }
+
+  function renderRow(item: IngredientCategory, withDivider: boolean) {
+    const editing = editingId === item.ID;
+    const busy = rowBusyId === item.ID;
+    return (
+      <View key={item.ID}>
+        {withDivider ? <Divider /> : null}
+        <View style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: tabletWorkspace ? 0 : spacing.lg, paddingVertical: spacing.sm }}>
+          <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
+            <AppIcon color={palette.muted} name="file-tray-stacked-outline" size={21} />
+          </View>
+          {editing ? (
+            <View style={{ minWidth: 0, flex: 1 }}>
+              <TextInput
+                autoFocus
+                value={editName}
+                onChangeText={setEditName}
+                onSubmitEditing={() => { void saveEdit(item); }}
+                returnKeyType="done"
+                placeholder={copy('ชื่อหมวด', 'Category name')}
+                placeholderTextColor={palette.placeholder}
+                style={{
+                  minHeight: 44,
+                  borderWidth: 1,
+                  borderColor: palette.controlBorder,
+                  borderRadius: radius.md,
+                  paddingHorizontal: spacing.md,
+                  color: palette.text,
+                  fontSize: 16,
+                  backgroundColor: palette.surface,
+                }}
+              />
+            </View>
+          ) : (
+            <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0, flex: 1 }]}>{item.name}</Text>
+          )}
+          {editing ? (
+            <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+              <Button compact variant="secondary" icon="close-outline" label={copy('ยกเลิก', 'Cancel')} onPress={cancelEdit} />
+              <Button compact icon="checkmark-outline" label={copy('บันทึก', 'Save')} onPress={() => { void saveEdit(item); }} loading={busy} disabled={!editName.trim()} />
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+              <Button
+                compact
+                variant="ghost"
+                icon={item.is_active ? 'eye-outline' : 'eye-off-outline'}
+                label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Off')}
+                onPress={() => { void toggleActive(item); }}
+              />
+              <Button compact variant="secondary" icon="create-outline" label={copy('แก้ไข', 'Edit')} onPress={() => startEdit(item)} />
+              <Button compact variant="danger" icon="trash-outline" label={copy('ลบ', 'Delete')} onPress={() => confirmDelete(item)} loading={busy} />
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  const emptyState = (
+    <EmptyState title={copy('ยังไม่มีหมวดวัตถุดิบ', 'No ingredient categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มวัตถุดิบ', 'Add the first category to organize inventory.')} />
+  );
 
   const formPanel = (
     <Surface style={{ flex: tabletWorkspace ? 0.8 : undefined }}>
@@ -72,53 +201,24 @@ export default function IngredientCategoriesScreen() {
     </Surface>
   );
 
-  const listHeader = (
-    <EdgeSectionHeader
-      title={copy('หมวดที่ใช้งาน', 'Ingredient categories')}
-      detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
-    />
-  );
-
   const listPanel = tabletWorkspace ? (
     <Surface style={{ flex: 1.2 }}>
       <SectionHeader
         title={copy('หมวดที่ใช้งาน', 'Ingredient categories')}
         detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
       />
-      {categories.map((item, index) => (
-        <View key={item.ID}>
-          {index ? <Divider /> : null}
-          <View style={{ minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.surfaceStrong }}>
-              <AppIcon color={palette.muted} name="file-tray-stacked-outline" size={21} />
-            </View>
-            <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0, flex: 1 }]}>{item.name}</Text>
-            <StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />
-          </View>
-        </View>
-      ))}
-      {!categories.length ? (
-        <EmptyState title={copy('ยังไม่มีหมวดวัตถุดิบ', 'No ingredient categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มวัตถุดิบ', 'Add the first category to organize inventory.')} />
-      ) : null}
+      {categories.map((item, index) => renderRow(item, Boolean(index)))}
+      {!categories.length ? emptyState : null}
     </Surface>
   ) : (
     <View style={{ gap: spacing.sm }}>
-      {listHeader}
+      <EdgeSectionHeader
+        title={copy('หมวดที่ใช้งาน', 'Ingredient categories')}
+        detail={copy(`${categories.length.toLocaleString('th-TH')} หมวด`, `${categories.length.toLocaleString('en-US')} categories`)}
+      />
       <EdgeSection>
-        {categories.map((item) => (
-          <EdgeRow
-            icon="file-tray-stacked-outline"
-            iconColor={palette.muted}
-            key={item.ID}
-            title={item.name}
-            trailing={<StatusBadge label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Inactive')} tone={item.is_active ? 'success' : 'neutral'} />}
-          />
-        ))}
-        {!categories.length ? (
-          <View style={{ paddingHorizontal: spacing.lg }}>
-            <EmptyState title={copy('ยังไม่มีหมวดวัตถุดิบ', 'No ingredient categories yet')} detail={copy('เพิ่มหมวดแรกเพื่อจัดกลุ่มวัตถุดิบ', 'Add the first category to organize inventory.')} />
-          </View>
-        ) : null}
+        {categories.map((item, index) => renderRow(item, Boolean(index)))}
+        {!categories.length ? <View style={{ paddingHorizontal: spacing.lg }}>{emptyState}</View> : null}
       </EdgeSection>
     </View>
   );
