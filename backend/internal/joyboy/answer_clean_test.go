@@ -43,3 +43,25 @@ func TestLatexIsFlattenedIntoReadableText(t *testing.T) {
 		t.Fatalf("the formula lost its words: %q", cleaned)
 	}
 }
+
+// A closing "ครับ" jammed against bold markup or an English word — "**9,988 บาท**ครับ",
+// "Dishyครับ" — reads as cramped once rendered, because the particle touches the
+// non-Thai character with no gap. A space goes in there. But Thai convention runs
+// the particle on without one, so "บาทครับ" must be left exactly as it is.
+func TestCleanAnswerSpacesAParticleStuckToNonThai(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"ยอดขายวันนี้คือ **9,988 บาท**ครับ", "ยอดขายวันนี้คือ **9,988 บาท** ครับ"},
+		{"ผมคือผู้ช่วยของระบบ Dishyครับ", "ผมคือผู้ช่วยของระบบ Dishy ครับ"},
+		{"กำไร 4,469ครับ", "กำไร 4,469 ครับ"},
+		// Thai particle convention: no space, and cleaning must not add one.
+		{"สวัสดีครับ", "สวัสดีครับ"},
+		{"ยอดขาย 77,340 บาทครับ", "ยอดขาย 77,340 บาทครับ"},
+		// Already spaced stays spaced (idempotent).
+		{"Dishy ครับ", "Dishy ครับ"},
+	}
+	for _, c := range cases {
+		if got := cleanAnswer(c.in); got != c.want {
+			t.Errorf("cleanAnswer(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
