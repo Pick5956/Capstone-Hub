@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, Bot, Loader2, RotateCcw, Send, Settings2, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
+import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
+import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -36,7 +37,9 @@ import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
+import HoverTip from "@/src/components/shared/HoverTip";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import VoiceWaveform from "@/src/components/shared/VoiceWaveform";
 import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
@@ -149,9 +152,13 @@ export default function AIAssistantPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [outage, setOutage] = useState<AIOutage | null>(null);
+  const [lastQuestion, setLastQuestion] = useState("");
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsCount, setInsightsCount] = useState(0);
@@ -164,6 +171,8 @@ export default function AIAssistantPage() {
   const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
+  const sendAfterVoiceRef = useRef(false);
   const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
@@ -288,6 +297,8 @@ export default function AIAssistantPage() {
     if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     setInput("");
     setError("");
+    setOutage(null);
+    setLastQuestion(trimmed);
     setPendingAction(null);
     setPendingActionPreview(null);
     setActionPreviewError("");
@@ -359,6 +370,13 @@ export default function AIAssistantPage() {
       ]);
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
+      // An outage gets its own card with the wait and a retry button, instead of
+      // the generic red strip that reads as though the question was at fault.
+      const reportedOutage = readAIOutage(err);
+      if (reportedOutage) {
+        setOutage(reportedOutage);
+        return;
+      }
       const message =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
@@ -367,6 +385,26 @@ export default function AIAssistantPage() {
     } finally {
       if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
+  };
+
+  // Dictated text lands here. The send button sets a flag before stopping, so the
+  // transcript can go straight out instead of waiting in the box for a second click.
+  const handleVoiceText = (text: string) => {
+    const merged = input.trim() ? `${input.trim()} ${text}` : text;
+    if (sendAfterVoiceRef.current) {
+      sendAfterVoiceRef.current = false;
+      setInput("");
+      void submitQuestion(merged);
+      return;
+    }
+    setInput(merged);
+  };
+
+  const handleListeningChange = (listening: boolean) => {
+    setVoiceListening(listening);
+    // Runs after the transcript callback, so this only clears an unused flag
+    // (e.g. send was pressed but nothing was recognised).
+    if (!listening) sendAfterVoiceRef.current = false;
   };
 
   const handleConfirmActionPreview = async () => {
@@ -487,10 +525,13 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+      {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
+      <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
+      <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
       <section className="relative flex min-h-0 flex-1">
         {/* Conversation — full width */}
-        <div className="relative flex min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-950">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
             <button
@@ -507,34 +548,53 @@ export default function AIAssistantPage() {
                 </span>
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleClearChat()}
-              disabled={loading || actionConfirming || actionCancelling}
-              aria-label={copy.newChat}
-              title={copy.newChat}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+            <HoverTip label={copy.newChat} placement="bottom">
+              <button
+                type="button"
+                onClick={() => void handleClearChat()}
+                disabled={loading || actionConfirming || actionCancelling}
+                aria-label={copy.newChat}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            </HoverTip>
+            <HoverTip
+              label={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
+              placement="bottom"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
-              title={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+            </HoverTip>
           </div>
           <AISettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} language={language} />
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
-          <div className="ai-scroll flex-1 min-h-0 space-y-4 overflow-y-auto px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8">
+          <div
+            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
+              /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
+              isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
+            }`}
+          >
             {isEmpty && !loading ? (
-              <div className="flex h-full flex-col items-center justify-center gap-6 px-6 text-center">
-                <SiriOrb size="128px" className="drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]" />
-                <div>
+              /* Absolute fill, not h-full: h-full resolves against the scroll box's
+                 content area, so this container's own padding pushed it 72px past
+                 the viewport — which both squashed the orb and created a scrollbar
+                 on a fresh chat. */
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-6 text-center">
+                <SiriOrb
+                  size="128px"
+                  className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
+                  active={voiceListening}
+                  level={voiceLevel}
+                />
+                <div className="shrink-0">
                   <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
                   <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                     {copy.welcome}
@@ -606,6 +666,19 @@ export default function AIAssistantPage() {
               </div>
             )}
 
+            {outage && (
+              <AIOutageNotice
+                language={language}
+                outage={outage}
+                retrying={loading}
+                onRetry={() => {
+                  const question = lastQuestion;
+                  setOutage(null);
+                  if (question) void submitQuestion(question);
+                }}
+              />
+            )}
+
             {error && (
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 {error}
@@ -626,6 +699,24 @@ export default function AIAssistantPage() {
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Dictation spotlight — the big orb rises over the conversation while
+              the mic is live, so the empty state isn't the only place it reacts. */}
+          {voiceListening && !isEmpty && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/45 backdrop-blur-[2px] dark:bg-gray-950/55">
+              <div className="flex flex-col items-center gap-4">
+                <SiriOrb
+                  size="150px"
+                  className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.45)]"
+                  active
+                  level={voiceLevel}
+                />
+                <span className="rounded-full bg-white/85 px-3.5 py-1.5 text-xs font-semibold text-orange-600 shadow-sm dark:bg-gray-900/85 dark:text-orange-400">
+                  {language === "th" ? "กำลังฟัง… พูดได้เลยครับ" : "Listening… go ahead"}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Quick questions (only before the conversation starts) — rounded pills */}
           {isEmpty && !loading && (
@@ -653,40 +744,98 @@ export default function AIAssistantPage() {
               submitQuestion();
             }}
           >
-            <div className="flex items-end gap-2 rounded-[1.75rem] border border-gray-200 bg-white p-2 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    submitQuestion();
-                  }
-                }}
-                placeholder={copy.askPlaceholder}
-                rows={1}
-                className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
-              />
-              <AIInputTools
-                language={language}
-                disabled={loading || actionConfirming || actionCancelling}
-                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
-              />
-              <button
-                type="submit"
-                disabled={loading || actionConfirming || actionCancelling || !input.trim()}
-                aria-label={copy.ask}
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span className="hidden sm:inline">{copy.ask}</span>
-                  </>
-                )}
-              </button>
+            <div
+              className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
+                voiceListening
+                  ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
+                  : "border-gray-200 bg-white pl-4 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
+              }`}
+            >
+              {/* Discard the take — left slot, like a voice memo's cancel */}
+              {voiceListening && (
+                <HoverTip label={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}>
+                  <button
+                    type="button"
+                    onClick={() => voiceControlsRef.current?.cancel()}
+                    aria-label={language === "th" ? "ยกเลิกการอัด" : "Cancel recording"}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </HoverTip>
+              )}
+              {voiceListening ? (
+                /* Dictation mode: the live waveform takes over the text field */
+                <VoiceWaveform level={voiceLevel} className="min-h-[2.25rem] min-w-0 flex-1 px-1" />
+              ) : (
+                <textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submitQuestion();
+                    }
+                  }}
+                  placeholder={copy.askPlaceholder}
+                  rows={1}
+                  className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
+                />
+              )}
+              {/* Kept mounted while dictating (it owns the mic session), just hidden */}
+              <div className={voiceListening ? "hidden" : "contents"}>
+                <AIInputTools
+                  language={language}
+                  disabled={loading || actionConfirming || actionCancelling}
+                  onInsertText={handleVoiceText}
+                  onListeningChange={handleListeningChange}
+                  onVoiceLevel={setVoiceLevel}
+                  voiceControlsRef={voiceControlsRef}
+                />
+              </div>
+              {voiceListening ? (
+                <>
+                  <HoverTip label={language === "th" ? "หยุด แล้วเอาข้อความไปแก้ก่อนส่ง" : "Stop and review before sending"}>
+                    <button
+                      type="button"
+                      onClick={() => voiceControlsRef.current?.stop()}
+                      aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                    </button>
+                  </HoverTip>
+                  <HoverTip label={language === "th" ? "หยุดแล้วส่งให้ AI ทันที" : "Stop and send to AI right away"}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sendAfterVoiceRef.current = true;
+                        voiceControlsRef.current?.stop();
+                      }}
+                      aria-label={language === "th" ? "หยุดแล้วส่งเลย" : "Stop and send"}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md active:scale-95"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                  </HoverTip>
+                </>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={loading || actionConfirming || actionCancelling || !input.trim()}
+                  aria-label={copy.ask}
+                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span className="hidden sm:inline">{copy.ask}</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </form>
         </div>

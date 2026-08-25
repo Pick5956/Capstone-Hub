@@ -1,4 +1,5 @@
 import { apiClient } from "./apiClient";
+import type { AIOutage } from "../components/shared/AIOutageNotice";
 import type {
   AIActionConfirmation,
   AIAskRequest,
@@ -9,6 +10,26 @@ import type {
   AIReceiptDraft,
   AISnapshot,
 } from "../types/ai";
+
+// The assistant reports an outage rather than answering from the database
+// behind the owner's back, so the two states it can report have to survive the
+// trip through axios: a spent daily quota, which clears on its own and says
+// when, and an unreachable provider, which does not.
+export function readAIOutage(err: unknown): AIOutage | null {
+  if (typeof err !== "object" || err === null || !("response" in err)) return null;
+  const response = (err as {
+    response?: { data?: { error?: string; code?: string; retry_after_seconds?: number } };
+  }).response;
+  const code = response?.data?.code;
+  if (code !== "ai_quota_exceeded" && code !== "ai_provider_unavailable") return null;
+
+  const seconds = response?.data?.retry_after_seconds;
+  return {
+    kind: code === "ai_quota_exceeded" ? "quota" : "provider",
+    message: response?.data?.error?.trim() || "",
+    retryAfterSeconds: typeof seconds === "number" && seconds > 0 ? seconds : undefined,
+  };
+}
 
 export function normalizeAIAnswer(value: unknown): string | null {
   if (typeof value !== "string") return null;

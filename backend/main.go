@@ -38,6 +38,8 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
 		c.Writer.Header().Set("Referrer-Policy", "no-referrer")
 		c.Writer.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// JSON API + validated image uploads only; lock CSP down as defense-in-depth (DISHY-07).
+		c.Writer.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
 		if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
 			c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,10 @@ type AIOperationsService interface {
 }
 
 const maxAIActionConfirmationBodyBytes int64 = 1024
+
+// A 1.5 MB image is ~2 MB of base64 plus JSON overhead. Capping here stops an
+// oversized upload before it is parsed, instead of leaning on the global 8 MB limit.
+const maxReceiptRequestBodyBytes int64 = 3 << 20
 
 func requireAIOwner(c *gin.Context) bool {
 	member, ok := contextMember(c)
@@ -81,8 +86,18 @@ func (ctrl *AIController) AskOperations(c *gin.Context) {
 		Role:         "owner",
 	}, &req)
 	if err != nil {
+		// An outage is reported as an outage. The assistant can still read the
+		// database without a provider, and answering from it anyway would hide the
+		// failure behind something that looks like an ordinary answer: the owner
+		// could not tell the two apart, nor know the day's budget was gone. 429
+		// says come back later and when; 503 says the provider is out, not the
+		// budget.
 		if errors.Is(err, service.ErrAIQuotaExceeded) {
-			respondAPIError(c, http.StatusTooManyRequests, err)
+			respondAIOutage(c, http.StatusTooManyRequests, "ai_quota_exceeded", err)
+			return
+		}
+		if errors.Is(err, service.ErrAIProviderUnavailable) {
+			respondAIOutage(c, http.StatusServiceUnavailable, "ai_provider_unavailable", err)
 			return
 		}
 		if errors.Is(err, repository.ErrAIConversationConflict) {
@@ -225,6 +240,7 @@ func (ctrl *AIController) ExtractReceipt(c *gin.Context) {
 		Image    string `json:"image"`
 		MimeType string `json:"mime_type"`
 	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxReceiptRequestBodyBytes)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondInvalidRequest(c)
 		return
@@ -450,4 +466,17 @@ func (ctrl *AIController) OperationsSnapshot(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
+}
+
+// respondAIOutage answers with the reason and, when the provider named one,
+// how long to wait, so the screen can say "back in 42 minutes" instead of a
+// generic failure. The message is owner-facing Thai written by the service.
+func respondAIOutage(c *gin.Context, status int, code string, err error) {
+	body := gin.H{"error": err.Error(), "code": code}
+	if seconds := service.AIRetryAfterSeconds(err); seconds > 0 {
+		body["retry_after_seconds"] = seconds
+		c.Header("Retry-After", strconv.Itoa(seconds))
+	}
+	c.Header("Cache-Control", "no-store, private")
+	c.JSON(status, body)
 }

@@ -82,7 +82,20 @@ func cleanRewrite(s string) string {
 // failure (no provider, LLM error, empty/oversized output) it returns the
 // original question so the flow never breaks.
 func (s *AIService) resolveContextualQuestion(question string, history []AIConversationMessage) (string, bool) {
-	if len(history) == 0 || !looksContextDependent(question) {
+	if !looksContextDependent(question) {
+		return question, false
+	}
+	return s.rewriteQuestionWithHistory(question, history)
+}
+
+// rewriteQuestionWithHistory performs the rewrite without asking first whether
+// the question looks like a follow-up. looksContextDependent is a list of words,
+// and a list of words is never finished: "ขอวิธีทำสามรายการนี้หน่อย" carries
+// "รายการนี้" where the list only knew "อันนี้", so a plain follow-up was
+// answered with "please rephrase". Callers that have their own evidence that
+// context is needed - the classifier came back unsure - use this directly.
+func (s *AIService) rewriteQuestionWithHistory(question string, history []AIConversationMessage) (string, bool) {
+	if len(history) == 0 {
 		return question, false
 	}
 	// A rewrite needs a configured provider; without one, keep the original.

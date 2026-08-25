@@ -48,6 +48,10 @@ export interface SiriOrbProps {
     c3?: string;
   };
   size?: string;
+  /** True while the mic is listening — the orb glows and swirls faster. */
+  active?: boolean;
+  /** Voice loudness 0..1. Scales and brightens the orb while `active`. */
+  level?: number;
 }
 
 export const SiriOrb: React.FC<SiriOrbProps> = ({
@@ -55,6 +59,8 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
   className,
   colors,
   animationDuration = 20,
+  active = false,
+  level = 0,
 }) => {
   // Warm palette tuned to the app's orange/amber theme.
   const defaultColors = {
@@ -107,6 +113,16 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
 
   const finalContrast = getFinalContrast(sizeValue);
 
+  // Voice reaction: a floor while listening (so it visibly wakes up even in a
+  // quiet room) plus a loudness-driven swell/glow on top.
+  const voiceLevel = active ? Math.min(1, Math.max(0, level)) : 0;
+  const voiceScale = active ? 1.04 + voiceLevel * 0.14 : 1;
+  const glowSpread = Math.round(sizeValue * (0.12 + voiceLevel * 0.3));
+  const glowAlpha = (0.3 + voiceLevel * 0.45).toFixed(2);
+  const spinDuration = active
+    ? Math.max(3, animationDuration * (1 - voiceLevel * 0.6) * 0.35)
+    : animationDuration;
+
   return (
     <div
       className={cn("siri-orb", className)}
@@ -114,11 +130,14 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
         {
           width: size,
           height: size,
+          transform: `translateZ(0) scale(${voiceScale})`,
+          boxShadow: active ? `0 0 ${glowSpread}px rgba(249, 115, 22, ${glowAlpha})` : undefined,
+          transition: "transform 90ms ease-out, box-shadow 140ms ease-out",
           "--bg": finalColors.bg,
           "--c1": finalColors.c1,
           "--c2": finalColors.c2,
           "--c3": finalColors.c3,
-          "--animation-duration": `${animationDuration}s`,
+          "--animation-duration": `${spinDuration}s`,
           "--blur-amount": `${blurAmount}px`,
           "--contrast-amount": finalContrast,
           "--dot-size": `${dotSize}px`,

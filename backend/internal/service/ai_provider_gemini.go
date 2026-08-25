@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 func (s *AIService) getGeminiKeys() []string {
@@ -38,12 +38,15 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
 	}
 
-	var lastErr error
-	numKeys := len(keys)
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "gemini", keys, &s.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return "", "", allKeysRateLimitedError("Gemini", len(keys), releaseAt)
+	}
 
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
+	var lastErr error
+
+	for _, attempt := range attempts {
+		currentKey := attempt.Key
 
 		var answer, model string
 		var err error
@@ -59,15 +62,22 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		}
 
 		if err == nil {
+			s.keyHealth.clear("gemini", attempt.Index)
 			return answer, model, nil
 		}
 
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Gemini key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini: %v — skipping remaining keys", err)
+			return "", "", err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 
 	return "", "", lastErr
@@ -76,7 +86,7 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 func (s *AIService) executeClassifierGemini(question string, apiKey string) (string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini classifier model=%s", model)
 
@@ -107,11 +117,8 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", errRateLimit
-		}
-		return "", newAIProviderHTTPError("Gemini", "classifier", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "classifier", model, resp); statusErr != nil {
+		return "", statusErr
 	}
 
 	var parsed geminiGenerateResponse
@@ -131,7 +138,7 @@ func (s *AIService) executeClassifierGemini(question string, apiKey string) (str
 func (s *AIService) executeGemini(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string, candidateTools []AIToolName) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini analytical model=%s", model)
 
@@ -165,11 +172,8 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Gemini", "analytical request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "analytical request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 
 	var parsed geminiGenerateResponse
@@ -207,7 +211,7 @@ func (s *AIService) executeGemini(question string, history []AIConversationMessa
 func (s *AIService) executeGeminiConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini conversation model=%s", model)
 
@@ -237,11 +241,8 @@ func (s *AIService) executeGeminiConversation(question string, history []AIConve
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Gemini", "conversation request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "conversation request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 
 	var parsed geminiGenerateResponse
@@ -405,7 +406,7 @@ func (s *AIService) getGeminiToolsForCandidates(candidates []AIToolName) []gemin
 func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini second-round model=%s", model)
 	payload := geminiGenerateRequest{
@@ -431,11 +432,8 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Gemini", "second-round request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "second-round request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 	var parsed geminiGenerateResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
@@ -456,21 +454,29 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 	if len(keys) == 0 {
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
 	}
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "gemini", keys, &s.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return "", "", allKeysRateLimitedError("Gemini second-round", len(keys), releaseAt)
+	}
 	var lastErr error
-	numKeys := len(keys)
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
-		answer, model, err := s.executeSecondRoundGemini(prompt, currentKey)
+	for _, attempt := range attempts {
+		answer, model, err := s.executeSecondRoundGemini(prompt, attempt.Key)
 		if err == nil {
+			s.keyHealth.clear("gemini", attempt.Index)
 			return answer, model, nil
 		}
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Gemini second-round key %d/%d rate limited → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini second-round: %v — skipping remaining keys", err)
+			return "", "", err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini second-round key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini second-round key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini second-round key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return "", "", lastErr
 }

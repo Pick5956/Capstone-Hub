@@ -65,7 +65,7 @@ func TestProviderCallLogsExcludeCredentialDerivedMaterial(t *testing.T) {
 		if _, _, err := service.executeGroqConversation("test question", nil, credential); err != nil {
 			t.Fatalf("Groq conversation call: %v", err)
 		}
-		if _, _, err := service.executeSecondRoundGroq("test prompt", credential); err != nil {
+		if _, _, err := service.executeSecondRoundGroq("test prompt", credential, aiProviderCompleteOptions{}); err != nil {
 			t.Fatalf("Groq second-round call: %v", err)
 		}
 		if _, err := service.executeClassifierGemini("test question", credential); err != nil {
@@ -156,7 +156,7 @@ func TestProviderFailureErrorsAndLogsExcludeResponseBodyAndCredentialMaterial(t 
 			return err
 		}},
 		{"Groq second round", func() error {
-			_, err := (&groqProviderAdapter{service: service}).Complete("private prompt")
+			_, err := (&groqProviderAdapter{service: service}).Complete("private prompt", aiProviderCompleteOptions{})
 			return err
 		}},
 		{"Gemini classifier", func() error {
@@ -172,7 +172,7 @@ func TestProviderFailureErrorsAndLogsExcludeResponseBodyAndCredentialMaterial(t 
 			return err
 		}},
 		{"Gemini second round", func() error {
-			_, err := (&geminiProviderAdapter{service: service}).Complete("private prompt")
+			_, err := (&geminiProviderAdapter{service: service}).Complete("private prompt", aiProviderCompleteOptions{})
 			return err
 		}},
 	}
@@ -236,7 +236,7 @@ func TestProviderHTTP429StillReturnsRateLimitSentinel(t *testing.T) {
 			_, err := (&groqProviderAdapter{service: service}).Answer(aiProviderAnswerRequest{Question: "question", Mode: aiProviderAnswerConversation})
 			return err
 		}},
-		{"Groq second round", func() error { _, err := (&groqProviderAdapter{service: service}).Complete("prompt"); return err }},
+		{"Groq second round", func() error { _, err := (&groqProviderAdapter{service: service}).Complete("prompt", aiProviderCompleteOptions{}); return err }},
 		{"Gemini classifier", func() error { _, err := (&geminiProviderAdapter{service: service}).Classify("question"); return err }},
 		{"Gemini analytical", func() error {
 			_, err := (&geminiProviderAdapter{service: service}).Answer(aiProviderAnswerRequest{Question: "question", Snapshot: snapshot, Mode: aiProviderAnswerAnalytical})
@@ -246,7 +246,7 @@ func TestProviderHTTP429StillReturnsRateLimitSentinel(t *testing.T) {
 			_, err := (&geminiProviderAdapter{service: service}).Answer(aiProviderAnswerRequest{Question: "question", Mode: aiProviderAnswerConversation})
 			return err
 		}},
-		{"Gemini second round", func() error { _, err := (&geminiProviderAdapter{service: service}).Complete("prompt"); return err }},
+		{"Gemini second round", func() error { _, err := (&geminiProviderAdapter{service: service}).Complete("prompt", aiProviderCompleteOptions{}); return err }},
 	}
 
 	captureAILogs(t, func() {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mic, Receipt, X } from "lucide-react";
 import { extractReceipt } from "@/src/lib/ai";
+import HoverTip from "@/src/components/shared/HoverTip";
 
 // Two optional AI input helpers, kept in ONE self-contained component so they are
 // trivially removable — drop <AIInputTools/> into any chat input bar, delete the
@@ -22,6 +23,13 @@ type Props = {
   onInsertText: (text: string) => void;
   language: "th" | "en";
   disabled?: boolean;
+  /** Fires when the mic starts/stops so the caller can react (e.g. wake the orb). */
+  onListeningChange?: (listening: boolean) => void;
+  /** Live voice loudness 0..1 while listening; 0 once it stops. */
+  onVoiceLevel?: (level: number) => void;
+  /** Filled while listening so a caller can drive its own controls next to the
+   *  input bar: `stop` keeps what was said, `cancel` throws it away. Null when idle. */
+  voiceControlsRef?: React.RefObject<{ stop: () => void; cancel: () => void } | null>;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -52,7 +60,14 @@ async function fileToDownscaledBase64(file: File, maxDim = 1400): Promise<{ base
   return { base64: out.split(",")[1] ?? "", mime: "image/jpeg" };
 }
 
-export default function AIInputTools({ onInsertText, language, disabled }: Props) {
+export default function AIInputTools({
+  onInsertText,
+  language,
+  disabled,
+  onListeningChange,
+  onVoiceLevel,
+  voiceControlsRef,
+}: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -60,6 +75,68 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
   const fileRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  // The loudness meter is a second, decorative mic tap alongside Web Speech —
+  // it only drives the orb, so every failure path is silently ignored.
+  const stopMeter = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    void audioCtxRef.current?.close().catch(() => undefined);
+    audioCtxRef.current = null;
+    onVoiceLevel?.(0);
+  }, [onVoiceLevel]);
+
+  const startMeter = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const AudioContextCtor =
+        window.AudioContext
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ?? ((window as any).webkitAudioContext as typeof AudioContext | undefined);
+      if (!AudioContextCtor) return;
+      const context = new AudioContextCtor();
+      audioCtxRef.current = context;
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      context.createMediaStreamSource(stream).connect(analyser);
+
+      const samples = new Uint8Array(analyser.fftSize);
+      let smoothed = 0;
+      let lastReportedAt = 0;
+      const tick = (timestamp: number) => {
+        analyser.getByteTimeDomainData(samples);
+        let sumSquares = 0;
+        for (let i = 0; i < samples.length; i += 1) {
+          const deviation = (samples[i] - 128) / 128;
+          sumSquares += deviation * deviation;
+        }
+        // Speech RMS sits low, so scale it up before clamping to 0..1.
+        const loudness = Math.min(1, Math.sqrt(sumSquares / samples.length) * 4.5);
+        smoothed += (loudness - smoothed) * 0.28;
+        // ~22 samples/sec: smooth enough for the orb and the waveform without
+        // re-rendering the whole chat on every animation frame.
+        if (timestamp - lastReportedAt >= 45) {
+          lastReportedAt = timestamp;
+          onVoiceLevel?.(smoothed);
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch {
+      /* no mic permission or no meter — the orb still reacts to the listening state */
+    }
+  }, [onVoiceLevel]);
+
+  useEffect(() => stopMeter, [stopMeter]);
 
   if (!AI_TOOLS_ENABLED) return null;
 
@@ -85,9 +162,23 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
     rec.lang = language === "th" ? "th-TH" : "en-US";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
+    const finish = () => {
+      setListening(false);
+      onListeningChange?.(false);
+      if (voiceControlsRef) voiceControlsRef.current = null;
+      stopMeter();
+    };
+    rec.onstart = () => {
+      setListening(true);
+      onListeningChange?.(true);
+      if (voiceControlsRef) {
+        // stop() still delivers the transcript; abort() drops it on the floor.
+        voiceControlsRef.current = { stop: () => rec.stop(), cancel: () => rec.abort() };
+      }
+      void startMeter();
+    };
+    rec.onerror = finish;
+    rec.onend = finish;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     rec.onresult = (e: any) => {
       const text = e?.results?.[0]?.[0]?.transcript?.trim();
@@ -139,30 +230,32 @@ export default function AIInputTools({ onInsertText, language, disabled }: Props
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5">
-      <button
-        type="button"
-        onClick={toggleVoice}
-        disabled={disabled}
-        aria-label={t("พูดเพื่อพิมพ์", "Speak to type")}
-        title={t("พูดเพื่อพิมพ์", "Speak to type")}
-        className={
-          listening
-            ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-500/40 animate-pulse"
-            : iconBtn
-        }
-      >
-        <Mic className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={disabled || scanning}
-        aria-label={t("สแกนบิลไปหน้ารายจ่าย", "Scan a bill into Expenses")}
-        title={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}
-        className={iconBtn}
-      >
-        {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
-      </button>
+      <HoverTip label={t("พูดเพื่อพิมพ์", "Speak to type")}>
+        <button
+          type="button"
+          onClick={toggleVoice}
+          disabled={disabled}
+          aria-label={t("พูดเพื่อพิมพ์", "Speak to type")}
+          className={
+            listening
+              ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-sm shadow-red-500/40 animate-pulse"
+              : iconBtn
+          }
+        >
+          <Mic className="h-4 w-4" />
+        </button>
+      </HoverTip>
+      <HoverTip label={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={disabled || scanning}
+          aria-label={t("สแกนบิลไปหน้ารายจ่าย", "Scan a bill into Expenses")}
+          className={iconBtn}
+        >
+          {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
+        </button>
+      </HoverTip>
       </div>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
 

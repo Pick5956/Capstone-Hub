@@ -26,7 +26,6 @@ type demoIngredient struct {
 	Stock                   float64
 	MinStock                float64
 	CostPerUnit             float64
-	YieldPercent            float64
 	StorageType             string
 }
 
@@ -46,7 +45,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   15000, // 15 kg
 				MinStock:                2000,  // 2 kg
 				CostPerUnit:             0.16,  // 160 THB/kg -> 0.16 THB/g
-				YieldPercent:            100,
 				StorageType:             "chilled",
 			},
 			{
@@ -57,7 +55,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   20000, // 20 kg
 				MinStock:                3000,
 				CostPerUnit:             0.095, // 95 THB/kg -> 0.095 THB/g
-				YieldPercent:            95,
 				StorageType:             "chilled",
 			},
 			{
@@ -68,7 +65,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   10000, // 10 kg
 				MinStock:                1500,
 				CostPerUnit:             0.28, // 280 THB/kg -> 0.28 THB/g
-				YieldPercent:            80,
 				StorageType:             "chilled",
 			},
 			{
@@ -79,7 +75,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   8000, // 8 kg
 				MinStock:                1000,
 				CostPerUnit:             0.22, // 220 THB/kg -> 0.22 THB/g
-				YieldPercent:            85,
 				StorageType:             "chilled",
 			},
 			{
@@ -90,7 +85,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   5000, // 5 kg
 				MinStock:                500,
 				CostPerUnit:             0.85, // 850 THB/kg -> 0.85 THB/g
-				YieldPercent:            100,
 				StorageType:             "chilled",
 			},
 		},
@@ -106,7 +100,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   3000, // 3 kg
 				MinStock:                500,
 				CostPerUnit:             0.05, // 50 THB/kg -> 0.05 THB/g
-				YieldPercent:            85,
 				StorageType:             "chilled",
 			},
 			{
@@ -117,7 +110,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   200,
 				MinStock:                30,
 				CostPerUnit:             3.5, // 3.5 THB/lime
-				YieldPercent:            90,
 				StorageType:             "chilled",
 			},
 			{
@@ -128,7 +120,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   2000,
 				MinStock:                300,
 				CostPerUnit:             0.12, // 120 THB/kg -> 0.12 THB/g
-				YieldPercent:            95,
 				StorageType:             "chilled",
 			},
 			{
@@ -139,7 +130,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   5000,
 				MinStock:                1000,
 				CostPerUnit:             0.09, // 90 THB/kg -> 0.09 THB/g
-				YieldPercent:            90,
 				StorageType:             "room_temp",
 			},
 			{
@@ -150,7 +140,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   8000,
 				MinStock:                1500,
 				CostPerUnit:             0.045, // 45 THB/kg -> 0.045 THB/g
-				YieldPercent:            85,
 				StorageType:             "chilled",
 			},
 			{
@@ -161,7 +150,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.025, // 25 THB/kg -> 0.025 THB/g
-				YieldPercent:            75,
 				StorageType:             "room_temp",
 			},
 		},
@@ -177,7 +165,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.04, // approx 28 THB/bottle -> 0.04 THB/ml
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -188,7 +175,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.05,
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -199,7 +185,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   5000,
 				MinStock:                1000,
 				CostPerUnit:             0.065, // 65 THB/kg -> 0.065 THB/g
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -210,7 +195,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   20000,
 				MinStock:                3000,
 				CostPerUnit:             0.045, // 45 THB/liter -> 0.045 THB/ml
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 		},
@@ -226,7 +210,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   50000, // 50 kg
 				MinStock:                10000,
 				CostPerUnit:             0.035, // 0.035 THB/g -> 35 THB/kg
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -237,7 +220,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   300,
 				MinStock:                50,
 				CostPerUnit:             4.2, // 4.2 THB/egg
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -248,7 +230,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   10000,
 				MinStock:                2000,
 				CostPerUnit:             0.055, // 55 THB/kg -> 0.055 THB/g
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 			{
@@ -259,7 +240,6 @@ var demoIngredientCategories = []demoIngredientCategory{
 				Stock:                   8000,
 				MinStock:                1500,
 				CostPerUnit:             0.03, // 30 THB/kg -> 0.03 THB/g
-				YieldPercent:            100,
 				StorageType:             "room_temp",
 			},
 		},
@@ -375,7 +355,11 @@ func upsertIngredient(tx *gorm.DB, restaurantID, categoryID uint, seed demoIngre
 	ingredient.Stock = seed.Stock
 	ingredient.MinStock = seed.MinStock
 	ingredient.CostPerUnit = seed.CostPerUnit
-	ingredient.YieldPercent = seed.YieldPercent
+	// Always 100: stock is recorded as net weight and CostPerUnit is the cost of
+	// that net unit, so a second yield division would double-count trim waste.
+	// The inventory form no longer exposes yield, so a seeded value below 100
+	// would silently inflate dish cost with no way to correct it from the UI.
+	ingredient.YieldPercent = 100
 	ingredient.StorageType = seed.StorageType
 
 	if result.Error == gorm.ErrRecordNotFound {

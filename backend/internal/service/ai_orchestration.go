@@ -18,6 +18,7 @@ const (
 	aiOrchestratorLegacy  aiOrchestratorMode = "legacy"
 	aiOrchestratorShadow  aiOrchestratorMode = "shadow"
 	aiOrchestratorPlanner aiOrchestratorMode = "planner"
+	aiOrchestratorJoyboy  aiOrchestratorMode = "joyboy"
 )
 
 type aiPreparedOrchestration struct {
@@ -38,6 +39,8 @@ func aiOrchestrationMode() aiOrchestratorMode {
 		return aiOrchestratorShadow
 	case string(aiOrchestratorPlanner):
 		return aiOrchestratorPlanner
+	case string(aiOrchestratorJoyboy):
+		return aiOrchestratorJoyboy
 	default:
 		return aiOrchestratorLegacy
 	}
@@ -235,12 +238,27 @@ func candidateToolsForProvider(prepared *aiPreparedOrchestration) []AIToolName {
 	return append([]AIToolName(nil), prepared.candidateTools...)
 }
 
+// validatePreparedResponseTool keeps a model-proposed tool inside what the plan
+// authorised. The boundary that matters is the read-only allowlist: every tool
+// here reads this one restaurant and none of them writes, so a tool outside the
+// candidate set is a disagreement about which reading answers the question, not
+// an escape from permission.
+//
+// That distinction has teeth in practice. The deterministic day-part answer is
+// written by the backend and reports get_sales_for_period whatever domain the
+// model chose, so treating every mismatch as fatal replaced a correct, locally
+// computed answer with an error on the screen.
 func validatePreparedResponseTool(response *AIAskResponse, prepared *aiPreparedOrchestration) error {
 	if response == nil || prepared == nil || response.Tool == "" {
 		return nil
 	}
-	if !containsAITool(prepared.candidateTools, response.Tool) {
+	if containsAITool(prepared.candidateTools, response.Tool) {
+		return nil
+	}
+	if !isSupportedReadOnlyTool(response.Tool) || !prepared.plan.Policy.ReadOnly {
 		return errors.New("AI response used a tool outside the authorized candidate set")
 	}
+	aiStage("warn", "answer used read-only tool %s outside the planned candidates %v",
+		response.Tool, prepared.candidateTools)
 	return nil
 }

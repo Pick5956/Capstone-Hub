@@ -48,7 +48,6 @@ import {
   getStatus,
   getStockPercent,
   inputCls,
-  SectionCard,
   STORAGE_TYPES,
   UNITS,
   type ItemStatus,
@@ -86,7 +85,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   if (status === "out") {
     return {
       label: copy.outOfStock,
-      dot: "bg-red-500",
       bar: "from-red-500 to-red-400",
       badge: "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300",
       value: "text-red-600 dark:text-red-400",
@@ -97,7 +95,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   if (status === "low") {
     return {
       label: copy.lowStock,
-      dot: "bg-amber-400",
       bar: "from-amber-400 to-orange-400",
       badge: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300",
       value: "text-amber-600 dark:text-amber-400",
@@ -107,7 +104,6 @@ function statusMeta(status: ItemStatus, copy: Copy) {
   }
   return {
     label: copy.inGoodShape,
-    dot: "bg-emerald-500",
     bar: "from-emerald-500 to-teal-400",
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
     value: "text-slate-900 dark:text-white",
@@ -378,7 +374,6 @@ export default function InventoryPage() {
   const [sortKey, setSortKey] = useState<"" | "name" | "category" | "stock" | "price">("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkClosing, setBulkClosing] = useState(false);
   const [bulkRows, setBulkRows] = useState<BulkRow[]>([{ ...bulkEmptyRow }]);
@@ -476,13 +471,7 @@ export default function InventoryPage() {
   }, [ingredients]);
 
   const totalItems = ingredients.length;
-  const lowCount = ingredients.filter((item) => getStatus(item) === "low").length;
-  const outCount = ingredients.filter((item) => getStatus(item) === "out").length;
-  const okCount = ingredients.filter((item) => getStatus(item) === "ok").length;
   const totalValue = ingredients.reduce((sum, item) => sum + getInventoryValue(item), 0);
-  const averageCoverage = ingredients.length
-    ? Math.round(ingredients.reduce((sum, item) => sum + getStockPercent(item), 0) / ingredients.length)
-    : 0;
   const categoryNameById = useMemo(
     () => new Map(categories.map((category) => [category.ID, category.name])),
     [categories],
@@ -526,8 +515,8 @@ export default function InventoryPage() {
     setPage(1);
   }, [search, statusFilter, categoryFilter, pageSize]);
 
-  // A new filter is a new context — drop any selection so you never bulk-delete
-  // rows you can no longer see.
+  // A new filter is a new context — drop any selection so a stale selection
+  // never refers to rows you can no longer see.
   useEffect(() => {
     setSelectedIds(new Set());
   }, [search, statusFilter, categoryFilter]);
@@ -718,45 +707,10 @@ export default function InventoryPage() {
     });
   }
 
+  // Header checkbox: with nothing selected it selects every filtered row;
+  // with anything selected — even a single row — one press clears it all.
   function toggleSelectAll() {
-    setSelectedIds((prev) =>
-      filtered.length > 0 && filtered.every((item) => prev.has(item.ID))
-        ? new Set()
-        : new Set(filtered.map((item) => item.ID)),
-    );
-  }
-
-  async function handleBulkDelete() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    const confirmed = await confirm({
-      title: lang === "th" ? `ลบ ${ids.length} รายการที่เลือก?` : `Delete ${ids.length} selected items?`,
-      message: lang === "th" ? "ลบออกจากคลังวัตถุดิบถาวร" : "This permanently removes them from inventory.",
-      confirmLabel: copy.delete,
-      cancelLabel: copy.cancel,
-      tone: "danger",
-    });
-    if (!confirmed) return;
-    setBulkDeleting(true);
-    // Delete in parallel; some may be blocked (used by a menu recipe) — keep the
-    // ones that succeeded and report how many could not go.
-    const results = await Promise.allSettled(ids.map((id) => deleteIngredient(id)));
-    const okIds = new Set(ids.filter((_, index) => results[index].status === "fulfilled"));
-    setIngredients((prev) => prev.filter((item) => !okIds.has(item.ID)));
-    setSelectedIds(new Set());
-    setBulkDeleting(false);
-    const failed = ids.length - okIds.size;
-    if (failed === 0) {
-      showToast({ title: lang === "th" ? `ลบ ${okIds.size} รายการแล้ว` : `Deleted ${okIds.size} items` });
-    } else {
-      showToast({
-        title:
-          lang === "th"
-            ? `ลบ ${okIds.size} รายการ • ${failed} รายการลบไม่ได้ (มีเมนูใช้อยู่)`
-            : `Deleted ${okIds.size} • ${failed} could not be deleted (in use by a menu)`,
-        tone: "warning",
-      });
-    }
+    setSelectedIds((prev) => (prev.size > 0 ? new Set() : new Set(filtered.map((item) => item.ID))));
   }
 
   function openBulk() {
@@ -969,7 +923,7 @@ export default function InventoryPage() {
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative flex-1">
+          <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -1071,6 +1025,14 @@ export default function InventoryPage() {
               </>
             )}
           </div>
+          {/* Inventory value — took over from the removed summary cards */}
+          <div className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 text-center dark:border-orange-900/40 dark:bg-orange-950/20">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">{lang === "th" ? "มูลค่า" : "Value"}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
+              {formatCurrency(totalValue, lang)}
+            </span>
+          </div>
+          <div className="flex-1" />
           {canManage && (
             <button
               type="button"
@@ -1147,80 +1109,9 @@ export default function InventoryPage() {
 
 
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <SectionCard
-                label={copy.total}
-                value={formatNumber(totalItems, lang)}
-              />
-              <SectionCard
-                label={copy.totalValue}
-                value={formatCurrency(totalValue, lang)}
-                helper={`${copy.rowValue} ${formatCurrency(totalValue / Math.max(totalItems, 1), lang)} / ${copy.totalItemsLabel}`}
-                tone="warm"
-              />
-              <div className="flex flex-col justify-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-2 dark:border-gray-800 dark:bg-gray-950">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("out")}
-                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-red-50 dark:hover:bg-red-950/30"
-                >
-                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
-                    {lang === "th" ? "หมดสต็อก" : "Out of stock"}
-                  </span>
-                  <span className={`text-base font-semibold tabular-nums ${outCount > 0 ? "text-red-600 dark:text-red-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(outCount, lang)}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter("low")}
-                  className="flex items-center justify-between rounded px-1.5 py-1 transition hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                >
-                  <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-amber-400" />
-                    {lang === "th" ? "ต่ำกว่าเกณฑ์" : "Below alert"}
-                  </span>
-                  <span className={`text-base font-semibold tabular-nums ${lowCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-300 dark:text-gray-600"}`}>
-                    {formatNumber(lowCount, lang)}
-                  </span>
-                </button>
-              </div>
-              <SectionCard
-                label={copy.averageCoverage}
-                value={`${formatNumber(averageCoverage, lang)}%`}
-                helper={`${formatNumber(okCount, lang)} ${copy.healthyItems.toLowerCase()}`}
-                tone="success"
-              />
-        </div>
 
           <div className="grid gap-4">
             <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              {canManage && selectedIds.size > 0 && (
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm dark:border-gray-800 dark:bg-gray-900/40">
-                  <span className="text-[13px] font-medium text-slate-600 dark:text-slate-300">
-                    {lang === "th" ? `เลือก ${selectedIds.size} รายการ` : `${selectedIds.size} selected`}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIds(new Set())}
-                      className="rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-200/60 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-gray-800 dark:hover:text-slate-200"
-                    >
-                      {lang === "th" ? "ล้าง" : "Clear"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBulkDelete}
-                      disabled={bulkDeleting}
-                      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {lang === "th" ? "ลบ" : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              )}
               <div className="overflow-x-auto">
                 {filtered.length === 0 ? (
                   <div className="m-2 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
@@ -1249,7 +1140,14 @@ export default function InventoryPage() {
                             />
                           </th>
                         )}
-                        {sortableTh("name", copy.name)}
+                        {sortableTh(
+                          "name",
+                          // Count lives here now that the summary cards are gone.
+                          // Show "shown / total" while a filter or search narrows the list.
+                          filtered.length === totalItems
+                            ? `${copy.name} (${formatNumber(totalItems, lang)})`
+                            : `${copy.name} (${formatNumber(filtered.length, lang)}/${formatNumber(totalItems, lang)})`,
+                        )}
                         {sortableTh("stock", copy.current)}
                         {sortableTh("category", copy.category)}
                         {sortableTh("price", copy.costPerUnit, true)}
@@ -1276,10 +1174,7 @@ export default function InventoryPage() {
                               </td>
                             )}
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
-                                <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
-                              </div>
+                              <span className="font-semibold text-slate-900 dark:text-white">{item.name}</span>
                             </td>
                             <td className="px-4 py-3">
                               <div className="w-44">

@@ -209,6 +209,24 @@ type groqRequest struct {
 	// Temperature is a pointer so 0 is actually sent (omitempty would drop a 0
 	// value). Used to pin the classifier to deterministic routing.
 	Temperature *float64 `json:"temperature,omitempty"`
+	// MaxCompletionTokens caps what the model may generate for one reply. Groq
+	// deprecated max_tokens in favour of this name, and the planner path already
+	// sends this one. It is a pointer for the same reason Temperature is, and
+	// every existing caller leaves it nil, so omitempty drops the key and their
+	// request bytes are unchanged.
+	//
+	// Nothing sets it, deliberately. Groq reserves prompt + max_completion_tokens
+	// against the daily token budget before the call runs, so asking for headroom
+	// costs capacity whether or not it gets used: at 4,096 a single question,
+	// which is two calls, reserves about 11,500 of the 200,000 tokens a day. The
+	// measured ceiling when it is omitted is 2,048, and the writing has never
+	// needed more than 326 of those — what overruns it is the thinking, which
+	// ReasoningEffort addresses without spending any budget at all.
+	MaxCompletionTokens *int `json:"max_completion_tokens,omitempty"`
+	// ReasoningEffort is "low", "medium" or "high" on gpt-oss. Groq defaults it
+	// to "medium", which is what every call here ran at before this field
+	// existed, without anyone choosing it.
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 }
 
 // zeroTemperature returns a pointer to 0 for deterministic calls (the intent
@@ -237,5 +255,27 @@ type groqParameters struct {
 type groqResponse struct {
 	Choices []struct {
 		Message groqMessage `json:"message"`
+		// FinishReason is "stop" when the model ended on its own and "length"
+		// when the provider cut it off. Reading it is the only way to tell the
+		// two apart: a cut reply parses fine, is not empty, and reaches the
+		// owner with its last word half written — which is exactly what
+		// happened to "สรุปสถานการณ์ร้าน" on 23 Aug, ending at "มูลค่ารวมของสิน".
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage groqUsage `json:"usage"`
+}
+
+// groqUsage is what the reply cost. It is recorded because the output ceiling
+// cannot be set sensibly by guesswork: too low truncates more often than today,
+// too high guards nothing. ReasoningTokens separates a model that thought for
+// too long from one that wrote for too long, which need opposite fixes — it
+// stays zero when the provider does not report it, so zero means "not reported"
+// rather than "did not think".
+type groqUsage struct {
+	PromptTokens            int `json:"prompt_tokens"`
+	CompletionTokens        int `json:"completion_tokens"`
+	TotalTokens             int `json:"total_tokens"`
+	CompletionTokensDetails struct {
+		ReasoningTokens int `json:"reasoning_tokens"`
+	} `json:"completion_tokens_details"`
 }

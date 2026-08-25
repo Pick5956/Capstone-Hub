@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 // aiProviderAnswerMode describes the current response path without exposing a
@@ -29,6 +29,38 @@ type aiProviderAnswer struct {
 	Model string
 }
 
+// aiProviderCompleteOptions carries per-call preferences to Complete. The zero
+// value means "whatever the provider does by default", which is what every
+// caller but joyboy passes, so adding a field here cannot change an existing
+// request.
+//
+// It exists because joyboy makes two calls per question that want opposite
+// things. Choosing tools is a judgement: at low effort it picked
+// get_lowest_margin_menu for "เมนูไหนขายดีแต่กำไรน้อย", a tool that says nothing
+// about how well anything sells, and then answered from it instead of saying the
+// data was insufficient. Writing the answer is transcription: five of eight
+// calls spent under twenty tokens thinking, and forcing more of it is what
+// pushed two replies into the output ceiling mid-word.
+//
+// The preference is expressed here rather than by calling Groq directly, so that
+// joyboy keeps going through this boundary. A path that named Groq would ignore
+// AI_PROVIDER, and the setting would quietly stop being true for one caller.
+type aiProviderCompleteOptions struct {
+	// ReasoningEffort is "low", "medium" or "high" for models that support it.
+	// Empty leaves the parameter out entirely.
+	ReasoningEffort string
+	// MaxCompletionTokens caps the reply — reasoning and written text together on
+	// gpt-oss. Zero leaves the parameter out, so the provider default applies.
+	//
+	// It is here because the two settings have to move together for the write
+	// round. Medium restores figure accuracy that low lost, but medium is also
+	// what once thought for 1,917 tokens and ran the answer into the 2,048-token
+	// provider default mid-word; a raised ceiling is what keeps that extra
+	// thinking from being cut off. Groq reserves this against the daily budget at
+	// request time, so it is set only where it is needed.
+	MaxCompletionTokens int
+}
+
 // aiProviderAdapter is the provider-neutral boundary used by AIService.
 // Groq and Gemini keep their own HTTP payloads and response parsing behind this
 // interface, while routing, fallback order, and backend policy remain shared.
@@ -38,7 +70,7 @@ type aiProviderAdapter interface {
 	Configured() bool
 	Classify(question string) (AIRouterResult, error)
 	Answer(request aiProviderAnswerRequest) (aiProviderAnswer, error)
-	Complete(prompt string) (aiProviderAnswer, error)
+	Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error)
 }
 
 type groqProviderAdapter struct {
@@ -55,12 +87,16 @@ func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) 
 		return AIRouterResult{}, errors.New("GROQ_API_KEYS is not configured")
 	}
 
+	attempts, releaseAt := nextProviderAttempts(&a.service.keyHealth, "groq", keys, &a.service.groqKeyIndex)
+	if len(attempts) == 0 {
+		return AIRouterResult{}, allKeysRateLimitedError("Groq classifier", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	for i := 0; i < len(keys); i++ {
-		idx := atomic.AddUint32(&a.service.groqKeyIndex, 1) - 1
-		keyPosition := idx % uint32(len(keys))
-		raw, err := a.service.executeClassifierGroq(question, keys[keyPosition])
+	for _, attempt := range attempts {
+		raw, err := a.service.executeClassifierGroq(question, attempt.Key)
 		if err == nil {
+			a.service.keyHealth.clear("groq", attempt.Index)
 			result, parseErr := parseRouterJSON(raw)
 			if parseErr == nil {
 				return result, nil
@@ -70,7 +106,19 @@ func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) 
 			continue
 		}
 		lastErr = err
-		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+		// A withdrawn model answers 404 for every key, so stop instead of spending
+		// the remaining keys rediscovering the same failure.
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Groq classifier: %v — skipping remaining keys", err)
+			return AIRouterResult{}, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			a.service.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Groq classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			continue
+		}
+		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Groq classifier exhausted configured keys: %w", lastErr)
 }
@@ -90,8 +138,8 @@ func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvide
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
-func (a *groqProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
-	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt)
+func (a *groqProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt, opts)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
@@ -109,12 +157,16 @@ func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error
 		return AIRouterResult{}, errors.New("GEMINI_API_KEYS is not configured")
 	}
 
+	attempts, releaseAt := nextProviderAttempts(&a.service.keyHealth, "gemini", keys, &a.service.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return AIRouterResult{}, allKeysRateLimitedError("Gemini classifier", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	for i := 0; i < len(keys); i++ {
-		idx := atomic.AddUint32(&a.service.geminiKeyIndex, 1) - 1
-		keyPosition := idx % uint32(len(keys))
-		raw, err := a.service.executeClassifierGemini(question, keys[keyPosition])
+	for _, attempt := range attempts {
+		raw, err := a.service.executeClassifierGemini(question, attempt.Key)
 		if err == nil {
+			a.service.keyHealth.clear("gemini", attempt.Index)
 			result, parseErr := parseRouterJSON(raw)
 			if parseErr == nil {
 				return result, nil
@@ -124,7 +176,19 @@ func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error
 			continue
 		}
 		lastErr = err
-		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", keyPosition+1, len(keys), err)
+		// A withdrawn model answers 404 for every key, so stop instead of spending
+		// the remaining keys rediscovering the same failure.
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini classifier: %v — skipping remaining keys", err)
+			return AIRouterResult{}, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			a.service.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			continue
+		}
+		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Gemini classifier exhausted configured keys: %w", lastErr)
 }
@@ -144,7 +208,11 @@ func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 
-func (a *geminiProviderAdapter) Complete(prompt string) (aiProviderAnswer, error) {
+// Complete ignores opts. Gemini has no equivalent of reasoning_effort on this
+// path, and a preference that cannot be expressed is not a reason to refuse the
+// call — the reply is still a reply. Dropping it here is what keeps the option a
+// hint rather than a contract every provider has to honour.
+func (a *geminiProviderAdapter) Complete(prompt string, _ aiProviderCompleteOptions) (aiProviderAnswer, error) {
 	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
