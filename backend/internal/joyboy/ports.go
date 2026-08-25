@@ -13,6 +13,11 @@ import "context"
 type ToolSpec struct {
 	Name        string
 	Description string
+	// Group is an optional heading the tool sits under in the rendered catalogue.
+	// It is presentation only — the model still picks freely across groups; the
+	// heading just breaks a long flat list into readable sections. Tools sharing
+	// a group must be listed consecutively for the heading to print once.
+	Group string
 }
 
 // CallKind says which of the two calls in a question this is. The two want

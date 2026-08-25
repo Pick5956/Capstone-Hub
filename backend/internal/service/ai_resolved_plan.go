@@ -1021,7 +1021,8 @@ func toolSupportsResolvedPlanDomain(tool AIToolName, domain ResolvedPlanDomain) 
 		AIToolGetIngredientReorderForecast, AIToolGetDeadStock, AIToolGetTopCostIngredients:
 		return domain == ResolvedPlanDomainInventory
 	case AIToolGetSalesSummary, AIToolGetSalesTrend, AIToolGetAverageOrderValue,
-		AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods, AIToolGetSalesForPeriod:
+		AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods, AIToolGetSalesForPeriod,
+		AIToolGetProfitSummary:
 		return domain == ResolvedPlanDomainSales
 	case AIToolGetStoreSummary:
 		return domain == ResolvedPlanDomainRestaurant

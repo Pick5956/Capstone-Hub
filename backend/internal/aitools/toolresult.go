@@ -27,6 +27,22 @@ type AIToolResult struct {
 	StoreSummary        *AIStoreSummary
 	SalesForPeriod      *AISalesPeriod
 	MostExpensiveMenus  []repository.AIMenuPrice
+	ProfitSummary       *AIProfitSummary
+}
+
+// AIProfitSummary is the store-level revenue / cost / profit over the analysis
+// window. It is summed from the per-menu margins the snapshot already holds, so
+// it always agrees with the margin tools rather than answering from a second
+// query that might drift. CoveragePercent carries how much of revenue has a
+// costed recipe behind it: below 100 the cost — and therefore the profit — is a
+// floor, because uncosted menus contribute revenue with zero cost.
+type AIProfitSummary struct {
+	Days            int
+	Revenue         float64
+	Cost            float64
+	Profit          float64
+	Margin          float64
+	CoveragePercent float64
 }
 
 // AIStoreSummary is a backend-composed overview so open-ended "summarize the

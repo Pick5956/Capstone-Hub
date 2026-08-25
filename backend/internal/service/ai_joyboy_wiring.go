@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"Project-M/internal/joyboy"
@@ -96,6 +97,17 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 	for _, name := range joyboyExtraTools {
 		catalogue = append(catalogue, joyboy.ToolSpec{Name: string(name), Description: joyboyExtraToolGuide[name]})
 	}
+	// Order and label by section so the flat list reads as grouped headings. The
+	// set is untouched — only the order and the Group tag are set here — so no
+	// tool is dropped or added by grouping. A stable sort keeps the within-group
+	// order above.
+	for i := range catalogue {
+		catalogue[i].Group = joyboyToolGroupHeading(AIToolName(catalogue[i].Name))
+	}
+	sort.SliceStable(catalogue, func(a, b int) bool {
+		return joyboyToolGroupOrder(AIToolName(catalogue[a].Name)) <
+			joyboyToolGroupOrder(AIToolName(catalogue[b].Name))
+	})
 	return catalogue
 }
 

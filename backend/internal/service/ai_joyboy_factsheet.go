@@ -129,6 +129,27 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				summary.Days, summary.Orders, joyboyNum(summary.Revenue)),
 		}), true
 
+	case AIToolGetProfitSummary:
+		profit := result.ProfitSummary
+		if profit == nil || profit.Revenue == 0 {
+			return joyboyNoData("no_margin_data_to_compute_profit"), true
+		}
+		lines := []string{
+			window,
+			fmt.Sprintf("revenue=%s cost=%s profit=%s margin_pct=%s",
+				joyboyNum(profit.Revenue), joyboyNum(profit.Cost),
+				joyboyNum(profit.Profit), joyboyNum(profit.Margin)),
+		}
+		// Below full coverage the cost is understated (uncosted menus add revenue
+		// with no cost), so profit is a floor. Flag it so the answer can say so
+		// rather than presenting a partial figure as the whole store's profit.
+		if profit.CoveragePercent < 99.5 {
+			lines = append(lines, fmt.Sprintf(
+				"note=cost_covers_only_%s_pct_of_revenue_so_profit_is_a_floor",
+				joyboyNum(profit.CoveragePercent)))
+		}
+		return joyboyJoin(lines), true
+
 	case AIToolGetSalesTrend:
 		trend := result.SalesTrend
 		if trend == nil {

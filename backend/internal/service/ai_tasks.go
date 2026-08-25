@@ -58,6 +58,7 @@ const (
 	AIToolGetStoreSummary      = aitools.AIToolGetStoreSummary
 	AIToolGetSalesForPeriod    = aitools.AIToolGetSalesForPeriod
 	AIToolGetMostExpensiveMenu = aitools.AIToolGetMostExpensiveMenu
+	AIToolGetProfitSummary     = aitools.AIToolGetProfitSummary
 
 	AIToolSearchSystemDocs = aitools.AIToolSearchSystemDocs
 	AIToolReadSystemDoc    = aitools.AIToolReadSystemDoc
@@ -91,8 +92,8 @@ type AIAverageOrderValue = aitools.AIAverageOrderValue
 type AISalesSummary = aitools.AISalesSummary
 type AISalesTrend = aitools.AISalesTrend
 
-func supportedReadOnlyToolNames() [22]AIToolName {
-	return [22]AIToolName{
+func supportedReadOnlyToolNames() [23]AIToolName {
+	return [23]AIToolName{
 		AIToolGetLowestMarginMenu,
 		AIToolGetHighestMarginMenu,
 		AIToolGetLowStockIngredients,
@@ -115,6 +116,7 @@ func supportedReadOnlyToolNames() [22]AIToolName {
 		AIToolGetMostExpensiveMenu,
 		AIToolSearchSystemDocs,
 		AIToolReadSystemDoc,
+		AIToolGetProfitSummary,
 	}
 }
 

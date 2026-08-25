@@ -36,6 +36,7 @@ const (
 	AIToolGetStoreSummary      AIToolName = "get_store_summary"
 	AIToolGetSalesForPeriod    AIToolName = "get_sales_for_period"
 	AIToolGetMostExpensiveMenu AIToolName = "get_most_expensive_menu"
+	AIToolGetProfitSummary     AIToolName = "get_profit_summary"
 
 	AIToolSearchSystemDocs AIToolName = "search_system_docs"
 	AIToolReadSystemDoc    AIToolName = "read_system_doc"

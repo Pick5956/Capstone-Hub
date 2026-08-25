@@ -87,11 +87,16 @@ var joyboyToolsNotOffered = map[AIToolName]struct{}{
 const joyboyToolDataCoverage AIToolName = "get_data_coverage"
 
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
-// Their names are not in getGroqTools(), so Catalogue() adds them and Run()
-// intercepts them.
+// Their names are not in getGroqTools(), so Catalogue() adds them. How they run
+// then splits: get_data_coverage and search_system_docs are intercepted in
+// runJoyboyExtraTool because they cannot be answered from the 30-day snapshot;
+// get_profit_summary is a normal snapshot tool that simply isn't in legacy's
+// provider list, so runJoyboyExtraTool leaves it alone and it falls through to
+// executeReadOnlyTool like every other read-only tool.
 var joyboyExtraTools = []AIToolName{
 	joyboyToolDataCoverage,
 	AIToolSearchSystemDocs,
+	AIToolGetProfitSummary,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -102,6 +107,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ยอดขายรวมทั้งหมดตั้งแต่เปิดร้าน ออเดอร์รวมทั้งหมด",
 	AIToolSearchSystemDocs: "ค้นคู่มือการใช้งานเว็บ Dishy เพื่อตอบวิธีใช้ระบบ " +
 		"ใช้ตอบ: ใช้ระบบยังไง เมนูตรงไหน ตั้งค่าอะไรที่ไหน ทำอะไรได้บ้าง ระบบมีข้อจำกัดอะไร แก้ปัญหายังไง",
+	AIToolGetProfitSummary: "กำไรรวมทั้งร้านในช่วงที่วิเคราะห์ คือรายได้รวม ลบ ต้นทุนวัตถุดิบรวม " +
+		"เหลือกำไรรวม พร้อม margin เฉลี่ยทั้งร้าน เป็นภาพรวมทั้งร้าน ไม่ใช่รายเมนู " +
+		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
+		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
+		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
 }
 
 // isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by
@@ -109,4 +119,57 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 func isJoyboyExtraTool(name AIToolName) bool {
 	_, ok := joyboyExtraToolGuide[name]
 	return ok
+}
+
+// joyboyToolGroups is the order the catalogue's section headings appear in and
+// the tools filed under each. Grouping is presentation only: the model still
+// picks freely across sections (chosen the way we settled — organise the flat
+// list for readability, never gate the choice behind a section). A tool absent
+// from every group still shows, unheaded, after the grouped ones, so a newly
+// added tool is never hidden — a test holds that each offered tool has a home.
+var joyboyToolGroups = []struct {
+	Heading string
+	Tools   []AIToolName
+}{
+	{"เมนู", []AIToolName{
+		AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus,
+		AIToolGetHighestMarginMenu, AIToolGetLowestMarginMenu, AIToolGetLowestCostMenu,
+		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering,
+	}},
+	{"ยอดขายและกำไร", []AIToolName{
+		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
+		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
+		AIToolGetProfitSummary,
+	}},
+	{"วัตถุดิบและสต๊อก", []AIToolName{
+		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,
+		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
+	}},
+	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},
+	{"คู่มือการใช้งาน", []AIToolName{AIToolSearchSystemDocs}},
+}
+
+// joyboyToolGroupHeading returns the section a tool sits under, "" if unfiled.
+func joyboyToolGroupHeading(name AIToolName) string {
+	for _, group := range joyboyToolGroups {
+		for _, tool := range group.Tools {
+			if tool == name {
+				return group.Heading
+			}
+		}
+	}
+	return ""
+}
+
+// joyboyToolGroupOrder ranks a tool by its group for a stable catalogue sort.
+// Unfiled tools sort last so they still render, just without a heading.
+func joyboyToolGroupOrder(name AIToolName) int {
+	for i, group := range joyboyToolGroups {
+		for _, tool := range group.Tools {
+			if tool == name {
+				return i
+			}
+		}
+	}
+	return len(joyboyToolGroups)
 }

@@ -202,9 +202,38 @@ func ExecuteReadOnlyTool(tool AIToolName, snapshot AISnapshot, question ...strin
 			menus = menus[:limit]
 		}
 		return AIToolResult{Tool: tool, MostExpensiveMenus: menus}, nil
+	case AIToolGetProfitSummary:
+		// Store profit is a margin question: without costed recipes there is no
+		// cost to subtract, so it is gated on the same readiness flag as the
+		// per-menu margin tools rather than answered as a bare revenue figure.
+		if !snapshot.AnalysisReadiness.CanAnalyzeMargin {
+			return AIToolResult{Tool: tool}, nil
+		}
+		profit := ComputeProfitSummary(snapshot)
+		return AIToolResult{Tool: tool, ProfitSummary: &profit}, nil
 	default:
 		return AIToolResult{}, errors.New("unsupported AI tool")
 	}
+}
+
+// ComputeProfitSummary sums the per-menu margins the snapshot already holds into
+// one store-level revenue / cost / profit. Summing the same rows the margin
+// tools report keeps the store total reconcilable with them; a separate
+// aggregate query could drift from the per-menu numbers the owner also sees.
+func ComputeProfitSummary(snapshot AISnapshot) AIProfitSummary {
+	summary := AIProfitSummary{
+		Days:            len(snapshot.SalesDays),
+		CoveragePercent: snapshot.AnalysisReadiness.MarginCostCoveragePercent,
+	}
+	for _, menu := range snapshot.AllMenuMargins {
+		summary.Revenue += menu.Revenue
+		summary.Cost += menu.Cost
+		summary.Profit += menu.Profit
+	}
+	if summary.Revenue > 0 {
+		summary.Margin = summary.Profit / summary.Revenue * 100
+	}
+	return summary
 }
 
 // ComputeSalesTrend splits the recent sales days into the last 7 days and the

@@ -46,7 +46,12 @@ const selectToolsTemplate = `คุณคือผู้ช่วยของเ
 
 func renderCatalogue(tools []ToolSpec) string {
 	lines := make([]string, 0, len(tools))
+	currentGroup := ""
 	for _, tool := range tools {
+		if tool.Group != "" && tool.Group != currentGroup {
+			lines = append(lines, "## "+tool.Group)
+			currentGroup = tool.Group
+		}
 		lines = append(lines, "- "+tool.Name+": "+tool.Description)
 	}
 	return strings.Join(lines, "\n")
