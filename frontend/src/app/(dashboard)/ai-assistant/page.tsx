@@ -90,10 +90,10 @@ function buildCopy(language: "th" | "en") {
         stockLow: "ต่ำ",
         restock: "แนะนำเติม",
         quickQuestions: [
-          "สรุปสถานการณ์ร้านวันนี้ให้หน่อย",
-          "พรุ่งนี้ควรเตรียมวัตถุดิบอะไรเพิ่ม?",
-          "เมนูไหนขายดีและกระทบสต็อกมากที่สุด?",
-          "มีความเสี่ยงวัตถุดิบขาดหรือซื้อเกินไหม?",
+          "สรุปร้าน",
+          "เมนูขายดี",
+          "วัตถุดิบใกล้หมด",
+          "มูลค่าสต๊อก",
         ],
       }
     : {
@@ -736,9 +736,9 @@ export default function AIAssistantPage() {
             </div>
           )}
 
-          {/* Input at the bottom — rounded pill */}
+          {/* Input at the bottom — rounded pill, capped and centred */}
           <form
-            className="p-3"
+            className="mx-auto w-full max-w-2xl p-3"
             onSubmit={(event) => {
               event.preventDefault();
               submitQuestion();
@@ -824,15 +824,13 @@ export default function AIAssistantPage() {
                   type="submit"
                   disabled={loading || actionConfirming || actionCancelling || !input.trim()}
                   aria-label={copy.ask}
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-4 text-sm font-semibold text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={copy.ask}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-sm shadow-orange-500/30 transition-all hover:brightness-105 hover:shadow-md hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      <span className="hidden sm:inline">{copy.ask}</span>
-                    </>
+                    <Send className="h-4 w-4" />
                   )}
                 </button>
               )}
