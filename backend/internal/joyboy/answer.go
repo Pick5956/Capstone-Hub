@@ -203,12 +203,13 @@ var latexText = regexp.MustCompile(`\\(?:text|mathrm|mathit)\{([^{}]*)\}`)
 var danglingPoliteness = regexp.MustCompile(`(?m)^[ \t]*(?:ครับ|ค่ะ|ขอบคุณครับ|ขอบคุณค่ะ)[ \t]*$`)
 
 // particleStuckToNonThai puts a space before a closing "ครับ"/"ค่ะ" when it butts
-// directly against a Latin letter, a digit, or a "*" — the "*" being the close of
-// a bold span. The model writes "**9,988 บาท**ครับ" and "ระบบ Dishyครับ", where the
-// particle jams against the markup or an English word with no gap. Thai text runs
-// the particle on without a space by convention, so the rule fires only when the
-// preceding character is not Thai, leaving "บาทครับ" untouched.
-var particleStuckToNonThai = regexp.MustCompile(`([A-Za-z0-9*])(ครับ|ค่ะ)`)
+// directly against a Latin letter, a digit, a "*" (the close of a bold span), or
+// a "%". The model writes "**9,988 บาท**ครับ", "ระบบ Dishyครับ", and "2.34%ครับ",
+// where the particle jams against the markup, an English word, or a percent sign
+// with no gap. Thai text runs the particle on without a space by convention, so
+// the rule fires only when the preceding character is not Thai, leaving "บาทครับ"
+// untouched.
+var particleStuckToNonThai = regexp.MustCompile(`([A-Za-z0-9*%])(ครับ|ค่ะ)`)
 
 // repeatedPoliteness collapses "ครับครับ", which is what asking for a polite
 // ending produced when the model had already written one. Go's regexp has no
