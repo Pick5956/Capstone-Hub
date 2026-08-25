@@ -87,3 +87,53 @@ func TestTheAnswerPromptKeepsNonZeroFractions(t *testing.T) {
 		t.Fatal("the .00-stripping rule was lost")
 	}
 }
+
+// reconcileFigures treats the fact sheet as the dictionary of correct numbers.
+// A figure that matches the source has its space separator turned into a comma —
+// which resolves the "one number or two?" ambiguity a bare regex cannot: only a
+// space run that reduces to a real source figure is joined. A figure that
+// matches nothing is returned untouched and, if large, reported as a possible
+// drift.
+func TestReconcileFiguresNormalisesOnlyConfirmedFigures(t *testing.T) {
+	sheet := "period=30 rank=1 menu=ต้มยำ qty=109 revenue=15151.00\ntotal_value=6957.50 orders=291"
+	cases := []struct{ in, want string }{
+		// "15 151" reduces to 15151, which is in the sheet → joined with a comma.
+		{"ต้มยำ 109 จาน 15 151 บาท", "ต้มยำ 109 จาน 15,151 บาท"},
+		// The decimal figure is confirmed; only the space becomes a comma, ".50" stays.
+		{"มูลค่า 6 957.50 บาท", "มูลค่า 6,957.50 บาท"},
+		// "5 คน" is not "5xxx" — the 3-digit group never forms, so it is left alone.
+		{"มี 5 คน", "มี 5 คน"},
+		// A space run that does not reduce to any source figure is left as written.
+		{"ขาย 5 200 อย่าง", "ขาย 5 200 อย่าง"},
+	}
+	for _, c := range cases {
+		got, _ := reconcileFigures(c.in, sheet)
+		if got != c.want {
+			t.Errorf("reconcileFigures(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// A large figure absent from the sheet is the drift signature; it is reported,
+// not corrected, so a legitimate derived percentage is never overwritten.
+func TestReconcileFiguresReportsDriftWithoutTouchingIt(t *testing.T) {
+	sheet := "qty=96 revenue=9504.00"
+	// 95 is not in the sheet: left as written, and (being under four digits) it
+	// is not even reported — small numbers are usually derived, kept quiet.
+	got, unmatched := reconcileFigures("ปีกไก่ 95 จาน", sheet)
+	if got != "ปีกไก่ 95 จาน" {
+		t.Fatalf("a non-matching figure was altered: %q", got)
+	}
+	if len(unmatched) != 0 {
+		t.Fatalf("a small figure was reported and should not be: %v", unmatched)
+	}
+	// A four-digit figure absent from the sheet is reported (possible drift) but
+	// still left untouched.
+	got, unmatched = reconcileFigures("รายได้ 9405 บาท", sheet)
+	if got != "รายได้ 9405 บาท" {
+		t.Fatalf("a reported figure was altered: %q", got)
+	}
+	if len(unmatched) != 1 || unmatched[0] != "9405" {
+		t.Fatalf("drift figure not reported: %v", unmatched)
+	}
+}

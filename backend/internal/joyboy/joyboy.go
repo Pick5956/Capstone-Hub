@@ -84,6 +84,13 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 			continue
 		}
 		if text := cleanAnswer(raw); text != "" {
+			// The fact sheet is the dictionary of correct figures: normalise the
+			// separators of any figure that matches it, and report any large one
+			// that matches nothing as a possible drift.
+			text, unmatched := reconcileFigures(text, sheet)
+			for _, figure := range unmatched {
+				a.log("joyboy: answer figure %q is not in the fact sheet", figure)
+			}
 			return text, nil
 		}
 		lastErr = errors.New("the model returned nothing usable")

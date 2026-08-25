@@ -269,3 +269,58 @@ func cleanAnswer(raw string) string {
 	}
 	return text
 }
+
+// answerFigure matches a numeric token in either the fact sheet or the answer,
+// allowing space or comma thousands separators and an optional decimal part.
+var answerFigure = regexp.MustCompile(`\d+(?:[, ]\d{3})*(?:\.\d+)?`)
+
+// canonicalFigure strips separators and trailing decimal zeros, so that
+// "6 957.50", "6,957.50", and the sheet's raw "6957.50" all reduce to the same
+// key ("6957.5") for comparison.
+func canonicalFigure(s string) string {
+	s = strings.ReplaceAll(s, ",", "")
+	s = strings.ReplaceAll(s, " ", "")
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	return s
+}
+
+// reconcileFigures uses the fact sheet as the dictionary of correct numbers —
+// Go already computed them and handed them to the model, so it can check them
+// back. This is legacy's number lock revived, but with a gentler hand: legacy
+// discarded the whole answer when it saw a figure it had not computed, which
+// threw away good answers over a percentage the model derived itself. Here a
+// figure that matches the source only has its thousands separator normalised to
+// a comma (safe, the value is confirmed), and a figure that matches nothing is
+// left exactly as written and merely reported.
+//
+// The report is a backstop. Transcription drift ("95" for a source "96") was a
+// low-effort artefact and disappeared at medium in round 12; if it ever returns
+// this is what surfaces it, without risking a wrong auto-correction.
+func reconcileFigures(text, sheet string) (string, []string) {
+	source := make(map[string]struct{})
+	for _, n := range answerFigure.FindAllString(sheet, -1) {
+		source[canonicalFigure(n)] = struct{}{}
+	}
+	var unmatched []string
+	fixed := answerFigure.ReplaceAllStringFunc(text, func(tok string) string {
+		if _, ok := source[canonicalFigure(tok)]; ok {
+			// Value confirmed against the source: normalise a space separator to
+			// a comma. Nothing else is touched, so the model's decimals stand.
+			if strings.Contains(tok, " ") {
+				return strings.ReplaceAll(tok, " ", ",")
+			}
+			return tok
+		}
+		// Not in the source. A large figure here is a possible drift worth
+		// seeing; small ones are usually percentages or day counts the model
+		// derived, so they are not reported to keep the log quiet.
+		if intPart := strings.SplitN(canonicalFigure(tok), ".", 2)[0]; len(intPart) >= 4 {
+			unmatched = append(unmatched, tok)
+		}
+		return tok
+	})
+	return fixed, unmatched
+}
