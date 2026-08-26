@@ -23,10 +23,8 @@ export function SettingsShell({
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Settings are forms: hold them to a readable measure and center them so
-          fields never stretch edge-to-edge on wide screens. The top padding
-          also keeps the first panel clear of the dashboard top bar when the
-          in-page header is hidden. */}
-      <div className="mx-auto w-full max-w-4xl px-4 pb-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
+          fields never stretch edge-to-edge on wide screens. */}
+      <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
         {hideHeader ? (
           // The sidebar already names the page; keep only a visually-hidden
           // heading so the document outline and screen readers are unaffected.

@@ -6,6 +6,7 @@ import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { createSingleFlight } from "@/src/lib/singleFlight";
 import { updateProfile, uploadProfileImage } from "@/src/lib/auth";
 import UserAvatar from "@/src/components/shared/UserAvatar";
+import { roleLabel } from "@/src/lib/roleLabels";
 import { Field, SettingsPanel, SettingsShell, StatusMessage } from "../_components/SettingsPrimitives";
 
 function normalizePhone(value: string) {
@@ -20,7 +21,7 @@ function getDisplayName(user: ReturnType<typeof useAuth>["user"], language: Lang
 }
 
 export default function AccountSettingsPage() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, memberships } = useAuth();
   const { language } = useLanguage();
   const saveOnceRef = useRef(createSingleFlight());
   const uploadOnceRef = useRef(createSingleFlight());
@@ -58,6 +59,12 @@ export default function AccountSettingsPage() {
         local: "อีเมลและรหัสผ่าน",
         connected: "เชื่อมแล้ว",
         notConnected: "ยังไม่เชื่อม",
+        places: "ร้านที่คุณอยู่",
+        placesHint: "ทุกร้านที่บัญชีนี้เป็นสมาชิก พร้อมบทบาทในแต่ละร้าน",
+        joined: "เข้าร่วมเมื่อ",
+        active: "ใช้งานอยู่",
+        suspended: "ถูกระงับ",
+        noPlaces: "ยังไม่ได้เป็นสมาชิกร้านไหน",
       }
     : {
         eyebrow: "Account",
@@ -85,6 +92,12 @@ export default function AccountSettingsPage() {
         local: "Email and password",
         connected: "Connected",
         notConnected: "Not connected",
+        places: "Your restaurants",
+        placesHint: "Every restaurant this account belongs to, with its role.",
+        joined: "Joined",
+        active: "Active",
+        suspended: "Suspended",
+        noPlaces: "Not a member of any restaurant yet.",
       };
 
   const displayName = getDisplayName(user, language);
@@ -162,7 +175,7 @@ export default function AccountSettingsPage() {
 
   return (
     <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="grid gap-4">
         <form onSubmit={saveProfile} className="space-y-4">
           <SettingsPanel title={copy.profile} hint={copy.profileHint}>
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -221,6 +234,50 @@ export default function AccountSettingsPage() {
               );
             })}
           </div>
+        </SettingsPanel>
+
+        <SettingsPanel title={copy.places} hint={copy.placesHint}>
+          {memberships.length ? (
+            <div className="grid gap-2">
+              {memberships.map((membership) => {
+                const name = membership.restaurant?.name ?? "-";
+                const isActive = membership.status === "active";
+                const joined = membership.joined_at
+                  ? new Date(membership.joined_at).toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : null;
+                const badgeClassName = isActive
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                  : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+
+                return (
+                  <div
+                    key={membership.ID}
+                    className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-md bg-orange-50 text-[13px] font-semibold text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
+                      {name.trim().charAt(0) || "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{name}</p>
+                      <p className="truncate text-[11px] text-gray-500 dark:text-gray-400">
+                        {roleLabel(membership.role, language)}
+                        {joined ? ` · ${copy.joined} ${joined}` : ""}
+                      </p>
+                    </div>
+                    <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${badgeClassName}`}>
+                      {isActive ? copy.active : copy.suspended}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{copy.noPlaces}</p>
+          )}
         </SettingsPanel>
       </div>
     </SettingsShell>
