@@ -79,6 +79,11 @@ type joyboyTools struct {
 	// askJoyboy attaches it to the response for the frontend chart to draw. The
 	// LLM still writes the words from the fact sheet; this is only the series.
 	forecast *AIForecastResult
+
+	// chart rides back the same way for the general chart payloads (a two-period
+	// comparison bar, a daily trend line): the tool computes it, askJoyboy hands
+	// it to the frontend to draw.
+	chart *AIChartData
 }
 
 func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
@@ -182,6 +187,9 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
+				// A comparison is a picture worth drawing: hand the frontend a
+				// two-bar chart of the same figures the fact sheet carries.
+				t.chart = buildSalesComparisonChart(a.Label, da.Revenue, b.Label, db.Revenue)
 				return joyboySalesComparisonBody(a, da, b, db), true, true
 			}
 			if len(req.periods) > 0 {
@@ -356,6 +364,9 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// it to the frontend so the ForecastChart draws under the answer.
 	if tools.forecast != nil {
 		response.Forecast = tools.forecast
+	}
+	if tools.chart != nil {
+		response.Chart = tools.chart
 	}
 	return response, nil
 }

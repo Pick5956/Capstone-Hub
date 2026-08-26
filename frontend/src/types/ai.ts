@@ -175,6 +175,14 @@ export type AIForecastResult = {
   stale_days: number;
 };
 
+export type AIChartData = {
+  kind: "bar" | "line" | "pie";
+  title: string;
+  unit?: string;
+  categories: string[];
+  series: { name?: string; values: number[] }[];
+};
+
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
@@ -187,6 +195,9 @@ export type AIAskResponse = {
   scope_assumed?: boolean;
   // Chart-ready sales forecast when the question asked for one.
   forecast?: AIForecastResult;
+  // General chart payload (bar/line/pie) when the answer is best shown as a
+  // picture — e.g. a two-period sales comparison.
+  chart?: AIChartData;
   conversation_id?: string;
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;

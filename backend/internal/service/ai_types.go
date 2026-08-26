@@ -39,6 +39,11 @@ type AIAskResponse struct {
 	// Forecast carries the chart-ready sales prediction (history + bounded future +
 	// measured error) when the question asked for a forecast.
 	Forecast       *AIForecastResult        `json:"forecast,omitempty"`
+	// Chart carries a general chart-ready payload (bar / line / pie) when the
+	// answer is best shown as a picture — a two-period comparison, a daily trend.
+	// Its numbers are computed in Go, the same figures the answer text states; the
+	// frontend draws it, the model never lays out the chart itself.
+	Chart          *AIChartData             `json:"chart,omitempty"`
 	ConversationID string                   `json:"conversation_id,omitempty"`
 	TurnID         string                   `json:"turn_id,omitempty"`
 	ResolvedPlan   *ResolvedPlan            `json:"resolved_plan,omitempty"`

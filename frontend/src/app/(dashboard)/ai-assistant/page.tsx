@@ -30,12 +30,13 @@ import {
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResult } from "@/src/types/ai";
+import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
+import AIChart from "@/src/components/shared/AIChart";
 import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import HoverTip from "@/src/components/shared/HoverTip";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
@@ -50,6 +51,7 @@ type Message = {
   actions?: AIGuidedAction[];
   model?: string;
   forecast?: AIForecastResult;
+  chart?: AIChartData;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
@@ -366,6 +368,7 @@ export default function AIAssistantPage() {
           actions,
           model: data.model,
           forecast: data.forecast,
+          chart: data.chart,
         },
       ]);
     } catch (err: unknown) {
@@ -619,6 +622,9 @@ export default function AIAssistantPage() {
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.forecast && msg.forecast.forecast.length > 0 && (
                       <ForecastChart data={msg.forecast} language={language} />
+                    )}
+                    {msg.chart && msg.chart.categories.length > 0 && (
+                      <AIChart data={msg.chart} language={language} />
                     )}
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">

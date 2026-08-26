@@ -182,6 +182,24 @@ func TestForecastBodyStatesPredictionCaveatAndAccuracy(t *testing.T) {
 	}
 }
 
+// A two-period comparison ships a bar chart of the same two revenue figures the
+// answer states, so the picture and the words never disagree.
+func TestSalesComparisonChartMirrorsTheFigures(t *testing.T) {
+	c := buildSalesComparisonChart("เดือนสิงหาคม 2569", 270363, "เดือนกรกฎาคม 2569", 347453)
+	if c.Kind != AIChartBar {
+		t.Errorf("comparison should be a bar chart, got %q", c.Kind)
+	}
+	if len(c.Categories) != 2 || c.Categories[0] != "เดือนสิงหาคม 2569" {
+		t.Errorf("categories should name both periods, got %v", c.Categories)
+	}
+	if len(c.Series) != 1 || len(c.Series[0].Values) != 2 || c.Series[0].Values[0] != 270363 || c.Series[0].Values[1] != 347453 {
+		t.Errorf("series must carry both revenues in order, got %+v", c.Series)
+	}
+	if c.Unit != "บาท" {
+		t.Errorf("unit should be บาท, got %q", c.Unit)
+	}
+}
+
 // A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
 // question is about a sales total; menu or per-order questions that mention a
 // year keep their own tools. A month question yields no bare year, so it stays
