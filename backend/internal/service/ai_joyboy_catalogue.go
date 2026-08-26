@@ -86,6 +86,14 @@ var joyboyToolsNotOffered = map[AIToolName]struct{}{
 // executeReadOnlyTool — it needs the full history, not the 30-day snapshot.
 const joyboyToolDataCoverage AIToolName = "get_data_coverage"
 
+// joyboyToolMenuForPeriod answers menu questions scoped to a named calendar
+// period ("เมนูขายดีเดือนที่แล้ว") instead of the rolling 30-day snapshot. It
+// reuses legacy's period parser (extractPeriods) and MenuMetricsForRange to
+// gather the numbers, but renders them as a raw fact sheet for the model to rank
+// and phrase — legacy's own path writes the finished Thai answer, which is the
+// one thing joyboy does not want from it.
+const joyboyToolMenuForPeriod AIToolName = "get_menu_metrics_for_period"
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -97,6 +105,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolDataCoverage,
 	AIToolSearchSystemDocs,
 	AIToolGetProfitSummary,
+	joyboyToolMenuForPeriod,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -112,6 +121,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
 		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
 		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
+	joyboyToolMenuForPeriod: "เมนูพร้อมยอดขาย จำนวนจาน กำไร และ margin ของ \"ช่วงเวลาที่ระบุ\" " +
+		"เช่น เดือนนี้ เดือนที่แล้ว เดือนกรกฎาคม ปีนี้ ไม่ใช่ 30 วันล่าสุด " +
+		"ใช้ตอบเฉพาะเมื่อคำถามเอ่ยชื่อเดือนหรือปีชัดเจน เช่น เมนูขายดีเดือนที่แล้ว " +
+		"เมนูกำไรดีสุดเดือนกรกฎาคม ยอดแต่ละเมนูปีนี้ " +
+		"ถ้าคำถามไม่เอ่ยช่วงเวลา ให้ใช้ get_top_selling_menus หรือ get_highest_margin_menu (30 วัน) แทน",
 }
 
 // isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by
@@ -134,7 +148,7 @@ var joyboyToolGroups = []struct {
 	{"เมนู", []AIToolName{
 		AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus,
 		AIToolGetHighestMarginMenu, AIToolGetLowestMarginMenu, AIToolGetLowestCostMenu,
-		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering,
+		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering, joyboyToolMenuForPeriod,
 	}},
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,

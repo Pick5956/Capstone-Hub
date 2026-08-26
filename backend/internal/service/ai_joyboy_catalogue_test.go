@@ -101,6 +101,24 @@ func TestDataCoverageBodyRendersTheSpan(t *testing.T) {
 	}
 }
 
+// get_menu_metrics_for_period renders every menu's figures for a named period as
+// a flat sheet, stating the period so the answer never reads as the 30-day
+// window, and giving all metrics so the model ranks by whichever was asked.
+func TestMenuForPeriodBodyStatesPeriodAndAllMetrics(t *testing.T) {
+	body := joyboyMenuForPeriodBody("เดือนกรกฎาคม 2569", []repository.AIMenuMarginSummary{
+		{MenuName: "ต้มยำกุ้ง", Quantity: 120, Revenue: 16680, Profit: 11000, Margin: 65.9},
+		{MenuName: "ผัดไทย", Quantity: 98, Revenue: 8820, Profit: 5800, Margin: 65.8},
+	})
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "not_30day_window", "menu=ต้มยำกุ้ง", "qty=120", "profit=", "margin_pct="} {
+		if !strings.Contains(body, want) {
+			t.Errorf("menu-for-period body missing %q: %s", want, body)
+		}
+	}
+	if empty := joyboyMenuForPeriodBody("เดือนที่แล้ว", nil); !strings.Contains(empty, "status=no_data") {
+		t.Errorf("no sales in period should report no_data, got %q", empty)
+	}
+}
+
 // search_system_docs is the other joyboy-only tool. Its fact sheet is prose — the
 // manual text a hit carried — so the model can answer "how do I use X?" from the
 // docs instead of its own guess. No hits must read as no-data, not as silence.

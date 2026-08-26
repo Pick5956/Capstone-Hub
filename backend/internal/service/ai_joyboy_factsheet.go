@@ -353,6 +353,28 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 	})
 }
 
+// joyboyMenuForPeriodBody renders every menu's figures for a named calendar
+// period as a flat sheet, ordered as the query returned them (revenue desc). It
+// gives the model all the metrics at once — qty, revenue, profit, margin — and
+// lets it rank by whichever the question asked, rather than picking a ranking in
+// Go the way legacy's finished answer does. The period label is stated so the
+// answer never reads as the 30-day window.
+func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSummary) string {
+	if len(metrics) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_menu_sales_recorded_in_period")})
+	}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	const limit = 15
+	for i, m := range metrics {
+		if i >= limit {
+			break
+		}
+		lines = append(lines, fmt.Sprintf("menu=%s qty=%d revenue=%s profit=%s margin_pct=%s",
+			m.MenuName, m.Quantity, joyboyNum(m.Revenue), joyboyNum(m.Profit), joyboyNum(m.Margin)))
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboySystemDocsBody renders documentation search hits for the model to answer
 // "how do I use X?" from. Unlike the figure tools this body is prose — the actual
 // manual text — because the answer is explaining the system, not reporting a

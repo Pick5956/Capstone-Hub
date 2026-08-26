@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"Project-M/internal/joyboy"
+	"Project-M/internal/repository"
 )
 
 // joyboyChat calls a model through the existing rotation, which already handles
@@ -130,6 +131,22 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboySystemDocsBody(result), true, true
+	case joyboyToolMenuForPeriod:
+		// Reuse legacy's period parser and range query, but render raw figures for
+		// the model to rank rather than legacy's finished answer. A question that
+		// names no period is not this tool's job — leave it out so the model's
+		// 30-day menu tools answer instead.
+		periods := extractPeriods(question, repository.BangkokNow())
+		if len(periods) == 0 {
+			return "", false, true
+		}
+		period := periods[0]
+		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, period.Start, period.End)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyMenuForPeriodBody(period.Label, metrics), true, true
 	}
 	return "", false, false
 }
