@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
+import { MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -19,7 +19,6 @@ import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
-import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
@@ -72,6 +71,7 @@ export default function PosTablesPage() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigationPending, startNavigationTransition] = useTransition();
   const [search, setSearch] = useState("");
+  const [zoneFilter, setZoneFilter] = useState<string>("all");
   const [error, setError] = useState("");
   const [sheetError, setSheetError] = useState("");
   const refreshInFlight = useRef(false);
@@ -205,7 +205,6 @@ export default function PosTablesPage() {
     startNavigationTransition(() => router.push(orderPosHref(order)));
   }, [router, startNavigationTransition]);
 
-  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
   const activeOrderByTable = useMemo(() => {
     const map = new Map<number, Order>();
@@ -219,6 +218,8 @@ export default function PosTablesPage() {
     const keyword = search.trim().toLowerCase();
     const groups = new Map<string, { label: string; tables: RestaurantTable[] }>();
     tables.filter((table) => {
+      const key = table.zone_id ? String(table.zone_id) : "none";
+      if (zoneFilter !== "all" && key !== zoneFilter) return false;
       if (!keyword) return true;
       return [
         table.table_number,
@@ -233,11 +234,49 @@ export default function PosTablesPage() {
       groups.get(key)?.tables.push(table);
     });
     return Array.from(groups.values());
-  }, [copy.noZone, search, tables]);
+  }, [copy.noZone, search, tables, zoneFilter]);
 
   // When the restaurant has no zones at all, drop the zone chrome entirely so the
   // floor reads as a plain, sequential list instead of a single "No zone" bucket.
   const hasAnyZone = useMemo(() => tables.some((table) => table.zone_id), [tables]);
+
+  const zoneOptions = useMemo(() => {
+    const counts = new Map<string, { key: string; label: string; count: number }>();
+    tables.forEach((table) => {
+      const key = table.zone_id ? String(table.zone_id) : "none";
+      const label = table.table_zone?.name || table.zone || copy.noZone;
+      const entry = counts.get(key) ?? { key, label, count: 0 };
+      entry.count += 1;
+      counts.set(key, entry);
+    });
+    return Array.from(counts.values());
+  }, [copy.noZone, tables]);
+
+  const occupiedCount = useMemo(
+    () => tables.filter((table) => activeOrderByTable.has(table.ID)).length,
+    [activeOrderByTable, tables]
+  );
+  const freeCount = useMemo(
+    () => tables.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length,
+    [activeOrderByTable, tables]
+  );
+
+  /** How many of a zone's tables are open for a walk-in right now. */
+  const freeIn = (list: RestaurantTable[]) =>
+    list.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length;
+
+  const summaryLine = language === "th"
+    ? `${occupiedCount} โต๊ะกำลังใช้งาน · อีก ${freeCount} โต๊ะพร้อมรับลูกค้า`
+    : `${occupiedCount} in service · ${freeCount} ready for guests`;
+  const allZonesLabel = language === "th" ? "ทุกโซน" : "All zones";
+  const freeLabel = (count: number) => (language === "th" ? `${count} โต๊ะว่าง` : `${count} free`);
+  const totalLabel = (count: number) => (language === "th" ? `${count} โต๊ะทั้งหมด` : `${count} tables`);
+  const chipClass = (on: boolean) =>
+    `ui-press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+      on
+        ? "border-orange-700 bg-orange-700 text-white"
+        : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200"
+    }`;
 
   const load = useCallback(async (showLoading = true) => {
     if (!canTake) return;
@@ -517,8 +556,23 @@ export default function PosTablesPage() {
       {isNavigating ? (
         <div aria-hidden="true" className="fixed inset-0 z-[var(--z-modal)] cursor-wait bg-transparent" />
       ) : null}
-      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
-        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none dark:lg:bg-transparent">
+        <div className="hidden lg:flex lg:items-start lg:justify-between lg:gap-4 lg:px-5 lg:pt-5">
+          <div className="min-w-0">
+            <h1 className="text-[24px] font-bold leading-tight text-gray-950 dark:text-white">{copy.eyebrow}</h1>
+            <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{summaryLine}</p>
+          </div>
+          <button
+            type="button"
+            disabled={isNavigating}
+            onClick={openTakeawaySheet}
+            className="ui-press hidden h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:inline-flex"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {copy.takeaway}
+          </button>
+        </div>
+        <div className="grid gap-1.5 px-3 py-2 sm:px-4 lg:flex lg:items-center lg:gap-2 lg:px-5 lg:pb-1 lg:pt-3">
           <label className="relative min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
             <input
@@ -534,26 +588,28 @@ export default function PosTablesPage() {
             type="button"
             disabled={isNavigating}
             onClick={openTakeawaySheet}
-            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:hidden"
           >
             <ShoppingBag className="h-4 w-4" />
             {copy.takeaway}
           </button>
-          <div aria-hidden="true" className="hidden lg:block" />
-          <button
-            type="button"
-            aria-label={notificationLabel}
-            disabled={isNavigating}
-            className="ui-press hidden h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900 lg:inline-flex"
-          >
-            <Bell className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <div className="hidden lg:block">
-            <DashboardAccountMenu />
-          </div>
+          {hasAnyZone && (
+            <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
+              <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
+                {allZonesLabel}
+                <span className="font-mono tabular-nums opacity-70">{tables.length}</span>
+              </button>
+              {zoneOptions.map((zone) => (
+                <button key={zone.key} type="button" onClick={() => setZoneFilter(zone.key)} className={chipClass(zoneFilter === zone.key)}>
+                  <span className="truncate">{zone.label}</span>
+                  <span className="font-mono tabular-nums opacity-70">{zone.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
-      <div aria-hidden="true" className="h-[104px] lg:h-[62px]" />
+      <div aria-hidden="true" className="h-[104px] lg:hidden" />
       <OperationalPageShell
         eyebrow={copy.eyebrow}
         title={copy.title}
@@ -577,9 +633,10 @@ export default function PosTablesPage() {
           {groupedTables.length ? groupedTables.map((group) => (
             <section key={group.label}>
               {hasAnyZone && (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="h-5 w-1 rounded-full bg-orange-500" aria-hidden="true" />
-                  <h2 className="text-[20px] font-semibold leading-none text-gray-950 dark:text-white">{group.label}</h2>
+                <div className="mb-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{group.label}</span>
+                  <h2 className="text-[15px] font-bold leading-tight text-gray-950 dark:text-white">{freeLabel(freeIn(group.tables))}</h2>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400">{totalLabel(group.tables.length)}</span>
                 </div>
               )}
               <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, ArrowRight, Bell, MapPin, Minus, Plus, Printer, ReceiptText, Search, ShoppingBasket, UtensilsCrossed, WalletCards, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, MapPin, Minus, Plus, Printer, ReceiptText, Search, ShoppingBasket, UtensilsCrossed, WalletCards, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -20,7 +20,6 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
-import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
@@ -818,20 +817,19 @@ export default function PosOrderDetailPage() {
 
   const orderItemCount = activeOrderItems.reduce((sum, item) => sum + item.quantity, 0);
   const canCloseTable = order ? canCloseEmptyTableOrder(order) : false;
-  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
 
 
 
 
-  const posHeaderSpacerClass = error ? "h-[152px] lg:h-[112px]" : "h-[102px] lg:h-[62px]";
+  const posHeaderSpacerClass = error ? "h-[152px] lg:hidden" : "h-[102px] lg:hidden";
 
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
     <div className={`min-h-screen w-full bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
-      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
-        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)_auto] lg:items-center lg:px-5">
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none dark:lg:bg-transparent">
+        <div className="grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(8rem,13rem)_minmax(12rem,0.7fr)_auto_minmax(0,1fr)] lg:items-center lg:px-5">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
             <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -886,18 +884,6 @@ export default function PosOrderDetailPage() {
             </div>
           )}
           <div aria-hidden="true" className="hidden lg:order-5 lg:block" />
-          {order && (
-            <div className="hidden items-center gap-1.5 justify-self-end lg:order-6 lg:flex">
-              <button
-                type="button"
-                aria-label={notificationLabel}
-                className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
-              >
-                <Bell className="h-4 w-4" strokeWidth={2} />
-              </button>
-              <DashboardAccountMenu />
-            </div>
-          )}
         </div>
         {error ? (
           <div className="px-3 py-2 sm:px-4 lg:px-5">
