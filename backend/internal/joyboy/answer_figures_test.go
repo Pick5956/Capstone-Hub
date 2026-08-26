@@ -137,3 +137,37 @@ func TestReconcileFiguresReportsDriftWithoutTouchingIt(t *testing.T) {
 		t.Fatalf("drift figure not reported: %v", unmatched)
 	}
 }
+
+// Round 18: "20 188" came back unfixed because the space was a narrow no-break
+// space (U+202F), which answerFigure's [, ] class does not see — so reconcile
+// read two numbers it could not confirm. cleanAnswer now folds the unicode space
+// to a plain one first, and reconcile then commas the confirmed figure.
+func TestUnicodeSpaceIsFoldedSoReconcileCanFix(t *testing.T) {
+	cleaned := cleanAnswer("ยอดขาย 20\u202f188 บาท")
+	if !strings.Contains(cleaned, "20 188") {
+		t.Fatalf("unicode space not folded to ASCII: %q", cleaned)
+	}
+	fixed, _ := reconcileFigures(cleaned, "revenue=20188.00")
+	if !strings.Contains(fixed, "20,188") {
+		t.Fatalf("confirmed figure not normalised to a comma: %q", fixed)
+	}
+}
+
+// The sales count has no stored unit, so the model defaults to "จาน" — wrong for
+// a drink. cleanAnswer neutralises the classifier to "รายการ" right after a
+// number, leaving a non-count "จาน" (จานเดียว, ต่อจาน) alone.
+func TestPlateUnitBecomesNeutralAfterANumber(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"น้ำเปล่า 431 จาน", "น้ำเปล่า 431 รายการ"},
+		{"ชาไทยเย็น **412** จาน", "ชาไทยเย็น **412** รายการ"},
+		{"ต้มยำ 15 จาน วันนี้", "ต้มยำ 15 รายการ วันนี้"},
+	}
+	for _, c := range cases {
+		if got := cleanAnswer(c.in); !strings.Contains(got, c.want) {
+			t.Errorf("cleanAnswer(%q) = %q, want to contain %q", c.in, got, c.want)
+		}
+	}
+	if got := cleanAnswer("เมนูอาหารจานเดียว"); !strings.Contains(got, "จานเดียว") {
+		t.Errorf("a non-count จาน was wrongly replaced: %q", got)
+	}
+}

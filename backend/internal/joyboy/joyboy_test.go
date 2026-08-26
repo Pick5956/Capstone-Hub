@@ -72,7 +72,7 @@ func newAssistant(t *testing.T, chat Chat, tools Tools) *Assistant {
 func TestAskRunsTheToolsTheModelChoseAndReturnsWhatItWrote(t *testing.T) {
 	chat := &fakeChat{
 		selected: []string{"get_top_selling_menus", "get_low_stock_ingredients"},
-		replies:  []string{"ต้มยำกุ้งขายดีที่สุด 112 จานในช่วง 30 วันล่าสุดครับ"},
+		replies:  []string{"ต้มยำกุ้งขายดีที่สุด 112 รายการในช่วง 30 วันล่าสุดครับ"},
 	}
 	tools := &fakeTools{results: []ToolResult{
 		{Tool: "get_top_selling_menus", Label: "เมนูขายดี · 30 วันล่าสุด", Body: "- ต้มยำกุ้ง: 112 จาน"},
@@ -82,7 +82,7 @@ func TestAskRunsTheToolsTheModelChoseAndReturnsWhatItWrote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
 	}
-	if answer.Text != "ต้มยำกุ้งขายดีที่สุด 112 จานในช่วง 30 วันล่าสุดครับ" {
+	if answer.Text != "ต้มยำกุ้งขายดีที่สุด 112 รายการในช่วง 30 วันล่าสุดครับ" {
 		t.Fatalf("text = %q", answer.Text)
 	}
 	if len(tools.asked) != 2 {

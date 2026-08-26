@@ -43,7 +43,9 @@ func TestPolitenessIsNotDoubledOrLeftDangling(t *testing.T) {
 	if strings.HasSuffix(got, "\nครับ") {
 		t.Fatalf("a dangling politeness line survived: %q", got)
 	}
-	if !strings.Contains(got, "109 จาน") {
+	// The count classifier is neutralised to "รายการ" by cleanAnswer, and it must
+	// survive the politeness guards intact.
+	if !strings.Contains(got, "109 รายการ") {
 		t.Fatalf("the answer was lost: %q", got)
 	}
 }

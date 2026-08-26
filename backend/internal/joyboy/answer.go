@@ -237,6 +237,9 @@ func cleanAnswer(raw string) string {
 	text = factSheetKeyInAnswer.ReplaceAllString(text, "")
 	text = latexText.ReplaceAllString(text, "$1")
 	text = latexDelimiters.ReplaceAllString(text, "")
+	text = unicodeSpaces.ReplaceAllString(text, " ")
+	text = zeroWidthChars.ReplaceAllString(text, "")
+	text = plateUnitAfterNumber.ReplaceAllString(text, "${1}รายการ")
 	text = particleStuckToNonThai.ReplaceAllString(text, "$1 $2")
 	for _, politeness := range repeatedPoliteness {
 		text = politeness.pattern.ReplaceAllString(text, politeness.particle)
@@ -270,6 +273,25 @@ func cleanAnswer(raw string) string {
 	}
 	return text
 }
+
+// unicodeSpaces are the non-ASCII space characters a model sometimes drops
+// between a number and its thousands group ("20 188"). They read as a space
+// but are not one, so answerFigure's [, ] class does not see the separator and
+// reconcileFigures treats "20 188" as two numbers it cannot confirm — the
+// separator is left as written and the space→comma fix never fires. Folding them
+// to a plain space first is what lets every downstream space rule work.
+var unicodeSpaces = regexp.MustCompile(`[\x{00A0}\x{1680}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]`)
+
+// zeroWidthChars carry no width; a model occasionally sprinkles them inside words
+// or numbers. They are dropped rather than spaced.
+var zeroWidthChars = regexp.MustCompile(`[\x{200B}\x{200C}\x{200D}\x{2060}\x{FEFF}]`)
+
+// plateUnitAfterNumber neutralises the classifier the model reaches for after a
+// sales count. quantity in the data is a bare count with no stored unit, so the
+// model defaults to "จาน" — wrong for a drink (น้ำเปล่า, ชาไทยเย็น). "รายการ" is
+// the neutral counter that fits any menu item. It only fires right after a
+// number (optionally through bold markers), so "จานเดียว" or "ต่อจาน" are safe.
+var plateUnitAfterNumber = regexp.MustCompile(`(\d[\s*]*)จาน`)
 
 // answerFigure matches a numeric token in either the fact sheet or the answer,
 // allowing space or comma thousands separators and an optional decimal part.
