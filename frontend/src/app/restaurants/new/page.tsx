@@ -718,7 +718,7 @@ export default function NewRestaurantPage() {
               {activeStep === "review" ? (
                 <button
                   type="submit"
-                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950"
+                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white"
                   disabled={submitting || !reviewSubmitReady}
                 >
                   {submitting ? copy.submitBusy : copy.submitIdle}
@@ -726,7 +726,7 @@ export default function NewRestaurantPage() {
               ) : (
                 <button
                   type="button"
-                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-gray-950 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-950"
+                  className="ui-press inline-flex min-h-10 justify-center rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white"
                   onClick={handleNext}
                 >
                   {nextButtonLabel}

@@ -665,7 +665,7 @@ export default function TablesPage() {
         <div className="flex flex-wrap gap-2">
           {canManage && <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.zoneManager}</button>}
           {canManage && <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.tagManager}</button>}
-          {canManage && <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">+ {copy.createTable}</button>}
+          {canManage && <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>}
         </div>
       </div>
 
@@ -854,7 +854,7 @@ export default function TablesPage() {
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         {copy.downloadQr}
                       </button>
-                      <a href={customerOrderLink} target="_blank" rel="noreferrer" className="col-span-2 flex h-9 items-center justify-center rounded-md bg-gray-900 px-2 text-center text-[11px] font-semibold text-white hover:opacity-90 dark:bg-white dark:text-gray-900">{copy.openCustomerMenu}</a>
+                      <a href={customerOrderLink} target="_blank" rel="noreferrer" className="col-span-2 flex h-9 items-center justify-center rounded-md bg-orange-700 px-2 text-center text-[11px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">{copy.openCustomerMenu}</a>
                     </div>
                   </div>
                 )}
@@ -863,7 +863,7 @@ export default function TablesPage() {
 
             <div className="space-y-2 border-t border-gray-200 p-4 dark:border-gray-800">
               {editingTable && <button type="button" onClick={() => setDeleteTarget({ type: "table", table: editingTable })} className="h-10 w-full rounded-md border border-red-200 text-[13px] font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>}
-              <button disabled={submitting} className="ui-press h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingTable ? copy.saveTable : copy.createTable}</button>
+              <button disabled={submitting} className="ui-press h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">{editingTable ? copy.saveTable : copy.createTable}</button>
               {formError && <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{formError}</p>}
             </div>
           </form>
@@ -898,7 +898,7 @@ export default function TablesPage() {
                 <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{copy.prefixHelp}</span>
               </label>
             </div>
-            <button disabled={submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingZone ? copy.saveZone : copy.addZone}</button>
+            <button disabled={submitting} className="h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">{editingZone ? copy.saveZone : copy.addZone}</button>
           </form>
         </ManagerModal>
       )}
@@ -925,7 +925,7 @@ export default function TablesPage() {
           </div>
           <form onSubmit={saveTag} className="mt-4 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-800">
             <input value={tagForm.name} onChange={(event) => setTagForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.tagName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-            <button disabled={submitting} className="h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">{editingTag ? copy.saveTag : copy.addTag}</button>
+            <button disabled={submitting} className="h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">{editingTag ? copy.saveTag : copy.addTag}</button>
           </form>
         </ManagerModal>
       )}

@@ -690,7 +690,7 @@ export default function PosTablesPage() {
                   <button type="button" disabled={submitting || isNavigating} onClick={cancelReservation} className="ui-press h-10 rounded-md border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50">
                     {copy.cancelReservation}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-10 whitespace-nowrap rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-10 whitespace-nowrap rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white">
                     {copy.acceptReservation}
                   </button>
                 </div>
@@ -760,7 +760,7 @@ export default function PosTablesPage() {
                   <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
                     {copy.cancel}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={openOrder} className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:h-9 sm:text-[12px]">
+                  <button type="button" disabled={submitting || isNavigating} onClick={openOrder} className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:cursor-wait disabled:opacity-60 dark:bg-orange-700 dark:text-white sm:h-9 sm:text-[12px]">
                     {submitting ? (takeawayOpen ? copy.openingTakeaway : copy.openingTable) : takeawayOpen ? copy.confirmTakeaway : copy.confirm}
                   </button>
                 </div>

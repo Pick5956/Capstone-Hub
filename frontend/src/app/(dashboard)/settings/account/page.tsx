@@ -191,7 +191,7 @@ export default function AccountSettingsPage() {
 
             <div className="mt-4 space-y-3">
               <StatusMessage error={error && error !== copy.required ? error : undefined} message={message} />
-              <button type="submit" disabled={!user || saving} className="ui-press h-11 w-full rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:w-auto">
+              <button type="submit" disabled={!user || saving} className="ui-press h-11 w-full rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-60 dark:bg-orange-700 dark:text-white sm:w-auto">
                 {saving ? copy.saving : copy.save}
               </button>
             </div>

@@ -179,7 +179,7 @@ export default function JoinRestaurantPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="submit"
-                className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+                className="h-10 rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white"
               >
                 {copy.openButton}
               </button>

@@ -863,7 +863,7 @@ export default function PosOrderDetailPage() {
                   </button>
                 ) : null}
                 {pendingItemCount === 0 && !isTerminal && activeOrderItems.length > 0 ? (
-                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                  <button type="button" disabled={submitting} onClick={() => { void loadBill(); }} className="ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white transition-[background-color,opacity] hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800">
                     <WalletCards className="h-4 w-4" aria-hidden="true" />
                     {copy.close}
                   </button>
@@ -1068,7 +1068,7 @@ export default function PosOrderDetailPage() {
               </label>
             </div>
             <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-11 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="button" disabled={submitting || requiredOptionsMissing} onClick={addSelectedMenu} className="ui-press h-11 w-full rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white">
                 {copy.add}
               </button>
             </div>
@@ -1375,8 +1375,8 @@ export default function PosOrderDetailPage() {
                     <span><strong>{receiptCopy.paymentComplete}</strong><span className="hidden sm:inline"> · {receiptCopy.paymentCompleteHint}</span></span>
                   </div>
                 ) : null}
-                <button type="button" onClick={() => printThermalReceipt("print-bill")} className={paymentComplete ? "ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200" : "h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}>{paymentComplete ? <><Printer className="h-4 w-4" aria-hidden="true" />{receiptCopy.printReceipt}</> : copy.print}</button>
-                {!paymentComplete ? <button type="button" disabled={submitting || !canPay || billUndelivered > 0} onClick={confirmPayment} className="ui-press h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.confirmPayment}</button> : null}
+                <button type="button" onClick={() => printThermalReceipt("print-bill")} className={paymentComplete ? "ui-press inline-flex h-10 items-center gap-2 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800" : "h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-orange-700"}>{paymentComplete ? <><Printer className="h-4 w-4" aria-hidden="true" />{receiptCopy.printReceipt}</> : copy.print}</button>
+                {!paymentComplete ? <button type="button" disabled={submitting || !canPay || billUndelivered > 0} onClick={confirmPayment} className="ui-press h-10 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-700 dark:text-white">{copy.confirmPayment}</button> : null}
               </div>
             </div>
           </div>

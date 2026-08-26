@@ -450,7 +450,7 @@ export default function CustomerTableOrderPage() {
             onClick={openSummary}
             disabled={submitting}
             aria-label={copy.reviewOrder}
-            className="ui-press mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-4 rounded-md bg-gray-900 px-4 text-white shadow-md transition-colors hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+            className="ui-press mx-auto flex h-14 w-full max-w-2xl items-center justify-between gap-4 rounded-md bg-orange-700 px-4 text-white shadow-md transition-colors hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
           >
             <span className="flex min-w-0 items-center gap-2 text-[14px] font-semibold">
               <ShoppingBasket className="h-5 w-5 shrink-0" aria-hidden="true" />
@@ -500,7 +500,7 @@ export default function CustomerTableOrderPage() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={closeSummary} className="h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold dark:border-gray-800">{copy.close}</button>
-                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{locating ? copy.checkingLocation : submitting ? copy.submitting : copy.submit}</button>
+                  <button type="button" onClick={submitOrder} disabled={submitting || !cartItemCount} className="h-10 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-orange-700 dark:text-white">{locating ? copy.checkingLocation : submitting ? copy.submitting : copy.submit}</button>
                 </div>
               </div>
             </div>
@@ -569,7 +569,7 @@ export default function CustomerTableOrderPage() {
                 {requiredOptionsMissing && <p className="text-[12px] font-medium text-red-600 dark:text-red-300">{copy.chooseRequired}</p>}
               </div>
               <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-                <button type="button" onClick={addToCart} disabled={requiredOptionsMissing} className="h-11 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.add}</button>
+                <button type="button" onClick={addToCart} disabled={requiredOptionsMissing} className="h-11 w-full rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-orange-700 dark:text-white">{copy.add}</button>
               </div>
             </div>
           </div>

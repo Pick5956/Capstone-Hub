@@ -90,7 +90,7 @@ export default function NotFoundUI() {
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Link
                   href="/restaurants"
-                  className="h-10 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-[13px] font-semibold inline-flex items-center justify-center hover:opacity-90 transition-opacity"
+                  className="h-10 rounded-md bg-orange-700 dark:bg-orange-700 text-white dark:text-white text-[13px] font-semibold inline-flex items-center justify-center hover:bg-orange-800 transition-opacity"
                 >
                   {language === "th" ? "ไปหน้าเลือกร้าน" : "Go to restaurants"}
                 </Link>

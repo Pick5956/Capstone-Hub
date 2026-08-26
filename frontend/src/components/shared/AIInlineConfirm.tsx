@@ -40,7 +40,7 @@ export default function AIInlineConfirm({
               type="button"
               onClick={onConfirm}
               disabled={disabled}
-              className="rounded-full bg-gray-950 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 dark:bg-white dark:text-gray-950"
+              className="rounded-full bg-orange-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 dark:bg-orange-700 dark:text-white"
             >
               {confirmLabel}
             </button>

@@ -332,7 +332,7 @@ export default function DocsShell({ children }: { children: ReactNode }) {
       >
         <a
           href="#docs-content"
-          className="fixed left-3 top-2 z-[70] -translate-y-20 rounded-md bg-gray-950 px-3 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0 dark:bg-white dark:text-gray-950"
+          className="fixed left-3 top-2 z-[70] -translate-y-20 rounded-md bg-orange-700 px-3 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0 dark:bg-orange-700 dark:text-white"
         >
           {language === "th" ? "ข้ามไปเนื้อหา" : "Skip to content"}
         </a>
@@ -370,7 +370,7 @@ export default function DocsShell({ children }: { children: ReactNode }) {
               <LanguageToggle />
               <Link
                 href="/restaurants"
-                className="ui-press hidden h-10 items-center gap-2 rounded-md bg-gray-900 px-3.5 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 xl:inline-flex"
+                className="ui-press hidden h-10 items-center gap-2 rounded-md bg-orange-700 px-3.5 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 xl:inline-flex"
               >
                 {copy.app}
                 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -552,7 +552,7 @@ export default function DocsShell({ children }: { children: ReactNode }) {
               <ThemeButton />
               <Link
                 href="/restaurants"
-                className="ui-press flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+                className="ui-press flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
               >
                 {copy.app}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />

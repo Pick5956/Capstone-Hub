@@ -231,7 +231,7 @@ export default function PaidReceiptDialog({
         </div>
 
         <div className="flex shrink-0 justify-end border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
-          <button type="button" onClick={() => (paper === "a4" ? printA4 : printThermalReceipt)("archive-print-receipt")} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">{paper === "a4" ? <Download className="h-4 w-4" aria-hidden="true" /> : <Printer className="h-4 w-4" aria-hidden="true" />}{paper === "a4" ? copy.savePdf : copy.print}</button>
+          <button type="button" onClick={() => (paper === "a4" ? printA4 : printThermalReceipt)("archive-print-receipt")} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800">{paper === "a4" ? <Download className="h-4 w-4" aria-hidden="true" /> : <Printer className="h-4 w-4" aria-hidden="true" />}{paper === "a4" ? copy.savePdf : copy.print}</button>
         </div>
       </div>
     </div>

@@ -498,7 +498,7 @@ export default function ExpensesPage() {
       <div id="expense-print">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {canEdit ? (
-          <button type="button" onClick={openAdd} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 print:hidden">
+          <button type="button" onClick={openAdd} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 print:hidden">
             <Plus className="h-4 w-4" aria-hidden="true" />
             {copy.add}
           </button>
@@ -732,7 +732,7 @@ export default function ExpensesPage() {
             </div>
 
             <div className="flex shrink-0 justify-end border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="submit" disabled={saving} className="ui-press h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-900">{copy.save}</button>
+              <button type="submit" disabled={saving} className="ui-press h-10 rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white disabled:opacity-50 dark:bg-orange-700 dark:text-white">{copy.save}</button>
             </div>
           </form>
         </div>

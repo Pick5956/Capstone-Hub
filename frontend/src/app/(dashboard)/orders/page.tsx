@@ -366,7 +366,7 @@ export default function OrdersPage() {
                           type="button"
                           disabled={receiptLoadingId === order.ID}
                           onClick={() => { void openReceipt(order); }}
-                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 lg:w-auto"
+                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 lg:w-auto"
                         >
                           <Printer className="h-4 w-4" aria-hidden="true" />
                           {copy.reprintReceipt}

@@ -54,7 +54,7 @@ export default function AIAssistantErrorState({
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex min-h-11 items-center justify-center rounded-md bg-gray-950 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-orange-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
           >
             {copy.retry}
           </button>
