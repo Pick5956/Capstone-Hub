@@ -72,6 +72,13 @@ func joyboyCompleteOptions(kind joyboy.CallKind) aiProviderCompleteOptions {
 type joyboyTools struct {
 	service      *AIService
 	restaurantID uint
+
+	// forecast carries chart-ready data back out of the tool run: joyboy's answer
+	// channel is text-only (joyboy.Answer), so when the forecast tool runs it
+	// stashes its structured result here on the struct that askJoyboy owns, and
+	// askJoyboy attaches it to the response for the frontend chart to draw. The
+	// LLM still writes the words from the fact sheet; this is only the series.
+	forecast *AIForecastResult
 }
 
 func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
@@ -196,6 +203,28 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return joyboySalesForPeriodBody(year.Label, d), true, true
 		}
 		return "", false, false
+	case joyboyToolSalesForecast:
+		// Reuse legacy's forecast compute wholesale (weekday average × trend +
+		// backtest bounds) — it already builds the chart-ready result. The chart
+		// data is stashed on the tools struct for askJoyboy; the fact sheet is
+		// what the model phrases from.
+		resp, handled, err := t.service.answerSalesForecast(t.restaurantID, question)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		if !handled {
+			// The model picked forecast for a question that reads as history —
+			// leave it out so a sales tool answers instead.
+			return "", false, true
+		}
+		if resp.Forecast == nil {
+			// Not enough daily history to forecast: relay the deterministic
+			// explanation, no chart.
+			return resp.Answer, true, true
+		}
+		t.forecast = resp.Forecast
+		return joyboyForecastBody(resp.Forecast), true, true
 	}
 	return "", false, false
 }
@@ -286,7 +315,8 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 // answered around: the only text available to fall back on is the fact sheet,
 // which is Go's writing, and showing it would be the template again.
 func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request *AIAskRequest) (*AIAskResponse, error) {
-	assistant, err := joyboy.New(joyboyChat{service: s}, &joyboyTools{service: s, restaurantID: actor.RestaurantID}, func(format string, args ...any) {
+	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID}
+	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {
 		aiStage("flow", format, args...)
 	})
 	if err != nil {
@@ -316,12 +346,18 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// without it the log shows every decision except the one being judged.
 	aiDebug("joyboy question: %s", request.Question)
 	aiDebug("joyboy answer: %s", answer.Text)
-	return &AIAskResponse{
+	response := &AIAskResponse{
 		Answer: answer.Text,
 		Intent: intent,
 		Task:   task,
 		Model:  fmt.Sprintf("joyboy(%s)", strings.Join(answer.Tools, "+")),
-	}, nil
+	}
+	// A forecast question leaves its chart-ready series on the tools struct; hand
+	// it to the frontend so the ForecastChart draws under the answer.
+	if tools.forecast != nil {
+		response.Forecast = tools.forecast
+	}
+	return response, nil
 }
 
 func joyboyHistory(history []AIConversationMessage) []joyboy.Turn {

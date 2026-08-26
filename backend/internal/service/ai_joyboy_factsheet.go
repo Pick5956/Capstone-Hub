@@ -419,6 +419,54 @@ func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPerio
 	return joyboyJoin(lines)
 }
 
+// joyboyForecastBody renders the next-7-days sales prediction as figures for the
+// model to phrase. The numbers are computed in Go (weekday average × trend,
+// bounds from a 28-day backtest); the model states them but must not invent any,
+// and the same result is drawn as a chart on the frontend. The note line is
+// deliberate: a forecast presented as fact is a lie, so the caveat travels with
+// the data, not only in the guide.
+func joyboyForecastBody(r *AIForecastResult) string {
+	if r == nil || len(r.Forecast) == 0 {
+		return joyboyNoData("not_enough_daily_history_to_forecast")
+	}
+	lines := []string{
+		"scope=sales_forecast_next_7_days",
+		"method=weekday_average_x_recent_trend",
+		"note=this_is_a_prediction_not_actual_sales_state_the_caveat",
+	}
+	if r.BacktestN >= 5 {
+		lines = append(lines, fmt.Sprintf("accuracy=backtest_%dd mape_pct=%s mae_baht=%s",
+			r.BacktestN, joyboyNum(r.MAPE), joyboyNum(r.MAE)))
+	} else {
+		lines = append(lines, "accuracy=too_little_data_to_measure_use_wide_band")
+	}
+	if r.StaleDays > 0 {
+		lines = append(lines, fmt.Sprintf("data_stale_days=%d", r.StaleDays))
+	}
+	// Whole baht: a forecast carries no sub-baht precision, so ".00" would be a
+	// lie about how exact it is (and the model pastes whatever it is given).
+	baht := func(v float64) string { return fmt.Sprintf("%.0f", v) }
+	// The week total is summed here, in Go, so a question like "how much will I
+	// sell next week" has an authoritative figure to state — the model must not
+	// add up the seven days itself (that is the drift reconcileFigures cannot
+	// catch, since a self-summed total is not in this sheet).
+	var weekPredicted, weekLower, weekUpper float64
+	for _, f := range r.Forecast {
+		if f.Closed {
+			lines = append(lines, fmt.Sprintf("day=%s weekday=%s status=closed", f.Date, f.Weekday))
+			continue
+		}
+		weekPredicted += f.Predicted
+		weekLower += f.Lower
+		weekUpper += f.Upper
+		lines = append(lines, fmt.Sprintf("day=%s weekday=%s predicted=%s range=%s-%s",
+			f.Date, f.Weekday, baht(f.Predicted), baht(f.Lower), baht(f.Upper)))
+	}
+	lines = append(lines, fmt.Sprintf("week_total_predicted=%s week_total_range=%s-%s",
+		baht(weekPredicted), baht(weekLower), baht(weekUpper)))
+	return joyboyJoin(lines)
+}
+
 // joyboySystemDocsBody renders documentation search hits for the model to answer
 // "how do I use X?" from. Unlike the figure tools this body is prose — the actual
 // manual text — because the answer is explaining the system, not reporting a

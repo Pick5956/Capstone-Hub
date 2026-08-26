@@ -97,6 +97,15 @@ const joyboyToolDataCoverage AIToolName = "get_data_coverage"
 // one thing joyboy does not want from it.
 const joyboyToolMenuForPeriod AIToolName = "get_menu_metrics_for_period"
 
+// joyboyToolSalesForecast predicts the next 7 days of sales and returns a
+// chart-ready series (history + bounded future). Legacy answers this through its
+// own keyword short-circuit (answerSalesForecast), which joyboy's mode branch
+// bypasses, so joyboy exposes it as a tool the model can pick. The numbers and
+// the accuracy band are computed in Go (weekday average × recent trend, measured
+// by a 28-day backtest) — the model never invents a forecast figure; it only
+// phrases the result, and the chart is drawn deterministically on the frontend.
+const joyboyToolSalesForecast AIToolName = "get_sales_forecast"
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -109,6 +118,7 @@ var joyboyExtraTools = []AIToolName{
 	AIToolSearchSystemDocs,
 	AIToolGetProfitSummary,
 	joyboyToolMenuForPeriod,
+	joyboyToolSalesForecast,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -129,6 +139,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบเฉพาะเมื่อคำถามเอ่ยชื่อเดือนหรือปีชัดเจน เช่น เมนูขายดีเดือนที่แล้ว " +
 		"เมนูกำไรดีสุดเดือนกรกฎาคม ยอดแต่ละเมนูปีนี้ " +
 		"ถ้าคำถามไม่เอ่ยช่วงเวลา ให้ใช้ get_top_selling_menus หรือ get_highest_margin_menu (30 วัน) แทน",
+	joyboyToolSalesForecast: "คาดการณ์ยอดขาย 7 วันข้างหน้า พร้อมช่วงความคลาดเคลื่อนและกราฟ " +
+		"คำนวณด้วยสถิติ (ค่าเฉลี่ยยอดขายตามวันในสัปดาห์ × แนวโน้มล่าสุด) เป็นการ \"ทำนายอนาคต\" ไม่ใช่ยอดที่เกิดขึ้นจริง " +
+		"ใช้ตอบเมื่อคำถามถามถึงอนาคต เช่น อาทิตย์หน้าจะขายได้เท่าไหร่ พรุ่งนี้น่าจะขายดีไหม คาดการณ์ยอดขายสัปดาห์หน้า ทำนายยอดขาย " +
+		"ถ้าถามยอดขายที่เกิดขึ้นไปแล้ว (วันนี้ เดือนนี้ ที่ผ่านมา) ให้ใช้ get_sales_for_period หรือ get_sales_summary แทน " +
+		"ต้องบอกผู้ใช้เสมอว่านี่คือการคาดการณ์ ไม่ใช่ตัวเลขจริง",
 }
 
 // isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by
@@ -156,7 +171,7 @@ var joyboyToolGroups = []struct {
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
-		AIToolGetProfitSummary,
+		AIToolGetProfitSummary, joyboyToolSalesForecast,
 	}},
 	{"วัตถุดิบและสต๊อก", []AIToolName{
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,

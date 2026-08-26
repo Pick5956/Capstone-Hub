@@ -158,6 +158,30 @@ func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
 	}
 }
 
+// get_sales_forecast renders the next-7-days prediction as figures for the model
+// to phrase, always carrying the "this is a prediction" caveat with the data and
+// the measured accuracy. A closed day shows as closed, not a zero prediction.
+func TestForecastBodyStatesPredictionCaveatAndAccuracy(t *testing.T) {
+	body := joyboyForecastBody(&AIForecastResult{
+		Forecast: []AIForecastPoint{
+			{Date: "2026-08-27", Weekday: "พฤหัสบดี", Predicted: 8062, Lower: 6800, Upper: 9300},
+			{Date: "2026-08-28", Weekday: "ศุกร์", Closed: true},
+		},
+		MAPE: 12.5, MAE: 1400, BacktestN: 28,
+	})
+	for _, want := range []string{"sales_forecast_next_7_days", "note=this_is_a_prediction", "mape_pct=12.50", "predicted=8062", "weekday=ศุกร์ status=closed", "week_total_predicted=8062"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("forecast body missing %q: %s", want, body)
+		}
+	}
+	if empty := joyboyForecastBody(&AIForecastResult{}); !strings.Contains(empty, "status=no_data") {
+		t.Errorf("no forecast points should report no_data, got %q", empty)
+	}
+	if nilBody := joyboyForecastBody(nil); !strings.Contains(nilBody, "status=no_data") {
+		t.Errorf("nil forecast should report no_data, got %q", nilBody)
+	}
+}
+
 // A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
 // question is about a sales total; menu or per-order questions that mention a
 // year keep their own tools. A month question yields no bare year, so it stays
