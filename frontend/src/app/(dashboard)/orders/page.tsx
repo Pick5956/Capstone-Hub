@@ -16,7 +16,6 @@ import { getOrderBill, listOrders } from "@/src/lib/order";
 import type { OrderListSummary } from "@/src/lib/order";
 import type { Bill, Order } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
-import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
@@ -236,7 +235,7 @@ export default function OrdersPage() {
   };
 
   const renderArchiveToolbar = (placement: "desktop" | "mobile") => (
-    <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "mb-4 lg:hidden"}>
+    <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "mb-4 w-full max-w-lg"}>
       <label className="relative block w-full min-w-0">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
         <input
@@ -259,9 +258,6 @@ export default function OrdersPage() {
       subtitle={copy.subtitle}
       hideHeaderText
     >
-      <DashboardTopBarPortal>
-        {renderArchiveToolbar("desktop")}
-      </DashboardTopBarPortal>
 
       {renderArchiveToolbar("mobile")}
 

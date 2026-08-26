@@ -16,7 +16,6 @@ import type { Ingredient } from "@/src/types/ingredient";
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
-import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
 import MenuImageCropper from "@/src/components/menu/MenuImageCropper";
 import { useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
@@ -113,7 +112,7 @@ export default function MenuPage() {
         menuSummary: "เมนูทั้งหมด",
         availableSummary: "พร้อมขาย",
         unavailableSummary: "ปิดขาย",
-        categoryManager: "หมวดหมู่เมนู",
+        categoryManager: "จัดหมวดหมู่",
         editorTitle: "จัดการเมนู",
         editorHint: "เพิ่มเมนูใหม่หรือแก้ไขรายการที่เลือก",
         categoryHint: "จัดกลุ่มเมนูให้พนักงานหาเจอเร็ว",
@@ -252,7 +251,7 @@ export default function MenuPage() {
         menuSummary: "Total items",
         availableSummary: "Available",
         unavailableSummary: "Unavailable",
-        categoryManager: "Menu categories",
+        categoryManager: "Manage categories",
         editorTitle: "Menu editor",
         editorHint: "Add a new item or edit the selected menu item.",
         categoryHint: "Group items so staff can find them quickly.",
@@ -808,28 +807,9 @@ export default function MenuPage() {
     }
   };
 
-  const renderMenuToolbar = (placement: "desktop" | "mobile") => (
-    <div className={placement === "desktop" ? "flex w-full min-w-0 items-center gap-2 pr-2" : "mb-4 flex flex-col gap-2 lg:hidden"}>
-      <label className={placement === "desktop" ? "relative block w-full max-w-md min-w-0" : "relative block w-full"}>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={copy.searchPlaceholder}
-          aria-label={copy.searchPlaceholder}
-          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
-        />
-      </label>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <DashboardTopBarPortal>
-        {renderMenuToolbar("desktop")}
-      </DashboardTopBarPortal>
       <h1 className="sr-only">{copy.title}</h1>
-      {renderMenuToolbar("mobile")}
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
@@ -838,12 +818,24 @@ export default function MenuPage() {
           <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="w-full max-w-xs">
-                  <ThemedSelect
-                    value={String(filterCategory)}
-                    onChange={(next) => setFilterCategory(Number(next))}
-                    options={categoryFilterOptions}
-                  />
+                <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
+                  <label className="relative block w-full sm:w-[336px]">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={copy.searchPlaceholder}
+                      aria-label={copy.searchPlaceholder}
+                      className="h-9 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+                    />
+                  </label>
+                  <div className="w-full sm:w-52">
+                    <ThemedSelect
+                      value={String(filterCategory)}
+                      onChange={(next) => setFilterCategory(Number(next))}
+                      options={categoryFilterOptions}
+                    />
+                  </div>
                 </div>
                 {canManage ? (
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
