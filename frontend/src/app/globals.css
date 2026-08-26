@@ -7,7 +7,7 @@
   --background: #ffffff;
   --foreground: #171717;
   --app-text-scale: 1;
-  --sidebar-w: 264px;
+  --sidebar-w: 216px;
   --dashboard-shell-row: 62px;
   --dashboard-shell-border: #dfe3e8;
   --scrollbar-track: #f1f5f9;
@@ -966,4 +966,165 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 .dark [data-google-auth]:hover [data-google-face] {
   background: var(--color-gray-900, #212121);
+}
+
+/* ---- Dishy web shell ------------------------------------------------------
+   The dashboard frames its content: the rail colour fills the viewport and the
+   page floats on it as a rounded sheet. Desktop only; phones stay full-bleed.
+
+   Values come from the dishy-design skill rather than guesswork:
+   ui_kits/dishy-web/Shell.jsx for the frame and rail, patterns.css
+   .dishy-canvas for the sheet, tokens/colors.css for the clay ramp. Do not
+   reach for --nav-surface here: that token's own comment scopes it to the Expo
+   tab bar, and an early pass wrongly painted this rail with it.
+
+   Markup contract: [data-shell-frame] paints behind everything,
+   [data-shell-sheet] clips and rounds, [data-shell-scroll] scrolls. All three
+   are set in (dashboard)/layout.tsx. */
+:root {
+  --shell-pad: 10px;
+  --shell-gap: 12px;
+  --shell-radius: 18px;
+}
+
+@media (min-width: 1024px) {
+  html:has([data-shell-frame]) {
+    overflow: hidden;
+  }
+
+  /* Frame continues the rail colour, which is kept as shipped. */
+  [data-shell-frame] {
+    background: #9a3412;
+  }
+
+  .dark [data-shell-frame] {
+    background: #7c2d12;
+  }
+
+  [data-nav-rail].dashboard-shell-border-r::after {
+    display: none;
+  }
+
+  [data-shell-sheet] {
+    height: calc(100vh - var(--shell-pad) * 2);
+    margin: var(--shell-pad) var(--shell-gap) var(--shell-pad) 0;
+    /* Only clips. Chrome paints scrollbars in the border box, which the radius
+       does not cut, so a scroller here would run past the rounded corner. */
+    overflow: hidden;
+    border-radius: var(--shell-radius);
+    background-color: #fff7ed;
+    background-image:
+      radial-gradient(rgba(224, 168, 124, 0.34) 1px, transparent 1.4px),
+      radial-gradient(860px 460px at 88% -8%, rgba(249, 115, 22, 0.08), transparent 68%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 240px);
+    background-size: 22px 22px, auto, auto;
+    /* No drop shadow and no ring. Shell.jsx uses a black shadow and a light
+       hairline, which are invisible on its near-black frame but read as a dirty
+       band and a seam on this orange one. The cream sheet already separates
+       itself from the rail by colour alone. */
+    box-shadow: none;
+  }
+
+  /* Every dashboard page paints bg-slate-50 (dark:bg-gray-950) on its own root,
+     which covered the canvas completely - only the scrollbar, which sits on the
+     scroller rather than under the page, was still visible. Inside the sheet the
+     canvas is the background, so the page root gets out of the way. Scoped to the
+     direct child of main, so cards and panels keep their own surfaces. */
+  [data-shell-scroll] > main > * {
+    background-color: transparent !important;
+  }
+
+  /* The canvas is a light-mode surface in the design system. Dark mode uses the
+     night background from patterns.css .dishy-bg-night instead. */
+  .dark [data-shell-sheet] {
+    background-color: #1a0d06;
+    background-image:
+      radial-gradient(1100px 620px at 72% -12%, rgba(249, 115, 22, 0.22), transparent 62%),
+      radial-gradient(760px 520px at -8% 108%, rgba(124, 45, 18, 0.5), transparent 60%);
+    background-size: auto, auto;
+  }
+
+  .dark [data-shell-scroll] {
+    scrollbar-color: rgba(224, 168, 124, 0.35) transparent;
+  }
+
+  .dark [data-shell-scroll]::-webkit-scrollbar-thumb {
+    background-color: rgba(224, 168, 124, 0.35);
+  }
+
+  [data-shell-scroll] {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(224, 168, 124, 0.55) transparent;
+  }
+
+  /* No track: the canvas shows through, so the thumb reads as part of the sheet. */
+  [data-shell-scroll]::-webkit-scrollbar {
+    width: 10px;
+    background: transparent;
+  }
+
+  [data-shell-scroll]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-shell-scroll]::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: rgba(224, 168, 124, 0.55);
+  }
+
+  [data-shell-scroll]::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(249, 115, 22, 0.6);
+  }
+}
+
+/* ---- Card edges on the warm canvas ----------------------------------------
+   .dishy-surface in patterns.css puts cards on --line (clay-300) with
+   --line-control (clay-500) on hover. Ported here so card edges sit in the same
+   family as the canvas instead of the neutral gray.
+
+   Targeting the utility classes rather than redefining --color-gray-200: that
+   token also backs text-gray-200 and text-gray-300, about 310 usages, which
+   would all turn orange. Light and dark are written separately because the
+   plain and dark: utilities have equal specificity, and a single rule appended
+   here would win in both and flatten dark mode.
+
+   Scoped to the sheet on purpose: the warm canvas only exists there, so phones
+   and the routes outside the dashboard keep their neutral edges. */
+[data-shell-sheet] {
+  --dashboard-shell-border: #fed7aa;
+}
+
+html:not(.dark) [data-shell-sheet] .border-gray-200,
+html:not(.dark) [data-shell-sheet] .border-slate-200 {
+  border-color: #fed7aa;
+}
+
+html:not(.dark) [data-shell-sheet] .border-gray-300 {
+  border-color: #e0a87c;
+}
+
+html:not(.dark) [data-shell-sheet] .hover\:border-gray-300:hover,
+html:not(.dark) [data-shell-sheet] .hover\:border-gray-400:hover {
+  border-color: #c77948;
+}
+
+.dark [data-shell-sheet] {
+  --dashboard-shell-border: rgba(255, 241, 228, 0.12);
+}
+
+.dark [data-shell-sheet] .border-gray-200,
+.dark [data-shell-sheet] .border-slate-200,
+.dark [data-shell-sheet] .border-gray-800 {
+  border-color: rgba(255, 241, 228, 0.1);
+}
+
+.dark [data-shell-sheet] .hover\:border-gray-300:hover,
+.dark [data-shell-sheet] .hover\:border-gray-400:hover {
+  border-color: rgba(255, 241, 228, 0.22);
 }

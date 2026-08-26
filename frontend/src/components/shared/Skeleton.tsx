@@ -143,10 +143,49 @@ export function WorkspacePageSkeleton() {
   );
 }
 
+/**
+ * Fills the content slot while a dashboard route loads. Deliberately has no
+ * sidebar and no page chrome: the layout around it is already on screen and
+ * stays put, so only the part that is actually changing should flicker.
+ */
+export function DashboardContentSkeleton() {
+  return (
+    <div className="px-4 py-5 sm:px-6 lg:px-8">
+      <Skeleton className="h-3 w-36" />
+      <Skeleton className="mt-3 h-7 w-56 max-w-full" />
+
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="rounded-md border border-gray-200 p-4 dark:border-gray-800">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-7 w-28" />
+            <Skeleton className="mt-2 h-3 w-20" />
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_340px]">
+        <div className="rounded-md border border-gray-200 p-4 dark:border-gray-800">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="mt-4 h-56" />
+        </div>
+        <div className="rounded-md border border-gray-200 p-4 dark:border-gray-800">
+          <Skeleton className="h-4 w-32" />
+          <div className="mt-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-12" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPageSkeleton() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-gray-950">
-      <div className="hidden lg:block fixed inset-y-0 left-0 w-[264px] border-r border-gray-200 bg-slate-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+      <div className="hidden lg:block fixed inset-y-0 left-0 w-[216px] border-r border-gray-200 bg-slate-50 p-4 dark:border-gray-800 dark:bg-gray-950">
         <div className="flex items-center gap-2.5">
           <Skeleton className="h-9 w-9" />
           <div className="space-y-1.5">
