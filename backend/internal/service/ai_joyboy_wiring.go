@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"Project-M/internal/joyboy"
 	"Project-M/internal/repository"
@@ -147,8 +148,80 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyMenuForPeriodBody(period.Label, metrics), true, true
+	case AIToolGetSalesForPeriod:
+		// A whole-store sales total for a named day / month / relative month, or
+		// a month-to-month / year-over-year comparison, all go through legacy's
+		// dated-sales resolver (already tested) for the window, then render a
+		// joyboy fact sheet rather than legacy's finished Thai answer. A named
+		// year on its own ("ยอดขายปีนี้") is not covered by that resolver, so it
+		// is handled here without widening extractPeriods (shared with the menu
+		// and profit period flows). A question that names no period at all is
+		// reported unhandled, so it falls through to ComputeSalesForPeriod — the
+		// snapshot tool that already answers "today" / "last 7 days".
+		now := repository.BangkokNow()
+		if req, isDated := resolveDatedSalesRequest(question, now); isDated {
+			if strings.TrimSpace(req.clarify) != "" {
+				return req.clarify, true, true
+			}
+			if req.comparison && len(req.periods) >= 2 {
+				a, b := req.periods[0], req.periods[1]
+				da, err := t.service.repo.SalesForRange(t.restaurantID, a.Start, a.End)
+				if err != nil {
+					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
+					return "", false, true
+				}
+				db, err := t.service.repo.SalesForRange(t.restaurantID, b.Start, b.End)
+				if err != nil {
+					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
+					return "", false, true
+				}
+				return joyboySalesComparisonBody(a, da, b, db), true, true
+			}
+			if len(req.periods) > 0 {
+				p := req.periods[0]
+				d, err := t.service.repo.SalesForRange(t.restaurantID, p.Start, p.End)
+				if err != nil {
+					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+					return "", false, true
+				}
+				return joyboySalesForPeriodBody(p.Label, d), true, true
+			}
+		}
+		if year, ok := joyboyYearSalesTotal(question, now); ok {
+			d, err := t.service.repo.SalesForRange(t.restaurantID, year.Start, year.End)
+			if err != nil {
+				aiStage("warn", "joyboy: %s (year) failed (%v) → leaving it out", tool, err)
+				return "", false, true
+			}
+			return joyboySalesForPeriodBody(year.Label, d), true, true
+		}
+		return "", false, false
 	}
 	return "", false, false
+}
+
+// joyboyYearSalesTotal recognises a whole-year sales total ("ยอดขายปีนี้",
+// "ยอดขายปีที่แล้ว", "ยอดขายปี 2568") — a case the month/day resolver does not
+// cover. It is kept here, joyboy-local, rather than added to extractPeriods so
+// the shared menu and profit period parsers keep their current tested behaviour.
+// It claims a question only when it is clearly about a sales total and not about
+// a menu, ingredient, or per-order average (those own their tools).
+func joyboyYearSalesTotal(question string, ref time.Time) (AIPeriod, bool) {
+	n := strings.ToLower(strings.TrimSpace(question))
+	if datedSalesExcluded(n) || !mentionsSalesTotal(n) {
+		return AIPeriod{}, false
+	}
+	year, ok := extractBareYear(question, ref)
+	if !ok {
+		return AIPeriod{}, false
+	}
+	loc := bangkokLocation()
+	start := time.Date(year, 1, 1, 0, 0, 0, 0, loc)
+	return AIPeriod{
+		Label: fmt.Sprintf("ปี %d", year+543),
+		Start: start,
+		End:   start.AddDate(1, 0, 0),
+	}, true
 }
 
 func (t *joyboyTools) Run(ctx context.Context, names []string, question string) ([]joyboy.ToolResult, error) {

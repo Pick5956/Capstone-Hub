@@ -375,6 +375,50 @@ func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSumm
 	return joyboyJoin(lines)
 }
 
+// joyboySalesForPeriodBody renders the whole-store paid-sales total for one
+// named window (a day, month, or year). Revenue is grand_total straight from
+// the orders table — the authoritative figure — so the model states it rather
+// than re-deriving it by summing menu lines (which drops rounding and misses
+// anything that is not a menu subtotal).
+func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
+	if d.Orders == 0 {
+		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", joyboyNoData("no_paid_orders_in_period")})
+	}
+	return joyboyJoin([]string{
+		"period=" + label,
+		"scope=named_period_paid_sales_whole_store",
+		"revenue=" + joyboyNum(d.Revenue),
+		fmt.Sprintf("orders=%d", d.Orders),
+		fmt.Sprintf("selling_days=%d", d.Days),
+	})
+}
+
+// joyboySalesComparisonBody renders two windows plus the percent change between
+// them. The percentage is computed in Go, not left to the model — a model
+// dividing two totals by hand is exactly the mistake this avoids — so the figure
+// lands in the fact sheet where reconcileFigures can check it.
+func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPeriod, db repository.AISalesRange) string {
+	lines := []string{
+		"scope=named_period_comparison_whole_store",
+		fmt.Sprintf("period_a=%s revenue_a=%s orders_a=%d", a.Label, joyboyNum(da.Revenue), da.Orders),
+		fmt.Sprintf("period_b=%s revenue_b=%s orders_b=%d", b.Label, joyboyNum(db.Revenue), db.Orders),
+	}
+	switch {
+	case db.Revenue > 0:
+		pct := (da.Revenue - db.Revenue) / db.Revenue * 100
+		dir := "up"
+		if pct < 0 {
+			dir = "down"
+		}
+		lines = append(lines, fmt.Sprintf("change_pct=%s direction=%s", joyboyNum(pct), dir))
+	case da.Revenue > 0:
+		lines = append(lines, "change_pct=na reason=period_b_has_no_sales")
+	default:
+		lines = append(lines, "change_pct=na reason=both_periods_have_no_sales")
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboySystemDocsBody renders documentation search hits for the model to answer
 // "how do I use X?" from. Unlike the figure tools this body is prose — the actual
 // manual text — because the answer is explaining the system, not reporting a

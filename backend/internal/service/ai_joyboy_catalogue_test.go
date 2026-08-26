@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/repository"
 )
@@ -116,6 +117,64 @@ func TestMenuForPeriodBodyStatesPeriodAndAllMetrics(t *testing.T) {
 	}
 	if empty := joyboyMenuForPeriodBody("เดือนที่แล้ว", nil); !strings.Contains(empty, "status=no_data") {
 		t.Errorf("no sales in period should report no_data, got %q", empty)
+	}
+}
+
+// get_sales_for_period states the whole-store paid-sales total for a named
+// window using grand_total from the orders table, so the model reports it
+// instead of summing menu lines (the mistake that produced 347,353 for a
+// 347,453 month). An empty window reads as no-data, not a zero baht answer.
+func TestSalesForPeriodBodyStatesWholeStoreTotal(t *testing.T) {
+	body := joyboySalesForPeriodBody("เดือนกรกฎาคม 2569", repository.AISalesRange{Orders: 1285, Revenue: 347453, Days: 31})
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "whole_store", "revenue=347453", "orders=1285", "selling_days=31"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sales-for-period body missing %q: %s", want, body)
+		}
+	}
+	if empty := joyboySalesForPeriodBody("ปี 2567", repository.AISalesRange{}); !strings.Contains(empty, "status=no_data") {
+		t.Errorf("no paid orders should report no_data, got %q", empty)
+	}
+}
+
+// A month-to-month comparison carries the percent change computed in Go, so the
+// model never divides two totals by hand. Its sign drives the direction, and a
+// zero baseline is flagged rather than divided by.
+func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
+	a := AIPeriod{Label: "เดือนสิงหาคม 2569"}
+	b := AIPeriod{Label: "เดือนกรกฎาคม 2569"}
+	up := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 100, Revenue: 120}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
+	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=up"} {
+		if !strings.Contains(up, want) {
+			t.Errorf("comparison body missing %q: %s", want, up)
+		}
+	}
+	down := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 80, Revenue: 80}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
+	if !strings.Contains(down, "direction=down") {
+		t.Errorf("a fall should read direction=down: %s", down)
+	}
+	zero := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 5, Revenue: 50}, b, repository.AISalesRange{})
+	if !strings.Contains(zero, "change_pct=na") {
+		t.Errorf("a zero baseline must not be divided by: %s", zero)
+	}
+}
+
+// A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
+// question is about a sales total; menu or per-order questions that mention a
+// year keep their own tools. A month question yields no bare year, so it stays
+// with the month resolver.
+func TestYearSalesTotalClaimsOnlyYearSalesQuestions(t *testing.T) {
+	ref := time.Date(2026, 8, 26, 12, 0, 0, 0, bangkokLocation())
+	if p, ok := joyboyYearSalesTotal("ยอดขายปีนี้เท่าไหร่", ref); !ok || !strings.Contains(p.Label, "2569") {
+		t.Errorf("ยอดขายปีนี้ should resolve to ปี 2569, got ok=%v label=%q", ok, p.Label)
+	}
+	if p, ok := joyboyYearSalesTotal("ยอดขายปี 2568", ref); !ok || !strings.Contains(p.Label, "2568") {
+		t.Errorf("ยอดขายปี 2568 should resolve, got ok=%v label=%q", ok, p.Label)
+	}
+	if _, ok := joyboyYearSalesTotal("เมนูขายดีปีนี้", ref); ok {
+		t.Error("a menu question must not be hijacked by the year-sales total")
+	}
+	if _, ok := joyboyYearSalesTotal("ยอดขายเดือนกรกฎาคม", ref); ok {
+		t.Error("a month question names no bare year and must fall through to the month resolver")
 	}
 }
 
