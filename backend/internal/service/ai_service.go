@@ -28,6 +28,7 @@ type AIService struct {
 	actionPlanStore            AIActionPlanStore
 	actionIngredients          AIActionIngredientPort
 	actionMenus                AIActionMenuPort
+	actionExpenses             AIActionExpensePort
 	tables                     AITablePort
 	actionCleanupCounter       uint64
 	// providerAdapters is nil in production and resolves lazily to Groq then
@@ -84,6 +85,7 @@ func ProvideAIServiceWithStores(
 	actionPlanStore AIActionPlanStore,
 	actionIngredients AIActionIngredientPort,
 	actionMenus AIActionMenuPort,
+	actionExpenses AIActionExpensePort,
 	tables AITablePort,
 ) *AIService {
 	service := ProvideAIServiceWithConversationStore(repo, conversationStore)
@@ -92,6 +94,7 @@ func ProvideAIServiceWithStores(
 	service.actionPlanStore = actionPlanStore
 	service.actionIngredients = actionIngredients
 	service.actionMenus = actionMenus
+	service.actionExpenses = actionExpenses
 	service.tables = tables
 	// The repository carries the per-restaurant owner toggle, so once it is wired
 	// the owner's AI-settings choice — not the env allowlist — gates actions.

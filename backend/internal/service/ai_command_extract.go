@@ -3,7 +3,10 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+
+	"Project-M/internal/repository"
 )
 
 // Reading a sentence into proposed changes.
@@ -39,6 +42,24 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 คำสั่งเกี่ยวกับ "เมนูที่ขายหน้าร้าน" (name = ชื่อเมนู · quantity เป็น 0 · unit เป็น "")
 - "menu_off" = ปิดขาย/หยุดขาย/งดขาย/เอาลง/ของหมดขายไม่ได้แล้ว
 - "menu_on"  = เปิดขาย/กลับมาขาย/เอาขึ้นใหม่
+- "menu_price" = เปลี่ยนราคาขายของเมนู (quantity = ราคาป้ายใหม่ เป็นบาทต่อจาน)
+  ระวังอย่าสับสนกับ "cost" ซึ่งเป็นราคาทุนของวัตถุดิบ ไม่ใช่ราคาขายของเมนู
+
+คำสั่งเกี่ยวกับ "บันทึกรายจ่ายของร้าน" (เงินที่จ่ายออกไปจริง)
+- "expense" = จ่ายค่าอะไรไป/ซื้ออะไรมา/เสียเงินค่าอะไร
+- ใส่เพิ่ม 2 ช่อง: "category" และ "date"
+- quantity = จำนวนเงินบาท · note = จ่ายค่าอะไร (เขียนสั้น ๆ เป็นคำพูด)
+- category เลือกจาก 6 ค่านี้เท่านั้น ห้ามคิดค่าใหม่
+  · "ingredient" = วัตถุดิบ ของสด ของแห้ง เครื่องปรุง
+  · "labor" = ค่าแรง เงินเดือน ค่าจ้าง โอที
+  · "rent" = ค่าเช่าที่ ค่าเช่าร้าน
+  · "utilities" = ค่าน้ำ ค่าไฟ ค่าแก๊ส ค่าเน็ต ค่าโทรศัพท์
+  · "equipment" = อุปกรณ์ เครื่องครัว โต๊ะเก้าอี้ ของใช้ที่ใช้ได้นาน
+  · "other" = อย่างอื่นที่ไม่เข้าห้าข้อบน
+- date เป็น "YYYY-MM-DD" ถ้าผู้ใช้ไม่ได้บอกวันเลย ให้เว้นว่าง ระบบจะใช้วันนี้เอง
+  แต่ถ้าผู้ใช้บอกวันแบบพูด ๆ ("เมื่อวาน" "เมื่อวานซืน" "วันที่ 20") ให้คำนวณเป็นวันที่จริง
+  โดยนับจากวันที่ปัจจุบันที่แจ้งไว้ข้างล่าง
+- ถ้าเดาหมวดไม่ออกจริง ๆ ให้ category เป็น "" ระบบจะถามเอง ห้ามเดามั่ว
 
 กฎร่วม:
 - ถ้าผู้ใช้ไม่ได้บอกจำนวน ให้ quantity เป็น 0 · ถ้าไม่ได้บอกหน่วย ให้ unit เป็น ""
@@ -66,6 +87,24 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 
 ข้อความ: "ปิดขายต้มยำกุ้ง แล้วก็รับหมูสับเข้า 2 กก."
 ตอบ: [{"name":"ต้มยำกุ้ง","kind":"menu_off","quantity":0,"unit":""},{"name":"หมูสับ","kind":"in","quantity":2,"unit":"กก."}]
+
+ข้อความ: "ขึ้นราคาต้มยำกุ้งเป็น 159"
+ตอบ: [{"name":"ต้มยำกุ้ง","kind":"menu_price","quantity":159,"unit":""}]
+
+ข้อความ: "ผัดไทยขายจานละ 89 นะ"
+ตอบ: [{"name":"ผัดไทย","kind":"menu_price","quantity":89,"unit":""}]
+
+ข้อความ: "จ่ายค่าไฟไป 3200"
+ตอบ: [{"name":"ค่าไฟ","kind":"expense","quantity":3200,"unit":"","category":"utilities","date":"","note":"ค่าไฟ"}]
+
+ข้อความ: "เมื่อวานจ่ายค่าแรงพนักงาน 2 คน 1,200 บาท"
+ตอบ: [{"name":"ค่าแรงพนักงาน","kind":"expense","quantity":1200,"unit":"","category":"labor","date":"","note":"ค่าแรงพนักงาน 2 คน"}]
+
+ข้อความ: "ซื้อกระทะใหม่ 1500"
+ตอบ: [{"name":"กระทะ","kind":"expense","quantity":1500,"unit":"","category":"equipment","date":"","note":"ซื้อกระทะใหม่"}]
+
+ข้อความ: "เดือนนี้จ่ายอะไรไปบ้าง"
+ตอบ: []
 
 ข้อความ: "เมนูไหนควรปิดขายดี"
 ตอบ: []
@@ -101,7 +140,10 @@ func (s *AIService) ExtractStockCommands(question string, history []AIConversati
 	if strings.TrimSpace(question) == "" {
 		return nil, nil
 	}
-	prompt := aiStockExtractionPrompt + aiRecentTurnsForExtraction(history) + strings.TrimSpace(question)
+	// The date goes in because "เมื่อวานจ่ายค่าแรง 1,200" has to become a real
+	// date, and the model cannot count back from a day it was never told.
+	today := fmt.Sprintf("(วันนี้คือ %s)\n", repository.BangkokNow().Format("2006-01-02"))
+	prompt := aiStockExtractionPrompt + today + aiRecentTurnsForExtraction(history) + strings.TrimSpace(question)
 	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low"})
 	if err != nil {
 		return nil, err
@@ -163,6 +205,8 @@ func ParseStockCommandDrafts(raw string) ([]AIStockCommandDraft, error) {
 		draft.Kind = strings.ToLower(strings.TrimSpace(draft.Kind))
 		draft.Unit = strings.TrimSpace(draft.Unit)
 		draft.Note = strings.TrimSpace(draft.Note)
+		draft.Category = strings.ToLower(strings.TrimSpace(draft.Category))
+		draft.Date = strings.TrimSpace(draft.Date)
 		if draft.Name == "" {
 			continue
 		}

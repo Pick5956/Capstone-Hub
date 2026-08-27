@@ -150,6 +150,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyDataCoverageBody(coverage), true, true
+	case joyboyToolExpenseSummary:
+		if t.service.actionExpenses == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		from := now.AddDate(0, 0, -29).Format("2006-01-02")
+		until := now.Format("2006-01-02")
+		list, err := t.service.actionExpenses.List(t.restaurantID, from, until, "")
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyExpenseSummaryBody(from, until, list), true, true
 	case joyboyToolTableStatus:
 		// Live state, read straight from the table service — not the 30-day
 		// snapshot every other tool reads, because the answer is only true for

@@ -94,8 +94,11 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	notices := make([]string, 0, 2)
 	for _, draft := range drafts {
 		resolution := ResolveStockCommand(shelf, draft)
-		if AIMenuCommandKind(draft.Kind) {
+		switch {
+		case AIMenuCommandKind(draft.Kind):
 			resolution = ResolveMenuCommand(menus, draft)
+		case strings.EqualFold(strings.TrimSpace(draft.Kind), "expense"):
+			resolution = ResolveExpenseCommand(draft, repository.BangkokNow())
 		}
 		switch resolution.Kind {
 		case AICommandOutcomeReady:
@@ -133,7 +136,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		return false
 	}
 
-	draft := BuildAdjustStockPlan(s.actionIngredients, s.actionMenus, actor.RestaurantID, commands, titles)
+	draft := BuildAdjustStockPlan(s.actionPorts(), actor.RestaurantID, commands, titles)
 	if len(draft.Items) == 0 {
 		response.Answer = aiRejectedItemsMessage(draft.Rejected)
 		response.Intent = AIIntentChat
@@ -198,6 +201,16 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 
 const aiActionPlanTimeLayout = "2006-01-02T15:04:05Z07:00"
 
+// actionPorts bundles the services the action registry writes through, so a new
+// action type is one field here rather than one more argument at every call.
+func (s *AIService) actionPorts() AIActionPorts {
+	return AIActionPorts{
+		Ingredients: s.actionIngredients,
+		Menus:       s.actionMenus,
+		Expenses:    s.actionExpenses,
+	}
+}
+
 // aiDraftsIncludeMenu reports whether anything in the sentence was about a menu,
 // which is what decides whether the menu catalogue is worth fetching.
 func aiDraftsIncludeMenu(drafts []AIStockCommandDraft) bool {
@@ -231,6 +244,10 @@ func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, preview
 				verb = "เพิ่มวัตถุดิบ"
 			case entity.AIActionTypeSetMenuAvailability:
 				verb = aiMenuPlanVerb(items)
+			case entity.AIActionTypeCreateExpense:
+				verb = "บันทึกรายจ่าย"
+			case entity.AIActionTypeSetMenuPrice:
+				verb = "ตั้งราคาเมนู"
 			}
 		}
 	}
@@ -302,7 +319,7 @@ func (s *AIService) ConfirmAIActionPlanForOwner(actor AIActorContext, planID, co
 
 	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
 	for _, item := range plan.Items {
-		execErr := executeAIActionItem(s.actionIngredients, s.actionMenus, actor.RestaurantID, actor.OwnerUserID, item)
+		execErr := executeAIActionItem(s.actionPorts(), actor.RestaurantID, actor.OwnerUserID, item)
 		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
 		if execErr != nil {
 			outcome.ErrorText = execErr.Error()

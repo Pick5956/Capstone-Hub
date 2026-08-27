@@ -354,6 +354,44 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 	})
 }
 
+// joyboyExpenseSummaryBody renders what the shop actually paid out over a window.
+// The category totals come first because "which category costs me most" is the
+// question this data is for; the recent rows follow so a specific bill can be
+// found ("ค่าไฟจ่ายไปเท่าไหร่").
+func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) string {
+	if list == nil || list.Entries == 0 {
+		return joyboyNoData("no_expenses_recorded_in_window")
+	}
+
+	lines := []string{
+		"period=" + from + ".." + until,
+		"total_spent=" + joyboyNum(list.Total),
+		"entries=" + strconv.FormatInt(list.Entries, 10),
+	}
+	for _, category := range list.Categories {
+		lines = append(lines, fmt.Sprintf("category_%s_%s=%s",
+			category.Category, aiExpenseCategoryLabel(category.Category), joyboyNum(category.Amount)))
+	}
+
+	const recent = 8
+	rows := list.Expenses
+	if len(rows) > recent {
+		rows = rows[:recent]
+	}
+	for _, row := range rows {
+		note := strings.TrimSpace(row.Note)
+		if note == "" {
+			note = aiExpenseCategoryLabel(row.Category)
+		}
+		lines = append(lines, fmt.Sprintf("entry=%s|%s|%s|%s",
+			row.SpentAt.Format("2006-01-02"), aiExpenseCategoryLabel(row.Category), joyboyNum(row.Amount), note))
+	}
+	if int64(len(list.Expenses)) < list.Entries || list.HasMore {
+		lines = append(lines, "note=แสดงเฉพาะรายการล่าสุด ไม่ใช่ทั้งหมด")
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboyTableStatusBody renders the floor as it stands right now.
 //
 // The reservation holder's phone number is deliberately left out. The owner is

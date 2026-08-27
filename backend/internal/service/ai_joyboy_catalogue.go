@@ -124,6 +124,11 @@ const joyboyToolSalesForecast AIToolName = "get_sales_forecast"
 // not. Booking stays on the table screen, where it is one tap and immediate.
 const joyboyToolTableStatus AIToolName = "get_table_status"
 
+// joyboyToolExpenseSummary reads the money that actually left the shop, which no
+// other tool covers: every existing figure here is revenue or the recipe cost of
+// food already sold, and neither of those is rent, wages or the electricity bill.
+const joyboyToolExpenseSummary AIToolName = "get_expense_summary"
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -138,6 +143,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolMenuForPeriod,
 	joyboyToolSalesForecast,
 	joyboyToolTableStatus,
+	joyboyToolExpenseSummary,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -153,6 +159,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
 		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
 		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
+	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริงใน 30 วันล่าสุด แยกตามหมวด " +
+		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
+		"ใช้ตอบ: จ่ายอะไรไปบ้าง รายจ่ายเท่าไหร่ ค่าไฟเดือนนี้เท่าไหร่ หมวดไหนจ่ายเยอะสุด ต้นทุนคงที่เท่าไหร่ " +
+		"นี่คือเงินสดที่จ่ายออกไป คนละอย่างกับต้นทุนวัตถุดิบของอาหารที่ขายไปแล้ว " +
+		"ถ้าถามกำไรจากการขาย ให้ใช้ get_profit_summary แทน",
 	joyboyToolTableStatus: "สถานะโต๊ะในร้าน \"ตอนนี้เดี๋ยวนี้\" ไม่ใช่ข้อมูลย้อนหลัง " +
 		"บอกจำนวนโต๊ะทั้งหมด ว่างกี่โต๊ะ มีคนนั่งกี่โต๊ะ จองไว้กี่โต๊ะ ที่นั่งว่างรวมกี่ที่ " +
 		"พร้อมรายชื่อโต๊ะว่าง เลขโต๊ะ จำนวนที่นั่ง และโซน " +
@@ -205,6 +216,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
 	}},
 	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus}},
+	{"รายจ่าย", []AIToolName{joyboyToolExpenseSummary}},
 	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},
 	{"คู่มือการใช้งาน", []AIToolName{AIToolSearchSystemDocs}},
 }

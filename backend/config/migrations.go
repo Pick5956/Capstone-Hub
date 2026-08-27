@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 18
+	CurrentSchemaVersion int64 = 19
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -338,6 +338,29 @@ func schemaMigrationPlan() []SchemaMigration {
 				if err := ctx.DB.Exec(
 					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
 						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability'))`,
+				).Error; err != nil {
+					return fmt.Errorf("recreate AI action type constraint: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 19,
+			Name:    "ai_action_plan_expense_and_menu_price_types",
+			Up: func(ctx *MigrationContext) error {
+				// Adds recording an expense and changing a menu price to the reviewed
+				// action allowlist. Same additive shape as 17 and 18: the constraint
+				// only widens. Both arrive in one migration because they were built
+				// together — a second numbered step for the same CHECK would only add
+				// a version every deployed database has to walk through.
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items DROP CONSTRAINT IF EXISTS ai_action_plan_items_allowed_type`,
+				).Error; err != nil {
+					return fmt.Errorf("drop AI action type constraint: %w", err)
+				}
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
+						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability','create_expense','set_menu_price'))`,
 				).Error; err != nil {
 					return fmt.Errorf("recreate AI action type constraint: %w", err)
 				}

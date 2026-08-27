@@ -103,6 +103,8 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// Version 18 widens the same CHECK constraint again (menu availability),
 		// still on an AI-owned table outside the frozen registry.
 		18: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
+		// Version 19 widens the same CHECK once more (recording an expense).
+		19: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 )
@@ -34,10 +35,14 @@ type AIStockCommandDraft struct {
 	Quantity float64 `json:"quantity"`
 	Unit     string  `json:"unit"`
 	Note     string  `json:"note,omitempty"`
+	// Used by kind=expense only. Category is one of the six the ledger accepts;
+	// Date is "YYYY-MM-DD" and defaults to today when the owner did not say one.
+	Category string `json:"category,omitempty"`
+	Date     string `json:"date,omitempty"`
 }
 
 // AICommandKindsAll lists what the extractor may propose.
-var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off"}
+var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off", "expense"}
 
 func aiIsStockKind(kind string) bool {
 	return kind == "in" || kind == "out" || kind == "adjust"
@@ -47,7 +52,7 @@ func aiIsStockKind(kind string) bool {
 // than the shelf, which decides which catalogue the name is resolved against.
 func AIMenuCommandKind(kind string) bool {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "menu_on", "menu_off":
+	case "menu_on", "menu_off", "menu_price":
 		return true
 	default:
 		return false
@@ -272,6 +277,83 @@ type AICommandResolution struct {
 	Question string               // set when Kind is ask or offer_create
 }
 
+// aiExpenseCategoryLabels turns the ledger's six stored categories into the
+// words the owner uses, for the preview line and for the question back when the
+// model could not tell which one was meant.
+var aiExpenseCategoryLabels = map[string]string{
+	"ingredient": "วัตถุดิบ",
+	"labor":      "ค่าแรง",
+	"rent":       "ค่าเช่า",
+	"utilities":  "ค่าน้ำค่าไฟ",
+	"equipment":  "อุปกรณ์",
+	"other":      "อื่น ๆ",
+}
+
+func aiExpenseCategoryLabel(category string) string {
+	if label, ok := aiExpenseCategoryLabels[strings.ToLower(strings.TrimSpace(category))]; ok {
+		return label
+	}
+	return category
+}
+
+// ResolveExpenseCommand checks a drafted expense before it becomes a plan. The
+// two things that cannot be guessed are asked about: which category the ledger
+// should file it under, and how much was actually paid. The date is the one
+// field with a safe default — an expense mentioned with no date is today's.
+func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandResolution {
+	note := strings.TrimSpace(draft.Note)
+	if note == "" {
+		note = strings.TrimSpace(draft.Name)
+	}
+	title := note
+	if title == "" {
+		title = "รายจ่าย"
+	}
+
+	category := strings.ToLower(strings.TrimSpace(draft.Category))
+	if !entity.IsValidExpenseCategory(category) {
+		options := make([]string, 0, len(aiExpenseCategoryLabels))
+		for _, key := range entity.ExpenseCategories {
+			options = append(options, aiExpenseCategoryLabels[key])
+		}
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” จัดเป็นรายจ่ายหมวดไหนครับ — %s", title, strings.Join(options, " / ")),
+		}
+	}
+	if draft.Quantity <= 0 {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” จ่ายไปเท่าไหร่ครับ", title),
+		}
+	}
+
+	date := strings.TrimSpace(draft.Date)
+	if date == "" {
+		date = now.Format("2006-01-02")
+	} else if _, err := time.Parse("2006-01-02", date); err != nil {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” จ่ายวันไหนครับ", title),
+		}
+	}
+
+	return AICommandResolution{
+		Kind:  AICommandOutcomeReady,
+		Title: title,
+		Command: AIAdjustStockCommand{
+			Kind:     "expense",
+			Quantity: draft.Quantity,
+			Category: category,
+			Date:     date,
+			Note:     note,
+		},
+	}
+}
+
 // ResolveMenuCommand checks a drafted open/close against the live menu. The menu
 // has to exist and has to actually be changing: a name nobody recognises is
 // asked about rather than half-matched, and a menu already in the asked-for
@@ -282,7 +364,7 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 		return AICommandResolution{Kind: AICommandOutcomeAsk, Question: "ขอชื่อเมนูด้วยครับ"}
 	}
 	kind := strings.ToLower(strings.TrimSpace(draft.Kind))
-	if !AIMenuCommandKind(kind) {
+	if !AIMenuCommandKind(kind) && kind != "menu_price" {
 		return AICommandResolution{
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
@@ -315,6 +397,25 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
 			Question: fmt.Sprintf("ไม่พบเมนูชื่อ “%s” ในร้านครับ ลองบอกชื่อให้ตรงกับหน้าจัดการเมนูอีกทีนะ", title),
+		}
+	}
+
+	if kind == "menu_price" {
+		if draft.Quantity <= 0 {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    match.Exact.Name,
+				Question: fmt.Sprintf("“%s” ตั้งราคาเท่าไหร่ครับ", match.Exact.Name),
+			}
+		}
+		return AICommandResolution{
+			Kind:  AICommandOutcomeReady,
+			Title: match.Exact.Name,
+			Command: AIAdjustStockCommand{
+				Kind:       "menu_price",
+				MenuItemID: match.Exact.ID,
+				Quantity:   draft.Quantity,
+			},
 		}
 	}
 

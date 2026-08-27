@@ -275,6 +275,28 @@ func (s *MenuService) UpdateMenuItemAvailability(restaurantID, itemID uint, req 
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
+// UpdateMenuItemPrice changes only the price.
+//
+// It exists because UpdateMenuItem takes the whole item: it replaces the recipe,
+// the option groups and the category links with whatever the request carries, so
+// a caller that wants to move a price and sends nothing else silently empties the
+// recipe — and with it that menu's cost and margin, with no error to notice.
+// Narrow edits get a narrow method, the way availability already does.
+func (s *MenuService) UpdateMenuItemPrice(restaurantID, itemID uint, price float64) (*entity.MenuItem, error) {
+	if math.IsNaN(price) || math.IsInf(price, 0) || price < 0 {
+		return nil, errors.New("price must be zero or more")
+	}
+	item, err := s.repo.FindMenuItem(restaurantID, itemID)
+	if err != nil {
+		return nil, err
+	}
+	item.Price = roundMoney(price)
+	if err := s.repo.UpdateMenuItem(item); err != nil {
+		return nil, err
+	}
+	return s.repo.FindMenuItem(restaurantID, item.ID)
+}
+
 func (s *MenuService) DeleteMenuItem(restaurantID, itemID uint) error {
 	item, err := s.repo.FindMenuItem(restaurantID, itemID)
 	if err != nil {

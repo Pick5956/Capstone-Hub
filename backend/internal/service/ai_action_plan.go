@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -53,6 +54,28 @@ type AIActionMenuPort interface {
 	ListMenuItems(restaurantID uint, includeInactive bool, categoryID uint) ([]entity.MenuItem, error)
 	FindMenuItem(restaurantID, itemID uint) (*entity.MenuItem, error)
 	UpdateMenuItemAvailability(restaurantID, itemID uint, req *MenuItemAvailabilityRequest) (*entity.MenuItem, error)
+	// Deliberately the narrow price setter, not UpdateMenuItem: the full update
+	// replaces the recipe with whatever the request carries, so using it here
+	// would empty the recipe of every menu the assistant repriced.
+	UpdateMenuItemPrice(restaurantID, itemID uint, price float64) (*entity.MenuItem, error)
+}
+
+// AIActionPorts groups the services the action layer reads and writes through.
+// It is a struct rather than a growing parameter list because every new action
+// type adds one, and a positional argument that is nil in most call sites is how
+// the wrong port eventually gets passed.
+type AIActionPorts struct {
+	Ingredients AIActionIngredientPort
+	Menus       AIActionMenuPort
+	Expenses    AIActionExpensePort
+}
+
+// AIActionExpensePort is the slice of the expense ledger the action layer needs.
+// Only Create is here: editing or deleting a past entry means finding which one,
+// which is a conversation of its own and not part of this boundary yet.
+type AIActionExpensePort interface {
+	Create(restaurantID, userID uint, req *ExpenseRequest) (*entity.Expense, error)
+	List(restaurantID uint, from, until, category string) (*ExpenseListResponse, error)
 }
 
 // AITablePort is the read-only slice of the table service the assistant needs.
@@ -84,6 +107,9 @@ type AIAdjustStockCommand struct {
 	// Set only for the menu kinds.
 	MenuItemID uint
 	Available  bool
+	// Set only for kind=expense.
+	Category string
+	Date     string
 }
 
 // AIActionItemPayload is what gets persisted for an item. It is deliberately
@@ -104,6 +130,9 @@ type AIActionItemPayload struct {
 	// that reads as "no change requested".
 	MenuItemID uint `json:"menu_item_id,omitempty"`
 	Available  bool `json:"available"`
+	// Used by create_expense.
+	Category string `json:"category,omitempty"`
+	Date     string `json:"date,omitempty"`
 }
 
 // AIActionItemPreview is what the owner reads before confirming.
@@ -302,6 +331,90 @@ func validateSetMenuAvailability(port AIActionMenuPort, restaurantID, menuItemID
 	return AIActionItemPayload{MenuItemID: item.ID, Available: available}, preview, nil
 }
 
+// validateCreateExpense checks a drafted ledger entry the way the expense form
+// would. Nothing is looked up — an expense has no existing row to check against
+// — so this is where the closed category set and the amount bounds are enforced.
+func validateCreateExpense(command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, error) {
+	category := strings.ToLower(strings.TrimSpace(command.Category))
+	if !entity.IsValidExpenseCategory(category) {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("หมวดรายจ่ายไม่ถูกต้อง")
+	}
+	if command.Quantity <= 0 || command.Quantity > aiActionMaxQuantity {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionBadQuantity
+	}
+	if _, err := time.Parse("2006-01-02", strings.TrimSpace(command.Date)); err != nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("วันที่ต้องเป็นรูปแบบ YYYY-MM-DD")
+	}
+
+	note := strings.TrimSpace(command.Note)
+	title := note
+	if title == "" {
+		title = aiExpenseCategoryLabel(category)
+	}
+	preview := AIActionItemPreview{
+		Title: title,
+		Change: fmt.Sprintf("บันทึกรายจ่าย %s บาท · หมวด%s · วันที่ %s",
+			formatStockNumber(roundBaht(command.Quantity)), aiExpenseCategoryLabel(category), command.Date),
+		// Unlike the expense a restock writes for itself, a hand-entered row stays
+		// editable — worth saying, because the owner has been told the opposite
+		// about the automatic one.
+		SideEffects: []string{"แก้หรือลบทีหลังได้ที่หน้ารายจ่าย"},
+	}
+	return AIActionItemPayload{
+		Category: category,
+		Amount:   roundBaht(command.Quantity),
+		Date:     strings.TrimSpace(command.Date),
+		Note:     note,
+	}, preview, nil
+}
+
+// validateSetMenuPrice checks a price change and, where the recipe allows it,
+// says what the change does to the money per plate. The owner is deciding
+// whether to raise a price; "139 → 159" alone does not tell them whether that
+// covers the cost, and the cost is already known.
+func validateSetMenuPrice(port AIActionMenuPort, restaurantID, menuItemID uint, price float64) (AIActionItemPayload, AIActionItemPreview, error) {
+	if port == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnavailable
+	}
+	if price < 0 || price > aiActionMaxQuantity {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionBadQuantity
+	}
+	item, err := port.FindMenuItem(restaurantID, menuItemID)
+	if err != nil || item == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errAIActionTargetNotFound
+	}
+	next := roundBaht(price)
+	if item.Price == next {
+		return AIActionItemPayload{}, AIActionItemPreview{}, fmt.Errorf("“%s” ราคา %s บาทอยู่แล้ว", item.Name, formatStockNumber(next))
+	}
+
+	preview := AIActionItemPreview{
+		Title:  item.Name,
+		Change: fmt.Sprintf("ราคา %s → %s บาท", formatStockNumber(item.Price), formatStockNumber(next)),
+	}
+	if cost := aiMenuRecipeCost(item); cost > 0 {
+		preview.SideEffects = append(preview.SideEffects, fmt.Sprintf(
+			"กำไรต่อจาน %s → %s บาท (ต้นทุน %s บาท)",
+			formatStockNumber(roundBaht(item.Price-cost)), formatStockNumber(roundBaht(next-cost)), formatStockNumber(cost)))
+	}
+	preview.SideEffects = append(preview.SideEffects, "มีผลกับออเดอร์ใหม่เท่านั้น บิลที่เปิดค้างไว้ใช้ราคาเดิม")
+	return AIActionItemPayload{MenuItemID: item.ID, Amount: next}, preview, nil
+}
+
+// aiMenuRecipeCost adds up what one plate costs from the stored recipe. It
+// returns 0 when the recipe is missing or its ingredients carry no cost, which
+// is the signal to say nothing about margin rather than to report zero cost.
+func aiMenuRecipeCost(item *entity.MenuItem) float64 {
+	total := 0.0
+	for _, component := range item.Ingredients {
+		if component.Ingredient == nil {
+			return 0
+		}
+		total += component.Ingredient.CostPerUnit * component.Quantity
+	}
+	return roundBaht(total)
+}
+
 func aiAvailabilityStateWord(available bool) string {
 	if available {
 		return "เปิดขาย"
@@ -327,40 +440,46 @@ type AIActionRejectedItem struct {
 
 // aiValidateCommand sends one command to the validator for its kind and reports
 // which action type it becomes.
-func aiValidateCommand(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, string, error) {
+func aiValidateCommand(ports AIActionPorts, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, string, error) {
 	switch command.Kind {
 	case "menu_on", "menu_off":
-		payload, preview, err := validateSetMenuAvailability(menuPort, restaurantID, command.MenuItemID, command.Available)
+		payload, preview, err := validateSetMenuAvailability(ports.Menus, restaurantID, command.MenuItemID, command.Available)
 		return payload, preview, entity.AIActionTypeSetMenuAvailability, err
+	case "expense":
+		payload, preview, err := validateCreateExpense(command)
+		return payload, preview, entity.AIActionTypeCreateExpense, err
+	case "menu_price":
+		payload, preview, err := validateSetMenuPrice(ports.Menus, restaurantID, command.MenuItemID, command.Quantity)
+		return payload, preview, entity.AIActionTypeSetMenuPrice, err
 	case "min":
-		payload, preview, err := validateSetIngredientField(port, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientMinStock, command.Quantity)
+		payload, preview, err := validateSetIngredientField(ports.Ingredients, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientMinStock, command.Quantity)
 		return payload, preview, entity.AIActionTypeSetIngredientMinStock, err
 	case "cost":
-		payload, preview, err := validateSetIngredientField(port, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientCost, command.Quantity)
+		payload, preview, err := validateSetIngredientField(ports.Ingredients, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientCost, command.Quantity)
 		return payload, preview, entity.AIActionTypeSetIngredientCost, err
 	case "create":
-		shelf, err := port.ListIngredients(restaurantID)
+		shelf, err := ports.Ingredients.ListIngredients(restaurantID)
 		if err != nil {
 			return AIActionItemPayload{}, AIActionItemPreview{}, "", err
 		}
 		payload, preview, err := validateCreateIngredient(shelf, command.Name, command.Unit, command.Quantity, 0, 0)
 		return payload, preview, entity.AIActionTypeCreateIngredient, err
 	default:
-		payload, preview, err := validateAdjustStock(port, restaurantID, command)
+		payload, preview, err := validateAdjustStock(ports.Ingredients, restaurantID, command)
 		return payload, preview, entity.AIActionTypeAdjustIngredientStock, err
 	}
 }
 
 // BuildAdjustStockPlan validates every requested change and returns the draft.
 // Invalid items are reported, not silently dropped.
-func BuildAdjustStockPlan(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID uint, commands []AIAdjustStockCommand, titles []string) AIActionPlanDraft {
+func BuildAdjustStockPlan(ports AIActionPorts, restaurantID uint, commands []AIAdjustStockCommand, titles []string) AIActionPlanDraft {
 	draft := AIActionPlanDraft{}
 	for index, command := range commands {
 		title := ""
 		if index < len(titles) {
 			title = titles[index]
 		}
-		payload, preview, actionType, err := aiValidateCommand(port, menuPort, restaurantID, command)
+		payload, preview, actionType, err := aiValidateCommand(ports, restaurantID, command)
 		if err != nil {
 			if title == "" {
 				title = fmt.Sprintf("รายการที่ %d", index+1)
@@ -389,8 +508,37 @@ func BuildAdjustStockPlan(port AIActionIngredientPort, menuPort AIActionMenuPort
 }
 
 // executeAIActionItem runs one stored item through the normal service path.
-func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID, actorUserID uint, item entity.AIActionPlanItem) error {
+func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, item entity.AIActionPlanItem) error {
 	switch item.ActionType {
+	case entity.AIActionTypeCreateExpense:
+		// The same Create the expense form calls, so its validation and its
+		// rounding are the ones that run.
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		if ports.Expenses == nil {
+			return ErrAIActionUnavailable
+		}
+		_, err := ports.Expenses.Create(restaurantID, actorUserID, &ExpenseRequest{
+			Category: payload.Category,
+			Amount:   payload.Amount,
+			SpentAt:  payload.Date,
+			Note:     payload.Note,
+		})
+		return err
+
+	case entity.AIActionTypeSetMenuPrice:
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		if ports.Menus == nil {
+			return ErrAIActionUnavailable
+		}
+		_, err := ports.Menus.UpdateMenuItemPrice(restaurantID, payload.MenuItemID, payload.Amount)
+		return err
+
 	case entity.AIActionTypeSetMenuAvailability:
 		// The same call the availability toggle on the menu screen makes, so
 		// whatever that does — and whatever it grows into — happens here too.
@@ -398,10 +546,10 @@ func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort,
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 			return errors.New("คำสั่งเสียหาย")
 		}
-		if menuPort == nil {
+		if ports.Menus == nil {
 			return ErrAIActionUnavailable
 		}
-		_, err := menuPort.UpdateMenuItemAvailability(restaurantID, payload.MenuItemID, &MenuItemAvailabilityRequest{
+		_, err := ports.Menus.UpdateMenuItemAvailability(restaurantID, payload.MenuItemID, &MenuItemAvailabilityRequest{
 			IsAvailable: payload.Available,
 		})
 		return err
@@ -411,7 +559,7 @@ func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort,
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 			return errors.New("คำสั่งเสียหาย")
 		}
-		_, err := port.AdjustStock(restaurantID, payload.IngredientID, actorUserID, &AdjustStockRequest{
+		_, err := ports.Ingredients.AdjustStock(restaurantID, payload.IngredientID, actorUserID, &AdjustStockRequest{
 			Type:     payload.Kind,
 			Quantity: payload.Quantity,
 			Amount:   payload.Amount,
@@ -427,7 +575,7 @@ func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort,
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 			return errors.New("คำสั่งเสียหาย")
 		}
-		current, err := port.FindIngredient(restaurantID, payload.IngredientID)
+		current, err := ports.Ingredients.FindIngredient(restaurantID, payload.IngredientID)
 		if err != nil || current == nil {
 			return ErrAIActionUnknownIngredient
 		}
@@ -437,7 +585,7 @@ func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort,
 		} else {
 			request.CostPerUnit = payload.CostPerUnit
 		}
-		_, err = port.Update(restaurantID, payload.IngredientID, request)
+		_, err = ports.Ingredients.Update(restaurantID, payload.IngredientID, request)
 		return err
 
 	case entity.AIActionTypeCreateIngredient:
@@ -445,7 +593,7 @@ func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort,
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 			return errors.New("คำสั่งเสียหาย")
 		}
-		_, err := port.Create(restaurantID, actorUserID, &IngredientRequest{
+		_, err := ports.Ingredients.Create(restaurantID, actorUserID, &IngredientRequest{
 			Name:        payload.Name,
 			Unit:        payload.Unit,
 			Stock:       payload.Quantity,
