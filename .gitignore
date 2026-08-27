@@ -1,4 +1,10 @@
+# Every .env variant, not just the exact name: a backup made while editing keys
+# (.env.bak, .env.old, .env.local) carries the same secrets and was previously
+# committable. The example file is the one deliberate exception.
 .env
+.env.*
+!.env.production.example
+!*.env.example
 backend/vendor/
 backend/.gocache/
 *.exe
