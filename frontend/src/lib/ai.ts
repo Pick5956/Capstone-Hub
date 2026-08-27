@@ -5,6 +5,7 @@ import type {
   AIAskRequest,
   AIAskResponse,
   AICalendarView,
+  AIActionPlanConfirmation,
   AIConversationMessage,
   AIInsight,
   AIReceiptDraft,
@@ -59,6 +60,15 @@ export const confirmAIAction = (previewId: string, confirmationToken: string) =>
 
 export const cancelAIAction = (previewId: string) =>
   apiClient.delete<void>(`/api/v1/ai/operations/actions/${encodeURIComponent(previewId)}`);
+
+export const confirmAIActionPlan = (planId: string, confirmationToken: string) =>
+  apiClient.post<AIActionPlanConfirmation>(
+    `/api/v1/ai/operations/plans/${encodeURIComponent(planId)}/confirm`,
+    { confirmation_token: confirmationToken },
+  );
+
+export const cancelAIActionPlan = (planId: string) =>
+  apiClient.delete<void>(`/api/v1/ai/operations/plans/${encodeURIComponent(planId)}`);
 
 export const getOperationsSnapshot = () =>
   apiClient.get<AISnapshot>("/api/v1/ai/operations/snapshot");

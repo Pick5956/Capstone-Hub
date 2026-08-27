@@ -183,6 +183,41 @@ export type AIChartData = {
   series: { name?: string; values: number[] }[];
 };
 
+// A multi-item change waiting for one confirmation. Its figures are computed in
+// Go; the bar only draws them.
+export type AIActionPlanItem = {
+  title: string;
+  change: string;
+  unit?: string;
+  side_effects?: string[];
+};
+
+export type AIActionPlan = {
+  id: string;
+  status: string;
+  expires_at: string;
+  confirmation_token: string;
+  summary: string;
+  items: AIActionPlanItem[];
+  warnings?: string[];
+};
+
+export type AIActionPlanItemOutcome = {
+  title: string;
+  succeeded: boolean;
+  error?: string;
+};
+
+export type AIActionPlanConfirmation = {
+  plan_id: string;
+  status: string;
+  replayed: boolean;
+  message: string;
+  succeeded: number;
+  failed: number;
+  items: AIActionPlanItemOutcome[];
+};
+
 export type AIAskResponse = {
   answer: string;
   intent: "analysis" | "greeting" | "capabilities" | "conversation" | "unclear" | "out_of_scope" | string;
@@ -202,6 +237,7 @@ export type AIAskResponse = {
   turn_id?: string;
   resolved_plan?: AIResolvedPlan;
   action_preview?: AIActionPreview;
+  action_plan?: AIActionPlan;
   candidate_tools?: string[];
   tools_used?: string[];
   doc_sources?: AISystemDocSource[];

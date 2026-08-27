@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
@@ -30,7 +30,7 @@ import {
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
+import type { AIActionPreview, AIActionPlan, AISnapshot, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
@@ -160,6 +160,8 @@ export default function AIAssistantPage() {
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  // A multi-item plan (inventory commands) waiting for one confirmation.
+  const [pendingActionPlan, setPendingActionPlan] = useState<AIActionPlan | null>(null);
   // The inline confirm bar owns its terminal state (done/cancelled/expired) and
   // stays mounted to show it. Once resolved, the preview must be dropped without
   // trying to cancel an already-executed action.
@@ -198,6 +200,7 @@ export default function AIAssistantPage() {
     // a send between this render and the deferred load must not reuse them.
     setConversationId(null);
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -275,6 +278,7 @@ export default function AIAssistantPage() {
     // gone, so this one must drop the shared server thread and pending action.
     setConversationId(null);
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -308,6 +312,7 @@ export default function AIAssistantPage() {
     setLastQuestion(trimmed);
     setPendingAction(null);
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionPreviewError("");
 
     const history = conversationHistory();
@@ -359,6 +364,10 @@ export default function AIAssistantPage() {
       if (data.action_preview) {
         actionResolvedRef.current = false;
         setPendingActionPreview(data.action_preview);
+      }
+      if (data.action_plan) {
+        actionResolvedRef.current = false;
+        setPendingActionPlan(data.action_plan);
       }
       const actions =
         data.intent === "unclear"
@@ -466,6 +475,7 @@ export default function AIAssistantPage() {
     if (actionResolvedRef.current) {
       actionResolvedRef.current = false;
       setPendingActionPreview(null);
+    setPendingActionPlan(null);
       return true;
     }
     if (actionConfirming || actionCancelling) return false;
@@ -529,9 +539,38 @@ export default function AIAssistantPage() {
     cancelAIAction(preview.id).catch(() => undefined);
   };
 
+  const handlePlanConfirm = async () => {
+    const plan = pendingActionPlan;
+    if (!plan) return;
+    const response = await confirmAIActionPlan(plan.id, plan.confirmation_token);
+    // The outcome is reported per item, so a batch that partly failed says so
+    // instead of reading as a clean success.
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: `plan-${response.data.plan_id}`,
+        role: "assistant",
+        content: response.data.message,
+        createdAt: new Date(),
+      },
+    ]);
+  };
+
+  const handlePlanCancel = () => {
+    const plan = pendingActionPlan;
+    if (!plan) return;
+    cancelAIActionPlan(plan.id).catch(() => undefined);
+  };
+
+  const handlePlanReissue = () => {
+    actionResolvedRef.current = false;
+    setPendingActionPlan(null);
+  };
+
   const handleInlineActionReissue = () => {
     actionResolvedRef.current = false;
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
   };
 
   const handleGuidedAction = (action: AIGuidedAction, msgId?: string) => {
@@ -731,6 +770,29 @@ export default function AIAssistantPage() {
               <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
                 {error}
               </div>
+            )}
+
+            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
+              <InlineDbConfirmBar
+                key={pendingActionPlan.id}
+                summary={pendingActionPlan.summary}
+                items={pendingActionPlan.items.map((planItem) => ({
+                  title: planItem.title,
+                  change: planItem.change,
+                  unit: planItem.unit,
+                  sideEffects: planItem.side_effects,
+                }))}
+                warnings={pendingActionPlan.warnings}
+                detail={language === "th"
+                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+                  : `changes ${pendingActionPlan.items.length} record(s)`}
+                expiresAt={pendingActionPlan.expires_at}
+                onConfirm={handlePlanConfirm}
+                onCancel={handlePlanCancel}
+                onReissue={handlePlanReissue}
+                onResolved={() => { actionResolvedRef.current = true; }}
+                language={language}
+              />
             )}
 
             {pendingActionPreview && (

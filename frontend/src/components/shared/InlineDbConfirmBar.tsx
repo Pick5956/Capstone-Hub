@@ -13,10 +13,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type InlineDbConfirmState = "pending" | "confirming" | "done" | "cancelled" | "expired";
 
+// One line of a multi-item plan ("กะเพรา · 500 → 2,500 กรัม" plus anything the
+// system will do on its own).
+export type InlineDbConfirmItem = {
+  title: string;
+  change: string;
+  unit?: string;
+  sideEffects?: string[];
+};
+
 export type InlineDbConfirmBarProps = {
-  itemName: string;
-  fromLabel: string;
-  toLabel: string;
+  /** Single-change mode (a menu opening or closing). */
+  itemName?: string;
+  fromLabel?: string;
+  toLabel?: string;
+  /** Plan mode: N changes confirmed together. Takes precedence when set. */
+  items?: InlineDbConfirmItem[];
+  /** Plan mode headline, e.g. "ปรับสต๊อก 2 รายการ". */
+  summary?: string;
+  /** Items the assistant could not take, shown so a batch never loses part of
+   * what was asked without saying so. */
+  warnings?: string[];
   detail: string;
   expiresAt: Date | string;
   onConfirm: () => Promise<void>;
@@ -152,9 +169,11 @@ export function barView(
 // --- Component --------------------------------------------------------------
 
 export default function InlineDbConfirmBar({
-  itemName, fromLabel, toLabel, detail, expiresAt,
+  itemName, fromLabel, toLabel, items, summary, warnings, detail, expiresAt,
   onConfirm, onCancel, onUndo, onReissue, onResolved, language = "th",
 }: InlineDbConfirmBarProps) {
+  const planItems = items ?? [];
+  const isPlan = planItems.length > 0;
   const t = labels(language);
   const expiryMs = typeof expiresAt === "string" ? Date.parse(expiresAt) : expiresAt.getTime();
 
@@ -282,6 +301,36 @@ export default function InlineDbConfirmBar({
 
       {/* Centre block */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {isPlan ? (
+          <>
+            <span className="truncate text-[15px] font-semibold text-gray-900 dark:text-gray-100">
+              {summary || itemName}
+            </span>
+            <ul className="mt-0.5 space-y-0.5">
+              {planItems.slice(0, 3).map((planItem, index) => (
+                <li key={index} className="text-[13px] text-gray-600 dark:text-gray-300">
+                  <span className="font-medium text-gray-800 dark:text-gray-100">{planItem.title}</span>
+                  {" · "}
+                  <span className="tabular-nums">{planItem.change}</span>
+                  {planItem.unit ? ` ${planItem.unit}` : ""}
+                  {(planItem.sideEffects ?? []).map((effect, effectIndex) => (
+                    <span key={effectIndex} className="ml-1.5 text-[12px] text-amber-700 dark:text-amber-400">
+                      · {effect}
+                    </span>
+                  ))}
+                </li>
+              ))}
+              {planItems.length > 3 && (
+                <li className="text-[12px] text-gray-400">+ อีก {planItems.length - 3} รายการ</li>
+              )}
+            </ul>
+            {(warnings ?? []).length > 0 && (
+              <span className="mt-0.5 text-[12px] text-red-600 dark:text-red-400">
+                ทำให้ไม่ได้: {(warnings ?? []).join(" · ")}
+              </span>
+            )}
+          </>
+        ) : (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <span className="truncate text-[15px] font-semibold text-gray-900 dark:text-gray-100">{itemName}</span>
           <span className="inline-flex shrink-0 items-center rounded-full bg-gray-100 p-0.5 dark:bg-gray-800">
@@ -301,6 +350,7 @@ export default function InlineDbConfirmBar({
             })}
           </span>
         </div>
+        )}
         <span role="status" aria-live="polite" className="text-[13px]" style={{ color: view.statusTone }}>
           {view.statusText}
         </span>
