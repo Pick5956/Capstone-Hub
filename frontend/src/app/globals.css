@@ -1021,7 +1021,7 @@ input[type="number"]::-webkit-inner-spin-button {
     background-size: 22px 22px;
     /* No drop shadow and no ring. Shell.jsx uses a black shadow and a light
        hairline, which are invisible on its near-black frame but read as a dirty
-       band and a seam on this orange one. The cream sheet already separates
+       band and a seam on this orange one. The white sheet already separates
        itself from the rail by colour alone. */
     box-shadow: none;
   }
