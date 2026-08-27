@@ -270,6 +270,30 @@ func setAIActionClarification(response *AIAskResponse, ambiguous bool) {
 	response.ActionPreview = nil
 }
 
+// setAIActionDisabledResponse answers a recognised menu open/close command when
+// the assistant may not act (the owner has not turned actions on). It says so
+// plainly — the one thing it must never do is let the model claim the change was
+// made.
+func setAIActionDisabledResponse(response *AIAskResponse, menuName string, desired bool) {
+	verb := aiAvailabilityVerb(desired)
+	name := strings.TrimSpace(menuName)
+	if name == "" {
+		response.Answer = fmt.Sprintf(
+			"ผมยัง%sเมนูให้ไม่ได้ครับ ต้องเปิด “ให้ AI ลงมือทำ” ในตั้งค่า AI ก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน",
+			verb,
+		)
+	} else {
+		response.Answer = fmt.Sprintf(
+			"ผมยัง%sเมนู “%s” ให้ไม่ได้ครับ ต้องเปิด “ให้ AI ลงมือทำ” ในตั้งค่า AI ก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน",
+			verb, name,
+		)
+	}
+	response.Intent = AIIntentChat
+	response.Task = AITaskGeneralChat
+	response.Model = "joyboy-action-disabled"
+	response.ActionPreview = nil
+}
+
 func setAIActionNoChangeResponse(response *AIAskResponse, menuName string, desired bool) {
 	response.Answer = fmt.Sprintf("เมนู “%s” อยู่ในสถานะ%sอยู่แล้ว จึงไม่มีข้อมูลที่ต้องเปลี่ยนครับ", menuName, aiAvailabilityVerb(desired))
 	response.Model = "local-action-policy"
@@ -377,8 +401,8 @@ func (s *AIService) CancelAIActionForOwner(actor AIActorContext, previewID strin
 // explicitly allowlisted. Only the one canary action (menu availability) exists;
 // new action types are a separate, schema-level change.
 
-var joyboyAvailabilityCloseMarkers = []string{"ปิดขาย", "หยุดขาย", "งดขาย", "พักขาย", "ปิดการขาย", "ปิดเมนู"}
-var joyboyAvailabilityOpenMarkers = []string{"เปิดขาย", "กลับมาขาย", "เปิดการขาย", "เปิดให้ขาย", "เปิดเมนู"}
+var joyboyAvailabilityCloseMarkers = []string{"ปิดขาย", "หยุดขาย", "งดขาย", "พักขาย", "ปิดการขาย", "ปิดสถานะ", "ปิดเมนู"}
+var joyboyAvailabilityOpenMarkers = []string{"เปิดขาย", "กลับมาขาย", "เปิดการขาย", "เปิดให้ขาย", "เปิดสถานะ", "เปิดเมนู"}
 
 // joyboyQuestionMarkers keep an analytical question ("เมนูไหนควรปิดขาย") from being
 // mistaken for an imperative command. A command names a menu; a question asks
@@ -442,18 +466,19 @@ func detectMenuAvailabilityCommand(question string) (menuName string, desiredAva
 // false — leaving the question to be answered normally — when actions are off,
 // the caller is not an owner, or the text is not a command.
 func (s *AIService) maybeCreateJoyboyMenuAvailabilityAction(actor AIActorContext, question string, response *AIAskResponse) bool {
-	if !s.ownerActionsEnabled(actor.RestaurantID) {
-		return false
-	}
-	if actor.OwnerUserID == 0 || actor.Role != "owner" {
-		return false
-	}
 	if s.actionStore == nil || s.actionMenuResolver == nil {
 		return false
 	}
 	name, desired, ok := detectMenuAvailabilityCommand(question)
 	if !ok {
 		return false
+	}
+	// The text is a menu open/close command, so this function owns the reply from
+	// here — the model must never be left to free-write "done" for a write that
+	// never ran. When actions are off (or the caller is not the owner), say so.
+	if actor.Role != "owner" || actor.OwnerUserID == 0 || !s.ownerActionsEnabled(actor.RestaurantID) {
+		setAIActionDisabledResponse(response, name, desired)
+		return true
 	}
 
 	menuItem, err := s.resolveAIActionMenu(actor.RestaurantID, ResolvedPlanEntityRef{

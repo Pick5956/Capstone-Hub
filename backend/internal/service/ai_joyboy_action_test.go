@@ -19,6 +19,8 @@ func TestDetectMenuAvailabilityCommand(t *testing.T) {
 		{"ช่วยปิดขายเมนู น้ำเปล่า ให้หน่อยครับ", "น้ำเปล่า", false, true},
 		{"เปิดขายเมนูชาไทยเย็นด้วยค่ะ", "ชาไทยเย็น", true, true},
 		{"งดขายผัดไทย", "ผัดไทย", false, true},
+		{"ปิดสถานะเมนูต้มยำกุ้ง", "ต้มยำกุ้ง", false, true},
+		{"เปิดสถานะเมนูชาไทยเย็น", "ชาไทยเย็น", true, true},
 		// Questions must not be taken as commands.
 		{"เมนูไหนควรปิดขาย", "", false, false},
 		{"ทำไมต้องปิดขายเมนูนี้", "", false, false},
