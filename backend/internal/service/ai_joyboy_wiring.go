@@ -315,15 +315,23 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 			Body:  body,
 		})
 	}
-	// A trend question is worth a picture: draw daily revenue as a line from the
-	// same snapshot the fact sheet used. Only when no chart was already set (a
-	// dated comparison owns the chart when it runs).
+	// Some questions are worth a picture, drawn from the same snapshot the fact
+	// sheet used: a trend as a daily line, best-sellers as bars, order types as a
+	// pie. The first chart-worthy tool wins, and only when no chart was already
+	// set (a dated comparison owns the chart when it runs).
 	if t.chart == nil {
 		for _, name := range names {
-			if AIToolName(strings.TrimSpace(name)) == AIToolGetSalesTrend {
-				if chart := buildDailySalesLineChart(snapshot.SalesDays); chart != nil {
-					t.chart = chart
-				}
+			var chart *AIChartData
+			switch AIToolName(strings.TrimSpace(name)) {
+			case AIToolGetSalesTrend:
+				chart = buildDailySalesLineChart(snapshot.SalesDays)
+			case AIToolGetTopSellingMenus:
+				chart = buildTopMenusBarChart(snapshot.TopMenuItems)
+			case AIToolGetOrderTypeBreakdown:
+				chart = buildOrderTypePieChart(snapshot.OrderTypeBreakdown)
+			}
+			if chart != nil {
+				t.chart = chart
 				break
 			}
 		}

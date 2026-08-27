@@ -115,3 +115,68 @@ func buildDailySalesLineChart(days []repository.AISalesSummary) *AIChartData {
 		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: values}},
 	}
 }
+
+// buildTopMenusBarChart draws the best-selling menus by quantity — the same
+// ranking the top-selling tool reports — as bars. Capped so the labels stay
+// readable. nil when there is nothing sold.
+func buildTopMenusBarChart(menus []repository.AIMenuSummary) *AIChartData {
+	if len(menus) == 0 {
+		return nil
+	}
+	const limit = 6
+	if len(menus) > limit {
+		menus = menus[:limit]
+	}
+	categories := make([]string, len(menus))
+	values := make([]float64, len(menus))
+	for i, m := range menus {
+		categories[i] = m.MenuName
+		values[i] = float64(m.Quantity)
+	}
+	return &AIChartData{
+		Kind:       AIChartBar,
+		Title:      "เมนูขายดี",
+		Unit:       "รายการ",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "จำนวน", Values: values}},
+	}
+}
+
+// orderTypeLabel turns the stored order type into the Thai the owner reads.
+func orderTypeLabel(orderType string) string {
+	switch strings.TrimSpace(orderType) {
+	case "dine_in":
+		return "กินที่ร้าน"
+	case "takeaway":
+		return "กลับบ้าน"
+	default:
+		return orderType
+	}
+}
+
+// buildOrderTypePieChart shows the share of revenue by order type (dine-in vs
+// takeaway) as a pie — the same split the breakdown tool reports. nil when there
+// is no revenue to divide.
+func buildOrderTypePieChart(rows []repository.AIOrderTypeSummary) *AIChartData {
+	categories := make([]string, 0, len(rows))
+	values := make([]float64, 0, len(rows))
+	var total float64
+	for _, r := range rows {
+		if r.Revenue <= 0 {
+			continue
+		}
+		categories = append(categories, orderTypeLabel(r.OrderType))
+		values = append(values, r.Revenue)
+		total += r.Revenue
+	}
+	if total <= 0 || len(categories) == 0 {
+		return nil
+	}
+	return &AIChartData{
+		Kind:       AIChartPie,
+		Title:      "สัดส่วนยอดขายตามประเภท",
+		Unit:       "บาท",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: values}},
+	}
+}

@@ -226,6 +226,36 @@ func TestDailySalesLineChartSortsAndLabels(t *testing.T) {
 	}
 }
 
+// Best-sellers draw as bars (by quantity, capped) and order types as a pie (by
+// revenue share, Thai labels). Both draw from the same figures their tools
+// report, and both refuse to draw when there is nothing to show.
+func TestTopMenusBarAndOrderTypePie(t *testing.T) {
+	bar := buildTopMenusBarChart([]repository.AIMenuSummary{
+		{MenuName: "น้ำเปล่า", Quantity: 431, Revenue: 2000},
+		{MenuName: "ต้มยำกุ้ง", Quantity: 395, Revenue: 50000},
+	})
+	if bar == nil || bar.Kind != AIChartBar || bar.Categories[0] != "น้ำเปล่า" || bar.Series[0].Values[0] != 431 {
+		t.Errorf("top-menus bar wrong: %+v", bar)
+	}
+	if buildTopMenusBarChart(nil) != nil {
+		t.Error("no menus should draw no bar")
+	}
+
+	pie := buildOrderTypePieChart([]repository.AIOrderTypeSummary{
+		{OrderType: "dine_in", Orders: 100, Revenue: 80000},
+		{OrderType: "takeaway", Orders: 40, Revenue: 20000},
+	})
+	if pie == nil || pie.Kind != AIChartPie {
+		t.Fatalf("order-type pie missing: %+v", pie)
+	}
+	if pie.Categories[0] != "กินที่ร้าน" || pie.Categories[1] != "กลับบ้าน" || pie.Series[0].Values[0] != 80000 {
+		t.Errorf("order-type pie wrong labels/values: %+v", pie)
+	}
+	if buildOrderTypePieChart([]repository.AIOrderTypeSummary{{OrderType: "dine_in", Revenue: 0}}) != nil {
+		t.Error("no revenue should draw no pie")
+	}
+}
+
 // A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
 // question is about a sales total; menu or per-order questions that mention a
 // year keep their own tools. A month question yields no bare year, so it stays
