@@ -143,6 +143,25 @@ func (r *AIRepository) ReplaceOperatingCalendar(restaurantID uint, rules []entit
 	})
 }
 
+// RestaurantAIActionsEnabled reports whether the owner has turned on the
+// assistant's ability to make changes for this restaurant.
+func (r *AIRepository) RestaurantAIActionsEnabled(restaurantID uint) (bool, error) {
+	var enabled bool
+	err := r.db.Model(&entity.Restaurant{}).
+		Where("id = ? AND deleted_at IS NULL", restaurantID).
+		Select("ai_actions_enabled").
+		Scan(&enabled).Error
+	return enabled, err
+}
+
+// SetRestaurantAIActionsEnabled stores the owner's on/off choice for the
+// assistant's write actions.
+func (r *AIRepository) SetRestaurantAIActionsEnabled(restaurantID uint, enabled bool) error {
+	return r.db.Model(&entity.Restaurant{}).
+		Where("id = ? AND deleted_at IS NULL", restaurantID).
+		Update("ai_actions_enabled", enabled).Error
+}
+
 func (r *AIRepository) SalesForHourRange(restaurantID uint, start, end time.Time, startHour, endHour int) (AISalesRange, error) {
 	var res AISalesRange
 	err := r.db.Model(&entity.Order{}).

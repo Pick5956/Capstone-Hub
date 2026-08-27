@@ -32,6 +32,8 @@ type AIOperationsService interface {
 	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
 	OperatingCalendarForOwner(restaurantID uint) (service.AICalendarView, error)
 	SetOperatingCalendar(restaurantID uint, view service.AICalendarView) error
+	AIActionsSettingForOwner(restaurantID uint) (service.AIActionsSettingView, error)
+	SetAIActionsSettingForOwner(restaurantID uint, enabled bool) error
 }
 
 const maxAIActionConfirmationBodyBytes int64 = 1024
@@ -189,6 +191,53 @@ func (ctrl *AIController) GetOperatingCalendar(c *gin.Context) {
 		return
 	}
 	view, err := ctrl.svc.OperatingCalendarForOwner(restaurantID)
+	if err != nil {
+		respondAPIError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
+// GetAISettings returns the owner-facing AI settings (whether the assistant may
+// make changes).
+func (ctrl *AIController) GetAISettings(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	view, err := ctrl.svc.AIActionsSettingForOwner(restaurantID)
+	if err != nil {
+		respondAPIError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
+// UpdateAISettings stores the owner's choice of whether the assistant may make
+// (previewed, confirmed) changes.
+func (ctrl *AIController) UpdateAISettings(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	var input struct {
+		ActionsEnabled bool `json:"actions_enabled"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	if err := ctrl.svc.SetAIActionsSettingForOwner(restaurantID, input.ActionsEnabled); err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
+	}
+	view, err := ctrl.svc.AIActionsSettingForOwner(restaurantID)
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
 		return

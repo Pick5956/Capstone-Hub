@@ -72,6 +72,17 @@ export const getOperatingCalendar = () =>
 export const updateOperatingCalendar = (view: AICalendarView) =>
   apiClient.put<AICalendarView>("/api/v1/ai/operations/calendar", view);
 
+export type AISettingsView = {
+  actions_enabled: boolean;
+  feature_available: boolean;
+};
+
+export const getAISettings = () =>
+  apiClient.get<AISettingsView>("/api/v1/ai/operations/settings");
+
+export const updateAISettings = (actionsEnabled: boolean) =>
+  apiClient.put<AISettingsView>("/api/v1/ai/operations/settings", { actions_enabled: actionsEnabled });
+
 export const extractReceipt = (imageBase64: string, mimeType: string) =>
   apiClient.post<{ draft: AIReceiptDraft }>(
     "/api/v1/ai/operations/receipt",

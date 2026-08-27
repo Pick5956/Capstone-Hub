@@ -89,6 +89,9 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// model also added a computed gorm:"-" field to MenuItem (no DB change); the
 		// fingerprint reflects the current models.
 		14: "fdad3196f5a6414532f5d5aa0236e815d0ec8970e1c69412c0cb000797fa0235",
+		// Version 15 adds Restaurant.AIActionsEnabled — the owner's toggle for the
+		// assistant's write actions — so the registry fingerprint advances.
+		15: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

@@ -85,6 +85,14 @@ func (f *fakeAIOperationsService) SetOperatingCalendar(uint, service.AICalendarV
 	return f.askErr
 }
 
+func (f *fakeAIOperationsService) AIActionsSettingForOwner(uint) (service.AIActionsSettingView, error) {
+	return service.AIActionsSettingView{}, f.askErr
+}
+
+func (f *fakeAIOperationsService) SetAIActionsSettingForOwner(uint, bool) error {
+	return f.askErr
+}
+
 func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error) {
 	f.confirmCalls++
 	f.actor = actor

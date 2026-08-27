@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 14
+	CurrentSchemaVersion int64 = 15
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -266,6 +266,20 @@ func schemaMigrationPlan() []SchemaMigration {
 					Update("permissions", `["take_order","take_payment","view_orders"]`)
 				if result.Error != nil {
 					return fmt.Errorf("update waiter default permissions: %w", result.Error)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 15,
+			Name:    "restaurant_ai_actions_enabled",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only: a per-restaurant opt-in that lets the owner turn the
+				// assistant's ability to make (previewed, confirmed) changes on or off
+				// from the AI settings, replacing the env allowlist. Defaults to false,
+				// so nothing changes for an existing restaurant until the owner opts in.
+				if err := ctx.DB.AutoMigrate(&entity.Restaurant{}); err != nil {
+					return fmt.Errorf("migrate restaurant AI actions flag: %w", err)
 				}
 				return nil
 			},

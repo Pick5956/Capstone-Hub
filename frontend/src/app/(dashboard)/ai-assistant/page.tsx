@@ -563,7 +563,7 @@ export default function AIAssistantPage() {
               </button>
             </HoverTip>
             <HoverTip
-              label={language === "th" ? "ตั้งค่า AI (ปฏิทินร้าน)" : "AI settings (calendar)"}
+              label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
               placement="bottom"
             >
               <button

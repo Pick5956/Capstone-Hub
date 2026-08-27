@@ -21,6 +21,12 @@ type Restaurant struct {
 	PromptPayQRImage     string  `json:"promptpay_qr_image"`
 	CoverImage           string  `json:"cover_image"`
 
+	// AIActionsEnabled lets the owner turn the assistant's ability to make
+	// changes (a previewed, confirmed write like opening or closing a menu) on or
+	// off from the AI settings. Default off: the assistant reads and answers until
+	// the owner opts in, and every action still needs an explicit confirmation.
+	AIActionsEnabled bool `json:"ai_actions_enabled" gorm:"not null;default:false"`
+
 	// Geofence for QR table ordering. A customer must be physically near the
 	// restaurant to send an order straight to the kitchen. OrderRadiusMeters = 0
 	// (or missing coordinates) disables the check entirely.

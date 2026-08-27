@@ -52,6 +52,30 @@ type AIActionMenuResolver interface {
 	FindMenuItemsByExactName(restaurantID uint, name string, limit int) ([]entity.MenuItem, error)
 }
 
+// AIActionsSettingStore reads and writes the per-restaurant owner toggle that
+// says whether the assistant may make (previewed, confirmed) changes. When one
+// is wired it replaces the env allowlist as the per-restaurant gate; the system
+// master switch (AI_ACTIONS_ENABLED) still applies on top.
+type AIActionsSettingStore interface {
+	RestaurantAIActionsEnabled(restaurantID uint) (bool, error)
+	SetRestaurantAIActionsEnabled(restaurantID uint, enabled bool) error
+}
+
+// ownerActionsEnabled is the production gate for whether the assistant may act
+// for this restaurant: the system master switch, then the owner's own toggle.
+// With no toggle store wired (unit tests), it falls back to the env allowlist so
+// the reviewed-boundary tests keep exercising the same policy they always have.
+func (s *AIService) ownerActionsEnabled(restaurantID uint) bool {
+	if s.actionsSetting == nil {
+		return aiActionsEnabledForRestaurant(restaurantID)
+	}
+	if restaurantID == 0 || !aiEnabledEnvironmentValue(os.Getenv("AI_ACTIONS_ENABLED")) {
+		return false
+	}
+	enabled, err := s.actionsSetting.RestaurantAIActionsEnabled(restaurantID)
+	return err == nil && enabled
+}
+
 type AIActionPreviewResponse struct {
 	ID                string                    `json:"id"`
 	ActionType        string                    `json:"action_type"`
@@ -125,7 +149,7 @@ func (s *AIService) maybeCreateAIActionPreview(actor AIActorContext, conversatio
 	}
 	// Shadow output is evaluation data only. It must never become authority to
 	// create even a pending write preview.
-	if aiOrchestrationMode() != aiOrchestratorPlanner || !aiActionsEnabledForRestaurant(actor.RestaurantID) {
+	if aiOrchestrationMode() != aiOrchestratorPlanner || !s.ownerActionsEnabled(actor.RestaurantID) {
 		return nil
 	}
 	if s.actionStore == nil || s.actionMenuResolver == nil {
@@ -290,7 +314,7 @@ func (s *AIService) ConfirmAIActionForOwner(actor AIActorContext, previewID, con
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("AI action requires an authenticated restaurant owner")
 	}
-	if !aiActionsEnabledForRestaurant(actor.RestaurantID) {
+	if !s.ownerActionsEnabled(actor.RestaurantID) {
 		return nil, ErrAIActionsDisabled
 	}
 	if s.actionStore == nil {
@@ -418,7 +442,7 @@ func detectMenuAvailabilityCommand(question string) (menuName string, desiredAva
 // false — leaving the question to be answered normally — when actions are off,
 // the caller is not an owner, or the text is not a command.
 func (s *AIService) maybeCreateJoyboyMenuAvailabilityAction(actor AIActorContext, question string, response *AIAskResponse) bool {
-	if !aiActionsEnabledForRestaurant(actor.RestaurantID) {
+	if !s.ownerActionsEnabled(actor.RestaurantID) {
 		return false
 	}
 	if actor.OwnerUserID == 0 || actor.Role != "owner" {
