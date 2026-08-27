@@ -37,12 +37,33 @@ func ParseStructuredPlannerResolvedPlan(rawJSON string, trustedOriginalQuestion 
 	if err := requireStructuredPlannerEOF(shapeDecoder); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
+	// Models routinely write null where the contract asks for an empty list, and
+	// both say the same thing: nothing was specified. Rejecting the whole plan
+	// over that spelling cost correct routing in live measurement, so the two are
+	// folded together here, at the wire boundary, before anything is validated.
+	rawJSON, shape = coerceStructuredPlannerNullArrays(rawJSON, shape)
+	// resolution.missing_fields is a list of field names, while the neighbouring
+	// inherited_fields is a list of objects. Models copy the object shape into
+	// both often enough that it cost a whole plan in live measurement, so an entry
+	// written as {"field":"task",...} is read as the name it already carries.
+	rawJSON, shape = coerceStructuredPlannerMissingFields(rawJSON, shape)
+	// The nullable object fields get the same treatment as the lists above, for
+	// the same reason: gpt-oss-20b writes "ranking": [] to say there is no
+	// ranking. An empty list and null say the same thing here, and rejecting the
+	// spelling threw away two complete, correct plans in live measurement.
+	rawJSON, shape = coerceStructuredPlannerEmptyObjects(rawJSON, shape)
+	rawJSON, shape = coerceStructuredPlannerConfidence(rawJSON, shape)
 	if err := validateStructuredPlannerWireShape(shape); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
 	}
 
+	// Unknown fields are ignored rather than fatal. Every field the contract needs
+	// has already been checked for presence and type above, so an extra key adds
+	// nothing and reaches no code: it cannot be a renamed field slipping through,
+	// because the real name would then be missing. Being strict here cost a
+	// complete and correct plan in live measurement, where the model appended one
+	// stray "resolved_plan" key after writing the whole plan correctly.
 	decoder := json.NewDecoder(bytes.NewBufferString(rawJSON))
-	decoder.DisallowUnknownFields()
 	var plan ResolvedPlan
 	if err := decoder.Decode(&plan); err != nil {
 		return ResolvedPlan{}, fmt.Errorf("%w: %v", ErrStructuredPlannerJSON, err)
@@ -238,4 +259,185 @@ func structuredPlannerNullableObjectWithRequired(value any, path string, keys ..
 		return nil
 	}
 	return structuredPlannerObjectWithRequired(value, path, keys...)
+}
+
+// structuredPlannerListFields are the contract's array-valued fields, addressed
+// as "<parent>.<key>" where the parent is the object that holds them.
+var structuredPlannerListFields = map[string][]string{
+	"parameters": {"metrics", "group_by", "entities", "filters"},
+	"resolution": {"inherited_fields", "missing_fields"},
+}
+
+// coerceStructuredPlannerNullArrays rewrites null and absent list fields to
+// empty lists and returns both the patched JSON (for the typed decode) and the
+// patched shape (for wire validation), so the two views can never disagree.
+// Absent is folded in with null for the same reason null was folded in with
+// empty: a model that writes no "entities" key is saying no entity was named,
+// which is exactly what an empty list says, and demanding the ceremony cost two
+// complete plans in live measurement.
+func coerceStructuredPlannerNullArrays(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	changed := false
+	for parent, keys := range structuredPlannerListFields {
+		nested, nestedOK := root[parent].(map[string]any)
+		if !nestedOK {
+			continue
+		}
+		for _, key := range keys {
+			if value, exists := nested[key]; exists && value != nil {
+				continue
+			}
+			nested[key] = []any{}
+			changed = true
+		}
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// coerceStructuredPlannerConfidence moves a confidence written at the root into
+// the resolution object it belongs to. Providers put it one level too high often
+// enough to lose whole plans, and the value they wrote is the value they meant.
+//
+// A confidence that is missing entirely is deliberately NOT filled in. It is the
+// field the assistant checks before it dares to answer at all - below 0.65 the
+// question is handed back to the user - so inventing one would be inventing
+// permission to answer.
+func coerceStructuredPlannerConfidence(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	stray, exists := root["confidence"]
+	if !exists {
+		return rawJSON, shape
+	}
+	resolution, ok := root["resolution"].(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	if _, alreadySet := resolution["confidence"]; alreadySet {
+		return rawJSON, shape
+	}
+	resolution["confidence"] = stray
+	delete(root, "confidence")
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// structuredPlannerNullableObjectFields are the contract's object-or-null fields.
+var structuredPlannerNullableObjectFields = map[string][]string{
+	"parameters": {"time_range", "compare_time_range", "day_part", "ranking"},
+}
+
+// coerceStructuredPlannerEmptyObjects repairs the three ways a model spells an
+// optional object: absent, an empty list, and the object wrapped in a
+// single-element list. Every other shape is left alone and still fails.
+func coerceStructuredPlannerEmptyObjects(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	changed := false
+	for parent, keys := range structuredPlannerNullableObjectFields {
+		nested, nestedOK := root[parent].(map[string]any)
+		if !nestedOK {
+			continue
+		}
+		for _, key := range keys {
+			value, exists := nested[key]
+			if !exists {
+				// An absent optional object says the same thing an explicit null
+				// says: this part of the question was not specified.
+				nested[key] = nil
+				changed = true
+				continue
+			}
+			list, isList := value.([]any)
+			if !isList {
+				continue
+			}
+			switch len(list) {
+			case 0:
+				nested[key] = nil
+			case 1:
+				// Models wrap the single object in a list: "ranking":[{...}]. The
+				// intent is unambiguous, and rejecting it lost a correct plan.
+				// Anything longer is a genuinely different shape and still fails.
+				object, isObject := list[0].(map[string]any)
+				if !isObject {
+					continue
+				}
+				nested[key] = object
+			default:
+				continue
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
+}
+
+// coerceStructuredPlannerMissingFields flattens objects in
+// resolution.missing_fields down to the field name they name. Anything that is
+// not an object with a string "field" is left untouched, so a genuinely
+// malformed value still fails validation.
+func coerceStructuredPlannerMissingFields(rawJSON string, shape any) (string, any) {
+	root, ok := shape.(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	resolution, ok := root["resolution"].(map[string]any)
+	if !ok {
+		return rawJSON, shape
+	}
+	entries, ok := resolution["missing_fields"].([]any)
+	if !ok {
+		return rawJSON, shape
+	}
+
+	changed := false
+	flattened := make([]any, 0, len(entries))
+	for _, entry := range entries {
+		object, isObject := entry.(map[string]any)
+		if !isObject {
+			flattened = append(flattened, entry)
+			continue
+		}
+		name, isString := object["field"].(string)
+		if !isString || strings.TrimSpace(name) == "" {
+			flattened = append(flattened, entry)
+			continue
+		}
+		flattened = append(flattened, name)
+		changed = true
+	}
+	if !changed {
+		return rawJSON, shape
+	}
+	resolution["missing_fields"] = flattened
+	patched, err := json.Marshal(root)
+	if err != nil {
+		return rawJSON, shape
+	}
+	return string(patched), root
 }

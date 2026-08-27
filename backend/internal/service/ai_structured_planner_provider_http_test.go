@@ -57,14 +57,20 @@ func TestGroqStructuredPlannerProviderUsesStrictJSONSchema(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// Pin a model that still accepts strict json_schema. The default model was
+	// moved to JSON object mode after Groq answered 400 json_validate_failed for
+	// every planner request it made in strict mode.
+	const strictModel = "openai/gpt-oss-120b"
+	t.Setenv("GROQ_PLANNER_MODEL", strictModel)
+
 	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"groq-test-key"}, server.URL)
 	response, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest())
 	if err != nil {
 		t.Fatalf("GenerateResolvedPlan: %v", err)
 	}
 
-	if received.Model != defaultGroqPlannerModel {
-		t.Fatalf("model = %q, want %q", received.Model, defaultGroqPlannerModel)
+	if received.Model != strictModel {
+		t.Fatalf("model = %q, want %q", received.Model, strictModel)
 	}
 	if received.MaxCompletionTokens != structuredPlannerMaxOutputTokens {
 		t.Fatalf("max_completion_tokens = %d, want %d", received.MaxCompletionTokens, structuredPlannerMaxOutputTokens)
@@ -78,7 +84,7 @@ func TestGroqStructuredPlannerProviderUsesStrictJSONSchema(t *testing.T) {
 	if additional, ok := received.ResponseFormat.JSONSchema.Schema["additionalProperties"].(bool); !ok || additional {
 		t.Fatalf("schema was not forwarded: %#v", received.ResponseFormat.JSONSchema.Schema)
 	}
-	if response.RawJSON != `{"answer":"ok"}` || response.Model != defaultGroqPlannerModel {
+	if response.RawJSON != `{"answer":"ok"}` || response.Model != strictModel {
 		t.Fatalf("response = %+v", response)
 	}
 	if response.InputTokens != 31 || response.OutputTokens != 12 {
@@ -139,7 +145,12 @@ func TestGroqStructuredPlannerConcurrentRequestsKeepPerRequestKeyOrder(t *testin
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		// JSON object mode appends the schema to the system prompt, so the test
+		// identity is the prefix rather than the whole message.
 		name := request.Messages[0].Content
+		if index := strings.Index(name, "\n"); index >= 0 {
+			name = name[:index]
+		}
 		mu.Lock()
 		calls[name] = append(calls[name], r.Header.Get("Authorization"))
 		callNumber := len(calls[name])
@@ -195,8 +206,11 @@ func TestGeminiStructuredPlannerProviderUsesResponseJSONSchema(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/v1beta/models/gemini-2.5-flash:generateContent" {
-			t.Errorf("path = %q", r.URL.Path)
+		// Derived from the constant so a model change never breaks this test for
+		// the wrong reason — what matters here is the shape of the path.
+		wantPath := "/v1beta/models/" + defaultGeminiPlannerModel + ":generateContent"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
 		}
 		if apiKey := r.Header.Get("x-goog-api-key"); apiKey != "gemini-test-key" {
 			t.Errorf("x-goog-api-key = %q", apiKey)
@@ -375,7 +389,10 @@ func TestStructuredPlannerModelChainPrefersPlannerThenSharedThenDefault(t *testi
 }
 
 func TestGroqStructuredPlannerUsesStrictSchemaForSupportedModel(t *testing.T) {
-	t.Setenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-20b")
+	// gpt-oss-20b was moved off strict mode after live measurement: Groq accepted
+	// the schema but the model could not satisfy it, so every planner request
+	// failed with 400 json_validate_failed. A larger model still uses strict mode.
+	t.Setenv("GROQ_PLANNER_MODEL", "openai/gpt-oss-120b")
 	var body []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ = io.ReadAll(r.Body)
@@ -534,8 +551,8 @@ func TestStructuredPlannerProvidersHonorCancellation(t *testing.T) {
 
 func TestStructuredPlannerProvidersRejectMissingKeys(t *testing.T) {
 	providers := []StructuredPlannerProvider{
-		NewGroqStructuredPlannerProvider(nil, []string{" ", ""}),
-		NewGeminiStructuredPlannerProvider(nil, nil),
+		NewGroqStructuredPlannerProvider(nil, []string{" ", ""}, nil),
+		NewGeminiStructuredPlannerProvider(nil, nil, nil),
 	}
 	for _, provider := range providers {
 		t.Run(string(provider.Name()), func(t *testing.T) {
@@ -544,5 +561,49 @@ func TestStructuredPlannerProvidersRejectMissingKeys(t *testing.T) {
 				t.Fatalf("error = %v, want missing API keys", err)
 			}
 		})
+	}
+}
+
+// The default planner model must ask for a plain JSON object and carry the
+// schema in the prompt. In strict mode this exact request returned HTTP 400 from
+// Groq every time, which took the whole provider out of the fallback chain.
+func TestGroqStructuredPlannerUsesJSONObjectModeForDefaultModel(t *testing.T) {
+	t.Setenv("GROQ_PLANNER_MODEL", "")
+	t.Setenv("GROQ_MODEL", "")
+
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(groqStructuredPlannerSuccessBody()))
+	}))
+	defer server.Close()
+
+	provider := newGroqStructuredPlannerProvider(server.Client(), []string{"key"}, server.URL)
+	if _, err := provider.GenerateResolvedPlan(context.Background(), structuredPlannerProviderTestRequest()); err != nil {
+		t.Fatalf("GenerateResolvedPlan: %v", err)
+	}
+
+	var sent struct {
+		Model    string `json:"model"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+		ResponseFormat struct {
+			Type string `json:"type"`
+		} `json:"response_format"`
+	}
+	if err := json.Unmarshal(body, &sent); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+	if sent.Model != defaultGroqPlannerModel {
+		t.Fatalf("model = %q, want the default %q", sent.Model, defaultGroqPlannerModel)
+	}
+	if sent.ResponseFormat.Type != "json_object" {
+		t.Fatalf("response_format = %q, want json_object", sent.ResponseFormat.Type)
+	}
+	if len(sent.Messages) == 0 || !strings.Contains(sent.Messages[0].Content, "JSON Schema") {
+		t.Fatal("the schema must be carried in the system prompt when the provider will not enforce it")
 	}
 }

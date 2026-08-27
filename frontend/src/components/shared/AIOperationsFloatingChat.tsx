@@ -971,11 +971,19 @@ export default function AIOperationsFloatingChat() {
         </div>
       </div>
 
-      {/* Floating Circular Trigger Button — fades out as the droplet expands over it */}
+      {/* Floating Circular Trigger Button — fades out as the droplet expands over it.
+          On phones the panel would cover the whole screen anyway, so the button
+          hands off to the full /ai-assistant page instead of opening it here. */}
       <button
         type="button"
         aria-label={labels.openAssistant}
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          if (window.matchMedia("(max-width: 639px)").matches) {
+            router.push("/ai-assistant");
+            return;
+          }
+          setIsOpen(true);
+        }}
         className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"

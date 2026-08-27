@@ -430,9 +430,10 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 	p.SchemaVersion = strings.TrimSpace(p.SchemaVersion)
 	p.OriginalQuestion = strings.TrimSpace(p.OriginalQuestion)
 	p.ResolvedQuestion = strings.TrimSpace(p.ResolvedQuestion)
-	p.Task = AITask(normalizeEnum(string(p.Task)))
+	p.Task = resolveTaskAlias(AITask(normalizeEnum(string(p.Task))))
 	p.Domain = ResolvedPlanDomain(normalizeEnum(string(p.Domain)))
 	p.Operation = ResolvedPlanOperation(normalizeEnum(string(p.Operation)))
+	p.Operation = alignOperationWithTask(p.Task, p.Operation)
 	p.Action = normalizeResolvedPlanAction(p.Action)
 	p.ToolHint = AIToolName(normalizeEnum(string(p.ToolHint)))
 	p.ResponseStyle = ResolvedPlanResponseStyle(normalizeEnum(string(p.ResponseStyle)))
@@ -440,14 +441,49 @@ func (p ResolvedPlan) Normalize() ResolvedPlan {
 
 	p.Parameters.Metrics = normalizeUniqueEnums(p.Parameters.Metrics)
 	p.Parameters.GroupBy = normalizeUniqueEnums(p.Parameters.GroupBy)
+	p.Parameters.GroupBy = fillImpliedGroupBy(p.Domain, p.Operation, p.Parameters.GroupBy)
+	p.Parameters.Metrics = fillImpliedMetrics(p.Domain, p.Operation, p.Parameters.Metrics)
 	p.Parameters.Entities = normalizeEntities(p.Parameters.Entities)
 	p.Parameters.TimeRange = normalizeTimeRange(p.Parameters.TimeRange)
 	p.Parameters.CompareTimeRange = normalizeTimeRange(p.Parameters.CompareTimeRange)
 	p.Parameters.DayPart = normalizeDayPart(p.Parameters.DayPart)
 	p.Parameters.Filters = normalizeFilters(p.Parameters.Filters)
 	p.Parameters.Ranking = normalizeRanking(p.Parameters.Ranking)
+	if p.Parameters.Ranking != nil && !operationSupportsRanking(p.Operation) {
+		// Asking for the top one by quantity IS a ranking, whatever the operation
+		// field was set to. "which menu sells best" came back as operation=retrieve
+		// carrying a complete ranking, and dropping the ranking left a plan with
+		// nothing to retrieve, which was then refused. The ranking is the more
+		// specific statement of what was asked, so it decides - but only where the
+		// task already allows ranking, and only where there is something to rank
+		// BY: a sales total carrying a stray ranking has no grouping and never
+		// will, so there the ranking is still the stray field and is dropped.
+		promoted := fillImpliedGroupBy(p.Domain, ResolvedPlanOperationRank, p.Parameters.GroupBy)
+		if len(promoted) > 0 && taskAllowsOperation(p.Task, ResolvedPlanOperationRank) {
+			p.Operation = ResolvedPlanOperationRank
+		} else {
+			p.Parameters.Ranking = nil
+		}
+	}
+	// A ranking names the metric it orders by, and the contract already insists
+	// that metric appears in the list. When the model filled in the ranking and
+	// left the list empty it said the same thing twice over, once; taking it from
+	// there beats refusing a plan that is not actually ambiguous.
+	if len(p.Parameters.Metrics) == 0 && p.Parameters.Ranking != nil && p.Parameters.Ranking.Metric != "" {
+		p.Parameters.Metrics = []ResolvedPlanMetric{p.Parameters.Ranking.Metric}
+	}
+	// The grouping was filled in above against the operation as written. A
+	// ranking may have changed it since, and rank needs a grouping, so the same
+	// rule is applied once more; it does nothing when a grouping already exists.
+	p.Parameters.GroupBy = fillImpliedGroupBy(p.Domain, p.Operation, p.Parameters.GroupBy)
 	p.Resolution.InheritedFields = normalizeInheritedFields(p.Resolution.InheritedFields)
+	for i := range p.Resolution.InheritedFields {
+		p.Resolution.InheritedFields[i].Field = qualifyPlanField(p.Resolution.InheritedFields[i].Field)
+	}
 	p.Resolution.MissingFields = normalizeUniqueEnums(p.Resolution.MissingFields)
+	for i, field := range p.Resolution.MissingFields {
+		p.Resolution.MissingFields[i] = qualifyPlanField(field)
+	}
 	// A field cannot be both carried over from an earlier turn and still missing.
 	// Models sometimes list the same field in both; the inherited entry carries a
 	// value, so it wins and the contradictory "missing" entry is dropped.
@@ -515,8 +551,8 @@ func (p ResolvedPlan) Validate() error {
 		if len(p.Parameters.GroupBy) == 0 {
 			return errors.New("resolved plan: operation=rank requires parameters.group_by")
 		}
-	} else if p.Parameters.Ranking != nil {
-		return errors.New("resolved plan: parameters.ranking is only allowed for operation=rank")
+	} else if p.Parameters.Ranking != nil && !operationSupportsRanking(p.Operation) {
+		return fmt.Errorf("resolved plan: parameters.ranking is not allowed for operation %q", p.Operation)
 	}
 	if p.Operation == ResolvedPlanOperationBreakdown && len(p.Parameters.GroupBy) == 0 {
 		return errors.New("resolved plan: operation=breakdown requires parameters.group_by")
@@ -853,6 +889,76 @@ func (p ResolvedPlanPolicy) validate(task AITask, operation ResolvedPlanOperatio
 	return nil
 }
 
+// taskAliases maps the names providers write for a task onto the names the
+// contract uses. Every entry is a real answer that was thrown away: the model
+// wrote the OPERATION where the task belongs - "retrieve", "recommend",
+// "refuse" - and the whole plan was discarded over a label, while the rest of it
+// described the question correctly.
+//
+// "refuse" resolves to risky_action rather than out_of_scope on purpose. Both
+// refuse, so the user sees a refusal either way, and risky_action is the more
+// cautious reading: it keeps the plan inside the write-safety path instead of
+// filing a write command away as an unrelated question.
+var taskAliases = map[AITask]AITask{
+	"retrieve":  AITaskRetrieveFact,
+	"analyze":   AITaskAnalyzeData,
+	"recommend": AITaskRecommendAction,
+	"refuse":    AITaskRiskyAction,
+	"clarify":   AITaskUnclear,
+	"chat":      AITaskGeneralChat,
+	"generate":  AITaskRestaurantContent,
+	"explain":   AITaskExplainConcept,
+	"help":      AITaskScopeQuestion,
+}
+
+func resolveTaskAlias(task AITask) AITask {
+	if isSupportedResolvedPlanTask(task) {
+		return task
+	}
+	if aliased, ok := taskAliases[task]; ok {
+		return aliased
+	}
+	return task
+}
+
+// soleOperationForTask reports the one operation a task can carry, when it has
+// exactly one. These are all the non-analytical tasks, where the task alone
+// decides what happens: an out_of_scope plan refuses, an unclear plan asks.
+func soleOperationForTask(task AITask) (ResolvedPlanOperation, bool) {
+	switch task {
+	case AITaskExplainConcept:
+		return ResolvedPlanOperationExplain, true
+	case AITaskScopeQuestion:
+		return ResolvedPlanOperationHelp, true
+	case AITaskGeneralChat:
+		return ResolvedPlanOperationChat, true
+	case AITaskRestaurantContent:
+		return ResolvedPlanOperationGenerate, true
+	case AITaskUnclear:
+		return ResolvedPlanOperationClarify, true
+	case AITaskOutOfScope:
+		return ResolvedPlanOperationRefuse, true
+	default:
+		return "", false
+	}
+}
+
+// alignOperationWithTask settles a disagreement between the two fields in favour
+// of the task, but only where the task leaves no choice. A model that answered
+// out_of_scope with operation=chat still means "do not do this"; discarding the
+// plan for the mismatch replaced a refusal with an apology. Analytical tasks
+// allow several operations, so a mismatch there is left to fail rather than
+// guessed at.
+func alignOperationWithTask(task AITask, operation ResolvedPlanOperation) ResolvedPlanOperation {
+	if taskAllowsOperation(task, operation) {
+		return operation
+	}
+	if sole, ok := soleOperationForTask(task); ok {
+		return sole
+	}
+	return operation
+}
+
 func isSupportedResolvedPlanTask(task AITask) bool {
 	return containsValue(resolvedPlanTasks, task)
 }
@@ -870,9 +976,21 @@ func taskAllowsOperation(task AITask, operation ResolvedPlanOperation) bool {
 			ResolvedPlanOperationBreakdown, ResolvedPlanOperationTrend, ResolvedPlanOperationForecast,
 		}, operation)
 	case AITaskAnalyzeData:
+		// rank belongs here for the same reason compare and breakdown do: "which
+		// menu earns the best margin" is analysis that happens to be ordered.
+		// retrieve_fact already allowed it, so excluding it here only decided the
+		// outcome by which of two interchangeable labels the model picked.
+		//
+		// retrieve, list and detail are here for exactly that reason too. The
+		// golden set labels "how much did we sell yesterday" and "what is running
+		// low in stock" as analyze_data, and their natural operations are retrieve
+		// and list; rejecting the pair threw away the whole plan and the user saw
+		// an apology, decided by nothing but which of two labels the model chose.
 		return containsValue([]ResolvedPlanOperation{
 			ResolvedPlanOperationAnalyze, ResolvedPlanOperationCompare, ResolvedPlanOperationSummarize,
 			ResolvedPlanOperationBreakdown, ResolvedPlanOperationTrend, ResolvedPlanOperationForecast,
+			ResolvedPlanOperationRank, ResolvedPlanOperationRetrieve, ResolvedPlanOperationList,
+			ResolvedPlanOperationDetail,
 		}, operation)
 	case AITaskRecommendAction, AITaskRestaurantAdvice:
 		return operation == ResolvedPlanOperationRecommend || operation == ResolvedPlanOperationDraftAction
@@ -1110,4 +1228,104 @@ func containsValue[T comparable](values []T, target T) bool {
 		}
 	}
 	return false
+}
+
+// impliedGroupDimensions maps the domains where a ranking has exactly one
+// sensible dimension. "Which menu has the best margin" can only be grouped by
+// menu, so requiring the model to restate it turned a correct plan into a
+// rejection. Domains where a ranking is genuinely ambiguous — sales could be
+// ranked by menu, weekday or hour — are deliberately absent, so those still have
+// to say what they are ranking.
+var impliedGroupDimensions = map[ResolvedPlanDomain]ResolvedPlanGroupDimension{
+	ResolvedPlanDomainMenu:      ResolvedPlanGroupMenu,
+	ResolvedPlanDomainInventory: ResolvedPlanGroupIngredient,
+	ResolvedPlanDomainTable:     ResolvedPlanGroupTable,
+	ResolvedPlanDomainStaff:     ResolvedPlanGroupStaffMember,
+}
+
+// fillImpliedGroupBy supplies the grouping a ranking or breakdown implies when
+// the plan left it empty. It never overrides a stated grouping and never invents
+// one for an ambiguous domain.
+// qualifiedPlanFields maps the bare names models write for nested fields onto
+// the qualified names the contract uses. Providers wrote "metrics" where the
+// contract says "parameters.metrics" often enough to fail otherwise-correct
+// plans; the two name the same field, so the short form is accepted and
+// rewritten rather than rejected.
+var qualifiedPlanFields = map[string]ResolvedPlanField{
+	"metrics":            ResolvedPlanFieldMetrics,
+	"entities":           ResolvedPlanFieldEntities,
+	"time_range":         ResolvedPlanFieldTimeRange,
+	"compare_time_range": ResolvedPlanFieldCompareTimeRange,
+	"day_part":           ResolvedPlanFieldDayPart,
+	"filters":            ResolvedPlanFieldFilters,
+	"ranking":            ResolvedPlanFieldRanking,
+	"group_by":           ResolvedPlanFieldGroupBy,
+}
+
+// qualifyPlanField expands a bare nested field name; anything else is returned
+// unchanged so an unknown field still fails validation.
+func qualifyPlanField(field ResolvedPlanField) ResolvedPlanField {
+	if qualified, ok := qualifiedPlanFields[strings.TrimSpace(string(field))]; ok {
+		return qualified
+	}
+	return field
+}
+
+// fillImpliedMetrics supplies the metric an operation states outright. A sales
+// question asking for a trend is a sales_trend question whether or not the model
+// also wrote the metric down, and without it the plan scores identically to a
+// plain revenue total and is routed to the summary tool - which is what happened
+// to "is revenue up or down against last week" in live measurement.
+func fillImpliedMetrics(
+	domain ResolvedPlanDomain,
+	operation ResolvedPlanOperation,
+	metrics []ResolvedPlanMetric,
+) []ResolvedPlanMetric {
+	// A summary or an analysis with no metric named is a request for the broad
+	// picture, which is what overview means. Providers leave the list out for
+	// exactly those two operations, and the plan was thrown away for it.
+	if len(metrics) == 0 &&
+		(operation == ResolvedPlanOperationSummarize || operation == ResolvedPlanOperationAnalyze) {
+		return []ResolvedPlanMetric{ResolvedPlanMetricOverview}
+	}
+	if domain != ResolvedPlanDomainSales || operation != ResolvedPlanOperationTrend {
+		return metrics
+	}
+	if containsValue(metrics, ResolvedPlanMetricSalesTrend) {
+		return metrics
+	}
+	return append([]ResolvedPlanMetric{ResolvedPlanMetricSalesTrend}, metrics...)
+}
+
+func fillImpliedGroupBy(
+	domain ResolvedPlanDomain,
+	operation ResolvedPlanOperation,
+	groupBy []ResolvedPlanGroupDimension,
+) []ResolvedPlanGroupDimension {
+	if len(groupBy) > 0 {
+		return groupBy
+	}
+	if operation != ResolvedPlanOperationRank && operation != ResolvedPlanOperationBreakdown {
+		return groupBy
+	}
+	implied, ok := impliedGroupDimensions[domain]
+	if !ok {
+		return groupBy
+	}
+	return []ResolvedPlanGroupDimension{implied}
+}
+
+// operationSupportsRanking lists the operations where an ordered result is part
+// of the request rather than stray output. "Recommend the five ingredients with
+// the fewest days left" is a recommendation that is inherently ranked, and
+// rejecting it cost a correct plan from the provider; the same is true of a list
+// that asks for the lowest or highest few. Operations that cannot use an order
+// have their ranking dropped during Normalize instead of failing the plan.
+func operationSupportsRanking(operation ResolvedPlanOperation) bool {
+	switch operation {
+	case ResolvedPlanOperationRank, ResolvedPlanOperationRecommend, ResolvedPlanOperationList:
+		return true
+	default:
+		return false
+	}
 }

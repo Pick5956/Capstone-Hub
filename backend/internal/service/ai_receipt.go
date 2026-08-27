@@ -8,6 +8,7 @@ package service
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 // ReceiptDraft is the proposed expense parsed from a bill photo. Every value is a
@@ -31,6 +32,66 @@ type ReceiptDraft struct {
 
 var receiptExpenseCategories = map[string]struct{}{
 	"ingredient": {}, "labor": {}, "rent": {}, "utilities": {}, "equipment": {}, "other": {},
+}
+
+// The frontend downscales a photo to roughly 200 KB before upload, so this is
+// generous for a real bill while keeping a direct API caller from pushing the
+// global 8 MB body limit straight through to the vision provider.
+const maxReceiptImageBytes = 1_500_000
+
+var receiptAllowedMimeTypes = map[string]struct{}{
+	"image/jpeg": {}, "image/png": {}, "image/webp": {},
+}
+
+// validateReceiptImage checks the upload before any provider call and returns the
+// mime type to send. The client-declared type is only a hint: the bytes are
+// sniffed and that result wins, so a PDF labelled "image/jpeg" is rejected.
+func validateReceiptImage(imageBase64, mimeType string) (string, error) {
+	claimed := normalizeMimeType(mimeType)
+	if claimed == "" {
+		claimed = "image/jpeg"
+	}
+	if _, ok := receiptAllowedMimeTypes[claimed]; !ok {
+		return "", fmt.Errorf("unsupported image type %q: use JPEG, PNG or WebP", claimed)
+	}
+
+	encoded := strings.TrimSpace(imageBase64)
+	// Tolerate a full data URL ("data:image/jpeg;base64,....") as well as raw base64.
+	if marker := strings.Index(encoded, ";base64,"); strings.HasPrefix(encoded, "data:") && marker >= 0 {
+		encoded = encoded[marker+len(";base64,"):]
+	}
+	if encoded == "" {
+		return "", errors.New("an image is required")
+	}
+	// Reject on the encoded length first: decoding is ~3/4 of it, so this refuses
+	// an oversized payload without allocating the decoded copy.
+	if len(encoded) > base64.StdEncoding.EncodedLen(maxReceiptImageBytes) {
+		return "", fmt.Errorf("image is too large: keep it under %d KB", maxReceiptImageBytes/1000)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", errors.New("image must be valid base64")
+	}
+	if len(raw) == 0 {
+		return "", errors.New("an image is required")
+	}
+	if len(raw) > maxReceiptImageBytes {
+		return "", fmt.Errorf("image is too large: keep it under %d KB", maxReceiptImageBytes/1000)
+	}
+
+	detected := normalizeMimeType(http.DetectContentType(raw))
+	if _, ok := receiptAllowedMimeTypes[detected]; !ok {
+		return "", fmt.Errorf("the upload is not a JPEG, PNG or WebP image (detected %q)", detected)
+	}
+	return detected, nil
+}
+
+func normalizeMimeType(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if semicolon := strings.Index(normalized, ";"); semicolon >= 0 {
+		normalized = strings.TrimSpace(normalized[:semicolon])
+	}
+	return normalized
 }
 
 const receiptExtractPrompt = `You are reading a photo of an expense receipt/bill for a Thai restaurant.
@@ -50,7 +111,7 @@ Return ONLY the JSON object.`
 func (s *AIService) executeReceiptGemini(imageBase64, mimeType, apiKey string) (*ReceiptDraft, error) {
 	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
 	if model == "" {
-		model = "gemini-2.5-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 	aiStage("call", "Gemini receipt-scan model=%s", model)
 
@@ -82,11 +143,8 @@ func (s *AIService) executeReceiptGemini(imageBase64, mimeType, apiKey string) (
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return nil, errRateLimit
-		}
-		return nil, newAIProviderHTTPError("Gemini", "receipt scan", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "receipt scan", model, resp); statusErr != nil {
+		return nil, statusErr
 	}
 
 	var parsed geminiGenerateResponse
@@ -137,26 +195,33 @@ func (s *AIService) extractReceiptWithRotation(imageBase64, mimeType string) (*R
 	if len(keys) == 0 {
 		return nil, errors.New("GEMINI_API_KEY is not configured")
 	}
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "gemini", keys, &s.geminiKeyIndex)
+	if len(attempts) == 0 {
+		return nil, allKeysRateLimitedError("Gemini receipt", len(keys), releaseAt)
+	}
+
 	var lastErr error
-	numKeys := len(keys)
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.geminiKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
-		draft, err := s.executeReceiptGemini(imageBase64, mimeType, currentKey)
+	for _, attempt := range attempts {
+		draft, err := s.executeReceiptGemini(imageBase64, mimeType, attempt.Key)
 		if err == nil {
+			s.keyHealth.clear("gemini", attempt.Index)
 			return draft, nil
 		}
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Gemini receipt key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Gemini receipt: %v — skipping remaining keys", err)
+			return nil, err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Gemini receipt key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini receipt key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Gemini receipt key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
-	// All keys exhausted while rate limited → surface as a quota error so the API
-	// returns 429 and the UI can tell the owner to retry shortly.
 	if errors.Is(lastErr, errRateLimit) {
-		return nil, ErrAIQuotaExceeded
+		return nil, allKeysRateLimitedError("Gemini receipt", len(keys), s.keyHealth.earliestRelease("gemini", len(keys)))
 	}
 	return nil, lastErr
 }
@@ -166,11 +231,9 @@ func (s *AIService) ExtractReceiptForOwner(actor AIActorContext, imageBase64, mi
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("authenticated restaurant owner context is required")
 	}
-	if strings.TrimSpace(imageBase64) == "" {
-		return nil, errors.New("an image is required")
+	verifiedMimeType, err := validateReceiptImage(imageBase64, mimeType)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(mimeType) == "" {
-		mimeType = "image/jpeg"
-	}
-	return s.extractReceiptWithRotation(imageBase64, mimeType)
+	return s.extractReceiptWithRotation(strings.TrimSpace(imageBase64), verifiedMimeType)
 }

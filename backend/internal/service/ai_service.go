@@ -32,6 +32,9 @@ type AIService struct {
 	// across requests. Runtime mode and provider ordering are resolved per ask.
 	structuredPlannerProviders []StructuredPlannerProvider
 	observability              *aiObservability
+	// keyHealth parks rate-limited API keys until their window resets so the next
+	// request skips them instead of spending a round trip rediscovering the 429.
+	keyHealth providerKeyHealth
 }
 
 func ProvideAIService(repo *repository.AIRepository) *AIService {
@@ -42,8 +45,10 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 		},
 	}
 	service.structuredPlannerProviders = []StructuredPlannerProvider{
-		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys()),
-		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys()),
+		// The same key-health tracker the chat flows use, so a key parked after a
+		// 429 in one path is skipped in the other instead of being rediscovered.
+		NewGroqStructuredPlannerProvider(service.httpClient, service.getGroqKeys(), &service.keyHealth),
+		NewGeminiStructuredPlannerProvider(service.httpClient, service.getGeminiKeys(), &service.keyHealth),
 	}
 	service.observability = newAIObservability()
 	return service
@@ -78,8 +83,27 @@ func ProvideAIServiceWithStores(
 	return service
 }
 
+// clarifyConfidenceFloor is the line under which the assistant hands the
+// question back instead of guessing. It gates the second-chance rewrite as well,
+// so the two can never drift apart and leave a question rewritten but still
+// turned away, or turned away without the rewrite being tried.
+const clarifyConfidenceFloor = 0.65
+
+// isAnalyticalTask lists the labels that mean "a question about this shop's
+// own numbers". Deliberately excludes unclear, out_of_scope and risky_action:
+// those have gates of their own further down and must keep reaching them.
+func isAnalyticalTask(task AITask) bool {
+	switch task {
+	case AITaskRetrieveFact, AITaskAnalyzeData, AITaskRecommendAction, AITaskRestaurantAdvice:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 	provider := s.getAIProvider()
+	var lastErr error
 	for _, adapter := range s.orderedProviderAdapters() {
 		if !adapter.Configured() {
 			if provider != "auto" {
@@ -91,16 +115,24 @@ func (s *AIService) classifyIntent(question string) (AIRouterResult, error) {
 		if err == nil {
 			return result, nil
 		}
+		lastErr = err
 		aiStage("warn", "%s classifier failed: %v", adapter.DisplayName(), err)
 	}
 
-	// Preserve analytical usefulness if provider classification is unavailable.
+	if lastErr == nil {
+		lastErr = errors.New("no AI provider is configured")
+	}
+	// The reason travels with the error. It used to be replaced by a generic
+	// sentence here, which erased the difference between an exhausted daily
+	// budget, an unreachable provider and a missing key - and the caller needs
+	// exactly that difference to tell the owner what happened and when to come
+	// back.
 	return AIRouterResult{
 		Task:                AITaskAnalyzeData,
 		Confidence:          0.5,
 		NeedsRestaurantData: true,
 		Risk:                "low",
-	}, errors.New("failed to classify via any model, falling back to default analysis")
+	}, fmt.Errorf("failed to classify via any model: %w", lastErr)
 }
 
 func parseRouterJSON(raw string) (AIRouterResult, error) {
@@ -162,6 +194,23 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 		return nil, err
 	}
 	request.History = history
+
+	if aiOrchestrationMode() == aiOrchestratorJoyboy {
+		aiStage("input", "joyboy | question_length=%d history_turns=%d",
+			len([]rune(request.Question)), len(history))
+		response, joyboyErr := s.askJoyboy(ctx, actor, &request)
+		if joyboyErr != nil {
+			return nil, joyboyErr
+		}
+		if session == nil {
+			return response, nil
+		}
+		response.ConversationID = session.conversation.ID
+		if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
+			return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
+		}
+		return response, nil
+	}
 
 	questionParts := splitSystemDocsAndLiveQuestion(originalQuestion)
 	var docsResponse *AIAskResponse
@@ -257,6 +306,8 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// structured path still needs (an ordinal such as "รองลงมา").
 	askedQuestion := question
 	var routerResult AIRouterResult
+	usedHistory := false
+	rewroteFromHistory := false
 	if prepared != nil {
 		question = prepared.plan.ResolvedQuestion
 		routerResult = prepared.router
@@ -270,17 +321,24 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("route", "comparison continuation resolved from history")
 			aiDebug("continuation → %q", resolved)
 			question = resolved
+			usedHistory = true
 		} else if resolved, rewritten := s.resolveContextualQuestion(question, history); rewritten {
 			aiStage("route", "context_rewritten=true resolved_question_length=%d", len([]rune(resolved)))
 			question = resolved
+			usedHistory = true
 		}
 
 		// Legacy mode: context rewrite and JSON router remain available as an
 		// immediate rollback path while the structured planner is evaluated.
 		routerResult, err = s.classifyIntent(question)
 		if err != nil {
-			aiStage("route", "classifier unavailable (%v) → default to analysis", err)
-			err = nil
+			// The classifier is the one step nothing downstream can replace: without it
+			// there is no reading of the question at all, only a keyword guess. Carrying
+			// on used to hide an outage behind an answer that looked ordinary, so the
+			// owner could not tell a full answer from a fallback one. Say what happened
+			// instead.
+			aiStage("warn", "classifier unavailable (%v) → telling the owner instead of guessing", err)
+			return nil, aiProviderOutageError(err)
 		} else {
 			aiStage("route", "task=%s tool=%s conf=%.2f risk=%s needs_data=%v",
 				routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence, routerResult.Risk, routerResult.NeedsRestaurantData)
@@ -344,8 +402,55 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
+	// Second chance before giving up. The classifier only ever sees the question,
+	// so a follow-up whose wording the keyword detector did not recognise arrives
+	// here looking vague rather than referential — which is how "ขอวิธีทำสามรายการ
+	// นี้หน่อย" was answered with "please rephrase" while the three items sat in
+	// the previous turn. That word list can never be finished, so the trigger is
+	// the classifier's own uncertainty instead: rewrite against history and ask
+	// once more. It costs one extra call, and only on questions that were about to
+	// be turned away.
+	if prepared == nil && !usedHistory && !structuredFollowUp && len(history) > 0 &&
+		(routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) {
+		if resolved, rewritten := s.rewriteQuestionWithHistory(question, history); rewritten {
+			aiStage("route", "classifier unsure (conf=%.2f) → rewrote from history, asking again", routerResult.Confidence)
+			aiDebug("second chance → %q", resolved)
+			question = resolved
+			usedHistory = true
+			rewroteFromHistory = true
+			if retried, retryErr := s.classifyIntent(question); retryErr != nil {
+				aiStage("warn", "second-chance classify failed (%v) → keeping the first result", retryErr)
+			} else {
+				routerResult = retried
+				if rescued, ok := applyKeywordBackstop(routerResult, question); ok {
+					routerResult = rescued
+				}
+				aiStage("route", "second chance task=%s tool=%s conf=%.2f",
+					routerResult.Task, aiToolOrDash(routerResult.SuggestedTool), routerResult.Confidence)
+			}
+		}
+	}
+
+	// The classifier answers 0.40 for two situations that need opposite
+	// treatment: it did not understand the question, and it understood the
+	// question perfectly but no tool can serve it. "If I sell 20% more, what do I
+	// earn" is the second - a clear question with no tool behind it, because
+	// every tool reads what already happened. Handing it back with a menu of
+	// unrelated suggestions reads as "I did not understand you", which is false
+	// and is what the owner sees.
+	//
+	// Once the rewrite has resolved the question against history, the first
+	// situation is ruled out: we know what is being asked. So an analytical
+	// question goes on to the free-form path, where the model answers from the
+	// snapshot instead of being turned away.
+	answeredFromContext := rewroteFromHistory && isAnalyticalTask(routerResult.Task)
+	if answeredFromContext {
+		aiStage("route", "resolved from history but no tool fits → answering free-form instead of asking back")
+	}
+
 	// Step 3: Check Confidence Level and Unclear Input
-	if (routerResult.Confidence < 0.65 || routerResult.Task == AITaskUnclear) && !structuredFollowUp {
+	if (routerResult.Confidence < clarifyConfidenceFloor || routerResult.Task == AITaskUnclear) &&
+		!structuredFollowUp && !answeredFromContext {
 		aiStage("flow", "clarify — unclear/low confidence (conf=%.2f) → ask user to specify", routerResult.Confidence)
 		clarification := "ผมอยากช่วยให้ตรงที่สุดครับ รบกวนระบุให้ชัดขึ้นอีกนิดได้ไหมครับ เช่น หมายถึงเมนูขายดี เมนูกำไรดี ยอดขายรวม หรือเช็กสต๊อกวัตถุดิบครับ"
 		model := "local-router-fallback"
@@ -417,8 +522,8 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 
 	intent = mapTaskToIntent(routerResult.Task)
 	needsData := routerResult.NeedsRestaurantData || intent == AIIntentAnalysis
-	if structuredFollowUp {
-		// It is a read-only ranking question regardless of how the router labelled it.
+	if structuredFollowUp || answeredFromContext {
+		// A read-only question about this shop, whatever label the router put on it.
 		intent = AIIntentAnalysis
 		needsData = true
 	}
@@ -445,11 +550,15 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			History:  history,
 			Mode:     aiProviderAnswerConversation,
 		}
+		var lastProviderErr error
 		for _, adapter := range s.orderedProviderAdapters() {
 			if !adapter.Configured() {
 				continue
 			}
 			answer, adapterErr := adapter.Answer(request)
+			if adapterErr != nil {
+				lastProviderErr = adapterErr
+			}
 			if adapterErr == nil {
 				return &AIAskResponse{
 					Answer:   answer.Text,
@@ -462,7 +571,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 			aiStage("warn", "conversational %s failed: %v", adapter.DisplayName(), adapterErr)
 		}
 
-		return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
+		return nil, aiProviderOutageError(lastProviderErr)
 	}
 
 	// Step 6: Analytical Flow (Needs Data = True, DB snapshot load)
@@ -476,7 +585,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// an error measured on this shop's own history, and is always framed as a guess.
 	if fcResp, handled, fErr := s.answerSalesForecast(restaurantID, question); handled {
 		aiStage("flow", "sales forecast — seasonal moving average + backtest")
-		return fcResp, nil
+		return s.narrateLocalAnswer(question, fcResp), nil
 	} else if fErr != nil {
 		aiStage("warn", "sales forecast failed (%v) → snapshot flow", fErr)
 	}
@@ -486,13 +595,13 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// single-metric tool can give, so they run before those tools.
 	if cmpResp, handled, cErr := s.answerWeekdayComparison(restaurantID, question); handled {
 		aiStage("flow", "weekday comparison — per-weekday range query")
-		return cmpResp, nil
+		return s.narrateLocalAnswer(question, cmpResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "weekday comparison failed (%v) → snapshot flow", cErr)
 	}
 	if cmpResp, handled, cErr := s.answerMenuComparison(restaurantID, question); handled {
 		aiStage("flow", "menu comparison — per-menu range query")
-		return cmpResp, nil
+		return s.narrateLocalAnswer(question, cmpResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "menu comparison failed (%v) → snapshot flow", cErr)
 	}
@@ -501,7 +610,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// within a day, finer than anything the day-level snapshot holds.
 	if partResp, handled, pErr := s.answerDayPartSalesQuery(restaurantID, question); handled {
 		aiStage("flow", "day-part sales query — hour-scoped range query")
-		return partResp, nil
+		return s.narrateLocalAnswer(question, partResp), nil
 	} else if pErr != nil {
 		aiStage("warn", "day-part sales query failed (%v) → snapshot flow", pErr)
 	}
@@ -511,7 +620,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// is not siphoned off as a plain sales question.
 	if profitResp, handled, prErr := s.answerTotalProfitQuery(restaurantID, question); handled {
 		aiStage("flow", "total-profit query — range-scoped revenue minus cost")
-		return profitResp, nil
+		return s.narrateLocalAnswer(question, profitResp), nil
 	} else if prErr != nil {
 		aiStage("warn", "total-profit query failed (%v) → snapshot flow", prErr)
 	}
@@ -520,7 +629,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// from the baht totals below.
 	if qtyResp, handled, qErr := s.answerTotalQuantityQuery(restaurantID, question); handled {
 		aiStage("flow", "total-quantity query — units sold across the period")
-		return qtyResp, nil
+		return s.narrateLocalAnswer(question, qtyResp), nil
 	} else if qErr != nil {
 		aiStage("warn", "total-quantity query failed (%v) → snapshot flow", qErr)
 	}
@@ -530,7 +639,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// not limited to the rolling snapshot window.
 	if datedResp, handled, derr := s.answerDatedSalesQuery(restaurantID, question); handled {
 		aiStage("flow", "dated-sales — range query (bypassing rolling window)")
-		return datedResp, nil
+		return s.narrateLocalAnswer(question, datedResp), nil
 	} else if derr != nil {
 		aiStage("warn", "dated-sales failed (%v) → snapshot flow", derr)
 	}
@@ -539,7 +648,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// rolling window, so it works even when today has no sales.
 	if covResp, handled, cErr := s.answerDataCoverage(restaurantID, question); handled {
 		aiStage("flow", "data-coverage query")
-		return covResp, nil
+		return s.narrateLocalAnswer(question, covResp), nil
 	} else if cErr != nil {
 		aiStage("warn", "data-coverage query failed (%v) → snapshot flow", cErr)
 	}
@@ -548,7 +657,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 	// own numbers, instead of the rolling analysis window.
 	if menuResp, handled, mErr := s.answerPeriodMenuQuery(restaurantID, question, askedQuestion); handled {
 		aiStage("flow", "menu-period query — range query (bypassing rolling window)")
-		return menuResp, nil
+		return s.narrateLocalAnswer(question, menuResp), nil
 	} else if mErr != nil {
 		aiStage("warn", "menu-period query failed (%v) → snapshot flow", mErr)
 	}
@@ -689,7 +798,10 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		if toolErr != nil {
 			aiStage("warn", "deterministic-first tool %s failed (%v) → LLM flow", toolToRun, toolErr)
 		} else if answer, ok := localToolAnswer(result); ok {
-			aiStage("flow", "deterministic-first: %s (skipping free-form LLM)", toolToRun)
+			aiStage("flow", "deterministic-first: %s (numbers computed locally)", toolToRun)
+			// The figures are already final; the LLM only writes a lead-in and is
+			// dropped if it touches a number it was not given.
+			answer = s.narrateDeterministicAnswer(question, answer, computeProactiveInsights(snapshot))
 			hinted, assumed := appendScopeHint(question, answer, todayHasNoSales(snapshot))
 			return &AIAskResponse{
 				Answer:       hinted,
@@ -760,13 +872,16 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}, nil
 	}
 
+	var analyticalErr error
 	for _, adapter := range s.orderedProviderAdapters() {
 		if !adapter.Configured() {
 			continue
 		}
-		if resp, err := executeAnalytical(adapter); err == nil {
+		resp, adapterErr := executeAnalytical(adapter)
+		if adapterErr == nil {
 			return resp, nil
 		}
+		analyticalErr = adapterErr
 	}
 
 	// Fallback to local hardcoded tool template only if the LLM analytical loop fails
@@ -787,7 +902,7 @@ func (s *AIService) askOperationsCore(restaurantID uint, req *AIAskRequest, prep
 		}
 	}
 
-	return nil, errors.New("AI ทุก provider ไม่สามารถตอบได้ขณะนี้ครับ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง")
+	return nil, aiProviderOutageError(analyticalErr)
 }
 
 func (s *AIService) OperationsSnapshot(restaurantID uint) (*AISnapshot, error) {

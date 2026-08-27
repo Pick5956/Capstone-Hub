@@ -232,7 +232,7 @@ export default function ReportsPage() {
                             key={day.order_date}
                             onClick={() => toggleDay(day.order_date)}
                             aria-haspopup="dialog"
-                            className={`ui-row-lift cursor-pointer ${open ? "bg-gray-100 dark:bg-gray-900" : "bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
+                            className={`cursor-pointer transition-colors ${open ? "bg-gray-100 dark:bg-gray-900" : "bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
                           >
                             <td className="px-4 py-2.5 font-medium">
                               <span className="inline-flex items-center gap-1.5">
@@ -326,7 +326,7 @@ export default function ReportsPage() {
                           onClick={() => void openReceipt(order.order_id)}
                           aria-haspopup="dialog"
                           aria-busy={receiptLoadingId === order.order_id}
-                          className={`ui-row-lift cursor-pointer bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
+                          className={`cursor-pointer bg-white transition-colors hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
                         >
                           <td className="py-1.5 font-mono">{order.order_number}</td>
                           <td className="py-1.5 truncate">{order.table_label || order.customer_name || "-"}</td>

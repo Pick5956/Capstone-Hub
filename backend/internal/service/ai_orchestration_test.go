@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -107,14 +106,15 @@ func TestPlannerModeFallsBackToLegacyWhenAllProvidersFail(t *testing.T) {
 		Question: "แล้วอันดับสองล่ะ",
 		History:  []AIConversationMessage{{Role: "user", Content: "เมนูไหนขายดี"}},
 	})
-	// The legacy flow runs; with no repository wired in this fixture it stops at
-	// the snapshot, which is proof the request left the planner path rather than
-	// returning the canned apology.
+	// The legacy flow runs and reports its own failure. In this fixture the legacy
+	// classifier is not stubbed either, so what comes back is the outage error —
+	// which is the point: with every provider down the owner is told so, instead
+	// of being handed a keyword guess dressed up as an answer.
 	if err == nil {
 		t.Fatal("expected the legacy flow to run and report its own error")
 	}
-	if !strings.Contains(err.Error(), "repository") {
-		t.Fatalf("error = %v, want the legacy snapshot path", err)
+	if !errors.Is(err, ErrAIProviderUnavailable) {
+		t.Fatalf("error = %v, want ErrAIProviderUnavailable", err)
 	}
 	if answerProvider.classifyCalls == 0 {
 		t.Fatal("legacy router was never reached, so the planner did not fall back")
@@ -243,13 +243,34 @@ func TestPlannerUnavailableDomainBecomesSafeCapabilityMessage(t *testing.T) {
 	}
 }
 
-func TestPreparedResponseRejectsToolOutsideCandidateSet(t *testing.T) {
-	prepared := &aiPreparedOrchestration{candidateTools: []AIToolName{AIToolGetSalesSummary}}
+func TestPreparedResponseToolStaysInsideTheReadOnlyAllowlist(t *testing.T) {
+	readOnlyPlan := ResolvedPlan{Policy: ResolvedPlanPolicy{ReadOnly: true}}
+	prepared := &aiPreparedOrchestration{
+		plan:           readOnlyPlan,
+		candidateTools: []AIToolName{AIToolGetSalesSummary},
+	}
 	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesSummary}, prepared); err != nil {
 		t.Fatalf("authorized tool rejected: %v", err)
 	}
-	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetLowStockIngredients}, prepared); err == nil {
-		t.Fatal("out-of-candidate tool was accepted")
+
+	// The deterministic day-part answer is written by the backend and always
+	// reports get_sales_for_period, whatever domain the model picked. It reads the
+	// same restaurant read-only, so it is allowed through rather than replacing a
+	// correct answer with an error.
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesForPeriod}, prepared); err != nil {
+		t.Fatalf("backend read-only answer rejected: %v", err)
+	}
+
+	// A name that is not on the read-only allowlist never passes, candidate set or
+	// not: that is the boundary this check exists for.
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolName("drop_all_menus")}, prepared); err == nil {
+		t.Fatal("a tool outside the read-only allowlist was accepted")
+	}
+
+	// And a plan that is not read-only cannot borrow the allowance above.
+	writePlan := &aiPreparedOrchestration{candidateTools: []AIToolName{AIToolGetSalesSummary}}
+	if err := validatePreparedResponseTool(&AIAskResponse{Tool: AIToolGetSalesForPeriod}, writePlan); err == nil {
+		t.Fatal("a non read-only plan was allowed to answer with an unplanned tool")
 	}
 }
 

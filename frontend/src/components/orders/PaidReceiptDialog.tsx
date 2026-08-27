@@ -37,7 +37,7 @@ export default function PaidReceiptDialog({
   // order closed, then to when it was created, so a receipt is never undated.
   const receiptAt = payment?.paid_at || bill.order.closed_at || bill.order.CreatedAt;
   const receiptAtLabel = receiptAt
-    ? new Date(receiptAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
+    ? new Date(receiptAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })
     : "";
   const groups = groupOrderItems(bill.items.filter((item) => item.status !== "cancelled"));
   const sections = (["dine_in", "takeaway"] as const)

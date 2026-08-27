@@ -93,10 +93,12 @@ export function SectionCard({
           : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
 
   return (
-    <div className={`rounded-md border px-3 py-2 ${toneClass}`}>
-      <span className="text-[11px] text-gray-500">{label}</span>
-      <p className="mt-1 text-lg font-semibold tracking-tight text-gray-900 tabular-nums dark:text-white">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{helper}</p> : null}
+    <div className={`rounded-md border px-2.5 py-1.5 ${toneClass}`}>
+      <span className="text-[11px] leading-none text-gray-500">{label}</span>
+      <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight text-gray-900 tabular-nums dark:text-white">
+        {value}
+      </p>
+      {helper ? <p className="mt-0.5 text-[10px] leading-tight text-gray-500 dark:text-gray-400">{helper}</p> : null}
     </div>
   );
 }

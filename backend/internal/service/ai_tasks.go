@@ -755,7 +755,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท\n\nเมนูนี้เป็นรายการที่ควรตรวจรายละเอียดต้นทุนต่อ หากต้องการวิเคราะห์แนวทางปรับราคาหรือสูตร ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+			"เมนูที่มี Margin ต่ำที่สุดคือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท",
 			menu.MenuName,
 			menu.Quantity,
 			formatMoney(menu.Revenue),
@@ -773,7 +773,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่ทำกำไรได้ดีที่สุด (Margin สูงสุด) คือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท\n\nเมนูนี้เป็นตัวทำกำไรหลักของร้าน เหมาะกับการผลักดันให้ขายมากขึ้น หากต้องการวิเคราะห์แนวทางโปรโมทหรือจัดเซ็ต ผมจะช่วยประเมินเป็นขั้นถัดไปครับ",
+			"เมนูที่ทำกำไรได้ดีที่สุด (Margin สูงสุด) คือ %s ครับ\n\n- ขายได้ %d จาน\n- รายได้รวม %s บาท\n- ต้นทุนรวม %s บาท\n- กำไรรวม %s บาท\n- Margin %.2f%%\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- กำไรเฉลี่ยต่อจาน %s บาท",
 			menu.MenuName,
 			menu.Quantity,
 			formatMoney(menu.Revenue),
@@ -799,8 +799,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			sb.WriteString(fmt.Sprintf("- **%s** (%s)\n  • สต็อกปัจจุบัน: %.2f %s (เกณฑ์ขั้นต่ำ: %.2f %s)\n  • แนะนำเติมเพิ่ม: **%.2f** %s\n",
 				item.Name, statusStr, item.Stock, item.Unit, item.MinStock, item.Unit, item.RestockEstimate, item.Unit))
 		}
-		sb.WriteString("\nแนะนำให้ทำการสั่งซื้อวัตถุดิบเพื่อป้องกันการขาดแคลนและรักษาความต่อเนื่องในการเสิร์ฟอาหารครับ")
-		return sb.String(), true
+			return sb.String(), true
 
 	case AIToolGetTopSellingMenus:
 		menus := result.TopSellingMenus
@@ -860,7 +859,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 		}
 		quantity := float64(menu.Quantity)
 		return fmt.Sprintf(
-			"เมนูที่มีต้นทุนต่อจานต่ำที่สุดคือ %s ครับ\n\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- ขายได้ %d จาน\n- ต้นทุนรวม %s บาท\n- ราคาขายเฉลี่ยต่อจาน %s บาท\n\nต้นทุนต่ำต่อจานทำให้เมนูนี้ยืดหยุ่นในการตั้งราคาหรือจัดโปรได้ครับ",
+			"เมนูที่มีต้นทุนต่อจานต่ำที่สุดคือ %s ครับ\n\n- ต้นทุนเฉลี่ยต่อจาน %s บาท\n- ขายได้ %d จาน\n- ต้นทุนรวม %s บาท\n- ราคาขายเฉลี่ยต่อจาน %s บาท",
 			menu.MenuName,
 			formatMoney(menu.Cost/quantity),
 			menu.Quantity,
@@ -949,7 +948,7 @@ func localToolAnswer(result AIToolResult) (string, bool) {
 			return "ยังไม่มีข้อมูลออเดอร์เพียงพอสำหรับดูช่วงเวลาขายดีครับ", true
 		}
 		return fmt.Sprintf(
-			"ช่วงที่ร้านขายดีที่สุดในช่วง %sครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)\n\nเหมาะกับการจัดพนักงานและเตรียมวัตถุดิบให้พอในช่วงพีคครับ",
+			"ช่วงที่ร้านขายดีที่สุดในช่วง %sครับ:\n\n- วันขายดีที่สุด: **%s** (%d ออเดอร์)\n- ช่วงเวลาขายดีที่สุด: **%02d:00-%02d:59 น.** (%d ออเดอร์)",
 			analysisWindowLabel(),
 			thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders,
 			peak.TopHour, peak.TopHour, peak.TopHourOrders,

@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync/atomic"
+	"time"
 )
 
 func (s *AIService) getGroqKeys() []string {
@@ -38,12 +38,15 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 		return "", "", errors.New("GROQ_API_KEY is not configured")
 	}
 
-	var lastErr error
-	numKeys := len(keys)
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "groq", keys, &s.groqKeyIndex)
+	if len(attempts) == 0 {
+		return "", "", allKeysRateLimitedError("Groq", len(keys), releaseAt)
+	}
 
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.groqKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
+	var lastErr error
+
+	for _, attempt := range attempts {
+		currentKey := attempt.Key
 
 		var answer, model string
 		var err error
@@ -59,15 +62,22 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 		}
 
 		if err == nil {
+			s.keyHealth.clear("groq", attempt.Index)
 			return answer, model, nil
 		}
 
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Groq key %d/%d rate limited (429) → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Groq: %v — skipping remaining keys", err)
+			return "", "", err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Groq key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Groq key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Groq key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 
 	return "", "", lastErr
@@ -76,7 +86,7 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 func (s *AIService) executeClassifierGroq(question string, apiKey string) (string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
-		model = "groq/compound-mini"
+		model = "openai/gpt-oss-20b"
 	}
 	aiStage("call", "Groq classifier model=%s", model)
 
@@ -107,11 +117,8 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", errRateLimit
-		}
-		return "", newAIProviderHTTPError("Groq", "classifier", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Groq", "classifier", model, resp); statusErr != nil {
+		return "", statusErr
 	}
 
 	var parsed groqResponse
@@ -127,7 +134,7 @@ func (s *AIService) executeClassifierGroq(question string, apiKey string) (strin
 func (s *AIService) executeGroq(question string, history []AIConversationMessage, snapshot AISnapshot, apiKey string, candidateTools []AIToolName) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
-		model = "groq/compound-mini"
+		model = "openai/gpt-oss-20b"
 	}
 	aiStage("call", "Groq analytical model=%s", model)
 
@@ -161,11 +168,8 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Groq", "analytical request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Groq", "analytical request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 
 	var parsed groqResponse
@@ -192,7 +196,7 @@ func (s *AIService) executeGroq(question string, history []AIConversationMessage
 func (s *AIService) executeGroqConversation(question string, history []AIConversationMessage, apiKey string) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
-		model = "groq/compound-mini"
+		model = "openai/gpt-oss-20b"
 	}
 	aiStage("call", "Groq conversation model=%s", model)
 
@@ -222,11 +226,8 @@ func (s *AIService) executeGroqConversation(question string, history []AIConvers
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Groq", "conversation request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Groq", "conversation request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 
 	var parsed groqResponse
@@ -441,10 +442,53 @@ func (s *AIService) getGroqToolsForCandidates(candidates []AIToolName) []groqToo
 	return filtered
 }
 
-func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string, string, error) {
+// groqReasoningEffortModels lists the models that accept reasoning_effort with
+// low/medium/high. Only gpt-oss takes those three; qwen3 uses none/default and
+// everything else rejects the field, so the model has to be checked rather than
+// the parameter sent blindly — GROQ_MODEL is an environment variable and can be
+// pointed at anything.
+var groqReasoningEffortModels = map[string]struct{}{
+	"openai/gpt-oss-20b":  {},
+	"openai/gpt-oss-120b": {},
+}
+
+// groqReasoningEffortFor decides whether the caller's preference can be sent.
+// An empty preference, or a model that does not take the parameter, produces no
+// field at all — which is how every caller except joyboy reaches Groq, so their
+// requests carry exactly the bytes they carried before this existed.
+//
+// An earlier version pinned "low" here for everyone. That was measured as a win
+// on writing (no reply hit the ceiling again, and latency halved) and a loss on
+// judgement: asked "เมนูไหนขายดีแต่กำไรน้อย" twice the model picked the right tool
+// once, and the wrong run then asserted an answer the tool could not support.
+// Joyboy makes both kinds of call, so the choice belongs to the caller that
+// knows which one it is making, not to this function.
+func groqReasoningEffortFor(model, preference string) *string {
+	preference = strings.TrimSpace(preference)
+	if preference == "" {
+		return nil
+	}
+	if _, supported := groqReasoningEffortModels[strings.TrimSpace(model)]; !supported {
+		return nil
+	}
+	return &preference
+}
+
+// positiveOrNil turns an unset ceiling (zero) into a nil pointer so omitempty
+// drops the key, and any positive value into a pointer that is sent. It keeps
+// the "zero means default" contract of aiProviderCompleteOptions intact at the
+// wire.
+func positiveOrNil(n int) *int {
+	if n <= 0 {
+		return nil
+	}
+	return &n
+}
+
+func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts aiProviderCompleteOptions) (string, string, error) {
 	model := strings.TrimSpace(os.Getenv("GROQ_MODEL"))
 	if model == "" {
-		model = "groq/compound-mini"
+		model = "openai/gpt-oss-20b"
 	}
 	aiStage("call", "Groq second-round model=%s", model)
 	payload := groqRequest{
@@ -452,6 +496,8 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 		Messages: []groqMessage{
 			{Role: "user", Content: prompt},
 		},
+		ReasoningEffort:     groqReasoningEffortFor(model, opts.ReasoningEffort),
+		MaxCompletionTokens: positiveOrNil(opts.MaxCompletionTokens),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -470,42 +516,60 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string) (string
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 429 {
-			return "", "", errRateLimit
-		}
-		return "", "", newAIProviderHTTPError("Groq", "second-round request", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Groq", "second-round request", model, resp); statusErr != nil {
+		return "", "", statusErr
 	}
 	var parsed groqResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return "", "", err
 	}
 	if len(parsed.Choices) > 0 {
-		return parsed.Choices[0].Message.Content, model, nil
+		choice := parsed.Choices[0]
+		// Reported, not acted on. No ceiling is sent yet, so this is the
+		// measurement that has to come first: how much a reply actually costs,
+		// and how often the provider default cuts one off. Counts only, no
+		// content, so it is safe outside AI_DEBUG.
+		if choice.FinishReason == "length" {
+			aiStage("warn", "Groq second-round hit the output ceiling → the answer is cut off (completion_tokens=%d reasoning_tokens=%d)",
+				parsed.Usage.CompletionTokens, parsed.Usage.CompletionTokensDetails.ReasoningTokens)
+		} else {
+			aiStage("usage", "Groq second-round finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d",
+				choice.FinishReason, parsed.Usage.CompletionTokens,
+				parsed.Usage.CompletionTokensDetails.ReasoningTokens, parsed.Usage.PromptTokens)
+		}
+		return choice.Message.Content, model, nil
 	}
 	return "", "", errors.New("groq second round returned empty response")
 }
 
-func (s *AIService) askSecondRoundGroqWithRotation(prompt string) (string, string, error) {
+func (s *AIService) askSecondRoundGroqWithRotation(prompt string, opts aiProviderCompleteOptions) (string, string, error) {
 	keys := s.getGroqKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GROQ_API_KEY is not configured")
 	}
+	attempts, releaseAt := nextProviderAttempts(&s.keyHealth, "groq", keys, &s.groqKeyIndex)
+	if len(attempts) == 0 {
+		return "", "", allKeysRateLimitedError("Groq second-round", len(keys), releaseAt)
+	}
 	var lastErr error
-	numKeys := len(keys)
-	for i := 0; i < numKeys; i++ {
-		idx := atomic.AddUint32(&s.groqKeyIndex, 1) - 1
-		currentKey := keys[idx%uint32(numKeys)]
-		answer, model, err := s.executeSecondRoundGroq(prompt, currentKey)
+	for _, attempt := range attempts {
+		answer, model, err := s.executeSecondRoundGroq(prompt, attempt.Key, opts)
 		if err == nil {
+			s.keyHealth.clear("groq", attempt.Index)
 			return answer, model, nil
 		}
 		lastErr = err
-		if err == errRateLimit {
-			aiStage("warn", "Groq second-round key %d/%d rate limited → rotating", (idx%uint32(numKeys))+1, numKeys)
+		if errors.Is(err, errModelUnavailable) {
+			aiStage("error", "Groq second-round: %v — skipping remaining keys", err)
+			return "", "", err
+		}
+		if errors.Is(err, errRateLimit) {
+			wait := retryAfterOf(err)
+			s.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
+			aiStage("warn", "Groq second-round key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Groq second-round key %d/%d failed: %v → rotating", (idx%uint32(numKeys))+1, numKeys, err)
+		aiStage("warn", "Groq second-round key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
 	}
 	return "", "", lastErr
 }

@@ -1030,7 +1030,7 @@ input[type="number"]::-webkit-inner-spin-button {
      scroller rather than under the page, was still visible. Inside the sheet the
      canvas is the background, so the page root gets out of the way. Scoped to the
      direct child of main, so cards and panels keep their own surfaces. */
-  [data-shell-scroll] > main > * {
+  [data-shell-scroll] > main > *:not(.ai-aura-bg) {
     background-color: transparent !important;
   }
 
@@ -1127,4 +1127,34 @@ html:not(.dark) [data-shell-sheet] .hover\:border-gray-400:hover {
 .dark [data-shell-sheet] .hover\:border-gray-300:hover,
 .dark [data-shell-sheet] .hover\:border-gray-400:hover {
   border-color: rgba(255, 241, 228, 0.22);
+}
+
+/* AI page — "Sunset Boulevard" aura background (light theme only).
+   Two multiply layers blend against the container's #faf8f2 base. The
+   container isolates the blend so it never composites against the page
+   behind it, and the layers sit at z-index:-1 so the chat content paints
+   above them without needing a per-element z-index. Hidden in dark mode. */
+.ai-aura-bg {
+  isolation: isolate;
+}
+.ai-aura-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  mix-blend-mode: multiply;
+  filter: blur(90px);
+  transform: translateZ(0);
+  will-change: transform;
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .ai-aura-layer {
+    filter: blur(130px);
+  }
+}
+.ai-aura-layer-1 {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 48%, rgba(255, 206, 164, 0.26) 76%, rgba(255, 172, 104, 0.50) 100%);
+}
+.ai-aura-layer-2 {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 164, 124, 0.20) 86%, rgba(255, 192, 92, 0.46) 100%);
 }

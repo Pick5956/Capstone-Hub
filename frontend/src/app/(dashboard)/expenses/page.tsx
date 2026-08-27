@@ -63,18 +63,6 @@ const categoryDotClass: Record<ExpenseCategory, string> = {
   other: "bg-gray-400",
 };
 
-// Filter chips carry a light tint of the same hue as the row dot, so the six
-// categories are told apart at a glance. Selection is a neutral ring, not a
-// solid fill - a filled chip would bury the tint it is supposed to show.
-const categoryChipClass: Record<"all" | ExpenseCategory, string> = {
-  all: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900",
-  ingredient: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-200 dark:hover:bg-emerald-900/50",
-  labor: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/50 dark:text-sky-200 dark:hover:bg-sky-900/50",
-  rent: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/50",
-  utilities: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/50 dark:text-indigo-200 dark:hover:bg-indigo-900/50",
-  equipment: "border-red-200 bg-red-50 text-red-800 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-900/50",
-  other: "border-gray-300 bg-gray-100 text-gray-700 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200 dark:hover:bg-gray-800",
-};
 
 // First entry doubles as the threshold for showing the pager at all.
 const pageSizes = [10, 25, 50, 100];
@@ -497,47 +485,41 @@ export default function ExpensesPage() {
 
       <div id="expense-print">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {canEdit ? (
-          <button type="button" onClick={openAdd} className="ui-press inline-flex h-10 items-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 print:hidden">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {copy.add}
-          </button>
-        ) : (
-          <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
-        )}
-        <ThemedSelect value={monthValue} onChange={selectMonth} options={monthOptions} className="w-[140px] print:hidden" />
+        <ThemedSelect value={monthValue} onChange={selectMonth} options={monthOptions} compact className="w-[140px] print:hidden" />
         {/* The picker itself is screen-only, so the PDF keeps a plain month heading. */}
         <span className="hidden text-[16px] font-semibold print:block">{monthLabel}</span>
         <span className="text-[11px] text-gray-500 dark:text-gray-400 print:hidden">{scopedData.entries} {copy.entries}</span>
         {/* Icon-only, so the label has to survive as an accessible name. */}
-        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
-        <button type="button" onClick={() => void exportPdf()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+        <button type="button" onClick={() => void exportPdf()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
           <Printer className="h-4 w-4" aria-hidden="true" />
           {copy.exportPdf}
         </button>
+        {/* Primary add sits at the far right of the header, matching /tables and /inventory. */}
+        {canEdit ? (
+          <button type="button" onClick={openAdd} className="ui-press inline-flex h-9 items-center gap-2 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 print:hidden">
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            {copy.add}
+          </button>
+        ) : (
+          <p className="inline-flex h-9 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-[12px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
+        )}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1.5 print:hidden">
-        {(["all", ...expenseCategories] as const).map((value) => {
-          const amount = value === "all" ? monthTotal : scopedData.categories.find((item) => item.category === value)?.amount ?? 0;
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => { setCategoryFilter(value); setPage(1); }}
-              className={`ui-press inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-colors ${categoryChipClass[value]} ${
-                categoryFilter === value ? "ring-2 ring-gray-900 dark:ring-white" : ""
-              }`}
-            >
-              {value === "all" ? copy.all : copy.categories[value]}
-              <span className="rounded-full bg-white/70 px-1.5 text-[10px] tabular-nums dark:bg-black/30">
-                {formatCurrency(amount, language)}
-              </span>
-            </button>
-          );
-        })}
+      <div className="mb-4 print:hidden">
+        <ThemedSelect
+          value={categoryFilter}
+          onChange={(value) => { setCategoryFilter(value as "all" | ExpenseCategory); setPage(1); }}
+          options={(["all", ...expenseCategories] as const).map((value) => {
+            const amount = value === "all" ? monthTotal : scopedData.categories.find((item) => item.category === value)?.amount ?? 0;
+            const label = value === "all" ? copy.all : copy.categories[value];
+            return { value, label: `${label} · ${formatCurrency(amount, language)}` };
+          })}
+          compact
+          className="w-full sm:w-[240px]"
+        />
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300 print:hidden">{error}</div>}
@@ -624,7 +606,7 @@ export default function ExpensesPage() {
                       onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEdit(expense); } },
                     }
                   : {})}
-                className={`ui-row-lift grid grid-cols-2 gap-x-3 gap-y-1 bg-white px-4 py-3 text-[14px] hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900 lg:grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] lg:items-center ${canEdit && expense.ingredient_transaction_id == null ? "cursor-pointer" : ""}`}
+                className={`grid grid-cols-2 gap-x-3 gap-y-1 bg-white px-4 py-3 text-[14px] transition-colors hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900 lg:grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] lg:items-center ${canEdit && expense.ingredient_transaction_id == null ? "cursor-pointer" : ""}`}
               >
                 <span className="font-mono text-[13px] tabular-nums text-gray-500 dark:text-gray-400">
                   {new Date(expense.spent_at).toLocaleDateString(locale, { day: "2-digit", month: "short" })}

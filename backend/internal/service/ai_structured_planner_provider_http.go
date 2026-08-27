@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -19,18 +18,41 @@ const (
 	groqStructuredPlannerEndpoint    = "https://api.groq.com/openai/v1/chat/completions"
 	geminiStructuredPlannerBaseURL   = "https://generativelanguage.googleapis.com/v1beta/models"
 	defaultGroqPlannerModel          = "openai/gpt-oss-20b"
-	defaultGeminiPlannerModel        = "gemini-2.5-flash"
+	// gemini-2.5-flash is being retired: a newly issued key answers
+	// 404 "no longer available to new users ... use models/gemini-3.5-flash-lite",
+	// and the two models bill against separate quota buckets, so the switch also
+	// restored capacity on keys that were already exhausted.
+	defaultGeminiPlannerModel        = "gemini-3.5-flash-lite"
 	structuredPlannerHTTPBodyLimit   = 1 << 20
 	structuredPlannerHTTPTimeout     = 30 * time.Second
-	structuredPlannerMaxOutputTokens = 2048
+	// The plan itself is about 300 tokens, but reasoning-style models spend a far
+	// larger budget before emitting it. Live runs showed gpt-oss-20b stopping at
+	// exactly 2048 output tokens and returning truncated JSON, which the parser
+	// then rejected — the provider looked broken when it had simply run out of
+	// room. Only tokens actually produced are billed, so the headroom is free.
+	// Groq reserves prompt + max_completion_tokens against the daily token
+	// budget before the call runs: a 429 body states "Requested 8675" for a
+	// 4,580-token prompt asking for 4,095 completion tokens. The budget is
+	// 200,000 tokens per DAY for the whole organisation, so every unused
+	// completion token asked for is a planning call that cannot happen today.
+	// The largest plan measured across every live run is 2,111 tokens, so this
+	// keeps a wide margin over that while buying back roughly a sixth of the
+	// day's calls. Raising it again is a capacity decision, not a free one.
+	structuredPlannerMaxOutputTokens = 3072
 )
 
 // groqStrictStructuredPlannerModels lists the Groq models that accept
 // response_format=json_schema with strict:true. Models outside this list still
 // work through JSON object mode, where the schema is carried in the prompt
 // instead of enforced by the provider.
+//
+// openai/gpt-oss-20b was removed after measurement: Groq accepts the schema but
+// the model cannot generate output that satisfies it, so every planner request
+// came back as HTTP 400 json_validate_failed and the provider never produced a
+// plan at all. The same request in JSON object mode answers 200, and the backend
+// still runs Normalize/Validate over the result, so nothing is trusted that was
+// not checked here.
 var groqStrictStructuredPlannerModels = map[string]struct{}{
-	"openai/gpt-oss-20b":                        {},
 	"openai/gpt-oss-120b":                       {},
 	"moonshotai/kimi-k2-instruct-0905":          {},
 	"meta-llama/llama-4-scout-17b-16e-instruct":  {},
@@ -50,16 +72,20 @@ and no property outside "properties" is allowed):
 // NewGroqStructuredPlannerProvider creates the hosted Groq implementation of
 // StructuredPlannerProvider. Keys are copied so callers may safely reuse or
 // clear their input slice after construction.
-func NewGroqStructuredPlannerProvider(client *http.Client, apiKeys []string) StructuredPlannerProvider {
-	return newGroqStructuredPlannerProvider(client, apiKeys, groqStructuredPlannerEndpoint)
+func NewGroqStructuredPlannerProvider(client *http.Client, apiKeys []string, health *providerKeyHealth) StructuredPlannerProvider {
+	provider := newGroqStructuredPlannerProvider(client, apiKeys, groqStructuredPlannerEndpoint)
+	provider.health = health
+	return provider
 }
 
 // NewGeminiStructuredPlannerProvider creates the hosted Gemini implementation
 // of StructuredPlannerProvider. It is intentionally not connected to
 // AIService yet; the planner can be integrated after its evaluation gate is in
 // place.
-func NewGeminiStructuredPlannerProvider(client *http.Client, apiKeys []string) StructuredPlannerProvider {
-	return newGeminiStructuredPlannerProvider(client, apiKeys, geminiStructuredPlannerBaseURL)
+func NewGeminiStructuredPlannerProvider(client *http.Client, apiKeys []string, health *providerKeyHealth) StructuredPlannerProvider {
+	provider := newGeminiStructuredPlannerProvider(client, apiKeys, geminiStructuredPlannerBaseURL)
+	provider.health = health
+	return provider
 }
 
 type groqStructuredPlannerProvider struct {
@@ -67,6 +93,10 @@ type groqStructuredPlannerProvider struct {
 	apiKeys  []string
 	endpoint string
 	keyIndex uint32
+	// health is shared with the rest of the assistant so a key parked by one
+	// flow is skipped by the other. Nil is valid: the provider then behaves as
+	// it did before, trying every key on every call.
+	health *providerKeyHealth
 }
 
 var _ StructuredPlannerProvider = (*groqStructuredPlannerProvider)(nil)
@@ -109,7 +139,7 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 			JSONSchema: &groqStructuredPlannerSchema{
 				Name:   strings.TrimSpace(request.SchemaName),
 				Strict: true,
-				Schema: request.JSONSchema,
+				Schema: sanitizeSchemaForGroqStrict(request.JSONSchema),
 			},
 		}
 	} else {
@@ -135,38 +165,17 @@ func (p *groqStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Context
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner request could not be encoded")
 	}
 
-	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
-	var lastErr error
-	stats := StructuredPlannerProviderResponse{Model: model}
-	for offset := range p.apiKeys {
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
-		stats.HTTPAttempts++
-		response, callErr := p.generateWithKey(ctx, payload, key, model)
-		if callErr == nil {
-			response.HTTPAttempts = stats.HTTPAttempts
-			response.KeyFallbacks = stats.KeyFallbacks
-			response.RateLimits = stats.RateLimits
-			return response, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		lastErr = callErr
-		if errors.Is(callErr, errRateLimit) {
-			stats.RateLimits++
-		}
-		if !structuredPlannerShouldTryNextKey(callErr) {
-			break
-		}
-		if offset+1 < len(p.apiKeys) {
-			stats.KeyFallbacks++
-		}
-	}
-
-	return stats, fmt.Errorf("Groq structured planner exhausted configured API keys: %w", lastErr)
+	return runPlannerKeyRotation(ctx, plannerRotation{
+		provider: "groq",
+		label:    "Groq structured planner",
+		health:   p.health,
+		keys:     p.apiKeys,
+		cursor:   &p.keyIndex,
+		model:    model,
+		call: func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error) {
+			return p.generateWithKey(ctx, payload, key, model)
+		},
+	})
 }
 
 func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, model string) (StructuredPlannerProviderResponse, error) {
@@ -190,8 +199,12 @@ func (p *groqStructuredPlannerProvider) generateWithKey(ctx context.Context, pay
 	if err != nil {
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner response could not be read")
 	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return StructuredPlannerProviderResponse{}, structuredPlannerHTTPStatusError("Groq", resp.StatusCode)
+	// Share the assistant's status vocabulary: a 404 means the configured model
+	// is gone (no key can fix it) and a 429 carries the wait the provider asked
+	// for, so the rotation below can park that key instead of rediscovering it.
+	if statusErr := classifyProviderResponse("Groq", "structured planner", model, resp); statusErr != nil {
+		logProviderRejection("Groq", model, resp.StatusCode, body)
+		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
 		return StructuredPlannerProviderResponse{}, errors.New("Groq structured planner response exceeded the size limit")
@@ -258,6 +271,7 @@ type geminiStructuredPlannerProvider struct {
 	apiKeys  []string
 	baseURL  string
 	keyIndex uint32
+	health   *providerKeyHealth
 }
 
 var _ StructuredPlannerProvider = (*geminiStructuredPlannerProvider)(nil)
@@ -320,38 +334,17 @@ func (p *geminiStructuredPlannerProvider) GenerateResolvedPlan(ctx context.Conte
 	}
 
 	endpoint := p.baseURL + "/" + url.PathEscape(model) + ":generateContent"
-	startIndex := atomic.AddUint32(&p.keyIndex, 1) - 1
-	var lastErr error
-	stats := StructuredPlannerProviderResponse{Model: model}
-	for offset := range p.apiKeys {
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		key := p.apiKeys[(int(startIndex)+offset)%len(p.apiKeys)]
-		stats.HTTPAttempts++
-		response, callErr := p.generateWithKey(ctx, payload, key, endpoint, model)
-		if callErr == nil {
-			response.HTTPAttempts = stats.HTTPAttempts
-			response.KeyFallbacks = stats.KeyFallbacks
-			response.RateLimits = stats.RateLimits
-			return response, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return StructuredPlannerProviderResponse{}, err
-		}
-		lastErr = callErr
-		if errors.Is(callErr, errRateLimit) {
-			stats.RateLimits++
-		}
-		if !structuredPlannerShouldTryNextKey(callErr) {
-			break
-		}
-		if offset+1 < len(p.apiKeys) {
-			stats.KeyFallbacks++
-		}
-	}
-
-	return stats, fmt.Errorf("Gemini structured planner exhausted configured API keys: %w", lastErr)
+	return runPlannerKeyRotation(ctx, plannerRotation{
+		provider: "gemini",
+		label:    "Gemini structured planner",
+		health:   p.health,
+		keys:     p.apiKeys,
+		cursor:   &p.keyIndex,
+		model:    model,
+		call: func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error) {
+			return p.generateWithKey(ctx, payload, key, endpoint, model)
+		},
+	})
 }
 
 func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, payload []byte, apiKey string, endpoint string, model string) (StructuredPlannerProviderResponse, error) {
@@ -375,8 +368,9 @@ func (p *geminiStructuredPlannerProvider) generateWithKey(ctx context.Context, p
 	if err != nil {
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner response could not be read")
 	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return StructuredPlannerProviderResponse{}, structuredPlannerHTTPStatusError("Gemini", resp.StatusCode)
+	if statusErr := classifyProviderResponse("Gemini", "structured planner", model, resp); statusErr != nil {
+		logProviderRejection("Gemini", model, resp.StatusCode, body)
+		return StructuredPlannerProviderResponse{}, statusErr
 	}
 	if tooLarge {
 		return StructuredPlannerProviderResponse{}, errors.New("Gemini structured planner response exceeded the size limit")
@@ -586,4 +580,159 @@ func stripGeminiUnsupportedSchemaKeywords(value any) any {
 	default:
 		return value
 	}
+}
+
+// groqUnsupportedSchemaKeywords are JSON Schema keywords that Groq's strict
+// json_schema mode rejects with HTTP 400 ("uniqueItems is not supported"),
+// failing the whole provider before the model is ever reached. Every keyword
+// here is a constraint the backend re-checks after parsing — Normalize/Validate
+// already reject duplicate metrics, group_by, entities and filters — so dropping
+// them from the wire schema changes what the provider is asked to enforce, not
+// what the backend accepts.
+var groqUnsupportedSchemaKeywords = map[string]struct{}{
+	"uniqueItems": {},
+}
+
+// sanitizeSchemaForGroqStrict deep-copies the schema without the keywords Groq
+// refuses. The copy matters: the same schema value is handed to the next
+// provider in the fallback chain, which must still see the full contract.
+func sanitizeSchemaForGroqStrict(schema map[string]any) map[string]any {
+	if schema == nil {
+		return nil
+	}
+	sanitized := make(map[string]any, len(schema))
+	for key, value := range schema {
+		if _, unsupported := groqUnsupportedSchemaKeywords[key]; unsupported {
+			continue
+		}
+		sanitized[key] = sanitizeSchemaValueForGroqStrict(value)
+	}
+	return sanitized
+}
+
+func sanitizeSchemaValueForGroqStrict(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeSchemaForGroqStrict(typed)
+	case []any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, sanitizeSchemaValueForGroqStrict(item))
+		}
+		return items
+	default:
+		return value
+	}
+}
+
+// plannerRotation describes one provider's attempt at producing a plan. It exists
+// so both planner adapters share the assistant's key handling instead of each
+// keeping a private copy: a key parked after a 429 anywhere is skipped here too,
+// and a withdrawn model stops the rotation instead of being retried per key.
+type plannerRotation struct {
+	provider string // key-health namespace, shared with the chat flows
+	label    string // human-readable name for errors
+	health   *providerKeyHealth
+	keys     []string
+	cursor   *uint32
+	model    string
+	call     func(ctx context.Context, key string) (StructuredPlannerProviderResponse, error)
+}
+
+func runPlannerKeyRotation(ctx context.Context, rotation plannerRotation) (StructuredPlannerProviderResponse, error) {
+	stats := StructuredPlannerProviderResponse{Model: rotation.model}
+	if len(rotation.keys) == 0 {
+		return stats, fmt.Errorf("%s has no configured API keys", rotation.label)
+	}
+
+	health := rotation.health
+	if health == nil {
+		// Without a shared tracker the provider still works; it simply cannot
+		// remember which keys are cooling down between calls.
+		health = &providerKeyHealth{}
+	}
+
+	attempts, releaseAt := nextProviderAttempts(health, rotation.provider, rotation.keys, rotation.cursor)
+	if len(attempts) == 0 {
+		return stats, allKeysRateLimitedError(rotation.label, len(rotation.keys), releaseAt)
+	}
+
+	var lastErr error
+	for _, attempt := range attempts {
+		if err := ctx.Err(); err != nil {
+			return StructuredPlannerProviderResponse{}, err
+		}
+		stats.HTTPAttempts++
+		response, callErr := rotation.call(ctx, attempt.Key)
+		if callErr == nil {
+			health.clear(rotation.provider, attempt.Index)
+			response.HTTPAttempts = stats.HTTPAttempts
+			response.KeyFallbacks = stats.KeyFallbacks
+			response.RateLimits = stats.RateLimits
+			return response, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return StructuredPlannerProviderResponse{}, err
+		}
+		lastErr = callErr
+
+		// A withdrawn model answers the same way on every key.
+		if errors.Is(callErr, errModelUnavailable) {
+			aiStage("error", "%s: %v — skipping remaining keys", rotation.label, callErr)
+			return stats, callErr
+		}
+		if errors.Is(callErr, errRateLimit) {
+			wait := retryAfterOf(callErr)
+			health.park(rotation.provider, attempt.Index, time.Now().Add(wait))
+			stats.RateLimits++
+			aiStage("warn", "%s key %d/%d rate limited → parked for %s",
+				rotation.label, attempt.Position, attempt.Total, wait.Round(time.Second))
+			if attempt.Position < attempt.Total {
+				stats.KeyFallbacks++
+			}
+			continue
+		}
+		if !structuredPlannerShouldTryNextKey(callErr) {
+			break
+		}
+		stats.KeyFallbacks++
+	}
+
+	return stats, fmt.Errorf("%s exhausted configured API keys: %w", rotation.label, lastErr)
+}
+
+// logProviderRejection prints the reason the provider gave for refusing the
+// call. Without it a rejection reads as a bare "provider_call failed": an
+// exhausted daily token budget, a withdrawn model and a malformed request all
+// look the same, and an investigation into the last one cost hours before the
+// message turned out to say "tokens per day (TPD): Limit 200000, Used 198085".
+// Only the provider status line is logged, never the prompt or the plan.
+func logProviderRejection(provider, model string, status int, body []byte) {
+	message := providerErrorMessage(body)
+	if message == "" {
+		message = "(ไม่มีรายละเอียดจาก provider)"
+	}
+	aiStage("warn", "%s structured planner ปฏิเสธคำขอ (HTTP %d, model=%s): %s", provider, status, model, message)
+}
+
+// providerErrorMessage pulls the human-readable reason out of an OpenAI-shaped
+// or Gemini-shaped error body.
+func providerErrorMessage(body []byte) string {
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	message := strings.TrimSpace(payload.Error.Message)
+	if message == "" {
+		message = strings.TrimSpace(payload.Error.Status)
+	}
+	if runes := []rune(message); len(runes) > 300 {
+		message = string(runes[:300]) + "…"
+	}
+	return message
 }
