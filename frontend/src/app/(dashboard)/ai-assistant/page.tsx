@@ -162,6 +162,10 @@ export default function AIAssistantPage() {
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   // A multi-item plan (inventory commands) waiting for one confirmation.
   const [pendingActionPlan, setPendingActionPlan] = useState<AIActionPlan | null>(null);
+  // The sentence that produced the pending change. "Ask again" puts it back in
+  // the box so the owner edits one word instead of retyping the command.
+  const [pendingActionQuestion, setPendingActionQuestion] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // The inline confirm bar owns its terminal state (done/cancelled/expired) and
   // stays mounted to show it. Once resolved, the preview must be dropped without
   // trying to cancel an already-executed action.
@@ -364,10 +368,12 @@ export default function AIAssistantPage() {
       if (data.action_preview) {
         actionResolvedRef.current = false;
         setPendingActionPreview(data.action_preview);
+        setPendingActionQuestion(trimmed);
       }
       if (data.action_plan) {
         actionResolvedRef.current = false;
         setPendingActionPlan(data.action_plan);
+        setPendingActionQuestion(trimmed);
       }
       const actions =
         data.intent === "unclear"
@@ -565,6 +571,7 @@ export default function AIAssistantPage() {
   const handlePlanReissue = () => {
     actionResolvedRef.current = false;
     setPendingActionPlan(null);
+    reissuePendingCommand();
   };
 
   const handleInlineActionReissue = () => {
@@ -895,6 +902,7 @@ export default function AIAssistantPage() {
                 <VoiceWaveform level={voiceLevel} className="min-h-[2.25rem] min-w-0 flex-1 px-1" />
               ) : (
                 <textarea
+                  ref={inputRef}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
