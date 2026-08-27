@@ -291,6 +291,14 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 	}
 
 	match := ResolveMenuName(menus, title)
+	// One near match and nothing else is not a guess — it is the only reading the
+	// catalogue allows. Asking "ต้มยำกุ้ง หมายถึงเมนูไหน — ต้มยำกุ้งน้ำข้น" when
+	// that is the sole answer reads as the assistant not paying attention, and the
+	// owner still sees the full name on the confirm bar before anything happens.
+	if match.Exact == nil && len(match.Candidates) == 1 {
+		only := match.Candidates[0]
+		match = AIMenuMatch{Exact: &only}
+	}
 	if match.Exact == nil {
 		if len(match.Candidates) > 0 {
 			names := make([]string, 0, len(match.Candidates))
@@ -381,7 +389,16 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 		}
 	}
 
+	// Same rule as the menu: a single near match is the only reading available, so
+	// it is taken rather than asked about. This is deliberately below the "create"
+	// branch above, which still demands an exact match — there, a near miss means
+	// "ผักชี" would be refused for looking like "ผักชีฝรั่ง", which is a different
+	// ingredient and a real one to add.
 	match := ResolveIngredientName(shelf, title)
+	if match.Exact == nil && len(match.Candidates) == 1 {
+		only := match.Candidates[0]
+		match = AIIngredientMatch{Exact: &only}
+	}
 	if match.Exact == nil {
 		if len(match.Candidates) > 0 {
 			names := make([]string, 0, len(match.Candidates))

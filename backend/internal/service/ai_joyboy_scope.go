@@ -26,11 +26,30 @@ import (
 
 const joyboyOutOfScopeAnswer = "ขอโทษครับ เรื่องนี้ผมยังช่วยไม่ได้ครับ"
 
-// joyboyClaimDone matches "<change verb> ... แล้ว" — the shape of a claim that
-// something was written ("ปิดขายเมนูต้มยำกุ้งแล้วครับ"). A bare "แล้ว" is left
-// alone because honest sentences use it too ("ข้อมูลถึงเมื่อวานแล้ว").
-var joyboyClaimDone = regexp.MustCompile(`(ปิดขาย|เปิดขาย|ปิดสถานะ|เปิดสถานะ|บันทึก|อัปเดต|อัพเดต|แก้ไข|ปรับ|เพิ่ม|ลบ|สร้าง|ตั้งค่า|ย้าย|จอง|ยกเลิก|ดำเนินการ)[^
-]{0,40}แล้ว`)
+// The verbs that name something this system can actually do. On their own they
+// prove nothing — a recipe uses half of them.
+const joyboyChangeVerbs = `(?:ปิดขาย|เปิดขาย|ปิดสถานะ|เปิดสถานะ|บันทึก|อัปเดต|อัพเดต|แก้ไข|ปรับ|เพิ่ม|ลบ|สร้าง|ตั้งค่า|ย้าย|จอง|ยกเลิก|ดำเนินการ)`
+
+// joyboyClaimDone matches a claim that one of those was carried out. What makes
+// it a claim rather than an instruction is where the "แล้ว" sits: at the end of
+// what is being said ("ปรับสต๊อกหมูสับให้แล้วครับ"), not in the middle of the
+// next step.
+//
+// The first version matched "<verb> … แล้ว" anywhere, and a recipe was the thing
+// that exposed it: "เพิ่มพริก 5 เม็ดแล้วผัดต่อ" is an instruction to the reader,
+// not a claim about the database, and the owner asking for a recipe got
+// "ขอโทษครับ เรื่องนี้ผมยังช่วยไม่ได้ครับ" instead of an answer.
+var (
+	// "…แล้ว" closing a line, with or without the polite particle.
+	joyboyClaimDoneAtEnd = regexp.MustCompile(`(?m)` + joyboyChangeVerbs + `[^\n]{0,40}แล้ว(?:ครับ|ค่ะ|นะครับ|นะคะ)?[ \t]*$`)
+	// "…แล้วครับ" mid-line, where the particle marks the end of the claim even
+	// though the sentence continues.
+	joyboyClaimDonePolite = regexp.MustCompile(joyboyChangeVerbs + `[^\n]{0,40}แล้ว(?:ครับ|ค่ะ|นะครับ|นะคะ)`)
+)
+
+func joyboyClaimsSomethingWasDone(text string) bool {
+	return joyboyClaimDoneAtEnd.MatchString(text) || joyboyClaimDonePolite.MatchString(text)
+}
 
 // joyboyMoneyFigure matches a baht amount, the shape a made-up shop figure takes
 // most often. It no longer blocks anything — it is the tripwire that tells us
@@ -46,7 +65,7 @@ func joyboyScopedAnswer(answer string, toolCount int) string {
 	if text == "" || toolCount > 0 {
 		return answer
 	}
-	if joyboyClaimDone.MatchString(text) {
+	if joyboyClaimsSomethingWasDone(text) {
 		return joyboyOutOfScopeAnswer
 	}
 	if joyboyMoneyFigure.MatchString(text) {

@@ -28,6 +28,11 @@ func TestJoyboyScopedAnswer(t *testing.T) {
 		"ถ้าอยากให้ยอดขายโตสัก 10% ลองเริ่มจากเมนูที่กำไรดีก่อนครับ",
 		"เก็บผักชีในตู้เย็นได้ประมาณ 5 วันครับ",
 		"ราคาหมูตลาดตอนนี้ผมไม่มีข้อมูลครับ แนะนำให้เช็คกับเจ้าประจำอีกที",
+		// Recipe steps use the same verbs a claim does. The "แล้ว" here joins two
+		// instructions to the reader; it is not a report about the database, and
+		// blocking it turned "how do I cook this" into an apology.
+		"ตั้งกระทะให้ร้อน เพิ่มน้ำมันแล้วใส่กระเทียมลงไปผัดจนหอมครับ",
+		"ผัดหมูสับจนสุก ปรับไฟให้แรงแล้วใส่ใบกะเพราตอนท้ายครับ",
 	}
 	for _, a := range kept {
 		if got := joyboyScopedAnswer(a, 0); got != a {

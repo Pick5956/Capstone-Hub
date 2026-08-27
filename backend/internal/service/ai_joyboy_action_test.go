@@ -51,6 +51,23 @@ func TestResolveMenuCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("a partial name matching exactly one menu is taken, not asked about", func(t *testing.T) {
+		// "ผัดไทยหมดแล้ว" against a shop selling "ผัดไทย" alone. Asking "which menu
+		// did you mean — ผัดไทย" when that is the only answer is the assistant not
+		// paying attention; the confirm bar still shows the full name.
+		single := []entity.MenuItem{{Model: gorm.Model{ID: 9}, Name: "ผัดไทยกุ้งสด", IsAvailable: true}}
+		got := ResolveMenuCommand(single, AIStockCommandDraft{Name: "ผัดไทย", Kind: "menu_off"})
+		if got.Kind != AICommandOutcomeReady {
+			t.Fatalf("outcome = %v (%s), want ready", got.Kind, got.Question)
+		}
+		if got.Command.MenuItemID != 9 {
+			t.Errorf("resolved to %d, want 9", got.Command.MenuItemID)
+		}
+		if got.Title != "ผัดไทยกุ้งสด" {
+			t.Errorf("title = %q, want the menu's real name", got.Title)
+		}
+	})
+
 	t.Run("closing a menu that is already closed changes nothing", func(t *testing.T) {
 		got := ResolveMenuCommand(menus, AIStockCommandDraft{Name: "ชาไทยเย็น", Kind: "menu_off"})
 		if got.Kind != AICommandOutcomeNothingToDo {
