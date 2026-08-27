@@ -106,7 +106,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		return true
 	}
 
-	summary := aiStockPlanSummary(draft.Previews)
+	summary := aiStockPlanSummary(draft.Items, draft.Previews)
 	plan, token, err := s.actionPlanStore.CreateAIActionPlan(repository.CreateAIActionPlanParams{
 		RestaurantID: actor.RestaurantID,
 		OwnerUserID:  actor.OwnerUserID,
@@ -159,11 +159,33 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 
 const aiActionPlanTimeLayout = "2006-01-02T15:04:05Z07:00"
 
-func aiStockPlanSummary(previews []AIActionItemPreview) string {
-	if len(previews) == 1 {
-		return fmt.Sprintf("ปรับสต๊อก “%s”", previews[0].Title)
+// aiStockPlanSummary names the plan for what it actually does. Calling a price
+// change "ปรับสต๊อก" made the headline disagree with the line under it, which is
+// the kind of small wrongness that makes an owner distrust the whole bar.
+func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, previews []AIActionItemPreview) string {
+	kinds := map[string]struct{}{}
+	for _, item := range items {
+		kinds[item.ActionType] = struct{}{}
 	}
-	return fmt.Sprintf("ปรับสต๊อก %d รายการ", len(previews))
+	verb := "แก้ข้อมูลคลัง"
+	if len(kinds) == 1 {
+		for actionType := range kinds {
+			switch actionType {
+			case entity.AIActionTypeAdjustIngredientStock:
+				verb = "ปรับสต๊อก"
+			case entity.AIActionTypeSetIngredientMinStock:
+				verb = "ตั้งขั้นต่ำ"
+			case entity.AIActionTypeSetIngredientCost:
+				verb = "ตั้งราคา"
+			case entity.AIActionTypeCreateIngredient:
+				verb = "เพิ่มวัตถุดิบ"
+			}
+		}
+	}
+	if len(previews) == 1 {
+		return fmt.Sprintf("%s “%s”", verb, previews[0].Title)
+	}
+	return fmt.Sprintf("%s %d รายการ", verb, len(previews))
 }
 
 func aiRejectedItemsMessage(rejected []AIActionRejectedItem) string {

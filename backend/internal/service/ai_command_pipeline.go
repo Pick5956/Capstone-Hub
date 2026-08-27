@@ -103,6 +103,46 @@ func ConvertToStockUnit(quantity float64, spokenUnit, stockUnit string) (float64
 	return converted, true
 }
 
+// aiUnitIsFine reports whether a stock unit is small enough that a bare price
+// ("ตั้งราคาหมูสับ 180") cannot plausibly mean per that unit — nobody prices pork
+// at 180 baht a gram. For a counting unit ("ไข่ 5 บาท" against ฟอง) a bare price
+// is unambiguous and needs no question.
+func aiUnitIsFine(stockUnit string) bool {
+	switch aiCanonicalUnit(stockUnit) {
+	case "g", "ml":
+		return true
+	default:
+		return false
+	}
+}
+
+// ConvertPricePerUnit turns a price quoted per spokenUnit into a price per
+// stockUnit. ok=false means the caller must ask: either no unit was given for a
+// finely measured ingredient, or the two units have no known relation.
+func ConvertPricePerUnit(price float64, spokenUnit, stockUnit string) (float64, bool) {
+	if price < 0 {
+		return 0, false
+	}
+	if strings.TrimSpace(spokenUnit) == "" {
+		// No unit spoken: safe only when the stock unit is something a price is
+		// naturally quoted in (a piece, an egg), never for grams or millilitres.
+		if aiUnitIsFine(stockUnit) {
+			return 0, false
+		}
+		return price, true
+	}
+	// How many stock units make up one spoken unit — 1 กก. = 1,000 กรัม.
+	perSpoken, ok := ConvertToStockUnit(1, spokenUnit, stockUnit)
+	if !ok || perSpoken <= 0 {
+		return 0, false
+	}
+	converted := price / perSpoken
+	if math.IsNaN(converted) || math.IsInf(converted, 0) {
+		return 0, false
+	}
+	return converted, true
+}
+
 // --- Name resolution ----------------------------------------------------------
 
 // AIIngredientMatch is the outcome of looking a spoken name up in the shelf.
@@ -241,13 +281,26 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: question}
 	}
 
-	// A price is money per unit, not an amount of stock, so it never goes through
-	// the unit conversion below.
+	// A price is money PER unit, so it converts the opposite way to a quantity:
+	// 2 กก. of stock is 2,000 grams, but 180 บาท/กก. is 0.18 บาท/กรัม. Getting this
+	// backwards is a thousand-fold error in every menu's cost, so an unclear unit
+	// is asked about rather than assumed.
 	if kind == "cost" {
+		perUnit, ok := ConvertPricePerUnit(draft.Quantity, draft.Unit, match.Exact.Unit)
+		if !ok {
+			return AICommandResolution{
+				Kind:  AICommandOutcomeAsk,
+				Title: title,
+				Question: fmt.Sprintf(
+					"“%s” ราคานี้ต่อหน่วยอะไรครับ ระบบเก็บเป็น%s (เช่น ต่อ%s หรือ ต่อกิโล)",
+					match.Exact.Name, match.Exact.Unit, match.Exact.Unit,
+				),
+			}
+		}
 		return AICommandResolution{
 			Kind:    AICommandOutcomeReady,
 			Title:   match.Exact.Name,
-			Command: AIAdjustStockCommand{IngredientID: match.Exact.ID, Kind: "cost", Quantity: draft.Quantity},
+			Command: AIAdjustStockCommand{IngredientID: match.Exact.ID, Kind: "cost", Quantity: perUnit},
 		}
 	}
 

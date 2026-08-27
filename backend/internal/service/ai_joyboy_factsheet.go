@@ -405,12 +405,16 @@ func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPerio
 	}
 	switch {
 	case db.Revenue > 0:
+		// The direction is a Thai word and the percentage carries no sign: a bare
+		// "-0.32" invites the model to narrate the wrong subject and keep the minus
+		// ("เมษายนเพิ่มขึ้น -0.32%"). One reading, no arithmetic left to interpret.
 		pct := (da.Revenue - db.Revenue) / db.Revenue * 100
-		dir := "up"
+		dir := "เพิ่มขึ้น"
 		if pct < 0 {
-			dir = "down"
+			dir = "ลดลง"
+			pct = -pct
 		}
-		lines = append(lines, fmt.Sprintf("change_pct=%s direction=%s", joyboyNum(pct), dir))
+		lines = append(lines, fmt.Sprintf("change_pct=%s direction=%s note=%s_เทียบกับ_%s", joyboyNum(pct), dir, a.Label, b.Label))
 	case da.Revenue > 0:
 		lines = append(lines, "change_pct=na reason=period_b_has_no_sales")
 	default:

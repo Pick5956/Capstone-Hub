@@ -200,7 +200,12 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				return req.clarify, true, true
 			}
 			if req.comparison && len(req.periods) >= 2 {
+				// Always oldest → newest, whichever order the owner said them in, so
+				// the sentence reads forward in time and cannot be told backwards.
 				a, b := req.periods[0], req.periods[1]
+				if a.Start.Before(b.Start) {
+					a, b = b, a
+				}
 				da, err := t.service.repo.SalesForRange(t.restaurantID, a.Start, a.End)
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)

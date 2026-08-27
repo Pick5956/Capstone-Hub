@@ -143,14 +143,16 @@ func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
 	a := AIPeriod{Label: "เดือนสิงหาคม 2569"}
 	b := AIPeriod{Label: "เดือนกรกฎาคม 2569"}
 	up := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 100, Revenue: 120}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
-	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=up"} {
+	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=เพิ่มขึ้น"} {
 		if !strings.Contains(up, want) {
 			t.Errorf("comparison body missing %q: %s", want, up)
 		}
 	}
+	// A fall reads as a Thai word with an unsigned percentage: a bare "-20" is what
+	// let the model narrate the wrong subject and keep the minus sign.
 	down := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 80, Revenue: 80}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
-	if !strings.Contains(down, "direction=down") {
-		t.Errorf("a fall should read direction=down: %s", down)
+	if !strings.Contains(down, "direction=ลดลง") || !strings.Contains(down, "change_pct=20.00") || strings.Contains(down, "-20") {
+		t.Errorf("a fall should read direction=ลดลง with an unsigned percentage: %s", down)
 	}
 	zero := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 5, Revenue: 50}, b, repository.AISalesRange{})
 	if !strings.Contains(zero, "change_pct=na") {
