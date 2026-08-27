@@ -76,8 +76,20 @@ func TestPlanSummaryNamesTheAction(t *testing.T) {
 		{ActionType: entity.AIActionTypeAdjustIngredientStock},
 		{ActionType: entity.AIActionTypeSetIngredientCost},
 	}
+	menuOff := []repository.CreateAIActionPlanItemParams{
+		{ActionType: entity.AIActionTypeSetMenuAvailability, PayloadJSON: `{"menu_item_id":3,"available":false}`},
+	}
+	menuOn := []repository.CreateAIActionPlanItemParams{
+		{ActionType: entity.AIActionTypeSetMenuAvailability, PayloadJSON: `{"menu_item_id":3,"available":true}`},
+	}
+	menuBoth := []repository.CreateAIActionPlanItemParams{
+		{ActionType: entity.AIActionTypeSetMenuAvailability, PayloadJSON: `{"menu_item_id":3,"available":false}`},
+		{ActionType: entity.AIActionTypeSetMenuAvailability, PayloadJSON: `{"menu_item_id":4,"available":true}`},
+	}
 	one := []AIActionItemPreview{{Title: "กะเพรา"}}
 	two := []AIActionItemPreview{{Title: "กะเพรา"}, {Title: "หมูสับ"}}
+	oneMenu := []AIActionItemPreview{{Title: "ผัดไทย"}}
+	twoMenus := []AIActionItemPreview{{Title: "ผัดไทย"}, {Title: "ชาไทยเย็น"}}
 
 	for _, test := range []struct {
 		items    []repository.CreateAIActionPlanItemParams
@@ -88,7 +100,12 @@ func TestPlanSummaryNamesTheAction(t *testing.T) {
 		{minStock, one, "ตั้งขั้นต่ำ “กะเพรา”"},
 		{cost, one, "ตั้งราคา “กะเพรา”"},
 		{create, one, "เพิ่มวัตถุดิบ “กะเพรา”"},
-		{mixed, two, "แก้ข้อมูลคลัง 2 รายการ"},
+		{mixed, two, "แก้ข้อมูลร้าน 2 รายการ"},
+		// A menu plan is named by the direction its items carry, read back from the
+		// payloads — never by the sentence that produced it.
+		{menuOff, oneMenu, "ปิดขายเมนู “ผัดไทย”"},
+		{menuOn, oneMenu, "เปิดขายเมนู “ผัดไทย”"},
+		{menuBoth, twoMenus, "เปลี่ยนสถานะขายเมนู 2 รายการ"},
 	} {
 		if got := aiStockPlanSummary(test.items, test.previews); got != test.want {
 			t.Errorf("summary = %q, want %q", got, test.want)

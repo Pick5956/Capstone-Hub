@@ -27,6 +27,7 @@ type AIService struct {
 	actionsSetting             AIActionsSettingStore
 	actionPlanStore            AIActionPlanStore
 	actionIngredients          AIActionIngredientPort
+	actionMenus                AIActionMenuPort
 	actionCleanupCounter       uint64
 	// providerAdapters is nil in production and resolves lazily to Groq then
 	// Gemini. Tests may inject provider-neutral fakes without making live calls.
@@ -81,12 +82,14 @@ func ProvideAIServiceWithStores(
 	actionMenuResolver AIActionMenuResolver,
 	actionPlanStore AIActionPlanStore,
 	actionIngredients AIActionIngredientPort,
+	actionMenus AIActionMenuPort,
 ) *AIService {
 	service := ProvideAIServiceWithConversationStore(repo, conversationStore)
 	service.actionStore = actionStore
 	service.actionMenuResolver = actionMenuResolver
 	service.actionPlanStore = actionPlanStore
 	service.actionIngredients = actionIngredients
+	service.actionMenus = actionMenus
 	// The repository carries the per-restaurant owner toggle, so once it is wired
 	// the owner's AI-settings choice — not the env allowlist — gates actions.
 	if repo != nil {
@@ -1132,24 +1135,3 @@ func (s *AIService) validateAndIntercept(res AIFinalJSONResponse, result AIToolR
 	return answer
 }
 
-// parseIntent is kept for backward compatibility and testing purposes.
-func parseIntent(answer string) AIIntent {
-	normalized := strings.ToUpper(strings.TrimSpace(answer))
-	labels := []struct {
-		label  string
-		intent AIIntent
-	}{
-		{label: "GREETING", intent: AIIntentGreeting},
-		{label: "CAPABILITIES", intent: AIIntentCapability},
-		{label: "UNCLEAR", intent: AIIntentUnclear},
-		{label: "CONVERSATION", intent: AIIntentChat},
-		{label: "OUT_OF_SCOPE", intent: AIIntentOutOfScope},
-		{label: "ANALYSIS", intent: AIIntentAnalysis},
-	}
-	for _, candidate := range labels {
-		if strings.HasPrefix(normalized, candidate.label) {
-			return candidate.intent
-		}
-	}
-	return AIIntentAnalysis
-}

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 17
+	CurrentSchemaVersion int64 = 18
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -314,6 +314,30 @@ func schemaMigrationPlan() []SchemaMigration {
 				if err := ctx.DB.Exec(
 					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
 						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient'))`,
+				).Error; err != nil {
+					return fmt.Errorf("recreate AI action type constraint: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 18,
+			Name:    "ai_action_plan_menu_availability_type",
+			Up: func(ctx *MigrationContext) error {
+				// Adds opening and closing a menu to the reviewed action allowlist,
+				// so the owner's plain-language menu commands travel the same
+				// confirmed path as the inventory ones instead of the separate,
+				// keyword-matched boundary they used to have. Additive: the
+				// constraint only widens, so rolling back narrows it again without
+				// touching a single row.
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items DROP CONSTRAINT IF EXISTS ai_action_plan_items_allowed_type`,
+				).Error; err != nil {
+					return fmt.Errorf("drop AI action type constraint: %w", err)
+				}
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
+						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability'))`,
 				).Error; err != nil {
 					return fmt.Errorf("recreate AI action type constraint: %w", err)
 				}

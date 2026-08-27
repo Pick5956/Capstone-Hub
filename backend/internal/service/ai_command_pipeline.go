@@ -23,11 +23,13 @@ import (
 //   - offerCreate → the thing does not exist yet; offer to add it
 
 // AIStockCommandDraft is the model's proposal for one change, before Go has
-// checked any of it.
+// checked any of it. The name is whatever the owner called the thing — an
+// ingredient for the stock kinds, a menu for the menu kinds.
 type AIStockCommandDraft struct {
 	Name string `json:"name"`
 	// in | out | adjust change stock; min sets the low-stock threshold; cost sets
-	// the price per unit; create adds a new ingredient.
+	// the price per unit; create adds a new ingredient; menu_on | menu_off open
+	// and close a menu for selling.
 	Kind     string  `json:"kind"`
 	Quantity float64 `json:"quantity"`
 	Unit     string  `json:"unit"`
@@ -35,10 +37,21 @@ type AIStockCommandDraft struct {
 }
 
 // AICommandKindsAll lists what the extractor may propose.
-var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create"}
+var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off"}
 
 func aiIsStockKind(kind string) bool {
 	return kind == "in" || kind == "out" || kind == "adjust"
+}
+
+// AIMenuCommandKind reports whether a drafted command is about a menu rather
+// than the shelf, which decides which catalogue the name is resolved against.
+func AIMenuCommandKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "menu_on", "menu_off":
+		return true
+	default:
+		return false
+	}
 }
 
 // --- Units -------------------------------------------------------------------
@@ -155,37 +168,86 @@ func aiNormalizeName(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
 
-// ResolveIngredientName finds the one ingredient a name refers to. An exact
-// match wins; otherwise near matches are returned as candidates for the owner to
-// pick from. Two ingredients with the same name stay ambiguous on purpose.
-func ResolveIngredientName(shelf []entity.Ingredient, name string) AIIngredientMatch {
+// aiMatchNames finds which entry a spoken name refers to. An exact match wins;
+// otherwise near matches come back as candidates for the owner to pick from. Two
+// entries with the same name stay ambiguous on purpose — guessing between them
+// would eventually change the wrong row.
+//
+// It works on names alone so the shelf and the menu can share one rule: the two
+// catalogues are different tables but the owner refers to both the same way,
+// with a partial name and no thought for how it is stored.
+func aiMatchNames(names []string, name string) (exact int, candidates []int) {
 	wanted := aiNormalizeName(name)
 	if wanted == "" {
-		return AIIngredientMatch{}
+		return -1, nil
 	}
-	exact := make([]entity.Ingredient, 0, 2)
-	near := make([]entity.Ingredient, 0, 4)
-	for _, item := range shelf {
-		candidate := aiNormalizeName(item.Name)
+	exactHits := make([]int, 0, 2)
+	near := make([]int, 0, 4)
+	for index, candidate := range names {
+		normalized := aiNormalizeName(candidate)
 		switch {
-		case candidate == wanted:
-			exact = append(exact, item)
-		case strings.Contains(candidate, wanted) || strings.Contains(wanted, candidate):
-			near = append(near, item)
+		case normalized == wanted:
+			exactHits = append(exactHits, index)
+		case strings.Contains(normalized, wanted) || strings.Contains(wanted, normalized):
+			near = append(near, index)
 		}
 	}
-	if len(exact) == 1 {
-		found := exact[0]
-		return AIIngredientMatch{Exact: &found}
+	if len(exactHits) == 1 {
+		return exactHits[0], nil
 	}
-	if len(exact) > 1 {
-		return AIIngredientMatch{Candidates: exact}
+	if len(exactHits) > 1 {
+		return -1, exactHits
 	}
-	sort.SliceStable(near, func(i, j int) bool { return len(near[i].Name) < len(near[j].Name) })
+	// Shortest first: "ต้มยำกุ้ง" said over "ต้มยำกุ้งน้ำข้น" and "ต้มยำกุ้งน้ำใส"
+	// should offer the plainest reading at the top.
+	sort.SliceStable(near, func(i, j int) bool { return len(names[near[i]]) < len(names[near[j]]) })
 	if len(near) > 3 {
 		near = near[:3]
 	}
+	return -1, near
+}
+
+// ResolveIngredientName finds the one ingredient a name refers to.
+func ResolveIngredientName(shelf []entity.Ingredient, name string) AIIngredientMatch {
+	names := make([]string, len(shelf))
+	for index, item := range shelf {
+		names[index] = item.Name
+	}
+	exact, candidates := aiMatchNames(names, name)
+	if exact >= 0 {
+		found := shelf[exact]
+		return AIIngredientMatch{Exact: &found}
+	}
+	near := make([]entity.Ingredient, 0, len(candidates))
+	for _, index := range candidates {
+		near = append(near, shelf[index])
+	}
 	return AIIngredientMatch{Candidates: near}
+}
+
+// AIMenuMatch is the outcome of looking a spoken name up in the menu.
+type AIMenuMatch struct {
+	Exact      *entity.MenuItem
+	Candidates []entity.MenuItem
+}
+
+// ResolveMenuName finds the one menu a name refers to, by the same rule the
+// shelf uses.
+func ResolveMenuName(menus []entity.MenuItem, name string) AIMenuMatch {
+	names := make([]string, len(menus))
+	for index, item := range menus {
+		names[index] = item.Name
+	}
+	exact, candidates := aiMatchNames(names, name)
+	if exact >= 0 {
+		found := menus[exact]
+		return AIMenuMatch{Exact: &found}
+	}
+	near := make([]entity.MenuItem, 0, len(candidates))
+	for _, index := range candidates {
+		near = append(near, menus[index])
+	}
+	return AIMenuMatch{Candidates: near}
 }
 
 // --- Deciding what to do ------------------------------------------------------
@@ -196,6 +258,10 @@ const (
 	AICommandOutcomeReady       AICommandOutcomeKind = "ready"
 	AICommandOutcomeAsk         AICommandOutcomeKind = "ask"
 	AICommandOutcomeOfferCreate AICommandOutcomeKind = "offer_create"
+	// The change is already true — the menu is closed and the owner said close it.
+	// Nothing to confirm, and saying "done" would be a lie about a write that
+	// never ran, so it is reported as its own outcome.
+	AICommandOutcomeNothingToDo AICommandOutcomeKind = "nothing_to_do"
 )
 
 // AICommandResolution is what the assistant should do with one drafted change.
@@ -204,6 +270,68 @@ type AICommandResolution struct {
 	Command  AIAdjustStockCommand // set when Kind is ready
 	Title    string               // the ingredient name as the owner said it
 	Question string               // set when Kind is ask or offer_create
+}
+
+// ResolveMenuCommand checks a drafted open/close against the live menu. The menu
+// has to exist and has to actually be changing: a name nobody recognises is
+// asked about rather than half-matched, and a menu already in the asked-for
+// state is reported as such instead of becoming an empty confirmation.
+func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICommandResolution {
+	title := strings.TrimSpace(draft.Name)
+	if title == "" {
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Question: "ขอชื่อเมนูด้วยครับ"}
+	}
+	kind := strings.ToLower(strings.TrimSpace(draft.Kind))
+	if !AIMenuCommandKind(kind) {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” นี่ต้องการเปิดขายหรือปิดขายครับ", title),
+		}
+	}
+
+	match := ResolveMenuName(menus, title)
+	if match.Exact == nil {
+		if len(match.Candidates) > 0 {
+			names := make([]string, 0, len(match.Candidates))
+			for _, candidate := range match.Candidates {
+				names = append(names, candidate.Name)
+			}
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    title,
+				Question: fmt.Sprintf("“%s” หมายถึงเมนูไหนครับ — %s", title, strings.Join(names, " / ")),
+			}
+		}
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("ไม่พบเมนูชื่อ “%s” ในร้านครับ ลองบอกชื่อให้ตรงกับหน้าจัดการเมนูอีกทีนะ", title),
+		}
+	}
+
+	wantAvailable := kind == "menu_on"
+	if match.Exact.IsAvailable == wantAvailable {
+		state := "ปิดขาย"
+		if wantAvailable {
+			state = "เปิดขาย"
+		}
+		return AICommandResolution{
+			Kind:     AICommandOutcomeNothingToDo,
+			Title:    match.Exact.Name,
+			Question: fmt.Sprintf("“%s” %sอยู่แล้วครับ ไม่ต้องแก้อะไร", match.Exact.Name, state),
+		}
+	}
+
+	return AICommandResolution{
+		Kind:  AICommandOutcomeReady,
+		Title: match.Exact.Name,
+		Command: AIAdjustStockCommand{
+			Kind:       kind,
+			MenuItemID: match.Exact.ID,
+			Available:  wantAvailable,
+		},
+	}
 }
 
 // ResolveStockCommand checks one drafted change against the shelf and decides

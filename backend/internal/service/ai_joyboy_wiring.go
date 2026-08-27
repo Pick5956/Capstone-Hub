@@ -386,17 +386,17 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 // answered around: the only text available to fall back on is the fact sheet,
 // which is Go's writing, and showing it would be the template again.
 func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request *AIAskRequest) (*AIAskResponse, error) {
-	// An owner's plain-language command to change data (currently only opening or
-	// closing a menu) short-circuits the read/answer flow into the reviewed
-	// action-preview boundary: the model writes nothing, and the change waits for
-	// the owner to confirm the preview. When actions are disabled or the text is
-	// not a command, this leaves the question to be answered normally below.
+	// An owner's plain-language command to change something — stock, an
+	// ingredient's price, a menu going off sale — short-circuits the read/answer
+	// flow into the reviewed plan boundary: the model proposes structure, Go
+	// checks it against the live database, and nothing is written until the owner
+	// confirms. When actions are off or the sentence is not a command, this leaves
+	// the question to be answered normally below.
+	//
+	// Menu commands used to have their own keyword-matched entry point here. They
+	// do not any more: one road, one boundary, and "ต้มยำกุ้งหมดแล้ว เอาลงก่อน"
+	// works for the same reason "เอาหมูสับเข้าคลัง 2 กิโล" does.
 	actionResponse := &AIAskResponse{Intent: AIIntentChat, Task: AITaskGeneralChat, Model: "joyboy"}
-	if s.maybeCreateJoyboyMenuAvailabilityAction(actor, request.Question, actionResponse) {
-		return actionResponse, nil
-	}
-	// Inventory commands take the same route: proposed by the model, checked in
-	// Go against the live shelf, and held as a plan until the owner confirms.
 	if s.maybeHandleJoyboyStockCommand(actor, request, actionResponse) {
 		return actionResponse, nil
 	}

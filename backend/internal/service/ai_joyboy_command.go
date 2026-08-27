@@ -54,7 +54,11 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	// Actions off (or not the owner): say so rather than letting the answer round
 	// describe a change that will not happen.
 	if actor.Role != "owner" || actor.OwnerUserID == 0 || !s.ownerActionsEnabled(actor.RestaurantID) {
-		response.Answer = "ผมยังแก้ข้อมูลคลังให้ไม่ได้ครับ ต้องเปิด “ให้ AI ลงมือทำ” ในตั้งค่า AI ก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน"
+			what := "แก้ข้อมูลคลัง"
+		if aiDraftsIncludeMenu(drafts) {
+			what = "แก้ข้อมูลร้าน"
+		}
+		response.Answer = fmt.Sprintf("ผมยัง%sให้ไม่ได้ครับ ต้องเปิด “ให้ AI ลงมือทำ” ในตั้งค่า AI ก่อน แล้วผมจะเตรียมรายการให้คุณกดยืนยัน", what)
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-action-disabled"
@@ -66,16 +70,41 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		aiStage("warn", "joyboy command: listing ingredients failed (%v) → answering normally", err)
 		return false
 	}
+	// The menu catalogue is only fetched when something in the sentence is about a
+	// menu, so an inventory-only command costs exactly what it did before.
+	var menus []entity.MenuItem
+	if aiDraftsIncludeMenu(drafts) {
+		if s.actionMenus == nil {
+			response.Answer = "ผมยังเปิด-ปิดขายเมนูให้ไม่ได้ครับ"
+			response.Intent = AIIntentChat
+			response.Task = AITaskGeneralChat
+			response.Model = "joyboy-command-unavailable"
+			return true
+		}
+		menus, err = s.actionMenus.ListMenuItems(actor.RestaurantID, true, 0)
+		if err != nil {
+			aiStage("warn", "joyboy command: listing menus failed (%v) → answering normally", err)
+			return false
+		}
+	}
 
 	commands := make([]AIAdjustStockCommand, 0, len(drafts))
 	titles := make([]string, 0, len(drafts))
 	questions := make([]string, 0, 2)
+	notices := make([]string, 0, 2)
 	for _, draft := range drafts {
 		resolution := ResolveStockCommand(shelf, draft)
+		if AIMenuCommandKind(draft.Kind) {
+			resolution = ResolveMenuCommand(menus, draft)
+		}
 		switch resolution.Kind {
 		case AICommandOutcomeReady:
 			commands = append(commands, resolution.Command)
 			titles = append(titles, resolution.Title)
+		case AICommandOutcomeNothingToDo:
+			// Already true. Not a question and not a change — just say so, and let
+			// the rest of the sentence proceed.
+			notices = append(notices, resolution.Question)
 		default:
 			// A question and an offer to add a missing ingredient are both simply
 			// asked; the owner's next message flows back through this path with the
@@ -87,17 +116,24 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	// Anything unclear is asked before a plan is built, so the owner never
 	// confirms half of what they said without knowing.
 	if len(questions) > 0 {
-		response.Answer = strings.Join(questions, "\n")
+		response.Answer = strings.Join(append(notices, questions...), "\n")
 		response.Intent = AIIntentUnclear
 		response.Task = AITaskUnclear
 		response.Model = "joyboy-command-clarify"
 		return true
 	}
 	if len(commands) == 0 {
+		if len(notices) > 0 {
+			response.Answer = strings.Join(notices, "\n")
+			response.Intent = AIIntentChat
+			response.Task = AITaskGeneralChat
+			response.Model = "joyboy-command-noop"
+			return true
+		}
 		return false
 	}
 
-	draft := BuildAdjustStockPlan(s.actionIngredients, actor.RestaurantID, commands, titles)
+	draft := BuildAdjustStockPlan(s.actionIngredients, s.actionMenus, actor.RestaurantID, commands, titles)
 	if len(draft.Items) == 0 {
 		response.Answer = aiRejectedItemsMessage(draft.Rejected)
 		response.Intent = AIIntentChat
@@ -133,6 +169,9 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	}
 
 	answer := fmt.Sprintf("ผมเตรียม%sแล้ว ยังไม่ได้แก้ข้อมูล กดยืนยันภายใน 1 นาทีครับ", summary)
+	if len(notices) > 0 {
+		answer = strings.Join(notices, "\n") + "\n" + answer
+	}
 	warnings := make([]string, 0, len(draft.Rejected))
 	if len(draft.Rejected) > 0 {
 		answer += "\n" + aiRejectedItemsMessage(draft.Rejected)
@@ -159,6 +198,17 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 
 const aiActionPlanTimeLayout = "2006-01-02T15:04:05Z07:00"
 
+// aiDraftsIncludeMenu reports whether anything in the sentence was about a menu,
+// which is what decides whether the menu catalogue is worth fetching.
+func aiDraftsIncludeMenu(drafts []AIStockCommandDraft) bool {
+	for _, draft := range drafts {
+		if AIMenuCommandKind(draft.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
 // aiStockPlanSummary names the plan for what it actually does. Calling a price
 // change "ปรับสต๊อก" made the headline disagree with the line under it, which is
 // the kind of small wrongness that makes an owner distrust the whole bar.
@@ -167,7 +217,7 @@ func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, preview
 	for _, item := range items {
 		kinds[item.ActionType] = struct{}{}
 	}
-	verb := "แก้ข้อมูลคลัง"
+	verb := "แก้ข้อมูลร้าน"
 	if len(kinds) == 1 {
 		for actionType := range kinds {
 			switch actionType {
@@ -179,6 +229,8 @@ func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, preview
 				verb = "ตั้งราคา"
 			case entity.AIActionTypeCreateIngredient:
 				verb = "เพิ่มวัตถุดิบ"
+			case entity.AIActionTypeSetMenuAvailability:
+				verb = aiMenuPlanVerb(items)
 			}
 		}
 	}
@@ -186,6 +238,32 @@ func aiStockPlanSummary(items []repository.CreateAIActionPlanItemParams, preview
 		return fmt.Sprintf("%s “%s”", verb, previews[0].Title)
 	}
 	return fmt.Sprintf("%s %d รายการ", verb, len(previews))
+}
+
+// aiMenuPlanVerb names a menu plan by the direction its items actually carry,
+// read back from the stored payloads rather than from the sentence — "ปิดขายเมนู"
+// over a plan that opens one would be the headline disagreeing with the rows.
+func aiMenuPlanVerb(items []repository.CreateAIActionPlanItemParams) string {
+	opens, closes := 0, 0
+	for _, item := range items {
+		var payload AIActionItemPayload
+		if err := jsonUnmarshalString(item.PayloadJSON, &payload); err != nil {
+			return "เปลี่ยนสถานะขายเมนู"
+		}
+		if payload.Available {
+			opens++
+		} else {
+			closes++
+		}
+	}
+	switch {
+	case opens > 0 && closes == 0:
+		return "เปิดขายเมนู"
+	case closes > 0 && opens == 0:
+		return "ปิดขายเมนู"
+	default:
+		return "เปลี่ยนสถานะขายเมนู"
+	}
 }
 
 func aiRejectedItemsMessage(rejected []AIActionRejectedItem) string {
@@ -224,7 +302,7 @@ func (s *AIService) ConfirmAIActionPlanForOwner(actor AIActorContext, planID, co
 
 	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
 	for _, item := range plan.Items {
-		execErr := executeAIActionItem(s.actionIngredients, actor.RestaurantID, actor.OwnerUserID, item)
+		execErr := executeAIActionItem(s.actionIngredients, s.actionMenus, actor.RestaurantID, actor.OwnerUserID, item)
 		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
 		if execErr != nil {
 			outcome.ErrorText = execErr.Error()

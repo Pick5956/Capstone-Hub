@@ -122,7 +122,7 @@ func TestValidateAdjustStockShowsSideEffects(t *testing.T) {
 // part of what the owner asked for.
 func TestBuildAdjustStockPlanReportsRejectedItems(t *testing.T) {
 	port := newAIActionPortFixture()
-	draft := BuildAdjustStockPlan(port, 1, []AIAdjustStockCommand{
+	draft := BuildAdjustStockPlan(port, nil, 1, []AIAdjustStockCommand{
 		{IngredientID: 1, Kind: "in", Quantity: 100},
 		{IngredientID: 99, Kind: "in", Quantity: 100},
 		{IngredientID: 2, Kind: "out", Quantity: 500},
@@ -155,7 +155,7 @@ func TestExecuteAIActionItemCallsIngredientService(t *testing.T) {
 	payload, _ := json.Marshal(AIActionItemPayload{IngredientID: 1, Kind: "in", Quantity: 250, Amount: 15, Note: "ตลาดเช้า"})
 	item := entity.AIActionPlanItem{ActionType: entity.AIActionTypeAdjustIngredientStock, PayloadJSON: string(payload)}
 
-	if err := executeAIActionItem(port, 1, 7, item); err != nil {
+	if err := executeAIActionItem(port, nil, 1, 7, item); err != nil {
 		t.Fatalf("execute error = %v", err)
 	}
 	if len(port.adjusted) != 1 {
@@ -167,7 +167,7 @@ func TestExecuteAIActionItemCallsIngredientService(t *testing.T) {
 	}
 
 	unknown := entity.AIActionPlanItem{ActionType: "delete_everything", PayloadJSON: "{}"}
-	if err := executeAIActionItem(port, 1, 7, unknown); err == nil {
+	if err := executeAIActionItem(port, nil, 1, 7, unknown); err == nil {
 		t.Error("an unreviewed action type must not execute")
 	}
 }
@@ -195,7 +195,7 @@ func TestSetIngredientFieldPreviewsAndPreservesOtherFields(t *testing.T) {
 
 	payload, _ := json.Marshal(AIActionItemPayload{IngredientID: 1, MinStock: 800})
 	item := entity.AIActionPlanItem{ActionType: entity.AIActionTypeSetIngredientMinStock, PayloadJSON: string(payload)}
-	if err := executeAIActionItem(port, 1, 7, item); err != nil {
+	if err := executeAIActionItem(port, nil, 1, 7, item); err != nil {
 		t.Fatalf("execute error = %v", err)
 	}
 	if len(port.updated) != 1 {
@@ -230,7 +230,7 @@ func TestValidateCreateIngredient(t *testing.T) {
 
 	itemPayload, _ := json.Marshal(AIActionItemPayload{Name: "ผักชี", Unit: "กรัม", Quantity: 500})
 	item := entity.AIActionPlanItem{ActionType: entity.AIActionTypeCreateIngredient, PayloadJSON: string(itemPayload)}
-	if err := executeAIActionItem(port, 1, 7, item); err != nil {
+	if err := executeAIActionItem(port, nil, 1, 7, item); err != nil {
 		t.Fatalf("execute error = %v", err)
 	}
 	if len(port.created) != 1 || port.created[0].Unit != "กรัม" || port.created[0].Stock != 500 {
@@ -247,12 +247,15 @@ func TestAllowedAIActionTypes(t *testing.T) {
 		entity.AIActionTypeSetIngredientMinStock,
 		entity.AIActionTypeSetIngredientCost,
 		entity.AIActionTypeCreateIngredient,
+		// Opening and closing a menu joined the plan boundary in migration 18,
+		// replacing the keyword-matched single-action path it used to have.
+		entity.AIActionTypeSetMenuAvailability,
 	} {
 		if !entity.IsAllowedAIActionType(good) {
 			t.Errorf("%q should be allowed", good)
 		}
 	}
-	for _, bad := range []string{"", "drop_table", "set_menu_availability"} {
+	for _, bad := range []string{"", "drop_table", "delete_menu", "set_menu_price"} {
 		if entity.IsAllowedAIActionType(bad) {
 			t.Errorf("%q must not be allowed in a plan", bad)
 		}

@@ -35,25 +35,3 @@ func requestsBusinessDecision(question string) bool {
 	}
 	return false
 }
-
-func requestsLowestMarginFact(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	hasMargin := strings.Contains(normalized, "margin") ||
-		strings.Contains(normalized, "มาร์จิ้น") ||
-		strings.Contains(normalized, "มาร์จิน")
-	hasLowest := strings.Contains(normalized, "ต่ำที่สุด") ||
-		strings.Contains(normalized, "lowest") ||
-		strings.Contains(normalized, "น้อยที่สุด")
-	return hasMargin && hasLowest
-}
-
-func localLowestMarginFactAnswer(question string, snapshot AISnapshot) (string, bool) {
-	if !requestsLowestMarginFact(question) {
-		return "", false
-	}
-	result, err := executeReadOnlyTool(AIToolGetLowestMarginMenu, snapshot)
-	if err != nil {
-		return "", false
-	}
-	return localToolAnswer(result)
-}

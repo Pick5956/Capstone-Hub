@@ -46,6 +46,15 @@ type AIActionIngredientPort interface {
 	Update(restaurantID, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error)
 }
 
+// AIActionMenuPort is the slice of the menu service the action layer needs: read
+// the catalogue to resolve a spoken name, re-read one row to validate against,
+// and flip its availability the way the menu screen's toggle does.
+type AIActionMenuPort interface {
+	ListMenuItems(restaurantID uint, includeInactive bool, categoryID uint) ([]entity.MenuItem, error)
+	FindMenuItem(restaurantID, itemID uint) (*entity.MenuItem, error)
+	UpdateMenuItemAvailability(restaurantID, itemID uint, req *MenuItemAvailabilityRequest) (*entity.MenuItem, error)
+}
+
 // jsonUnmarshalString decodes a stored JSON column into a typed value.
 func jsonUnmarshalString(raw string, target any) error {
 	return json.Unmarshal([]byte(raw), target)
@@ -53,17 +62,21 @@ func jsonUnmarshalString(raw string, target any) error {
 
 // --- Request shapes handed in by the command layer ---------------------------
 
-// AIAdjustStockCommand is a validated-by-Go intent to change one ingredient's
-// stock. Quantity is already expressed in that ingredient's own stock unit.
+// AIAdjustStockCommand is a validated-by-Go intent to change one thing:
+// an ingredient's stock, one of its fields, or whether a menu is being sold.
+// Quantity is already expressed in that ingredient's own stock unit.
 type AIAdjustStockCommand struct {
 	IngredientID uint
-	Kind         string // in | out | adjust | min | cost | create
+	Kind         string // in | out | adjust | min | cost | create | menu_on | menu_off
 	Quantity     float64
 	Amount       float64 // baht, only meaningful for kind=in
 	Note         string
 	// Set only when Kind is create.
 	Name string
 	Unit string
+	// Set only for the menu kinds.
+	MenuItemID uint
+	Available  bool
 }
 
 // AIActionItemPayload is what gets persisted for an item. It is deliberately
@@ -79,6 +92,11 @@ type AIActionItemPayload struct {
 	Unit        string  `json:"unit,omitempty"`
 	MinStock    float64 `json:"min_stock,omitempty"`
 	CostPerUnit float64 `json:"cost_per_unit,omitempty"`
+	// Used by set_menu_availability. Available carries no omitempty on purpose:
+	// closing a menu IS the false value, and omitting it would store a payload
+	// that reads as "no change requested".
+	MenuItemID uint `json:"menu_item_id,omitempty"`
+	Available  bool `json:"available"`
 }
 
 // AIActionItemPreview is what the owner reads before confirming.
@@ -248,6 +266,42 @@ func validateCreateIngredient(shelf []entity.Ingredient, name, unit string, stoc
 	}, preview, nil
 }
 
+// validateSetMenuAvailability re-reads the menu row and describes the flip in
+// the words the owner used to think about it. The row is read again here rather
+// than trusted from the catalogue listing, so a toggle someone pressed on the
+// menu screen a second ago is what the preview reflects.
+func validateSetMenuAvailability(port AIActionMenuPort, restaurantID, menuItemID uint, available bool) (AIActionItemPayload, AIActionItemPreview, error) {
+	if port == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnavailable
+	}
+	item, err := port.FindMenuItem(restaurantID, menuItemID)
+	if err != nil || item == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errAIActionTargetNotFound
+	}
+	if item.IsAvailable == available {
+		return AIActionItemPayload{}, AIActionItemPreview{}, fmt.Errorf("“%s” %sอยู่แล้ว", item.Name, aiAvailabilityStateWord(available))
+	}
+
+	preview := AIActionItemPreview{
+		Title: item.Name,
+		Change: fmt.Sprintf("%s → %s",
+			aiAvailabilityStateWord(item.IsAvailable), aiAvailabilityStateWord(available)),
+	}
+	if available {
+		preview.SideEffects = append(preview.SideEffects, "ลูกค้าจะสั่งเมนูนี้ได้ทันที")
+	} else {
+		preview.SideEffects = append(preview.SideEffects, "เมนูนี้จะหายจากหน้าสั่งอาหาร · ออเดอร์ที่สั่งไปแล้วไม่กระทบ")
+	}
+	return AIActionItemPayload{MenuItemID: item.ID, Available: available}, preview, nil
+}
+
+func aiAvailabilityStateWord(available bool) string {
+	if available {
+		return "เปิดขาย"
+	}
+	return "ปิดขาย"
+}
+
 // --- Building and executing a plan -------------------------------------------
 
 // AIActionPlanDraft is a fully validated plan, ready to be stored for
@@ -266,8 +320,11 @@ type AIActionRejectedItem struct {
 
 // aiValidateCommand sends one command to the validator for its kind and reports
 // which action type it becomes.
-func aiValidateCommand(port AIActionIngredientPort, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, string, error) {
+func aiValidateCommand(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, string, error) {
 	switch command.Kind {
+	case "menu_on", "menu_off":
+		payload, preview, err := validateSetMenuAvailability(menuPort, restaurantID, command.MenuItemID, command.Available)
+		return payload, preview, entity.AIActionTypeSetMenuAvailability, err
 	case "min":
 		payload, preview, err := validateSetIngredientField(port, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientMinStock, command.Quantity)
 		return payload, preview, entity.AIActionTypeSetIngredientMinStock, err
@@ -289,14 +346,14 @@ func aiValidateCommand(port AIActionIngredientPort, restaurantID uint, command A
 
 // BuildAdjustStockPlan validates every requested change and returns the draft.
 // Invalid items are reported, not silently dropped.
-func BuildAdjustStockPlan(port AIActionIngredientPort, restaurantID uint, commands []AIAdjustStockCommand, titles []string) AIActionPlanDraft {
+func BuildAdjustStockPlan(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID uint, commands []AIAdjustStockCommand, titles []string) AIActionPlanDraft {
 	draft := AIActionPlanDraft{}
 	for index, command := range commands {
 		title := ""
 		if index < len(titles) {
 			title = titles[index]
 		}
-		payload, preview, actionType, err := aiValidateCommand(port, restaurantID, command)
+		payload, preview, actionType, err := aiValidateCommand(port, menuPort, restaurantID, command)
 		if err != nil {
 			if title == "" {
 				title = fmt.Sprintf("รายการที่ %d", index+1)
@@ -325,8 +382,23 @@ func BuildAdjustStockPlan(port AIActionIngredientPort, restaurantID uint, comman
 }
 
 // executeAIActionItem runs one stored item through the normal service path.
-func executeAIActionItem(port AIActionIngredientPort, restaurantID, actorUserID uint, item entity.AIActionPlanItem) error {
+func executeAIActionItem(port AIActionIngredientPort, menuPort AIActionMenuPort, restaurantID, actorUserID uint, item entity.AIActionPlanItem) error {
 	switch item.ActionType {
+	case entity.AIActionTypeSetMenuAvailability:
+		// The same call the availability toggle on the menu screen makes, so
+		// whatever that does — and whatever it grows into — happens here too.
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		if menuPort == nil {
+			return ErrAIActionUnavailable
+		}
+		_, err := menuPort.UpdateMenuItemAvailability(restaurantID, payload.MenuItemID, &MenuItemAvailabilityRequest{
+			IsAvailable: payload.Available,
+		})
+		return err
+
 	case entity.AIActionTypeAdjustIngredientStock:
 		var payload AIActionItemPayload
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {

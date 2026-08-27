@@ -32,10 +32,13 @@ const (
 	// Action types the plan boundary accepts. Adding one here is not enough: it
 	// must also be registered with a validator and an executor, and the check
 	// constraint below must list it — three reviewed places, on purpose.
-	AIActionTypeAdjustIngredientStock  = "adjust_ingredient_stock"
-	AIActionTypeSetIngredientMinStock  = "set_ingredient_min_stock"
-	AIActionTypeSetIngredientCost      = "set_ingredient_cost"
-	AIActionTypeCreateIngredient       = "create_ingredient"
+	AIActionTypeAdjustIngredientStock = "adjust_ingredient_stock"
+	AIActionTypeSetIngredientMinStock = "set_ingredient_min_stock"
+	AIActionTypeSetIngredientCost     = "set_ingredient_cost"
+	AIActionTypeCreateIngredient      = "create_ingredient"
+	// Opening and closing a menu is also a plan item now. Its constant lives with
+	// the older single-action preview (ai_action_preview.go), which names the same
+	// action — one spelling of "set_menu_availability" for both boundaries.
 )
 
 type AIActionPlan struct {
@@ -73,7 +76,8 @@ func IsAllowedAIActionType(actionType string) bool {
 	case AIActionTypeAdjustIngredientStock,
 		AIActionTypeSetIngredientMinStock,
 		AIActionTypeSetIngredientCost,
-		AIActionTypeCreateIngredient:
+		AIActionTypeCreateIngredient,
+		AIActionTypeSetMenuAvailability:
 		return true
 	default:
 		return false
@@ -91,7 +95,7 @@ type AIActionPlanItem struct {
 	PlanID string `json:"plan_id" gorm:"type:varchar(64);not null;index:idx_ai_action_plan_items_plan,priority:1"`
 	Seq    int    `json:"seq" gorm:"not null;index:idx_ai_action_plan_items_plan,priority:2"`
 
-	ActionType string `json:"action_type" gorm:"size:48;not null;check:ai_action_plan_items_allowed_type,action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient')"`
+	ActionType string `json:"action_type" gorm:"size:48;not null;check:ai_action_plan_items_allowed_type,action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability')"`
 
 	PayloadJSON string `json:"-" gorm:"type:jsonb;not null;default:'{}';check:ai_action_plan_items_payload_size,octet_length(payload_json::text) <= 8192"`
 	PreviewJSON string `json:"preview" gorm:"type:jsonb;not null;default:'{}';check:ai_action_plan_items_preview_size,octet_length(preview_json::text) <= 8192"`

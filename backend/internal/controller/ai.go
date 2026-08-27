@@ -59,6 +59,9 @@ func ProvideAIController(db *gorm.DB) *AIController {
 		repository.NewMenuRepository(db),
 		repository.NewAIActionPlanRepository(db),
 		service.ProvideIngredientService(repository.NewIngredientRepository(db)),
+		// The same menu service the menu screen uses, so an availability change the
+		// assistant makes runs exactly the code a button press runs.
+		service.ProvideMenuService(repository.NewMenuRepository(db)),
 	))
 }
 

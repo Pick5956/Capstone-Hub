@@ -256,6 +256,13 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	return s.repo.FindMenuItem(restaurantID, item.ID)
 }
 
+// FindMenuItem reads one tenant-scoped menu item. It exists so callers that must
+// re-check a row before acting on it (the AI action boundary) go through the
+// service rather than reaching for the repository themselves.
+func (s *MenuService) FindMenuItem(restaurantID, itemID uint) (*entity.MenuItem, error) {
+	return s.repo.FindMenuItem(restaurantID, itemID)
+}
+
 func (s *MenuService) UpdateMenuItemAvailability(restaurantID, itemID uint, req *MenuItemAvailabilityRequest) (*entity.MenuItem, error) {
 	item, err := s.repo.FindMenuItem(restaurantID, itemID)
 	if err != nil {
