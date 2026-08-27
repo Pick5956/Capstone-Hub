@@ -41,7 +41,7 @@ describe("InlineDbConfirmBar helpers", () => {
 
     const pending = barView("pending", base);
     expect(pending.statusText).toContain("แก้ข้อมูลจริง 1 รายการ");
-    expect(pending.statusText).toContain("ยกเลิกได้ใน 4:32");
+    expect(pending.statusText).toContain("กดยืนยันภายใน 4:32");
     expect(pending.highlight).toBe("to");
     expect(pending.glow).toBe(true);
     expect(pending.buttons).toBe("confirm");
