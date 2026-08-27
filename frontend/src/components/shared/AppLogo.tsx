@@ -17,7 +17,10 @@ export default function AppLogo({
 }: AppLogoProps) {
   return (
     <span
-      className={`relative inline-flex shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-800 ${className}`}
+      // The artwork already carries its own hand-drawn frame and its outside is
+      // transparent, so a CSS card behind it just adds a straight white square
+      // that ignores the frame slant and shows up on any coloured surface.
+      className={`relative inline-flex shrink-0 ${className}`}
       style={{ height: size, width: size }}
     >
       <Image
@@ -26,7 +29,7 @@ export default function AppLogo({
         fill
         priority={priority}
         sizes={`${size}px`}
-        className="object-cover"
+        className="object-contain"
       />
     </span>
   );

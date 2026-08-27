@@ -22,13 +22,15 @@ export function SettingsShell({
 }) {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      {hideHeader ? (
-        // The sidebar already names the page; keep only a visually-hidden
-        // heading so the document outline and screen readers are unaffected.
-        <h1 className="sr-only">{title}</h1>
-      ) : (
-        <div className="px-4 pt-4 sm:px-6 lg:px-8 lg:pt-6 mb-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      {/* Settings are forms: hold them to a readable measure and center them so
+          fields never stretch edge-to-edge on wide screens. */}
+      <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">
+        {hideHeader ? (
+          // The sidebar already names the page; keep only a visually-hidden
+          // heading so the document outline and screen readers are unaffected.
+          <h1 className="sr-only">{title}</h1>
+        ) : (
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-600 dark:text-orange-400">{eyebrow}</p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{title}</h1>
@@ -38,12 +40,10 @@ export function SettingsShell({
             </div>
             {action ? <div className="shrink-0">{action}</div> : null}
           </div>
-        </div>
-      )}
+        )}
 
-      <main className="w-full px-4 pb-4 sm:px-6 lg:px-8">
-        {children}
-      </main>
+        <main className="w-full">{children}</main>
+      </div>
     </div>
   );
 }

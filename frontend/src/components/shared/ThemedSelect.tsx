@@ -30,6 +30,7 @@ export default function ThemedSelect({
   disabled,
   className = "",
   placeholder = "เลือก",
+  compact = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -37,6 +38,8 @@ export default function ThemedSelect({
   disabled?: boolean;
   className?: string;
   placeholder?: string;
+  // compact matches the h-9 action buttons; the default h-10 stays the app-wide size.
+  compact?: boolean;
 }) {
   const { language } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -206,7 +209,7 @@ export default function ThemedSelect({
         aria-haspopup="listbox"
         aria-controls={renderMenu ? listboxId : undefined}
         aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
-        className={`h-10 w-full rounded-md border px-3 pr-9 text-left text-[13px] text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] active:translate-y-px focus-visible:border-orange-500 focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState}`}
+        className={`${compact ? "h-9 text-[12px]" : "h-10 text-[13px]"} w-full rounded-md border px-3 pr-9 text-left text-gray-900 outline-none transition-[background-color,border-color,box-shadow,transform,opacity] active:translate-y-px focus-visible:border-orange-500 focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white ${buttonState}`}
       >
         <span className={`${selected ? "" : "text-gray-500 dark:text-gray-400"} block truncate`}>
           {selected?.label ?? (placeholder || fallbackPlaceholder)}

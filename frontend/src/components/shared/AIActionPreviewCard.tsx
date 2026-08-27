@@ -131,7 +131,7 @@ export default function AIActionPreviewCard({
           type="button"
           disabled={busy}
           onClick={onConfirm}
-          className="inline-flex items-center gap-1.5 rounded-md bg-gray-950 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+          className="inline-flex items-center gap-1.5 rounded-md bg-orange-700 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
         >
           {confirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />}
           {confirming ? copy.confirming : copy.confirm}

@@ -69,6 +69,15 @@ const EyeSlashIcon = () => (
   </svg>
 );
 
+const GoogleGlyph = () => (
+  <svg viewBox="0 0 18 18" className="h-[18px] w-[18px] shrink-0" aria-hidden="true" focusable="false">
+    <path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 2.0782-1.7959 2.7164v2.2581h2.9087c1.7018-1.5668 2.6836-3.874 2.6836-6.615z" />
+    <path fill="#34A853" d="M9 18c2.43 0 4.4673-.806 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.859-3.0477.859-2.344 0-4.3282-1.5831-5.036-3.7104H.9574v2.3318C2.4382 15.9832 5.4818 18 9 18z" />
+    <path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.2822-1.1168-.2822-1.71s.1022-1.17.2822-1.71V4.9582H.9574C.3477 6.1732 0 7.5477 0 9s.3477 2.8268.9574 4.0418L3.964 10.71z" />
+    <path fill="#EA4335" d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4632.8918 11.426 0 9 0 5.4818 0 2.4382 2.0168.9574 4.9582L3.964 7.29C4.6718 5.1627 6.656 3.5795 9 3.5795z" />
+  </svg>
+);
+
 const ClearIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="h-3.5 w-3.5">
     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -278,6 +287,7 @@ export default function AuthModal({
         createAccountButton: "สร้างบัญชี",
         createAccountBusy: "กำลังสร้างบัญชี...",
         or: "หรือ",
+        continueWithGoogle: "ดำเนินการต่อโดยใช้ Google",
         noAccount: "ยังไม่มีบัญชี?",
         haveAccount: "มีบัญชีอยู่แล้ว?",
         forgotPassword: "ลืมรหัสผ่าน?",
@@ -323,6 +333,7 @@ export default function AuthModal({
         createAccountButton: "Create account",
         createAccountBusy: "Creating account...",
         or: "or",
+        continueWithGoogle: "Continue with Google",
         noAccount: "Don't have an account?",
         haveAccount: "Already have an account?",
         forgotPassword: "Forgot password?",
@@ -447,6 +458,47 @@ export default function AuthModal({
     if (!isOpen || authMode !== "login" || !clientId) return;
 
     let cancelled = false;
+
+    // Google bakes the width into the button at render time and never reflows it.
+    // Measuring once left a 320 px button inside a narrower slot on small screens,
+    // so it overflowed and its own grey outline showed past our border. Re-render
+    // on container resize instead, and remember the last width so the observer
+    // cannot loop on the layout its own re-render produces.
+    const MAX_BUTTON_WIDTH = 320;
+    const MEASURE_RETRY_MS = 50;
+    const MEASURE_MAX_RETRIES = 40;
+    let lastRenderedWidth = 0;
+    let measureTimer: ReturnType<typeof setTimeout> | undefined;
+    let measureAttempts = 0;
+    const renderGoogleButton = () => {
+      const slot = googleButtonRef.current;
+      if (cancelled || !window.google || !slot) return;
+      const measured = Math.round(slot.getBoundingClientRect().width);
+      // The dialog animates open, so the slot is still zero-width on the first
+      // pass. The old code fell back to 320 px there and baked that width into
+      // the button, which then overflowed a narrower slot and pushed Google own
+      // grey outline out past our border. Wait for a real measurement instead,
+      // but never wait forever - a button at the old fallback width beats no
+      // button at all.
+      if (measured <= 0 && measureAttempts < MEASURE_MAX_RETRIES) {
+        measureAttempts += 1;
+        measureTimer = setTimeout(renderGoogleButton, MEASURE_RETRY_MS);
+        return;
+      }
+      const width = Math.min(MAX_BUTTON_WIDTH, measured || MAX_BUTTON_WIDTH);
+      if (width === lastRenderedWidth) return;
+      lastRenderedWidth = width;
+      slot.innerHTML = "";
+      window.google.accounts.id.renderButton(slot, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        width,
+      });
+    };
+
     const initializeGoogleButton = () => {
       if (cancelled || !window.google || !googleButtonRef.current) return;
       if (!googleInitializedRef.current) {
@@ -456,17 +508,21 @@ export default function AuthModal({
         });
         googleInitializedRef.current = true;
       }
-      const buttonWidth = Math.min(320, googleButtonRef.current.clientWidth || 320);
-      googleButtonRef.current.innerHTML = "";
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        shape: "rectangular",
-        width: buttonWidth,
-      });
+      renderGoogleButton();
     };
+
+    // ResizeObserver catches container-driven width changes; the window listener
+    // covers viewport changes such as an orientation flip. Both funnel through the
+    // lastRenderedWidth guard, so whichever fires first does the single re-render.
+    const slotEl = googleButtonRef.current;
+    const resizeObserver =
+      slotEl && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => renderGoogleButton())
+        : null;
+    if (slotEl && resizeObserver) resizeObserver.observe(slotEl);
+    const handleWindowResize = () => renderGoogleButton();
+    window.addEventListener("resize", handleWindowResize);
+    window.addEventListener("orientationchange", handleWindowResize);
 
     if (window.google) {
       initializeGoogleButton();
@@ -487,6 +543,10 @@ export default function AuthModal({
 
     return () => {
       cancelled = true;
+      if (measureTimer) clearTimeout(measureTimer);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
+      window.removeEventListener("orientationchange", handleWindowResize);
     };
   }, [authMode, isOpen]);
 
@@ -744,7 +804,7 @@ export default function AuthModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-1 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900"
+                className="mt-1 h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white"
               >
                 {loading ? copy.loginBusy : copy.loginButton}
               </button>
@@ -756,17 +816,22 @@ export default function AuthModal({
                     <span className="text-[11px] text-gray-500 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
-                  {/* Google briefly resizes and restyles its iframe while initializing or
-                      returning from the account picker. Keep sizing and the visible border
-                      on our wrapper so the button does not jump or lose its outline. */}
-                  <div className="group relative mx-auto h-11 w-full max-w-80 rounded-md">
+                  {/* Google injects its own button markup and restyles it on focus, press,
+                      and on the way back from the account picker - borders, outlines and
+                      state layers we cannot predict or keep up with. So their button stays
+                      the real click and focus target but is rendered fully transparent, and
+                      we paint the visible face underneath it. Nothing Google does to its own
+                      markup can reach the user. The 44 px outer height is the anti-jump slot;
+                      the face and the click target are both the visible 40 px. */}
+                  <div data-google-auth="" className="relative mx-auto h-11 w-full max-w-80">
+                    <span data-google-face="" aria-hidden="true">
+                      <GoogleGlyph />
+                      {copy.continueWithGoogle}
+                    </span>
                     <div
-                      className="flex h-11 overflow-hidden rounded-md"
+                      data-gis-slot=""
+                      className="absolute inset-x-0 top-0 h-10 overflow-hidden rounded-md opacity-0"
                       ref={googleButtonRef}
-                    />
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 top-0 h-10 rounded-md border border-gray-300 transition-[border-color,box-shadow] group-focus-within:border-orange-500 group-focus-within:ring-2 group-focus-within:ring-orange-500/15 dark:border-gray-700"
                     />
                   </div>
                 </>
@@ -793,7 +858,7 @@ export default function AuthModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-1 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900"
+                className="mt-1 h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white"
               >
                 {loading ? copy.sendResetBusy : copy.sendResetLink}
               </button>
@@ -881,7 +946,7 @@ export default function AuthModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-1 h-10 w-full rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900"
+                className="mt-1 h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white"
               >
                 {loading ? copy.createAccountBusy : copy.createAccountButton}
               </button>

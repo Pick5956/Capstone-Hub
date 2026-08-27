@@ -417,7 +417,7 @@ function SecondaryButton({onClick, children}: {onClick: () => void; children: Re
     <button
       type="button"
       onClick={onClick}
-      className="ui-press landing-lift inline-flex h-20 w-100 max-w-6xl items-center rounded-[10px] bg-gray-900 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+      className="ui-press landing-lift inline-flex h-20 w-100 max-w-6xl items-center rounded-[10px] bg-orange-700 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
     >
       {/* กลาง */}
       <span className="flex flex-[6] items-center justify-center">
@@ -436,7 +436,7 @@ function PrimaryButton({ onClick, children }: { onClick: () => void; children: R
     <button
       type="button"
       onClick={onClick}
-      className="ui-press landing-lift inline-flex h-25 w-full max-w-6xl items-center rounded-[10px] bg-gray-900 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+      className="ui-press landing-lift inline-flex h-25 w-full max-w-6xl items-center rounded-[10px] bg-orange-700 px-5 text-xl sm:text-3xl md:text-4xl lg:text-[60px] font-semibold text-white transition-colors hover:bg-orange-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
     >
       {/* อันแรก — เล็กสุด */}
       <span className="flex flex-[1] items-center justify-start">
@@ -891,7 +891,7 @@ export default function LandingPage() {
               className={`ui-press landing-lift inline-flex h-9 items-center justify-center rounded-md px-3.5 text-[13px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${
                 headerOnImage
                   ? "bg-white text-gray-950 hover:bg-gray-100"
-                  : "bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                  : "bg-orange-700 text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800"
               }`}
             >
               {copy.login}

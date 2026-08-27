@@ -19,19 +19,36 @@ function fmtBaht(v: number) {
 
 // ForecastTooltip formats the hovered point: actuals show one figure, forecasts
 // show the prediction plus its range — the range being the honest "how sure" cue.
-function ForecastTooltip({ active, payload, label, t }: any) {
+type ForecastRow = {
+  date?: string;
+  actual?: number;
+  predicted?: number;
+  band?: number[];
+};
+
+// Recharts hands the content element active/payload/label at hover time, so
+// those stay optional; `t` is the caller-supplied label set.
+type ForecastTooltipProps = {
+  active?: boolean;
+  payload?: { payload?: ForecastRow }[];
+  label?: string | number;
+  t: { actual: string; predicted: string; range: string };
+};
+
+function ForecastTooltip({ active, payload, label, t }: ForecastTooltipProps) {
   if (!active || !payload?.length) return null;
-  const row = payload[0]?.payload ?? {};
-  const isForecast = row.predicted != null && row.actual == null;
+  const row: ForecastRow = payload[0]?.payload ?? {};
+  // Holding the value rather than a boolean lets TS see it is defined below.
+  const forecast = row.actual == null ? row.predicted : undefined;
   return (
     <div className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div className="font-medium text-gray-700 dark:text-gray-200">{label}</div>
       {row.actual != null && (
         <div className="text-gray-500 dark:text-gray-400">{t.actual}: {fmtBaht(row.actual)} ฿</div>
       )}
-      {isForecast && (
+      {forecast != null && (
         <>
-          <div className="text-orange-600 dark:text-orange-400">{t.predicted}: {fmtBaht(row.predicted)} ฿</div>
+          <div className="text-orange-600 dark:text-orange-400">{t.predicted}: {fmtBaht(forecast)} ฿</div>
           {row.band && (
             <div className="text-gray-400">{t.range}: {fmtBaht(row.band[0])}–{fmtBaht(row.band[1])} ฿</div>
           )}

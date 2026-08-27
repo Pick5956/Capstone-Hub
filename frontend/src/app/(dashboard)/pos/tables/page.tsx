@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
+import { MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -19,7 +19,6 @@ import type { RestaurantTable, TableStatus } from "@/src/types/table";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
-import DashboardAccountMenu from "@/src/components/shared/DashboardAccountMenu";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
@@ -72,6 +71,7 @@ export default function PosTablesPage() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [navigationPending, startNavigationTransition] = useTransition();
   const [search, setSearch] = useState("");
+  const [zoneFilter, setZoneFilter] = useState<string>("all");
   const [error, setError] = useState("");
   const [sheetError, setSheetError] = useState("");
   const refreshInFlight = useRef(false);
@@ -205,7 +205,6 @@ export default function PosTablesPage() {
     startNavigationTransition(() => router.push(orderPosHref(order)));
   }, [router, startNavigationTransition]);
 
-  const notificationLabel = language === "th" ? "การแจ้งเตือน" : "Notifications";
 
   const activeOrderByTable = useMemo(() => {
     const map = new Map<number, Order>();
@@ -219,6 +218,8 @@ export default function PosTablesPage() {
     const keyword = search.trim().toLowerCase();
     const groups = new Map<string, { label: string; tables: RestaurantTable[] }>();
     tables.filter((table) => {
+      const key = table.zone_id ? String(table.zone_id) : "none";
+      if (zoneFilter !== "all" && key !== zoneFilter) return false;
       if (!keyword) return true;
       return [
         table.table_number,
@@ -233,11 +234,37 @@ export default function PosTablesPage() {
       groups.get(key)?.tables.push(table);
     });
     return Array.from(groups.values());
-  }, [copy.noZone, search, tables]);
+  }, [copy.noZone, search, tables, zoneFilter]);
 
   // When the restaurant has no zones at all, drop the zone chrome entirely so the
   // floor reads as a plain, sequential list instead of a single "No zone" bucket.
   const hasAnyZone = useMemo(() => tables.some((table) => table.zone_id), [tables]);
+
+  const zoneOptions = useMemo(() => {
+    const counts = new Map<string, { key: string; label: string; count: number }>();
+    tables.forEach((table) => {
+      const key = table.zone_id ? String(table.zone_id) : "none";
+      const label = table.table_zone?.name || table.zone || copy.noZone;
+      const entry = counts.get(key) ?? { key, label, count: 0 };
+      entry.count += 1;
+      counts.set(key, entry);
+    });
+    return Array.from(counts.values());
+  }, [copy.noZone, tables]);
+
+  /** How many of a zone's tables are open for a walk-in right now. */
+  const freeIn = (list: RestaurantTable[]) =>
+    list.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length;
+
+  const allZonesLabel = language === "th" ? "ทุกโซน" : "All zones";
+  const zoneCountLabel = (free: number, total: number) =>
+    language === "th" ? `ว่าง ${free} จาก ${total} โต๊ะ` : `${free} of ${total} free`;
+  const chipClass = (on: boolean) =>
+    `ui-press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+      on
+        ? "border-orange-700 bg-orange-700 text-white"
+        : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200"
+    }`;
 
   const load = useCallback(async (showLoading = true) => {
     if (!canTake) return;
@@ -517,43 +544,48 @@ export default function PosTablesPage() {
       {isNavigating ? (
         <div aria-hidden="true" className="fixed inset-0 z-[var(--z-modal)] cursor-wait bg-transparent" />
       ) : null}
-      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 lg:left-[var(--sidebar-w)] lg:top-0 transition-[left] duration-300 ease-in-out">
-        <div className="dashboard-shell-border-b grid gap-1.5 px-3 py-2 sm:px-4 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[minmax(15rem,22rem)_auto_minmax(0,1fr)_auto_auto] lg:items-center lg:px-5">
-          <label className="relative min-w-0">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none dark:lg:bg-transparent">
+        <h1 className="sr-only">{copy.eyebrow}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
+          <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:flex lg:items-center lg:gap-2">
+            <label className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                disabled={isNavigating}
+                placeholder={copy.search}
+                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+                aria-label={copy.search}
+              />
+            </label>
+            <button
+              type="button"
               disabled={isNavigating}
-              placeholder={copy.search}
-              className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
-              aria-label={copy.search}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isNavigating}
-            onClick={openTakeawaySheet}
-            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            {copy.takeaway}
-          </button>
-          <div aria-hidden="true" className="hidden lg:block" />
-          <button
-            type="button"
-            aria-label={notificationLabel}
-            disabled={isNavigating}
-            className="ui-press hidden h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900 lg:inline-flex"
-          >
-            <Bell className="h-4 w-4" strokeWidth={2} />
-          </button>
-          <div className="hidden lg:block">
-            <DashboardAccountMenu />
+              onClick={openTakeawaySheet}
+              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:order-last lg:ml-auto"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              {copy.takeaway}
+            </button>
+            {hasAnyZone && (
+              <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
+                <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
+                  {allZonesLabel}
+                  <span className="font-mono tabular-nums opacity-70">{tables.length}</span>
+                </button>
+                {zoneOptions.map((zone) => (
+                  <button key={zone.key} type="button" onClick={() => setZoneFilter(zone.key)} className={chipClass(zoneFilter === zone.key)}>
+                    <span className="truncate">{zone.label}</span>
+                    <span className="font-mono tabular-nums opacity-70">{zone.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
-      <div aria-hidden="true" className="h-[104px] lg:h-[62px]" />
+      <div aria-hidden="true" className="h-[104px] lg:hidden" />
       <OperationalPageShell
         eyebrow={copy.eyebrow}
         title={copy.title}
@@ -561,6 +593,7 @@ export default function PosTablesPage() {
         showHeader={false}
       >
 
+      <div className="mx-auto w-full max-w-6xl">
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {loading || isNavigating ? (
@@ -568,7 +601,7 @@ export default function PosTablesPage() {
           role="status"
           aria-live="polite"
           aria-label={language === "th" ? "กำลังโหลด" : "Loading"}
-          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7"
+          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
         >
           {Array.from({ length: 10 }).map((_, index) => <Skeleton key={index} className="h-[118px]" />)}
         </div>
@@ -577,12 +610,12 @@ export default function PosTablesPage() {
           {groupedTables.length ? groupedTables.map((group) => (
             <section key={group.label}>
               {hasAnyZone && (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="h-5 w-1 rounded-full bg-orange-500" aria-hidden="true" />
-                  <h2 className="text-[20px] font-semibold leading-none text-gray-950 dark:text-white">{group.label}</h2>
+                <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[color:var(--dashboard-shell-border)] pb-2">
+                  <h2 className="truncate text-[15px] font-bold leading-tight text-gray-950 dark:text-white">{group.label}</h2>
+                  <span className="shrink-0 text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{zoneCountLabel(freeIn(group.tables), group.tables.length)}</span>
                 </div>
               )}
-              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
+              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
                   const busy = Boolean(order);
@@ -690,7 +723,7 @@ export default function PosTablesPage() {
                   <button type="button" disabled={submitting || isNavigating} onClick={cancelReservation} className="ui-press h-10 rounded-md border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50">
                     {copy.cancelReservation}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-10 whitespace-nowrap rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                  <button type="button" disabled={submitting || isNavigating} onClick={acceptReservation} className="ui-press col-span-2 h-10 whitespace-nowrap rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white">
                     {copy.acceptReservation}
                   </button>
                 </div>
@@ -760,7 +793,7 @@ export default function PosTablesPage() {
                   <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
                     {copy.cancel}
                   </button>
-                  <button type="button" disabled={submitting || isNavigating} onClick={openOrder} className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-gray-900 sm:h-9 sm:text-[12px]">
+                  <button type="button" disabled={submitting || isNavigating} onClick={openOrder} className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:cursor-wait disabled:opacity-60 dark:bg-orange-700 dark:text-white sm:h-9 sm:text-[12px]">
                     {submitting ? (takeawayOpen ? copy.openingTakeaway : copy.openingTable) : takeawayOpen ? copy.confirmTakeaway : copy.confirm}
                   </button>
                 </div>
@@ -769,6 +802,7 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
+      </div>
       </OperationalPageShell>
     </>
   );

@@ -1062,7 +1062,7 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 text-[12px] font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white transition hover:bg-orange-800 dark:bg-orange-700 dark:text-white"
             >
               <Plus className="h-4 w-4" />
               {copy.add}
@@ -1445,7 +1445,7 @@ export default function InventoryPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                  className="rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white"
                 >
                   {submitting ? "..." : copy.save}
                 </button>
@@ -1588,7 +1588,7 @@ export default function InventoryPage() {
                 type="button"
                 onClick={handleBulkSave}
                 disabled={bulkSaving}
-                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                className="inline-flex items-center gap-1.5 rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white"
               >
                 {bulkSaving
                   ? "..."
@@ -1701,7 +1701,7 @@ export default function InventoryPage() {
                   type="button"
                   onClick={handleCreateCategory}
                   disabled={categorySubmitting}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-orange-700 px-3 text-sm font-semibold text-white transition hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white"
                 >
                   <Plus className="h-4 w-4" />
                   {lang === "th" ? "เพิ่มหมวดหมู่" : "Add category"}
@@ -1852,7 +1852,7 @@ export default function InventoryPage() {
               <button
                 onClick={handleAdjust}
                 disabled={adjusting}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+                className="rounded-md bg-orange-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white"
               >
                 {adjusting ? "..." : copy.save}
               </button>

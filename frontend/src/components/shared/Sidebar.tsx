@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/src/providers/SidebarProvider';
 import { useAuth } from '@/src/providers/AuthProvider';
+import DashboardAccountMenu from '@/src/components/shared/DashboardAccountMenu';
 import { useLanguage } from '@/src/providers/LanguageProvider';
 import AppLogo from '@/src/components/shared/AppLogo';
+import AppWordmark from '@/src/components/shared/AppWordmark';
 import { useBackdropClose } from '@/src/hooks/useBackdropClose';
 import { can, TEAM_MANAGEMENT_PERMISSIONS } from '@/src/lib/rbac';
 import type { Permission } from '@/src/types/auth';
@@ -199,20 +201,20 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
 
               const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
                 active
-                  ? 'border border-transparent bg-orange-50 text-orange-700 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-orange-700 dark:bg-orange-950 dark:text-orange-200 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
-                  : 'border border-transparent text-gray-800 hover:border-[color:var(--dashboard-shell-border)] hover:bg-white hover:text-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 dark:hover:text-white'
-              } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-gray-600 dark:hover:bg-transparent dark:hover:text-gray-400' : ''}`;
+                  ? 'border border-transparent bg-orange-100 text-orange-900 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-transparent dark:bg-orange-100 dark:text-orange-900 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
+                  : 'border border-transparent text-orange-100 hover:border-orange-700 hover:bg-orange-700 hover:text-white dark:text-orange-100 dark:hover:bg-orange-800 dark:hover:text-white'
+              } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-orange-200 dark:hover:bg-transparent dark:hover:text-orange-200' : ''}`;
 
               const content = (
                 <>
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500 dark:text-gray-400'}`}>{icon}</span>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-900 dark:text-orange-900' : 'text-orange-200 dark:text-orange-200'}`}>{icon}</span>
                   <span
                     className={`flex min-w-0 flex-1 items-center justify-between gap-2 transition-all duration-300 ${
                       collapsed ? 'w-0 opacity-0 pointer-events-none overflow-hidden' : 'w-auto opacity-100'
                     }`}
                   >
-                    <span className="truncate">{label}</span>
-                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-gray-500 dark:text-gray-500">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                    <span className="truncate leading-[1.6]">{label}</span>
+                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-orange-300 dark:text-orange-300">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
                     {hasSubItems && (
                       <svg
                         viewBox="0 0 24 24"
@@ -220,7 +222,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         stroke="currentColor"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-600 dark:text-orange-300' : 'text-gray-500'} ${isExpanded ? 'rotate-90' : ''}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-900 dark:text-orange-900' : 'text-orange-200'} ${isExpanded ? 'rotate-90' : ''}`}
                       >
                         <polyline points="9 18 15 12 9 6"/>
                       </svg>
@@ -228,7 +230,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                   </span>
                   {badge && (
                     <span
-                      className={`flex h-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white transition-all duration-300 ${
+                      className={`flex h-5 shrink-0 items-center justify-center rounded-full bg-white text-orange-900 transition-all duration-300 ${
                         collapsed 
                           ? 'absolute right-1 top-1 h-2 w-2 p-0 text-[0px] overflow-hidden' 
                           : 'min-w-5 px-1.5 text-[10px] font-semibold'
@@ -278,7 +280,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         isExpanded ? '' : 'pointer-events-none'
                       }`}
                     >
-                      <div className="relative ml-5 border-l border-gray-200 pl-3 space-y-0.5 dark:border-gray-800 pt-1 pb-1">
+                      <div className="relative ml-5 border-l border-orange-700 pl-3 space-y-0.5 dark:border-orange-700 pt-1 pb-1">
                         {visibleSubItems.map(sub => {
                           const subActive = isActive(sub.href);
                           return (
@@ -289,8 +291,8 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                               tabIndex={isExpanded ? 0 : -1}
                               className={`flex items-center rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
                                 subActive
-                                  ? 'bg-orange-50/50 text-orange-600 dark:bg-orange-950/20 dark:text-orange-400'
-                                  : 'text-gray-700 hover:bg-gray-100/50 hover:text-gray-950 dark:text-gray-300 dark:hover:bg-gray-900/50 dark:hover:text-white'
+                                  ? 'bg-orange-100 text-orange-900 dark:bg-orange-100 dark:text-orange-900'
+                                  : 'text-orange-200 hover:bg-orange-700 hover:text-white dark:text-orange-200 dark:hover:bg-orange-800 dark:hover:text-white'
                               }`}
                             >
                               {sub.label}
@@ -310,6 +312,60 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
   );
 }
 
+function useOpenState() {
+  const { activeMembership } = useAuth();
+  const { language } = useLanguage();
+  const openTime = activeMembership?.restaurant?.open_time ?? '';
+  const closeTime = activeMembership?.restaurant?.close_time ?? '';
+  if (!/^\d{2}:\d{2}$/.test(openTime) || !/^\d{2}:\d{2}$/.test(closeTime)) return null;
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const toMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  const open = toMinutes(openTime);
+  const close = toMinutes(closeTime);
+  // A close time earlier than the open time means the shift runs past midnight.
+  const isOpen = close > open ? minutes >= open && minutes < close : minutes >= open || minutes < close;
+  return language === 'th'
+    ? `${isOpen ? 'เปิดอยู่' : 'ปิดอยู่'} · ${isOpen ? 'ปิด' : 'เปิด'} ${isOpen ? closeTime : openTime}`
+    : `${isOpen ? 'Open' : 'Closed'} · ${isOpen ? 'closes' : 'opens'} ${isOpen ? closeTime : openTime}`;
+}
+
+function RestaurantSwitcherCard({ collapsed }: { collapsed: boolean }) {
+  const { activeMembership } = useAuth();
+  const { language } = useLanguage();
+  const name = activeMembership?.restaurant?.name ?? (language === 'th' ? 'เลือกร้าน' : 'Select restaurant');
+  const detail = useOpenState();
+  const initial = name.trim().charAt(0) || '?';
+
+  return (
+    <Link
+      href="/restaurants"
+      title={collapsed ? name : undefined}
+      aria-label={language === 'th' ? 'เปลี่ยนร้าน' : 'Switch restaurant'}
+      className={`flex min-w-0 items-center rounded-md border border-transparent transition-colors hover:border-orange-700 hover:bg-orange-700 ${collapsed ? 'justify-center p-1' : 'min-w-0 flex-1 gap-2 p-1.5'}`}
+    >
+      <span
+        aria-hidden="true"
+        className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-md text-[15px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+        style={{ background: 'linear-gradient(135deg,#f97316,#c2410c)' }}
+      >
+        {initial}
+      </span>
+      {!collapsed && (
+        <>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[13px] font-bold leading-[1.6] text-orange-50">{name}</span>
+            {detail && <span className="truncate text-[11px] leading-[1.6] text-orange-200">{detail}</span>}
+          </span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-orange-200" aria-hidden="true">
+            <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+          </svg>
+        </>
+      )}
+    </Link>
+  );
+}
+
 function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
@@ -325,7 +381,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
         className={`flex min-w-0 items-center rounded-md border border-transparent transition-[background-color,border-color,gap,padding] duration-300 ${
           collapsed 
             ? 'justify-center gap-0 p-1 hover:bg-transparent' 
-            : 'gap-2.5 px-1.5 py-1.5 hover:border-[color:var(--dashboard-shell-border)] hover:bg-white dark:hover:bg-gray-900'
+            : 'gap-2.5 px-1.5 py-1.5 hover:border-orange-700 hover:bg-orange-700 dark:hover:bg-orange-800'
         }`}
       >
         <AppLogo size={32} />
@@ -335,9 +391,9 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold leading-tight text-gray-950 dark:text-white">{restaurantName}</span>
+            <span className="block truncate text-[13px] font-semibold leading-[1.6] text-white dark:text-white">{restaurantName}</span>
           </span>
-          <span className="shrink-0 text-[11px] font-semibold text-orange-600 dark:text-orange-400">{switchLabel}</span>
+          <span className="shrink-0 text-[11px] font-semibold text-orange-200 dark:text-orange-200">{switchLabel}</span>
         </div>
       </Link>
     </div>
@@ -371,6 +427,7 @@ export default function Sidebar() {
       )}
 
       <aside
+        data-nav-rail=""
         ref={mobileDrawerRef}
         role="dialog"
         aria-modal={mobileOpen}
@@ -380,7 +437,7 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-[color:var(--dashboard-shell-border)] bg-slate-50 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-gray-950 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-orange-900 bg-orange-800 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-orange-900 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
@@ -390,7 +447,7 @@ export default function Sidebar() {
             <button
               onClick={() => setMobileOpen(false)}
               aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
-              className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="rounded-md p-1.5 text-orange-200 transition-colors hover:bg-orange-700 dark:hover:bg-orange-800"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-5 w-5">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -403,32 +460,53 @@ export default function Sidebar() {
       </aside>
 
       <aside
+        data-nav-rail=""
         className={`
-          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-slate-50 dark:bg-gray-950 lg:flex
+          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-orange-800 dark:bg-orange-900 lg:flex
           transition-[width] duration-300 ease-in-out will-change-[width]
-          ${collapsed ? 'w-[68px]' : 'w-[264px]'}
+          ${collapsed ? 'w-[68px]' : 'w-[216px]'}
         `}
       >
-        <div className={`dashboard-shell-border-b flex flex-col justify-center shrink-0 transition-[height,padding] duration-300 ease-in-out ${collapsed ? 'h-[112px] px-3' : 'h-[62px] px-3'}`}>
-          <div className={`flex items-center transition-all duration-300 ${collapsed ? 'flex-col-reverse gap-3' : 'justify-between gap-2'}`}>
-            <RestaurantHeader collapsed={collapsed} />
-            <div className="flex items-center">
-              <button
-                onClick={() => setCollapsed(!collapsed)}
-                className="shrink-0 rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
-                title={collapseTitle}
-              >
-                {collapsed ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="9 18 15 12 9 6"/></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-4 w-4"><polyline points="15 18 9 12 15 6"/></svg>
-                )}
-              </button>
-            </div>
+        <div className="flex h-[62px] shrink-0 flex-col justify-center px-3">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCollapsed(!collapsed)}
+              /* 44px wide with the icon centred puts its axis at x=34, the same
+                 place the collapsed rail centres every nav icon. Widening rather
+                 than re-aligning keeps the left edge fixed, so the icon does not
+                 shift when the rail collapses. */
+              className="inline-flex h-9 w-11 shrink-0 items-center justify-center rounded-md text-orange-200 transition-colors hover:bg-orange-700 dark:hover:bg-orange-800"
+              title={collapseTitle}
+              aria-label={collapseTitle}
+              aria-expanded={!collapsed}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-5 w-5" aria-hidden="true">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
+            <Link
+              href="/home"
+              aria-label="Dishy"
+              tabIndex={collapsed ? -1 : undefined}
+              className={`flex min-w-0 items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${
+                collapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-auto opacity-100'
+              }`}
+            >
+              <AppLogo size={32} />
+              <AppWordmark height={22} className="shrink-0 text-orange-50" />
+            </Link>
           </div>
         </div>
 
         <NavLinks collapsed={collapsed} />
+
+        <div className={`shrink-0 border-t border-orange-700 px-3 py-2 flex items-center gap-1 ${collapsed ? 'flex-col' : ''}`}>
+          <RestaurantSwitcherCard collapsed={collapsed} />
+          <DashboardAccountMenu />
+        </div>
       </aside>
     </>
   );

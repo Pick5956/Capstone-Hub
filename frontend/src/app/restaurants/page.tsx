@@ -260,7 +260,7 @@ export default function RestaurantsPage() {
         <div className="flex flex-row items-center gap-2.5 shrink-0 w-full sm:w-auto">
           <Link
             href="/restaurants/new"
-            className="flex-1 sm:flex-none inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-md bg-gray-900 dark:bg-white text-white dark:text-gray-950 px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all duration-200 hover:bg-gray-850 dark:hover:bg-gray-100 hover:scale-[1.02] active:scale-[0.98]"
+            className="flex-1 sm:flex-none inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 sm:gap-2 rounded-md bg-orange-700 dark:bg-orange-700 text-white dark:text-white px-3 sm:px-4 text-xs sm:text-sm font-semibold transition-all duration-200 hover:bg-gray-850 dark:hover:bg-orange-800 hover:scale-[1.02] active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
             <span>{language === "th" ? "สร้างร้านใหม่" : "Create Restaurant"}</span>

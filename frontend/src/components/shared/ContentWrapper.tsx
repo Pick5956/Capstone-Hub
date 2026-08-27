@@ -16,7 +16,7 @@ export default function ContentWrapper({ children }: { children: React.ReactNode
         return;
       }
       // Read CSS variable set imperatively by SidebarProvider (no React re-render needed)
-      const w = html.style.getPropertyValue('--sidebar-w') || '264px';
+      const w = html.style.getPropertyValue('--sidebar-w') || '216px';
       ref.current.style.marginLeft = w;
     };
 

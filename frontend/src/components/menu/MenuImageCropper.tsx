@@ -740,7 +740,7 @@ export default function MenuImageCropper({
                 || (removeBackground && !currentBackgroundPreview?.can_remove)
               }
               onClick={() => { void applyCrop(); }}
-              className="ui-press h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-white dark:text-gray-900"
+              className="ui-press h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white"
             >
               {applying ? copy.applying : copy.apply}
             </button>

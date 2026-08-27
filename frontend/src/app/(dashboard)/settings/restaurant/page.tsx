@@ -489,7 +489,7 @@ export default function RestaurantSettingsPage() {
   if (!restaurantId) {
     return (
       <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.noRestaurant} backLabel={copy.back}>
-        <Link href="/restaurants" className="ui-press inline-flex h-10 items-center rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white dark:bg-white dark:text-gray-900">{copy.goRestaurants}</Link>
+        <Link href="/restaurants" className="ui-press inline-flex h-10 items-center rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white dark:bg-orange-700 dark:text-white">{copy.goRestaurants}</Link>
       </SettingsShell>
     );
   }
@@ -650,7 +650,7 @@ export default function RestaurantSettingsPage() {
               <button
                 type="submit"
                 disabled={saving || loading}
-                className="ui-press inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-5 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-gray-900"
+                className="ui-press inline-flex h-10 items-center justify-center rounded-md bg-orange-700 px-5 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-60 dark:bg-orange-700 dark:text-white"
               >
                 {saving ? copy.saving : copy.save}
               </button>
@@ -680,7 +680,7 @@ export default function RestaurantSettingsPage() {
         )}
 
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 p-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:hidden">
-          <button type="submit" disabled={saving || loading} className="ui-press flex h-12 w-full items-center justify-center rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+          <button type="submit" disabled={saving || loading} className="ui-press flex h-12 w-full items-center justify-center rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
             {saving ? copy.saving : copy.save}
           </button>
         </div>

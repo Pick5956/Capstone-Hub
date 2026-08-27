@@ -168,7 +168,7 @@ export default function InvitationAcceptPage() {
               <button
                 type="button"
                 onClick={() => openLoginModal(`/invitations/${token}`)}
-                className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+                className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white"
               >
                 {copy.login}
               </button>
@@ -280,7 +280,7 @@ export default function InvitationAcceptPage() {
                 type="button"
                 disabled={loading || !invitation || !usable || emailMismatch || accepting}
                 onClick={handleAccept}
-                className="h-10 flex-1 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                className="h-10 flex-1 rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-700 dark:text-white"
               >
                 {accepting ? copy.acceptBusy : user ? copy.acceptButton : copy.loginToAccept}
               </button>

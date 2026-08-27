@@ -38,7 +38,7 @@ export default function TeamSettingsPage() {
   return (
     <SettingsShell eyebrow={copy.eyebrow} title={copy.title} subtitle={copy.subtitle} backLabel={copy.back} hideHeader>
       <SettingsPanel title={copy.panel} hint={copy.hint}>
-        <Link href="/staff" className="ui-press inline-flex h-10 items-center rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white dark:bg-white dark:text-gray-900">
+        <Link href="/staff" className="ui-press inline-flex h-10 items-center rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white dark:bg-orange-700 dark:text-white">
           {copy.button}
         </Link>
       </SettingsPanel>

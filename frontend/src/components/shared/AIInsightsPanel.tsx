@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Coins,
@@ -62,22 +62,28 @@ export default function AIInsightsPanel({ language, onCount }: Props) {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
+  // onCount is a parent callback that can be re-created every render. Keeping
+  // it in a ref lets the fetch stay mount-once without an incomplete dep list.
+  const onCountRef = useRef(onCount);
+  useEffect(() => {
+    onCountRef.current = onCount;
+  });
+
   useEffect(() => {
     let active = true;
-    setLoading(true);
     getProactiveInsights()
       .then((res) => {
         if (!active) return;
         const list = res.data?.insights ?? [];
         setInsights(list);
-        onCount?.(list.length);
+        onCountRef.current?.(list.length);
         // next frame → trigger the staggered entrance transition
         requestAnimationFrame(() => active && setMounted(true));
       })
       .catch(() => {
         if (!active) return;
         setInsights([]);
-        onCount?.(0);
+        onCountRef.current?.(0);
       })
       .finally(() => active && setLoading(false));
     return () => {

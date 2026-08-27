@@ -823,7 +823,7 @@ export default function StaffPage() {
                     <button
                       type="button"
                       onClick={openInviteModal}
-                      className="h-10 rounded-md bg-gray-900 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
+                      className="h-10 rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white"
                     >
                       {copy.createLink}
                     </button>
@@ -1212,7 +1212,7 @@ export default function StaffPage() {
               >
                 {copy.cancelAction}
               </button>
-              <button type="submit" disabled={!canManageInvites || !roleId || submitting} className="h-10 rounded-md bg-gray-900 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900">
+              <button type="submit" disabled={!canManageInvites || !roleId || submitting} className="h-10 rounded-md bg-orange-700 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-700 dark:text-white">
                 {submitting ? copy.creating : copy.createLink}
               </button>
             </div>
@@ -1255,7 +1255,7 @@ export default function StaffPage() {
                 <button
                   type="submit"
                   disabled={!canManageRoles || creatingRole}
-                  className="mt-3 h-10 w-full rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-900"
+                  className="mt-3 h-10 w-full rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-orange-700 dark:text-white"
                 >
                   {creatingRole ? copy.creatingRole : copy.createRole}
                 </button>
@@ -1345,7 +1345,7 @@ export default function StaffPage() {
                             aria-label={copy.saveRoleName}
                             title={copy.saveRoleName}
                             disabled={roleDialogPolicy.busy || !roleRenameDraft.trim() || !roleNameDirty}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-gray-900 text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-white dark:text-gray-900"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-orange-700 text-white transition-colors hover:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-orange-700 dark:text-white"
                           >
                             <Check className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
                           </button>
@@ -1548,7 +1548,7 @@ export default function StaffPage() {
                   </button>
                 )}
               </div>
-              <button type="button" onClick={() => void savePermissions()} disabled={!roleDialogPolicy.canSavePermissions || permissionEditBlocked} className="h-9 rounded-md bg-gray-900 px-3 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-900">
+              <button type="button" onClick={() => void savePermissions()} disabled={!roleDialogPolicy.canSavePermissions || permissionEditBlocked} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-orange-700 dark:text-white">
                 {permissionSaving ? (language === "th" ? "กำลังบันทึก..." : "Saving...") : (language === "th" ? "บันทึกสิทธิ์" : "Save permissions")}
               </button>
             </div>

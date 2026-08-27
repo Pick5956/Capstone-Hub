@@ -16,7 +16,6 @@ import { getOrderBill, listOrders } from "@/src/lib/order";
 import type { OrderListSummary } from "@/src/lib/order";
 import type { Bill, Order } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
-import DashboardTopBarPortal from "@/src/components/shared/DashboardTopBarPortal";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
@@ -236,7 +235,7 @@ export default function OrdersPage() {
   };
 
   const renderArchiveToolbar = (placement: "desktop" | "mobile") => (
-    <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "mb-4 lg:hidden"}>
+    <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "mb-4 w-full max-w-lg"}>
       <label className="relative block w-full min-w-0">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
         <input
@@ -259,9 +258,6 @@ export default function OrdersPage() {
       subtitle={copy.subtitle}
       hideHeaderText
     >
-      <DashboardTopBarPortal>
-        {renderArchiveToolbar("desktop")}
-      </DashboardTopBarPortal>
 
       {renderArchiveToolbar("mobile")}
 
@@ -366,7 +362,7 @@ export default function OrdersPage() {
                           type="button"
                           disabled={receiptLoadingId === order.ID}
                           onClick={() => { void openReceipt(order); }}
-                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-[13px] font-semibold text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 lg:w-auto"
+                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:opacity-50 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-800 lg:w-auto"
                         >
                           <Printer className="h-4 w-4" aria-hidden="true" />
                           {copy.reprintReceipt}

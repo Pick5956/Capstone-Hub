@@ -2,6 +2,25 @@ import { groupOrderItems } from "@/src/lib/orderItemGroups";
 import type { Bill, OrderItem } from "@/src/types/order";
 import type { Restaurant } from "@/src/types/restaurant";
 
+const BANGKOK_TZ = "Asia/Bangkok";
+
+// Receipts always read in Thai time, whatever timezone the device is set to. A bare
+// date like order_date ("2026-08-25") carries no clock, so it is anchored to Bangkok
+// midnight and printed without a time — otherwise new Date() reads it as UTC midnight
+// and prints a spurious 07:00 (00:00 UTC shifted into +07:00).
+function formatReceiptDate(value: string | null | undefined, locale: string) {
+  if (!value) return "-";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const parsed = new Date(dateOnly ? `${value}T00:00:00+07:00` : value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleString(
+    locale,
+    dateOnly
+      ? { dateStyle: "short", timeZone: BANGKOK_TZ }
+      : { dateStyle: "short", timeStyle: "short", timeZone: BANGKOK_TZ },
+  );
+}
+
 function fulfillmentType(item: OrderItem) {
   return item.fulfillment_type === "takeaway" ? "takeaway" : "dine_in";
 }
@@ -85,7 +104,7 @@ export default function ThermalReceipt({
 
       <dl className="mt-2 space-y-0.5 text-[9px] leading-[1.35]">
         <div className="flex justify-between gap-2"><dt>{copy.reference}</dt><dd className="font-mono font-semibold tabular-nums">{bill.order.order_number}</dd></div>
-        <div className="flex justify-between gap-2"><dt>{copy.date}</dt><dd className="text-right tabular-nums">{paidAt ? new Date(paidAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : "-"}</dd></div>
+        <div className="flex justify-between gap-2"><dt>{copy.date}</dt><dd className="text-right tabular-nums">{formatReceiptDate(paidAt, locale)}</dd></div>
         <div className="flex justify-between gap-2"><dt>{copy.location}</dt><dd className="text-right font-semibold">{locationLabel}</dd></div>
         <div className="flex justify-between gap-2"><dt>{copy.cashier}</dt><dd className="max-w-[28mm] truncate text-right">{staffName(bill)}</dd></div>
       </dl>
