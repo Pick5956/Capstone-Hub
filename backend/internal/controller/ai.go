@@ -34,6 +34,8 @@ type AIOperationsService interface {
 	SetOperatingCalendar(restaurantID uint, view service.AICalendarView) error
 	AIActionsSettingForOwner(restaurantID uint) (service.AIActionsSettingView, error)
 	SetAIActionsSettingForOwner(restaurantID uint, enabled bool) error
+	ConfirmAIActionPlanForOwner(actor service.AIActorContext, planID, confirmationToken string) (*service.AIActionPlanConfirmation, error)
+	CancelAIActionPlanForOwner(actor service.AIActorContext, planID string) error
 }
 
 const maxAIActionConfirmationBodyBytes int64 = 1024
@@ -57,6 +59,8 @@ func ProvideAIController(db *gorm.DB) *AIController {
 		repository.NewAIConversationRepository(db),
 		repository.NewAIActionPreviewRepository(db),
 		repository.NewMenuRepository(db),
+		repository.NewAIActionPlanRepository(db),
+		service.ProvideIngredientService(repository.NewIngredientRepository(db)),
 	))
 }
 
@@ -179,6 +183,85 @@ func (ctrl *AIController) ProactiveInsights(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"insights": insights})
+}
+
+// ConfirmAIActionPlan runs a multi-item plan the owner just confirmed. The
+// per-item outcome is returned as-is, so a batch that partly failed is reported
+// rather than rounded up to success.
+func (ctrl *AIController) ConfirmAIActionPlan(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAIActionConfirmationBodyBytes)
+	var input service.AIActionConfirmationRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		respondInvalidRequest(c)
+		return
+	}
+	result, err := ctrl.svc.ConfirmAIActionPlanForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, c.Param("planID"), input.ConfirmationToken)
+	if err != nil {
+		respondAIActionPlanError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store, private")
+	c.JSON(http.StatusOK, result)
+}
+
+// CancelAIActionPlan drops a pending plan without writing anything.
+func (ctrl *AIController) CancelAIActionPlan(c *gin.Context) {
+	restaurantID, ok := requireRestaurant(c)
+	if !ok {
+		return
+	}
+	if !requireAIOwner(c) {
+		return
+	}
+	userID, ok := contextUserID(c)
+	if !ok || userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authenticated owner is required"})
+		return
+	}
+	if err := ctrl.svc.CancelAIActionPlanForOwner(service.AIActorContext{
+		RestaurantID: restaurantID,
+		OwnerUserID:  userID,
+		Role:         "owner",
+	}, c.Param("planID")); err != nil {
+		respondAIActionPlanError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// respondAIActionPlanError maps the boundary's refusals to status codes the
+// client can act on: gone for a window that closed, conflict for a race.
+func respondAIActionPlanError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, repository.ErrAIActionPlanNotFound):
+		respondAPIError(c, http.StatusNotFound, err)
+	case errors.Is(err, repository.ErrAIActionPlanInvalidToken):
+		respondAPIError(c, http.StatusForbidden, err)
+	case errors.Is(err, repository.ErrAIActionPlanExpired), errors.Is(err, repository.ErrAIActionPlanCancelled):
+		respondAPIError(c, http.StatusGone, err)
+	case errors.Is(err, repository.ErrAIActionPlanInProgress), errors.Is(err, repository.ErrAIActionPlanAlreadyExecuted):
+		respondAPIError(c, http.StatusConflict, err)
+	case errors.Is(err, service.ErrAIActionsDisabled), errors.Is(err, service.ErrAIActionUnavailable):
+		respondAPIError(c, http.StatusForbidden, err)
+	default:
+		respondAPIError(c, http.StatusBadRequest, err)
+	}
 }
 
 // GetOperatingCalendar returns the restaurant's forecast open/closed calendar.

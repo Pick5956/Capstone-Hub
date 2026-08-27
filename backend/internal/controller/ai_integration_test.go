@@ -93,6 +93,14 @@ func (f *fakeAIOperationsService) SetAIActionsSettingForOwner(uint, bool) error 
 	return f.askErr
 }
 
+func (f *fakeAIOperationsService) ConfirmAIActionPlanForOwner(service.AIActorContext, string, string) (*service.AIActionPlanConfirmation, error) {
+	return &service.AIActionPlanConfirmation{}, f.askErr
+}
+
+func (f *fakeAIOperationsService) CancelAIActionPlanForOwner(service.AIActorContext, string) error {
+	return f.askErr
+}
+
 func (f *fakeAIOperationsService) ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error) {
 	f.confirmCalls++
 	f.actor = actor

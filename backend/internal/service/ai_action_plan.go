@@ -39,8 +39,14 @@ type AIActionPlanStore interface {
 // needs: read one ingredient to validate against, and apply a stock change the
 // way the inventory screen does.
 type AIActionIngredientPort interface {
+	ListIngredients(restaurantID uint) ([]entity.Ingredient, error)
 	FindIngredient(restaurantID, ingredientID uint) (*entity.Ingredient, error)
 	AdjustStock(restaurantID, ingredientID, userID uint, req *AdjustStockRequest) (*entity.Ingredient, error)
+}
+
+// jsonUnmarshalString decodes a stored JSON column into a typed value.
+func jsonUnmarshalString(raw string, target any) error {
+	return json.Unmarshal([]byte(raw), target)
 }
 
 // --- Request shapes handed in by the command layer ---------------------------

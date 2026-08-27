@@ -51,6 +51,16 @@ const (
 	maxIngredientCost     = 1_000_000_000
 )
 
+// ListIngredients and FindIngredient satisfy AIActionIngredientPort so the
+// assistant validates against, and writes through, this same service.
+func (s *IngredientService) ListIngredients(restaurantID uint) ([]entity.Ingredient, error) {
+	return s.repo.List(restaurantID)
+}
+
+func (s *IngredientService) FindIngredient(restaurantID, ingredientID uint) (*entity.Ingredient, error) {
+	return s.repo.FindByID(restaurantID, ingredientID)
+}
+
 func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error) {
 	return s.repo.List(restaurantID)
 }

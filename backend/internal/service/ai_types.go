@@ -48,6 +48,8 @@ type AIAskResponse struct {
 	TurnID         string                   `json:"turn_id,omitempty"`
 	ResolvedPlan   *ResolvedPlan            `json:"resolved_plan,omitempty"`
 	ActionPreview  *AIActionPreviewResponse `json:"action_preview,omitempty"`
+	// ActionPlan carries a multi-item change waiting for one confirmation.
+	ActionPlan     *AIActionPlanResponse     `json:"action_plan,omitempty"`
 	CandidateTools []AIToolName             `json:"candidate_tools,omitempty"`
 	Planner        *AIPlannerMetadata       `json:"planner,omitempty"`
 	ToolsUsed      []AIToolName             `json:"tools_used,omitempty"`

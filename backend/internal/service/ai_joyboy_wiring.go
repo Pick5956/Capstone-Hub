@@ -358,6 +358,11 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	if s.maybeCreateJoyboyMenuAvailabilityAction(actor, request.Question, actionResponse) {
 		return actionResponse, nil
 	}
+	// Inventory commands take the same route: proposed by the model, checked in
+	// Go against the live shelf, and held as a plan until the owner confirms.
+	if s.maybeHandleJoyboyStockCommand(actor, request, actionResponse) {
+		return actionResponse, nil
+	}
 
 	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID}
 	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {

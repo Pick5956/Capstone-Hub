@@ -25,6 +25,8 @@ type AIService struct {
 	actionStore                AIActionStore
 	actionMenuResolver         AIActionMenuResolver
 	actionsSetting             AIActionsSettingStore
+	actionPlanStore            AIActionPlanStore
+	actionIngredients          AIActionIngredientPort
 	actionCleanupCounter       uint64
 	// providerAdapters is nil in production and resolves lazily to Groq then
 	// Gemini. Tests may inject provider-neutral fakes without making live calls.
@@ -77,10 +79,14 @@ func ProvideAIServiceWithStores(
 	conversationStore AIConversationStore,
 	actionStore AIActionStore,
 	actionMenuResolver AIActionMenuResolver,
+	actionPlanStore AIActionPlanStore,
+	actionIngredients AIActionIngredientPort,
 ) *AIService {
 	service := ProvideAIServiceWithConversationStore(repo, conversationStore)
 	service.actionStore = actionStore
 	service.actionMenuResolver = actionMenuResolver
+	service.actionPlanStore = actionPlanStore
+	service.actionIngredients = actionIngredients
 	// The repository carries the per-restaurant owner toggle, so once it is wired
 	// the owner's AI-settings choice — not the env allowlist — gates actions.
 	if repo != nil {

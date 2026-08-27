@@ -17,6 +17,14 @@ type fakeAIActionIngredientPort struct {
 	adjustErr error
 }
 
+func (f *fakeAIActionIngredientPort) ListIngredients(uint) ([]entity.Ingredient, error) {
+	shelf := make([]entity.Ingredient, 0, len(f.items))
+	for _, item := range f.items {
+		shelf = append(shelf, *item)
+	}
+	return shelf, nil
+}
+
 func (f *fakeAIActionIngredientPort) FindIngredient(_ uint, ingredientID uint) (*entity.Ingredient, error) {
 	item, ok := f.items[ingredientID]
 	if !ok {
