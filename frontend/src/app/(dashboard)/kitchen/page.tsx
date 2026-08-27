@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, Clock3, History, Undo2, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, History, Undo2, X } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -739,16 +739,12 @@ export default function KitchenPage() {
     const contentId = `kitchen-${lane}-zone`;
     const label = isReadyLane ? copy.readyZone : copy.cookingZone;
     const emptyLabel = isReadyLane ? copy.readyEmpty : copy.cookingEmpty;
-    const Icon = isReadyLane ? CheckCircle2 : Clock3;
     // Only the "done" zone can be collapsed; the cooking zone always stays open.
     const collapsible = isReadyLane;
     const isOpen = collapsible ? open : true;
 
     const zoneIconLabel = (
       <span className="relative z-10 flex min-w-0 items-center gap-3">
-        {/* <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${isReadyLane ? "bg-emerald-400 text-emerald-950" : "bg-amber-400 text-amber-950"}`}>
-          <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-        </span> */}
         <span className="min-w-0">
           <span className="block text-[21px] font-semibold leading-tight">{label}</span>
         </span>

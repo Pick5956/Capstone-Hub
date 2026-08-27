@@ -47,10 +47,15 @@ export default function AIOutageNotice({
   const [remaining, setRemaining] = useState(outage.retryAfterSeconds ?? 0);
 
   // A fresh outage restarts the clock; without this the countdown from a previous
-  // failure would keep running against the new one.
-  useEffect(() => {
+  // failure would keep running against the new one. Adjusting state during render
+  // is React's documented way to reset on a prop change - an effect would repaint
+  // one frame with the stale count first.
+  const outageId = `${outage.message}|${outage.retryAfterSeconds ?? 0}`;
+  const [seenOutageId, setSeenOutageId] = useState(outageId);
+  if (outageId !== seenOutageId) {
+    setSeenOutageId(outageId);
     setRemaining(outage.retryAfterSeconds ?? 0);
-  }, [outage.retryAfterSeconds, outage.message]);
+  }
 
   useEffect(() => {
     if (remaining <= 0) return;
