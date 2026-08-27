@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 16
+	CurrentSchemaVersion int64 = 17
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -294,6 +294,28 @@ func schemaMigrationPlan() []SchemaMigration {
 				// leaves two unused tables.
 				if err := ctx.DB.AutoMigrate(&entity.AIActionPlan{}, &entity.AIActionPlanItem{}); err != nil {
 					return fmt.Errorf("migrate AI action plans: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 17,
+			Name:    "ai_action_plan_inventory_types",
+			Up: func(ctx *MigrationContext) error {
+				// Widens the reviewed action allowlist to the rest of the inventory
+				// set (min stock, cost, adding an ingredient). The constraint is
+				// dropped and recreated because a CHECK cannot be altered in place;
+				// rolling back means narrowing it again, not dropping data.
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items DROP CONSTRAINT IF EXISTS ai_action_plan_items_allowed_type`,
+				).Error; err != nil {
+					return fmt.Errorf("drop AI action type constraint: %w", err)
+				}
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_action_plan_items ADD CONSTRAINT ai_action_plan_items_allowed_type
+						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient'))`,
+				).Error; err != nil {
+					return fmt.Errorf("recreate AI action type constraint: %w", err)
 				}
 				return nil
 			},

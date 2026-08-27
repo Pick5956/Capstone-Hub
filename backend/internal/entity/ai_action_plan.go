@@ -32,7 +32,10 @@ const (
 	// Action types the plan boundary accepts. Adding one here is not enough: it
 	// must also be registered with a validator and an executor, and the check
 	// constraint below must list it — three reviewed places, on purpose.
-	AIActionTypeAdjustIngredientStock = "adjust_ingredient_stock"
+	AIActionTypeAdjustIngredientStock  = "adjust_ingredient_stock"
+	AIActionTypeSetIngredientMinStock  = "set_ingredient_min_stock"
+	AIActionTypeSetIngredientCost      = "set_ingredient_cost"
+	AIActionTypeCreateIngredient       = "create_ingredient"
 )
 
 type AIActionPlan struct {
@@ -67,7 +70,10 @@ type AIActionPlan struct {
 // constraint, so an unreviewed type cannot reach the database from either side.
 func IsAllowedAIActionType(actionType string) bool {
 	switch actionType {
-	case AIActionTypeAdjustIngredientStock:
+	case AIActionTypeAdjustIngredientStock,
+		AIActionTypeSetIngredientMinStock,
+		AIActionTypeSetIngredientCost,
+		AIActionTypeCreateIngredient:
 		return true
 	default:
 		return false
@@ -85,7 +91,7 @@ type AIActionPlanItem struct {
 	PlanID string `json:"plan_id" gorm:"type:varchar(64);not null;index:idx_ai_action_plan_items_plan,priority:1"`
 	Seq    int    `json:"seq" gorm:"not null;index:idx_ai_action_plan_items_plan,priority:2"`
 
-	ActionType string `json:"action_type" gorm:"size:48;not null;check:ai_action_plan_items_allowed_type,action_type IN ('adjust_ingredient_stock')"`
+	ActionType string `json:"action_type" gorm:"size:48;not null;check:ai_action_plan_items_allowed_type,action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient')"`
 
 	PayloadJSON string `json:"-" gorm:"type:jsonb;not null;default:'{}';check:ai_action_plan_items_payload_size,octet_length(payload_json::text) <= 8192"`
 	PreviewJSON string `json:"preview" gorm:"type:jsonb;not null;default:'{}';check:ai_action_plan_items_preview_size,octet_length(preview_json::text) <= 8192"`

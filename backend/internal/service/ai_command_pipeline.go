@@ -25,11 +25,20 @@ import (
 // AIStockCommandDraft is the model's proposal for one change, before Go has
 // checked any of it.
 type AIStockCommandDraft struct {
-	Name     string  `json:"name"`
-	Kind     string  `json:"kind"`     // in | out | adjust
+	Name string `json:"name"`
+	// in | out | adjust change stock; min sets the low-stock threshold; cost sets
+	// the price per unit; create adds a new ingredient.
+	Kind     string  `json:"kind"`
 	Quantity float64 `json:"quantity"`
 	Unit     string  `json:"unit"`
 	Note     string  `json:"note,omitempty"`
+}
+
+// AICommandKindsAll lists what the extractor may propose.
+var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create"}
+
+func aiIsStockKind(kind string) bool {
+	return kind == "in" || kind == "out" || kind == "adjust"
 }
 
 // --- Units -------------------------------------------------------------------
@@ -167,7 +176,36 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 	}
 
 	kind := strings.ToLower(strings.TrimSpace(draft.Kind))
-	if kind != "in" && kind != "out" && kind != "adjust" {
+	// Adding a new ingredient is the one command that must not resolve against
+	// the shelf — it is precisely for something the shelf does not have.
+	if kind == "create" {
+		if strings.TrimSpace(draft.Unit) == "" {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    title,
+				Question: fmt.Sprintf("“%s” นับเป็นหน่วยอะไรครับ เช่น กรัม / กก. / ฟอง", title),
+			}
+		}
+		if match := ResolveIngredientName(shelf, title); match.Exact != nil {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    title,
+				Question: fmt.Sprintf("มี “%s” ในคลังอยู่แล้วครับ ต้องการรับเข้าเพิ่มหรือแก้ข้อมูลแทนไหม", match.Exact.Name),
+			}
+		}
+		return AICommandResolution{
+			Kind:  AICommandOutcomeReady,
+			Title: title,
+			Command: AIAdjustStockCommand{
+				Kind:     "create",
+				Quantity: draft.Quantity,
+				Name:     title,
+				Unit:     strings.TrimSpace(draft.Unit),
+				Note:     strings.TrimSpace(draft.Note),
+			},
+		}
+	}
+	if kind != "in" && kind != "out" && kind != "adjust" && kind != "min" && kind != "cost" {
 		return AICommandResolution{
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
@@ -196,10 +234,20 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 	}
 
 	if draft.Quantity <= 0 {
+		question := fmt.Sprintf("“%s” เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit)
+		if kind == "cost" {
+			question = fmt.Sprintf("“%s” ราคาต่อ%sเท่าไหร่ครับ", match.Exact.Name, match.Exact.Unit)
+		}
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: question}
+	}
+
+	// A price is money per unit, not an amount of stock, so it never goes through
+	// the unit conversion below.
+	if kind == "cost" {
 		return AICommandResolution{
-			Kind:     AICommandOutcomeAsk,
-			Title:    title,
-			Question: fmt.Sprintf("“%s” เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit),
+			Kind:    AICommandOutcomeReady,
+			Title:   match.Exact.Name,
+			Command: AIAdjustStockCommand{IngredientID: match.Exact.ID, Kind: "cost", Quantity: draft.Quantity},
 		}
 	}
 

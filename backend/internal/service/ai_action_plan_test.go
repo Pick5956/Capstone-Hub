@@ -14,6 +14,8 @@ import (
 type fakeAIActionIngredientPort struct {
 	items     map[uint]*entity.Ingredient
 	adjusted  []AdjustStockRequest
+	created   []IngredientRequest
+	updated   []IngredientRequest
 	adjustErr error
 }
 
@@ -39,6 +41,16 @@ func (f *fakeAIActionIngredientPort) AdjustStock(_ uint, ingredientID, _ uint, r
 		return nil, f.adjustErr
 	}
 	f.adjusted = append(f.adjusted, *req)
+	return f.items[ingredientID], nil
+}
+
+func (f *fakeAIActionIngredientPort) Create(_ uint, _ uint, req *IngredientRequest) (*entity.Ingredient, error) {
+	f.created = append(f.created, *req)
+	return &entity.Ingredient{Name: req.Name, Unit: req.Unit}, nil
+}
+
+func (f *fakeAIActionIngredientPort) Update(_ uint, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error) {
+	f.updated = append(f.updated, *req)
 	return f.items[ingredientID], nil
 }
 
@@ -160,10 +172,85 @@ func TestExecuteAIActionItemCallsIngredientService(t *testing.T) {
 	}
 }
 
+// Changing one field must read the row first and put everything else back
+// unchanged, and must say what it is changing "from → to".
+func TestSetIngredientFieldPreviewsAndPreservesOtherFields(t *testing.T) {
+	port := newAIActionPortFixture()
+
+	_, preview, err := validateSetIngredientField(port, 1, 1, entity.AIActionTypeSetIngredientMinStock, 800)
+	if err != nil || !strings.Contains(preview.Change, "ขั้นต่ำ 0 → 800") {
+		t.Fatalf("min-stock preview = %+v err=%v", preview, err)
+	}
+	if !strings.Contains(strings.Join(preview.SideEffects, " "), "ต่ำกว่าขั้นต่ำใหม่") {
+		t.Errorf("a threshold above current stock should warn: %+v", preview.SideEffects)
+	}
+
+	_, costPreview, err := validateSetIngredientField(port, 1, 2, entity.AIActionTypeSetIngredientCost, 0.2)
+	if err != nil || !strings.Contains(costPreview.Change, "0.18 → 0.2") {
+		t.Fatalf("cost preview = %+v err=%v", costPreview, err)
+	}
+	if !strings.Contains(strings.Join(costPreview.SideEffects, " "), "กำไรของเมนู") {
+		t.Errorf("a price change should warn about menu margins: %+v", costPreview.SideEffects)
+	}
+
+	payload, _ := json.Marshal(AIActionItemPayload{IngredientID: 1, MinStock: 800})
+	item := entity.AIActionPlanItem{ActionType: entity.AIActionTypeSetIngredientMinStock, PayloadJSON: string(payload)}
+	if err := executeAIActionItem(port, 1, 7, item); err != nil {
+		t.Fatalf("execute error = %v", err)
+	}
+	if len(port.updated) != 1 {
+		t.Fatalf("expected one update, got %d", len(port.updated))
+	}
+	got := port.updated[0]
+	if got.MinStock != 800 || got.Name != "กะเพรา" || got.Unit != "กรัม" || got.Stock != 500 {
+		t.Errorf("update should change only the threshold: %+v", got)
+	}
+}
+
+// Adding an ingredient refuses a missing unit and a duplicate name, because the
+// unit is what recipes measure against and the system never converts.
+func TestValidateCreateIngredient(t *testing.T) {
+	port := newAIActionPortFixture()
+	shelf, _ := port.ListIngredients(1)
+
+	payload, preview, err := validateCreateIngredient(shelf, "ผักชี", "กรัม", 0, 0, 0)
+	if err != nil || payload.Name != "ผักชี" || payload.Unit != "กรัม" {
+		t.Fatalf("create payload = %+v err=%v", payload, err)
+	}
+	if !strings.Contains(preview.Change, "หน่วยกรัม") {
+		t.Errorf("preview should state the unit: %q", preview.Change)
+	}
+
+	if _, _, err := validateCreateIngredient(shelf, "ผักชี", "", 0, 0, 0); err == nil {
+		t.Error("a missing unit must be refused, not guessed")
+	}
+	if _, _, err := validateCreateIngredient(shelf, "กะเพรา", "กรัม", 0, 0, 0); err == nil {
+		t.Error("an existing name must be refused")
+	}
+
+	itemPayload, _ := json.Marshal(AIActionItemPayload{Name: "ผักชี", Unit: "กรัม", Quantity: 500})
+	item := entity.AIActionPlanItem{ActionType: entity.AIActionTypeCreateIngredient, PayloadJSON: string(itemPayload)}
+	if err := executeAIActionItem(port, 1, 7, item); err != nil {
+		t.Fatalf("execute error = %v", err)
+	}
+	if len(port.created) != 1 || port.created[0].Unit != "กรัม" || port.created[0].Stock != 500 {
+		t.Errorf("create call = %+v", port.created)
+	}
+}
+
 // The allowlist is the Go half of the item table's check constraint.
 func TestAllowedAIActionTypes(t *testing.T) {
 	if !entity.IsAllowedAIActionType(entity.AIActionTypeAdjustIngredientStock) {
 		t.Error("the reviewed stock action should be allowed")
+	}
+	for _, good := range []string{
+		entity.AIActionTypeSetIngredientMinStock,
+		entity.AIActionTypeSetIngredientCost,
+		entity.AIActionTypeCreateIngredient,
+	} {
+		if !entity.IsAllowedAIActionType(good) {
+			t.Errorf("%q should be allowed", good)
+		}
 	}
 	for _, bad := range []string{"", "drop_table", "set_menu_availability"} {
 		if entity.IsAllowedAIActionType(bad) {

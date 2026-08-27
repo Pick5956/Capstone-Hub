@@ -42,6 +42,8 @@ type AIActionIngredientPort interface {
 	ListIngredients(restaurantID uint) ([]entity.Ingredient, error)
 	FindIngredient(restaurantID, ingredientID uint) (*entity.Ingredient, error)
 	AdjustStock(restaurantID, ingredientID, userID uint, req *AdjustStockRequest) (*entity.Ingredient, error)
+	Create(restaurantID, userID uint, req *IngredientRequest) (*entity.Ingredient, error)
+	Update(restaurantID, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error)
 }
 
 // jsonUnmarshalString decodes a stored JSON column into a typed value.
@@ -55,10 +57,13 @@ func jsonUnmarshalString(raw string, target any) error {
 // stock. Quantity is already expressed in that ingredient's own stock unit.
 type AIAdjustStockCommand struct {
 	IngredientID uint
-	Kind         string // in | out | adjust
+	Kind         string // in | out | adjust | min | cost | create
 	Quantity     float64
 	Amount       float64 // baht, only meaningful for kind=in
 	Note         string
+	// Set only when Kind is create.
+	Name string
+	Unit string
 }
 
 // AIActionItemPayload is what gets persisted for an item. It is deliberately
@@ -69,6 +74,11 @@ type AIActionItemPayload struct {
 	Quantity     float64 `json:"quantity,omitempty"`
 	Amount       float64 `json:"amount,omitempty"`
 	Note         string  `json:"note,omitempty"`
+	// Used by the ingredient-editing types.
+	Name        string  `json:"name,omitempty"`
+	Unit        string  `json:"unit,omitempty"`
+	MinStock    float64 `json:"min_stock,omitempty"`
+	CostPerUnit float64 `json:"cost_per_unit,omitempty"`
 }
 
 // AIActionItemPreview is what the owner reads before confirming.
@@ -172,6 +182,72 @@ func formatStockNumber(value float64) string {
 	return text
 }
 
+// validateSetIngredientField checks a min-stock or cost change against the live
+// row and describes it as "from → to", the only rendering that makes the
+// difference between setting and adding unmistakable.
+func validateSetIngredientField(port AIActionIngredientPort, restaurantID uint, ingredientID uint, actionType string, value float64) (AIActionItemPayload, AIActionItemPreview, error) {
+	if value < 0 || value > aiActionMaxQuantity {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionBadQuantity
+	}
+	ingredient, err := port.FindIngredient(restaurantID, ingredientID)
+	if err != nil || ingredient == nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, ErrAIActionUnknownIngredient
+	}
+
+	payload := AIActionItemPayload{IngredientID: ingredient.ID}
+	preview := AIActionItemPreview{Title: ingredient.Name}
+	switch actionType {
+	case entity.AIActionTypeSetIngredientMinStock:
+		payload.MinStock = value
+		preview.Change = fmt.Sprintf("ขั้นต่ำ %s → %s", formatStockNumber(ingredient.MinStock), formatStockNumber(value))
+		preview.Unit = ingredient.Unit
+		if ingredient.Stock < value {
+			preview.SideEffects = append(preview.SideEffects, "สต๊อกตอนนี้ต่ำกว่าขั้นต่ำใหม่ · จะขึ้นเตือนว่าใกล้หมด")
+		}
+	case entity.AIActionTypeSetIngredientCost:
+		payload.CostPerUnit = value
+		preview.Change = fmt.Sprintf("ราคาต่อ%s %s → %s บาท", ingredient.Unit, formatStockNumber(ingredient.CostPerUnit), formatStockNumber(value))
+		preview.SideEffects = append(preview.SideEffects, "กระทบต้นทุนและกำไรของเมนูที่ใช้วัตถุดิบนี้")
+	default:
+		return AIActionItemPayload{}, AIActionItemPreview{}, fmt.Errorf("ยังไม่รองรับคำสั่งชนิด %q", actionType)
+	}
+	return payload, preview, nil
+}
+
+// validateCreateIngredient refuses a nameless or unitless ingredient: the unit is
+// what recipes are measured against, and the system never converts, so guessing
+// it would misread every recipe that later uses this item.
+func validateCreateIngredient(shelf []entity.Ingredient, name, unit string, stock, minStock, cost float64) (AIActionItemPayload, AIActionItemPreview, error) {
+	cleanName := strings.TrimSpace(name)
+	cleanUnit := strings.TrimSpace(unit)
+	if cleanName == "" {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("ต้องมีชื่อวัตถุดิบ")
+	}
+	if cleanUnit == "" {
+		return AIActionItemPayload{}, AIActionItemPreview{}, errors.New("ต้องระบุหน่วย เช่น กรัม หรือ ฟอง")
+	}
+	if match := ResolveIngredientName(shelf, cleanName); match.Exact != nil {
+		return AIActionItemPayload{}, AIActionItemPreview{}, fmt.Errorf("มี “%s” ในคลังอยู่แล้ว", match.Exact.Name)
+	}
+
+	preview := AIActionItemPreview{
+		Title:  cleanName,
+		Change: fmt.Sprintf("เพิ่มเข้าคลัง · หน่วย%s · เริ่มที่ %s", cleanUnit, formatStockNumber(stock)),
+		Unit:   cleanUnit,
+	}
+	if stock > 0 && cost > 0 {
+		preview.SideEffects = append(preview.SideEffects,
+			fmt.Sprintf("บันทึกรายจ่าย %s บาท (แก้หรือลบไม่ได้)", formatStockNumber(roundBaht(stock*cost))))
+	}
+	return AIActionItemPayload{
+		Name:        cleanName,
+		Unit:        cleanUnit,
+		Quantity:    stock,
+		MinStock:    minStock,
+		CostPerUnit: cost,
+	}, preview, nil
+}
+
 // --- Building and executing a plan -------------------------------------------
 
 // AIActionPlanDraft is a fully validated plan, ready to be stored for
@@ -188,8 +264,31 @@ type AIActionRejectedItem struct {
 	Reason string
 }
 
-// BuildAdjustStockPlan validates every requested stock change and returns the
-// draft. Invalid items are reported, not silently dropped.
+// aiValidateCommand sends one command to the validator for its kind and reports
+// which action type it becomes.
+func aiValidateCommand(port AIActionIngredientPort, restaurantID uint, command AIAdjustStockCommand) (AIActionItemPayload, AIActionItemPreview, string, error) {
+	switch command.Kind {
+	case "min":
+		payload, preview, err := validateSetIngredientField(port, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientMinStock, command.Quantity)
+		return payload, preview, entity.AIActionTypeSetIngredientMinStock, err
+	case "cost":
+		payload, preview, err := validateSetIngredientField(port, restaurantID, command.IngredientID, entity.AIActionTypeSetIngredientCost, command.Quantity)
+		return payload, preview, entity.AIActionTypeSetIngredientCost, err
+	case "create":
+		shelf, err := port.ListIngredients(restaurantID)
+		if err != nil {
+			return AIActionItemPayload{}, AIActionItemPreview{}, "", err
+		}
+		payload, preview, err := validateCreateIngredient(shelf, command.Name, command.Unit, command.Quantity, 0, 0)
+		return payload, preview, entity.AIActionTypeCreateIngredient, err
+	default:
+		payload, preview, err := validateAdjustStock(port, restaurantID, command)
+		return payload, preview, entity.AIActionTypeAdjustIngredientStock, err
+	}
+}
+
+// BuildAdjustStockPlan validates every requested change and returns the draft.
+// Invalid items are reported, not silently dropped.
 func BuildAdjustStockPlan(port AIActionIngredientPort, restaurantID uint, commands []AIAdjustStockCommand, titles []string) AIActionPlanDraft {
 	draft := AIActionPlanDraft{}
 	for index, command := range commands {
@@ -197,7 +296,7 @@ func BuildAdjustStockPlan(port AIActionIngredientPort, restaurantID uint, comman
 		if index < len(titles) {
 			title = titles[index]
 		}
-		payload, preview, err := validateAdjustStock(port, restaurantID, command)
+		payload, preview, actionType, err := aiValidateCommand(port, restaurantID, command)
 		if err != nil {
 			if title == "" {
 				title = fmt.Sprintf("รายการที่ %d", index+1)
@@ -216,7 +315,7 @@ func BuildAdjustStockPlan(port AIActionIngredientPort, restaurantID uint, comman
 			continue
 		}
 		draft.Items = append(draft.Items, repository.CreateAIActionPlanItemParams{
-			ActionType:  entity.AIActionTypeAdjustIngredientStock,
+			ActionType:  actionType,
 			PayloadJSON: string(payloadJSON),
 			PreviewJSON: string(previewJSON),
 		})
@@ -240,7 +339,63 @@ func executeAIActionItem(port AIActionIngredientPort, restaurantID, actorUserID 
 			Note:     payload.Note,
 		})
 		return err
+	case entity.AIActionTypeSetIngredientMinStock, entity.AIActionTypeSetIngredientCost:
+		// Editing one field goes through the same Update the inventory form uses,
+		// so its validation and its "unit cannot change while recipes use it" rule
+		// still apply. The current row is re-read here so a concurrent edit to any
+		// other field is preserved rather than overwritten with a stale copy.
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		current, err := port.FindIngredient(restaurantID, payload.IngredientID)
+		if err != nil || current == nil {
+			return ErrAIActionUnknownIngredient
+		}
+		request := aiIngredientRequestFrom(current)
+		if item.ActionType == entity.AIActionTypeSetIngredientMinStock {
+			request.MinStock = payload.MinStock
+		} else {
+			request.CostPerUnit = payload.CostPerUnit
+		}
+		_, err = port.Update(restaurantID, payload.IngredientID, request)
+		return err
+
+	case entity.AIActionTypeCreateIngredient:
+		var payload AIActionItemPayload
+		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
+			return errors.New("คำสั่งเสียหาย")
+		}
+		_, err := port.Create(restaurantID, actorUserID, &IngredientRequest{
+			Name:        payload.Name,
+			Unit:        payload.Unit,
+			Stock:       payload.Quantity,
+			MinStock:    payload.MinStock,
+			CostPerUnit: payload.CostPerUnit,
+		})
+		return err
+
 	default:
 		return fmt.Errorf("ยังไม่รองรับคำสั่งชนิด %q", item.ActionType)
 	}
+}
+
+// aiIngredientRequestFrom copies a stored ingredient into the shape Update
+// expects, so changing one field leaves the rest exactly as they were.
+func aiIngredientRequestFrom(item *entity.Ingredient) *IngredientRequest {
+	request := &IngredientRequest{
+		Name:         item.Name,
+		SKU:          item.SKU,
+		ImageURL:     item.ImageURL,
+		Unit:         item.Unit,
+		Stock:        item.Stock,
+		MinStock:     item.MinStock,
+		CostPerUnit:  item.CostPerUnit,
+		YieldPercent: item.YieldPercent,
+		StorageType:  item.StorageType,
+	}
+	if item.CategoryID != nil {
+		request.CategoryID = *item.CategoryID
+	}
+	return request
 }
