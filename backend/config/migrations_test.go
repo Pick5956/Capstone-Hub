@@ -92,6 +92,11 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// Version 15 adds Restaurant.AIActionsEnabled — the owner's toggle for the
 		// assistant's write actions — so the registry fingerprint advances.
 		15: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
+		// Version 16 adds the multi-item action plan tables (AIActionPlan +
+		// AIActionPlanItem) inside the migration itself, following the same rule as
+		// the earlier AI tables: the frozen baseline registry stays untouched, so
+		// the fingerprint is unchanged from version 15.
+		16: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 15
+	CurrentSchemaVersion int64 = 16
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -280,6 +280,20 @@ func schemaMigrationPlan() []SchemaMigration {
 				// so nothing changes for an existing restaurant until the owner opts in.
 				if err := ctx.DB.AutoMigrate(&entity.Restaurant{}); err != nil {
 					return fmt.Errorf("migrate restaurant AI actions flag: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 16,
+			Name:    "ai_action_plans",
+			Up: func(ctx *MigrationContext) error {
+				// Additive-only: the multi-item action boundary (a plan the owner
+				// confirms once, holding N changes of allowed types). The existing
+				// single-menu preview table is untouched, so rolling this back just
+				// leaves two unused tables.
+				if err := ctx.DB.AutoMigrate(&entity.AIActionPlan{}, &entity.AIActionPlanItem{}); err != nil {
+					return fmt.Errorf("migrate AI action plans: %w", err)
 				}
 				return nil
 			},
