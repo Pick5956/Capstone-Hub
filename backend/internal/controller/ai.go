@@ -62,6 +62,8 @@ func ProvideAIController(db *gorm.DB) *AIController {
 		// The same menu service the menu screen uses, so an availability change the
 		// assistant makes runs exactly the code a button press runs.
 		service.ProvideMenuService(repository.NewMenuRepository(db)),
+		// Read-only: the assistant reports the floor, it does not book tables.
+		service.ProvideTableService(repository.NewTableRepository(db)),
 	))
 }
 

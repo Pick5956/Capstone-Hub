@@ -110,6 +110,20 @@ const joyboyToolMenuForPeriod AIToolName = "get_menu_metrics_for_period"
 // phrases the result, and the chart is drawn deterministically on the frontend.
 const joyboyToolSalesForecast AIToolName = "get_sales_forecast"
 
+// joyboyToolTableStatus reports the floor as it is right now: how many tables are
+// free, taken, or held for a booking. It is the one tool here that reads live
+// state rather than a window of history, because "โต๊ะว่างไหม" is only ever a
+// question about this minute.
+//
+// It is read-only, and that is a decision rather than an omission. Every write in
+// this assistant is proposed, shown, and executed only when the owner confirms —
+// which fits data that is still true a minute later. A table is the fastest
+// changing thing in the shop: by the time a "reserve table 5" bar is confirmed,
+// the floor staff may have seated someone there. The write would be refused
+// safely, but the owner would have been told a change was ready that then was
+// not. Booking stays on the table screen, where it is one tap and immediate.
+const joyboyToolTableStatus AIToolName = "get_table_status"
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -123,6 +137,7 @@ var joyboyExtraTools = []AIToolName{
 	AIToolGetProfitSummary,
 	joyboyToolMenuForPeriod,
 	joyboyToolSalesForecast,
+	joyboyToolTableStatus,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -138,6 +153,14 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
 		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
 		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
+	joyboyToolTableStatus: "สถานะโต๊ะในร้าน \"ตอนนี้เดี๋ยวนี้\" ไม่ใช่ข้อมูลย้อนหลัง " +
+		"บอกจำนวนโต๊ะทั้งหมด ว่างกี่โต๊ะ มีคนนั่งกี่โต๊ะ จองไว้กี่โต๊ะ ที่นั่งว่างรวมกี่ที่ " +
+		"พร้อมรายชื่อโต๊ะว่าง เลขโต๊ะ จำนวนที่นั่ง และโซน " +
+		"ใช้ตอบ: โต๊ะว่างกี่โต๊ะ ร้านเต็มยัง มีโต๊ะรับกี่คนได้บ้าง โต๊ะไหนว่าง โต๊ะนี้ว่างไหม " +
+		"ตอนนี้มีคนกี่โต๊ะ โซนไหนคนแน่น มีใครจองไว้บ้าง " +
+		"ระบบนี้ดูสถานะได้อย่างเดียว จองหรือยกเลิกจองไม่ได้ " +
+		"แต่ถ้าผู้ใช้ขอให้จองโต๊ะหรือยกเลิกจอง **ก็ให้เลือกเครื่องมือนี้อยู่ดี** " +
+		"จะได้ตอบจากสถานะจริงว่าทำให้ไม่ได้ และบอกว่าต้องไปกดเองที่หน้าจัดการโต๊ะ",
 	joyboyToolMenuForPeriod: "เมนูพร้อมยอดขาย จำนวนจาน กำไร และ margin ของ \"ช่วงเวลาที่ระบุ\" " +
 		"เช่น เดือนนี้ เดือนที่แล้ว เดือนกรกฎาคม ปีนี้ ไม่ใช่ 30 วันล่าสุด " +
 		"ใช้ตอบเฉพาะเมื่อคำถามเอ่ยชื่อเดือนหรือปีชัดเจน เช่น เมนูขายดีเดือนที่แล้ว " +
@@ -181,6 +204,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,
 		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
 	}},
+	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus}},
 	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},
 	{"คู่มือการใช้งาน", []AIToolName{AIToolSearchSystemDocs}},
 }

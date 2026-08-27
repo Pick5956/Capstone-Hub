@@ -55,6 +55,13 @@ type AIActionMenuPort interface {
 	UpdateMenuItemAvailability(restaurantID, itemID uint, req *MenuItemAvailabilityRequest) (*entity.MenuItem, error)
 }
 
+// AITablePort is the read-only slice of the table service the assistant needs.
+// There is no write method here on purpose: booking a table is left to the table
+// screen, where it takes effect the moment it is tapped (see joyboyToolTableStatus).
+type AITablePort interface {
+	ListTables(restaurantID uint) ([]entity.RestaurantTable, error)
+}
+
 // jsonUnmarshalString decodes a stored JSON column into a typed value.
 func jsonUnmarshalString(raw string, target any) error {
 	return json.Unmarshal([]byte(raw), target)

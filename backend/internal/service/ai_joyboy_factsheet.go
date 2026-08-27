@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
 
@@ -351,6 +352,92 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 		"total_orders=" + strconv.FormatInt(cov.Orders, 10),
 		"total_revenue=" + joyboyNum(cov.Revenue),
 	})
+}
+
+// joyboyTableStatusBody renders the floor as it stands right now.
+//
+// The reservation holder's phone number is deliberately left out. The owner is
+// entitled to see it, but this sheet is sent to a model provider outside the
+// system, and a customer's phone number has no bearing on any question the
+// assistant is being asked ("is table 5 free?"). The name is enough to say who a
+// table is being held for; the number stays in the database.
+func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
+	if len(tables) == 0 {
+		return joyboyNoData("no_tables_configured")
+	}
+
+	var free, occupied, reserved, inactive int
+	freeSeats := 0
+	freeList := make([]string, 0, len(tables))
+	reservedList := make([]string, 0, 4)
+	occupiedList := make([]string, 0, 8)
+	// Closed tables are named too. Counting them and not listing them is what made
+	// "โต๊ะ F04 ว่างไหม" come back as "there is no such table" — the model could
+	// only see the tables in the three lists, so a table in none of them read as
+	// one that does not exist.
+	inactiveList := make([]string, 0, 4)
+
+	for _, table := range tables {
+		label := strings.TrimSpace(table.TableNumber)
+		if label == "" {
+			label = strings.TrimSpace(table.DisplayLabel)
+		}
+		zone := strings.TrimSpace(table.Zone)
+		descriptor := fmt.Sprintf("%s(%d ที่นั่ง", label, table.Capacity)
+		if zone != "" {
+			descriptor += " · โซน" + zone
+		}
+		descriptor += ")"
+
+		switch table.Status {
+		case entity.TableStatusFree:
+			free++
+			freeSeats += table.Capacity
+			freeList = append(freeList, descriptor)
+		case entity.TableStatusOccupied:
+			occupied++
+			occupiedList = append(occupiedList, label)
+		case entity.TableStatusReserved:
+			reserved++
+			if name := strings.TrimSpace(table.ReservationName); name != "" {
+				descriptor += " จองชื่อ " + name
+			}
+			reservedList = append(reservedList, descriptor)
+		default:
+			inactive++
+			inactiveList = append(inactiveList, descriptor)
+		}
+	}
+
+	lines := []string{
+		"as_of=ตอนนี้",
+		// The writing round never sees the tool catalogue — that is read by the
+		// round that picks tools. Asked "book table P01 for คุณสมศรี", the model
+		// picked this tool, read the floor, and wrote "ได้จองโต๊ะ P01 ให้แล้วครับ"
+		// over a booking that never happened. The rule has to travel with the data
+		// the answer is written from, so it lives here.
+		"capability=read_only",
+		"note=ดูสถานะได้อย่างเดียว จองโต๊ะหรือยกเลิกจองไม่ได้ ถ้าผู้ใช้ขอให้จอง ห้ามบอกว่าจองให้แล้ว ให้บอกว่าต้องไปกดที่หน้าจัดการโต๊ะเอง",
+		"total_tables=" + strconv.Itoa(len(tables)),
+		"free=" + strconv.Itoa(free),
+		"occupied=" + strconv.Itoa(occupied),
+		"reserved=" + strconv.Itoa(reserved),
+		"inactive=" + strconv.Itoa(inactive),
+		"free_seats_total=" + strconv.Itoa(freeSeats),
+	}
+	if len(freeList) > 0 {
+		lines = append(lines, "free_tables="+strings.Join(freeList, " "))
+	}
+	if len(reservedList) > 0 {
+		lines = append(lines, "reserved_tables="+strings.Join(reservedList, " "))
+	}
+	if len(occupiedList) > 0 {
+		lines = append(lines, "occupied_tables="+strings.Join(occupiedList, " "))
+	}
+	if len(inactiveList) > 0 {
+		lines = append(lines, "inactive_tables_ปิดใช้งานอยู่="+strings.Join(inactiveList, " "))
+	}
+	return joyboyJoin(lines)
 }
 
 // joyboyMenuForPeriodBody renders every menu's figures for a named calendar
