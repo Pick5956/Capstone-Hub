@@ -128,21 +128,6 @@ func (r *AIRepository) OperatingCalendarRules(restaurantID uint) ([]entity.AIOpe
 	return rules, err
 }
 
-// ReplaceOperatingCalendar swaps a restaurant's calendar rules for a new set in
-// one transaction, so a save is all-or-nothing and never leaves a half-updated
-// calendar.
-func (r *AIRepository) ReplaceOperatingCalendar(restaurantID uint, rules []entity.AIOperatingCalendarRule) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("restaurant_id = ?", restaurantID).Delete(&entity.AIOperatingCalendarRule{}).Error; err != nil {
-			return err
-		}
-		if len(rules) == 0 {
-			return nil
-		}
-		return tx.Create(&rules).Error
-	})
-}
-
 // RestaurantAIActionsEnabled reports whether the owner has turned on the
 // assistant's ability to make changes for this restaurant.
 func (r *AIRepository) RestaurantAIActionsEnabled(restaurantID uint) (bool, error) {

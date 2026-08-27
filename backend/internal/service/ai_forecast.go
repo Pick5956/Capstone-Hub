@@ -109,9 +109,10 @@ func (s *AIService) answerSalesForecast(restaurantID uint, question string) (*AI
 		anchor = lastData
 	}
 
-	// Operating calendar: only the days the owner explicitly marked closed (in the
-	// settings modal). A read failure just means "no rules" → everything open,
-	// never a broken forecast. Unmarked days are treated as open by design.
+	// Operating calendar: only the days explicitly marked closed. Nothing writes
+	// these rules today, so in practice every day reads as open — see ai_calendar.go.
+	// A read failure just means "no rules" → everything open, never a broken
+	// forecast. Unmarked days are treated as open by design.
 	rules, _ := s.repo.OperatingCalendarRules(restaurantID)
 	cal := buildOperatingCalendar(rules)
 

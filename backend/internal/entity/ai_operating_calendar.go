@@ -5,9 +5,13 @@ import "gorm.io/gorm"
 // AIOperatingCalendarRule is the AI feature's own record of when a restaurant is
 // closed, used by the sales forecast. It is deliberately kept out of the shared
 // Restaurant entity so the AI feature owns its schema and migrations outright; it
-// links by restaurant_id only. If the restaurant settings later grow a first-class
-// operating schedule, these rules can be migrated there without touching callers,
-// because the forecast reads them through an isOpen() abstraction.
+// links by restaurant_id only.
+//
+// No code writes these rules any more: the AI settings screen that edited them was
+// removed, so the table stays empty and the forecast treats every day as open. The
+// row shape is kept because the restaurant's own open/closed switch is the natural
+// thing to fill it — and the forecast reads through an isOpen() abstraction, so
+// that new writer would not touch the forecast at all.
 //
 // RuleType is one of:
 //   - "weekly_closed": the shop is closed every <Weekday> (0=Sunday..6=Saturday)

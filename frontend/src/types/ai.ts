@@ -155,16 +155,6 @@ export type AISystemDocSource = {
   url: `/docs#${string}` | `/docs/${string}#${string}`;
 };
 
-export type AICalendarException = {
-  date: string; // "YYYY-MM-DD"
-  kind: "closed" | "open";
-};
-
-export type AICalendarView = {
-  closed_weekdays: number[]; // 0=Sunday .. 6=Saturday
-  exceptions: AICalendarException[];
-};
-
 export type AIForecastResult = {
   history: { date: string; actual: number }[];
   forecast: { date: string; weekday: string; predicted: number; lower: number; upper: number }[];

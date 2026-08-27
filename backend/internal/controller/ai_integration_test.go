@@ -77,14 +77,6 @@ func (f *fakeAIOperationsService) ExtractReceiptForOwner(actor service.AIActorCo
 	return nil, f.askErr
 }
 
-func (f *fakeAIOperationsService) OperatingCalendarForOwner(uint) (service.AICalendarView, error) {
-	return service.AICalendarView{}, f.askErr
-}
-
-func (f *fakeAIOperationsService) SetOperatingCalendar(uint, service.AICalendarView) error {
-	return f.askErr
-}
-
 func (f *fakeAIOperationsService) AIActionsSettingForOwner(uint) (service.AIActionsSettingView, error) {
 	return service.AIActionsSettingView{}, f.askErr
 }

@@ -4,7 +4,6 @@ import type {
   AIActionConfirmation,
   AIAskRequest,
   AIAskResponse,
-  AICalendarView,
   AIActionPlanConfirmation,
   AIConversationMessage,
   AIInsight,
@@ -75,12 +74,6 @@ export const getOperationsSnapshot = () =>
 
 export const getProactiveInsights = () =>
   apiClient.get<{ insights: AIInsight[] }>("/api/v1/ai/operations/insights");
-
-export const getOperatingCalendar = () =>
-  apiClient.get<AICalendarView>("/api/v1/ai/operations/calendar");
-
-export const updateOperatingCalendar = (view: AICalendarView) =>
-  apiClient.put<AICalendarView>("/api/v1/ai/operations/calendar", view);
 
 export type AISettingsView = {
   actions_enabled: boolean;

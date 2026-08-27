@@ -30,8 +30,6 @@ type AIOperationsService interface {
 	ExtractReceiptForOwner(actor service.AIActorContext, imageBase64, mimeType string) (*service.ReceiptDraft, error)
 	ConfirmAIActionForOwner(actor service.AIActorContext, previewID, confirmationToken string) (*service.AIActionConfirmationResponse, error)
 	CancelAIActionForOwner(actor service.AIActorContext, previewID string) error
-	OperatingCalendarForOwner(restaurantID uint) (service.AICalendarView, error)
-	SetOperatingCalendar(restaurantID uint, view service.AICalendarView) error
 	AIActionsSettingForOwner(restaurantID uint) (service.AIActionsSettingView, error)
 	SetAIActionsSettingForOwner(restaurantID uint, enabled bool) error
 	ConfirmAIActionPlanForOwner(actor service.AIActorContext, planID, confirmationToken string) (*service.AIActionPlanConfirmation, error)
@@ -264,23 +262,6 @@ func respondAIActionPlanError(c *gin.Context, err error) {
 	}
 }
 
-// GetOperatingCalendar returns the restaurant's forecast open/closed calendar.
-func (ctrl *AIController) GetOperatingCalendar(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
-	if !ok {
-		return
-	}
-	if !requireAIOwner(c) {
-		return
-	}
-	view, err := ctrl.svc.OperatingCalendarForOwner(restaurantID)
-	if err != nil {
-		respondAPIError(c, http.StatusInternalServerError, err)
-		return
-	}
-	c.JSON(http.StatusOK, view)
-}
-
 // GetAISettings returns the owner-facing AI settings (whether the assistant may
 // make changes).
 func (ctrl *AIController) GetAISettings(c *gin.Context) {
@@ -321,32 +302,6 @@ func (ctrl *AIController) UpdateAISettings(c *gin.Context) {
 		return
 	}
 	view, err := ctrl.svc.AIActionsSettingForOwner(restaurantID)
-	if err != nil {
-		respondAPIError(c, http.StatusInternalServerError, err)
-		return
-	}
-	c.JSON(http.StatusOK, view)
-}
-
-// UpdateOperatingCalendar replaces the restaurant's forecast open/closed calendar.
-func (ctrl *AIController) UpdateOperatingCalendar(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
-	if !ok {
-		return
-	}
-	if !requireAIOwner(c) {
-		return
-	}
-	var input service.AICalendarView
-	if err := c.ShouldBindJSON(&input); err != nil {
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
-	if err := ctrl.svc.SetOperatingCalendar(restaurantID, input); err != nil {
-		respondAPIError(c, http.StatusBadRequest, err)
-		return
-	}
-	view, err := ctrl.svc.OperatingCalendarForOwner(restaurantID)
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
 		return
