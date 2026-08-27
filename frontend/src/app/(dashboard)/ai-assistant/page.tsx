@@ -528,7 +528,7 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100dvh-var(--dashboard-shell-row))] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
