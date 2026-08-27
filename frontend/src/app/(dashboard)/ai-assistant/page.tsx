@@ -568,6 +568,20 @@ export default function AIAssistantPage() {
     cancelAIActionPlan(plan.id).catch(() => undefined);
   };
 
+  // Put the original sentence back in the input, cursor at the end, so the owner
+  // changes the part that was wrong instead of retyping the whole command.
+  const reissuePendingCommand = () => {
+    const question = pendingActionQuestion;
+    if (!question) return;
+    setInput(question);
+    requestAnimationFrame(() => {
+      const box = inputRef.current;
+      if (!box) return;
+      box.focus();
+      box.setSelectionRange(question.length, question.length);
+    });
+  };
+
   const handlePlanReissue = () => {
     actionResolvedRef.current = false;
     setPendingActionPlan(null);
@@ -578,6 +592,7 @@ export default function AIAssistantPage() {
     actionResolvedRef.current = false;
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    reissuePendingCommand();
   };
 
   const handleGuidedAction = (action: AIGuidedAction, msgId?: string) => {
