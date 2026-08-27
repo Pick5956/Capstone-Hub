@@ -252,25 +252,13 @@ export default function PosTablesPage() {
     return Array.from(counts.values());
   }, [copy.noZone, tables]);
 
-  const occupiedCount = useMemo(
-    () => tables.filter((table) => activeOrderByTable.has(table.ID)).length,
-    [activeOrderByTable, tables]
-  );
-  const freeCount = useMemo(
-    () => tables.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length,
-    [activeOrderByTable, tables]
-  );
-
   /** How many of a zone's tables are open for a walk-in right now. */
   const freeIn = (list: RestaurantTable[]) =>
     list.filter((table) => !activeOrderByTable.has(table.ID) && table.status === "free").length;
 
-  const summaryLine = language === "th"
-    ? `${occupiedCount} โต๊ะกำลังใช้งาน · อีก ${freeCount} โต๊ะพร้อมรับลูกค้า`
-    : `${occupiedCount} in service · ${freeCount} ready for guests`;
   const allZonesLabel = language === "th" ? "ทุกโซน" : "All zones";
-  const freeLabel = (count: number) => (language === "th" ? `${count} โต๊ะว่าง` : `${count} free`);
-  const totalLabel = (count: number) => (language === "th" ? `${count} โต๊ะทั้งหมด` : `${count} tables`);
+  const zoneCountLabel = (free: number, total: number) =>
+    language === "th" ? `ว่าง ${free} จาก ${total} โต๊ะ` : `${free} of ${total} free`;
   const chipClass = (on: boolean) =>
     `ui-press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
       on
@@ -557,56 +545,44 @@ export default function PosTablesPage() {
         <div aria-hidden="true" className="fixed inset-0 z-[var(--z-modal)] cursor-wait bg-transparent" />
       ) : null}
       <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none dark:lg:bg-transparent">
-        <div className="hidden lg:flex lg:items-start lg:justify-between lg:gap-4 lg:px-5 lg:pt-5">
-          <div className="min-w-0">
-            <h1 className="text-[24px] font-bold leading-tight text-gray-950 dark:text-white">{copy.eyebrow}</h1>
-            <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">{summaryLine}</p>
-          </div>
-          <button
-            type="button"
-            disabled={isNavigating}
-            onClick={openTakeawaySheet}
-            className="ui-press hidden h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:inline-flex"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            {copy.takeaway}
-          </button>
-        </div>
-        <div className="grid gap-1.5 px-3 py-2 sm:px-4 lg:flex lg:items-center lg:gap-2 lg:px-5 lg:pb-1 lg:pt-3">
-          <label className="relative min-w-0">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+        <h1 className="sr-only">{copy.eyebrow}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
+          <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:flex lg:items-center lg:gap-2">
+            <label className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                disabled={isNavigating}
+                placeholder={copy.search}
+                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+                aria-label={copy.search}
+              />
+            </label>
+            <button
+              type="button"
               disabled={isNavigating}
-              placeholder={copy.search}
-              className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
-              aria-label={copy.search}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isNavigating}
-            onClick={openTakeawaySheet}
-            className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:hidden"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            {copy.takeaway}
-          </button>
-          {hasAnyZone && (
-            <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
-              <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
-                {allZonesLabel}
-                <span className="font-mono tabular-nums opacity-70">{tables.length}</span>
-              </button>
-              {zoneOptions.map((zone) => (
-                <button key={zone.key} type="button" onClick={() => setZoneFilter(zone.key)} className={chipClass(zoneFilter === zone.key)}>
-                  <span className="truncate">{zone.label}</span>
-                  <span className="font-mono tabular-nums opacity-70">{zone.count}</span>
+              onClick={openTakeawaySheet}
+              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:order-last lg:ml-auto"
+            >
+              <ShoppingBag className="h-4 w-4" />
+              {copy.takeaway}
+            </button>
+            {hasAnyZone && (
+              <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
+                <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
+                  {allZonesLabel}
+                  <span className="font-mono tabular-nums opacity-70">{tables.length}</span>
                 </button>
-              ))}
-            </div>
-          )}
+                {zoneOptions.map((zone) => (
+                  <button key={zone.key} type="button" onClick={() => setZoneFilter(zone.key)} className={chipClass(zoneFilter === zone.key)}>
+                    <span className="truncate">{zone.label}</span>
+                    <span className="font-mono tabular-nums opacity-70">{zone.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div aria-hidden="true" className="h-[104px] lg:hidden" />
@@ -617,6 +593,7 @@ export default function PosTablesPage() {
         showHeader={false}
       >
 
+      <div className="mx-auto w-full max-w-6xl">
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {loading || isNavigating ? (
@@ -624,7 +601,7 @@ export default function PosTablesPage() {
           role="status"
           aria-live="polite"
           aria-label={language === "th" ? "กำลังโหลด" : "Loading"}
-          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7"
+          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
         >
           {Array.from({ length: 10 }).map((_, index) => <Skeleton key={index} className="h-[118px]" />)}
         </div>
@@ -633,13 +610,12 @@ export default function PosTablesPage() {
           {groupedTables.length ? groupedTables.map((group) => (
             <section key={group.label}>
               {hasAnyZone && (
-                <div className="mb-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{group.label}</span>
-                  <h2 className="text-[15px] font-bold leading-tight text-gray-950 dark:text-white">{freeLabel(freeIn(group.tables))}</h2>
-                  <span className="text-[12px] text-gray-500 dark:text-gray-400">{totalLabel(group.tables.length)}</span>
+                <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[color:var(--dashboard-shell-border)] pb-2">
+                  <h2 className="truncate text-[15px] font-bold leading-tight text-gray-950 dark:text-white">{group.label}</h2>
+                  <span className="shrink-0 text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{zoneCountLabel(freeIn(group.tables), group.tables.length)}</span>
                 </div>
               )}
-              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
+              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
                   const busy = Boolean(order);
@@ -826,6 +802,7 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
+      </div>
       </OperationalPageShell>
     </>
   );
