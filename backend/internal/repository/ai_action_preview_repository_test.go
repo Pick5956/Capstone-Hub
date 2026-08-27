@@ -70,8 +70,8 @@ func TestBuildSetMenuAvailabilityPreviewSnapshotsCurrentStateAndFixedTTL(t *test
 	if !preview.ExpectedTargetUpdatedAt.Equal(menuUpdatedAt) {
 		t.Fatalf("expected updated_at = %s, want %s", preview.ExpectedTargetUpdatedAt, menuUpdatedAt)
 	}
-	if !preview.ExpiresAt.Equal(now.Add(5*time.Minute)) || AIActionPreviewTTL != 5*time.Minute {
-		t.Fatalf("preview expiry = %s, want fixed five-minute TTL", preview.ExpiresAt)
+	if !preview.ExpiresAt.Equal(now.Add(1*time.Minute)) || AIActionPreviewTTL != 1*time.Minute {
+		t.Fatalf("preview expiry = %s, want fixed one-minute TTL", preview.ExpiresAt)
 	}
 	if &preview.ConfirmationTokenHash[0] == &hash[0] {
 		t.Fatal("preview retained caller-owned hash slice")

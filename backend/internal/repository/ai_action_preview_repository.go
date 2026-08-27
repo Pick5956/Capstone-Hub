@@ -20,7 +20,10 @@ import (
 )
 
 const (
-	AIActionPreviewTTL                 = 5 * time.Minute
+	// One minute: long enough to read a one-line confirm bar and press it, short
+	// enough that the countdown ring visibly moves and a forgotten command clears
+	// itself quickly rather than lingering as a live write.
+	AIActionPreviewTTL                 = 1 * time.Minute
 	AIActionPreviewRetention           = 30 * 24 * time.Hour
 	AIActionPreviewResultMaxBytes      = 16 * 1024
 	aiActionPreviewIDBytes             = 16

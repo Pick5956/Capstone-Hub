@@ -40,6 +40,9 @@ const DANGER = "#FF3B30";
 const DANGER_TEXT = "#c72c22";
 const DANGER_BORDER = "#ffb3ad";
 const ACCENT = "#f97316"; // orange-500 — the warm ring, glowing like the Orb
+const ACCENT_URGENT = "#d97706"; // amber-600 — the last seconds, pulsing faster
+// Below this many milliseconds left, the ring switches to the urgent look.
+export const URGENT_MS = 15_000;
 const ACCENT_DEEP = "#c2410c"; // orange-700 — highlighted "to" cell / confirm button
 
 function labels(language: "th" | "en") {
@@ -95,6 +98,7 @@ export function isTerminal(state: InlineDbConfirmState): boolean {
 type BarView = {
   ringColor: string;
   glow: boolean;
+  urgent: boolean;
   borderColor: string;
   highlight: "from" | "to";
   highlightColor: string;
@@ -112,31 +116,36 @@ export function barView(
   switch (state) {
     case "done":
       return {
-        ringColor: GREEN, glow: false, borderColor: GREEN_BORDER,
+        ringColor: GREEN, glow: false, urgent: false, borderColor: GREEN_BORDER,
         highlight: "to", highlightColor: GREEN,
         statusText: t.done, statusTone: GREEN_TEXT, icon: "check", buttons: "undo",
       };
     case "cancelled":
       return {
-        ringColor: DANGER, glow: false, borderColor: DANGER_BORDER,
+        ringColor: DANGER, glow: false, urgent: false, borderColor: DANGER_BORDER,
         highlight: "from", highlightColor: "#64748b",
         statusText: t.cancelled, statusTone: DANGER_TEXT, icon: "x", buttons: "reissue",
       };
     case "expired":
       return {
-        ringColor: DANGER, glow: false, borderColor: DANGER_BORDER,
+        ringColor: DANGER, glow: false, urgent: false, borderColor: DANGER_BORDER,
         highlight: "from", highlightColor: "#64748b",
         statusText: t.expired, statusTone: DANGER_TEXT, icon: "x", buttons: "reissue",
       };
-    default: // pending | confirming
+    default: { // pending | confirming
+      const urgent = state === "pending" && opts.remainingMs <= URGENT_MS;
       return {
-        ringColor: ACCENT, glow: state === "pending", borderColor: "rgba(249,115,22,0.35)",
+        ringColor: urgent ? ACCENT_URGENT : ACCENT,
+        glow: state === "pending",
+        urgent,
+        borderColor: urgent ? "rgba(217,119,6,0.55)" : "rgba(249,115,22,0.35)",
         highlight: "to", highlightColor: ACCENT_DEEP,
         statusText: opts.error ? opts.error : `${opts.detail} · ${t.cancelIn(formatCountdown(opts.remainingMs))}`,
         statusTone: opts.error ? "#dc2626" : "var(--idcb-muted)",
         icon: state === "confirming" ? "spinner" : "none",
         buttons: "confirm",
       };
+    }
   }
 }
 
@@ -199,6 +208,7 @@ export default function InlineDbConfirmBar({
 
   const view = barView(state, { detail, remainingMs: remaining, language, error });
   const dashoffset = ringDashoffset(state, remaining, totalRef.current ?? 1);
+  const secondsLeft = Math.max(0, Math.ceil(remaining / 1000));
 
   return (
     <div
@@ -209,15 +219,30 @@ export default function InlineDbConfirmBar({
     >
       <style>{`
         @keyframes idcb-glow { 0%,100%{ filter: drop-shadow(0 0 2.5px rgba(249,115,22,.5)); } 50%{ filter: drop-shadow(0 0 7px rgba(249,115,22,.9)); } }
+        @keyframes idcb-glow-urgent { 0%,100%{ filter: drop-shadow(0 0 3px rgba(217,119,6,.7)); } 50%{ filter: drop-shadow(0 0 9px rgba(217,119,6,1)); } }
         @keyframes idcb-spin { to { transform: rotate(360deg); } }
+        /* The seconds swap with a small lift instead of a hard cut. */
+        @keyframes idcb-tick { 0% { opacity: 0; transform: translateY(3px) scale(.9); } 100% { opacity: 1; transform: none; } }
+        /* Check / cross draw themselves in, then the ring gives one soft pulse. */
+        @keyframes idcb-draw { from { stroke-dashoffset: 40; } to { stroke-dashoffset: 0; } }
+        @keyframes idcb-pop { 0% { transform: scale(.55); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes idcb-settle { 0% { transform: scale(1); } 45% { transform: scale(1.07); } 100% { transform: scale(1); } }
         .idcb-glow { animation: idcb-glow 2.2s ease-in-out infinite; }
+        .idcb-glow-urgent { animation: idcb-glow-urgent .9s ease-in-out infinite; }
         .idcb-spin { animation: idcb-spin .8s linear infinite; transform-origin: center; }
-        .idcb-progress { transition: stroke-dashoffset .45s cubic-bezier(.3,.9,.3,1), stroke .3s ease; }
+        /* 1s ticks: ease the sweep over most of a second so the ring reads as
+           continuous motion rather than a stepping hand. */
+        .idcb-progress { transition: stroke-dashoffset .9s cubic-bezier(.35,.85,.4,1), stroke .35s ease; }
+        .idcb-progress-settle { transition: stroke-dashoffset .5s cubic-bezier(.2,.9,.3,1), stroke .35s ease; animation: idcb-settle .5s ease-out; transform-origin: 20px 20px; }
+        .idcb-tick { animation: idcb-tick .3s cubic-bezier(.2,.9,.3,1); }
+        .idcb-mark { animation: idcb-pop .34s cubic-bezier(.2,.9,.3,1); transform-origin: center; }
+        .idcb-mark path { stroke-dasharray: 40; animation: idcb-draw .38s cubic-bezier(.4,.9,.4,1) forwards; }
         .idcb-focus:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) {
-          .idcb-glow { animation: none; filter: drop-shadow(0 0 4px rgba(249,115,22,.7)); }
+          .idcb-glow, .idcb-glow-urgent { animation: none; filter: drop-shadow(0 0 4px rgba(249,115,22,.7)); }
           .idcb-spin { animation-duration: 1.6s; }
-          .idcb-progress { transition: none; }
+          .idcb-progress, .idcb-progress-settle { transition: none; animation: none; }
+          .idcb-tick, .idcb-mark, .idcb-mark path { animation: none; stroke-dashoffset: 0; }
         }
       `}</style>
 
@@ -228,15 +253,26 @@ export default function InlineDbConfirmBar({
           <circle
             cx="20" cy="20" r="18" fill="none" stroke={view.ringColor} strokeWidth="4" strokeLinecap="round"
             strokeDasharray={RING_CIRCUMFERENCE} strokeDashoffset={dashoffset}
-            className={`idcb-progress${view.glow ? " idcb-glow" : ""}`}
+            className={`${isTerminal(state) ? "idcb-progress-settle" : "idcb-progress"}${view.glow ? (view.urgent ? " idcb-glow-urgent" : " idcb-glow") : ""}`}
           />
         </svg>
         <span className="absolute grid place-items-center">
+          {view.icon === "none" && (
+            // Seconds left, in the middle of the ring — the part of the countdown
+            // the eye can actually read second to second.
+            <span
+              key={secondsLeft}
+              className="idcb-tick text-[12px] font-semibold tabular-nums"
+              style={{ color: view.ringColor }}
+            >
+              {secondsLeft}
+            </span>
+          )}
           {view.icon === "check" && (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN_ICON} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+            <svg className="idcb-mark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={GREEN_ICON} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
           )}
           {view.icon === "x" && (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={DANGER} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            <svg className="idcb-mark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={DANGER} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           )}
           {view.icon === "spinner" && (
             <svg className="idcb-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="3" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /></svg>

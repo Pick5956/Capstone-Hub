@@ -390,8 +390,14 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// without it the log shows every decision except the one being judged.
 	aiDebug("joyboy question: %s", request.Question)
 	aiDebug("joyboy answer: %s", answer.Text)
+	// With no tool behind it, an answer that states a figure or claims a change
+	// was made is invented — send the plain "cannot help with this yet" instead.
+	finalAnswer := joyboyScopedAnswer(answer.Text, len(answer.Tools))
+	if finalAnswer != answer.Text {
+		aiStage("flow", "joyboy: unbacked answer with 0 tools → replaced with out-of-scope reply")
+	}
 	response := &AIAskResponse{
-		Answer: answer.Text,
+		Answer: finalAnswer,
 		Intent: intent,
 		Task:   task,
 		Model:  fmt.Sprintf("joyboy(%s)", strings.Join(answer.Tools, "+")),
