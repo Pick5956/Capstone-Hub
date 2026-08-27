@@ -1012,12 +1012,13 @@ input[type="number"]::-webkit-inner-spin-button {
        does not cut, so a scroller here would run past the rounded corner. */
     overflow: hidden;
     border-radius: var(--shell-radius);
-    background-color: #fff7ed;
+    background-color: #ffffff;
+    /* Dot grid only. The warm corner glow and the white sheen that used to sit
+       on top were there to build a cream canvas; on a white base the sheen is
+       invisible and the glow just tints the corner back toward cream. */
     background-image:
-      radial-gradient(rgba(224, 168, 124, 0.34) 1px, transparent 1.4px),
-      radial-gradient(860px 460px at 88% -8%, rgba(249, 115, 22, 0.08), transparent 68%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 240px);
-    background-size: 22px 22px, auto, auto;
+      radial-gradient(rgba(224, 168, 124, 0.34) 1px, transparent 1.4px);
+    background-size: 22px 22px;
     /* No drop shadow and no ring. Shell.jsx uses a black shadow and a light
        hairline, which are invisible on its near-black frame but read as a dirty
        band and a seam on this orange one. The cream sheet already separates
