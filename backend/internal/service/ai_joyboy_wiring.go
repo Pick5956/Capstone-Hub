@@ -315,6 +315,19 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 			Body:  body,
 		})
 	}
+	// A trend question is worth a picture: draw daily revenue as a line from the
+	// same snapshot the fact sheet used. Only when no chart was already set (a
+	// dated comparison owns the chart when it runs).
+	if t.chart == nil {
+		for _, name := range names {
+			if AIToolName(strings.TrimSpace(name)) == AIToolGetSalesTrend {
+				if chart := buildDailySalesLineChart(snapshot.SalesDays); chart != nil {
+					t.chart = chart
+				}
+				break
+			}
+		}
+	}
 	return results
 }
 

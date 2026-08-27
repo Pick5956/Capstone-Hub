@@ -200,6 +200,32 @@ func TestSalesComparisonChartMirrorsTheFigures(t *testing.T) {
 	}
 }
 
+// The daily-sales line chart draws revenue per day, sorted oldest-first with
+// compact day/month labels, from the same snapshot the trend answer uses. Too
+// few days makes no line.
+func TestDailySalesLineChartSortsAndLabels(t *testing.T) {
+	c := buildDailySalesLineChart([]repository.AISalesSummary{
+		{OrderDate: "2026-08-25", Revenue: 12000},
+		{OrderDate: "2026-08-23", Revenue: 9000},
+		{OrderDate: "2026-08-24", Revenue: 15000},
+	})
+	if c == nil {
+		t.Fatal("expected a chart from three days")
+	}
+	if c.Kind != AIChartLine {
+		t.Errorf("want a line chart, got %q", c.Kind)
+	}
+	if len(c.Categories) != 3 || c.Categories[0] != "23/8" || c.Categories[2] != "25/8" {
+		t.Errorf("labels should be day/month oldest-first, got %v", c.Categories)
+	}
+	if len(c.Series) != 1 || c.Series[0].Values[0] != 9000 || c.Series[0].Values[2] != 12000 {
+		t.Errorf("values must follow the sorted dates, got %+v", c.Series)
+	}
+	if buildDailySalesLineChart([]repository.AISalesSummary{{OrderDate: "2026-08-25", Revenue: 1}}) != nil {
+		t.Error("a single day is not enough to draw a line")
+	}
+}
+
 // A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
 // question is about a sales total; menu or per-order questions that mention a
 // year keep their own tools. A month question yields no bare year, so it stays

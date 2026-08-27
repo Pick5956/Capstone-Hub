@@ -1,5 +1,12 @@
 package service
 
+import (
+	"sort"
+	"strings"
+
+	"Project-M/internal/repository"
+)
+
 // General chart payloads for the assistant.
 //
 // This is the "bounded-flexible" charting the owner asked for: the user says
@@ -48,5 +55,63 @@ func buildSalesComparisonChart(labelA string, revenueA float64, labelB string, r
 		Unit:       "บาท",
 		Categories: []string{labelA, labelB},
 		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: []float64{revenueA, revenueB}}},
+	}
+}
+
+// shortDayMonth turns an ISO date ("2026-08-27") into a compact "27/8" axis label.
+func shortDayMonth(iso string) string {
+	parts := strings.Split(strings.TrimSpace(iso), "-")
+	if len(parts) != 3 {
+		return iso
+	}
+	day := strings.TrimLeft(parts[2], "0")
+	month := strings.TrimLeft(parts[1], "0")
+	if day == "" {
+		day = "0"
+	}
+	if month == "" {
+		month = "0"
+	}
+	return day + "/" + month
+}
+
+// buildDailySalesLineChart renders revenue per day over the recent window as a
+// line — the shape a "how are sales trending" question wants to see. It draws
+// from the same daily figures the trend tool reports, so the picture and the
+// answer agree. nil when there are too few days to make a line.
+func buildDailySalesLineChart(days []repository.AISalesSummary) *AIChartData {
+	type point struct {
+		date    string
+		revenue float64
+	}
+	points := make([]point, 0, len(days))
+	for _, d := range days {
+		iso := strings.TrimSpace(d.OrderDate)
+		if iso == "" {
+			continue
+		}
+		points = append(points, point{iso, d.Revenue})
+	}
+	if len(points) < 2 {
+		return nil
+	}
+	// ISO dates sort correctly as plain strings.
+	sort.SliceStable(points, func(i, j int) bool { return points[i].date < points[j].date })
+	const maxDays = 30
+	if len(points) > maxDays {
+		points = points[len(points)-maxDays:]
+	}
+	categories := make([]string, len(points))
+	values := make([]float64, len(points))
+	for i, p := range points {
+		categories[i] = shortDayMonth(p.date)
+		values[i] = p.revenue
+	}
+	return &AIChartData{
+		Kind:       AIChartLine,
+		Title:      "ยอดขายรายวัน",
+		Unit:       "บาท",
+		Categories: categories,
+		Series:     []AIChartSeries{{Name: "ยอดขาย", Values: values}},
 	}
 }
