@@ -6,9 +6,19 @@ import (
 	"strings"
 )
 
-// maxAnswerRunes is large enough for a five-row ranking with a figure or two per
-// row. Past it the model has stopped answering and started writing an essay.
-const maxAnswerRunes = 1600
+// There is no length limit here on purpose.
+//
+// There used to be one — 1,600 runes, and past it the reply was thrown away. It
+// was aimed at an essay-writing model, but a discarded reply is retried once and
+// then reported as an outage, so the owner saw "the system is unavailable" for a
+// perfectly good long answer: a recipe, a set of suggestions, anything explained
+// properly. A wall of text is a nuisance the owner can scroll past; an outage
+// hides a working assistant.
+//
+// The length is still bounded, just not here: the write call asks the provider
+// for at most joyboyWriteCeiling tokens, so a runaway reply stops at that ceiling
+// rather than running forever. Raising THAT is the knob for longer answers, and
+// it costs quota — this file's job is only to not throw away what came back.
 
 // historyTurns is how far back the model is shown. Two exchanges is enough to
 // resolve "แล้วอันที่สองล่ะ" without pushing the older half of a long
@@ -39,8 +49,9 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   ห้ามแต่งเหตุผลย้อนหลัง ถ้าไม่แน่ใจให้บอกว่าไม่แน่ใจ
 - ถ้าคำถามกำกวมหรืออ่านแล้วไม่แน่ใจว่าหมายถึงอะไร ให้ถามกลับสั้น ๆ ก่อน
   ห้ามเดาความหมายแล้วตอบยาว
-- หน้าที่ของคุณคือช่วยเรื่องร้านอาหารร้านนี้ ถ้าถูกถามเรื่องอื่นที่ไม่เกี่ยวกับร้าน
-  ตอบสั้น ๆ ได้ แล้วชวนกลับมาเรื่องร้าน ไม่ต้องตอบยาว`
+- หน้าที่หลักของคุณคือช่วยเรื่องร้านอาหารร้านนี้ แต่ถ้าถูกถามเรื่องทั่วไปที่ตอบได้
+  ก็ตอบไปตามปกติ ไม่ต้องบ่ายเบี่ยงหรือปฏิเสธ เช่น สูตรอาหาร วิธีเก็บของ เรื่องคุยเล่น
+  ตอบให้พอดีกับที่ถาม แล้วค่อยชวนกลับมาเรื่องร้าน`
 
 // answerTemplate says what to write before it says what not to. An earlier
 // version was ten prohibitions and no instruction, and the model did the only
@@ -141,7 +152,11 @@ const noDataAnswerTemplate = joyboyPersona + `
 
 ข้อห้าม:
 - ห้ามอ้างตัวเลขใด ๆ เกี่ยวกับร้านนี้ เพราะคุณไม่ได้รับข้อมูลของร้านมาเลย
-- ห้ามอ้างค่าเฉลี่ยของร้านอื่น ราคาตลาด หรือสถิติอุตสาหกรรม เพราะตรวจสอบไม่ได้
+- ห้ามยกตัวเลขตลาด ค่าเฉลี่ยของร้านอื่น หรือสถิติอุตสาหกรรม มาพูดเหมือนเป็นตัวเลขจริง
+  เพราะคุณไม่มีข้อมูลปัจจุบันและตรวจสอบไม่ได้ ถ้าจำเป็นต้องพูดถึง ให้บอกว่าเป็นการประมาณ
+  และบอกให้ไปเช็คราคาจริงเอง
+- แต่ความรู้ทั่วไปที่ไม่ใช่ตัวเลข ตอบได้ตามปกติ เช่น วิธีทำอาหาร วิธีเก็บวัตถุดิบ
+  วิธีจัดโปรโมชั่น เรื่องทั่วไปที่คนคุยกัน ไม่ต้องบ่ายเบี่ยง
 - ถ้าคำถามต้องใช้ข้อมูลของร้าน ให้บอกว่าขอดูข้อมูลส่วนไหนเพิ่ม`
 
 func answerPrompt(question string, history []Turn, sheet string) string {
@@ -267,11 +282,7 @@ func cleanAnswer(raw string) string {
 		}
 		kept = append(kept, line)
 	}
-	text = strings.TrimSpace(strings.Join(kept, "\n"))
-	if text == "" || len([]rune(text)) > maxAnswerRunes {
-		return ""
-	}
-	return text
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 // unicodeSpaces are the non-ASCII space characters a model sometimes drops

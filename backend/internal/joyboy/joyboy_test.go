@@ -224,8 +224,12 @@ func TestCleanAnswerDropsWrappersAndRunawayReplies(t *testing.T) {
 	if got := cleanAnswer("- ต้มยำกุ้ง 112 จาน\n- ชาไทย 108 จาน"); !strings.Contains(got, "\n") {
 		t.Fatal("line breaks are part of the answer and must survive")
 	}
-	if cleanAnswer(strings.Repeat("ก", maxAnswerRunes+1)) != "" {
-		t.Fatal("a runaway reply must be rejected")
+	// A long reply is kept. It used to be discarded, which turned a good long
+	// answer (a recipe, a full explanation) into an outage; the provider's token
+	// ceiling is what bounds length now.
+	long := strings.Repeat("ก", 4000)
+	if cleanAnswer(long) != long {
+		t.Fatal("a long reply must be kept, not discarded")
 	}
 	if cleanAnswer("   ") != "" {
 		t.Fatal("an empty reply must be rejected")
