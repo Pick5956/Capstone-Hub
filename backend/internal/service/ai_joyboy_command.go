@@ -16,43 +16,6 @@ import (
 // add the missing ingredient, or a plain "actions are off" — because the one
 // unacceptable outcome is the assistant claiming it did something it did not.
 
-// aiStockCommandMarkers keep the extraction round off questions. Running it on
-// every message would spend a model call per turn and invite false positives on
-// wording like "ยอดขายเพิ่มขึ้น"; a stock command always says what to do to the
-// shelf.
-var aiStockCommandMarkers = []string{
-	"รับเข้า", "รับของ", "รับ", "เติมสต๊อก", "เติมสต็อก", "เติม",
-	"ตัดออก", "ตัดสต๊อก", "ตัดสต็อก", "หักออก", "ใช้ไป", "ทิ้ง", "เสีย",
-	"ปรับสต๊อก", "ปรับสต็อก", "ปรับยอด", "ตั้งยอด", "นับได้", "ปรับเป็น",
-	"เพิ่มวัตถุดิบ", "เพิ่มของ", "เพิ่มเข้าคลัง", "เข้าคลัง",
-	"ตั้งขั้นต่ำ", "ขั้นต่ำ", "แจ้งเตือนเมื่อเหลือ",
-	"ขึ้นราคา", "ลดราคา", "ตั้งราคา", "ราคาต่อ", "กิโลละ", "ต้นทุนเป็น",
-}
-
-// aiStockCommandExcluded filters the analytical questions that share vocabulary
-// with a command ("วัตถุดิบไหนควรเติม") — those are answered, not acted on.
-var aiStockCommandExcluded = []string{"ไหน", "อะไรบ้าง", "เท่าไหร่", "กี่", "ควร", "แนะนำ", "ทำไม", "ดีไหม", "มั้ย"}
-
-// looksLikeStockCommand is a cheap pre-filter, not the decision. The decision is
-// made by the extractor plus Go validation downstream.
-func looksLikeStockCommand(question string) bool {
-	text := strings.ToLower(strings.TrimSpace(question))
-	if text == "" {
-		return false
-	}
-	for _, excluded := range aiStockCommandExcluded {
-		if strings.Contains(text, excluded) {
-			return false
-		}
-	}
-	for _, marker := range aiStockCommandMarkers {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
-}
-
 // AIActionPlanResponse is the confirm-bar payload for a multi-item plan.
 type AIActionPlanResponse struct {
 	ID                string                    `json:"id"`
@@ -78,10 +41,11 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	if s.actionPlanStore == nil || s.actionIngredients == nil || s.repo == nil {
 		return false
 	}
-	if !looksLikeStockCommand(request.Question) {
-		return false
-	}
-
+	// No keyword gate. Deciding whether a sentence is a command is exactly the
+	// judgement the model is good at, and a keyword list can only ever cover the
+	// phrasings someone thought of. The extractor returns an empty list for
+	// anything that is not a command, which costs one small call and keeps every
+	// way of saying it working.
 	drafts, err := s.ExtractStockCommands(request.Question, request.History)
 	if err != nil || len(drafts) == 0 {
 		return false

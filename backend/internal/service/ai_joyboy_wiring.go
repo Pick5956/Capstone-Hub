@@ -84,6 +84,19 @@ type joyboyTools struct {
 	// comparison bar, a daily trend line): the tool computes it, askJoyboy hands
 	// it to the frontend to draw.
 	chart *AIChartData
+
+	// history lets a tool read the range from the thread when the sentence alone
+	// is not enough ("แล้วเดือนก่อนล่ะ").
+	history []AIConversationMessage
+}
+
+// joyboyWithCoverage appends what range the shop actually has data for, so an
+// empty window is reported as "outside the records" rather than as zero sales.
+func joyboyWithCoverage(body, coverage string) string {
+	if strings.TrimSpace(coverage) == "" {
+		return body
+	}
+	return body + "\n" + coverage
 }
 
 func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
@@ -171,7 +184,18 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		// reported unhandled, so it falls through to ComputeSalesForPeriod — the
 		// snapshot tool that already answers "today" / "last 7 days".
 		now := repository.BangkokNow()
-		if req, isDated := resolveDatedSalesRequest(question, now); isDated {
+		req, isDated := resolveDatedSalesRequest(question, now)
+		if !isDated {
+			// The word list did not recognise the range. Rather than quietly
+			// answering about today — which is how "เดือนมีน่า" became "there is no
+			// data" — ask the model what range was meant and validate its answer
+			// here. Reading a sentence is its job; deciding the figures stays ours.
+			if modelReq, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok {
+				req, isDated = modelReq, true
+				aiStage("flow", "joyboy: period read by the model (%d window(s), comparison=%v)", len(modelReq.periods), modelReq.comparison)
+			}
+		}
+		if isDated {
 			if strings.TrimSpace(req.clarify) != "" {
 				return req.clarify, true, true
 			}
@@ -190,7 +214,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				// A comparison is a picture worth drawing: hand the frontend a
 				// two-bar chart of the same figures the fact sheet carries.
 				t.chart = buildSalesComparisonChart(a.Label, da.Revenue, b.Label, db.Revenue)
-				return joyboySalesComparisonBody(a, da, b, db), true, true
+				return joyboyWithCoverage(joyboySalesComparisonBody(a, da, b, db), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]
@@ -199,7 +223,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				return joyboySalesForPeriodBody(p.Label, d), true, true
+				return joyboyWithCoverage(joyboySalesForPeriodBody(p.Label, d), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
 			}
 		}
 		if year, ok := joyboyYearSalesTotal(question, now); ok {
@@ -364,7 +388,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		return actionResponse, nil
 	}
 
-	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID}
+	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID, history: request.History}
 	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {
 		aiStage("flow", format, args...)
 	})
