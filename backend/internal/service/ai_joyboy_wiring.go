@@ -326,7 +326,12 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 			case AIToolGetSalesTrend:
 				chart = buildDailySalesLineChart(snapshot.SalesDays)
 			case AIToolGetTopSellingMenus:
-				chart = buildTopMenusBarChart(snapshot.TopMenuItems)
+				// The model reaches for this tool even to just list the menus
+				// ("มีเมนูอะไรบ้าง"), so only draw a ranking chart when the question
+				// actually asks for one — never for a plain list.
+				if menuRankingChartWanted(question) {
+					chart = buildTopMenusBarChart(snapshot.TopMenuItems)
+				}
 			case AIToolGetOrderTypeBreakdown:
 				chart = buildOrderTypePieChart(snapshot.OrderTypeBreakdown)
 			}

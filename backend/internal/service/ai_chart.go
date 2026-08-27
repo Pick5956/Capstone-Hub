@@ -116,6 +116,23 @@ func buildDailySalesLineChart(days []repository.AISalesSummary) *AIChartData {
 	}
 }
 
+// menuRankingChartWanted is true when a menu question asks for a ranking or a
+// chart ("เมนูขายดี", "5 อันดับ", "กราฟ") rather than a plain list of what is on
+// the menu ("มีเมนูอะไรบ้าง") — the top-selling tool answers both, but only the
+// former is worth a bar chart.
+func menuRankingChartWanted(question string) bool {
+	n := strings.ToLower(question)
+	for _, k := range []string{
+		"ขายดี", "อันดับ", "มากสุด", "เยอะสุด", "สูงสุด", "ยอดนิยม", "นิยม",
+		"กราฟ", "ชาร์ต", "แผนภูมิ", "top", "chart", "ranking", "best",
+	} {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
+}
+
 // buildTopMenusBarChart draws the best-selling menus by quantity — the same
 // ranking the top-selling tool reports — as bars. Capped so the labels stay
 // readable. nil when there is nothing sold.

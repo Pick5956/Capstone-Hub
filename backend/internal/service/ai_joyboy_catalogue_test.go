@@ -256,6 +256,21 @@ func TestTopMenusBarAndOrderTypePie(t *testing.T) {
 	}
 }
 
+// A plain "what's on the menu" question must not drag a ranking chart along; only
+// a ranking/chart intent does.
+func TestMenuRankingChartWanted(t *testing.T) {
+	for _, q := range []string{"เมนูขายดี 5 อันดับ", "เมนูไหนขายดีสุด", "ขอกราฟเมนูขายดี", "เมนูยอดนิยม"} {
+		if !menuRankingChartWanted(q) {
+			t.Errorf("%q should want a ranking chart", q)
+		}
+	}
+	for _, q := range []string{"มีเมนูอะไรบ้างในร้านเรา", "ร้านมีเมนูอะไร", "ลิสต์เมนูทั้งหมด"} {
+		if menuRankingChartWanted(q) {
+			t.Errorf("%q is a plain list, no chart", q)
+		}
+	}
+}
+
 // A whole-year total ("ยอดขายปีนี้", "ยอดขายปี 2568") is claimed only when the
 // question is about a sales total; menu or per-order questions that mention a
 // year keep their own tools. A month question yields no bare year, so it stays
