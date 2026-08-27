@@ -323,6 +323,16 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 // answered around: the only text available to fall back on is the fact sheet,
 // which is Go's writing, and showing it would be the template again.
 func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request *AIAskRequest) (*AIAskResponse, error) {
+	// An owner's plain-language command to change data (currently only opening or
+	// closing a menu) short-circuits the read/answer flow into the reviewed
+	// action-preview boundary: the model writes nothing, and the change waits for
+	// the owner to confirm the preview. When actions are disabled or the text is
+	// not a command, this leaves the question to be answered normally below.
+	actionResponse := &AIAskResponse{Intent: AIIntentChat, Task: AITaskGeneralChat, Model: "joyboy"}
+	if s.maybeCreateJoyboyMenuAvailabilityAction(actor, request.Question, actionResponse) {
+		return actionResponse, nil
+	}
+
 	tools := &joyboyTools{service: s, restaurantID: actor.RestaurantID}
 	assistant, err := joyboy.New(joyboyChat{service: s}, tools, func(format string, args ...any) {
 		aiStage("flow", format, args...)
