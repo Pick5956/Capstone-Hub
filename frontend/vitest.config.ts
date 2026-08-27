@@ -36,6 +36,7 @@ export default defineConfig({
       "src/app/(dashboard)/expenses/expensesPage.test.ts",
       "src/app/(dashboard)/staff/staffPermissionPolicy.test.ts",
       "src/components/shared/RealtimeConnectionNotice.test.tsx",
+      "src/components/shared/InlineDbConfirmBar.test.tsx",
       "src/components/shared/AppWordmark.test.tsx",
       "src/components/shared/ThemedSelect.test.tsx",
       "src/components/docs/DocsContent.test.tsx",

@@ -32,6 +32,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import type { AIActionPreview, AISnapshot, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
+import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
@@ -159,6 +160,10 @@ export default function AIAssistantPage() {
   const [pendingAction, setPendingAction] = useState<AIGuidedAction | null>(null);
   const [pendingActionMsgId, setPendingActionMsgId] = useState<string | null>(null);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  // The inline confirm bar owns its terminal state (done/cancelled/expired) and
+  // stays mounted to show it. Once resolved, the preview must be dropped without
+  // trying to cancel an already-executed action.
+  const actionResolvedRef = useRef(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -351,7 +356,10 @@ export default function AIAssistantPage() {
         snapshotRequests.invalidate();
         setLatestSnapshot((current) => selectOperationsSnapshot(current, data.snapshot));
       }
-      if (data.action_preview) setPendingActionPreview(data.action_preview);
+      if (data.action_preview) {
+        actionResolvedRef.current = false;
+        setPendingActionPreview(data.action_preview);
+      }
       const actions =
         data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
@@ -453,6 +461,13 @@ export default function AIAssistantPage() {
   async function discardPendingActionPreview(): Promise<boolean> {
     const preview = pendingActionPreview;
     if (!preview) return true;
+    // Already confirmed/cancelled/expired via the inline bar — just drop it, never
+    // cancel an action that already ran.
+    if (actionResolvedRef.current) {
+      actionResolvedRef.current = false;
+      setPendingActionPreview(null);
+      return true;
+    }
     if (actionConfirming || actionCancelling) return false;
 
     const requestGeneration = conversationRequests.begin();
@@ -491,6 +506,33 @@ export default function AIAssistantPage() {
   async function handleCancelActionPreview() {
     await discardPendingActionPreview();
   }
+
+  // Inline confirm bar (reversible one-row writes). The bar owns its own
+  // pending → done | cancelled | expired display, so these only run the API and
+  // let onResolved mark the preview done; the bar stays until reissue or the
+  // next message.
+  const availabilityLabel = (available: boolean) =>
+    language === "th" ? (available ? "เปิดขาย" : "ปิดขาย") : available ? "Available" : "Unavailable";
+
+  const handleInlineActionConfirm = async () => {
+    const preview = pendingActionPreview;
+    if (!preview) return;
+    // Toggling a menu's availability does not move the analysis snapshot (sales,
+    // margins, stock risks are unaffected), so there is nothing to refresh here —
+    // the bar shows "done" on success and rethrows on failure.
+    await confirmAIAction(preview.id, preview.confirmation_token);
+  };
+
+  const handleInlineActionCancel = () => {
+    const preview = pendingActionPreview;
+    if (!preview) return;
+    cancelAIAction(preview.id).catch(() => undefined);
+  };
+
+  const handleInlineActionReissue = () => {
+    actionResolvedRef.current = false;
+    setPendingActionPreview(null);
+  };
 
   const handleGuidedAction = (action: AIGuidedAction, msgId?: string) => {
     if (action.prompt) {
@@ -692,15 +734,31 @@ export default function AIAssistantPage() {
             )}
 
             {pendingActionPreview && (
-              <AIActionPreviewCard
-                preview={pendingActionPreview}
-                language={language}
-                confirming={actionConfirming}
-                cancelling={actionCancelling}
-                error={actionPreviewError}
-                onConfirm={handleConfirmActionPreview}
-                onCancel={handleCancelActionPreview}
-              />
+              pendingActionPreview.action_type === "set_menu_availability" ? (
+                <InlineDbConfirmBar
+                  key={pendingActionPreview.id}
+                  itemName={pendingActionPreview.target.name}
+                  fromLabel={availabilityLabel(pendingActionPreview.current.is_available)}
+                  toLabel={availabilityLabel(pendingActionPreview.requested.is_available)}
+                  detail={language === "th" ? "แก้ข้อมูลจริง 1 รายการ" : "changes 1 record"}
+                  expiresAt={pendingActionPreview.expires_at}
+                  onConfirm={handleInlineActionConfirm}
+                  onCancel={handleInlineActionCancel}
+                  onReissue={handleInlineActionReissue}
+                  onResolved={() => { actionResolvedRef.current = true; }}
+                  language={language}
+                />
+              ) : (
+                <AIActionPreviewCard
+                  preview={pendingActionPreview}
+                  language={language}
+                  confirming={actionConfirming}
+                  cancelling={actionCancelling}
+                  error={actionPreviewError}
+                  onConfirm={handleConfirmActionPreview}
+                  onCancel={handleCancelActionPreview}
+                />
+              )
             )}
 
             <div ref={messagesEndRef} />
