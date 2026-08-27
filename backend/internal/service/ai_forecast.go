@@ -76,8 +76,26 @@ func isForecastQuestion(question string) bool {
 		"forecast", "predict", "projection")
 }
 
+// answerSalesForecast is the legacy entry: there the word list is what decides a
+// question is about the future at all, so it has to run.
 func (s *AIService) answerSalesForecast(restaurantID uint, question string) (*AIAskResponse, bool, error) {
 	if s.repo == nil || !isForecastQuestion(question) {
+		return nil, false, nil
+	}
+	return s.buildSalesForecastAnswer(restaurantID)
+}
+
+// buildSalesForecastAnswer is the same forecast without the word list in front
+// of it, for callers where something else already decided.
+//
+// Joyboy is that caller: the model reads the sentence and picks the forecast
+// tool, and re-testing its choice against sixteen Thai words could only overrule
+// it — "อาทิตย์ถัดไปน่าจะขายได้เท่าไหร่" is plainly about the future and matches
+// none of them, so the tool was dropped and the owner got a history answer to a
+// question about next week. The model decides what was meant; this decides what
+// the numbers are.
+func (s *AIService) buildSalesForecastAnswer(restaurantID uint) (*AIAskResponse, bool, error) {
+	if s.repo == nil {
 		return nil, false, nil
 	}
 

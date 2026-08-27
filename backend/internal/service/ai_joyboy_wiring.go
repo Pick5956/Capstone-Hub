@@ -181,15 +181,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		// year on its own ("ยอดขายปีนี้") is not covered by that resolver, so it
 		// is handled here without widening extractPeriods (shared with the menu
 		// and profit period flows). A question that names no period at all is
-		// reported unhandled, so it falls through to ComputeSalesForPeriod — the
-		// snapshot tool that already answers "today" / "last 7 days".
+		// reported unhandled and falls through to the snapshot tool, which
+		// answers about today — the right default for "ยอดขายเท่าไหร่" with no
+		// window in it. (That tool can also report the last seven days, but only
+		// when it is given the question, which the snapshot path does not do.)
 		now := repository.BangkokNow()
 		req, isDated := resolveDatedSalesRequest(question, now)
 		if !isDated {
-			// The word list did not recognise the range. Rather than quietly
-			// answering about today — which is how "เดือนมีน่า" became "there is no
-			// data" — ask the model what range was meant and validate its answer
-			// here. Reading a sentence is its job; deciding the figures stays ours.
+			// The word list did not recognise the range — which is most of the time,
+			// because it only knows months. "เมื่อวาน", "สัปดาห์ที่แล้ว" and every
+			// other day-level window arrive here. Rather than quietly answering
+			// about today — which is how "เดือนมีน่า" became "there is no data" —
+			// ask the model what range was meant and validate its answer here.
+			// Reading a sentence is its job; deciding the figures stays ours.
 			if modelReq, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok {
 				req, isDated = modelReq, true
 				aiStage("flow", "joyboy: period read by the model (%d window(s), comparison=%v)", len(modelReq.periods), modelReq.comparison)
@@ -245,14 +249,14 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		// backtest bounds) — it already builds the chart-ready result. The chart
 		// data is stashed on the tools struct for askJoyboy; the fact sheet is
 		// what the model phrases from.
-		resp, handled, err := t.service.answerSalesForecast(t.restaurantID, question)
+		// No word-list check here: the model already read the sentence and asked
+		// for a forecast, and a list of sixteen phrases can only overrule it.
+		resp, handled, err := t.service.buildSalesForecastAnswer(t.restaurantID)
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
 		if !handled {
-			// The model picked forecast for a question that reads as history —
-			// leave it out so a sales tool answers instead.
 			return "", false, true
 		}
 		if resp.Forecast == nil {
@@ -324,7 +328,11 @@ func (t *joyboyTools) appendReadOnlyResults(results []joyboy.ToolResult, names [
 			aiStage("warn", "joyboy: ignoring unsupported tool %q", name)
 			continue
 		}
-		result, runErr := executeReadOnlyTool(tool, snapshot)
+		// The question goes in as well. It used to be left out, which quietly cost
+		// two things: a "how many did I sell yesterday" fell back to today's figure
+		// because the period tool never saw the word, and "ขอ 10 อันดับ" always
+		// returned five. The tools that ignore the question are unaffected.
+		result, runErr := executeReadOnlyTool(tool, snapshot, question)
 		if runErr != nil {
 			aiStage("warn", "joyboy: tool %s failed (%v) → leaving it out", tool, runErr)
 			continue
