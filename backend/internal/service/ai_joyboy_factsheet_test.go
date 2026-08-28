@@ -144,3 +144,20 @@ func TestProfitForPeriodReportsAnEmptyWindow(t *testing.T) {
 		t.Errorf("an empty window must be reported as empty:\n%s", body)
 	}
 }
+
+// An empty expense window is where the worst answer came from: with nothing
+// recorded for July the model took the spend as zero and reported a month of
+// revenue as "กำไรสุทธิ". The warning has to be on the empty sheet too.
+func TestExpenseSummarySaysItIsNotTheCostBaseEvenWhenEmpty(t *testing.T) {
+	empty := joyboyExpenseSummaryBody("เดือนกรกฎาคม 2569", "2026-07-01", "2026-07-31", &ExpenseListResponse{})
+	if !strings.Contains(empty, "ห้ามถือว่าต้นทุนเป็นศูนย์") {
+		t.Errorf("an empty window must still say the recipes hold the real cost:\n%s", empty)
+	}
+
+	populated := joyboyExpenseSummaryBody("เดือนนี้", "2026-08-01", "2026-08-28", &ExpenseListResponse{
+		Entries: 1, Total: 300,
+	})
+	if !strings.Contains(populated, "ห้ามเอาไปลบกับยอดขาย") {
+		t.Errorf("the populated sheet lost its warning:\n%s", populated)
+	}
+}

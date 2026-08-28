@@ -113,7 +113,11 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		lines := []string{
 			window,
 			order,
-			fmt.Sprintf("note=รายการนี้เป็นอันดับต้นเพียง %d เมนู ไม่ใช่เมนูทั้งหมดของร้าน เมนูที่ไม่อยู่ในรายการไม่ได้แปลว่าไม่มียอดขาย", len(menus)),
+			// The second sentence is the other half of the same misreading: told the
+		// list was partial, the model still called its last row "เมนูที่ขายแย่ที่สุด"
+		// — the bottom of a top-five is not the worst menu in the shop.
+		fmt.Sprintf("note=รายการนี้เป็นอันดับต้นเพียง %d เมนู ไม่ใช่เมนูทั้งหมดของร้าน เมนูที่ไม่อยู่ในรายการไม่ได้แปลว่าไม่มียอดขาย "+
+			"และห้ามเรียกรายการสุดท้ายในลิสต์ว่าเมนูที่ขายแย่ที่สุดหรือกำไรน้อยที่สุด เพราะเป็นแค่อันดับท้ายของอันดับต้นเท่านั้น", len(menus)),
 		}
 		for index, menu := range menus {
 			lines = append(lines, fmt.Sprintf("rank=%d menu=%s qty=%d revenue=%s",
@@ -387,9 +391,22 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 // The category totals come first because "which category costs me most" is the
 // question this data is for; the recent rows follow so a specific bill can be
 // found ("ค่าไฟจ่ายไปเท่าไหร่").
+// expenseIsNotTheCostBase rides on this sheet whether or not there are entries.
+// It was first added only to the populated branch, and the empty one then
+// produced the worse answer of the two: with no July expenses recorded the model
+// treated the spend as zero and called a month of revenue "กำไรสุทธิ 347,453".
+const expenseIsNotTheCostBase = "note=ตัวเลขนี้เป็นรายจ่ายที่เจ้าของบันทึกเองเท่านั้น " +
+	"ไม่ได้รวมต้นทุนวัตถุดิบของเมนู ห้ามเอาไปลบกับยอดขายแล้วเรียกว่ากำไรหรือเงินที่เหลือ " +
+	"ถ้าไม่มีรายจ่ายบันทึกไว้ ก็ไม่ได้แปลว่าร้านไม่มีต้นทุน ห้ามถือว่าต้นทุนเป็นศูนย์ " +
+	"ถ้าถูกถามถึงกำไร ให้บอกว่าต้องดูจากกำไรของเมนูแทน"
+
 func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListResponse) string {
 	if list == nil || list.Entries == 0 {
-		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_expenses_recorded_in_window")})
+		return joyboyJoin([]string{
+			"period=" + label,
+			joyboyNoData("no_expenses_recorded_in_window"),
+			expenseIsNotTheCostBase,
+		})
 	}
 
 	lines := []string{
@@ -429,9 +446,7 @@ func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListRespon
 	// เหลือเท่าไหร่" the model subtracted one 300-baht entry from a month of
 	// revenue and called the remainder what was left, which reads as profit and is
 	// off by the entire ingredient cost.
-	lines = append(lines, "note=ตัวเลขนี้เป็นรายจ่ายที่เจ้าของบันทึกเองเท่านั้น "+
-		"ไม่ได้รวมต้นทุนวัตถุดิบของเมนู ห้ามเอาไปลบกับยอดขายแล้วเรียกว่ากำไรหรือเงินที่เหลือ "+
-		"ถ้าถูกถามถึงกำไร ให้บอกว่าต้องดูจากกำไรของเมนูแทน")
+	lines = append(lines, expenseIsNotTheCostBase)
 	return joyboyJoin(lines)
 }
 
