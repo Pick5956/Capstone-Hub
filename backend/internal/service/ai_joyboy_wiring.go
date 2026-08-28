@@ -191,15 +191,28 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.actionExpenses == nil {
 			return "", false, true
 		}
+		// The window was fixed at the last 30 days, so "เดือนที่แล้วจ่ายค่าอะไรไปบ้าง"
+		// was answered with this month's spending. profitPeriod is the same reader
+		// the profit and menu period flows use, and it falls back to the rolling
+		// 30 days when the sentence names no window.
 		now := repository.BangkokNow()
-		from := now.AddDate(0, 0, -29).Format("2006-01-02")
-		until := now.Format("2006-01-02")
+		start, end, label, explicit := profitPeriod(question, now)
+		if !explicit {
+			start, end = now.AddDate(0, 0, -29), now
+		}
+		from := start.Format("2006-01-02")
+		// The range is half-open (end is the day after), and the expense list takes
+		// an inclusive last day.
+		until := end.AddDate(0, 0, -1).Format("2006-01-02")
+		if !explicit {
+			until = end.Format("2006-01-02")
+		}
 		list, err := t.service.actionExpenses.List(t.restaurantID, from, until, "")
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboyExpenseSummaryBody(from, until, list), true, true
+		return joyboyExpenseSummaryBody(label, from, until, list), true, true
 	case joyboyToolTableStatus:
 		// Live state, read straight from the table service — not the 30-day
 		// snapshot every other tool reads, because the answer is only true for

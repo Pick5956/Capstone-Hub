@@ -193,6 +193,18 @@ const noDataAnswerTemplate = joyboyPersona + `
   วิธีจัดโปรโมชั่น เรื่องทั่วไปที่คนคุยกัน ไม่ต้องบ่ายเบี่ยง
 - ถ้าคำถามต้องใช้ข้อมูลของร้าน ให้บอกว่าขอดูข้อมูลส่วนไหนเพิ่ม`
 
+// rewriteWithoutInventedFigures is appended to the same prompt when the first
+// answer stated a figure the fact sheet does not contain. It names the figures
+// rather than repeating the rule in general terms, because the rule was already
+// in the prompt and was already followed everywhere except on those numbers —
+// so what the model needs is which ones, not the rule again.
+const rewriteWithoutInventedFigures = `
+
+**เขียนคำตอบใหม่ ตัวเลขเหล่านี้ไม่มีอยู่ในข้อมูลข้างบน: %s**
+ตัวเลขนี้น่าจะเกิดจากคุณบวกลบเอง ซึ่งห้ามทำ เพราะเลขที่คิดเองอาจผิดโดยที่ไม่มีใครรู้
+ให้ตอบด้วยเลขที่อยู่ในข้อมูลเท่านั้น ถ้าคำถามอยากได้ผลต่างหรือผลรวมที่ไม่มีให้
+ให้บอกตรง ๆ ว่ายังไม่มีตัวเลขนั้น พร้อมยกเลขที่มีให้ดูแทน`
+
 func answerPrompt(question string, history []Turn, sheet string) string {
 	if strings.TrimSpace(sheet) == "" {
 		return fmt.Sprintf(noDataAnswerTemplate, question, formatHistory(history))

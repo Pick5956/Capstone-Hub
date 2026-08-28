@@ -387,13 +387,19 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 // The category totals come first because "which category costs me most" is the
 // question this data is for; the recent rows follow so a specific bill can be
 // found ("ค่าไฟจ่ายไปเท่าไหร่").
-func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) string {
+func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListResponse) string {
 	if list == nil || list.Entries == 0 {
-		return joyboyNoData("no_expenses_recorded_in_window")
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_expenses_recorded_in_window")})
 	}
 
 	lines := []string{
-		"period=" + from + ".." + until,
+		// The label is what the answer should say; the ISO dates stay behind it so
+		// the exact window is still on the sheet. Given only "2026-07-30..2026-08-28"
+		// the model read the dates out loud as Thai words in the Christian era —
+		// "วันที่สามสิบกรกฎาคม ถึงวันที่ยี่สิบแปด สิงหาคม ค.ศ. 2026" — in a product
+		// whose every other date is Buddhist-era.
+		"period=" + label,
+		"period_exact=" + from + ".." + until,
 		"total_spent=" + joyboyNum(list.Total),
 		"entries=" + strconv.FormatInt(list.Entries, 10),
 	}
@@ -418,6 +424,14 @@ func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) str
 	if int64(len(list.Expenses)) < list.Entries || list.HasMore {
 		lines = append(lines, "note=แสดงเฉพาะรายการล่าสุด ไม่ใช่ทั้งหมด")
 	}
+	// This table holds only what the owner typed in by hand — it is not the shop's
+	// cost base, which lives in the recipes. Asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่
+	// เหลือเท่าไหร่" the model subtracted one 300-baht entry from a month of
+	// revenue and called the remainder what was left, which reads as profit and is
+	// off by the entire ingredient cost.
+	lines = append(lines, "note=ตัวเลขนี้เป็นรายจ่ายที่เจ้าของบันทึกเองเท่านั้น "+
+		"ไม่ได้รวมต้นทุนวัตถุดิบของเมนู ห้ามเอาไปลบกับยอดขายแล้วเรียกว่ากำไรหรือเงินที่เหลือ "+
+		"ถ้าถูกถามถึงกำไร ให้บอกว่าต้องดูจากกำไรของเมนูแทน")
 	return joyboyJoin(lines)
 }
 

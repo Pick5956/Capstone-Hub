@@ -90,12 +90,42 @@ func answeredTools(results []ToolResult) []string {
 	return names
 }
 
-// write asks for the answer and gives the model exactly one second chance. The
-// retry is for a reply that arrived empty or as nothing but a wrapper, which a
-// model does occasionally and does not repeat; anything worse than that is an
-// outage and is reported as one.
+// write asks for the answer, then checks every large figure in it against the
+// fact sheet and asks once more if one of them is not there.
+//
+// The rule against doing arithmetic is stated in the prompt, and the model keeps
+// it almost always — but asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่" it
+// subtracted the two and reported a figure that appears in no sheet, as a fact,
+// in bold. Logging that (which is all this used to do) tells us afterwards; the
+// owner still read the invented number. Naming the figure back to the model gets
+// a clean answer, and it fires rarely enough — once in about twenty-five
+// questions here — to be worth the extra call when it does.
 func (a *Assistant) write(ctx context.Context, question string, history []Turn, sheet string) (string, error) {
-	prompt := answerPrompt(question, history, sheet)
+	text, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, sheet), sheet)
+	if err != nil || len(unmatched) == 0 {
+		return text, err
+	}
+	for _, figure := range unmatched {
+		a.log("joyboy: answer figure %q is not in the fact sheet → asking again", figure)
+	}
+
+	retry, stillUnmatched, retryErr := a.writeOnce(ctx,
+		answerPrompt(question, history, sheet)+fmt.Sprintf(rewriteWithoutInventedFigures, strings.Join(unmatched, ", ")),
+		sheet)
+	if retryErr != nil || len(stillUnmatched) > 0 {
+		// The rewrite is no better than what we have, so keep the first answer
+		// rather than trading one unbacked figure for another.
+		a.log("joyboy: the rewrite did not come back clean, keeping the first answer")
+		return text, nil
+	}
+	return retry, nil
+}
+
+// writeOnce gives the model exactly one second chance. That retry is for a reply
+// that arrived empty or as nothing but a wrapper, which a model does
+// occasionally and does not repeat; anything worse than that is an outage and is
+// reported as one.
+func (a *Assistant) writeOnce(ctx context.Context, prompt, sheet string) (string, []string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 2; attempt++ {
 		raw, err := a.chat.Complete(ctx, prompt, CallWriteAnswer)
@@ -107,17 +137,14 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 		if text := cleanAnswer(raw); text != "" {
 			// The fact sheet is the dictionary of correct figures: normalise the
 			// separators of any figure that matches it, and report any large one
-			// that matches nothing as a possible drift.
+			// that matches nothing.
 			text, unmatched := reconcileFigures(text, sheet)
-			for _, figure := range unmatched {
-				a.log("joyboy: answer figure %q is not in the fact sheet", figure)
-			}
-			return text, nil
+			return text, unmatched, nil
 		}
 		lastErr = errors.New("the model returned nothing usable")
 		a.log("joyboy: attempt %d produced nothing usable", attempt)
 	}
-	return "", fmt.Errorf("%w: writing the answer: %w", ErrUnavailable, lastErr)
+	return "", nil, fmt.Errorf("%w: writing the answer: %w", ErrUnavailable, lastErr)
 }
 
 func dedupe(names []string) []string {
