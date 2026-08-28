@@ -139,6 +139,45 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 	return catalogue
 }
 
+// periodNamedIn resolves the window a question is about, and it exists because
+// the word list alone is not enough.
+//
+// profitPeriod knows the periods somebody thought to type into it: today,
+// yesterday, a named or relative month. Wiring only that into the profit and
+// expense tools made them right about "เดือนที่แล้ว" and quietly wrong about
+// everything else — asked "สัปดาห์ก่อนจ่ายอะไรไปบ้าง" the assistant read a
+// 30-day sheet and answered "จ่าย 300 บาทในสัปดาห์ก่อน", relabelling the window
+// it was handed. A word list that misses does not fail loudly; it answers about
+// the wrong days.
+//
+// Running the list first and the model second was the obvious order and it was
+// wrong: "ตั้งแต่ต้นเดือนถึงวันนี้กำไรเท่าไหร่" contains the word "วันนี้", so the
+// list matched that fragment, claimed the question, and answered about today
+// alone — which has no sales — while the model never got to see the sentence.
+// A word list does not know it only matched part of a phrase.
+//
+// So the model reads the range and the list is the fallback for when it cannot
+// be reached. Go still validates the dates and writes the label the owner reads:
+// the model says WHICH range, never what the figures in it are. The extra call
+// is small and runs at low effort.
+func (t *joyboyTools) periodNamedIn(question string) (start, end time.Time, label string, named bool) {
+	now := repository.BangkokNow()
+	if request, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok &&
+		len(request.periods) > 0 && strings.TrimSpace(request.clarify) == "" {
+		period := request.periods[0]
+		aiStage("flow", "joyboy: period read by the model → %s", period.Label)
+		return period.Start, period.End, period.Label, true
+	}
+	// Reached when the model read no period ("กำไรเท่าไหร่" names none, which is a
+	// correct answer) or could not be reached at all. The list then still covers
+	// the common months and days rather than losing the window entirely.
+	if start, end, label, explicit := profitPeriod(question, now); explicit {
+		aiStage("flow", "joyboy: period read by the word list → %s", label)
+		return start, end, label, true
+	}
+	return time.Time{}, time.Time{}, "", false
+}
+
 // runJoyboyExtraTool handles the joyboy-only tools that do not go through the
 // snapshot. handled is false for any other tool, so the caller falls through to
 // the normal read-only path.
@@ -196,7 +235,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		// the profit and menu period flows use, and it falls back to the rolling
 		// 30 days when the sentence names no window.
 		now := repository.BangkokNow()
-		start, end, label, explicit := profitPeriod(question, now)
+		start, end, label, explicit := t.periodNamedIn(question)
 		if !explicit {
 			start, end = now.AddDate(0, 0, -29), now
 		}
@@ -241,7 +280,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.repo == nil {
 			return "", false, false
 		}
-		start, end, label, explicit := profitPeriod(question, repository.BangkokNow())
+		start, end, label, explicit := t.periodNamedIn(question)
 		if !explicit {
 			return "", false, false
 		}
