@@ -1467,12 +1467,11 @@ export default function Home() {
       // us, so a sideways drag isn't taken over as a scroll and cancelled
       // halfway through. Anything inside that needs to pan sideways itself
       // has to opt back out (the split handle already sets `touch-none`).
-      // Tall enough to carry the page's own background to the bottom of the
-      // window, but no taller: a flat `min-h-screen` here would sit *below*
-      // the shell's top bar (`pt-14` on mobile, the 62px spacer row on
-      // desktop) and push the page past the viewport, so an empty dashboard
-      // still scrolled.
-      className="min-h-[calc(100vh-3.5rem)] touch-pan-y bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 lg:min-h-[calc(100vh-var(--dashboard-shell-row))]"
+      // Tall enough to carry the page background to the bottom on mobile, but no
+      // taller: MobileTopBar sits above <main> (pt-14), so a flat min-h-dvh would
+      // push an empty dashboard past the viewport. On lg the shell sheet owns the
+      // height, so no viewport min-height is set at all.
+      className="min-h-[calc(100dvh-3.5rem)] touch-pan-y bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100"
       onWheel={wheelSwipe}
       onPointerDown={startSwipe}
       onPointerMove={moveSwipe}

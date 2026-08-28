@@ -793,7 +793,7 @@ export default function StaffPage() {
   if (!restaurantId) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <h1 className="sr-only">{copy.title}</h1>
 
       {error && (

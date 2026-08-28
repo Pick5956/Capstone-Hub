@@ -260,7 +260,7 @@ export default function PosTablesPage() {
   const zoneCountLabel = (free: number, total: number) =>
     language === "th" ? `ว่าง ${free} จาก ${total} โต๊ะ` : `${free} of ${total} free`;
   const chipClass = (on: boolean) =>
-    `ui-press inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
+    `ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
       on
         ? "border-orange-700 bg-orange-700 text-white"
         : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200"
@@ -544,7 +544,7 @@ export default function PosTablesPage() {
       {isNavigating ? (
         <div aria-hidden="true" className="fixed inset-0 z-[var(--z-modal)] cursor-wait bg-transparent" />
       ) : null}
-      <div className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none dark:lg:bg-transparent">
+      <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <h1 className="sr-only">{copy.eyebrow}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
           <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:flex lg:items-center lg:gap-2">

@@ -920,7 +920,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative w-full sm:w-64">
