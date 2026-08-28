@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CaseSensitive, Check, ChevronLeft, ChevronRight, Languages, LogOut, Moon, Sparkles, Sun } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
+
+// useLayoutEffect warns during server rendering, and this only ever runs in the
+// browser, so fall back to useEffect on the server.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { useTheme, type FontSize } from "@/src/providers/ThemeProvider";
 import UserAvatar from "@/src/components/shared/UserAvatar";
@@ -73,20 +77,37 @@ export default function DashboardAccountMenu() {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const isDark = mounted && theme === "dark";
   const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === "-" ? "" : user.last_name}`.trim()) : language === "th" ? "ผู้ใช้งาน" : "User";
   const fontLabel = fontSizeOptions.find((option) => option.value === fontSize);
 
+  // The trigger used to live in the top bar, so this opened downward from a
+  // right-anchored point. It now sits in the sidebar foot, where rect.bottom is
+  // the bottom of the screen: the menu was placed just past it and never seen.
   const updateMenuPosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
-    setMenuPosition({
-      top: rect.bottom + 8,
-      right: Math.max(8, window.innerWidth - rect.right),
-    });
+    const menu = menuRef.current;
+    const width = menu?.offsetWidth ?? 288;
+    const height = menu?.offsetHeight ?? 0;
+    const margin = 8;
+
+    // Prefer below; flip above when the trigger is near the bottom edge.
+    let top = rect.bottom + margin;
+    if (height > 0 && top + height > window.innerHeight - margin) {
+      top = rect.top - margin - height;
+    }
+    if (height > 0) {
+      top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
+    }
+
+    // Align to the trigger's leading edge, then keep the whole panel on screen.
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+
+    setMenuPosition({ top, left });
   }, []);
 
   const copy = language === "th"
@@ -137,7 +158,7 @@ export default function DashboardAccountMenu() {
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!open) return;
 
     updateMenuPosition();
@@ -147,7 +168,7 @@ export default function DashboardAccountMenu() {
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [open, updateMenuPosition]);
+  }, [open, panel, updateMenuPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -187,7 +208,6 @@ export default function DashboardAccountMenu() {
         ref={triggerRef}
         type="button"
         onClick={() => {
-          if (!open) updateMenuPosition();
           setOpen((current) => !current);
           setPanel("main");
         }}
@@ -203,8 +223,8 @@ export default function DashboardAccountMenu() {
         <div
           ref={menuRef}
           role="menu"
-          className="fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 shadow-xl shadow-gray-950/10 dark:bg-gray-950 dark:shadow-black/40"
-          style={{ top: menuPosition.top, right: menuPosition.right }}
+          className={`fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 shadow-xl shadow-gray-950/10 dark:bg-gray-950 dark:shadow-black/40 ${menuPosition ? "" : "opacity-0"}`}
+          style={{ top: menuPosition?.top ?? -9999, left: menuPosition?.left ?? -9999 }}
         >
           {panel === "main" ? (
             <>
