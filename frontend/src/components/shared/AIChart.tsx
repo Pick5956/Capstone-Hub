@@ -25,7 +25,22 @@ function fmtNum(v: number) {
 // follows, so a two-period comparison reads "this vs that" at a glance.
 const BAR_COLORS = ["#ea580c", "#64748b", "#0ea5e9", "#16a34a", "#a855f7"];
 
-function ChartTooltip({ active, payload, label, unit }: any) {
+type ChartTooltipEntry = {
+  name?: string;
+  value?: number;
+  payload?: { name?: string };
+};
+
+// Recharts supplies active/payload/label to the content element at hover time,
+// so those stay optional; `unit` is passed by the caller.
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: ChartTooltipEntry[];
+  label?: string | number;
+  unit?: string;
+};
+
+function ChartTooltip({ active, payload, label, unit }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   // Bars/lines carry the category in `label`; a pie slice carries it on the
   // point instead, so fall back to that.
@@ -33,9 +48,9 @@ function ChartTooltip({ active, payload, label, unit }: any) {
   return (
     <div className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] shadow-sm dark:border-gray-700 dark:bg-gray-900">
       {heading && <div className="font-medium text-gray-700 dark:text-gray-200">{heading}</div>}
-      {payload.map((p: any, i: number) => (
+      {payload.map((p, i) => (
         <div key={i} className="text-gray-500 dark:text-gray-400">
-          {fmtNum(p.value)}{unit ? ` ${unit}` : ""}
+          {fmtNum(p.value ?? 0)}{unit ? ` ${unit}` : ""}
         </div>
       ))}
     </div>
