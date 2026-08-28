@@ -233,7 +233,7 @@ export default function InlineDbConfirmBar({
     <div
       role="group"
       aria-label={t.aria}
-      className="idcb mt-2 flex flex-wrap items-center gap-3 rounded-full border bg-white px-3 py-2.5 dark:bg-gray-950"
+      className="idcb mt-2 flex flex-wrap items-center gap-3 rounded-3xl border bg-white px-3 py-2.5 dark:bg-gray-950"
       style={{ borderColor: view.borderColor, ["--idcb-muted" as string]: "#64748b" }}
     >
       <style>{`
@@ -356,8 +356,9 @@ export default function InlineDbConfirmBar({
         </span>
       </div>
 
-      {/* Actions */}
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      {/* Actions — full-width row under the text on a phone (the plan text wraps
+          tall there), back inline on the right from sm up. */}
+      <div className="flex w-full shrink-0 items-center justify-end gap-1.5 sm:ml-auto sm:w-auto">
         {view.buttons === "confirm" && (
           <>
             <button

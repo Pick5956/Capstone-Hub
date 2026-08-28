@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, confirmAIAction, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -43,8 +43,9 @@ import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import type { AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
+import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
+import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
@@ -187,6 +188,12 @@ export default function AIOperationsFloatingChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
+  // Multi-item action plans (stock, menu, expense commands). This surface used to
+  // ignore them entirely: the answer said "press confirm" and no confirm bar was
+  // ever drawn, so a command typed here could never be carried out. It did not
+  // show while phones were redirected to the full page, and became reachable the
+  // moment the floating chat started opening as a sheet on mobile.
+  const [pendingActionPlan, setPendingActionPlan] = useState<AIActionPlan | null>(null);
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
@@ -218,6 +225,7 @@ export default function AIOperationsFloatingChat() {
     // a send between this render and the deferred load must not reuse them.
     setConversationId(null);
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -323,6 +331,7 @@ export default function AIOperationsFloatingChat() {
     // gone, so this one must drop the shared server thread and any pending action.
     setConversationId(null);
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -382,6 +391,7 @@ export default function AIOperationsFloatingChat() {
 
     setInput("");
     setPendingActionPreview(null);
+    setPendingActionPlan(null);
     setActionPreviewError("");
     
     setMessages((previous) => [
@@ -472,6 +482,10 @@ export default function AIOperationsFloatingChat() {
       if (data.action_preview) {
         setPendingActionPreview(data.action_preview);
       }
+
+      if (data.action_plan) {
+        setPendingActionPlan(data.action_plan);
+      }
       
       if (data.snapshot) {
         snapshotRequests.invalidate();
@@ -510,6 +524,32 @@ export default function AIOperationsFloatingChat() {
     } finally {
       if (conversationRequests.isCurrent(requestGeneration)) setLoading(false);
     }
+  };
+
+  // Plan confirm/cancel mirror the full AI page: the outcome is reported per item,
+  // so a batch that partly failed says so instead of reading as a clean success.
+  const handlePlanConfirm = async () => {
+    const plan = pendingActionPlan;
+    if (!plan) return;
+    const response = await confirmAIActionPlan(plan.id, plan.confirmation_token);
+    setMessages((previous) => [
+      ...previous,
+      {
+        id: `plan-${response.data.plan_id}`,
+        role: "assistant",
+        content: response.data.message,
+        createdAt: new Date(),
+      },
+    ]);
+    // A confirmed plan changed the shop, so the cached snapshot behind the stats
+    // panel is stale — drop it and let the next read refetch.
+    snapshotRequests.invalidate();
+  };
+
+  const handlePlanCancel = () => {
+    const plan = pendingActionPlan;
+    if (!plan) return;
+    cancelAIActionPlan(plan.id).catch(() => undefined);
   };
 
   const handleConfirmActionPreview = async () => {
@@ -617,6 +657,15 @@ export default function AIOperationsFloatingChat() {
           border-color: rgb(249 115 22);
           box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
         }
+        /* Phone sheet only: the message list dissolves into the canvas under the
+           floating controls instead of ending at a hard edge. From sm up the panel
+           has a real header bar, so no fade there. */
+        @media (max-width: 639px) {
+          .ai-sheet-fade {
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 3.25rem);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 3.25rem);
+          }
+        }
         @media (prefers-reduced-motion: reduce) {
           .animate-message-slide {
             animation: none !important;
@@ -624,11 +673,19 @@ export default function AIOperationsFloatingChat() {
         }
       `}</style>
 
-      {/* Chat Window Panel */}
+      {/* Chat Window Panel.
+          Phone: a bottom sheet that slides up in place (Meta-style) — tap the orb
+          and the chat rises over the current page, no navigation. It sits flush to
+          the bottom and leaves a peek of the page at the top. Slide is a transform
+          so it reads as motion, not a fade.
+          sm+: the docked bottom-right card, unchanged — sm:translate-y-0 cancels the
+          sheet transform and it fades with opacity as before. */}
       <div
-        className={`fixed inset-x-3 bottom-3 top-3 z-[var(--z-chat)] flex items-stretch transition-opacity duration-200 ease-out ${
-          isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-        } sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] md:w-[400px]`}
+        className={`fixed inset-x-0 bottom-0 z-[var(--z-chat)] flex h-[88dvh] items-stretch transition-transform duration-300 ease-out ${
+          isOpen ? "translate-y-0" : "translate-y-full"
+        } ${isOpen ? "pointer-events-auto" : "pointer-events-none"} sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[380px] sm:translate-y-0 sm:transition-opacity md:w-[400px] ${
+          isOpen ? "sm:opacity-100" : "sm:opacity-0"
+        }`}
       >
         {/* Stats drawer moves and scales as one surface so its cards enter together. */}
         <div 
@@ -734,10 +791,39 @@ export default function AIOperationsFloatingChat() {
             role="dialog"
             aria-modal="false"
             aria-labelledby="ai-operations-chat-title"
-            className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30"
+            className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-t-2xl rounded-b-none border border-gray-200 bg-[#faf8f2] shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30 sm:rounded-2xl sm:bg-white"
           >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:px-4">
+          {/* Phone: no header bar — the controls float top-right over the canvas,
+              the same glassy treatment as the full AI page. Reset + close only. */}
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:hidden">
+            {messages.length > 1 && (
+              <button
+                type="button"
+                aria-label={labels.clearChat}
+                disabled={loading || actionConfirming || actionCancelling}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleClearChat();
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label={labels.closeAssistant}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(false);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {/* Header (sm+ only) */}
+          <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:flex sm:px-4">
             <div className="flex min-w-0 items-center gap-2.5">
               <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
               <div className="flex min-w-0 items-center">
@@ -821,8 +907,10 @@ export default function AIOperationsFloatingChat() {
             </div>
           </div>
 
-          {/* Chat Messages Body with custom scrollbar and entry animation */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4 scrollbar-thin">
+          {/* Chat Messages Body with custom scrollbar and entry animation.
+              Phone: extra top padding clears the floating controls, and the same
+              top fade as the AI page lets content dissolve instead of being cut. */}
+          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-14 space-y-4 scrollbar-thin sm:pt-4">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
@@ -878,6 +966,26 @@ export default function AIOperationsFloatingChat() {
                   <span className="ai-shimmer-text text-xs font-medium sm:text-[13px]">{copy.thinking}</span>
                 </div>
               </div>
+            )}
+            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
+              <InlineDbConfirmBar
+                key={pendingActionPlan.id}
+                summary={pendingActionPlan.summary}
+                items={pendingActionPlan.items.map((planItem) => ({
+                  title: planItem.title,
+                  change: planItem.change,
+                  unit: planItem.unit,
+                  sideEffects: planItem.side_effects,
+                }))}
+                warnings={pendingActionPlan.warnings}
+                detail={language === "th"
+                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+                  : `changes ${pendingActionPlan.items.length} record(s)`}
+                expiresAt={pendingActionPlan.expires_at}
+                onConfirm={handlePlanConfirm}
+                onCancel={handlePlanCancel}
+                language={language}
+              />
             )}
             {pendingActionPreview && (
               <AIActionPreviewCard
@@ -939,7 +1047,9 @@ export default function AIOperationsFloatingChat() {
               handleSend();
             }}
             onClick={(e) => e.stopPropagation()}
-            className="rounded-b-2xl border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 sm:p-3.5"
+            /* Phone: the pill floats on the canvas with no bar or divider above it,
+               matching the full AI page. sm+ keeps the bordered footer. */
+            className="bg-transparent px-3 pb-3 pt-1 dark:bg-transparent sm:rounded-b-2xl sm:border-t sm:border-gray-200 sm:bg-white sm:p-3.5 sm:dark:border-gray-800 sm:dark:bg-gray-950"
           >
             <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
               <input
@@ -972,18 +1082,12 @@ export default function AIOperationsFloatingChat() {
       </div>
 
       {/* Floating Circular Trigger Button — fades out as the droplet expands over it.
-          On phones the panel would cover the whole screen anyway, so the button
-          hands off to the full /ai-assistant page instead of opening it here. */}
+          Tapping it opens the chat in place everywhere: a bottom sheet on a phone,
+          the docked card on a larger screen. It no longer navigates away. */}
       <button
         type="button"
         aria-label={labels.openAssistant}
-        onClick={() => {
-          if (window.matchMedia("(max-width: 639px)").matches) {
-            router.push("/ai-assistant");
-            return;
-          }
-          setIsOpen(true);
-        }}
+        onClick={() => setIsOpen(true)}
         className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"

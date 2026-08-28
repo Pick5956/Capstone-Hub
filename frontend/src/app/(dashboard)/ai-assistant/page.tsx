@@ -245,6 +245,25 @@ export default function AIAssistantPage() {
     }
   }, [messages, loading]);
 
+  // Lock the page (body/html) from scrolling while the AI view is mounted. This
+  // view sizes itself to the dynamic viewport and does its own inner scrolling,
+  // so any body scroll is unwanted — on mobile Safari it lets the user drag the
+  // whole app up and expose a strip of blank background below the input. The
+  // desktop shell already locks the html at lg; this covers phones. Restored on
+  // unmount so every other page scrolls normally.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overflow;
+    const prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prevHtml;
+      body.style.overflow = prevBody;
+    };
+  }, []);
+
   useEffect(() => {
     snapshotRequests.invalidate();
     snapshotRequestedRef.current = false;
@@ -683,10 +702,18 @@ export default function AIAssistantPage() {
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
-            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-4 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
+            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-2 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
               /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
               isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
             }`}
+            style={{
+              /* Top fade: content dissolves into the aura instead of being cut by a
+                 hard edge or hidden abruptly behind the floating controls. The
+                 background stays visible through the fade, so nothing looks covered. */
+              WebkitMaskImage:
+                "linear-gradient(to bottom, transparent 0, #000 3.25rem)",
+              maskImage: "linear-gradient(to bottom, transparent 0, #000 3.25rem)",
+            }}
           >
             {isEmpty && !loading ? (
               /* Absolute fill, not h-full: h-full resolves against the scroll box's
@@ -711,7 +738,7 @@ export default function AIAssistantPage() {
               messages.map((msg) => {
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="ml-auto flex max-w-[85%] items-end justify-end gap-2.5">
+                  <div key={msg.id} className="ml-auto flex max-w-[92%] items-end justify-end gap-2.5 sm:max-w-[85%]">
                     <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
                       {msg.content}
                     </div>
@@ -719,7 +746,7 @@ export default function AIAssistantPage() {
                 );
               }
               return (
-                <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5">
+                <div key={msg.id} className="flex max-w-[96%] items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
                   <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
                     <SafeAIResponseContent content={msg.content} compact language={language} />

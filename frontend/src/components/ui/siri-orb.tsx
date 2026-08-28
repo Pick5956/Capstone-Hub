@@ -183,6 +183,13 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({
           box-shadow: inset var(--bg) 0 0 var(--shadow-spread) calc(var(--shadow-spread) * 0.2);
           filter: blur(var(--blur-amount)) contrast(var(--contrast-amount));
           animation: siri-orb-rotate var(--animation-duration) linear infinite;
+          /* iOS Safari does not clip this blurred, animated layer to the parent's
+             rounded overflow (it is on its own compositor layer), so the square
+             corners of the blur region show as an orange box behind the orb. A
+             circular mask on the layer itself clips it reliably where the parent
+             cannot. closest-side = the inscribed circle, matching border-radius:50%. */
+          -webkit-mask-image: radial-gradient(circle closest-side, #000 98%, transparent 100%);
+          mask-image: radial-gradient(circle closest-side, #000 98%, transparent 100%);
         }
         .siri-orb::after {
           background-image: radial-gradient(circle at center, var(--bg) var(--dot-size), transparent var(--dot-size));

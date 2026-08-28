@@ -50,6 +50,14 @@ export default function AIChart({ data }: { data: AIChartData; language?: "th" |
 
   const kNum = (v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`);
 
+  // Long Thai menu names collide on a phone-width axis. Cut to a short label —
+  // the full name lives in the tooltip and in the answer text above the chart —
+  // and count by characters so a Thai name is not sliced mid-cluster too hard.
+  const shortLabel = (value: string) => {
+    const runes = Array.from(String(value ?? ""));
+    return runes.length > 7 ? runes.slice(0, 7).join("") + "…" : runes.join("");
+  };
+
   // One row per category; each series contributes a value column. A single-series
   // comparison or daily trend is one "value" column across the categories.
   const primary = data.series[0];
@@ -83,9 +91,20 @@ export default function AIChart({ data }: { data: AIChartData; language?: "th" |
             <Line dataKey="value" stroke="#ea580c" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
           </LineChart>
         ) : (
-          <BarChart data={rows} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
+          <BarChart data={rows} margin={{ top: 6, right: 8, bottom: 4, left: -14 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.5} vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} interval={0} />
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              tickFormatter={shortLabel}
+              angle={-30}
+              textAnchor="end"
+              height={46}
+              tickMargin={2}
+            />
             <YAxis tickFormatter={kNum} tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} width={40} />
             <Tooltip cursor={{ fill: "#f9731611" }} content={<ChartTooltip unit={data.unit} />} />
             <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>

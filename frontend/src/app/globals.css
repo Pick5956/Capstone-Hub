@@ -48,7 +48,13 @@
 }
 
 body {
-  min-height: 100vh;
+  /* Dynamic viewport height, not 100vh. On mobile Safari 100vh is the TALLER
+     address-bar-hidden height, so a page that fills the visible screen (the AI
+     assistant view sizes itself to 100dvh) leaves a 100vh-100dvh strip of empty
+     white below that the user can scroll into. 100dvh matches what is actually
+     visible, so a full-height page has no phantom space and a long page still
+     scrolls normally. */
+  min-height: 100dvh;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
