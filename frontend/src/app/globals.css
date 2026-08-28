@@ -1036,7 +1036,7 @@ input[type="number"]::-webkit-inner-spin-button {
   /* A page header that should stay with the operator while its list scrolls.
      sticky, never fixed: a fixed header escapes the sheet and stops tracking
      its scroller. The fill matches the sheet exactly so rows cannot show
-     through it.
+     through it. */
   [data-shell-sticky] {
     position: sticky;
     top: 0;
