@@ -361,6 +361,14 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICommandResolution {
 	title := strings.TrimSpace(draft.Name)
 	if title == "" {
+		// Same as the stock path: quote the owner's words back when the extractor
+		// kept them, so the question names the half of the sentence it is about.
+		if said := strings.TrimSpace(draft.Note); said != "" {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Question: fmt.Sprintf("ส่วน “%s” หมายถึงเมนูไหนครับ บอกชื่อมาได้เลย", said),
+			}
+		}
 		return AICommandResolution{Kind: AICommandOutcomeAsk, Question: "ขอชื่อเมนูด้วยครับ"}
 	}
 	kind := strings.ToLower(strings.TrimSpace(draft.Kind))
@@ -449,6 +457,16 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) AICommandResolution {
 	title := strings.TrimSpace(draft.Name)
 	if title == "" {
+		// The extractor sends the owner's own words along when it could tell a
+		// command was there but not what it was about ("เพิ่มของอีกอย่างที่ใกล้หมด").
+		// Quoting them back is the difference between a question the owner can
+		// answer and one they have to decode.
+		if said := strings.TrimSpace(draft.Note); said != "" {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Question: fmt.Sprintf("ส่วน “%s” หมายถึงตัวไหนครับ บอกชื่อมาได้เลย", said),
+			}
+		}
 		return AICommandResolution{Kind: AICommandOutcomeAsk, Question: "ขอชื่อวัตถุดิบด้วยครับ"}
 	}
 

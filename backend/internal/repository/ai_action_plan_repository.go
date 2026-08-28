@@ -191,6 +191,38 @@ func (r *AIActionPlanRepository) FindAIActionPlan(restaurantID, ownerUserID uint
 	return &plan, nil
 }
 
+// PendingAIActionPlan returns the owner's newest plan that is still waiting for
+// a button press, or nil when there is none.
+//
+// It exists because the assistant could not tell that it had already asked. The
+// owner typed "เพิ่มหมูสับ 2 กิโล", got a confirm card, answered "โอเค" — and got
+// a second identical card, because the model reads the conversation as text and
+// a card waiting on screen is not text. Nothing was written twice (the button is
+// still the only way through), but the owner was asked the same question twice.
+//
+// Expired rows are excluded here rather than filtered by the caller: a plan past
+// its minute cannot be confirmed, so pointing the owner at its button would be
+// worse than saying nothing.
+func (r *AIActionPlanRepository) PendingAIActionPlan(restaurantID, ownerUserID uint) (*entity.AIActionPlan, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("AI action plan repository is not connected")
+	}
+	var plan entity.AIActionPlan
+	err := r.db.
+		Preload("Items", func(db *gorm.DB) *gorm.DB { return db.Order("seq asc") }).
+		Where("restaurant_id = ? AND owner_user_id = ? AND status = ? AND expires_at > ?",
+			restaurantID, ownerUserID, entity.AIActionPlanStatusPending, r.currentTime()).
+		Order("created_at desc").
+		First(&plan).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &plan, nil
+}
+
 // ClaimAIActionPlan verifies the confirmation token under a row lock and flips
 // the plan to "executing", which is what makes a second confirmation a no-op.
 // It returns replayed=true when the plan already finished, so a retried request

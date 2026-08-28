@@ -74,6 +74,14 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
   ให้ยกชื่อและชนิดคำสั่งจากที่ผู้ช่วยเสนอมาเติมให้ครบ — **ไม่ถือว่าเป็นการเดา** เพราะมาจากบทสนทนาจริง
 - **ถ้าเป็นคำถาม ไม่ใช่คำสั่ง ให้ตอบ []** เช่น "เมนูไหนควรปิดขาย" "วัตถุดิบไหนใกล้หมด"
 - ถ้าข้อความไม่ใช่คำสั่งเลย ให้ตอบ []
+- **ถ้าประโยคสั่งหลายอย่าง แล้วมีอันที่รู้ว่าเป็นคำสั่งแต่ไม่รู้ว่าหมายถึงของชิ้นไหน
+  ห้ามทิ้งอันนั้น** ให้ส่งมาด้วยโดยให้ name เป็น "" และใส่คำพูดเดิมของผู้ใช้ไว้ใน note
+  ระบบจะถามกลับเอง · ถ้าทิ้งไป เจ้าของจะสั่งสองอย่างแต่ได้ยินเรื่องเดียวโดยไม่รู้ตัว
+  **ห้ามเดาชื่อของที่ผู้ใช้ไม่ได้พูด และห้ามลอกชื่อจากตัวอย่างด้านล่างมาใช้**
+  ตัวอย่างมีไว้ให้ดูรูปแบบ ไม่ใช่ให้ยกคำตอบมาใช้ซ้ำ
+- **ถ้าผู้ช่วยเพิ่งบอกว่า "... — รับทราบแล้วครับ" แล้วถามต่อว่าอีกอันหมายถึงตัวไหน
+  ให้ส่งกลับมาทั้งสองอัน** ทั้งอันที่รับทราบไปแล้ว (ยกจำนวนและหน่วยเดิมมาให้ครบ)
+  และอันที่ผู้ใช้เพิ่งบอกชื่อ ห้ามส่งมาแค่อันใหม่ ไม่งั้นอันแรกจะหายไปเงียบ ๆ
 
 ตัวอย่าง
 ข้อความ: "รับกะเพราเข้า 2 กก. หมูสับ 5 กก."
@@ -138,6 +146,16 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 ข้อความ: "ยอดขายวันนี้เท่าไหร่"
 ตอบ: []
 
+ข้อความ: "รับน้ำมันพืชเข้า 5 ลิตร แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย"
+ตอบ: [{"name":"น้ำมันพืช","kind":"in","quantity":5,"unit":"ลิตร"},{"name":"","kind":"in","quantity":0,"unit":"","note":"ของอีกตัวที่หมดไปเมื่อวาน"}]
+
+(บทสนทนาก่อนหน้า)
+ผู้ใช้: รับน้ำมันพืชเข้า 5 ลิตร แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย
+ผู้ช่วย: น้ำมันพืช 5 ลิตร — รับทราบแล้วครับ
+ส่วน “ของอีกตัวที่หมดไปเมื่อวาน” หมายถึงตัวไหนครับ บอกชื่อมาได้เลย
+ข้อความล่าสุด: ซอสหอยนางรม 3 ขวด
+ตอบ: [{"name":"น้ำมันพืช","kind":"in","quantity":5,"unit":"ลิตร"},{"name":"ซอสหอยนางรม","kind":"in","quantity":3,"unit":"ขวด"}]
+
 ข้อความของเจ้าของร้าน:
 `
 
@@ -156,7 +174,15 @@ func (s *AIService) ExtractStockCommands(question string, history []AIConversati
 	if err != nil {
 		return nil, err
 	}
-	return ParseStockCommandDrafts(text)
+	drafts, err := ParseStockCommandDrafts(text)
+	// What the model made of the sentence is the first thing worth seeing when a
+	// command comes out wrong, and it was the one step of this flow that left no
+	// trace: the plan is logged, the answer is logged, the reading between them
+	// was not.
+	if aiDebugEnabled() {
+		aiStage("debug", "joyboy command: read %d draft(s) from %q → %s", len(drafts), question, strings.TrimSpace(text))
+	}
+	return drafts, err
 }
 
 // aiRecentTurnsForExtraction renders the last exchanges so a one-word reply can
@@ -215,7 +241,13 @@ func ParseStockCommandDrafts(raw string) ([]AIStockCommandDraft, error) {
 		draft.Note = strings.TrimSpace(draft.Note)
 		draft.Category = strings.ToLower(strings.TrimSpace(draft.Category))
 		draft.Date = strings.TrimSpace(draft.Date)
-		if draft.Name == "" {
+		// A nameless entry is dropped, except when the model kept the owner's own
+		// words for it. That is the case where it could tell a command was there
+		// but not what it was about — "เพิ่มไข่ไก่ 30 ฟอง แล้วก็เพิ่มของอีกอย่างที่
+		// ใกล้หมดด้วย" — and dropping it here is what made the second half vanish
+		// with nothing said. It becomes a question to the owner further down, never
+		// a write: nothing can be written without a resolved name.
+		if draft.Name == "" && draft.Note == "" {
 			continue
 		}
 		if draft.Quantity < 0 {

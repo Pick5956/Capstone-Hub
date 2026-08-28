@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"Project-M/internal/entity"
@@ -90,6 +91,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 
 	commands := make([]AIAdjustStockCommand, 0, len(drafts))
 	titles := make([]string, 0, len(drafts))
+	acknowledged := make([]string, 0, len(drafts))
 	questions := make([]string, 0, 2)
 	notices := make([]string, 0, 2)
 	for _, draft := range drafts {
@@ -104,6 +106,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		case AICommandOutcomeReady:
 			commands = append(commands, resolution.Command)
 			titles = append(titles, resolution.Title)
+			acknowledged = append(acknowledged, aiCommandAsSaid(resolution.Title, draft))
 		case AICommandOutcomeNothingToDo:
 			// Already true. Not a question and not a change — just say so, and let
 			// the rest of the sentence proceed.
@@ -119,7 +122,15 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	// Anything unclear is asked before a plan is built, so the owner never
 	// confirms half of what they said without knowing.
 	if len(questions) > 0 {
-		response.Answer = strings.Join(append(notices, questions...), "\n")
+		lines := notices
+		// Say what was understood before asking about what was not. Without this the
+		// owner sees only the question and cannot tell whether the part that was
+		// clear survived — and neither can the model on the next turn, which reads
+		// this answer as its own history when it rebuilds the command.
+		if len(acknowledged) > 0 {
+			lines = append(lines, fmt.Sprintf("%s — รับทราบแล้วครับ", strings.Join(acknowledged, " · ")))
+		}
+		response.Answer = strings.Join(append(lines, questions...), "\n")
 		response.Intent = AIIntentUnclear
 		response.Task = AITaskUnclear
 		response.Model = "joyboy-command-clarify"
@@ -146,6 +157,38 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	}
 
 	summary := aiStockPlanSummary(draft.Items, draft.Previews)
+
+	// One live proposal at a time.
+	//
+	// A card was on screen for "เพิ่มหมูสับ 2 กิโล" and the owner typed "โอเค".
+	// That went back through the extractor, which re-derived the command from the
+	// thread — and got a different one: a card proposing หมูสับ 5000 → 2000, a cut
+	// of three kilos where the owner had agreed to adding two. The summary the
+	// assistant writes ("ผมเตรียมปรับสต๊อก 'หมูสับ' แล้ว") carries no numbers, so
+	// re-reading it is guesswork, and agreeing to a proposal is not a new command.
+	//
+	// Comparing the two plans is not enough to catch that, because the whole
+	// failure is that they differ. So while a plan is pending, no second plan is
+	// built at all: press it or cancel it first. The window is one minute, and a
+	// confirm card the owner has not answered is the one thing the next message is
+	// most likely about.
+	if pending, err := s.actionPlanStore.PendingAIActionPlan(actor.RestaurantID, actor.OwnerUserID); err != nil {
+		aiStage("warn", "joyboy command: checking for a pending plan failed (%v) → carrying on", err)
+	} else if pending != nil {
+		if aiPlanAsksForTheSameThing(pending, draft.Items) {
+			response.Answer = fmt.Sprintf("%sรออยู่แล้วครับ กดปุ่มยืนยันในกล่องข้างบนได้เลย", pending.Summary)
+		} else {
+			response.Answer = fmt.Sprintf(
+				"ยังมีรายการรอยืนยันค้างอยู่ครับ — %s\nกดยืนยันหรือยกเลิกในกล่องข้างบนก่อน แล้วค่อยสั่งอันใหม่นะครับ",
+				pending.Summary)
+		}
+		aiStage("flow", "joyboy command: a plan is already pending → not building a second one")
+		response.Intent = AIIntentChat
+		response.Task = AITaskGeneralChat
+		response.Model = "joyboy-command-already-pending"
+		return true
+	}
+
 	plan, token, err := s.actionPlanStore.CreateAIActionPlan(repository.CreateAIActionPlanParams{
 		RestaurantID: actor.RestaurantID,
 		OwnerUserID:  actor.OwnerUserID,
@@ -195,6 +238,52 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		Summary:           summary,
 		Items:             items,
 		Warnings:          warnings,
+	}
+	return true
+}
+
+// aiCommandAsSaid renders one understood command the way the owner said it, for
+// the line that goes out while the rest of the sentence is being asked about.
+//
+// The amount and unit are there for the next turn as much as for the owner: the
+// model rebuilds the whole command from this thread, and "ไข่ไก่ — รับทราบแล้ว"
+// gave it nothing to rebuild from, so answering the question produced a plan for
+// the newly named ingredient alone and the first one was lost.
+func aiCommandAsSaid(title string, draft AIStockCommandDraft) string {
+	name := strings.TrimSpace(title)
+	if name == "" {
+		name = strings.TrimSpace(draft.Name)
+	}
+	if draft.Quantity <= 0 {
+		return name
+	}
+	// Trimmed, not joyboyNum: this is the owner's own phrasing being read back, and
+	// "ไข่ไก่ 30.00 ฟอง" is not how they said it.
+	said := name + " " + strconv.FormatFloat(draft.Quantity, 'f', -1, 64)
+	if unit := strings.TrimSpace(draft.Unit); unit != "" {
+		said += " " + unit
+	}
+	return said
+}
+
+// aiPlanAsksForTheSameThing reports whether a plan already waiting for the owner
+// covers exactly the items just built.
+//
+// The comparison is on the action type and the payload — what would actually be
+// written — not on the summary text, because the same write can be described two
+// ways ("เพิ่มหมูสับ 2 กิโล" and "โอเค" produce identical payloads from different
+// sentences, which is precisely the case worth catching). Order matters: the
+// items are built from one sentence in the order it was said, so two plans that
+// differ only in order came from different sentences.
+func aiPlanAsksForTheSameThing(pending *entity.AIActionPlan, items []repository.CreateAIActionPlanItemParams) bool {
+	if pending == nil || len(pending.Items) != len(items) || len(items) == 0 {
+		return false
+	}
+	for index, item := range items {
+		existing := pending.Items[index]
+		if existing.ActionType != item.ActionType || existing.PayloadJSON != item.PayloadJSON {
+			return false
+		}
 	}
 	return true
 }
