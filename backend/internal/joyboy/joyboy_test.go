@@ -97,6 +97,52 @@ func TestAskRunsTheToolsTheModelChoseAndReturnsWhatItWrote(t *testing.T) {
 	}
 }
 
+// Answer.Tools is what the caller's invention guard reads: it stands down when a
+// tool ran, because a figure or a claim then has a fact sheet behind it. So it
+// must list the tools that ANSWERED, not the ones that were asked for. A tool
+// that was requested and then dropped (no period parsed, a port not wired, a
+// repository error) contributes nothing to the sheet, and counting it told the
+// guard to stand down over an answer written from nothing.
+func TestAskReportsOnlyTheToolsThatProducedData(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus", "get_low_stock_ingredients"},
+		replies:  []string{"ต้มยำกุ้งขายดีที่สุดครับ"},
+	}
+	// Two asked for; one came back empty, the way a dropped tool does.
+	tools := &fakeTools{results: []ToolResult{
+		{Tool: "get_top_selling_menus", Label: "เมนูขายดี", Body: "- ต้มยำกุ้ง: 112"},
+		{Tool: "get_low_stock_ingredients", Label: "วัตถุดิบใกล้หมด", Body: "   "},
+	}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "เมนูขายดี"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if len(answer.Tools) != 1 || answer.Tools[0] != "get_top_selling_menus" {
+		t.Fatalf("Tools = %v, want only the tool that produced a body", answer.Tools)
+	}
+}
+
+// Every tool dropped means the answer was written from an empty sheet, and the
+// guard has to see that as "no tools ran" so it can catch an invented claim.
+func TestAskReportsNoToolsWhenEveryResultIsEmpty(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus"},
+		replies:  []string{"จองโต๊ะให้แล้วครับ"},
+	}
+	tools := &fakeTools{results: []ToolResult{
+		{Tool: "get_top_selling_menus", Label: "เมนูขายดี", Body: ""},
+	}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "จองโต๊ะ"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if len(answer.Tools) != 0 {
+		t.Fatalf("Tools = %v, want empty so the guard stays armed", answer.Tools)
+	}
+}
+
 func TestAskAsksForEachToolOnce(t *testing.T) {
 	chat := &fakeChat{
 		selected: []string{"get_top_selling_menus", "get_top_selling_menus", " ", "get_low_stock_ingredients"},
@@ -117,8 +163,11 @@ func TestAskAsksForEachToolOnce(t *testing.T) {
 			t.Fatalf("tools asked = %v, want %v", tools.asked, want)
 		}
 	}
-	if len(answer.Tools) != 2 {
-		t.Fatalf("reported tools = %v", answer.Tools)
+	// Dedupe is about the REQUEST — asserted on tools.asked above. What comes back
+	// in answer.Tools is a different question: the tools that produced a body. The
+	// fake returns one result, so one tool answered, however many were asked for.
+	if len(answer.Tools) != 1 || answer.Tools[0] != "x" {
+		t.Fatalf("reported tools = %v, want the single tool that answered", answer.Tools)
 	}
 }
 

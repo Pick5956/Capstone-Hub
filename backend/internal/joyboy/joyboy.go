@@ -66,7 +66,28 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	if err != nil {
 		return Answer{}, err
 	}
-	return Answer{Text: text, Tools: requested}, nil
+	// Report the tools that actually produced data, not the ones the model asked
+	// for. A requested tool can be dropped on the way (no period parsed, a port
+	// that is not wired, a repository error) and the answer is then written from
+	// an empty fact sheet — exactly the situation the caller's invention guard
+	// exists for. Reporting the request instead told that guard a tool had run,
+	// so it stood down and let an unbacked claim through: "ได้จองโต๊ะ P01 ให้แล้ว"
+	// over a booking that never happened.
+	return Answer{Text: text, Tools: answeredTools(results)}, nil
+}
+
+// answeredTools lists the tools that came back with something to say, in the
+// order they ran. A result with an empty body contributed nothing to the fact
+// sheet, so it does not count as a tool that answered.
+func answeredTools(results []ToolResult) []string {
+	names := make([]string, 0, len(results))
+	for _, result := range results {
+		if strings.TrimSpace(result.Body) == "" {
+			continue
+		}
+		names = append(names, result.Tool)
+	}
+	return names
 }
 
 // write asks for the answer and gives the model exactly one second chance. The

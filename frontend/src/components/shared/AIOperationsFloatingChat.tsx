@@ -544,6 +544,11 @@ export default function AIOperationsFloatingChat() {
     // A confirmed plan changed the shop, so the cached snapshot behind the stats
     // panel is stale — drop it and let the next read refetch.
     snapshotRequests.invalidate();
+    // HTTP 200 with nothing changed: the failure lives in the body, so it has to
+    // be raised or the bar paints green over a plan that did nothing.
+    if (response.data.succeeded === 0 && response.data.failed > 0) {
+      throw new Error(response.data.message);
+    }
   };
 
   const handlePlanCancel = () => {

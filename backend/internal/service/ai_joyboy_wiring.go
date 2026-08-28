@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/joyboy"
 	"Project-M/internal/repository"
 )
@@ -150,6 +151,42 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyDataCoverageBody(coverage), true, true
+	case joyboyToolIngredientDetail:
+		if t.service.actionIngredients == nil {
+			return "", false, true
+		}
+		shelf, err := t.service.actionIngredients.ListIngredients(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		// The menu list carries the recipes, which is how "which menus use this"
+		// is answered from stored data instead of from the ingredient's name.
+		var menus []entity.MenuItem
+		if t.service.actionMenus != nil {
+			menus, _ = t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
+		}
+		return joyboyIngredientDetailBody(shelf, menus, question), true, true
+
+	case joyboyToolMenuDetail:
+		if t.service.actionMenus == nil || t.service.repo == nil {
+			return "", false, true
+		}
+		menus, err := t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+		margins, err := t.service.repo.AllMenuMargins(t.restaurantID, since)
+		if err != nil {
+			// Sales are one part of the answer; price, availability and the recipe
+			// are still worth reporting without them.
+			aiStage("warn", "joyboy: %s margins failed (%v) → reporting without sales", tool, err)
+			margins = nil
+		}
+		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question), true, true
+
 	case joyboyToolExpenseSummary:
 		if t.service.actionExpenses == nil {
 			return "", false, true
@@ -183,6 +220,25 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboySystemDocsBody(result), true, true
+	case AIToolGetProfitSummary:
+		// The snapshot behind this tool is fixed at 30 days, so "กำไรเดือนที่แล้ว"
+		// came back as the rolling window's profit stated as last month's. When the
+		// sentence names a period, answer that period; when it names none, report
+		// unhandled so the 30-day snapshot answers as before.
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := profitPeriod(question, repository.BangkokNow())
+		if !explicit {
+			return "", false, false
+		}
+		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the 30-day snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyProfitForPeriodBody(label, metrics), true, true
+
 	case joyboyToolMenuForPeriod:
 		// Reuse legacy's period parser and range query, but render raw figures for
 		// the model to rank rather than legacy's finished answer. A question that

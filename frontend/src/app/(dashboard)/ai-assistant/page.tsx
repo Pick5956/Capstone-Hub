@@ -579,6 +579,14 @@ export default function AIAssistantPage() {
         createdAt: new Date(),
       },
     ]);
+    // A request that arrives and changes nothing still returns HTTP 200 — the
+    // failure is in the body. Without this the bar read "saved, takes effect now"
+    // in green over a plan where every item failed. Throwing hands the backend's
+    // own words to the bar, which shows them and stays on the confirm button so
+    // the owner can try again.
+    if (response.data.succeeded === 0 && response.data.failed > 0) {
+      throw new Error(response.data.message);
+    }
   };
 
   const handlePlanCancel = () => {

@@ -129,6 +129,14 @@ const joyboyToolTableStatus AIToolName = "get_table_status"
 // food already sold, and neither of those is rent, wages or the electricity bill.
 const joyboyToolExpenseSummary AIToolName = "get_expense_summary"
 
+// The two lookup tools. Everything else here ranks or totals; these answer about
+// one named thing, which is the question an owner asks most and the one the
+// assistant used to answer worst — see ai_joyboy_detail.go for what went wrong.
+const (
+	joyboyToolIngredientDetail AIToolName = "get_ingredient_detail"
+	joyboyToolMenuDetail       AIToolName = "get_menu_detail"
+)
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -144,6 +152,8 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolSalesForecast,
 	joyboyToolTableStatus,
 	joyboyToolExpenseSummary,
+	joyboyToolIngredientDetail,
+	joyboyToolMenuDetail,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -159,6 +169,17 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
 		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
 		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
+	joyboyToolIngredientDetail: "ข้อมูลของ \"วัตถุดิบตัวที่ผู้ใช้เอ่ยชื่อ\" โดยเฉพาะ " +
+		"บอกสต๊อกคงเหลือ หน่วย ขั้นต่ำ ราคาต่อหน่วย มูลค่าคงเหลือ และ **เมนูไหนบ้างที่ใช้วัตถุดิบตัวนี้** " +
+		"ใช้ตอบเมื่อคำถามเอ่ยชื่อวัตถุดิบตัวใดตัวหนึ่ง เช่น หมูสับเหลือเท่าไหร่ · กะเพราขั้นต่ำเท่าไหร่ · " +
+		"ไข่ไก่ราคาเท่าไหร่ · เมนูไหนใช้กุ้งสดบ้าง · ถ้ากะเพราหมดจะกระทบเมนูไหน " +
+		"ต่างจาก get_low_stock_ingredients ที่บอกเฉพาะตัวที่ใกล้หมดทั้งหมด ไม่เจาะจงตัวใดตัวหนึ่ง",
+	joyboyToolMenuDetail: "ข้อมูลของ \"เมนูตัวที่ผู้ใช้เอ่ยชื่อ\" โดยเฉพาะ " +
+		"บอกราคา สถานะเปิด/ปิดขาย จำนวนที่ขายได้ ยอดขาย ต้นทุน กำไร margin และสูตรว่าใช้วัตถุดิบอะไรบ้าง " +
+		"ใช้ตอบเมื่อคำถามเอ่ยชื่อเมนูตัวใดตัวหนึ่ง เช่น ผัดไทยขายได้กี่รายการ · ต้มยำกุ้งกำไรเท่าไหร่ · " +
+		"ข้าวผัดปูใช้วัตถุดิบอะไร · ถ้าปิดขายเมนูนี้จะกระทบยอดขายแค่ไหน " +
+		"**สำคัญ: ถ้าคำถามเอ่ยชื่อเมนูเจาะจง ให้ใช้เครื่องมือนี้ ห้ามใช้ลิสต์อันดับ** " +
+		"เพราะลิสต์อันดับมีแค่ไม่กี่ตัว เมนูที่ไม่อยู่ในลิสต์ไม่ได้แปลว่าไม่มียอดขาย",
 	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริงใน 30 วันล่าสุด แยกตามหมวด " +
 		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
 		"ใช้ตอบ: จ่ายอะไรไปบ้าง รายจ่ายเท่าไหร่ ค่าไฟเดือนนี้เท่าไหร่ หมวดไหนจ่ายเยอะสุด ต้นทุนคงที่เท่าไหร่ " +
@@ -215,6 +236,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,
 		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
 	}},
+	{"ดูรายตัวที่ระบุชื่อ", []AIToolName{joyboyToolIngredientDetail, joyboyToolMenuDetail}},
 	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus}},
 	{"รายจ่าย", []AIToolName{joyboyToolExpenseSummary}},
 	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},

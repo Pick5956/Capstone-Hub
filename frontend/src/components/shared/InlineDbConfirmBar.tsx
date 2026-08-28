@@ -213,8 +213,12 @@ export default function InlineDbConfirmBar({
     try {
       await onConfirm();
       setState("done");
-    } catch {
-      setError(t.confirmError);
+    } catch (err) {
+      // Prefer the reason the caller raised — the backend says per item what went
+      // wrong, and "ทำไม่สำเร็จครับ ข้อมูลไม่ถูกเปลี่ยน" is worth more than a
+      // generic failure line. Falls back when the throw carries no message.
+      const reason = err instanceof Error ? err.message.trim() : "";
+      setError(reason || t.confirmError);
       setState("pending");
     }
   }, [state, onConfirm, t.confirmError]);

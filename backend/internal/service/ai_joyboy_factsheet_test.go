@@ -109,3 +109,38 @@ func TestStoreSummaryAdmitsWhatItDoesNotCarry(t *testing.T) {
 		t.Fatalf("the summary does not point at the tool holding the names: %q", body)
 	}
 }
+
+// The failure this replaces: asked "กำไรเดือนที่แล้วเท่าไหร่", the assistant read
+// the fixed 30-day snapshot and reported that figure as last month's profit.
+func TestProfitForPeriodTotalsTheNamedWindow(t *testing.T) {
+	metrics := []repository.AIMenuMarginSummary{
+		{MenuName: "ผัดไทยกุ้งสด", Quantity: 100, Revenue: 8900, Cost: 2700, Profit: 6200},
+		{MenuName: "ลาบหมู", Quantity: 50, Revenue: 3950, Cost: 1200, Profit: 2750},
+	}
+	body := joyboyProfitForPeriodBody("เดือนกรกฎาคม 2569", metrics)
+
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "revenue=12850", "profit=8950", "scope=named_period_not_30day_window"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sheet is missing %q:\n%s", want, body)
+		}
+	}
+}
+
+// An uncosted menu understates the cost, so the profit is a floor and the sheet
+// has to say so — the same rule the 30-day snapshot follows.
+func TestProfitForPeriodFlagsPartialCostCoverage(t *testing.T) {
+	metrics := []repository.AIMenuMarginSummary{
+		{MenuName: "มีต้นทุน", Quantity: 10, Revenue: 1000, Cost: 400, Profit: 600},
+		{MenuName: "ยังไม่ผูกต้นทุน", Quantity: 10, Revenue: 1000, Cost: 0, Profit: 1000},
+	}
+	if body := joyboyProfitForPeriodBody("เดือนนี้", metrics); !strings.Contains(body, "profit_is_a_floor") {
+		t.Errorf("half the revenue is uncosted, the sheet must flag it:\n%s", body)
+	}
+}
+
+// A named period with no sales is a stated empty period, not a zero-baht profit.
+func TestProfitForPeriodReportsAnEmptyWindow(t *testing.T) {
+	if body := joyboyProfitForPeriodBody("เมื่อวาน", nil); !strings.Contains(body, "no_paid_sales_in_period") {
+		t.Errorf("an empty window must be reported as empty:\n%s", body)
+	}
+}

@@ -101,7 +101,20 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if len(menus) == 0 {
 			return joyboyNoData("no_menu_sales_recorded_in_period"), true
 		}
-		lines := []string{window, order}
+		// Say plainly that this is a ranking cut to a few rows, not the whole menu.
+		// Without it the model read the list as the complete set: asked about a menu
+		// that sells well but is not in the top five, it answered "ไม่มียอดขายของ
+		// เมนูนี้ในข้อมูล" over a menu with hundreds of sales. A list that does not
+		// say it is partial gets treated as exhaustive.
+		// The note carries no boolean: cleanAnswer strips a "key=" prefix and keeps
+		// the value, so "list_is_partial=true" reached the owner as a bare "(true)"
+		// sitting in the middle of a Thai sentence. A plain sentence cannot leak
+		// that way.
+		lines := []string{
+			window,
+			order,
+			fmt.Sprintf("note=รายการนี้เป็นอันดับต้นเพียง %d เมนู ไม่ใช่เมนูทั้งหมดของร้าน เมนูที่ไม่อยู่ในรายการไม่ได้แปลว่าไม่มียอดขาย", len(menus)),
+		}
 		for index, menu := range menus {
 			lines = append(lines, fmt.Sprintf("rank=%d menu=%s qty=%d revenue=%s",
 				index+1, menu.MenuName, menu.Quantity, joyboyNum(menu.Revenue)))
@@ -163,11 +176,17 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				joyboyNoData("no_prior_week_to_compare_against"),
 			}), true
 		}
+		// No prior_days line: AISalesTrend counts days for the recent window only,
+		// and this used to print RecentDays under the prior label — telling the
+		// model the earlier window covered seven days when it may have covered two.
+		// The model is instructed never to compute a figure itself, so it repeated
+		// the wrong one faithfully. A missing line is a fact the model can work
+		// around; a fabricated one it cannot.
 		return joyboyJoin([]string{
 			fmt.Sprintf("recent_days=%d recent_orders=%d recent_revenue=%s",
 				trend.RecentDays, trend.RecentOrders, joyboyNum(trend.RecentRevenue)),
-			fmt.Sprintf("prior_days=%d prior_orders=%d prior_revenue=%s",
-				trend.RecentDays, trend.PriorOrders, joyboyNum(trend.PriorRevenue)),
+			fmt.Sprintf("prior_orders=%d prior_revenue=%s",
+				trend.PriorOrders, joyboyNum(trend.PriorRevenue)),
 			fmt.Sprintf("revenue_change_pct=%s", joyboyNum(trend.RevenueChangePct)),
 		}), true
 
@@ -198,11 +217,18 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if peak == nil || !peak.HasData {
 			return joyboyNoData("no_orders_recorded_in_period"), true
 		}
+		// The two lines are separate rankings over the same window, and saying only
+		// "busiest weekday" and "busiest hour" let the model read the second as the
+		// busiest hour *of that weekday*: it reported 161 of Monday's 188 orders
+		// falling at 11:00, a nested fact neither line states. The counts are what
+		// make it obviously wrong, and the note is what stops it being written.
 		return joyboyJoin([]string{
 			window,
 			fmt.Sprintf("busiest_weekday=%s weekday_orders=%d",
 				thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders),
-			fmt.Sprintf("busiest_hour=%02d:00 hour_orders=%d", peak.TopHour, peak.TopHourOrders),
+			fmt.Sprintf("busiest_hour_across_all_days=%02d:00 hour_orders=%d", peak.TopHour, peak.TopHourOrders),
+			"note=สองบรรทัดนี้นับคนละแกน วันที่คับคั่งที่สุดกับชั่วโมงที่คับคั่งที่สุดนับรวมทุกวันในช่วงนี้ " +
+				"ห้ามบอกว่าชั่วโมงนั้นเป็นชั่วโมงที่คับคั่งที่สุดของวันนั้น",
 		}), true
 
 	case AIToolGetMenuEngineering:
@@ -282,10 +308,13 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				summary.Days, summary.Orders, joyboyNum(summary.Revenue)),
 		}
 		if summary.Trend != nil && summary.Trend.HasPrior {
+			// The prior window carries no day count of its own, so it is labelled
+			// plainly rather than borrowing the recent window's — the same
+			// fabrication the standalone trend sheet used to print.
 			lines = append(lines, fmt.Sprintf(
-				"recent_%dd_revenue=%s prior_%dd_revenue=%s revenue_change_pct=%s",
+				"recent_%dd_revenue=%s prior_period_revenue=%s revenue_change_pct=%s",
 				summary.Trend.RecentDays, joyboyNum(summary.Trend.RecentRevenue),
-				summary.Trend.RecentDays, joyboyNum(summary.Trend.PriorRevenue),
+				joyboyNum(summary.Trend.PriorRevenue),
 				joyboyNum(summary.Trend.RevenueChangePct)))
 		}
 		for index, menu := range summary.TopMenus {
@@ -496,6 +525,45 @@ func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSumm
 		}
 		lines = append(lines, fmt.Sprintf("menu=%s qty=%d revenue=%s profit=%s margin_pct=%s",
 			m.MenuName, m.Quantity, joyboyNum(m.Revenue), joyboyNum(m.Profit), joyboyNum(m.Margin)))
+	}
+	return joyboyJoin(lines)
+}
+
+// joyboyProfitForPeriodBody totals revenue, cost and profit over a named calendar
+// period.
+//
+// get_profit_summary only ever reads the rolling 30-day snapshot, and asked
+// "กำไรเดือนที่แล้วเท่าไหร่" the model reported that window's figure as last
+// month's profit — a wrong number stated with full confidence, which is worse
+// than no answer. The sheet did carry "period=30 วันล่าสุด", but a label the
+// model may or may not repeat is not a fix for reading the wrong window.
+//
+// Coverage is reported for the same reason the snapshot reports it: below full
+// coverage the cost is understated, so the profit is a floor rather than a
+// figure.
+func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSummary) string {
+	var revenue, cost, profit, costedRevenue float64
+	for _, m := range metrics {
+		revenue += m.Revenue
+		cost += m.Cost
+		profit += m.Profit
+		if m.Cost > 0 {
+			costedRevenue += m.Revenue
+		}
+	}
+	if revenue == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_paid_sales_in_period")})
+	}
+	lines := []string{
+		"period=" + label,
+		"scope=named_period_not_30day_window",
+		fmt.Sprintf("revenue=%s cost=%s profit=%s margin_pct=%s",
+			joyboyNum(roundBaht(revenue)), joyboyNum(roundBaht(cost)), joyboyNum(roundBaht(profit)),
+			joyboyNum(roundBaht(profit/revenue*100))),
+	}
+	if coverage := costedRevenue / revenue * 100; coverage < 99.5 {
+		lines = append(lines, fmt.Sprintf(
+			"note=cost_covers_only_%s_pct_of_revenue_so_profit_is_a_floor", joyboyNum(roundBaht(coverage))))
 	}
 	return joyboyJoin(lines)
 }
