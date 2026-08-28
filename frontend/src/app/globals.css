@@ -7,7 +7,7 @@
   --background: #ffffff;
   --foreground: #171717;
   --app-text-scale: 1;
-  --sidebar-w: 216px;
+  --sidebar-w: 196px;
   --dashboard-shell-row: 62px;
   --dashboard-shell-border: #dfe3e8;
   --scrollbar-track: #f1f5f9;
@@ -49,6 +49,7 @@
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
@@ -982,9 +983,9 @@ input[type="number"]::-webkit-inner-spin-button {
    [data-shell-sheet] clips and rounds, [data-shell-scroll] scrolls. All three
    are set in (dashboard)/layout.tsx. */
 :root {
-  --shell-pad: 10px;
-  --shell-gap: 12px;
-  --shell-radius: 18px;
+  --shell-pad: 0px;
+  --shell-gap: 0px;
+  --shell-radius: 0px;
 }
 
 @media (min-width: 1024px) {
@@ -992,37 +993,28 @@ input[type="number"]::-webkit-inner-spin-button {
     overflow: hidden;
   }
 
-  /* Frame continues the rail colour, which is kept as shipped. */
+  /* Not painted any more - the sheet covers the viewport beside the rail.
+     The element stays because html:has([data-shell-frame]) is the marker
+     that says the desktop shell is active and owns the scrolling. */
   [data-shell-frame] {
-    background: #9a3412;
-  }
-
-  .dark [data-shell-frame] {
-    background: #7c2d12;
+    background: none;
   }
 
   [data-nav-rail].dashboard-shell-border-r::after {
     display: none;
   }
 
+  /* The white surface beside the rail. It is flush and square now - the inset
+     and radius variables are 0 - but it keeps its own height and overflow so
+     [data-shell-scroll] inside it stays the scroller. That is what page-level
+     sticky headers anchor to, so this box cannot go away. */
   [data-shell-sheet] {
     height: calc(100vh - var(--shell-pad) * 2);
+    height: calc(100dvh - var(--shell-pad) * 2);
     margin: var(--shell-pad) var(--shell-gap) var(--shell-pad) 0;
-    /* Only clips. Chrome paints scrollbars in the border box, which the radius
-       does not cut, so a scroller here would run past the rounded corner. */
     overflow: hidden;
     border-radius: var(--shell-radius);
     background-color: #ffffff;
-    /* Dot grid only. The warm corner glow and the white sheen that used to sit
-       on top were there to build a cream canvas; on a white base the sheen is
-       invisible and the glow just tints the corner back toward cream. */
-    background-image:
-      radial-gradient(rgba(224, 168, 124, 0.34) 1px, transparent 1.4px);
-    background-size: 22px 22px;
-    /* No drop shadow and no ring. Shell.jsx uses a black shadow and a light
-       hairline, which are invisible on its near-black frame but read as a dirty
-       band and a seam on this orange one. The white sheet already separates
-       itself from the rail by colour alone. */
     box-shadow: none;
   }
 
@@ -1031,7 +1023,22 @@ input[type="number"]::-webkit-inner-spin-button {
      scroller rather than under the page, was still visible. Inside the sheet the
      canvas is the background, so the page root gets out of the way. Scoped to the
      direct child of main, so cards and panels keep their own surfaces. */
-  [data-shell-scroll] > main > *:not(.ai-aura-bg) {
+  /* A page header that should stay with the operator while its list scrolls.
+     sticky, never fixed: fixed escapes the sheet and paints over its rounded
+     corners. The fill matches the sheet exactly so rows cannot show through. */
+  [data-shell-sticky] {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: #ffffff;
+    backdrop-filter: none;
+  }
+
+  .dark [data-shell-sticky] {
+    background-color: #1a0d06;
+  }
+
+  [data-shell-scroll] > main > *:not(.ai-aura-bg):not([data-shell-sticky]) {
     background-color: transparent !important;
   }
 

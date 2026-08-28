@@ -185,7 +185,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
             <div
               role="separator"
               aria-orientation="horizontal"
-              className="mx-1 my-2 border-t border-[color:var(--dashboard-shell-border)] [@media(max-height:760px)]:my-1.5"
+              className="mx-1 my-2 border-t border-orange-700 [@media(max-height:760px)]:my-1.5"
             />
           )}
           <div className="space-y-0.5">
@@ -199,7 +199,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
               // Active if either this parent href matches or one of its child sub-items matches
               const active = !comingSoon && (isActive(href) || (hasSubItems && visibleSubItems.some(sub => isActive(sub.href))));
 
-              const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[13px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
+              const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[12px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
                 active
                   ? 'border border-transparent bg-orange-100 text-orange-900 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-transparent dark:bg-orange-100 dark:text-orange-900 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
                   : 'border border-transparent text-orange-100 hover:border-orange-700 hover:bg-orange-700 hover:text-white dark:text-orange-100 dark:hover:bg-orange-800 dark:hover:text-white'
@@ -289,7 +289,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                               href={sub.href}
                               onClick={onNavigate}
                               tabIndex={isExpanded ? 0 : -1}
-                              className={`flex items-center rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                              className={`flex items-center rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
                                 subActive
                                   ? 'bg-orange-100 text-orange-900 dark:bg-orange-100 dark:text-orange-900'
                                   : 'text-orange-200 hover:bg-orange-700 hover:text-white dark:text-orange-200 dark:hover:bg-orange-800 dark:hover:text-white'
@@ -354,7 +354,7 @@ function RestaurantSwitcherCard({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[13px] font-bold leading-[1.6] text-orange-50">{name}</span>
+            <span className="truncate text-[12px] font-bold leading-[1.6] text-orange-50">{name}</span>
             {detail && <span className="truncate text-[11px] leading-[1.6] text-orange-200">{detail}</span>}
           </span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-orange-200" aria-hidden="true">
@@ -391,7 +391,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold leading-[1.6] text-white dark:text-white">{restaurantName}</span>
+            <span className="block truncate text-[12px] font-semibold leading-[1.6] text-white dark:text-white">{restaurantName}</span>
           </span>
           <span className="shrink-0 text-[11px] font-semibold text-orange-200 dark:text-orange-200">{switchLabel}</span>
         </div>
@@ -437,11 +437,11 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-[var(--z-modal)] flex h-screen w-64 flex-col border-r border-orange-900 bg-orange-800 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-orange-900 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-dvh w-64 flex-col border-r border-orange-900 bg-orange-800 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-orange-900 lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
-        <div className="dashboard-shell-row dashboard-shell-border-b flex shrink-0 items-center justify-between gap-2 px-3">
+        <div className="dashboard-shell-row border-b border-orange-700 flex shrink-0 items-center justify-between gap-2 px-3">
           <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
             <button
@@ -462,9 +462,9 @@ export default function Sidebar() {
       <aside
         data-nav-rail=""
         className={`
-          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-screen flex-col overflow-hidden bg-orange-800 dark:bg-orange-900 lg:flex
+          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-dvh flex-col overflow-hidden bg-orange-800 dark:bg-orange-900 lg:flex
           transition-[width] duration-300 ease-in-out will-change-[width]
-          ${collapsed ? 'w-[68px]' : 'w-[216px]'}
+          ${collapsed ? 'w-[68px]' : 'w-[196px]'}
         `}
       >
         <div className="flex h-[62px] shrink-0 flex-col justify-center px-3">
