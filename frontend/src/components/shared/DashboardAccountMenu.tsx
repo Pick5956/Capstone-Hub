@@ -5,13 +5,13 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CaseSensitive, Check, ChevronLeft, ChevronRight, Languages, LogOut, Moon, Sparkles, Sun } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
+import { useTheme, type FontSize } from "@/src/providers/ThemeProvider";
+import UserAvatar from "@/src/components/shared/UserAvatar";
 
 // useLayoutEffect warns during server rendering, and this only ever runs in the
 // browser, so fall back to useEffect on the server.
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
-import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
-import { useTheme, type FontSize } from "@/src/providers/ThemeProvider";
-import UserAvatar from "@/src/components/shared/UserAvatar";
 
 type Panel = "main" | "theme" | "language" | "font" | "assistant";
 

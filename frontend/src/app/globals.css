@@ -970,8 +970,10 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 /* ---- Dishy web shell ------------------------------------------------------
-   The dashboard frames its content: the rail colour fills the viewport and the
-   page floats on it as a rounded sheet. Desktop only; phones stay full-bleed.
+   The dashboard content sits on a white sheet beside the rail. It was framed
+   and rounded once; the inset and radius variables below are 0 now, but the
+   sheet still owns its height and scrolling. Desktop only; phones stay
+   full-bleed.
 
    Values come from the dishy-design skill rather than guesswork:
    ui_kits/dishy-web/Shell.jsx for the frame and rail, patterns.css
@@ -980,7 +982,8 @@ input[type="number"]::-webkit-inner-spin-button {
    tab bar, and an early pass wrongly painted this rail with it.
 
    Markup contract: [data-shell-frame] paints behind everything,
-   [data-shell-sheet] clips and rounds, [data-shell-scroll] scrolls. All three
+   Markup contract: [data-shell-frame] marks the shell active,
+   [data-shell-sheet] sizes and clips, [data-shell-scroll] scrolls. All three
    are set in (dashboard)/layout.tsx. */
 :root {
   --shell-pad: 0px;
@@ -1024,8 +1027,9 @@ input[type="number"]::-webkit-inner-spin-button {
      canvas is the background, so the page root gets out of the way. Scoped to the
      direct child of main, so cards and panels keep their own surfaces. */
   /* A page header that should stay with the operator while its list scrolls.
-     sticky, never fixed: fixed escapes the sheet and paints over its rounded
-     corners. The fill matches the sheet exactly so rows cannot show through. */
+     sticky, never fixed: a fixed header escapes the sheet and stops tracking
+     its scroller. The fill matches the sheet exactly so rows cannot show
+     through it.
   [data-shell-sticky] {
     position: sticky;
     top: 0;
