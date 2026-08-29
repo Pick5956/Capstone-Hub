@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -487,6 +488,79 @@ func joyboyOrderTypeForPeriodBody(label string, rows []repository.AIOrderTypeSum
 		lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
 			row.OrderType, row.Orders, joyboyNum(row.Revenue)))
 	}
+	return joyboyJoin(lines)
+}
+
+// aiOrderStatusThai turns a stored status into the words the owner uses. The
+// model would otherwise translate "sent_to_kitchen" itself, differently each
+// time, and one of those readings ("ส่งครัวแล้ว" vs "กำลังทำ") changes what the
+// owner thinks the kitchen is doing.
+var aiOrderStatusThai = map[string]string{
+	entity.OrderStatusOpen:          "เปิดบิลแล้ว ยังไม่ส่งครัว",
+	entity.OrderStatusSentToKitchen: "ส่งครัวแล้ว รอครัวเริ่มทำ",
+	entity.OrderStatusCooking:       "ครัวกำลังทำ",
+	entity.OrderStatusReady:         "ครัวทำเสร็จ รอเสิร์ฟ",
+	entity.OrderStatusServed:        "เสิร์ฟแล้ว รอเก็บเงิน",
+}
+
+// joyboyActiveOrdersBody renders the floor right now: what the kitchen is
+// working on and which bills are still open.
+//
+// Every other tool reports history, so "ตอนนี้บิลไหนยังไม่จ่าย" had no source at
+// all. The waiting time is computed here rather than left as a timestamp,
+// because the model may not do arithmetic and "opened 14:05" is not an answer to
+// "which table has been waiting longest".
+func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) string {
+	if len(orders) == 0 {
+		return joyboyJoin([]string{
+			"as_of=ตอนนี้",
+			"capability=read_only",
+			joyboyNoData("no_active_orders_right_now"),
+			"note=ไม่มีออเดอร์ค้างอยู่เลย ทุกบิลปิดหมดแล้ว",
+		})
+	}
+
+	var unpaidTotal float64
+	var unpaidCount, kitchenCount int
+	lines := []string{
+		"as_of=ตอนนี้",
+		"capability=read_only",
+		"note=ดูได้อย่างเดียว รับออเดอร์ ปิดบิล หรือเปลี่ยนสถานะครัวให้ไม่ได้ " +
+			"ถ้าผู้ใช้ขอให้ทำ ห้ามบอกว่าทำให้แล้ว ให้บอกว่าต้องไปกดเองที่หน้าขายหรือหน้าครัว",
+		fmt.Sprintf("active_orders=%d", len(orders)),
+	}
+	rows := make([]string, 0, len(orders))
+	for _, order := range orders {
+		if order.PaymentStatus == "unpaid" {
+			unpaidCount++
+			unpaidTotal += order.GrandTotal
+		}
+		if order.Status == entity.OrderStatusSentToKitchen || order.Status == entity.OrderStatusCooking {
+			kitchenCount++
+		}
+		where := strings.TrimSpace(order.TableNumber)
+		if where == "" {
+			where = "สั่งกลับบ้าน"
+		} else {
+			where = "โต๊ะ " + where
+		}
+		status := aiOrderStatusThai[order.Status]
+		if status == "" {
+			status = order.Status
+		}
+		waited := int(now.Sub(order.OpenedAt).Minutes())
+		if waited < 0 {
+			waited = 0
+		}
+		rows = append(rows, fmt.Sprintf("order=%s %s สถานะ=%s ยอด=%s การชำระ=%s เปิดมาแล้ว=%d นาที คน=%d",
+			order.OrderNumber, where, status, joyboyNum(order.GrandTotal),
+			map[string]string{"unpaid": "ยังไม่จ่าย", "paid": "จ่ายแล้ว"}[order.PaymentStatus],
+			waited, order.CustomerCount))
+	}
+	lines = append(lines,
+		fmt.Sprintf("in_kitchen_now=%d", kitchenCount),
+		fmt.Sprintf("unpaid_bills=%d unpaid_total=%s", unpaidCount, joyboyNum(roundBaht(unpaidTotal))))
+	lines = append(lines, rows...)
 	return joyboyJoin(lines)
 }
 

@@ -128,6 +128,43 @@ func (r *AIRepository) OperatingCalendarRules(restaurantID uint) ([]entity.AIOpe
 	return rules, err
 }
 
+// AIActiveOrder is one order still on the floor: not completed, not cancelled.
+//
+// The customer's name and phone are deliberately absent. They are on the row and
+// the owner may see them, but this reaches a model provider outside the system
+// and neither is needed to answer "which bills are still unpaid" — the table and
+// order number identify the bill on their own. Same rule the table sheet follows.
+type AIActiveOrder struct {
+	OrderNumber   string    `json:"order_number"`
+	TableNumber   string    `json:"table_number"`
+	OrderType     string    `json:"order_type"`
+	Status        string    `json:"status"`
+	PaymentStatus string    `json:"payment_status"`
+	GrandTotal    float64   `json:"grand_total"`
+	CustomerCount int       `json:"customer_count"`
+	OpenedAt      time.Time `json:"opened_at"`
+}
+
+// ActiveOrders reads the floor as it stands right now — the tickets the kitchen
+// is working on and the bills nobody has closed yet.
+//
+// Nothing else exposed this: every other tool here reports history. Asked "ตอนนี้
+// บิลไหนยังไม่จ่าย" the assistant had no source at all, which is the shape of
+// question it used to answer by guessing.
+func (r *AIRepository) ActiveOrders(restaurantID uint) ([]AIActiveOrder, error) {
+	var rows []AIActiveOrder
+	err := r.db.Table("orders").
+		Select(`orders.order_number, COALESCE(restaurant_tables.table_number, '') AS table_number,
+			orders.order_type, orders.status, orders.payment_status,
+			orders.grand_total, orders.customer_count, orders.opened_at`).
+		Joins("LEFT JOIN restaurant_tables ON restaurant_tables.id = orders.table_id").
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL", restaurantID).
+		Where("orders.status NOT IN (?)", []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Order("orders.opened_at asc").
+		Scan(&rows).Error
+	return rows, err
+}
+
 // FindRestaurant returns the shop's own profile row — its name, branch, type and
 // opening hours. The assistant had no way to read this, so "ร้านเราชื่ออะไร"
 // was a dead end that it filled by dumping a sales total.

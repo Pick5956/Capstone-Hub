@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -220,5 +221,49 @@ func TestOrderTypeForPeriodStatesTheWindow(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("order-type sheet missing %q:\n%s", want, body)
 		}
+	}
+}
+
+// "ตอนนี้บิลไหนยังไม่จ่าย" had no source at all — every other tool reports
+// history. The sheet also computes the waiting time, because the model may not
+// do arithmetic and a timestamp is not an answer to "who has waited longest".
+func TestActiveOrdersBodyReportsTheFloorRightNow(t *testing.T) {
+	now := time.Date(2026, 8, 29, 19, 30, 0, 0, time.UTC)
+	orders := []repository.AIActiveOrder{
+		{OrderNumber: "A012", TableNumber: "A2", OrderType: "dine_in", Status: entity.OrderStatusCooking,
+			PaymentStatus: "unpaid", GrandTotal: 480, CustomerCount: 3,
+			OpenedAt: now.Add(-25 * time.Minute)},
+		{OrderNumber: "A013", TableNumber: "B2", OrderType: "dine_in", Status: entity.OrderStatusServed,
+			PaymentStatus: "unpaid", GrandTotal: 320, CustomerCount: 2,
+			OpenedAt: now.Add(-70 * time.Minute)},
+		{OrderNumber: "T004", OrderType: "takeaway", Status: entity.OrderStatusReady,
+			PaymentStatus: "paid", GrandTotal: 150, CustomerCount: 1,
+			OpenedAt: now.Add(-5 * time.Minute)},
+	}
+	body := joyboyActiveOrdersBody(orders, now)
+
+	for _, want := range []string{
+		"active_orders=3", "in_kitchen_now=1", "unpaid_bills=2 unpaid_total=800",
+		"order=A012 โต๊ะ A2", "สถานะ=ครัวกำลังทำ", "เปิดมาแล้ว=70 นาที",
+		"order=T004 สั่งกลับบ้าน", "capability=read_only",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("active-orders sheet missing %q:\n%s", want, body)
+		}
+	}
+	// Status codes must be translated once, here, not by the model each time.
+	if strings.Contains(body, "sent_to_kitchen") || strings.Contains(body, "cooking") {
+		t.Errorf("raw status codes leaked to the model:\n%s", body)
+	}
+}
+
+// An empty floor is a real state worth stating plainly, not a missing tool.
+func TestActiveOrdersBodyReportsAnEmptyFloor(t *testing.T) {
+	body := joyboyActiveOrdersBody(nil, time.Now())
+	if !strings.Contains(body, "no_active_orders_right_now") {
+		t.Errorf("an empty floor should say so:\n%s", body)
+	}
+	if !strings.Contains(body, "capability=read_only") {
+		t.Errorf("the read-only warning must travel with the empty sheet too:\n%s", body)
 	}
 }

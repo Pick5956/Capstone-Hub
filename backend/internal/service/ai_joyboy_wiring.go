@@ -289,6 +289,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyOrderTypeForPeriodBody(label, rows), true, true
 
+	case joyboyToolActiveOrders:
+		// Live state, like the table tool: only true for this minute, so it is read
+		// straight from the orders table rather than the 30-day snapshot.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		orders, err := t.service.repo.ActiveOrders(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyActiveOrdersBody(orders, repository.BangkokNow()), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

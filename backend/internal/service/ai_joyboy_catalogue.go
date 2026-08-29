@@ -142,6 +142,11 @@ const (
 	joyboyToolMenuDetail       AIToolName = "get_menu_detail"
 )
 
+// joyboyToolActiveOrders reads the floor right now: the tickets the kitchen is
+// working on and the bills nobody has closed. Every other tool reports history,
+// so this shape of question had no source at all.
+const joyboyToolActiveOrders AIToolName = "get_active_orders"
+
 // joyboyToolShopProfile reads the shop's own identity — its name, branch, type
 // and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
 // end the model filled by dumping a sales total.
@@ -165,6 +170,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolIngredientDetail,
 	joyboyToolMenuDetail,
 	joyboyToolShopProfile,
+	joyboyToolActiveOrders,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -214,6 +220,13 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบเมื่อคำถามถามถึงอนาคต เช่น อาทิตย์หน้าจะขายได้เท่าไหร่ พรุ่งนี้น่าจะขายดีไหม คาดการณ์ยอดขายสัปดาห์หน้า ทำนายยอดขาย " +
 		"ถ้าถามยอดขายที่เกิดขึ้นไปแล้ว (วันนี้ เดือนนี้ ที่ผ่านมา) ให้ใช้ get_sales_for_period หรือ get_sales_summary แทน " +
 		"ต้องบอกผู้ใช้เสมอว่านี่คือการคาดการณ์ ไม่ใช่ตัวเลขจริง",
+	joyboyToolActiveOrders: "ออเดอร์ที่ยังไม่ปิดบิล \"ตอนนี้เดี๋ยวนี้\" ไม่ใช่ข้อมูลย้อนหลัง " +
+		"บอกว่ามีกี่ออเดอร์ค้าง ครัวกำลังทำกี่ออเดอร์ บิลไหนยังไม่จ่าย ยอดค้างชำระรวมเท่าไหร่ " +
+		"พร้อมเลขออเดอร์ โต๊ะ สถานะ ยอด และเปิดบิลมานานกี่นาที " +
+		"ใช้ตอบ: ตอนนี้มีออเดอร์อะไรบ้าง ครัวกำลังทำอะไร บิลไหนยังไม่จ่าย โต๊ะไหนรอเก็บเงิน " +
+		"มีบิลค้างนานสุดกี่นาที ยอดค้างชำระรวมเท่าไหร่ ร้านยุ่งอยู่ไหม " +
+		"ดูได้อย่างเดียว รับออเดอร์หรือปิดบิลให้ไม่ได้ " +
+		"ถ้าถามยอดขายที่ปิดบิลไปแล้ว ให้ใช้ get_sales_summary หรือ get_sales_for_period แทน",
 	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
 		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
 		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
@@ -251,7 +264,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetTopCostIngredients, AIToolGetInventoryValuation,
 	}},
 	{"ดูรายตัวที่ระบุชื่อ", []AIToolName{joyboyToolIngredientDetail, joyboyToolMenuDetail}},
-	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus}},
+	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus, joyboyToolActiveOrders}},
 	{"ข้อมูลร้าน", []AIToolName{joyboyToolShopProfile}},
 	{"รายจ่าย", []AIToolName{joyboyToolExpenseSummary}},
 	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},
