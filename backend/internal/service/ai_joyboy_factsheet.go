@@ -450,6 +450,46 @@ func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListRespon
 	return joyboyJoin(lines)
 }
 
+// joyboyPeakForPeriodBody renders the busiest weekday and hour over a named
+// window, rather than the fixed 30-day snapshot the peak tool otherwise reads.
+//
+// The two lines are separate rankings over the same window — the note is the
+// same one the snapshot sheet carries, and for the same reason: given only
+// "busiest weekday" and "busiest hour" the model reported the hour as the
+// busiest hour *of that weekday*, a nested fact neither line states.
+func joyboyPeakForPeriodBody(label string, weekdays, hours []repository.AIPeriodSummary) string {
+	if len(weekdays) == 0 && len(hours) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_orders_recorded_in_period")})
+	}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	if len(weekdays) > 0 {
+		lines = append(lines, fmt.Sprintf("busiest_weekday=%s weekday_orders=%d",
+			thaiWeekdayName(weekdays[0].Period), weekdays[0].Orders))
+	}
+	if len(hours) > 0 {
+		lines = append(lines, fmt.Sprintf("busiest_hour_across_all_days=%02d:00 hour_orders=%d",
+			hours[0].Period, hours[0].Orders))
+	}
+	lines = append(lines, "note=สองบรรทัดนี้นับคนละแกน วันที่คับคั่งที่สุดกับชั่วโมงที่คับคั่งที่สุดนับรวมทุกวันในช่วงนี้ "+
+		"ห้ามบอกว่าชั่วโมงนั้นเป็นชั่วโมงที่คับคั่งที่สุดของวันนั้น")
+	return joyboyJoin(lines)
+}
+
+// joyboyOrderTypeForPeriodBody splits paid orders by service type over a named
+// window. The snapshot version is fixed at 30 days, so "เดือนที่แล้วสั่งกลับกี่ที่"
+// was answered about a window the owner did not ask for.
+func joyboyOrderTypeForPeriodBody(label string, rows []repository.AIOrderTypeSummary) string {
+	if len(rows) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_orders_recorded_in_period")})
+	}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	for _, row := range rows {
+		lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
+			row.OrderType, row.Orders, joyboyNum(row.Revenue)))
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboyShopProfileBody renders the shop's own identity — the answer to
 // "ร้านเราชื่ออะไร", which had no tool and so came back as a sales total.
 //

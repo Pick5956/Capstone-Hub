@@ -252,6 +252,43 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyExpenseSummaryBody(label, from, until, list), true, true
+	case AIToolGetPeakPeriods:
+		// Same shape as the profit case: a named window is answered from that
+		// window, anything else falls through to the 30-day snapshot.
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			return "", false, false
+		}
+		weekdays, err := t.service.repo.PeakSalesByWeekdayForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		hours, err := t.service.repo.PeakSalesByHourForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyPeakForPeriodBody(label, weekdays, hours), true, true
+
+	case AIToolGetOrderTypeBreakdown:
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			return "", false, false
+		}
+		rows, err := t.service.repo.OrderTypeBreakdownForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyOrderTypeForPeriodBody(label, rows), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

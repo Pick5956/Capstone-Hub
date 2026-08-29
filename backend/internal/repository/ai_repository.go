@@ -359,6 +359,49 @@ func (r *AIRepository) PeakSalesByHour(restaurantID uint, since time.Time) ([]AI
 	return rows, err
 }
 
+// PeakSalesByWeekdayForRange and PeakSalesByHourForRange are the window-bounded
+// twins of the two above. The snapshot versions only ever look back a fixed 30
+// days, so "อาทิตย์ก่อนช่วงไหนคนเยอะสุด" was answered about the wrong days — the
+// same defect the profit and expense tools had before they learned to read the
+// period out of the sentence.
+func (r *AIRepository) PeakSalesByWeekdayForRange(restaurantID uint, start, end time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(DOW FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) PeakSalesByHourForRange(restaurantID uint, start, end time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(HOUR FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// OrderTypeBreakdownForRange totals paid orders by service type over a named
+// window, for the same reason: the snapshot version is fixed at 30 days.
+func (r *AIRepository) OrderTypeBreakdownForRange(restaurantID uint, start, end time.Time) ([]AIOrderTypeSummary, error) {
+	var rows []AIOrderTypeSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("order_type, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("order_type").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *AIRepository) IngredientUsage(restaurantID uint, since time.Time) ([]AIIngredientUsage, error) {
 	var rows []AIIngredientUsage
 	err := r.db.Table("ingredients").

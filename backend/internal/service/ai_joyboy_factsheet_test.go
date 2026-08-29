@@ -186,3 +186,39 @@ func TestShopProfileBodyStatesIdentityNotSalesOrContact(t *testing.T) {
 		t.Errorf("a missing profile should report no-data, got %q", nd)
 	}
 }
+
+// "อาทิตย์ก่อนช่วงไหนคนเยอะสุด" used to be answered from the fixed 30-day
+// snapshot, and the two lines are separate rankings the model once glued into
+// one ("11:00 was the busiest hour of Monday").
+func TestPeakForPeriodStatesTheWindowAndKeepsTheAxesApart(t *testing.T) {
+	body := joyboyPeakForPeriodBody("สัปดาห์ที่แล้ว",
+		[]repository.AIPeriodSummary{{Period: 1, Orders: 188}},
+		[]repository.AIPeriodSummary{{Period: 11, Orders: 161}})
+
+	for _, want := range []string{"period=สัปดาห์ที่แล้ว", "scope=named_period_not_30day_window",
+		"weekday_orders=188", "busiest_hour_across_all_days=11:00"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("peak sheet missing %q:\n%s", want, body)
+		}
+	}
+	if !strings.Contains(body, "นับคนละแกน") {
+		t.Errorf("the sheet must say the two lines are separate rankings:\n%s", body)
+	}
+	if empty := joyboyPeakForPeriodBody("เมื่อวาน", nil, nil); !strings.Contains(empty, "no_orders_recorded_in_period") {
+		t.Errorf("an empty window must be reported as empty:\n%s", empty)
+	}
+}
+
+// The order-type split had the same fixed window, so "เดือนที่แล้วสั่งกลับกี่ที่"
+// was answered about the last 30 days instead.
+func TestOrderTypeForPeriodStatesTheWindow(t *testing.T) {
+	body := joyboyOrderTypeForPeriodBody("เดือนกรกฎาคม 2569", []repository.AIOrderTypeSummary{
+		{OrderType: "dine_in", Orders: 900, Revenue: 250000},
+		{OrderType: "takeaway", Orders: 385, Revenue: 97453},
+	})
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "order_type=dine_in orders=900", "order_type=takeaway orders=385"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("order-type sheet missing %q:\n%s", want, body)
+		}
+	}
+}
