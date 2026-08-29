@@ -350,3 +350,45 @@ func TestNotSetUpGapsDoNotReadAsZero(t *testing.T) {
 		t.Errorf("an unconfigured floor must not read as a full one:\n%s", tables)
 	}
 }
+
+// The two-period comparison already states direction in Thai with an unsigned
+// percentage, because a bare "-0.32" let the model narrate the wrong subject and
+// keep the minus. The weekly trend sheet had the same bare figure.
+func TestSalesTrendStatesDirectionInsteadOfASignedPercent(t *testing.T) {
+	down, _ := joyboyFactBody(AIToolResult{
+		Tool:       AIToolGetSalesTrend,
+		SalesTrend: &AISalesTrend{HasPrior: true, RecentDays: 7, RecentOrders: 80, RecentRevenue: 80, PriorOrders: 90, PriorRevenue: 100, RevenueChangePct: -20},
+	})
+	if !strings.Contains(down, "direction=ลดลง") {
+		t.Errorf("a fall should be a Thai word:\n%s", down)
+	}
+	if strings.Contains(down, "-20") {
+		t.Errorf("the percentage must not carry a sign as well as a direction:\n%s", down)
+	}
+	up, _ := joyboyFactBody(AIToolResult{
+		Tool:       AIToolGetSalesTrend,
+		SalesTrend: &AISalesTrend{HasPrior: true, RecentDays: 7, RecentOrders: 100, RecentRevenue: 120, PriorOrders: 90, PriorRevenue: 100, RevenueChangePct: 20},
+	})
+	if !strings.Contains(up, "direction=เพิ่มขึ้น") {
+		t.Errorf("a rise should be a Thai word:\n%s", up)
+	}
+}
+
+// Raw service-type codes get translated by the model, differently each time.
+func TestOrderTypeIsTranslatedBeforeTheModelSeesIt(t *testing.T) {
+	body, _ := joyboyFactBody(AIToolResult{
+		Tool: AIToolGetOrderTypeBreakdown,
+		OrderTypeBreakdown: []repository.AIOrderTypeSummary{
+			{OrderType: "dine_in", Orders: 900, Revenue: 250000},
+			{OrderType: "takeaway", Orders: 385, Revenue: 97453},
+		},
+	})
+	for _, want := range []string{"order_type=กินที่ร้าน", "order_type=สั่งกลับบ้าน"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("order type should reach the model in Thai, missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "dine_in") || strings.Contains(body, "takeaway") {
+		t.Errorf("raw codes leaked to the model:\n%s", body)
+	}
+}

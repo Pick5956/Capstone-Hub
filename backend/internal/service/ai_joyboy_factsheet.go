@@ -211,12 +211,22 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		// The model is instructed never to compute a figure itself, so it repeated
 		// the wrong one faithfully. A missing line is a fact the model can work
 		// around; a fabricated one it cannot.
+		// The direction is a Thai word and the percentage carries no sign, the same
+		// way the two-period comparison states it. A bare "-0.32" here invited the
+		// same misreading that fix was for: the model narrating the wrong subject
+		// and keeping the minus ("ยอดขายลดลง -0.32%" or "เพิ่มขึ้น -0.32%").
+		direction, changePct := "เพิ่มขึ้น", trend.RevenueChangePct
+		if changePct < 0 {
+			direction, changePct = "ลดลง", -changePct
+		}
 		return joyboyJoin([]string{
+			"scope=7วันล่าสุด_เทียบกับ_7วันก่อนหน้า",
 			fmt.Sprintf("recent_days=%d recent_orders=%d recent_revenue=%s",
 				trend.RecentDays, trend.RecentOrders, joyboyNum(trend.RecentRevenue)),
 			fmt.Sprintf("prior_orders=%d prior_revenue=%s",
 				trend.PriorOrders, joyboyNum(trend.PriorRevenue)),
-			fmt.Sprintf("revenue_change_pct=%s", joyboyNum(trend.RevenueChangePct)),
+			fmt.Sprintf("revenue_change_pct=%s direction=%s note=%s_เทียบกับ_7วันก่อนหน้า",
+				joyboyNum(changePct), direction, "7วันล่าสุด"),
 		}), true
 
 	case AIToolGetAverageOrderValue:
@@ -237,7 +247,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		lines := []string{window}
 		for _, entry := range result.OrderTypeBreakdown {
 			lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
-				entry.OrderType, entry.Orders, joyboyNum(entry.Revenue)))
+				aiOrderTypeThai(entry.OrderType), entry.Orders, joyboyNum(entry.Revenue)))
 		}
 		return joyboyJoin(lines), true
 
@@ -527,9 +537,24 @@ func joyboyOrderTypeForPeriodBody(label string, rows []repository.AIOrderTypeSum
 	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
-			row.OrderType, row.Orders, joyboyNum(row.Revenue)))
+			aiOrderTypeThai(row.OrderType), row.Orders, joyboyNum(row.Revenue)))
 	}
 	return joyboyJoin(lines)
+}
+
+// aiOrderTypeThai turns the stored service type into the owner's words. Left as
+// "dine_in" the model translates it itself, differently each time — the same
+// reason the order statuses are translated here rather than in the answer.
+func aiOrderTypeThai(orderType string) string {
+	switch orderType {
+	case "dine_in":
+		return "กินที่ร้าน"
+	case "takeaway":
+		return "สั่งกลับบ้าน"
+	case "delivery":
+		return "เดลิเวอรี"
+	}
+	return orderType
 }
 
 // aiOrderStatusThai turns a stored status into the words the owner uses. The
