@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
 
@@ -159,5 +160,29 @@ func TestExpenseSummarySaysItIsNotTheCostBaseEvenWhenEmpty(t *testing.T) {
 	})
 	if !strings.Contains(populated, "ห้ามเอาไปลบกับยอดขาย") {
 		t.Errorf("the populated sheet lost its warning:\n%s", populated)
+	}
+}
+
+// "ร้านเราชื่ออะไร" had no tool and came back as a sales total. The profile sheet
+// answers it from the shop's own row, and deliberately omits address/phone/tax.
+func TestShopProfileBodyStatesIdentityNotSalesOrContact(t *testing.T) {
+	r := &entity.Restaurant{
+		Name: "ครัวคุณย่า", BranchName: "สาขาหลัก", RestaurantType: "ตามสั่ง",
+		OpenTime: "10:00", CloseTime: "22:00", TableCount: 12,
+		Phone: "0812345678", Address: "123 ถนนสุขุมวิท",
+	}
+	body := joyboyShopProfileBody(r)
+	for _, want := range []string{"shop_name=ครัวคุณย่า", "branch=สาขาหลัก", "type=ตามสั่ง", "hours=10:00-22:00", "table_count=12"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("profile sheet missing %q:\n%s", want, body)
+		}
+	}
+	// Contact details are the shop's, but this sheet leaves the system, so they
+	// stay out of it.
+	if strings.Contains(body, "0812345678") || strings.Contains(body, "สุขุมวิท") {
+		t.Errorf("phone/address must not be on the sheet:\n%s", body)
+	}
+	if nd := joyboyShopProfileBody(nil); !strings.Contains(nd, "no_restaurant_profile") {
+		t.Errorf("a missing profile should report no-data, got %q", nd)
 	}
 }

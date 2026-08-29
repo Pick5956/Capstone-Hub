@@ -137,6 +137,11 @@ const (
 	joyboyToolMenuDetail       AIToolName = "get_menu_detail"
 )
 
+// joyboyToolShopProfile reads the shop's own identity — its name, branch, type
+// and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
+// end the model filled by dumping a sales total.
+const joyboyToolShopProfile AIToolName = "get_shop_profile"
+
 // joyboyExtraTools are the capabilities joyboy offers beyond legacy's tool list.
 // Their names are not in getGroqTools(), so Catalogue() adds them. How they run
 // then splits: get_data_coverage and search_system_docs are intercepted in
@@ -154,6 +159,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolExpenseSummary,
 	joyboyToolIngredientDetail,
 	joyboyToolMenuDetail,
+	joyboyToolShopProfile,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -203,6 +209,9 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบเมื่อคำถามถามถึงอนาคต เช่น อาทิตย์หน้าจะขายได้เท่าไหร่ พรุ่งนี้น่าจะขายดีไหม คาดการณ์ยอดขายสัปดาห์หน้า ทำนายยอดขาย " +
 		"ถ้าถามยอดขายที่เกิดขึ้นไปแล้ว (วันนี้ เดือนนี้ ที่ผ่านมา) ให้ใช้ get_sales_for_period หรือ get_sales_summary แทน " +
 		"ต้องบอกผู้ใช้เสมอว่านี่คือการคาดการณ์ ไม่ใช่ตัวเลขจริง",
+	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
+		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
+		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
 }
 
 // isJoyboyExtraTool reports whether a tool is joyboy-only (handled in Run() by
@@ -238,6 +247,7 @@ var joyboyToolGroups = []struct {
 	}},
 	{"ดูรายตัวที่ระบุชื่อ", []AIToolName{joyboyToolIngredientDetail, joyboyToolMenuDetail}},
 	{"หน้าร้าน", []AIToolName{joyboyToolTableStatus}},
+	{"ข้อมูลร้าน", []AIToolName{joyboyToolShopProfile}},
 	{"รายจ่าย", []AIToolName{joyboyToolExpenseSummary}},
 	{"ข้อมูลระบบ", []AIToolName{joyboyToolDataCoverage}},
 	{"คู่มือการใช้งาน", []AIToolName{AIToolSearchSystemDocs}},

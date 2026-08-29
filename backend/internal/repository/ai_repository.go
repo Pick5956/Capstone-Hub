@@ -128,6 +128,17 @@ func (r *AIRepository) OperatingCalendarRules(restaurantID uint) ([]entity.AIOpe
 	return rules, err
 }
 
+// FindRestaurant returns the shop's own profile row — its name, branch, type and
+// opening hours. The assistant had no way to read this, so "ร้านเราชื่ออะไร"
+// was a dead end that it filled by dumping a sales total.
+func (r *AIRepository) FindRestaurant(restaurantID uint) (*entity.Restaurant, error) {
+	var restaurant entity.Restaurant
+	if err := r.db.First(&restaurant, restaurantID).Error; err != nil {
+		return nil, err
+	}
+	return &restaurant, nil
+}
+
 // RestaurantAIActionsEnabled reports whether the owner has turned on the
 // assistant's ability to make changes for this restaurant.
 func (r *AIRepository) RestaurantAIActionsEnabled(restaurantID uint) (bool, error) {

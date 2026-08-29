@@ -450,6 +450,32 @@ func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListRespon
 	return joyboyJoin(lines)
 }
 
+// joyboyShopProfileBody renders the shop's own identity — the answer to
+// "ร้านเราชื่ออะไร", which had no tool and so came back as a sales total.
+//
+// Only identity and hours go on the sheet. The address, phone, PromptPay name
+// and tax rates are the shop's, and the owner may see them, but this sheet is
+// sent to a model provider outside the system and none of them is needed to say
+// what the shop is called or when it opens.
+func joyboyShopProfileBody(r *entity.Restaurant) string {
+	if r == nil {
+		return joyboyNoData("no_restaurant_profile")
+	}
+	lines := []string{"shop_name=" + strings.TrimSpace(r.Name)}
+	if branch := strings.TrimSpace(r.BranchName); branch != "" {
+		lines = append(lines, "branch="+branch)
+	}
+	if kind := strings.TrimSpace(r.RestaurantType); kind != "" {
+		lines = append(lines, "type="+kind)
+	}
+	open, close := strings.TrimSpace(r.OpenTime), strings.TrimSpace(r.CloseTime)
+	if open != "" || close != "" {
+		lines = append(lines, fmt.Sprintf("hours=%s-%s", open, close))
+	}
+	lines = append(lines, fmt.Sprintf("table_count=%d", r.TableCount))
+	return joyboyJoin(lines)
+}
+
 // joyboyTableStatusBody renders the floor as it stands right now.
 //
 // The reservation holder's phone number is deliberately left out. The owner is

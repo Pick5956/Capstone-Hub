@@ -252,6 +252,16 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyExpenseSummaryBody(label, from, until, list), true, true
+	case joyboyToolShopProfile:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		restaurant, err := t.service.repo.FindRestaurant(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyShopProfileBody(restaurant), true, true
 	case joyboyToolTableStatus:
 		// Live state, read straight from the table service — not the 30-day
 		// snapshot every other tool reads, because the answer is only true for
