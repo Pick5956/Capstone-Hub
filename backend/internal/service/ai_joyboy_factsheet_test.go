@@ -317,3 +317,36 @@ func TestTopCostSheetAdmitsItIsAPartialListBeforeTotalling(t *testing.T) {
 		t.Errorf("the total must be scoped to the listed rows only:\n%s", body)
 	}
 }
+
+// A gap that means "not entered yet" must never read as "the real value is
+// zero". That confusion is exactly how a month of revenue got reported as
+// "กำไรสุทธิ" when no expenses had been recorded.
+func TestNotSetUpGapsDoNotReadAsZero(t *testing.T) {
+	cases := []struct {
+		tool   AIToolName
+		result AIToolResult
+		forbid string
+	}{
+		{AIToolGetInventoryValuation, AIToolResult{Tool: AIToolGetInventoryValuation}, "มูลค่าสต๊อกเป็น 0"},
+		{AIToolGetProfitSummary, AIToolResult{Tool: AIToolGetProfitSummary}, "กำไรเป็น 0"},
+		{AIToolGetMostExpensiveMenu, AIToolResult{Tool: AIToolGetMostExpensiveMenu}, "ไม่มีเมนูขาย"},
+	}
+	for _, c := range cases {
+		body, ok := joyboyFactBody(c.result)
+		if !ok {
+			t.Fatalf("%s did not render", c.tool)
+		}
+		if !strings.Contains(body, "ไม่ได้แปลว่าค่าจริงเป็นศูนย์") {
+			t.Errorf("%s: an unfilled gap must say it is not a zero:\n%s", c.tool, body)
+		}
+		if !strings.Contains(body, "ห้าม") {
+			t.Errorf("%s: the sheet should say what not to answer:\n%s", c.tool, body)
+		}
+	}
+
+	// A shop with no tables set up is not a shop with no free tables.
+	tables := joyboyTableStatusBody(nil)
+	if !strings.Contains(tables, "ห้ามตอบว่าร้านไม่มีโต๊ะว่าง") {
+		t.Errorf("an unconfigured floor must not read as a full one:\n%s", tables)
+	}
+}

@@ -44,6 +44,21 @@ func joyboyJoin(lines []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// joyboyNotSetUpYet marks a gap that means "the owner has not entered this yet",
+// which is not the same as "the real value is zero".
+//
+// The two read alike on an empty sheet and the model picks whichever answers the
+// question: with no expenses recorded for July it took the spend as zero and
+// called a month of revenue "กำไรสุทธิ". Every gap of this kind now says which
+// kind it is, and what to tell the owner instead.
+func joyboyNotSetUpYet(reason, sayInstead string) string {
+	return joyboyJoin([]string{
+		joyboyNoData(reason),
+		"gap_means=ยังไม่ได้บันทึกข้อมูลส่วนนี้ในระบบ ไม่ได้แปลว่าค่าจริงเป็นศูนย์",
+		"note=" + sayInstead,
+	})
+}
+
 // joyboyMenuMarginLine renders the one menu shape that carries cost and profit.
 func joyboyMenuMarginLine(menu *repository.AIMenuMarginSummary) string {
 	quantity := float64(menu.Quantity)
@@ -136,7 +151,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 	case AIToolGetInventoryValuation:
 		valuation := result.InventoryValuation
 		if valuation == nil {
-			return joyboyNoData("no_ingredients_recorded"), true
+			return joyboyNotSetUpYet("no_ingredients_recorded",
+				"ยังไม่มีวัตถุดิบในระบบเลย ห้ามตอบว่ามูลค่าสต๊อกเป็น 0 บาท ให้บอกว่าต้องเพิ่มวัตถุดิบเข้าคลังก่อน"), true
 		}
 		return joyboyJoin([]string{
 			"scope=current_stock_level",
@@ -158,7 +174,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 	case AIToolGetProfitSummary:
 		profit := result.ProfitSummary
 		if profit == nil || profit.Revenue == 0 {
-			return joyboyNoData("no_margin_data_to_compute_profit"), true
+			return joyboyNotSetUpYet("no_margin_data_to_compute_profit",
+				"คิดกำไรไม่ได้เพราะยังไม่มียอดขายหรือยังไม่ได้ผูกต้นทุนวัตถุดิบกับเมนู ห้ามตอบว่ากำไรเป็น 0"), true
 		}
 		lines := []string{
 			window,
@@ -381,7 +398,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 
 	case AIToolGetMostExpensiveMenu:
 		if len(result.MostExpensiveMenus) == 0 {
-			return joyboyNoData("no_menu_items_recorded"), true
+			return joyboyNotSetUpYet("no_menu_items_recorded",
+				"ยังไม่มีเมนูในระบบเลย ห้ามตอบว่าร้านไม่มีเมนูขาย ให้บอกว่าต้องเพิ่มเมนูก่อน"), true
 		}
 		lines := []string{"ranked_by=listed_menu_price desc", "note=price_charged_per_dish_not_revenue"}
 		for index, menu := range result.MostExpensiveMenus {
@@ -622,7 +640,8 @@ func joyboyShopProfileBody(r *entity.Restaurant) string {
 // table is being held for; the number stays in the database.
 func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 	if len(tables) == 0 {
-		return joyboyNoData("no_tables_configured")
+		return joyboyNotSetUpYet("no_tables_configured",
+			"ยังไม่ได้ตั้งค่าโต๊ะในระบบ ห้ามตอบว่าร้านไม่มีโต๊ะว่างหรือโต๊ะเต็ม ให้บอกว่าต้องไปตั้งค่าโต๊ะก่อน")
 	}
 
 	var free, occupied, reserved, inactive int
