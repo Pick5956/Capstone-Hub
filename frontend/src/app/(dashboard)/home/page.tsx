@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   ChefHat,
   ChevronDown,
@@ -15,8 +16,10 @@ import {
   ChevronUp,
   Clock,
   Download,
+  LayoutGrid,
   Loader2,
   ReceiptText,
+  type LucideIcon,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "@/src/providers/AuthProvider";
@@ -90,13 +93,6 @@ const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
 // one never reshuffles the rest, it only drops the open one below them.
 const defaultCardOrder = ["sales", "liveWork", "floorStatus", "monthReview"];
 const expandedCardStorageKey = "home:expandedCard";
-// Day/month split of the sales card, as a percentage of the card width. Kept in
-// localStorage, not session: it is a layout preference, not where you were.
-const cardSplitStorageKey = "home:salesSplit";
-const cardSplitDefault = 58;
-const cardSplitMin = 30;
-const cardSplitMax = 78;
-const clampSplit = (pct: number) => Math.min(cardSplitMax, Math.max(cardSplitMin, pct));
 // Shared by both halves of the swipe: the page springing back under the
 // pointer, and the newly picked day sliding in.
 const swipeSettle: KeyframeAnimationOptions = { duration: 220, easing: "cubic-bezier(0.2, 0, 0, 1)" };
@@ -168,7 +164,6 @@ function buildCopy(language: "th" | "en") {
         expenseMonthly: "รายจ่าย\nเดือนนี้",
         thisMonth: "ทั้งเดือน",
         thisDay: "ทั้งวัน",
-        resizeSplit: "ปรับสัดส่วนรายวัน/รายเดือน",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
         chartDay: "รายวัน",
@@ -184,9 +179,6 @@ function buildCopy(language: "th" | "en") {
         revenue: "รายได้",
         topItems: "เมนูขายดีประจำเดือน",
         otherItems: "อื่นๆ",
-        previousMonth: "เดือนก่อน",
-        nextMonth: "เดือนถัดไป",
-        chooseMonth: "เลือกเดือน",
         noSales: "ยังไม่มียอดขาย",
         noSalesMonth: "ยังไม่มียอดขาย",
         peakHours: "ช่วงเวลาที่ขายดีที่สุด",
@@ -264,7 +256,6 @@ function buildCopy(language: "th" | "en") {
         expenseMonthly: "Expenses\nthis month",
         thisMonth: "This month",
         thisDay: "This day",
-        resizeSplit: "Resize the day and month panes",
         expenseCategory: "Category",
         expenseNote: "Details",
         chartDay: "Daily",
@@ -280,9 +271,6 @@ function buildCopy(language: "th" | "en") {
         revenue: "Revenue",
         topItems: "Top items this month",
         otherItems: "Others",
-        previousMonth: "Previous month",
-        nextMonth: "Next month",
-        chooseMonth: "Choose month",
         noSales: "No sales yet",
         noSalesMonth: "No sales yet",
         peakHours: "Busiest hours",
@@ -445,7 +433,11 @@ const profitValueClass = (value: number) => (value < 0 ? costValueClass : "text-
 
 // Folder tab: sized to its own title so several sit side by side in one strip,
 // rounded on top only, square along the bottom where the open card's body meets it.
-const cardTabShape = "ui-press inline-flex max-w-full items-center gap-2.5 rounded-t-md border px-4 py-2 text-left";
+// On a phone the four tabs share the width as equal segments of one bar —
+// wrapped tabs of mixed widths read as debris, not as a selector. From `sm`
+// they go back to sitting at their natural width.
+const cardTabShape =
+  "ui-press inline-flex max-w-full items-center rounded-t-md border text-left max-sm:min-w-0 max-sm:flex-1 max-sm:justify-center max-sm:gap-1 max-sm:px-2 sm:gap-2.5 sm:px-4 py-2";
 
 // Font size for a collapsed-tile line, so the whole string fits on one line
 // instead of truncating: cap it relative to the tile (`cqi` = 1% of the tile's
@@ -485,6 +477,9 @@ const groupCardRows = (rows: CardRow[]) => {
 
 function CollapsibleCard({
   title,
+  // Stands in for the title on a phone, where four titles cannot share one
+  // strip without truncating to nonsense.
+  icon: Icon,
   subtitle,
   summary,
   // Named rows for the collapsed face, in place of the count tiles: a card
@@ -502,6 +497,7 @@ function CollapsibleCard({
   children,
 }: {
   title: string;
+  icon: LucideIcon;
   subtitle?: string;
   summary?: CardSummaryItem[];
   rows?: CardRow[];
@@ -527,11 +523,13 @@ function CollapsibleCard({
         <button
           type="button"
           onClick={onToggle}
+          aria-label={title}
           className={`${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-gray-600 hover:bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-950`}
           style={{ order: collapsedRank }}
         >
-          <span className="truncate text-[12px] font-semibold">{title}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
+          <Icon className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />
+          <span className="truncate text-[12px] font-semibold max-sm:hidden">{title}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60 max-sm:hidden" aria-hidden="true" />
         </button>
       );
     }
@@ -630,14 +628,16 @@ function CollapsibleCard({
       <button
         type="button"
         onClick={onToggle}
+        aria-label={title}
         style={{ order: collapsedRank }}
         className={`${cardTabShape} relative z-10 -mb-px border-b-0 border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900`}
       >
-        <span className="min-w-0">
+        <Icon className="h-4 w-4 shrink-0 text-gray-950 dark:text-white sm:hidden" aria-hidden="true" />
+        <span className="min-w-0 max-sm:hidden">
           <span className="block truncate text-[13px] font-semibold text-gray-950 dark:text-white">{title}</span>
           {subtitle ? <span className="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-500">{subtitle}</span> : null}
         </span>
-        <ChevronUp className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
+        <ChevronUp className="h-4 w-4 shrink-0 text-gray-500 max-sm:hidden" aria-hidden="true" />
       </button>
       {/* Only the corner the tab actually lands on is squared off — the
           leftmost tab gives the folder its L, any other tab notches the top
@@ -726,19 +726,9 @@ export default function Home() {
     if (saved) setExpandedKey(saved);
   }, []);
 
-  const [splitPct, setSplitPct] = useState(cardSplitDefault);
-  const [splitDragging, setSplitDragging] = useState(false);
-  const splitRowRef = useRef<HTMLDivElement | null>(null);
-  // Read after mount for the same reason as the open card: the server has no
-  // localStorage, so seeding the initial state from it would not hydrate.
-  useEffect(() => {
-    const saved = Number(localStorage.getItem(cardSplitStorageKey));
-    if (Number.isFinite(saved) && saved > 0) setSplitPct(clampSplit(saved));
-  }, []);
-  const moveSplitTo = (pct: number) => setSplitPct(clampSplit(pct));
-  // Written on release and on each keypress rather than on every pointermove —
-  // a drag would otherwise hit localStorage a few hundred times.
-  const persistSplit = () => localStorage.setItem(cardSplitStorageKey, String(Math.round(splitPct)));
+  // Which half of the sales card is open. The other one stays on screen, just
+  // narrow enough to read its headline figures.
+  const [salesPane, setSalesPane] = useState<"day" | "month">("day");
   const toggleCard = (key: string) => {
     const next = expandedKey === key ? null : key;
     // Remembered so the open card survives navigating away to a monthly page
@@ -797,12 +787,10 @@ export default function Home() {
   // under the new heading while the next request is in flight.
   const [detail, setDetail] = useState<{ key: string; kind: "sales"; data: SalesDetailReport } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [topItemsMonthDate, setTopItemsMonthDate] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [topItemsData, setTopItemsData] = useState<ReportTopMenuItem[]>([]);
   const [topItemsLoading, setTopItemsLoading] = useState(false);
-  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
-  const [pickerYear, setPickerYear] = useState(() => now.getFullYear());
-  const monthPickerRef = useRef<HTMLDivElement>(null);
+  // The donut follows the selected day's month, same as the rest of that pane.
+  const topItemsMonth = selectedDate.slice(0, 7);
 
   useEffect(() => {
     if (!activeMembership?.restaurant_id) return;
@@ -810,7 +798,7 @@ export default function Home() {
     const loadingFrame = requestAnimationFrame(() => {
       if (!cancelled) setTopItemsLoading(true);
     });
-    getTopMenuItemsByMonth(topItemsMonthDate.getFullYear(), topItemsMonthDate.getMonth() + 1)
+    getTopMenuItemsByMonth(Number(topItemsMonth.slice(0, 4)), Number(topItemsMonth.slice(5, 7)))
       .then((res) => {
         if (!cancelled) setTopItemsData(res.data.items ?? []);
       })
@@ -824,33 +812,7 @@ export default function Home() {
       cancelled = true;
       cancelAnimationFrame(loadingFrame);
     };
-  }, [topItemsMonthDate, activeMembership?.restaurant_id]);
-
-  useEffect(() => {
-    if (!monthPickerOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (monthPickerRef.current && !monthPickerRef.current.contains(event.target as Node)) {
-        setMonthPickerOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [monthPickerOpen]);
-
-  const shiftTopItemsMonth = (delta: number) => {
-    setMonthPickerOpen(false);
-    setTopItemsMonthDate((date) => new Date(date.getFullYear(), date.getMonth() + delta, 1));
-  };
-
-  const currentRealMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const canGoNextTopItemsMonth = topItemsMonthDate.getTime() < currentRealMonthStart.getTime();
-  const topItemsMonthLabel = topItemsMonthDate.toLocaleDateString(language === "th" ? "th-TH" : "en-US", {
-    month: "long",
-    year: "numeric",
-  });
-  const monthShortLabels = Array.from({ length: 12 }, (_, index) =>
-    new Date(2000, index, 1).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { month: "short" }),
-  );
+  }, [topItemsMonth, activeMembership?.restaurant_id]);
 
   // Loaded on mount, not on first day/month chart view: the month section reads
   // its revenue and profit off this, and that shows while the card is collapsed.
@@ -1074,10 +1036,10 @@ export default function Home() {
 
   const startSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    // Controls that own the horizontal drag themselves — the day/month split
-    // handle, the chart, native inputs — keep it. Buttons and links don't:
-    // a swipe may start on one, and a plain tap still clicks through.
-    if ((event.target as HTMLElement).closest("[role='separator'], .recharts-wrapper, input, select, textarea")) return;
+    // Controls that own the horizontal drag themselves — the chart, native
+    // inputs — keep it. Buttons and links don't: a swipe may start on one,
+    // and a plain tap still clicks through.
+    if ((event.target as HTMLElement).closest(".recharts-wrapper, input, select, textarea")) return;
     if (overScroller(event.target)) return;
     swipeRef.current = { x: event.clientX, y: event.clientY, dragging: false };
   };
@@ -1403,9 +1365,7 @@ export default function Home() {
       return totals;
     }, {}),
   ).sort((a, b) => b[1] - a[1]);
-  // The top-items list follows its own month picker in the sales card, so it
-  // only belongs on this sheet when that picker happens to agree.
-  const monthTopItems = toDashboardDate(topItemsMonthDate).slice(0, 7) === expenseMonth ? topItemsData : [];
+  const monthTopItems = topItemsData;
   const shortDayLabel = (date: string) =>
     new Date(`${date}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { day: "numeric", month: "short" });
 
@@ -1466,7 +1426,7 @@ export default function Home() {
       // vertical scrolling to the browser and keeps the horizontal axis for
       // us, so a sideways drag isn't taken over as a scroll and cancelled
       // halfway through. Anything inside that needs to pan sideways itself
-      // has to opt back out (the split handle already sets `touch-none`).
+      // has to opt back out with `touch-none`.
       // Tall enough to carry the page background to the bottom on mobile, but no
       // taller: MobileTopBar sits above <main> (pt-14), so a flat min-h-dvh would
       // push an empty dashboard past the viewport. On lg the shell sheet owns the
@@ -1553,9 +1513,10 @@ export default function Home() {
                 turns permanent at `lg` and takes 264px, so a tablet in
                 landscape leaves about 744px for the cards — two columns' worth.
                 Three from `xl`, four only at `2xl`. */}
-            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5" : "grid grid-cols-1 gap-3 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"}>
+            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5 max-sm:gap-x-0" : "grid grid-cols-1 gap-3 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"}>
             <CollapsibleCard
               title={copy.salesOverview}
+              icon={ReceiptText}
               summary={summary}
               showSummaryWhenExpanded={false}
               expanded={openCard === "sales"}
@@ -1563,14 +1524,37 @@ export default function Home() {
               collapsedRank={collapsedRank("sales")}
               onToggle={() => toggleCard("sales")}
             >
-              <div ref={splitRowRef} className="overflow-visible lg:flex lg:items-stretch">
-                <div
-                  style={{ width: `${splitPct}%` }}
-                  className="min-w-0 border-b border-gray-200 p-4 dark:border-gray-800 max-lg:!w-full lg:shrink-0 lg:border-b-0"
-                >
-                  <div className="border-b-2 border-gray-900 pb-1.5 dark:border-white">
-                    <h3 className="text-[17px] font-bold uppercase tracking-wide text-gray-950 dark:text-white">{copy.thisDay}</h3>
-                  </div>
+              <div className="overflow-visible">
+                {/* Both titles sit together as tabs, so switching panes is one
+                    click without hunting for the other end of the card. */}
+                <div className="flex items-end gap-4 px-4 pt-4">
+                  <button
+                    type="button"
+                    aria-pressed={salesPane === "day"}
+                    onClick={() => setSalesPane("day")}
+                    className={`ui-press border-b-2 pb-1.5 text-[17px] font-bold uppercase tracking-wide ${
+                      salesPane === "day"
+                        ? "border-gray-900 text-gray-950 dark:border-white dark:text-white"
+                        : "border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    {copy.thisDay}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={salesPane === "month"}
+                    onClick={() => setSalesPane("month")}
+                    className={`ui-press flex flex-wrap items-baseline gap-x-2 border-b-2 pb-1.5 text-[17px] font-bold uppercase tracking-wide ${
+                      salesPane === "month"
+                        ? "border-orange-500 text-orange-600 dark:border-orange-400 dark:text-orange-400"
+                        : "border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    {copy.thisMonth}
+                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{selectedMonthLabel}</span>
+                  </button>
+                </div>
+                <div className={`min-w-0 p-4 ${salesPane === "day" ? "" : "hidden"}`}>
                   <div className="mb-3 mt-3 grid grid-cols-3 gap-2">
                     {summary.filter((item) => item.key !== "cost").map((item) => {
                       const tileClass = `rounded-md border px-3 py-2 text-left ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`;
@@ -1596,7 +1580,7 @@ export default function Home() {
                           type="button"
                           onClick={() => setDayOrdersOpen((open) => !open)}
                           aria-expanded={dayOrdersOpen}
-                          className={`ui-press ui-shake w-full cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125 ${tileClass} ${dayOrdersOpen ? "ring-2 ring-gray-900 dark:ring-white" : ""}`}
+                          className={`ui-press w-full cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125 ${tileClass} ${dayOrdersOpen ? "ring-2 ring-gray-900 dark:ring-white" : ""}`}
                         >
                           {body(true)}
                         </button>
@@ -1720,53 +1704,11 @@ export default function Home() {
                     </p>
                   )}
                 </div>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label={copy.resizeSplit}
-                  aria-valuenow={Math.round(splitPct)}
-                  aria-valuemin={cardSplitMin}
-                  aria-valuemax={cardSplitMax}
-                  tabIndex={0}
-                  onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    setSplitDragging(true);
-                  }}
-                  onPointerMove={(event) => {
-                    if (!splitDragging || !splitRowRef.current) return;
-                    const rect = splitRowRef.current.getBoundingClientRect();
-                    moveSplitTo(((event.clientX - rect.left) / rect.width) * 100);
-                  }}
-                  onPointerUp={(event) => {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                    setSplitDragging(false);
-                    persistSplit();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                    event.preventDefault();
-                    moveSplitTo(splitPct + (event.key === "ArrowLeft" ? -2 : 2));
-                    persistSplit();
-                  }}
-                  onDoubleClick={() => {
-                    moveSplitTo(cardSplitDefault);
-                    localStorage.setItem(cardSplitStorageKey, String(cardSplitDefault));
-                  }}
-                  className={`group relative hidden w-1.5 shrink-0 cursor-col-resize touch-none border-x border-gray-200 bg-gray-100 transition-colors hover:bg-orange-400 focus-visible:outline-none focus-visible:bg-orange-500 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-orange-500 lg:block ${
-                    splitDragging ? "bg-orange-500 dark:bg-orange-500" : ""
-                  }`}
-                >
-                  <span className="absolute left-1/2 top-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-400 group-hover:bg-white dark:bg-gray-600" aria-hidden="true" />
-                </div>
-
-                {/* Left pane is the selected day; this one is the month it falls
-                    in. The revenue and expense figures are themselves the links
-                    to their full monthly pages. */}
-                <div className="min-w-0 flex-1 bg-slate-100/70 p-4 dark:bg-gray-900/50">
-                  <div className="flex flex-wrap items-baseline gap-x-2 border-b-2 border-orange-500 pb-1.5 dark:border-orange-400">
-                    <h3 className="text-[17px] font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400">{copy.thisMonth}</h3>
-                    <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{selectedMonthLabel}</span>
-                  </div>
+                {/* The month the selected day falls in. The revenue and expense
+                    figures are themselves the links to their full monthly pages. */}
+                <div className={`min-w-0 bg-slate-100/70 p-4 dark:bg-gray-900/50 ${
+                  salesPane === "month" ? "" : "hidden"
+                }`}>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {[
                       { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language), tone: "revenue" as CardTone, href: canViewReports ? "/reports" : undefined },
@@ -1775,7 +1717,7 @@ export default function Home() {
                       { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
                     ].map((stat) => {
                       const tileClass = `block rounded-md border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
-                        stat.href ? "ui-press ui-shake cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
+                        stat.href ? "ui-press cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
                       }`;
                       const body = (
                         <>
@@ -1817,7 +1759,7 @@ export default function Home() {
                                   <Cell key={entry.name} fill={topItemColors[index % topItemColors.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
+                              <Tooltip wrapperStyle={{ zIndex: 20 }} formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
                             </PieChart>
                             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                               <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
@@ -1827,90 +1769,6 @@ export default function Home() {
                         ) : (
                           <div className="flex h-36 items-center justify-center text-[12px] text-gray-500">{copy.noSalesMonth}</div>
                         )}
-                      </div>
-
-                      <div ref={monthPickerRef} className="relative mt-3 flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => shiftTopItemsMonth(-1)}
-                          aria-label={copy.previousMonth}
-                          title={copy.previousMonth}
-                          className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                        >
-                          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPickerYear(topItemsMonthDate.getFullYear());
-                            setMonthPickerOpen((open) => !open);
-                          }}
-                          aria-label={copy.chooseMonth}
-                          title={copy.chooseMonth}
-                          className="ui-press min-w-[112px] rounded-md border border-gray-200 px-2 py-1 text-center font-mono text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
-                        >
-                          {topItemsMonthLabel}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!canGoNextTopItemsMonth}
-                          onClick={() => shiftTopItemsMonth(1)}
-                          aria-label={copy.nextMonth}
-                          title={copy.nextMonth}
-                          className="ui-press inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
-                        >
-                          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-
-                        {monthPickerOpen ? (
-                          <div className="absolute left-1/2 top-full z-30 mt-1 w-56 -translate-x-1/2 rounded-md border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-800 dark:bg-gray-900">
-                            <div className="flex items-center justify-between px-1 pb-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setPickerYear((year) => year - 1)}
-                                className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
-                              >
-                                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                              <span className="font-mono text-[12px] font-semibold text-gray-800 dark:text-gray-100">{pickerYear}</span>
-                              <button
-                                type="button"
-                                disabled={pickerYear >= now.getFullYear()}
-                                onClick={() => setPickerYear((year) => year + 1)}
-                                className="ui-press inline-flex h-6 w-6 items-center justify-center rounded text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-400 dark:hover:bg-gray-800"
-                              >
-                                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-4 gap-1">
-                              {monthShortLabels.map((label, index) => {
-                                const isFuture = pickerYear > now.getFullYear() || (pickerYear === now.getFullYear() && index > now.getMonth());
-                                const isSelected = pickerYear === topItemsMonthDate.getFullYear() && index === topItemsMonthDate.getMonth();
-                                const isCurrentRealMonth = pickerYear === now.getFullYear() && index === now.getMonth();
-                                return (
-                                  <button
-                                    key={label}
-                                    type="button"
-                                    disabled={isFuture}
-                                    onClick={() => {
-                                      setTopItemsMonthDate(new Date(pickerYear, index, 1));
-                                      setMonthPickerOpen(false);
-                                    }}
-                                    className={`rounded px-1.5 py-1.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-30 ${
-                                      isSelected
-                                        ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                                        : isCurrentRealMonth
-                                        ? "text-sky-700 ring-1 ring-inset ring-sky-500 dark:text-sky-300"
-                                        : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-                                    }`}
-                                  >
-                                    {label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : null}
                       </div>
 
                       {topItemsPie.length ? (
@@ -2098,6 +1956,7 @@ export default function Home() {
                 could drift from it. */}
             <CollapsibleCard
               title={copy.monthReview}
+              icon={CalendarRange}
               subtitle={selectedMonthLabel}
               expanded={openCard === "monthReview"}
               dimmed={isCardDimmed("monthReview")}
@@ -2236,7 +2095,7 @@ export default function Home() {
                   className={`shrink-0 text-gray-500 ${openCard !== null ? "h-3.5 w-3.5" : "h-8 w-8 text-gray-300 dark:text-gray-700"}`}
                   aria-hidden="true"
                 />
-                <span className={openCard !== null ? "truncate" : ""}>{copy.historyNotice}</span>
+                <span className={openCard !== null ? "truncate max-sm:hidden" : ""}>{copy.historyNotice}</span>
               </div>
             ) : null}
 
@@ -2245,6 +2104,7 @@ export default function Home() {
               {isToday ? (
               <CollapsibleCard
                 title={copy.liveWork}
+                icon={AlertTriangle}
                 summary={liveWorkSummary}
                 rows={attentionRows}
                 expanded={openCard === "liveWork"}
@@ -2379,6 +2239,7 @@ export default function Home() {
               {isToday ? (
                 <CollapsibleCard
                   title={copy.floorStatus}
+                  icon={LayoutGrid}
                   summary={floorStatusSummary}
                   rows={floorRows}
                   expanded={openCard === "floorStatus"}

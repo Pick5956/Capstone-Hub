@@ -638,27 +638,6 @@ html[data-font-size="extra-large"] {
   transform: translateY(1px) scale(0.99);
 }
 
-/* Wiggles for as long as the cursor sits on it. Written with the standalone
-   `rotate`/`translate` properties rather than `transform`, so it stacks with
-   whatever transform a utility class (or `.ui-press:active` above) already
-   sets instead of replacing it. Small angles: this runs on figures that still
-   have to be readable while they move. */
-@keyframes ui-shake {
-  0%,
-  100% {
-    rotate: -0.5deg;
-    translate: -0.5px 0;
-  }
-  50% {
-    rotate: 0.5deg;
-    translate: 0.5px 0;
-  }
-}
-
-.ui-shake:hover:not(:disabled) {
-  animation: ui-shake 320ms ease-in-out infinite;
-}
-
 /* A ledger row that lifts and tilts under the cursor, like a card being picked
    up. On a <table> row the shadow only paints when the table is
    border-separate — a collapsed table drops it silently. */
@@ -795,10 +774,6 @@ html[data-font-size="extra-large"] {
 
   .ui-row-lift:hover {
     transform: none;
-  }
-
-  .ui-shake:hover:not(:disabled) {
-    animation: none;
   }
 
   ::view-transition-group(*),
