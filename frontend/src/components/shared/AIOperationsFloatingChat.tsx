@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -46,6 +46,7 @@ import { useTheme } from "@/src/providers/ThemeProvider";
 import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
+import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
@@ -187,6 +188,8 @@ export default function AIOperationsFloatingChat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [outage, setOutage] = useState<AIOutage | null>(null);
+  const [lastQuestion, setLastQuestion] = useState("");
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   // Multi-item action plans (stock, menu, expense commands). This surface used to
   // ignore them entirely: the answer said "press confirm" and no confirm bar was
@@ -450,6 +453,10 @@ export default function AIOperationsFloatingChat() {
     }
 
     const requestGeneration = conversationRequests.begin();
+    // Kept for the outage card's retry button, and cleared here so a card from a
+    // previous failure does not sit under a question that has since succeeded.
+    setLastQuestion(trimmed);
+    setOutage(null);
     setLoading(true);
 
     try {
@@ -495,23 +502,21 @@ export default function AIOperationsFloatingChat() {
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       console.error(err);
-      let errorMessage =
+      // An outage is reported by the backend as a code, not as English words in
+      // the message. This used to sniff the message for "429"/"quota"/"exhausted"
+      // and the message arrives in Thai, so a quota outage never matched: the
+      // owner saw a bare error line with no wait and no retry, while the full AI
+      // page showed a proper card for the same failure.
+      const reportedOutage = readAIOutage(err);
+      if (reportedOutage) {
+        setOutage(reportedOutage);
+        return;
+      }
+      const errorMessage =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : "";
-          
-      // Bulletproof local quota check
-      if (errorMessage && (
-        errorMessage.includes("429") || 
-        errorMessage.includes("quota") || 
-        errorMessage.includes("RESOURCE_EXHAUSTED") || 
-        errorMessage.includes("exhausted")
-      )) {
-        errorMessage = language === "th"
-          ? "โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)"
-          : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
-      }
-          
+
       setMessages((previous) => [
         ...previous,
         {
@@ -971,6 +976,18 @@ export default function AIOperationsFloatingChat() {
                   <span className="ai-shimmer-text text-xs font-medium sm:text-[13px]">{copy.thinking}</span>
                 </div>
               </div>
+            )}
+            {outage && (
+              <AIOutageNotice
+                language={language}
+                outage={outage}
+                retrying={loading}
+                onRetry={() => {
+                  const question = lastQuestion;
+                  setOutage(null);
+                  if (question) void handleSend(question);
+                }}
+              />
             )}
             {pendingActionPlan && pendingActionPlan.items.length > 0 && (
               <InlineDbConfirmBar

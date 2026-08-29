@@ -579,6 +579,11 @@ export default function AIAssistantPage() {
         createdAt: new Date(),
       },
     ]);
+    // A confirmed plan changed the shop, so the cached snapshot behind the stats
+    // panel is stale. Confirming a single action already refetched it; a plan —
+    // which can change several things at once — did not, so the numbers on this
+    // page kept showing the state from before the write until a reload.
+    snapshotRequests.invalidate();
     // A request that arrives and changes nothing still returns HTTP 200 — the
     // failure is in the body. Without this the bar read "saved, takes effect now"
     // in green over a plan where every item failed. Throwing hands the backend's
