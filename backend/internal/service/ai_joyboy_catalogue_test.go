@@ -131,6 +131,12 @@ func TestSalesForPeriodBodyStatesWholeStoreTotal(t *testing.T) {
 			t.Errorf("sales-for-period body missing %q: %s", want, body)
 		}
 	}
+	// The average bill is a division the model may not do, so Go states it:
+	// 347,453 / 1,285 = 270.39. Without this "บิลเฉลี่ยเดือนที่แล้ว" had no figure
+	// to read and the reconcile guard turned the model's own division into "ไม่ทราบ".
+	if !strings.Contains(body, "avg_per_order=270.39") {
+		t.Errorf("the average bill should be computed here: %s", body)
+	}
 	if empty := joyboySalesForPeriodBody("ปี 2567", repository.AISalesRange{}); !strings.Contains(empty, "status=no_data") {
 		t.Errorf("no paid orders should report no_data, got %q", empty)
 	}
@@ -143,7 +149,7 @@ func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
 	a := AIPeriod{Label: "เดือนสิงหาคม 2569"}
 	b := AIPeriod{Label: "เดือนกรกฎาคม 2569"}
 	up := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 100, Revenue: 120}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
-	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=เพิ่มขึ้น"} {
+	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=เพิ่มขึ้น", "avg_per_order_a=1.2", "avg_per_order_b=1.11"} {
 		if !strings.Contains(up, want) {
 			t.Errorf("comparison body missing %q: %s", want, up)
 		}
@@ -187,14 +193,16 @@ func TestForecastBodyStatesPredictionCaveatAndAccuracy(t *testing.T) {
 // A two-period comparison ships a bar chart of the same two revenue figures the
 // answer states, so the picture and the words never disagree.
 func TestSalesComparisonChartMirrorsTheFigures(t *testing.T) {
-	c := buildSalesComparisonChart("เดือนสิงหาคม 2569", 270363, "เดือนกรกฎาคม 2569", 347453)
+	// Older period first: the chart reads left → right as a timeline, so the
+	// caller feeds the older window as the left bar and the newer as the right.
+	c := buildSalesComparisonChart("เดือนกรกฎาคม 2569", 347453, "เดือนสิงหาคม 2569", 270363)
 	if c.Kind != AIChartBar {
 		t.Errorf("comparison should be a bar chart, got %q", c.Kind)
 	}
-	if len(c.Categories) != 2 || c.Categories[0] != "เดือนสิงหาคม 2569" {
-		t.Errorf("categories should name both periods, got %v", c.Categories)
+	if len(c.Categories) != 2 || c.Categories[0] != "เดือนกรกฎาคม 2569" {
+		t.Errorf("the older period should be the left bar, got %v", c.Categories)
 	}
-	if len(c.Series) != 1 || len(c.Series[0].Values) != 2 || c.Series[0].Values[0] != 270363 || c.Series[0].Values[1] != 347453 {
+	if len(c.Series) != 1 || len(c.Series[0].Values) != 2 || c.Series[0].Values[0] != 347453 || c.Series[0].Values[1] != 270363 {
 		t.Errorf("series must carry both revenues in order, got %+v", c.Series)
 	}
 	if c.Unit != "บาท" {

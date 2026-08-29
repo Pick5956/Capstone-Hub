@@ -606,13 +606,21 @@ func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
 	if d.Orders == 0 {
 		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", joyboyNoData("no_paid_orders_in_period")})
 	}
-	return joyboyJoin([]string{
+	lines := []string{
 		"period=" + label,
 		"scope=named_period_paid_sales_whole_store",
 		"revenue=" + joyboyNum(d.Revenue),
 		fmt.Sprintf("orders=%d", d.Orders),
 		fmt.Sprintf("selling_days=%d", d.Days),
-	})
+	}
+	// The average bill is revenue ÷ orders, a division the model is forbidden to
+	// do — so "เดือนที่แล้วบิลเฉลี่ยเท่าไหร่" had nothing to read and either made
+	// the figure up (caught by the reconcile guard, then answered "ไม่ทราบ") or
+	// leaned on the 30-day AOV tool for a period it did not ask about. Go divides.
+	if d.Orders > 0 {
+		lines = append(lines, "avg_per_order="+joyboyNum(roundBaht(d.Revenue/float64(d.Orders))))
+	}
+	return joyboyJoin(lines)
 }
 
 // joyboySalesComparisonBody renders two windows plus the percent change between
@@ -624,6 +632,14 @@ func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPerio
 		"scope=named_period_comparison_whole_store",
 		fmt.Sprintf("period_a=%s revenue_a=%s orders_a=%d", a.Label, joyboyNum(da.Revenue), da.Orders),
 		fmt.Sprintf("period_b=%s revenue_b=%s orders_b=%d", b.Label, joyboyNum(db.Revenue), db.Orders),
+	}
+	// The average bill per period, for "บิลเฉลี่ยเดือนนี้เทียบเดือนก่อนต่างกันไหม" —
+	// the model cannot divide, so both averages are computed here.
+	if da.Orders > 0 {
+		lines = append(lines, "avg_per_order_a="+joyboyNum(roundBaht(da.Revenue/float64(da.Orders))))
+	}
+	if db.Orders > 0 {
+		lines = append(lines, "avg_per_order_b="+joyboyNum(roundBaht(db.Revenue/float64(db.Orders))))
 	}
 	switch {
 	case db.Revenue > 0:

@@ -338,26 +338,31 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				return req.clarify, true, true
 			}
 			if req.comparison && len(req.periods) >= 2 {
-				// Always oldest → newest, whichever order the owner said them in, so
-				// the sentence reads forward in time and cannot be told backwards.
-				a, b := req.periods[0], req.periods[1]
-				if a.Start.Before(b.Start) {
-					a, b = b, a
+				// The change is "newer against older", so the fact sheet takes the
+				// newer window as period_a (the subject) and the older as period_b
+				// (the baseline): change_pct = (newer − older) / older, read the way
+				// the owner asked it ("เดือนนี้เทียบเดือนก่อนเพิ่มขึ้นกี่%").
+				newer, older := req.periods[0], req.periods[1]
+				if newer.Start.Before(older.Start) {
+					newer, older = older, newer
 				}
-				da, err := t.service.repo.SalesForRange(t.restaurantID, a.Start, a.End)
+				dNewer, err := t.service.repo.SalesForRange(t.restaurantID, newer.Start, newer.End)
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				db, err := t.service.repo.SalesForRange(t.restaurantID, b.Start, b.End)
+				dOlder, err := t.service.repo.SalesForRange(t.restaurantID, older.Start, older.End)
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				// A comparison is a picture worth drawing: hand the frontend a
-				// two-bar chart of the same figures the fact sheet carries.
-				t.chart = buildSalesComparisonChart(a.Label, da.Revenue, b.Label, db.Revenue)
-				return joyboyWithCoverage(joyboySalesComparisonBody(a, da, b, db), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
+				// The chart, though, reads left → right as a timeline: older bar on
+				// the left, newer on the right. Drawing it in period_a-first order put
+				// this month on the left and last month on the right — time running
+				// backwards. The figures are the same either way; only the order the
+				// eye reads them in differs from the sheet's.
+				t.chart = buildSalesComparisonChart(older.Label, dOlder.Revenue, newer.Label, dNewer.Revenue)
+				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]
