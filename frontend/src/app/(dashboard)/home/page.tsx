@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowRight,
+  Banknote,
   CalendarDays,
   CalendarRange,
   CheckCircle2,
@@ -19,6 +20,8 @@ import {
   LayoutGrid,
   Loader2,
   ReceiptText,
+  TrendingDown,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
@@ -32,8 +35,10 @@ import {
   hasPartialDailyExpenseRows,
   shiftDashboardDate,
   toDashboardDate,
+  kitchenTicketKey,
   toDashboardFloorTables,
   totalDailyExpensesForMonth,
+  uniqueKitchenTickets,
   uniqueOrdersById,
   type DashboardFloorTable,
 } from "@/src/lib/homeDashboard";
@@ -49,6 +54,7 @@ import {
 } from "@/src/lib/report";
 import { listTables } from "@/src/lib/table";
 import { printA4 } from "@/src/lib/thermalReceiptPrint";
+import { loadSarabun } from "@/src/lib/sarabunFont";
 import type { Ingredient } from "@/src/types/ingredient";
 import type {
   ReportSalesDay,
@@ -65,7 +71,11 @@ import type { Bill, Order, OrderItem, OrderStatus } from "@/src/types/order";
 
 type LaneStatus = "delayed" | "cooking" | "ready";
 type KitchenTicket = {
-  id: number;
+  // The queue's ticket id ("<order>:<round>"), so two rounds off one table
+  // stay two tickets. The order it belongs to is kept beside it — that is what
+  // the POS screen is addressed by.
+  id: string;
+  orderId: number;
   orderNumber: string;
   table: string;
   items: string[];
@@ -91,7 +101,7 @@ const EMPTY_EXPENSE_LEDGER: ExpenseLedgerState = {
 
 // Collapsed cards always sit left-to-right in this order — opening or closing
 // one never reshuffles the rest, it only drops the open one below them.
-const defaultCardOrder = ["sales", "liveWork", "floorStatus", "monthReview"];
+const defaultCardOrder = ["liveWork", "floorStatus", "sales", "monthReview"];
 const expandedCardStorageKey = "home:expandedCard";
 // Shared by both halves of the swipe: the page springing back under the
 // pointer, and the newly picked day sliding in.
@@ -134,8 +144,8 @@ function buildCopy(language: "th" | "en") {
         chooseDate: "เลือกวันที่",
         loading: "กำลังโหลด",
         updated: "อัปเดต",
-        ordersTotal: "ออเดอร์ทั้งหมด",
-        paidRevenue: "ยอดรับชำระ",
+        ordersTotal: "ออเดอร์",
+        paidRevenue: "รับเงินแล้ว",
         activeOrders: "กำลังดำเนินการ",
         liveWork: "งานที่ต้องจัดการตอนนี้",
         lateKitchen: "ครัวเกินเวลา",
@@ -156,12 +166,11 @@ function buildCopy(language: "th" | "en") {
         minutes: "นาที",
         noKitchen: "ครัวว่าง",
         salesOverview: "ยอดขาย",
-        metricRevenue: "รายได้ทั้งหมด",
+        metricRevenue: "ยอดขาย",
         metricCost: "รายจ่าย",
         metricProfit: "กำไร",
         // Wrapped on purpose: the tile sizes its type to the longest line, so
         // breaking a long label lets the whole tile read bigger.
-        expenseMonthly: "รายจ่าย\nเดือนนี้",
         thisMonth: "ทั้งเดือน",
         thisDay: "ทั้งวัน",
         expenseCategory: "ประเภท",
@@ -185,6 +194,7 @@ function buildCopy(language: "th" | "en") {
         peakHoursEmpty: "ยังไม่มียอดขาย",
         bills: "บิล",
         exportPdf: "บันทึกเป็น PDF",
+        exportError: "สร้างไฟล์ PDF ไม่สำเร็จ",
         monthReview: "สรุปเดือนนี้",
         keyFigures: "ตัวเลขสำคัญ",
         avgTicket: "เฉลี่ยต่อบิล",
@@ -228,8 +238,8 @@ function buildCopy(language: "th" | "en") {
         chooseDate: "Choose date",
         loading: "Loading",
         updated: "Updated",
-        ordersTotal: "Total orders",
-        paidRevenue: "Paid revenue",
+        ordersTotal: "Orders",
+        paidRevenue: "Paid",
         activeOrders: "Active",
         liveWork: "Needs attention now",
         lateKitchen: "Late in kitchen",
@@ -250,10 +260,9 @@ function buildCopy(language: "th" | "en") {
         minutes: "mins",
         noKitchen: "Kitchen is clear",
         salesOverview: "Sales",
-        metricRevenue: "Total revenue",
-        metricCost: "Expenses",
+        metricRevenue: "Sales",
+        metricCost: "Spent",
         metricProfit: "Profit",
-        expenseMonthly: "Expenses\nthis month",
         thisMonth: "This month",
         thisDay: "This day",
         expenseCategory: "Category",
@@ -277,6 +286,7 @@ function buildCopy(language: "th" | "en") {
         peakHoursEmpty: "No sales yet",
         bills: "bills",
         exportPdf: "Export PDF",
+        exportError: "Could not create the PDF",
         monthReview: "Month summary",
         keyFigures: "Key figures",
         avgTicket: "Average ticket",
@@ -398,11 +408,31 @@ function ChartBox({
 }
 
 type CardTone = "revenue" | "profit" | "cost";
+// Keyed by the tile's own `key`, so both the day and the month grid pick
+// their icons up without either array carrying one.
+const metricIcon: Record<string, LucideIcon> = {
+  revenue: Banknote,
+  cost: TrendingDown,
+  profit: Wallet,
+  orders: ReceiptText,
+};
+
 type CardSummaryItem = { key: string; label: string; value: string; valueClass?: string; helper?: string; tone?: CardTone; href?: string };
 // A collapsed-face detail row. `heading` turns it into the lane title above
 // the rows it covers, with its count on the right, and `tint` paints the
 // partition it opens in that lane's colour.
-type CardRow = CardSummaryItem & { heading?: boolean; tint?: string };
+// A pip: the thing itself, and a smaller footnote under it — a table and the
+// tail of the order sitting on it.
+type CardChip = { text: string; note?: string };
+type CardRow = CardSummaryItem & { heading?: boolean; tint?: string; chips?: CardChip[] };
+
+// One width for every pip in a row, set by the longest line any of them
+// carries — a row of mixed widths reads as a ragged list, not as a set. `ch`
+// is exact here: the pips are monospaced. The addend is the horizontal padding.
+const chipWidth = (chips: CardChip[] = []) =>
+  chips.length
+    ? `calc(${Math.max(...chips.map((chip) => Math.max(chip.text.length, chip.note?.length ?? 0)))}ch + 0.75rem)`
+    : undefined;
 
 // Border and wash for a topic's partition, keyed by what the topic means:
 // late is red, in progress amber, finished green, stock orange, booked blue.
@@ -437,7 +467,7 @@ const profitValueClass = (value: number) => (value < 0 ? costValueClass : "text-
 // wrapped tabs of mixed widths read as debris, not as a selector. From `sm`
 // they go back to sitting at their natural width.
 const cardTabShape =
-  "ui-press inline-flex max-w-full items-center rounded-t-md border text-left max-sm:min-w-0 max-sm:flex-1 max-sm:justify-center max-sm:gap-1 max-sm:px-2 sm:gap-2.5 sm:px-4 py-2";
+  "ui-press inline-flex max-w-full items-center rounded-t-lg border text-left max-sm:min-w-0 max-sm:flex-1 max-sm:justify-center max-sm:gap-1 max-sm:px-2 sm:gap-2.5 sm:px-4 py-2";
 
 // Font size for a collapsed-tile line, so the whole string fits on one line
 // instead of truncating: cap it relative to the tile (`cqi` = 1% of the tile's
@@ -480,6 +510,9 @@ function CollapsibleCard({
   // Stands in for the title on a phone, where four titles cannot share one
   // strip without truncating to nonsense.
   icon: Icon,
+  // Extra classes for the grid tile only — a card whose face needs more room
+  // than the rest asks for it here.
+  faceClass,
   subtitle,
   summary,
   // Named rows for the collapsed face, in place of the count tiles: a card
@@ -498,6 +531,7 @@ function CollapsibleCard({
 }: {
   title: string;
   icon: LucideIcon;
+  faceClass?: string;
   subtitle?: string;
   summary?: CardSummaryItem[];
   rows?: CardRow[];
@@ -538,7 +572,7 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         style={{ order: collapsedRank }}
-        className="ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-md border border-gray-200 bg-white p-5 text-left sm:aspect-[4/5] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950"
+        className={`ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-xl border border-gray-200 bg-white p-6 text-left sm:aspect-[3/4] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${faceClass ?? ""}`}
       >
         {/* The card's own name is the loudest thing on it: bigger than
             anything below and on a tinted band of its own, so the tile reads
@@ -546,7 +580,7 @@ function CollapsibleCard({
             a card that is only worth opening — the name takes the middle of
             the tile instead of sitting on top of empty space. */}
         <div className={`text-center ${hasFaceTable ? "" : "my-auto"}`}>
-          <h2 className={`text-[22px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-md bg-gray-100 px-3 py-2 dark:bg-gray-900" : ""}`}>{title}</h2>
+          <h2 className={`text-[26px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-900" : ""}`}>{title}</h2>
           {subtitle ? <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-500">{subtitle}</p> : null}
         </div>
         {rows?.length ? (
@@ -560,10 +594,18 @@ function CollapsibleCard({
             style={{ containerType: "inline-size" }}
             className="grid min-h-0 flex-1 auto-rows-fr grid-cols-2 gap-2 overflow-hidden"
           >
-            {groupCardRows(rows).map((block) => (
+            {groupCardRows(rows).map((block, index, blocks) => (
               <div
                 key={block.head.key}
-                className="flex min-w-0 flex-col border border-gray-200 last:odd:col-span-2 dark:border-gray-800"
+                // On a phone the first lane — the one you open the card for —
+                // takes a line of its own and the rest pair up under it. From
+                // `sm` the pairing starts at the top instead, and an odd lane
+                // at the end spans the width rather than sitting half empty.
+                // Worked out here rather than with `first:`/`last:odd:`, which
+                // read the DOM the same way but only in one of the two layouts.
+                className={`flex min-w-0 flex-col overflow-hidden rounded-lg border border-transparent ${
+                  index === 0 ? "max-sm:col-span-2" : ""
+                } ${index === blocks.length - 1 && blocks.length % 2 === 1 ? "sm:col-span-2" : ""}`}
               >
                 <div
                   style={{ fontSize: rowTopicText }}
@@ -572,8 +614,36 @@ function CollapsibleCard({
                   <span className="truncate font-bold uppercase tracking-wide">{block.head.label}</span>
                   <span className="ml-auto shrink-0 font-mono font-bold tabular-nums">{block.head.value}</span>
                 </div>
-                <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {block.items.map((item) => (
+                {/* The lane's own scroller: a state with a dozen free tables
+                    lists them all, and the block stays the height of its
+                    neighbours instead of clipping the tail off. */}
+                <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+                  {block.items.map((item) => item.chips ? (
+                    // A lane whose tables carry no clock shows them as pips
+                    // rather than one line each: the whole set fits the block,
+                    // and the count above it is something you can eyeball.
+                    <div
+                      key={item.key}
+                      style={{ fontSize: `calc(${rowText} * 1.05)` }}
+                      // Each pip is as wide as what it says and they wrap when
+                      // the line runs out, rather than every pip being stamped
+                      // to one column width.
+                      className="flex flex-wrap gap-1 px-2 py-1.5 leading-none"
+                    >
+                      {item.chips.map((chip, index) => (
+                        <span
+                          // Two rounds off one table are two pips reading the same thing, so
+                          // the position is what tells them apart.
+                          key={`${chip.text}-${chip.note ?? ""}-${index}`}
+                          style={{ minWidth: chipWidth(item.chips) }}
+                          className={`inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border border-current/30 px-1 py-0.5 font-mono ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
+                        >
+                          <span className="max-w-full truncate">{chip.text}</span>
+                          {chip.note ? <span className="max-w-full truncate text-[0.68em] opacity-70">{chip.note}</span> : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
                     <div key={item.key} style={{ fontSize: rowText }} className="flex items-baseline gap-1.5 px-2 py-0.5 leading-tight">
                       {/* A row with no figure is not data, it is the "nothing
                           here" line — muted so it never reads as an entry. */}
@@ -594,27 +664,31 @@ function CollapsibleCard({
           // and leave this card taller than the ones beside it.
           <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-3">
             {summary.map((item) => {
-              // Label and figure share one size, set by the longest line of
-              // the two — a label carrying a `\n` is measured per line, so
-              // breaking a long one buys the whole tile bigger type.
-              const longest = [...item.label.split("\n"), item.value].reduce((a, b) => (a.length >= b.length ? a : b));
+              // Label and figure share one size, set by whichever is longer.
+              // The icon rides on the label line, so it counts as a glyph or
+              // two of its own.
+              const longest = [item.label + "  ", item.value].reduce((a, b) => (a.length >= b.length ? a : b));
               const textSize = fitTileText(longest, 15, 0.66);
+              const TileIcon = metricIcon[item.key];
               return (
                 <div
                   key={item.key}
                   // Container query context so the two lines below can size
                   // themselves against this tile rather than the viewport.
                   style={{ containerType: "inline-size" }}
-                  className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-1 border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}
+                  className={`flex min-h-0 min-w-0 flex-col items-center justify-center gap-1 rounded-lg border p-2 text-center ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`}
                 >
-                  <p style={{ fontSize: textSize }} className="whitespace-pre-line font-bold uppercase tracking-wide leading-tight">{item.label}</p>
+                  <p style={{ fontSize: textSize }} className="flex min-w-0 items-center gap-1 font-bold uppercase tracking-wide leading-tight">
+                    {TileIcon ? <TileIcon style={{ width: textSize, height: textSize }} className="shrink-0 opacity-80" aria-hidden="true" /> : null}
+                    <span className="truncate">{item.label}</span>
+                  </p>
                   <p style={{ fontSize: textSize }} className={`truncate font-mono font-bold leading-tight tabular-nums ${item.valueClass ?? "text-gray-950 dark:text-white"}`}>{item.value}</p>
                 </div>
               );
             })}
           </div>
         ) : null}
-        <ChevronDown className="mx-auto h-5 w-5 shrink-0 text-gray-300 transition-transform group-hover:translate-y-0.5 dark:text-gray-700" aria-hidden="true" />
+        <ChevronDown className="mx-auto hidden h-5 w-5 shrink-0 text-gray-300 transition-transform group-hover:translate-y-0.5 dark:text-gray-700 sm:block" aria-hidden="true" />
       </button>
     );
   }
@@ -633,24 +707,25 @@ function CollapsibleCard({
         className={`${cardTabShape} relative z-10 -mb-px border-b-0 border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900`}
       >
         <Icon className="h-4 w-4 shrink-0 text-gray-950 dark:text-white sm:hidden" aria-hidden="true" />
-        <span className="min-w-0 max-sm:hidden">
-          <span className="block truncate text-[13px] font-semibold text-gray-950 dark:text-white">{title}</span>
-          {subtitle ? <span className="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-500">{subtitle}</span> : null}
+        {/* The subtitle rides beside the name, not under it: a two-line tab
+            would stand taller than the folded ones and lift the whole strip. */}
+        <span className="flex min-w-0 items-baseline gap-1.5 max-sm:hidden">
+          <span className="truncate text-[13px] font-semibold text-gray-950 dark:text-white">{title}</span>
+          {subtitle ? <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-500">{subtitle}</span> : null}
         </span>
         <ChevronUp className="h-4 w-4 shrink-0 text-gray-500 max-sm:hidden" aria-hidden="true" />
       </button>
-      {/* Only the corner the tab actually lands on is squared off — the
-          leftmost tab gives the folder its L, any other tab notches the top
-          edge and the corners stay round. */}
+      {/* The top-left corner stays square whichever card is open: a tab is
+          always sitting on it — this card's own when it is leftmost, the first
+          folded one otherwise — and a round corner under a flush tab reads as
+          a gap. */}
       <section
         style={{ order: 100 }}
-        className={`col-span-full w-full overflow-visible border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 ${
-          collapsedRank === 0 ? "rounded-b-md rounded-tr-md" : "rounded-md"
-        }`}
+        className="col-span-full w-full overflow-visible rounded-b-xl rounded-tr-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
       >
         {summary?.length && showSummaryWhenExpanded ? (
           // Sits flush in the body's top corners, so it has to match them.
-          <div className={`grid grid-cols-2 gap-px overflow-hidden border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4 ${collapsedRank === 0 ? "rounded-tr-md" : "rounded-t-md"}`}>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-tr-xl border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 lg:grid-cols-4">
             {summary.map((item) => {
               // A tile with an `href` drills into its own page.
               const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-950 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
@@ -760,6 +835,7 @@ export default function Home() {
   };
   const [salesDays, setSalesDays] = useState<ReportSalesDay[]>([]);
   const [stockRisks, setStockRisks] = useState<ReportStockRisk[]>([]);
+  const [monthPdfError, setMonthPdfError] = useState("");
   const [salesDaysLoading, setSalesDaysLoading] = useState(false);
   const salesDaysLoadedRef = useRef(false);
   const [salesHours, setSalesHours] = useState<ReportSalesHour[]>([]);
@@ -958,7 +1034,10 @@ export default function Home() {
       setOrders(nextOrders);
       if (liveData) {
         const [tableRes, kitchenRes, ingredientRes] = liveData;
-        setKitchenOrders(uniqueOrdersById(kitchenRes.data.orders ?? []));
+        // Deduped by ticket, not by order: the queue sends one ticket per
+        // round, so a table's second round shares its order's ID and would be
+        // dropped by `uniqueOrdersById`.
+        setKitchenOrders(uniqueKitchenTickets(kitchenRes.data.orders ?? []));
         setTables(toDashboardFloorTables(tableRes.data.tables ?? [], nextOrders, new Date()));
         setIngredients(ingredientRes.data.ingredients ?? []);
       } else {
@@ -1121,6 +1200,7 @@ export default function Home() {
   }, [selectedDate]);
 
   const tickets = useMemo<KitchenTicket[]>(() => kitchenOrders.map((order) => {
+    const key = kitchenTicketKey(order);
     const oldestSent = order.items?.reduce<string | null>((oldest, item) => {
       if (!item.sent_at) return oldest;
       if (!oldest || new Date(item.sent_at) < new Date(oldest)) return item.sent_at;
@@ -1130,7 +1210,8 @@ export default function Home() {
     const hasCooking = order.items?.some((item) => item.status === "cooking") ?? false;
     const hasReady = order.items?.some((item) => item.status === "ready") ?? false;
     return {
-      id: order.ID,
+      id: key,
+      orderId: order.ID,
       orderNumber: order.order_number,
       table: orderLocationLabel(order, language),
       items: order.items?.map((item) => itemSummaryLabel(item, language)) ?? [],
@@ -1292,7 +1373,7 @@ export default function Home() {
   const summary = [
     { key: "revenue", label: copy.paidRevenue, value: formatCurrency(paidRevenue, language), helper: `${paidOrders.length} ${copy.order}`, tone: "revenue" as const },
     ...(canViewExpenses
-      ? [{ key: "cost", label: copy.expenseMonthly, value: formatCurrency(-monthExpense, language), valueClass: costValueClass, tone: "cost" as CardTone }]
+      ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(-monthExpense, language), valueClass: costValueClass, tone: "cost" as CardTone }]
       : []),
     // A loss on a green tile would read as good news, so it borrows the cost
     // tone, and the signed figure is coloured to match.
@@ -1307,31 +1388,31 @@ export default function Home() {
   ];
 
   // The closed card is the whole kitchen at a glance: every lane, always, with
-  // its ticket count — a clear kitchen is three zeroes and the day's order
+  // its ticket count — a clear kitchen is two zeroes and the day's order
   // count, which says more than the words "kitchen is clear". Under each lane
-  // sit its two longest-waiting tickets, the ones someone should walk to
-  // first. Two is the cap and there is no "+n more" line: the lane count above
-  // already says how many are behind them, and the card has to stay the same
-  // height as its neighbours no matter how bad service gets.
+  // its tickets sit as pips, longest wait first, each one the table and the
+  // tail of its order number — enough to walk to it, and the whole lane fits
+  // where two written-out rows used to.
   // An empty lane says so in words: a table of blank lines leaves you
   // wondering whether it is empty or still loading.
   const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-500" });
   const attentionRows: CardRow[] = [
-    ...lanes.flatMap((lane) => {
-      const worst = [...lane.items].sort((a, b) => b.waited - a.waited).slice(0, 2);
-      return [
-        { key: `${lane.key}-head`, label: lane.title, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
-        ...(worst.length
-          ? worst.map((ticket) => ({
-              key: `${lane.key}-${ticket.id}`,
-              label: ticket.table,
-              helper: `#${ticket.orderNumber}`,
-              value: `${ticket.waited} ${copy.minutes}`,
-              valueClass: lane.color,
-            }))
-          : [emptyRow(lane.key)]),
-      ];
-    }),
+    // Done needs no attention, so it stays off the cover — the open card still
+    // lists it.
+    ...lanes.filter((lane) => lane.key !== "ready").flatMap((lane) => [
+      { key: `${lane.key}-head`, label: lane.title, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
+      ...(lane.items.length
+        ? [{
+            key: `${lane.key}-chips`,
+            label: "",
+            value: "",
+            valueClass: lane.color,
+            chips: [...lane.items]
+              .sort((a, b) => b.waited - a.waited)
+              .map((ticket) => ({ text: ticket.table, note: ticket.orderNumber.slice(-3) })),
+          }]
+        : [emptyRow(lane.key)]),
+    ]),
     // The fourth cell is the store cupboard: what is running out and how much
     // of it is left, since that is the other thing that stops a kitchen.
     { key: "stock", label: copy.lowStock, value: lowStockCount.toLocaleString(), valueClass: "text-orange-600 dark:text-orange-300", tint: rowTint.orange, heading: true },
@@ -1368,6 +1449,85 @@ export default function Home() {
   const monthTopItems = topItemsData;
   const shortDayLabel = (date: string) =>
     new Date(`${date}T12:00:00`).toLocaleDateString(language === "th" ? "th-TH" : "en-US", { day: "numeric", month: "short" });
+  // Read twice — once by the sheet's table, once by the PDF — so the file can
+  // never drift from what the card showed.
+  const monthKeyFigures = [
+    { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language) },
+    ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(-monthExpense, language), valueClass: costValueClass }] : []),
+    { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), valueClass: profitValueClass(monthProfit) },
+    { key: "margin", label: copy.profitMargin, value: `${formatNumber(monthMargin, language, 1)}%` },
+    { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
+    { key: "avg", label: copy.avgTicket, value: formatCurrency(monthAvgTicket, language) },
+    { key: "days", label: copy.tradingDays, value: monthDaysTraded.toLocaleString() },
+    { key: "best", label: copy.bestDay, value: monthBestDay ? `${shortDayLabel(monthBestDay.order_date)} · ${formatCurrency(monthBestDay.revenue, language)}` : "-" },
+    { key: "slow", label: copy.slowestDay, value: monthSlowestDay ? `${shortDayLabel(monthSlowestDay.order_date)} · ${formatCurrency(monthSlowestDay.revenue, language)}` : "-" },
+  ];
+
+  // A real file, the same way the expenses page makes one: jsPDF with the Thai
+  // face embedded, one table per section of the sheet.
+  const exportMonthPdf = async () => {
+    setMonthPdfError("");
+    try {
+      const [font, { jsPDF }, autoTable] = await Promise.all([
+        loadSarabun(),
+        import("jspdf"),
+        import("jspdf-autotable").then((module) => module.default),
+      ]);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      doc.addFileToVFS("Sarabun.ttf", font);
+      doc.addFont("Sarabun.ttf", "Sarabun", "normal");
+      doc.setFont("Sarabun");
+      doc.setFontSize(14);
+      doc.text(`${copy.monthReview} ${selectedMonthLabel}`, 10, 14);
+      doc.setFontSize(9);
+      doc.text(`${copy.generatedAt} ${new Date().toLocaleString(language === "th" ? "th-TH" : "en-US")}`, 10, 19);
+
+      // Only the regular weight is embedded, so every cell asks for "normal";
+      // a bold request would silently fall back to Helvetica and drop the Thai.
+      const cell = { font: "Sarabun", fontStyle: "normal" as const };
+      let startY = 24;
+      const section = (head: string[], body: string[][]) => {
+        if (!body.length) return;
+        autoTable(doc, {
+          startY,
+          margin: { left: 10, right: 10 },
+          head: [head],
+          body,
+          styles: { ...cell, fontSize: 9, cellPadding: 1.5, lineColor: 0, lineWidth: 0.1, textColor: 0 },
+          headStyles: { ...cell, fillColor: [223, 227, 230] },
+        });
+        startY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+      };
+
+      section([copy.keyFigures, ""], monthKeyFigures.map((row) => [row.label, row.value]));
+      if (canViewExpenses) {
+        section(
+          [copy.expenseCategory, copy.metricCost, copy.share],
+          monthExpenseByCategory.map(([category, amount]) => [
+            expenseCategoryLabels[language][category as ExpenseCategory] ?? category,
+            formatCurrency(amount, language),
+            `${monthExpense ? formatNumber((amount / monthExpense) * 100, language, 0) : 0}%`,
+          ]),
+        );
+      }
+      section(
+        ["#", copy.topItems, copy.dishes],
+        monthTopItems.slice(0, 8).map((item, index) => [String(index + 1), item.menu_name, formatNumber(item.quantity, language, 0)]),
+      );
+      section(
+        [copy.stockRisks, "", copy.restock],
+        stockRisks.slice(0, 8).map((risk) => [
+          risk.name,
+          `${formatNumber(risk.stock, language)} / ${formatNumber(risk.min_stock, language)} ${risk.unit}`,
+          formatNumber(risk.restock_estimate, language),
+        ]),
+      );
+
+      doc.save(`month-summary-${expenseMonth}.pdf`);
+    } catch {
+      setMonthPdfError(copy.exportError);
+    }
+  };
 
   const liveWorkSummary: CardSummaryItem[] = [
     { key: "late", label: copy.lateKitchen, value: delayed.length.toLocaleString() },
@@ -1385,31 +1545,27 @@ export default function Home() {
   ];
 
   // Same face as the kitchen card: every state, always, with its count, and
-  // under a state that has a clock running, the table that has been sitting
-  // longest — the one a host should look at first. States with nothing timed
-  // stay a single line.
+  // every table in it as a pip — its name, and the party sitting on it where
+  // there is one. Occupied leads with the table that has been sitting longest,
+  // the one a host should look at first.
   const floorRows: CardRow[] = [
     { key: "occupied", label: copy.occupied, items: occupied, color: "text-amber-600 dark:text-amber-300", tint: rowTint.amber },
     { key: "reserved", label: copy.reserved, items: reservedTables, color: "text-sky-600 dark:text-sky-300", tint: rowTint.sky },
     { key: "available", label: copy.available, items: availableTables, color: "text-emerald-600 dark:text-emerald-300", tint: rowTint.emerald },
-  ].flatMap((lane) => {
-    const longest = lane.items.reduce<DashboardFloorTable | null>(
-      (worst, table) => ((table.minutes ?? -1) > (worst?.minutes ?? -1) ? table : worst),
-      null,
-    );
-    return [
-      { key: `${lane.key}-head`, label: lane.label, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
-      longest
-        ? {
-            key: `${lane.key}-${longest.key}`,
-            label: longest.label,
-            helper: longest.guests ? `${longest.guests} ${copy.people}` : longest.zone,
-            value: `${longest.minutes} ${copy.minutes}`,
-            valueClass: lane.color,
-          }
-        : emptyRow(lane.key),
-    ];
-  });
+  ].flatMap((lane) => [
+    { key: `${lane.key}-head`, label: lane.label, value: lane.items.length.toLocaleString(), valueClass: lane.color, tint: lane.tint, heading: true },
+    ...(lane.items.length
+      ? [{
+          key: `${lane.key}-chips`,
+          label: "",
+          value: "",
+          valueClass: lane.color,
+          chips: [...lane.items]
+            .sort((a, b) => (b.minutes ?? -1) - (a.minutes ?? -1))
+            .map((table) => ({ text: table.label, note: table.guests ? `${table.guests}p` : table.seats ? `${table.seats}s` : undefined })),
+        }]
+      : [emptyRow(lane.key)]),
+  ]);
 
   // While a card is open, every other card shrinks from a full tile down to
   // just its folder tab.
@@ -1442,57 +1598,54 @@ export default function Home() {
       onPointerLeave={(event) => endSwipe(event, false)}
     >
       <header className="sticky top-14 z-20 border-b border-gray-200 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:px-6 lg:top-0 lg:px-8">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">{copy.title}</h1>
-              {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" aria-label={copy.loading} /> : null}
-            </div>
-          </div>
-
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
-            <div className="inline-flex max-w-full overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-              <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-              </button>
-              {/* The native input drives the value but renders the browser's own
-                  numeric format, so it sits transparent on top and the readable
-                  weekday/date is drawn underneath it. */}
-              <label className="relative inline-flex h-10 min-w-0 cursor-pointer items-center gap-2 px-3 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
-                <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
-                <span className="sr-only">{copy.chooseDate}</span>
-                {/* Fixed width: the label is a long weekday and month name, so
-                    letting it size to its content shifts the arrows either side
-                    of it every time the day changes. */}
-                <span aria-hidden="true" className="w-56 min-w-0 truncate text-center text-[13px] font-semibold text-gray-800 dark:text-gray-100">
-                  {selectedDateLabel}
-                </span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={today}
-                  onChange={(event) => selectDate(event.target.value)}
-                  onClick={(event) => event.currentTarget.showPicker?.()}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                />
-              </label>
-              <button type="button" disabled={selectedDate >= today} onClick={() => selectDate(shiftDashboardDate(selectedDate, 1))} aria-label={copy.nextDay} title={copy.nextDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+        <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center gap-2">
+          <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">{copy.title}</h1>
+          {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" aria-label={copy.loading} /> : null}
         </div>
       </header>
 
-      {/* The swiped surface: the header above it holds the date control, which
-          shouldn't slide out from under the thumb that's changing it. */}
-      <div ref={contentRef} className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-        {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
+      {/* The swiped surface, the date control included: changing the day moves
+          the control and the cards it filters as one. */}
+      <div ref={contentRef} className="mx-auto w-full max-w-6xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+        {/* The date sits in the same stack as the cards it filters, and rides
+            the same swipe: change the day and control and content move as one. */}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex min-w-0 flex-1 overflow-hidden rounded-md border border-gray-200 bg-white sm:flex-initial dark:border-gray-800 dark:bg-gray-950">
+            <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {/* The native input drives the value but renders the browser's own
+                numeric format, so it sits transparent on top and the readable
+                weekday/date is drawn underneath it. */}
+            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
+              <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
+              <span className="sr-only">{copy.chooseDate}</span>
+              {/* Fixed width: the label is a long weekday and month name, so
+                  letting it size to its content shifts the arrows either side
+                  of it every time the day changes. */}
+              <span aria-hidden="true" className="w-full min-w-0 truncate text-center text-[13px] font-semibold text-gray-800 sm:w-56 dark:text-gray-100">
+                {selectedDateLabel}
+              </span>
+              <input
+                type="date"
+                value={selectedDate}
+                max={today}
+                onChange={(event) => selectDate(event.target.value)}
+                onClick={(event) => event.currentTarget.showPicker?.()}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
+            <button type="button" disabled={selectedDate >= today} onClick={() => selectDate(shiftDashboardDate(selectedDate, 1))} aria-label={copy.nextDay} title={copy.nextDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+          {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
+        </div>
+        {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
         <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
         {dateLoading ? (
-          <div className="flex min-h-72 items-center justify-center rounded-md border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+          <div className="flex min-h-72 items-center justify-center rounded-xl border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {copy.loading}
           </div>
@@ -1503,17 +1656,15 @@ export default function Home() {
                 beats a complete row. Open: a folder rack, every tab side by
                 side on one line (no row gap, so the open card's body below
                 meets its tab) and wrapping only when the line runs out. */}
-            {/* `auto-rows-fr`: every row takes the height of the tallest card
-                in the whole grid, not just its own row, so a card that wraps
-                to the second column still matches the ones beside it. Only
-                from `sm` up — in one column there is nothing to line up with,
-                and forcing every card to the tallest one's height just leaves
-                dead space under the short ones. Narrow cards read better than
-                fat ones, but the column count has to count the sidebar too: it
-                turns permanent at `lg` and takes 264px, so a tablet in
-                landscape leaves about 744px for the cards — two columns' worth.
-                Three from `xl`, four only at `2xl`. */}
-            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5 max-sm:gap-x-0" : "grid grid-cols-1 gap-3 sm:auto-rows-fr sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"}>
+            {/* Rows size themselves: the cards that carry a face table all
+                share `aspect-[3/4]` and so match without being forced to, and
+                the month card — a name and nothing else — is free to take a
+                short full-width row of its own instead of a card-tall one.
+                Narrow cards read better than fat ones, but the column count
+                has to count the sidebar too: it turns permanent at `lg` and
+                takes 264px, so a tablet in landscape leaves about 744px for
+                the cards — two columns' worth. Three from `xl`. */}
+            <div className={openCard !== null ? "flex flex-wrap items-end gap-x-1.5 max-sm:gap-x-0" : "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"}>
             <CollapsibleCard
               title={copy.salesOverview}
               icon={ReceiptText}
@@ -1557,14 +1708,16 @@ export default function Home() {
                 <div className={`min-w-0 p-4 ${salesPane === "day" ? "" : "hidden"}`}>
                   <div className="mb-3 mt-3 grid grid-cols-3 gap-2">
                     {summary.filter((item) => item.key !== "cost").map((item) => {
-                      const tileClass = `rounded-md border px-3 py-2 text-left ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`;
+                      const tileClass = `rounded-lg border px-3 py-2 text-left ${item.tone ? cardToneTile[item.tone] : cardToneNeutral}`;
+                      const Icon = metricIcon[item.key];
                       // Only the orders tile does anything, so only it gets the
                       // chevron — an affordance on a dead tile is a worse lie
                       // than no affordance at all.
                       const body = (interactive: boolean) => (
                         <>
-                          <p className="flex items-center gap-1 truncate text-[12px] font-bold uppercase tracking-wide">
-                            {item.label}
+                          <p className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-wide">
+                            {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" /> : null}
+                            <span className="truncate">{item.label}</span>
                             {interactive ? (
                               <span className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-current/15">
                                 <ChevronDown className={`h-3 w-3 transition-transform ${dayOrdersOpen ? "rotate-180" : ""}`} aria-hidden="true" />
@@ -1591,7 +1744,7 @@ export default function Home() {
                   </div>
 
                   {dayOrdersOpen ? (
-                    <div className="mb-3 rounded-md border border-gray-200 dark:border-gray-800">
+                    <div className="mb-3 rounded-lg border border-gray-200 dark:border-gray-800">
                       <div id="day-orders-sheet">
                         <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                           <div className="min-w-0">
@@ -1716,13 +1869,15 @@ export default function Home() {
                       { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), tone: (monthProfit < 0 ? "cost" : "profit") as CardTone, valueClass: profitValueClass(monthProfit) },
                       { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
                     ].map((stat) => {
-                      const tileClass = `block rounded-md border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
+                      const tileClass = `block rounded-lg border px-3 py-2 ${stat.tone ? cardToneTile[stat.tone] : cardToneNeutral} ${
                         stat.href ? "ui-press cursor-pointer shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:brightness-105 dark:hover:brightness-125" : ""
                       }`;
+                      const Icon = metricIcon[stat.key];
                       const body = (
                         <>
-                          <p className="flex items-center gap-1 truncate text-[12px] font-bold uppercase tracking-wide">
-                            {stat.label}
+                          <p className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-wide">
+                            {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" /> : null}
+                            <span className="truncate">{stat.label}</span>
                             {stat.href ? (
                               <span className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-current/15">
                                 <ArrowRight className="h-3 w-3" aria-hidden="true" />
@@ -1843,7 +1998,7 @@ export default function Home() {
                       </div>
 
                       {activeDetailBar ? (
-                        <div className="mt-3 rounded-md border border-gray-200 dark:border-gray-800">
+                        <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800">
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-2 dark:border-gray-800">
                             <div className="min-w-0">
                               <h4 className="text-[12px] font-semibold text-gray-950 dark:text-white">
@@ -1951,19 +2106,23 @@ export default function Home() {
             </CollapsibleCard>
 
             {/* The manager's month, and the one card built to leave the screen:
-                everything inside `month-summary-sheet` is what prints, so the
-                sheet is the card body rather than a separate hidden copy that
-                could drift from it. */}
+                its Export PDF builds the file from the same figures the sheet
+                renders, rather than photographing the DOM or keeping a hidden
+                second copy that could drift from it. */}
             <CollapsibleCard
               title={copy.monthReview}
               icon={CalendarRange}
+              // Only worth a banner row when there are live cards above it to
+              // fill the grid; on a past date it is one of two cards and takes
+              // a normal tile.
+              faceClass={isToday ? "sm:col-span-full sm:h-40" : undefined}
               subtitle={selectedMonthLabel}
               expanded={openCard === "monthReview"}
               dimmed={isCardDimmed("monthReview")}
               collapsedRank={collapsedRank("monthReview")}
               onToggle={() => toggleCard("monthReview")}
             >
-              <div id="month-summary-sheet" className="p-4">
+              <div className="p-4">
                 <div className="flex items-start justify-between gap-3 border-b border-gray-200 pb-3 dark:border-gray-800">
                   <div className="min-w-0">
                     <h3 className="text-[15px] font-bold text-gray-950 dark:text-white">{copy.monthReview} · {selectedMonthLabel}</h3>
@@ -1973,30 +2132,23 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => printA4("month-summary-sheet")}
+                    onClick={() => { void exportMonthPdf(); }}
                     className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden"
                   >
                     <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     {copy.exportPdf}
                   </button>
                 </div>
+                {monthPdfError ? (
+                  <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">{monthPdfError}</p>
+                ) : null}
 
                 <div className="grid gap-4 pt-3 lg:grid-cols-2">
                   <section>
                     <h4 className="mb-1.5 text-[12px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{copy.keyFigures}</h4>
                     <table className="w-full text-left text-[12px]">
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                        {[
-                          { key: "revenue", label: copy.metricRevenue, value: formatCurrency(monthRevenue, language) },
-                          ...(canViewExpenses ? [{ key: "cost", label: copy.metricCost, value: formatCurrency(-monthExpense, language), valueClass: costValueClass }] : []),
-                          { key: "profit", label: copy.metricProfit, value: formatCurrency(monthProfit, language, 0, "exceptZero"), valueClass: profitValueClass(monthProfit) },
-                          { key: "margin", label: copy.profitMargin, value: `${formatNumber(monthMargin, language, 1)}%` },
-                          { key: "orders", label: copy.ordersTotal, value: monthOrders.toLocaleString() },
-                          { key: "avg", label: copy.avgTicket, value: formatCurrency(monthAvgTicket, language) },
-                          { key: "days", label: copy.tradingDays, value: monthDaysTraded.toLocaleString() },
-                          { key: "best", label: copy.bestDay, value: monthBestDay ? `${shortDayLabel(monthBestDay.order_date)} · ${formatCurrency(monthBestDay.revenue, language)}` : "-" },
-                          { key: "slow", label: copy.slowestDay, value: monthSlowestDay ? `${shortDayLabel(monthSlowestDay.order_date)} · ${formatCurrency(monthSlowestDay.revenue, language)}` : "-" },
-                        ].map((row) => (
+                        {monthKeyFigures.map((row) => (
                           <tr key={row.key}>
                             <td className="py-1.5 pr-3 text-gray-600 dark:text-gray-300">{row.label}</td>
                             <td className={`py-1.5 text-right font-mono font-semibold tabular-nums ${row.valueClass ?? "text-gray-950 dark:text-white"}`}>{row.value}</td>
@@ -2088,7 +2240,7 @@ export default function Home() {
                 className={
                   openCard !== null
                     ? `${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300`
-                    : "flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-md border border-gray-200 bg-white p-5 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400"
+                    : "flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white p-6 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400"
                 }
               >
                 <CalendarDays
@@ -2138,7 +2290,7 @@ export default function Home() {
                               </div>
                               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                                 {lane.items.length ? lane.items.slice(0, 5).map((ticket) => (
-                                  <button key={`${lane.key}-${ticket.id}`} type="button" onClick={() => router.push(orderPosHref({ ID: ticket.id, order_number: ticket.orderNumber }))} className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
+                                  <button key={`${lane.key}-${ticket.id}`} type="button" onClick={() => router.push(orderPosHref({ ID: ticket.orderId, order_number: ticket.orderNumber }))} className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
                                     <div className="flex items-center justify-between gap-3">
                                       <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{ticket.table}</span>
                                       <span className="font-mono text-[11px] text-gray-500">#{ticket.orderNumber}</span>

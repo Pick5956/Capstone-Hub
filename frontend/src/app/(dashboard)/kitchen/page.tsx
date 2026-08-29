@@ -9,6 +9,7 @@ import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { playBeep } from "@/src/lib/browserAudio";
 import { can } from "@/src/lib/rbac";
 import { kitchenQueue, updateOrderItemStatus } from "@/src/lib/order";
+import { kitchenTicketKey } from "@/src/lib/homeDashboard";
 import type { Order, OrderItem } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
@@ -54,10 +55,6 @@ function cookingBarClass(minutes: number) {
   if (minutes >= 10) return "bg-red-600";
   if (minutes >= 5) return "bg-amber-500";
   return "bg-emerald-600";
-}
-
-function ticketKey(order: Order) {
-  return order.kitchen_ticket_id ?? `${order.ID}:${order.kitchen_batch ?? 0}`;
 }
 
 function orderTableLabel(order: Order) {
@@ -239,7 +236,7 @@ export default function KitchenPage() {
     setError("");
     try {
       const res = await kitchenQueue();
-      const nextIds = new Set(res.data.orders.map((order) => ticketKey(order)));
+      const nextIds = new Set(res.data.orders.map((order) => kitchenTicketKey(order)));
       const hasNewTicket = hasLoadedRef.current && [...nextIds].some((id) => !ticketIdsRef.current.has(id));
       const transitioningItemIds = transitioningItemIdsRef.current;
       const nextOrders = transitioningItemIds.size
@@ -264,10 +261,10 @@ export default function KitchenPage() {
   };
 
   const applyItemStatuses = (order: Order, itemIds: number[], status: OrderItem["status"]) => {
-    const key = ticketKey(order);
+    const key = kitchenTicketKey(order);
     const changedItemIds = new Set(itemIds);
     setOrders((current) => current.map((currentOrder) => (
-      ticketKey(currentOrder) === key
+      kitchenTicketKey(currentOrder) === key
         ? {
             ...currentOrder,
             items: currentOrder.items?.map((item: OrderItem) => (
@@ -336,7 +333,7 @@ export default function KitchenPage() {
     const cookingItems = order.items?.filter((item) => item.status === "cooking") ?? [];
     if (!cookingItems.length) return;
     const itemIds = cookingItems.map((item) => item.ID);
-    const key = ticketKey(order);
+    const key = kitchenTicketKey(order);
     setSubmittingId(order.ID);
     setError("");
     itemIds.forEach((itemId) => transitioningItemIdsRef.current.add(itemId));
@@ -540,13 +537,13 @@ export default function KitchenPage() {
       ? (language === "th" ? "กลับบ้าน" : "Takeaway")
       : orderTableLabel(order);
     const kitchenBatch = order.kitchen_batch || 1;
-    const currentTicketKey = ticketKey(order);
+    const currentTicketKey = kitchenTicketKey(order);
     const isCompletingTicket = !isReadyLane && completingTicketIds.has(currentTicketKey);
     const isCollapsingTicket = !isReadyLane && collapsingTicketIds.has(currentTicketKey);
 
     return (
       <div
-        key={`${lane}:${ticketKey(order)}`}
+        key={`${lane}:${kitchenTicketKey(order)}`}
         className={`kitchen-ticket-shell grid ${isCollapsingTicket ? "kitchen-ticket-collapse" : ""}`}
       >
         <div className="min-h-0 overflow-hidden">
@@ -822,7 +819,7 @@ export default function KitchenPage() {
                 <div className="flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-2">
                   {laneOrders.map((order) => (
                     <div
-                      key={`${lane}:${ticketKey(order)}`}
+                      key={`${lane}:${kitchenTicketKey(order)}`}
                       className="min-w-[260px] shrink-0 snap-start"
                       style={{ flexBasis: "calc((100% - 2.25rem) / 4)" }}
                     >
@@ -1037,7 +1034,7 @@ export default function KitchenPage() {
                     }, order.kitchen_sent_at ?? null);
                     const secs = durationSeconds(startAt, finishAt);
                     return (
-                      <div key={ticketKey(order)} className="flex items-center gap-3 px-4 py-3">
+                      <div key={kitchenTicketKey(order)} className="flex items-center gap-3 px-4 py-3">
                         <div className="min-w-0 flex-1">
                           <p className="text-[15px] font-semibold text-gray-950 dark:text-white">{orderLocationLabel(order, language)}</p>
                           <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.kitchenBatch(order.kitchen_batch || 1)}</p>

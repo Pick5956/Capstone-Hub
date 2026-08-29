@@ -8,6 +8,7 @@ import {
   toDashboardDate,
   toDashboardFloorTables,
   totalDailyExpensesForMonth,
+  uniqueKitchenTickets,
   uniqueOrdersById,
 } from "../homeDashboard";
 import type { Order } from "../../types/order";
@@ -73,6 +74,12 @@ describe("home dashboard helpers", () => {
 
   it("deduplicates repeated kitchen orders by database ID", () => {
     expect(uniqueOrdersById([order(16), order(16), order(17)]).map((item) => item.ID)).toEqual([16, 17]);
+  });
+
+  it("keeps a table's second kitchen round as its own ticket", () => {
+    const round = (id: number, batch: number) => ({ ...order(id), kitchen_batch: batch, kitchen_ticket_id: `${id}:${batch}` });
+    const kept = uniqueKitchenTickets([round(16, 1), round(16, 2), round(16, 2), round(17, 1)]);
+    expect(kept.map((item) => item.kitchen_ticket_id)).toEqual(["16:1", "16:2", "17:1"]);
   });
 
   it("uses server-side daily expense aggregates instead of capped ledger rows", () => {
