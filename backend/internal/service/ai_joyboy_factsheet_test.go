@@ -267,3 +267,53 @@ func TestActiveOrdersBodyReportsAnEmptyFloor(t *testing.T) {
 		t.Errorf("the read-only warning must travel with the empty sheet too:\n%s", body)
 	}
 }
+
+// Totals the model cannot compute itself. "ต้องใช้เงินเท่าไหร่ถ้าเติมของที่
+// ใกล้หมดทั้งหมด" is a multiply-then-sum, and "เงินจมรวมเท่าไหร่" is a sum —
+// both were unanswerable over sheets that listed the parts and no total.
+func TestStockSheetsCarryTheTotalsTheModelCannotCompute(t *testing.T) {
+	low, _ := joyboyFactBody(AIToolResult{
+		Tool: AIToolGetLowStockIngredients,
+		LowStockIngredients: []AIStockRisk{
+			{Name: "ข้าวคั่ว", Status: "low", Stock: 40, MinStock: 100, Unit: "กรัม", RestockEstimate: 160, CostPerUnit: 0.5},
+			{Name: "ใบกะเพรา", Status: "out", Stock: 0, MinStock: 300, Unit: "กรัม", RestockEstimate: 600, CostPerUnit: 0.15},
+		},
+	})
+	// 160×0.5 + 600×0.15 = 170
+	if !strings.Contains(low, "restock_all_cost=170") {
+		t.Errorf("low-stock sheet should total the restock cost:\n%s", low)
+	}
+
+	dead, _ := joyboyFactBody(AIToolResult{
+		Tool: AIToolGetDeadStock,
+		DeadStock: []AIDeadStockItem{
+			{Name: "มะละกอดิบ", Stock: 5, Unit: "กก.", Value: 250},
+			{Name: "หมึกกล้วย", Stock: 2, Unit: "กก.", Value: 400},
+		},
+	})
+	if !strings.Contains(dead, "dead_value_total=650") {
+		t.Errorf("dead-stock sheet should total the money sitting idle:\n%s", dead)
+	}
+}
+
+// The top-cost list is cut to eight upstream. Unsaid, the model reads it as the
+// whole set — the mistake the menu rankings already made — and then the total
+// below it reads as the shop's entire ingredient spend.
+func TestTopCostSheetAdmitsItIsAPartialListBeforeTotalling(t *testing.T) {
+	body, _ := joyboyFactBody(AIToolResult{
+		Tool: AIToolGetTopCostIngredients,
+		TopCostIngredients: []AICostIngredient{
+			{Name: "เนื้อหมู", Unit: "กก.", Cost: 5000, Used: 25},
+			{Name: "กุ้งสด", Unit: "กก.", Cost: 3000, Used: 10},
+		},
+	})
+	if !strings.Contains(body, "อันดับต้นเพียง 2 ตัว") {
+		t.Errorf("the sheet must say the list is partial:\n%s", body)
+	}
+	if !strings.Contains(body, "listed_items_cost_total=8000") {
+		t.Errorf("the total of the listed rows should be stated:\n%s", body)
+	}
+	if !strings.Contains(body, "ไม่ใช่ต้นทุนวัตถุดิบทั้งร้าน") {
+		t.Errorf("the total must be scoped to the listed rows only:\n%s", body)
+	}
+}

@@ -82,12 +82,19 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("no_ingredient_below_its_minimum"), true
 		}
 		lines := []string{"scope=current_stock_level"}
+		// The cost of restocking everything on this list is a multiply-then-sum,
+		// which the model may not do — so "ต้องใช้เงินเท่าไหร่ถ้าเติมของที่ใกล้หมด
+		// ทั้งหมด" had no figure to read. Go totals it.
+		var restockCost float64
 		for _, item := range result.LowStockIngredients {
+			restockCost += item.RestockEstimate * item.CostPerUnit
 			lines = append(lines, fmt.Sprintf(
 				"ingredient=%s status=%s stock=%s unit=%s min_stock=%s restock_suggested=%s cost_per_unit=%s",
 				item.Name, item.Status, joyboyNum(item.Stock), item.Unit,
 				joyboyNum(item.MinStock), joyboyNum(item.RestockEstimate), joyboyNum(item.CostPerUnit)))
 		}
+		lines = append(lines, fmt.Sprintf("items_below_minimum=%d restock_all_cost=%s",
+			len(result.LowStockIngredients), joyboyNum(roundBaht(restockCost))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus:
@@ -285,10 +292,15 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("every_stocked_ingredient_was_used_in_period"), true
 		}
 		lines := []string{window, "meaning=held_in_stock_but_never_used_in_period"}
+		var deadValue float64
 		for _, item := range result.DeadStock {
+			deadValue += item.Value
 			lines = append(lines, fmt.Sprintf("ingredient=%s stock=%s unit=%s value=%s",
 				item.Name, joyboyNum(item.Stock), item.Unit, joyboyNum(item.Value)))
 		}
+		// "เงินจมรวมเท่าไหร่" is the question this tool exists for, and it is a sum.
+		lines = append(lines, fmt.Sprintf("dead_items=%d dead_value_total=%s",
+			len(result.DeadStock), joyboyNum(roundBaht(deadValue))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetTopCostIngredients:
@@ -296,10 +308,21 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("no_ingredient_usage_recorded_in_period"), true
 		}
 		lines := []string{window, "ranked_by=total_cost_consumed desc"}
+		// The list is cut to the top eight upstream. Saying so is the same fix the
+		// menu rankings needed: a list that does not admit it is partial gets read
+		// as the whole set, and the total below would then look like the shop's
+		// entire ingredient spend rather than these eight.
+		lines = append(lines, fmt.Sprintf(
+			"note=รายการนี้เป็นอันดับต้นเพียง %d ตัว ไม่ใช่วัตถุดิบทั้งหมดของร้าน "+
+				"ยอดรวมด้านล่างคือรวมเฉพาะ %d ตัวนี้ ไม่ใช่ต้นทุนวัตถุดิบทั้งร้าน",
+			len(result.TopCostIngredients), len(result.TopCostIngredients)))
+		var listedCost float64
 		for index, item := range result.TopCostIngredients {
+			listedCost += item.Cost
 			lines = append(lines, fmt.Sprintf("rank=%d ingredient=%s cost=%s used=%s unit=%s",
 				index+1, item.Name, joyboyNum(item.Cost), joyboyNum(item.Used), item.Unit))
 		}
+		lines = append(lines, fmt.Sprintf("listed_items_cost_total=%s", joyboyNum(roundBaht(listedCost))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetStoreSummary:
