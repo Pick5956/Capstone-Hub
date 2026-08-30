@@ -72,37 +72,43 @@ html {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
+/* A thumb and nothing else. The track was a grey channel painted down the side
+   of every card that scrolls; transparent lets the surface it sits on show
+   through, and the padding-box border floats the thumb off the edge instead of
+   ruling a line along it. */
 * {
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
 }
 
 *::-webkit-scrollbar-thumb {
-  min-height: 40px;
-  border: 2px solid var(--scrollbar-track);
+  min-height: 32px;
+  border: 2px solid transparent;
   border-radius: 999px;
   background: var(--scrollbar-thumb);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-corner {
-  background: var(--scrollbar-corner);
+  background: transparent;
 }
 
 /* Interactive controls should advertise that they can be clicked. Keep these
