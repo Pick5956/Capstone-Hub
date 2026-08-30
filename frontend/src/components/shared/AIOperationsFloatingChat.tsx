@@ -920,7 +920,7 @@ export default function AIOperationsFloatingChat() {
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
-          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-14 space-y-4 scrollbar-thin sm:pt-4">
+          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
@@ -932,7 +932,7 @@ export default function AIOperationsFloatingChat() {
 
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="ml-auto flex max-w-[90%] items-end justify-end gap-2.5 animate-message-slide">
+                  <div key={msg.id} className="ml-auto flex max-w-[93%] items-end justify-end gap-2.5 animate-message-slide sm:max-w-[90%]">
                     <div className="max-w-full break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-xs leading-relaxed text-white shadow-sm shadow-orange-500/25 sm:text-[13px]">
                       {msg.content}
                     </div>
@@ -942,7 +942,7 @@ export default function AIOperationsFloatingChat() {
 
               // Assistant/AI message
               return (
-                <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5 animate-message-slide">
+                <div key={msg.id} className="flex max-w-[96%] items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />

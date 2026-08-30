@@ -217,7 +217,7 @@ func TestOrderTypeForPeriodStatesTheWindow(t *testing.T) {
 		{OrderType: "dine_in", Orders: 900, Revenue: 250000},
 		{OrderType: "takeaway", Orders: 385, Revenue: 97453},
 	})
-	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "order_type=dine_in orders=900", "order_type=takeaway orders=385"} {
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "order_type=กินที่ร้าน orders=900", "order_type=สั่งกลับบ้าน orders=385"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("order-type sheet missing %q:\n%s", want, body)
 		}
