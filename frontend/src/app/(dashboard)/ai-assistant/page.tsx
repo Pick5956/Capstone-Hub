@@ -1039,21 +1039,15 @@ export default function AIAssistantPage() {
           }`}
           aria-hidden={!drawerOpen}
         >
-          {/* No title bar: the panel is a notification list and already names
-              itself. A second heading above its own heading was two titles for
-              one thing, so only the close control stays, pinned right. */}
-          <div className="flex justify-end px-3 pt-5 sm:pt-3">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(false)}
-              aria-label={language === "th" ? "ปิด" : "Close"}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            <AIInsightsPanel language={language} onCount={setInsightsCount} />
+          {/* No chrome of its own: the close control rides the panel's own title
+              row. A bar holding nothing but an X was a thick empty band above the
+              heading — two rows of furniture for one list. */}
+          <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-4 sm:pt-3">
+            <AIInsightsPanel
+              language={language}
+              onCount={setInsightsCount}
+              onClose={() => setDrawerOpen(false)}
+            />
           </div>
         </aside>
     </main>

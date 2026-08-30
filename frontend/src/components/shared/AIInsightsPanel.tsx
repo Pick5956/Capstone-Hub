@@ -9,11 +9,18 @@ import {
   Package,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
 import { getProactiveInsights } from "@/src/lib/ai";
 import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
 
-type Props = { language: "th" | "en"; onCount?: (count: number) => void };
+type Props = {
+  language: "th" | "en";
+  onCount?: (count: number) => void;
+  /** When given, a close control sits on the title row instead of on a bar of
+   *  its own — one row of chrome rather than two. */
+  onClose?: () => void;
+};
 
 const copyByLang = {
   th: {
@@ -99,7 +106,7 @@ function iconFor(kind: string) {
   }
 }
 
-export default function AIInsightsPanel({ language, onCount }: Props) {
+export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
   const copy = copyByLang[language];
   const [insights, setInsights] = useState<AIInsight[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,19 +148,31 @@ export default function AIInsightsPanel({ language, onCount }: Props) {
       {/* Header: the count is the summary, so it is stated before any card. It
           turns red only when something is actually urgent — a chip that is always
           coloured stops meaning anything. */}
-      <div className="mb-3 flex items-baseline justify-between gap-2 px-1">
+      <div className="mb-3 flex items-center justify-between gap-2 px-1">
         <h2 className="text-[15px] font-bold tracking-[-0.01em] text-gray-950 dark:text-white">
           {copy.title}
         </h2>
-        {insights && insights.length > 0 && (
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-              urgentCount > 0 ? toneStyle.danger.chip : toneStyle.note.chip
-            }`}
-          >
-            {urgentCount > 0 ? copy.urgent(urgentCount) : copy.items(insights.length)}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {insights && insights.length > 0 && (
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                urgentCount > 0 ? toneStyle.danger.chip : toneStyle.note.chip
+              }`}
+            >
+              {urgentCount > 0 ? copy.urgent(urgentCount) : copy.items(insights.length)}
+            </span>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={language === "th" ? "ปิด" : "Close"}
+              className="-mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2">
