@@ -663,7 +663,7 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
@@ -715,7 +715,7 @@ export default function AIAssistantPage() {
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
-            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-2 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
+            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-1 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
               /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
               isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
             }`}
@@ -751,7 +751,7 @@ export default function AIAssistantPage() {
               messages.map((msg) => {
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="ml-auto flex max-w-[92%] items-end justify-end gap-2.5 sm:max-w-[85%]">
+                  <div key={msg.id} className="ml-auto flex max-w-[96%] items-end justify-end gap-2.5 sm:max-w-[85%]">
                     <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
                       {msg.content}
                     </div>
@@ -759,7 +759,7 @@ export default function AIAssistantPage() {
                 );
               }
               return (
-                <div key={msg.id} className="flex max-w-[96%] items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
+                <div key={msg.id} className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
                   <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
