@@ -547,7 +547,7 @@ export default function PosTablesPage() {
       <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <h1 className="sr-only">{copy.eyebrow}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
-          <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:flex lg:items-center lg:gap-2">
+          <div className="mx-auto grid w-full max-w-7xl gap-1.5 lg:flex lg:items-center lg:gap-2">
             <label className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               <input
@@ -593,7 +593,7 @@ export default function PosTablesPage() {
         showHeader={false}
       >
 
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-7xl">
       <RealtimeConnectionNotice language={language} status={realtimeStatus} className="mb-4" />
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
       {loading || isNavigating ? (
@@ -601,7 +601,7 @@ export default function PosTablesPage() {
           role="status"
           aria-live="polite"
           aria-label={language === "th" ? "กำลังโหลด" : "Loading"}
-          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+          className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
         >
           {Array.from({ length: 10 }).map((_, index) => <Skeleton key={index} className="h-[118px]" />)}
         </div>
@@ -615,7 +615,7 @@ export default function PosTablesPage() {
                   <span className="shrink-0 text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{zoneCountLabel(freeIn(group.tables), group.tables.length)}</span>
                 </div>
               )}
-              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
                   const busy = Boolean(order);

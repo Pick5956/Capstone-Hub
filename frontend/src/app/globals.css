@@ -6,8 +6,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --app-text-scale: 1;
-  --sidebar-w: 196px;
+  /* The UI-size preference was removed. Every text-[Npx] utility below is
+     multiplied by this one constant, which is the old "normal" step. Change it
+     here if the whole app should read larger or smaller. */
+  --app-text-scale: 1.08;
+  --sidebar-w: 220px;
   --dashboard-shell-row: 62px;
   --dashboard-shell-border: #dfe3e8;
   --scrollbar-track: #f1f5f9;
@@ -160,21 +163,6 @@ html {
   cursor: not-allowed;
 }
 
-html[data-font-size="small"] {
-  --app-text-scale: 1;
-}
-
-html[data-font-size="normal"] {
-  --app-text-scale: 1.08;
-}
-
-html[data-font-size="large"] {
-  --app-text-scale: 1.16;
-}
-
-html[data-font-size="extra-large"] {
-  --app-text-scale: 1.28;
-}
 
 .text-\[9px\] { font-size: calc(9px * var(--app-text-scale)); }
 .text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
@@ -1057,10 +1045,9 @@ input[type="number"]::-webkit-inner-spin-button {
      night background from patterns.css .dishy-bg-night instead. */
   .dark [data-shell-sheet] {
     background-color: #1a0d06;
-    background-image:
-      radial-gradient(1100px 620px at 72% -12%, rgba(249, 115, 22, 0.22), transparent 62%),
-      radial-gradient(760px 520px at -8% 108%, rgba(124, 45, 18, 0.5), transparent 60%);
-    background-size: auto, auto;
+    /* Flat, like the light sheet. The glows used to sit strongest along the top
+       edge, which is exactly where a sticky header paints its own solid fill -
+       so the bar cut a hard rectangle out of them at the top right. */
   }
 
   .dark [data-shell-scroll] {

@@ -3,24 +3,19 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CaseSensitive, Check, ChevronLeft, ChevronRight, Languages, LogOut, Moon, Sparkles, Sun } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Languages, LogOut, Moon, Sparkles, Sun } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
-import { useTheme, type FontSize } from "@/src/providers/ThemeProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import UserAvatar from "@/src/components/shared/UserAvatar";
+import { roleLabel } from "@/src/lib/roleLabels";
 
 // useLayoutEffect warns during server rendering, and this only ever runs in the
 // browser, so fall back to useEffect on the server.
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-type Panel = "main" | "theme" | "language" | "font" | "assistant";
+type Panel = "main" | "theme" | "language" | "assistant";
 
-const fontSizeOptions: { value: FontSize; th: string; en: string }[] = [
-  { value: "small", th: "เล็ก", en: "Small" },
-  { value: "normal", th: "ปกติ", en: "Normal" },
-  { value: "large", th: "ใหญ่", en: "Large" },
-  { value: "extra-large", th: "ใหญ่มาก", en: "Extra large" },
-];
 
 function MenuButton({
   icon,
@@ -68,10 +63,17 @@ function OptionButton({ label, active, onClick }: { label: string; active: boole
   );
 }
 
-export default function DashboardAccountMenu() {
+// variant picks the trigger, not the menu. `icon` is the 40px avatar button
+// the top bars use; `rail` is the full-width row in the sidebar foot, which
+// has room to name the person and their role.
+export default function DashboardAccountMenu({
+  variant = "icon",
+}: {
+  variant?: "icon" | "rail";
+} = {}) {
   const { user, logout, activeMembership } = useAuth();
   const { language, setLanguage } = useLanguage();
-  const { theme, fontSize, mounted, toggle, setFontSize, showAIAssistant, setShowAIAssistant } = useTheme();
+  const { theme, mounted, toggle, showAIAssistant, setShowAIAssistant } = useTheme();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("main");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -80,7 +82,7 @@ export default function DashboardAccountMenu() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const isDark = mounted && theme === "dark";
   const displayName = user ? (user.nickname?.trim() || `${user.first_name} ${user.last_name === "-" ? "" : user.last_name}`.trim()) : language === "th" ? "ผู้ใช้งาน" : "User";
-  const fontLabel = fontSizeOptions.find((option) => option.value === fontSize);
+  const roleText = roleLabel(activeMembership?.role, language);
 
   // The trigger used to live in the top bar, so this opened downward from a
   // right-anchored point. It now sits in the sidebar foot, where rect.bottom is
@@ -118,7 +120,6 @@ export default function DashboardAccountMenu() {
         themeValue: isDark ? "มืด" : "สว่าง",
         language: "แสดงภาษา",
         languageValue: "ไทย",
-        fontSize: "ขนาด UI",
         aiAssistant: "AI ผู้ช่วย",
         aiAssistantValue: showAIAssistant ? "เปิด" : "ปิด",
         aiAssistantOn: "เปิด",
@@ -135,7 +136,6 @@ export default function DashboardAccountMenu() {
         themeValue: isDark ? "Dark" : "Light",
         language: "Display language",
         languageValue: "English",
-        fontSize: "UI size",
         aiAssistant: "AI assistant",
         aiAssistantValue: showAIAssistant ? "On" : "Off",
         aiAssistantOn: "On",
@@ -182,48 +182,69 @@ export default function DashboardAccountMenu() {
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [open]);
 
-  const selectLanguage = (next: Language) => {
-    setLanguage(next);
+  // Choosing an option finishes the interaction, so the menu closes with it.
+  // The panel resets too, so the next open starts at the top instead of inside
+  // whichever sub-panel was last used. The Back buttons still only setPanel -
+  // they are navigation, not a decision.
+  const commitChoice = () => {
     setPanel("main");
+    setOpen(false);
   };
 
-  const selectFontSize = (next: FontSize) => {
-    setFontSize(next);
-    setPanel("main");
+  const selectLanguage = (next: Language) => {
+    setLanguage(next);
+    commitChoice();
   };
+
 
   const switchTheme = (dark: boolean) => {
     if (dark !== isDark) toggle();
-    setPanel("main");
+    commitChoice();
   };
 
   const selectAssistantVisibility = (next: boolean) => {
     setShowAIAssistant(next);
-    setPanel("main");
+    commitChoice();
   };
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => {
-          setOpen((current) => !current);
-          setPanel("main");
-        }}
-        aria-label={copy.account}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
-      >
-        <UserAvatar src={user?.profile_image} name={displayName} size={30} className="h-8 w-8 text-[11px] text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
-      </button>
+      {variant === "rail" ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => { setOpen((current) => !current); setPanel("main"); }}
+          aria-label={copy.account}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          className="flex w-full min-w-0 items-center gap-2 rounded-md border border-transparent p-1.5 text-left transition-colors hover:border-orange-700 hover:bg-orange-700"
+        >
+          <UserAvatar src={user?.profile_image} name={displayName} size={34} className="h-[34px] w-[34px] shrink-0 text-[13px] text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[12px] font-bold leading-[1.6] text-orange-50">{displayName}</span>
+            {/* Hidden on short viewports, where the nav needs the rows back. */}
+            <span className="truncate text-[11px] leading-[1.6] text-orange-200 [@media(max-height:760px)]:hidden">{roleText}</span>
+          </span>
+        </button>
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => { setOpen((current) => !current); setPanel("main"); }}
+          aria-label={copy.account}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-900"
+        >
+          <UserAvatar src={user?.profile_image} name={displayName} size={30} className="h-8 w-8 text-[11px] text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" />
+        </button>
+      )}
 
       {open && typeof document !== "undefined" ? createPortal(
         <div
           ref={menuRef}
           role="menu"
-          className={`fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 shadow-xl shadow-gray-950/10 dark:bg-gray-950 dark:shadow-black/40 ${menuPosition ? "" : "opacity-0"}`}
+          className={`fixed z-[var(--z-dropdown)] w-72 max-w-[calc(100dvw-1rem)] overflow-hidden rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white py-2 shadow-[0_2px_4px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.14)] dark:bg-gray-950 dark:shadow-[0_2px_4px_rgba(0,0,0,0.35),0_16px_40px_rgba(0,0,0,0.55)] ${menuPosition ? "" : "opacity-0"}`}
           style={{ top: menuPosition?.top ?? -9999, left: menuPosition?.left ?? -9999 }}
         >
           {panel === "main" ? (
@@ -241,7 +262,6 @@ export default function DashboardAccountMenu() {
               <div className="border-t border-[color:var(--dashboard-shell-border)]" />
               <MenuButton icon={isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />} label={copy.theme} value={copy.themeValue} chevron onClick={() => setPanel("theme")} />
               <MenuButton icon={<Languages className="h-4 w-4" />} label={copy.language} value={copy.languageValue} chevron onClick={() => setPanel("language")} />
-              <MenuButton icon={<CaseSensitive className="h-4 w-4" />} label={copy.fontSize} value={fontLabel ? (language === "th" ? fontLabel.th : fontLabel.en) : ""} chevron onClick={() => setPanel("font")} />
               {activeMembership?.role?.name === "owner" ? (
                 <MenuButton icon={<Sparkles className="h-4 w-4" />} label={copy.aiAssistant} value={copy.aiAssistantValue} chevron onClick={() => setPanel("assistant")} />
               ) : null}
@@ -272,17 +292,6 @@ export default function DashboardAccountMenu() {
             </>
           ) : null}
 
-          {panel === "font" ? (
-            <>
-              <button type="button" onClick={() => setPanel("main")} className="flex h-10 w-full items-center gap-2 px-3 text-left text-[13px] font-semibold text-gray-900 hover:bg-gray-50 dark:text-white dark:hover:bg-gray-900">
-                <ChevronLeft className="h-4 w-4" />
-                {copy.fontSize}
-              </button>
-              {fontSizeOptions.map((option) => (
-                <OptionButton key={option.value} label={language === "th" ? option.th : option.en} active={fontSize === option.value} onClick={() => selectFontSize(option.value)} />
-              ))}
-            </>
-          ) : null}
 
           {panel === "assistant" && activeMembership?.role?.name === "owner" ? (
             <>
