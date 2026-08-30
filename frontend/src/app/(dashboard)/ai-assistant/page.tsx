@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -672,20 +672,28 @@ export default function AIAssistantPage() {
         <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-950">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen((open) => !open)}
-              aria-label={language === "th" ? "ควรรู้วันนี้" : "Insights"}
-              className="inline-flex items-center gap-1.5 rounded-full border border-gray-200/80 bg-white/80 px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-200 dark:hover:border-orange-800"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-orange-500" />
-              <span className="hidden sm:inline">{language === "th" ? "ควรรู้วันนี้" : "Insights"}</span>
-              {insightsCount > 0 && (
-                <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white">
-                  {insightsCount}
-                </span>
-              )}
-            </button>
+            {/* Insights live behind a bell, the control everyone already reads as
+                "there is something new for you". The badge carries the count, so
+                the button needs no label to be understood. */}
+            <HoverTip label={language === "th" ? "ควรรู้วันนี้" : "Insights"} placement="bottom">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen((open) => !open)}
+                aria-label={
+                  language === "th"
+                    ? `ควรรู้วันนี้${insightsCount > 0 ? ` ${insightsCount} เรื่อง` : ""}`
+                    : `Insights${insightsCount > 0 ? `, ${insightsCount} items` : ""}`
+                }
+                className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
+              >
+                <Bell className="h-3.5 w-3.5" />
+                {insightsCount > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-[#faf8f2] dark:ring-gray-950">
+                    {insightsCount}
+                  </span>
+                )}
+              </button>
+            </HoverTip>
             <HoverTip label={copy.newChat} placement="bottom">
               <button
                 type="button"

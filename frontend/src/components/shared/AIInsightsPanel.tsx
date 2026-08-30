@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle,
+  Check,
   Coins,
   Loader2,
   PackageX,
-  Sparkles,
+  Package,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -16,35 +16,78 @@ import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
 type Props = { language: "th" | "en"; onCount?: (count: number) => void };
 
 const copyByLang = {
-  th: { title: "ควรรู้วันนี้", empty: "ทุกอย่างดูโอเค ไม่มีเรื่องด่วนวันนี้ 👍", loading: "กำลังสแกนร้าน..." },
-  en: { title: "Today's insights", empty: "All clear — nothing urgent today 👍", loading: "Scanning the shop..." },
+  th: {
+    title: "ควรรู้วันนี้",
+    empty: "ทุกอย่างปกติ ไม่มีเรื่องต้องรีบวันนี้",
+    loading: "กำลังตรวจข้อมูลร้าน",
+    urgent: (n: number) => `${n} เรื่องด่วน`,
+    items: (n: number) => `${n} เรื่อง`,
+  },
+  en: {
+    title: "Today's insights",
+    empty: "All clear — nothing urgent today",
+    loading: "Checking the shop",
+    urgent: (n: number) => `${n} urgent`,
+    items: (n: number) => `${n} items`,
+  },
 };
 
-const severityStyle: Record<AIInsightSeverity, { bar: string; icon: string; metric: string; glow: string }> = {
-  critical: {
-    bar: "bg-gradient-to-b from-rose-500 to-red-600",
-    icon: "bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-sm shadow-rose-500/40",
-    metric: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:ring-rose-900/60",
-    glow: "hover:shadow-[0_8px_30px_-12px_rgba(244,63,94,0.45)]",
+// A card's tone is what the owner should FEEL about it, which is not the same as
+// the raw severity: "sales_up" and "dead_stock" are both severity=info, but one is
+// good news and one is money sitting still. Deriving the tone from the kind as
+// well keeps the colour honest.
+type Tone = "danger" | "warn" | "good" | "note";
+
+// Colour alone must never be the only carrier of meaning (a red dot reads as a
+// grey dot to a red-blind owner, and as nothing at all on a glance), so every
+// tone also ships a word and a distinct icon. Three signals, one meaning.
+const toneStyle: Record<
+  Tone,
+  { chip: string; icon: string; metric: string; card: string; label: { th: string; en: string } | null }
+> = {
+  danger: {
+    chip: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+    icon: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+    metric: "text-rose-700 dark:text-rose-300",
+    // The one card that gets a tinted ground: the eye lands here first, and
+    // nothing else competes with it.
+    card: "bg-rose-50/70 ring-1 ring-rose-100 dark:bg-rose-950/20 dark:ring-rose-900/40",
+    label: { th: "ด่วน", en: "Urgent" },
   },
-  warning: {
-    bar: "bg-gradient-to-b from-amber-400 to-orange-500",
-    icon: "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm shadow-amber-500/40",
-    metric: "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/50",
-    glow: "hover:shadow-[0_8px_30px_-12px_rgba(245,158,11,0.4)]",
+  warn: {
+    chip: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
+    icon: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    metric: "text-amber-800 dark:text-amber-300",
+    card: "bg-white ring-1 ring-gray-100 dark:bg-gray-900/50 dark:ring-gray-800",
+    label: { th: "ต้องดู", en: "Watch" },
   },
-  info: {
-    bar: "bg-gradient-to-b from-sky-400 to-indigo-500",
-    icon: "bg-gradient-to-br from-sky-400 to-indigo-500 text-white shadow-sm shadow-sky-500/40",
-    metric: "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900/50",
-    glow: "hover:shadow-[0_8px_30px_-12px_rgba(56,189,248,0.4)]",
+  good: {
+    chip: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300",
+    icon: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+    metric: "text-emerald-800 dark:text-emerald-300",
+    card: "bg-white ring-1 ring-gray-100 dark:bg-gray-900/50 dark:ring-gray-800",
+    label: null,
+  },
+  note: {
+    chip: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    icon: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300",
+    metric: "text-gray-700 dark:text-gray-200",
+    card: "bg-white ring-1 ring-gray-100 dark:bg-gray-900/50 dark:ring-gray-800",
+    label: null,
   },
 };
+
+function toneFor(kind: string, severity: AIInsightSeverity): Tone {
+  if (kind === "sales_up") return "good";
+  if (severity === "critical") return "danger";
+  if (severity === "warning") return "warn";
+  return "note";
+}
 
 function iconFor(kind: string) {
   switch (kind) {
     case "ingredient_low":
-      return AlertTriangle;
+      return Package;
     case "sales_drop":
       return TrendingDown;
     case "sales_up":
@@ -91,30 +134,41 @@ export default function AIInsightsPanel({ language, onCount }: Props) {
     };
   }, []);
 
+  const urgentCount = insights?.filter((i) => i.severity === "critical").length ?? 0;
+
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2 px-1">
-        <span className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-sm">
-          <Sparkles className="h-3.5 w-3.5" />
-        </span>
-        <h2 className="text-sm font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
+      {/* Header: the count is the summary, so it is stated before any card. It
+          turns red only when something is actually urgent — a chip that is always
+          coloured stops meaning anything. */}
+      <div className="mb-3 flex items-baseline justify-between gap-2 px-1">
+        <h2 className="text-[15px] font-bold tracking-[-0.01em] text-gray-950 dark:text-white">
+          {copy.title}
+        </h2>
         {insights && insights.length > 0 && (
-          <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-            {insights.length}
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+              urgentCount > 0 ? toneStyle.danger.chip : toneStyle.note.chip
+            }`}
+          >
+            {urgentCount > 0 ? copy.urgent(urgentCount) : copy.items(insights.length)}
           </span>
         )}
       </div>
 
       <div className="space-y-2">
         {loading && (
-          <div className="flex items-center gap-2 px-1 py-6 text-xs text-gray-500">
+          <div className="flex items-center gap-2 px-1 py-6 text-xs text-gray-500 dark:text-gray-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             {copy.loading}
           </div>
         )}
 
         {!loading && insights && insights.length === 0 && (
-          <div className="rounded-xl bg-emerald-50/60 px-3 py-5 text-center text-xs text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300">
+          <div className="flex items-center gap-2.5 rounded-2xl bg-emerald-50/70 px-4 py-4 text-[13px] font-medium text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-300 dark:ring-emerald-900/40">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <Check className="h-4 w-4" />
+            </span>
             {copy.empty}
           </div>
         )}
@@ -122,33 +176,37 @@ export default function AIInsightsPanel({ language, onCount }: Props) {
         {!loading &&
           insights?.map((insight, index) => {
             const Icon = iconFor(insight.kind);
-            const style = severityStyle[insight.severity] ?? severityStyle.info;
+            const tone = toneFor(insight.kind, insight.severity);
+            const style = toneStyle[tone];
             return (
               <article
                 key={`${insight.kind}-${index}`}
-                style={{ transitionDelay: `${index * 70}ms` }}
-                className={`group relative flex gap-3 overflow-hidden rounded-xl border border-gray-100 bg-white p-3 pl-4 transition-all duration-500 ease-out dark:border-gray-800/70 dark:bg-gray-900/40 ${style.glow} ${
+                style={{ transitionDelay: `${index * 60}ms` }}
+                className={`flex gap-3 rounded-2xl p-3.5 transition-all duration-500 ease-out ${style.card} ${
                   mounted ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
                 }`}
               >
-                <span className={`absolute inset-y-0 left-0 w-1 ${style.bar}`} aria-hidden />
                 <span
-                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${style.icon}`}
+                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${style.icon}`}
+                  aria-hidden
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold leading-snug text-gray-900 dark:text-white">
-                      {insight.title}
-                    </p>
+                  {style.label && (
+                    <span className={`text-[11px] font-bold uppercase tracking-wide ${style.metric}`}>
+                      {style.label[language]}
+                    </span>
+                  )}
+                  {/* The headline is never truncated: a cut headline is a fact the
+                      owner has to guess at. */}
+                  <p className="text-[14.5px] font-bold leading-snug tracking-[-0.01em] text-gray-950 dark:text-white">
+                    {insight.title}
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-gray-500 tabular-nums dark:text-gray-400">
                     {insight.metric && (
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${style.metric}`}>
-                        {insight.metric}
-                      </span>
+                      <span className={`font-bold ${style.metric}`}>{insight.metric} · </span>
                     )}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                     {insight.detail}
                   </p>
                 </div>
