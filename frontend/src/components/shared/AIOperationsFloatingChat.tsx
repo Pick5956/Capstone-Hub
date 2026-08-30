@@ -920,7 +920,7 @@ export default function AIOperationsFloatingChat() {
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
-          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-1 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
+          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
