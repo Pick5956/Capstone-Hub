@@ -43,8 +43,11 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	catalogue := a.tools.Catalogue()
+	// Argument order matches the template's cache-friendly layout: the static
+	// catalogue leads (so Groq caches the whole instruction+rules prefix), and the
+	// dynamic history and question come last.
 	selection, err := a.chat.Complete(ctx, fmt.Sprintf(
-		selectToolsTemplate, question, formatHistory(request.History), renderCatalogue(catalogue)), CallSelectTools)
+		selectToolsTemplate, renderCatalogue(catalogue), formatHistory(request.History), question), CallSelectTools)
 	if err != nil {
 		return Answer{}, fmt.Errorf("%w: choosing tools: %w", ErrUnavailable, err)
 	}

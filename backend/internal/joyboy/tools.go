@@ -23,11 +23,8 @@ import (
 // The rule names topics rather than tools, so renaming a tool cannot break it,
 // and it is a floor rather than a ceiling: reaching for more is what makes this
 // worth having over legacy's single fixed bundle.
-const selectToolsTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร กำลังจะตอบคำถามด้านล่าง
+const selectToolsTemplate = `คุณคือผู้ช่วยของเจ้าของร้านอาหาร กำลังจะเลือกเครื่องมือเพื่อตอบคำถามของเจ้าของร้าน (คำถามอยู่ท้ายสุดของข้อความนี้)
 
-คำถาม:
-%s
-%s
 เครื่องมือที่เรียกได้:
 %s
 
@@ -75,7 +72,11 @@ const selectToolsTemplate = `คุณคือผู้ช่วยของเ
 
 ตอบกลับเป็น JSON array ของชื่อเครื่องมือที่ต้องใช้เท่านั้น ห้ามมีข้อความอื่น
 เลือกได้หลายตัว เช่น ["get_top_selling_menus","get_low_stock_ingredients"]
-ถ้าคำถามไม่ต้องใช้ข้อมูลของร้านเลย เช่นทักทายหรือถามความหมายของศัพท์ทั่วไป ให้ตอบ []`
+ถ้าคำถามไม่ต้องใช้ข้อมูลของร้านเลย เช่นทักทายหรือถามความหมายของศัพท์ทั่วไป ให้ตอบ []
+
+%s
+คำถามล่าสุดของเจ้าของร้าน:
+%s`
 
 func renderCatalogue(tools []ToolSpec) string {
 	lines := make([]string, 0, len(tools))

@@ -17,7 +17,7 @@ func TestTheAnswerPromptAllowsAnAnswerWithoutFigures(t *testing.T) {
 	}
 	// It must stay a permission, not a ban: a question about sales still needs
 	// its numbers.
-	if !strings.Contains(prompt, "ตัวเลขทุกตัวต้องมาจากข้อมูลข้างบน") {
+	if !strings.Contains(prompt, "ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง") {
 		t.Fatal("the rule anchoring figures to the data was lost")
 	}
 }
