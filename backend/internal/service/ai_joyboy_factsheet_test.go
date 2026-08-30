@@ -296,6 +296,30 @@ func TestStockSheetsCarryTheTotalsTheModelCannotCompute(t *testing.T) {
 	}
 }
 
+// A raw stock flag ("out"/"low") left in the sheet gets pasted straight into the
+// answer — the owner read "ไก่สับ (out) 0.00 กรัม", an English code in a Thai
+// reply. The sheet must carry the Thai wording so even a verbatim paste reads as
+// a word, not a code.
+func TestLowStockSheetStatesTheStatusInThai(t *testing.T) {
+	body, _ := joyboyFactBody(AIToolResult{
+		Tool: AIToolGetLowStockIngredients,
+		LowStockIngredients: []AIStockRisk{
+			{Name: "ไก่สับ", Status: "out", Stock: 0, MinStock: 500, Unit: "กรัม", RestockEstimate: 1000, CostPerUnit: 0.12},
+			{Name: "ข้าวคั่ว", Status: "low", Stock: 40, MinStock: 100, Unit: "กรัม", RestockEstimate: 160, CostPerUnit: 0.5},
+		},
+	})
+	for _, want := range []string{"หมดสต๊อกแล้ว", "ใกล้หมด"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the low-stock sheet should state the status in Thai (%q):\n%s", want, body)
+		}
+	}
+	for _, leak := range []string{"status=out", "status=low"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("the raw status code %q leaked into the sheet:\n%s", leak, body)
+		}
+	}
+}
+
 // The top-cost list is cut to eight upstream. Unsaid, the model reads it as the
 // whole set — the mistake the menu rankings already made — and then the total
 // below it reads as the shop's entire ingredient spend.

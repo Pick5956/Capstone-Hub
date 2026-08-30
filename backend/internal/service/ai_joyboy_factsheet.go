@@ -105,7 +105,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			restockCost += item.RestockEstimate * item.CostPerUnit
 			lines = append(lines, fmt.Sprintf(
 				"ingredient=%s status=%s stock=%s unit=%s min_stock=%s restock_suggested=%s cost_per_unit=%s",
-				item.Name, item.Status, joyboyNum(item.Stock), item.Unit,
+				item.Name, aiStockStatusThai(item.Status), joyboyNum(item.Stock), item.Unit,
 				joyboyNum(item.MinStock), joyboyNum(item.RestockEstimate), joyboyNum(item.CostPerUnit)))
 		}
 		lines = append(lines, fmt.Sprintf("items_below_minimum=%d restock_all_cost=%s",
@@ -555,6 +555,21 @@ func aiOrderTypeThai(orderType string) string {
 		return "เดลิเวอรี"
 	}
 	return orderType
+}
+
+// aiStockStatusThai turns the raw stock flag into the owner's words. Left as
+// "out"/"low", the model pastes it straight through — the owner read "ไก่สับ
+// (out) 0.00 กรัม", an English code sitting in a Thai answer, the same leak
+// dine_in and the order statuses had. Only "out" and "low" ever reach a fact
+// sheet; "ok" items are filtered out before this is called.
+func aiStockStatusThai(status string) string {
+	switch status {
+	case "out":
+		return "หมดสต๊อกแล้ว"
+	case "low":
+		return "ใกล้หมด"
+	}
+	return status
 }
 
 // aiOrderStatusThai turns a stored status into the words the owner uses. The
