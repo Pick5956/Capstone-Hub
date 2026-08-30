@@ -88,7 +88,7 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-950 px-4 py-10 text-white sm:px-6">
+    <main className="min-h-dvh bg-gray-950 px-4 py-10 text-white sm:px-6">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center">
         <section className="w-full overflow-hidden rounded-md border border-white/10 bg-gray-900 shadow-2xl">
           <div className="border-b border-white/10 px-5 py-5">

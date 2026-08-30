@@ -659,7 +659,7 @@ export default function TablesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
         <div className="flex flex-wrap gap-2">

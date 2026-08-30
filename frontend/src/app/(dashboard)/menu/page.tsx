@@ -808,7 +808,7 @@ export default function MenuPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <h1 className="sr-only">{copy.title}</h1>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
@@ -878,7 +878,7 @@ export default function MenuPage() {
                       className={`group flex min-h-[214px] flex-col overflow-hidden rounded-md bg-transparent text-left transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 dark:bg-transparent ${canManage ? "cursor-pointer active:scale-[0.99]" : ""} ${!item.is_available ? "opacity-60" : ""}`}
                     >
                       <div
-                        className="aspect-[4/3] bg-transparent bg-cover bg-center"
+                        className="aspect-[4/3] w-full bg-transparent bg-cover bg-center"
                         style={{ backgroundImage: `url(${item.image_url || "/menu-placeholder-v2.webp"})` }}
                         aria-label={item.image_url ? `${copy.imageAlt} ${item.name}` : undefined}
                       />

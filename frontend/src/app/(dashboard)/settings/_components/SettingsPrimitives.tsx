@@ -21,7 +21,7 @@ export function SettingsShell({
   hideHeader?: boolean;
 }) {
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="min-h-dvh w-full max-w-full overflow-x-hidden bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       {/* Settings are forms: hold them to a readable measure and center them so
           fields never stretch edge-to-edge on wide screens. */}
       <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-4 sm:px-6 sm:pt-6 lg:px-8">

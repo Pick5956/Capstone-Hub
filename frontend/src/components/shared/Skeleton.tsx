@@ -93,7 +93,7 @@ export function RestaurantCardSkeleton() {
 
 export function WorkspacePageSkeleton() {
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <div className="min-h-dvh bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95">
         <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
@@ -184,8 +184,8 @@ export function DashboardContentSkeleton() {
 
 export function DashboardPageSkeleton() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-gray-950">
-      <div className="hidden lg:block fixed inset-y-0 left-0 w-[216px] border-r border-gray-200 bg-slate-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+    <div className="min-h-dvh bg-slate-50 dark:bg-gray-950">
+      <div className="hidden lg:block fixed inset-y-0 left-0 w-[196px] border-r border-gray-200 bg-slate-50 p-4 dark:border-gray-800 dark:bg-gray-950">
         <div className="flex items-center gap-2.5">
           <Skeleton className="h-9 w-9" />
           <div className="space-y-1.5">
@@ -235,7 +235,7 @@ export function DashboardPageSkeleton() {
 
 export function LandingPageSkeleton() {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950">
+    <div className="min-h-dvh bg-white dark:bg-gray-950">
       <header className="border-b border-gray-200 px-4 py-4 dark:border-gray-800">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-2.5">

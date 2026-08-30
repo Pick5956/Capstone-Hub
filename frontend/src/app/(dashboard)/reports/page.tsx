@@ -166,7 +166,7 @@ export default function ReportsPage() {
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-gray-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
         <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">

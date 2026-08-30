@@ -177,8 +177,10 @@ export default function InlineDbConfirmBar({
   const t = labels(language);
   const expiryMs = typeof expiresAt === "string" ? Date.parse(expiresAt) : expiresAt.getTime();
 
-  const totalRef = useRef<number | null>(null);
-  if (totalRef.current === null) totalRef.current = Math.max(1000, expiryMs - Date.now());
+  // Captured once, so the ring measures against the window the bar opened with
+  // rather than a shrinking one. Lazy initialiser, not a ref assigned in the
+  // render body - that reads the clock during render.
+  const [totalMs] = useState(() => Math.max(1000, expiryMs - Date.now()));
 
   const [state, setState] = useState<InlineDbConfirmState>("pending");
   const [remaining, setRemaining] = useState<number>(() => Math.max(0, expiryMs - Date.now()));
@@ -230,7 +232,7 @@ export default function InlineDbConfirmBar({
   }, [state, onCancel]);
 
   const view = barView(state, { detail, remainingMs: remaining, language, error });
-  const dashoffset = ringDashoffset(state, remaining, totalRef.current ?? 1);
+  const dashoffset = ringDashoffset(state, remaining, totalMs);
   const secondsLeft = Math.max(0, Math.ceil(remaining / 1000));
 
   return (

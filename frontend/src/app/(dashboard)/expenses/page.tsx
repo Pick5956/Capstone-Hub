@@ -7,6 +7,7 @@ import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
+import { loadSarabun } from "@/src/lib/sarabunFont";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { formatCurrency } from "@/src/lib/format";
 import { toDashboardDate } from "@/src/lib/homeDashboard";
@@ -66,18 +67,6 @@ const categoryDotClass: Record<ExpenseCategory, string> = {
 
 // First entry doubles as the threshold for showing the pager at all.
 const pageSizes = [10, 25, 50, 100];
-
-let sarabunBase64: string | null = null;
-
-async function loadSarabun() {
-  if (sarabunBase64) return sarabunBase64;
-  const response = await fetch("/fonts/Sarabun-Regular.ttf");
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += 1) binary += String.fromCharCode(bytes[index]);
-  sarabunBase64 = btoa(binary);
-  return sarabunBase64;
-}
 
 function emptyForm(restaurantId: number | null): FormState {
   return { restaurantId, id: null, category: "ingredient", amount: "", spent_at: toDashboardDate(new Date()), note: "" };

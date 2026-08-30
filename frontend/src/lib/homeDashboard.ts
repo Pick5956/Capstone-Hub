@@ -8,6 +8,9 @@ export type DashboardFloorTable = {
   label: string;
   status: "occupied" | "available" | "reserved" | "inactive";
   guests?: number;
+  // The table's own capacity, not who is on it — what a free table has to
+  // offer, where an occupied one reports its party instead.
+  seats: number;
   minutes?: number;
   zone?: string;
 };
@@ -49,6 +52,23 @@ export function hasPartialDailyExpenseRows(shownRows: number, totalEntries: numb
   return shownRows < totalEntries;
 }
 
+// The kitchen queue splits an order into one ticket per round it sent, so two
+// rounds off one table share an order ID and differ only here. Anything that
+// counts or keys tickets has to use this, not `order.ID`.
+export function kitchenTicketKey(order: Order) {
+  return order.kitchen_ticket_id ?? `${order.ID}:${order.kitchen_batch ?? 0}`;
+}
+
+export function uniqueKitchenTickets(orders: Order[]) {
+  const seen = new Set<string>();
+  return orders.filter((order) => {
+    const key = kitchenTicketKey(order);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function uniqueOrdersById(orders: Order[]) {
   const seen = new Set<number>();
   return orders.filter((order) => {
@@ -73,6 +93,7 @@ export function toDashboardFloorTables(tables: RestaurantTable[], orders: Order[
       label: table.display_label || table.table_number,
       status: table.status === "free" ? "available" : table.status,
       guests: activeOrder?.customer_count,
+      seats: table.capacity,
       minutes: Number.isFinite(openedAt) ? Math.max(0, Math.floor((now.getTime() - openedAt) / 60000)) : undefined,
       zone: table.zone,
     };
