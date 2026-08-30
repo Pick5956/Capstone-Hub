@@ -1013,26 +1013,36 @@ export default function AIAssistantPage() {
         </div>
       </section>
 
-      {/* Dim overlay — click to dismiss the insights drawer */}
+      {/* Dim overlay — click to dismiss. Full-viewport on a phone (the panel
+          covers the screen there); a light scrim on a desktop, where the panel
+          is a popover and the page behind it stays visible. */}
         {drawerOpen && (
           <div
             onClick={() => setDrawerOpen(false)}
-            className="absolute inset-0 z-30 bg-black/20 backdrop-blur-[1px] dark:bg-black/40"
+            className="fixed inset-0 z-[59] bg-black/30 backdrop-blur-[1px] dark:bg-black/50 sm:absolute sm:bg-black/15 sm:backdrop-blur-0 sm:dark:bg-black/30"
             aria-hidden
           />
         )}
 
-        {/* Insights drawer — slides in from the right, off-screen until toggled */}
+        {/* Insights — two different objects, not one object resized.
+            Phone: a full-screen sheet that slides up, because a 340px rail on a
+            390px screen was a sliver of a page rather than a page.
+            Desktop: a rounded card that hangs off the bell it came from, so the
+            chat stays visible and the panel reads as belonging to that button.
+            The right/top offsets match the bell's own (main's padding + its
+            right-3/top-3) so the card's edge lines up with the control. */}
         <aside
-          className={`absolute inset-y-0 right-0 z-40 flex w-[340px] max-w-[88vw] flex-col border-l border-gray-200 bg-white shadow-2xl transition-transform duration-300 ease-out dark:border-gray-800 dark:bg-gray-950 ${
-            drawerOpen ? "translate-x-0" : "translate-x-full"
+          className={`fixed inset-0 z-[60] flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-gray-950 sm:absolute sm:inset-auto sm:right-9 sm:top-16 sm:w-[380px] sm:max-h-[min(32rem,calc(100%-6rem))] sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-gray-950/20 sm:dark:border-gray-800 lg:right-11 ${
+            drawerOpen
+              ? "translate-y-0 opacity-100 sm:scale-100"
+              : "pointer-events-none translate-y-full opacity-0 sm:translate-y-0 sm:scale-95"
           }`}
           aria-hidden={!drawerOpen}
         >
           {/* No title bar: the panel is a notification list and already names
               itself. A second heading above its own heading was two titles for
               one thing, so only the close control stays, pinned right. */}
-          <div className="flex justify-end px-3 pt-3">
+          <div className="flex justify-end px-3 pt-5 sm:pt-3">
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
