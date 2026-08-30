@@ -416,17 +416,22 @@ func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string
 				lowest = ing
 			}
 		}
-		id := lowest.ID
 		amount := round2(600 + rng.Float64()*1900)
+		// IngredientTransactionID is deliberately left nil. It means "this row was
+		// written automatically by a stock-in", it is unique so one restock cannot
+		// bill twice, and it points at ingredient_transactions — not at an
+		// ingredient. It used to be filled with the ingredient's own ID, which was
+		// the wrong table and, being unique, broke the whole seeding run on the
+		// first day the same ingredient came up lowest twice (SQLSTATE 23505).
+		// These rows stand for expenses the owner typed in, so nil is also correct.
 		expenses = append(expenses, entity.Expense{
-			Model:                   gorm.Model{CreatedAt: spentAt, UpdatedAt: spentAt},
-			RestaurantID:            restaurantID,
-			Category:                "ingredient",
-			Amount:                  amount,
-			SpentAt:                 spentAt,
-			Note:                    marker + " ซื้อ" + lowest.Name,
-			CreatedByID:             staffID,
-			IngredientTransactionID: &id,
+			Model:        gorm.Model{CreatedAt: spentAt, UpdatedAt: spentAt},
+			RestaurantID: restaurantID,
+			Category:     "ingredient",
+			Amount:       amount,
+			SpentAt:      spentAt,
+			Note:         marker + " ซื้อ" + lowest.Name,
+			CreatedByID:  staffID,
 		})
 	}
 	if rng.Float64() < 0.25 {
