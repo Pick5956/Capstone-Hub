@@ -97,6 +97,52 @@ func TestAskRunsTheToolsTheModelChoseAndReturnsWhatItWrote(t *testing.T) {
 	}
 }
 
+// Answer.Tools is what the caller's invention guard reads: it stands down when a
+// tool ran, because a figure or a claim then has a fact sheet behind it. So it
+// must list the tools that ANSWERED, not the ones that were asked for. A tool
+// that was requested and then dropped (no period parsed, a port not wired, a
+// repository error) contributes nothing to the sheet, and counting it told the
+// guard to stand down over an answer written from nothing.
+func TestAskReportsOnlyTheToolsThatProducedData(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus", "get_low_stock_ingredients"},
+		replies:  []string{"ต้มยำกุ้งขายดีที่สุดครับ"},
+	}
+	// Two asked for; one came back empty, the way a dropped tool does.
+	tools := &fakeTools{results: []ToolResult{
+		{Tool: "get_top_selling_menus", Label: "เมนูขายดี", Body: "- ต้มยำกุ้ง: 112"},
+		{Tool: "get_low_stock_ingredients", Label: "วัตถุดิบใกล้หมด", Body: "   "},
+	}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "เมนูขายดี"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if len(answer.Tools) != 1 || answer.Tools[0] != "get_top_selling_menus" {
+		t.Fatalf("Tools = %v, want only the tool that produced a body", answer.Tools)
+	}
+}
+
+// Every tool dropped means the answer was written from an empty sheet, and the
+// guard has to see that as "no tools ran" so it can catch an invented claim.
+func TestAskReportsNoToolsWhenEveryResultIsEmpty(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus"},
+		replies:  []string{"จองโต๊ะให้แล้วครับ"},
+	}
+	tools := &fakeTools{results: []ToolResult{
+		{Tool: "get_top_selling_menus", Label: "เมนูขายดี", Body: ""},
+	}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "จองโต๊ะ"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if len(answer.Tools) != 0 {
+		t.Fatalf("Tools = %v, want empty so the guard stays armed", answer.Tools)
+	}
+}
+
 func TestAskAsksForEachToolOnce(t *testing.T) {
 	chat := &fakeChat{
 		selected: []string{"get_top_selling_menus", "get_top_selling_menus", " ", "get_low_stock_ingredients"},
@@ -117,8 +163,11 @@ func TestAskAsksForEachToolOnce(t *testing.T) {
 			t.Fatalf("tools asked = %v, want %v", tools.asked, want)
 		}
 	}
-	if len(answer.Tools) != 2 {
-		t.Fatalf("reported tools = %v", answer.Tools)
+	// Dedupe is about the REQUEST — asserted on tools.asked above. What comes back
+	// in answer.Tools is a different question: the tools that produced a body. The
+	// fake returns one result, so one tool answered, however many were asked for.
+	if len(answer.Tools) != 1 || answer.Tools[0] != "x" {
+		t.Fatalf("reported tools = %v, want the single tool that answered", answer.Tools)
 	}
 }
 
@@ -262,5 +311,68 @@ func TestToolSelectionKeepsOnlyRealToolNames(t *testing.T) {
 	}
 	if got := parseToolSelection("[]", catalogue); len(got) != 0 {
 		t.Fatalf("empty array selected %v", got)
+	}
+}
+
+// The model is told never to do arithmetic, and it keeps that rule almost always
+// — but asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่" it subtracted the two
+// and reported 347,153, a figure on no sheet, in bold. One rewrite naming the
+// figure is cheaper than an owner acting on an invented number.
+func TestAskRewritesAnAnswerThatStatesAFigureFromNoSheet(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus"},
+		replies: []string{
+			"ขายได้ 347,453 บาท จ่ายไป 300 บาท เหลือ 347,153 บาทครับ",
+			"ขายได้ 347,453 บาท จ่ายไป 300 บาท ส่วนยอดคงเหลือยังไม่มีตัวเลขนี้ในระบบครับ",
+		},
+	}
+	tools := &fakeTools{results: []ToolResult{{Tool: "get_top_selling_menus", Body: "revenue=347453\nspent=300"}}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "เดือนที่แล้วเหลือเท่าไหร่"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if strings.Contains(answer.Text, "347,153") {
+		t.Errorf("the invented figure survived the rewrite: %q", answer.Text)
+	}
+	if chat.writeCalls != 2 {
+		t.Errorf("writeCalls = %d, want one write and one rewrite", chat.writeCalls)
+	}
+	if !strings.Contains(chat.lastPrompt, "347,153") {
+		t.Errorf("the rewrite prompt should name the offending figure:\n%s", chat.lastPrompt)
+	}
+}
+
+// A rewrite that invents a different figure is no better than the first answer,
+// so the first one stands rather than being traded for another unbacked number.
+func TestAskKeepsTheFirstAnswerWhenTheRewriteIsNoCleaner(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus"},
+		replies:  []string{"เหลือ 347,153 บาทครับ", "เหลือ 912,644 บาทครับ"},
+	}
+	tools := &fakeTools{results: []ToolResult{{Tool: "get_top_selling_menus", Body: "revenue=347453"}}}
+
+	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "เหลือเท่าไหร่"})
+	if err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if !strings.Contains(answer.Text, "347,153") {
+		t.Errorf("the first answer should stand, got %q", answer.Text)
+	}
+}
+
+// An answer whose figures are all on the sheet must not pay for a second call.
+func TestAskDoesNotRewriteAnAnswerThatMatchesTheSheet(t *testing.T) {
+	chat := &fakeChat{
+		selected: []string{"get_top_selling_menus"},
+		replies:  []string{"ขายได้ 347,453 บาทครับ"},
+	}
+	tools := &fakeTools{results: []ToolResult{{Tool: "get_top_selling_menus", Body: "revenue=347453"}}}
+
+	if _, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "ขายได้เท่าไหร่"}); err != nil {
+		t.Fatalf("Ask: %v", err)
+	}
+	if chat.writeCalls != 1 {
+		t.Errorf("writeCalls = %d, want a single write", chat.writeCalls)
 	}
 }

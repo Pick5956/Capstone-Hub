@@ -53,8 +53,9 @@ func TestBothPromptsCarryTheQuestion(t *testing.T) {
 func TestTheAnswerPromptAsksForBoundedFormatting(t *testing.T) {
 	prompt := answerPrompt("สรุปสถานการณ์ร้าน", nil, "revenue=77340.00")
 	for _, want := range []string{
-		"ทำตัวหนาด้วย **",
-		"ตัวที่สำคัญที่สุดตัวเดียว",
+		"ทำตัวหนา **",
+		"คำตอบนั้นตัวเดียว",              // single-answer: bold one
+		"ห้ามทำหนาแค่แถวเดียวแบบสุ่ม",   // ranked list: bold the metric on every row
 		"ใช้หัวข้อสั้น ๆ",
 		"อิโมจิ",
 	} {

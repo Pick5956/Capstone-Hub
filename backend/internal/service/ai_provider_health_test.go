@@ -222,3 +222,41 @@ func TestKeyCooldownIsBounded(t *testing.T) {
 		t.Fatalf("expected roughly 7.66s from the per-minute reset, got %s", got)
 	}
 }
+
+// Every key parked with the first one a moment from free used to answer the
+// owner "เชื่อมต่อผู้ช่วย AI ไม่ได้" rather than wait out the moment.
+func TestNextProviderAttemptsHoldsForAKeyThatIsAboutToFreeUp(t *testing.T) {
+	var health providerKeyHealth
+	var cursor uint32
+	keys := []string{"a", "b"}
+	health.park("groq", 0, time.Now().Add(80*time.Millisecond))
+	health.park("groq", 1, time.Now().Add(120*time.Millisecond))
+
+	started := time.Now()
+	attempts, releaseAt := nextProviderAttempts(&health, "groq", keys, &cursor)
+	if len(attempts) == 0 {
+		t.Fatalf("a key frees up in 80ms, it should have been waited for (releaseAt=%v)", releaseAt)
+	}
+	if elapsed := time.Since(started); elapsed < 60*time.Millisecond {
+		t.Errorf("returned after %s without waiting for the park to expire", elapsed)
+	}
+}
+
+// A real quota outage must still fail fast rather than holding the request open.
+func TestNextProviderAttemptsDoesNotHoldForALongPark(t *testing.T) {
+	var health providerKeyHealth
+	var cursor uint32
+	health.park("groq", 0, time.Now().Add(time.Hour))
+
+	started := time.Now()
+	attempts, releaseAt := nextProviderAttempts(&health, "groq", []string{"a"}, &cursor)
+	if len(attempts) != 0 {
+		t.Fatalf("a key parked for an hour is not available")
+	}
+	if releaseAt.IsZero() {
+		t.Errorf("the caller needs to know when it frees up")
+	}
+	if elapsed := time.Since(started); elapsed > maxRateLimitHold {
+		t.Errorf("waited %s on an hour-long park", elapsed)
+	}
+}

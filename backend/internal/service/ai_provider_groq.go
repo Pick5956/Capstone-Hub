@@ -533,9 +533,10 @@ func (s *AIService) executeSecondRoundGroq(prompt string, apiKey string, opts ai
 			aiStage("warn", "Groq second-round hit the output ceiling → the answer is cut off (completion_tokens=%d reasoning_tokens=%d)",
 				parsed.Usage.CompletionTokens, parsed.Usage.CompletionTokensDetails.ReasoningTokens)
 		} else {
-			aiStage("usage", "Groq second-round finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d",
+			aiStage("usage", "Groq second-round finish=%s completion_tokens=%d reasoning_tokens=%d prompt_tokens=%d cached_tokens=%d",
 				choice.FinishReason, parsed.Usage.CompletionTokens,
-				parsed.Usage.CompletionTokensDetails.ReasoningTokens, parsed.Usage.PromptTokens)
+				parsed.Usage.CompletionTokensDetails.ReasoningTokens, parsed.Usage.PromptTokens,
+				parsed.Usage.PromptTokensDetails.CachedTokens)
 		}
 		return choice.Message.Content, model, nil
 	}

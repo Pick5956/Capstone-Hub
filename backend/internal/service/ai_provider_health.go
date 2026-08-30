@@ -273,23 +273,48 @@ func nextProviderAttempts(
 		return nil, time.Time{}
 	}
 	start := atomic.AddUint32(cursor, 1) - 1
-	for offset := 0; offset < total; offset++ {
-		index := int((start + uint32(offset)) % uint32(total))
-		if ok, _ := health.available(provider, index); !ok {
-			continue
+	scan := func() []providerAttempt {
+		found := make([]providerAttempt, 0, total)
+		for offset := 0; offset < total; offset++ {
+			index := int((start + uint32(offset)) % uint32(total))
+			if ok, _ := health.available(provider, index); !ok {
+				continue
+			}
+			found = append(found, providerAttempt{
+				Key:      keys[index],
+				Index:    index,
+				Position: index + 1,
+				Total:    total,
+			})
 		}
-		attempts = append(attempts, providerAttempt{
-			Key:      keys[index],
-			Index:    index,
-			Position: index + 1,
-			Total:    total,
-		})
+		return found
 	}
-	if len(attempts) == 0 {
-		return nil, health.earliestRelease(provider, total)
+
+	if attempts = scan(); len(attempts) > 0 {
+		return attempts, time.Time{}
 	}
-	return attempts, time.Time{}
+
+	// Every key is parked. When the first one comes back within a moment, hold
+	// for it rather than failing: a question that already takes several seconds
+	// to answer can afford one more, and the owner reading "เชื่อมต่อผู้ช่วยไม่ได้"
+	// over a key that was a second from free is a worse outcome than the wait.
+	// The cap is what keeps this from turning a quota outage into a hang.
+	releaseAt = health.earliestRelease(provider, total)
+	if wait := time.Until(releaseAt); wait > 0 && wait <= maxRateLimitHold {
+		aiStage("flow", "%s: every key is parked, holding %s for the first one", provider, wait.Round(time.Millisecond))
+		time.Sleep(wait)
+		if attempts = scan(); len(attempts) > 0 {
+			return attempts, time.Time{}
+		}
+		releaseAt = health.earliestRelease(provider, total)
+	}
+	return nil, releaseAt
 }
+
+// maxRateLimitHold bounds that wait. Long enough to cover the sub-second gaps
+// that come from several questions landing at once, short enough that a real
+// daily quota still fails fast instead of holding the request open.
+const maxRateLimitHold = 2 * time.Second
 
 // allKeysRateLimitedError explains the wait instead of a bare quota error. It
 // wraps BOTH sentinels on purpose: the provider layer contract is errRateLimit

@@ -128,6 +128,54 @@ func (r *AIRepository) OperatingCalendarRules(restaurantID uint) ([]entity.AIOpe
 	return rules, err
 }
 
+// AIActiveOrder is one order still on the floor: not completed, not cancelled.
+//
+// The customer's name and phone are deliberately absent. They are on the row and
+// the owner may see them, but this reaches a model provider outside the system
+// and neither is needed to answer "which bills are still unpaid" — the table and
+// order number identify the bill on their own. Same rule the table sheet follows.
+type AIActiveOrder struct {
+	OrderNumber   string    `json:"order_number"`
+	TableNumber   string    `json:"table_number"`
+	OrderType     string    `json:"order_type"`
+	Status        string    `json:"status"`
+	PaymentStatus string    `json:"payment_status"`
+	GrandTotal    float64   `json:"grand_total"`
+	CustomerCount int       `json:"customer_count"`
+	OpenedAt      time.Time `json:"opened_at"`
+}
+
+// ActiveOrders reads the floor as it stands right now — the tickets the kitchen
+// is working on and the bills nobody has closed yet.
+//
+// Nothing else exposed this: every other tool here reports history. Asked "ตอนนี้
+// บิลไหนยังไม่จ่าย" the assistant had no source at all, which is the shape of
+// question it used to answer by guessing.
+func (r *AIRepository) ActiveOrders(restaurantID uint) ([]AIActiveOrder, error) {
+	var rows []AIActiveOrder
+	err := r.db.Table("orders").
+		Select(`orders.order_number, COALESCE(restaurant_tables.table_number, '') AS table_number,
+			orders.order_type, orders.status, orders.payment_status,
+			orders.grand_total, orders.customer_count, orders.opened_at`).
+		Joins("LEFT JOIN restaurant_tables ON restaurant_tables.id = orders.table_id").
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL", restaurantID).
+		Where("orders.status NOT IN (?)", []string{entity.OrderStatusCompleted, entity.OrderStatusCancelled}).
+		Order("orders.opened_at asc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// FindRestaurant returns the shop's own profile row — its name, branch, type and
+// opening hours. The assistant had no way to read this, so "ร้านเราชื่ออะไร"
+// was a dead end that it filled by dumping a sales total.
+func (r *AIRepository) FindRestaurant(restaurantID uint) (*entity.Restaurant, error) {
+	var restaurant entity.Restaurant
+	if err := r.db.First(&restaurant, restaurantID).Error; err != nil {
+		return nil, err
+	}
+	return &restaurant, nil
+}
+
 // RestaurantAIActionsEnabled reports whether the owner has turned on the
 // assistant's ability to make changes for this restaurant.
 func (r *AIRepository) RestaurantAIActionsEnabled(restaurantID uint) (bool, error) {
@@ -343,6 +391,49 @@ func (r *AIRepository) PeakSalesByHour(restaurantID uint, since time.Time) ([]AI
 		Select("EXTRACT(HOUR FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
 		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
 		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// PeakSalesByWeekdayForRange and PeakSalesByHourForRange are the window-bounded
+// twins of the two above. The snapshot versions only ever look back a fixed 30
+// days, so "อาทิตย์ก่อนช่วงไหนคนเยอะสุด" was answered about the wrong days — the
+// same defect the profit and expense tools had before they learned to read the
+// period out of the sentence.
+func (r *AIRepository) PeakSalesByWeekdayForRange(restaurantID uint, start, end time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(DOW FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+func (r *AIRepository) PeakSalesByHourForRange(restaurantID uint, start, end time.Time) ([]AIPeriodSummary, error) {
+	var rows []AIPeriodSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("EXTRACT(HOUR FROM opened_at)::int AS period, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("period").
+		Order("orders desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// OrderTypeBreakdownForRange totals paid orders by service type over a named
+// window, for the same reason: the snapshot version is fixed at 30 days.
+func (r *AIRepository) OrderTypeBreakdownForRange(restaurantID uint, start, end time.Time) ([]AIOrderTypeSummary, error) {
+	var rows []AIOrderTypeSummary
+	err := r.db.Model(&entity.Order{}).
+		Select("order_type, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
+		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
+			restaurantID, start, end, entity.OrderStatusCancelled).
+		Group("order_type").
 		Order("orders desc").
 		Scan(&rows).Error
 	return rows, err

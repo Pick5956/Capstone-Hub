@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -46,6 +46,7 @@ import { useTheme } from "@/src/providers/ThemeProvider";
 import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
+import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 
 type Message = {
@@ -187,6 +188,8 @@ export default function AIOperationsFloatingChat() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [outage, setOutage] = useState<AIOutage | null>(null);
+  const [lastQuestion, setLastQuestion] = useState("");
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   // Multi-item action plans (stock, menu, expense commands). This surface used to
   // ignore them entirely: the answer said "press confirm" and no confirm bar was
@@ -450,6 +453,10 @@ export default function AIOperationsFloatingChat() {
     }
 
     const requestGeneration = conversationRequests.begin();
+    // Kept for the outage card's retry button, and cleared here so a card from a
+    // previous failure does not sit under a question that has since succeeded.
+    setLastQuestion(trimmed);
+    setOutage(null);
     setLoading(true);
 
     try {
@@ -495,23 +502,21 @@ export default function AIOperationsFloatingChat() {
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       console.error(err);
-      let errorMessage =
+      // An outage is reported by the backend as a code, not as English words in
+      // the message. This used to sniff the message for "429"/"quota"/"exhausted"
+      // and the message arrives in Thai, so a quota outage never matched: the
+      // owner saw a bare error line with no wait and no retry, while the full AI
+      // page showed a proper card for the same failure.
+      const reportedOutage = readAIOutage(err);
+      if (reportedOutage) {
+        setOutage(reportedOutage);
+        return;
+      }
+      const errorMessage =
         typeof err === "object" && err !== null && "response" in err
           ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
           : "";
-          
-      // Bulletproof local quota check
-      if (errorMessage && (
-        errorMessage.includes("429") || 
-        errorMessage.includes("quota") || 
-        errorMessage.includes("RESOURCE_EXHAUSTED") || 
-        errorMessage.includes("exhausted")
-      )) {
-        errorMessage = language === "th"
-          ? "โควต้าการใช้งาน AI ชั่วคราวของคุณหมดลงแล้วครับ กรุณารอประมาณ 1 นาทีแล้วลองใหม่อีกครั้งนะครับ (API Quota Exceeded)"
-          : "Temporary AI quota exceeded. Please wait about 1 minute and try again! (API Quota Exceeded)";
-      }
-          
+
       setMessages((previous) => [
         ...previous,
         {
@@ -544,6 +549,11 @@ export default function AIOperationsFloatingChat() {
     // A confirmed plan changed the shop, so the cached snapshot behind the stats
     // panel is stale — drop it and let the next read refetch.
     snapshotRequests.invalidate();
+    // HTTP 200 with nothing changed: the failure lives in the body, so it has to
+    // be raised or the bar paints green over a plan that did nothing.
+    if (response.data.succeeded === 0 && response.data.failed > 0) {
+      throw new Error(response.data.message);
+    }
   };
 
   const handlePlanCancel = () => {
@@ -910,7 +920,7 @@ export default function AIOperationsFloatingChat() {
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
-          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-14 space-y-4 scrollbar-thin sm:pt-4">
+          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
@@ -922,7 +932,7 @@ export default function AIOperationsFloatingChat() {
 
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="ml-auto flex max-w-[90%] items-end justify-end gap-2.5 animate-message-slide">
+                  <div key={msg.id} className="ml-auto flex max-w-[96%] items-end justify-end gap-2.5 animate-message-slide sm:max-w-[90%]">
                     <div className="max-w-full break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-xs leading-relaxed text-white shadow-sm shadow-orange-500/25 sm:text-[13px]">
                       {msg.content}
                     </div>
@@ -932,7 +942,7 @@ export default function AIOperationsFloatingChat() {
 
               // Assistant/AI message
               return (
-                <div key={msg.id} className="flex max-w-[90%] items-start gap-2.5 animate-message-slide">
+                <div key={msg.id} className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
@@ -966,6 +976,18 @@ export default function AIOperationsFloatingChat() {
                   <span className="ai-shimmer-text text-xs font-medium sm:text-[13px]">{copy.thinking}</span>
                 </div>
               </div>
+            )}
+            {outage && (
+              <AIOutageNotice
+                language={language}
+                outage={outage}
+                retrying={loading}
+                onRetry={() => {
+                  const question = lastQuestion;
+                  setOutage(null);
+                  if (question) void handleSend(question);
+                }}
+              />
             )}
             {pendingActionPlan && pendingActionPlan.items.length > 0 && (
               <InlineDbConfirmBar
@@ -1051,7 +1073,13 @@ export default function AIOperationsFloatingChat() {
                matching the full AI page. sm+ keeps the bordered footer. */
             className="bg-transparent px-3 pb-3 pt-1 dark:bg-transparent sm:rounded-b-2xl sm:border-t sm:border-gray-200 sm:bg-white sm:p-3.5 sm:dark:border-gray-800 sm:dark:bg-gray-950"
           >
-            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+              <AIInputTools
+                tools={["scan"]}
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
+              />
               <input
                 ref={inputRef}
                 type="text"
@@ -1063,6 +1091,7 @@ export default function AIOperationsFloatingChat() {
                 className="min-h-9 min-w-0 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
               <AIInputTools
+                tools={["voice"]}
                 language={language}
                 disabled={loading || actionConfirming || actionCancelling}
                 onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}

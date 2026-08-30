@@ -31,6 +31,7 @@ import (
 type AIActionPlanStore interface {
 	CreateAIActionPlan(repository.CreateAIActionPlanParams) (*entity.AIActionPlan, string, error)
 	FindAIActionPlan(restaurantID, ownerUserID uint, planID string) (*entity.AIActionPlan, error)
+	PendingAIActionPlan(restaurantID, ownerUserID uint) (*entity.AIActionPlan, error)
 	ClaimAIActionPlan(restaurantID, ownerUserID uint, planID, confirmationToken string) (*entity.AIActionPlan, bool, error)
 	FinishAIActionPlan(planID string, outcomes []repository.AIActionPlanItemOutcome) (*entity.AIActionPlan, error)
 	CancelAIActionPlan(restaurantID, ownerUserID uint, planID string) (*entity.AIActionPlan, error)

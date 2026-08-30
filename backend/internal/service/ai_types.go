@@ -238,4 +238,10 @@ type groqUsage struct {
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
+	// CachedTokens is the slice of prompt_tokens Groq served from its prompt
+	// cache. Cached tokens do not count toward the rate limit, so this is the
+	// number that says whether the static-prefix layout is actually paying off.
+	PromptTokensDetails struct {
+		CachedTokens int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details"`
 }

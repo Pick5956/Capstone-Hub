@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"Project-M/internal/entity"
 	"Project-M/internal/joyboy"
 	"Project-M/internal/repository"
 )
@@ -138,6 +139,45 @@ func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 	return catalogue
 }
 
+// periodNamedIn resolves the window a question is about, and it exists because
+// the word list alone is not enough.
+//
+// profitPeriod knows the periods somebody thought to type into it: today,
+// yesterday, a named or relative month. Wiring only that into the profit and
+// expense tools made them right about "เดือนที่แล้ว" and quietly wrong about
+// everything else — asked "สัปดาห์ก่อนจ่ายอะไรไปบ้าง" the assistant read a
+// 30-day sheet and answered "จ่าย 300 บาทในสัปดาห์ก่อน", relabelling the window
+// it was handed. A word list that misses does not fail loudly; it answers about
+// the wrong days.
+//
+// Running the list first and the model second was the obvious order and it was
+// wrong: "ตั้งแต่ต้นเดือนถึงวันนี้กำไรเท่าไหร่" contains the word "วันนี้", so the
+// list matched that fragment, claimed the question, and answered about today
+// alone — which has no sales — while the model never got to see the sentence.
+// A word list does not know it only matched part of a phrase.
+//
+// So the model reads the range and the list is the fallback for when it cannot
+// be reached. Go still validates the dates and writes the label the owner reads:
+// the model says WHICH range, never what the figures in it are. The extra call
+// is small and runs at low effort.
+func (t *joyboyTools) periodNamedIn(question string) (start, end time.Time, label string, named bool) {
+	now := repository.BangkokNow()
+	if request, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok &&
+		len(request.periods) > 0 && strings.TrimSpace(request.clarify) == "" {
+		period := request.periods[0]
+		aiStage("flow", "joyboy: period read by the model → %s", period.Label)
+		return period.Start, period.End, period.Label, true
+	}
+	// Reached when the model read no period ("กำไรเท่าไหร่" names none, which is a
+	// correct answer) or could not be reached at all. The list then still covers
+	// the common months and days rather than losing the window entirely.
+	if start, end, label, explicit := profitPeriod(question, now); explicit {
+		aiStage("flow", "joyboy: period read by the word list → %s", label)
+		return start, end, label, true
+	}
+	return time.Time{}, time.Time{}, "", false
+}
+
 // runJoyboyExtraTool handles the joyboy-only tools that do not go through the
 // snapshot. handled is false for any other tool, so the caller falls through to
 // the normal read-only path.
@@ -150,19 +190,128 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyDataCoverageBody(coverage), true, true
+	case joyboyToolIngredientDetail:
+		if t.service.actionIngredients == nil {
+			return "", false, true
+		}
+		shelf, err := t.service.actionIngredients.ListIngredients(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		// The menu list carries the recipes, which is how "which menus use this"
+		// is answered from stored data instead of from the ingredient's name.
+		var menus []entity.MenuItem
+		if t.service.actionMenus != nil {
+			menus, _ = t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
+		}
+		return joyboyIngredientDetailBody(shelf, menus, question), true, true
+
+	case joyboyToolMenuDetail:
+		if t.service.actionMenus == nil || t.service.repo == nil {
+			return "", false, true
+		}
+		menus, err := t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+		margins, err := t.service.repo.AllMenuMargins(t.restaurantID, since)
+		if err != nil {
+			// Sales are one part of the answer; price, availability and the recipe
+			// are still worth reporting without them.
+			aiStage("warn", "joyboy: %s margins failed (%v) → reporting without sales", tool, err)
+			margins = nil
+		}
+		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question), true, true
+
 	case joyboyToolExpenseSummary:
 		if t.service.actionExpenses == nil {
 			return "", false, true
 		}
+		// The window was fixed at the last 30 days, so "เดือนที่แล้วจ่ายค่าอะไรไปบ้าง"
+		// was answered with this month's spending. profitPeriod is the same reader
+		// the profit and menu period flows use, and it falls back to the rolling
+		// 30 days when the sentence names no window.
 		now := repository.BangkokNow()
-		from := now.AddDate(0, 0, -29).Format("2006-01-02")
-		until := now.Format("2006-01-02")
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			start, end = now.AddDate(0, 0, -29), now
+		}
+		from := start.Format("2006-01-02")
+		// The range is half-open (end is the day after), and the expense list takes
+		// an inclusive last day.
+		until := end.AddDate(0, 0, -1).Format("2006-01-02")
+		if !explicit {
+			until = end.Format("2006-01-02")
+		}
 		list, err := t.service.actionExpenses.List(t.restaurantID, from, until, "")
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboyExpenseSummaryBody(from, until, list), true, true
+		return joyboyExpenseSummaryBody(label, from, until, list), true, true
+	case AIToolGetPeakPeriods:
+		// Same shape as the profit case: a named window is answered from that
+		// window, anything else falls through to the 30-day snapshot.
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			return "", false, false
+		}
+		weekdays, err := t.service.repo.PeakSalesByWeekdayForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		hours, err := t.service.repo.PeakSalesByHourForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyPeakForPeriodBody(label, weekdays, hours), true, true
+
+	case AIToolGetOrderTypeBreakdown:
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			return "", false, false
+		}
+		rows, err := t.service.repo.OrderTypeBreakdownForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyOrderTypeForPeriodBody(label, rows), true, true
+
+	case joyboyToolActiveOrders:
+		// Live state, like the table tool: only true for this minute, so it is read
+		// straight from the orders table rather than the 30-day snapshot.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		orders, err := t.service.repo.ActiveOrders(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyActiveOrdersBody(orders, repository.BangkokNow()), true, true
+
+	case joyboyToolShopProfile:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		restaurant, err := t.service.repo.FindRestaurant(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyShopProfileBody(restaurant), true, true
 	case joyboyToolTableStatus:
 		// Live state, read straight from the table service — not the 30-day
 		// snapshot every other tool reads, because the answer is only true for
@@ -183,6 +332,25 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboySystemDocsBody(result), true, true
+	case AIToolGetProfitSummary:
+		// The snapshot behind this tool is fixed at 30 days, so "กำไรเดือนที่แล้ว"
+		// came back as the rolling window's profit stated as last month's. When the
+		// sentence names a period, answer that period; when it names none, report
+		// unhandled so the 30-day snapshot answers as before.
+		if t.service.repo == nil {
+			return "", false, false
+		}
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			return "", false, false
+		}
+		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the 30-day snapshot", tool, label, err)
+			return "", false, false
+		}
+		return joyboyProfitForPeriodBody(label, metrics), true, true
+
 	case joyboyToolMenuForPeriod:
 		// Reuse legacy's period parser and range query, but render raw figures for
 		// the model to rank rather than legacy's finished answer. A question that
@@ -230,26 +398,31 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				return req.clarify, true, true
 			}
 			if req.comparison && len(req.periods) >= 2 {
-				// Always oldest → newest, whichever order the owner said them in, so
-				// the sentence reads forward in time and cannot be told backwards.
-				a, b := req.periods[0], req.periods[1]
-				if a.Start.Before(b.Start) {
-					a, b = b, a
+				// The change is "newer against older", so the fact sheet takes the
+				// newer window as period_a (the subject) and the older as period_b
+				// (the baseline): change_pct = (newer − older) / older, read the way
+				// the owner asked it ("เดือนนี้เทียบเดือนก่อนเพิ่มขึ้นกี่%").
+				newer, older := req.periods[0], req.periods[1]
+				if newer.Start.Before(older.Start) {
+					newer, older = older, newer
 				}
-				da, err := t.service.repo.SalesForRange(t.restaurantID, a.Start, a.End)
+				dNewer, err := t.service.repo.SalesForRange(t.restaurantID, newer.Start, newer.End)
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				db, err := t.service.repo.SalesForRange(t.restaurantID, b.Start, b.End)
+				dOlder, err := t.service.repo.SalesForRange(t.restaurantID, older.Start, older.End)
 				if err != nil {
 					aiStage("warn", "joyboy: %s comparison failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				// A comparison is a picture worth drawing: hand the frontend a
-				// two-bar chart of the same figures the fact sheet carries.
-				t.chart = buildSalesComparisonChart(a.Label, da.Revenue, b.Label, db.Revenue)
-				return joyboyWithCoverage(joyboySalesComparisonBody(a, da, b, db), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
+				// The chart, though, reads left → right as a timeline: older bar on
+				// the left, newer on the right. Drawing it in period_a-first order put
+				// this month on the left and last month on the right — time running
+				// backwards. The figures are the same either way; only the order the
+				// eye reads them in differs from the sheet's.
+				t.chart = buildSalesComparisonChart(older.Label, dOlder.Revenue, newer.Label, dNewer.Revenue)
+				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]

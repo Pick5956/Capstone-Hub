@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
@@ -41,6 +42,21 @@ func joyboyNum(value float64) string {
 
 func joyboyJoin(lines []string) string {
 	return strings.Join(lines, "\n")
+}
+
+// joyboyNotSetUpYet marks a gap that means "the owner has not entered this yet",
+// which is not the same as "the real value is zero".
+//
+// The two read alike on an empty sheet and the model picks whichever answers the
+// question: with no expenses recorded for July it took the spend as zero and
+// called a month of revenue "กำไรสุทธิ". Every gap of this kind now says which
+// kind it is, and what to tell the owner instead.
+func joyboyNotSetUpYet(reason, sayInstead string) string {
+	return joyboyJoin([]string{
+		joyboyNoData(reason),
+		"gap_means=ยังไม่ได้บันทึกข้อมูลส่วนนี้ในระบบ ไม่ได้แปลว่าค่าจริงเป็นศูนย์",
+		"note=" + sayInstead,
+	})
 }
 
 // joyboyMenuMarginLine renders the one menu shape that carries cost and profit.
@@ -81,12 +97,19 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("no_ingredient_below_its_minimum"), true
 		}
 		lines := []string{"scope=current_stock_level"}
+		// The cost of restocking everything on this list is a multiply-then-sum,
+		// which the model may not do — so "ต้องใช้เงินเท่าไหร่ถ้าเติมของที่ใกล้หมด
+		// ทั้งหมด" had no figure to read. Go totals it.
+		var restockCost float64
 		for _, item := range result.LowStockIngredients {
+			restockCost += item.RestockEstimate * item.CostPerUnit
 			lines = append(lines, fmt.Sprintf(
 				"ingredient=%s status=%s stock=%s unit=%s min_stock=%s restock_suggested=%s cost_per_unit=%s",
-				item.Name, item.Status, joyboyNum(item.Stock), item.Unit,
+				item.Name, aiStockStatusThai(item.Status), joyboyNum(item.Stock), item.Unit,
 				joyboyNum(item.MinStock), joyboyNum(item.RestockEstimate), joyboyNum(item.CostPerUnit)))
 		}
+		lines = append(lines, fmt.Sprintf("items_below_minimum=%d restock_all_cost=%s",
+			len(result.LowStockIngredients), joyboyNum(roundBaht(restockCost))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus:
@@ -101,7 +124,24 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if len(menus) == 0 {
 			return joyboyNoData("no_menu_sales_recorded_in_period"), true
 		}
-		lines := []string{window, order}
+		// Say plainly that this is a ranking cut to a few rows, not the whole menu.
+		// Without it the model read the list as the complete set: asked about a menu
+		// that sells well but is not in the top five, it answered "ไม่มียอดขายของ
+		// เมนูนี้ในข้อมูล" over a menu with hundreds of sales. A list that does not
+		// say it is partial gets treated as exhaustive.
+		// The note carries no boolean: cleanAnswer strips a "key=" prefix and keeps
+		// the value, so "list_is_partial=true" reached the owner as a bare "(true)"
+		// sitting in the middle of a Thai sentence. A plain sentence cannot leak
+		// that way.
+		lines := []string{
+			window,
+			order,
+			// The second sentence is the other half of the same misreading: told the
+		// list was partial, the model still called its last row "เมนูที่ขายแย่ที่สุด"
+		// — the bottom of a top-five is not the worst menu in the shop.
+		fmt.Sprintf("note=รายการนี้เป็นอันดับต้นเพียง %d เมนู ไม่ใช่เมนูทั้งหมดของร้าน เมนูที่ไม่อยู่ในรายการไม่ได้แปลว่าไม่มียอดขาย "+
+			"และห้ามเรียกรายการสุดท้ายในลิสต์ว่าเมนูที่ขายแย่ที่สุดหรือกำไรน้อยที่สุด เพราะเป็นแค่อันดับท้ายของอันดับต้นเท่านั้น", len(menus)),
+		}
 		for index, menu := range menus {
 			lines = append(lines, fmt.Sprintf("rank=%d menu=%s qty=%d revenue=%s",
 				index+1, menu.MenuName, menu.Quantity, joyboyNum(menu.Revenue)))
@@ -111,7 +151,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 	case AIToolGetInventoryValuation:
 		valuation := result.InventoryValuation
 		if valuation == nil {
-			return joyboyNoData("no_ingredients_recorded"), true
+			return joyboyNotSetUpYet("no_ingredients_recorded",
+				"ยังไม่มีวัตถุดิบในระบบเลย ห้ามตอบว่ามูลค่าสต๊อกเป็น 0 บาท ให้บอกว่าต้องเพิ่มวัตถุดิบเข้าคลังก่อน"), true
 		}
 		return joyboyJoin([]string{
 			"scope=current_stock_level",
@@ -133,7 +174,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 	case AIToolGetProfitSummary:
 		profit := result.ProfitSummary
 		if profit == nil || profit.Revenue == 0 {
-			return joyboyNoData("no_margin_data_to_compute_profit"), true
+			return joyboyNotSetUpYet("no_margin_data_to_compute_profit",
+				"คิดกำไรไม่ได้เพราะยังไม่มียอดขายหรือยังไม่ได้ผูกต้นทุนวัตถุดิบกับเมนู ห้ามตอบว่ากำไรเป็น 0"), true
 		}
 		lines := []string{
 			window,
@@ -163,12 +205,28 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				joyboyNoData("no_prior_week_to_compare_against"),
 			}), true
 		}
+		// No prior_days line: AISalesTrend counts days for the recent window only,
+		// and this used to print RecentDays under the prior label — telling the
+		// model the earlier window covered seven days when it may have covered two.
+		// The model is instructed never to compute a figure itself, so it repeated
+		// the wrong one faithfully. A missing line is a fact the model can work
+		// around; a fabricated one it cannot.
+		// The direction is a Thai word and the percentage carries no sign, the same
+		// way the two-period comparison states it. A bare "-0.32" here invited the
+		// same misreading that fix was for: the model narrating the wrong subject
+		// and keeping the minus ("ยอดขายลดลง -0.32%" or "เพิ่มขึ้น -0.32%").
+		direction, changePct := "เพิ่มขึ้น", trend.RevenueChangePct
+		if changePct < 0 {
+			direction, changePct = "ลดลง", -changePct
+		}
 		return joyboyJoin([]string{
+			"scope=7วันล่าสุด_เทียบกับ_7วันก่อนหน้า",
 			fmt.Sprintf("recent_days=%d recent_orders=%d recent_revenue=%s",
 				trend.RecentDays, trend.RecentOrders, joyboyNum(trend.RecentRevenue)),
-			fmt.Sprintf("prior_days=%d prior_orders=%d prior_revenue=%s",
-				trend.RecentDays, trend.PriorOrders, joyboyNum(trend.PriorRevenue)),
-			fmt.Sprintf("revenue_change_pct=%s", joyboyNum(trend.RevenueChangePct)),
+			fmt.Sprintf("prior_orders=%d prior_revenue=%s",
+				trend.PriorOrders, joyboyNum(trend.PriorRevenue)),
+			fmt.Sprintf("revenue_change_pct=%s direction=%s note=%s_เทียบกับ_7วันก่อนหน้า",
+				joyboyNum(changePct), direction, "7วันล่าสุด"),
 		}), true
 
 	case AIToolGetAverageOrderValue:
@@ -189,7 +247,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		lines := []string{window}
 		for _, entry := range result.OrderTypeBreakdown {
 			lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
-				entry.OrderType, entry.Orders, joyboyNum(entry.Revenue)))
+				aiOrderTypeThai(entry.OrderType), entry.Orders, joyboyNum(entry.Revenue)))
 		}
 		return joyboyJoin(lines), true
 
@@ -198,11 +256,18 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if peak == nil || !peak.HasData {
 			return joyboyNoData("no_orders_recorded_in_period"), true
 		}
+		// The two lines are separate rankings over the same window, and saying only
+		// "busiest weekday" and "busiest hour" let the model read the second as the
+		// busiest hour *of that weekday*: it reported 161 of Monday's 188 orders
+		// falling at 11:00, a nested fact neither line states. The counts are what
+		// make it obviously wrong, and the note is what stops it being written.
 		return joyboyJoin([]string{
 			window,
 			fmt.Sprintf("busiest_weekday=%s weekday_orders=%d",
 				thaiWeekdayName(peak.TopWeekday), peak.TopWeekdayOrders),
-			fmt.Sprintf("busiest_hour=%02d:00 hour_orders=%d", peak.TopHour, peak.TopHourOrders),
+			fmt.Sprintf("busiest_hour_across_all_days=%02d:00 hour_orders=%d", peak.TopHour, peak.TopHourOrders),
+			"note=สองบรรทัดนี้นับคนละแกน วันที่คับคั่งที่สุดกับชั่วโมงที่คับคั่งที่สุดนับรวมทุกวันในช่วงนี้ " +
+				"ห้ามบอกว่าชั่วโมงนั้นเป็นชั่วโมงที่คับคั่งที่สุดของวันนั้น",
 		}), true
 
 	case AIToolGetMenuEngineering:
@@ -254,10 +319,15 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("every_stocked_ingredient_was_used_in_period"), true
 		}
 		lines := []string{window, "meaning=held_in_stock_but_never_used_in_period"}
+		var deadValue float64
 		for _, item := range result.DeadStock {
+			deadValue += item.Value
 			lines = append(lines, fmt.Sprintf("ingredient=%s stock=%s unit=%s value=%s",
 				item.Name, joyboyNum(item.Stock), item.Unit, joyboyNum(item.Value)))
 		}
+		// "เงินจมรวมเท่าไหร่" is the question this tool exists for, and it is a sum.
+		lines = append(lines, fmt.Sprintf("dead_items=%d dead_value_total=%s",
+			len(result.DeadStock), joyboyNum(roundBaht(deadValue))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetTopCostIngredients:
@@ -265,10 +335,21 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 			return joyboyNoData("no_ingredient_usage_recorded_in_period"), true
 		}
 		lines := []string{window, "ranked_by=total_cost_consumed desc"}
+		// The list is cut to the top eight upstream. Saying so is the same fix the
+		// menu rankings needed: a list that does not admit it is partial gets read
+		// as the whole set, and the total below would then look like the shop's
+		// entire ingredient spend rather than these eight.
+		lines = append(lines, fmt.Sprintf(
+			"note=รายการนี้เป็นอันดับต้นเพียง %d ตัว ไม่ใช่วัตถุดิบทั้งหมดของร้าน "+
+				"ยอดรวมด้านล่างคือรวมเฉพาะ %d ตัวนี้ ไม่ใช่ต้นทุนวัตถุดิบทั้งร้าน",
+			len(result.TopCostIngredients), len(result.TopCostIngredients)))
+		var listedCost float64
 		for index, item := range result.TopCostIngredients {
+			listedCost += item.Cost
 			lines = append(lines, fmt.Sprintf("rank=%d ingredient=%s cost=%s used=%s unit=%s",
 				index+1, item.Name, joyboyNum(item.Cost), joyboyNum(item.Used), item.Unit))
 		}
+		lines = append(lines, fmt.Sprintf("listed_items_cost_total=%s", joyboyNum(roundBaht(listedCost))))
 		return joyboyJoin(lines), true
 
 	case AIToolGetStoreSummary:
@@ -282,10 +363,13 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 				summary.Days, summary.Orders, joyboyNum(summary.Revenue)),
 		}
 		if summary.Trend != nil && summary.Trend.HasPrior {
+			// The prior window carries no day count of its own, so it is labelled
+			// plainly rather than borrowing the recent window's — the same
+			// fabrication the standalone trend sheet used to print.
 			lines = append(lines, fmt.Sprintf(
-				"recent_%dd_revenue=%s prior_%dd_revenue=%s revenue_change_pct=%s",
+				"recent_%dd_revenue=%s prior_period_revenue=%s revenue_change_pct=%s",
 				summary.Trend.RecentDays, joyboyNum(summary.Trend.RecentRevenue),
-				summary.Trend.RecentDays, joyboyNum(summary.Trend.PriorRevenue),
+				joyboyNum(summary.Trend.PriorRevenue),
 				joyboyNum(summary.Trend.RevenueChangePct)))
 		}
 		for index, menu := range summary.TopMenus {
@@ -324,7 +408,8 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 
 	case AIToolGetMostExpensiveMenu:
 		if len(result.MostExpensiveMenus) == 0 {
-			return joyboyNoData("no_menu_items_recorded"), true
+			return joyboyNotSetUpYet("no_menu_items_recorded",
+				"ยังไม่มีเมนูในระบบเลย ห้ามตอบว่าร้านไม่มีเมนูขาย ให้บอกว่าต้องเพิ่มเมนูก่อน"), true
 		}
 		lines := []string{"ranked_by=listed_menu_price desc", "note=price_charged_per_dish_not_revenue"}
 		for index, menu := range result.MostExpensiveMenus {
@@ -358,13 +443,32 @@ func joyboyDataCoverageBody(cov repository.AISalesCoverage) string {
 // The category totals come first because "which category costs me most" is the
 // question this data is for; the recent rows follow so a specific bill can be
 // found ("ค่าไฟจ่ายไปเท่าไหร่").
-func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) string {
+// expenseIsNotTheCostBase rides on this sheet whether or not there are entries.
+// It was first added only to the populated branch, and the empty one then
+// produced the worse answer of the two: with no July expenses recorded the model
+// treated the spend as zero and called a month of revenue "กำไรสุทธิ 347,453".
+const expenseIsNotTheCostBase = "note=ตัวเลขนี้เป็นรายจ่ายที่เจ้าของบันทึกเองเท่านั้น " +
+	"ไม่ได้รวมต้นทุนวัตถุดิบของเมนู ห้ามเอาไปลบกับยอดขายแล้วเรียกว่ากำไรหรือเงินที่เหลือ " +
+	"ถ้าไม่มีรายจ่ายบันทึกไว้ ก็ไม่ได้แปลว่าร้านไม่มีต้นทุน ห้ามถือว่าต้นทุนเป็นศูนย์ " +
+	"ถ้าถูกถามถึงกำไร ให้บอกว่าต้องดูจากกำไรของเมนูแทน"
+
+func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListResponse) string {
 	if list == nil || list.Entries == 0 {
-		return joyboyNoData("no_expenses_recorded_in_window")
+		return joyboyJoin([]string{
+			"period=" + label,
+			joyboyNoData("no_expenses_recorded_in_window"),
+			expenseIsNotTheCostBase,
+		})
 	}
 
 	lines := []string{
-		"period=" + from + ".." + until,
+		// The label is what the answer should say; the ISO dates stay behind it so
+		// the exact window is still on the sheet. Given only "2026-07-30..2026-08-28"
+		// the model read the dates out loud as Thai words in the Christian era —
+		// "วันที่สามสิบกรกฎาคม ถึงวันที่ยี่สิบแปด สิงหาคม ค.ศ. 2026" — in a product
+		// whose every other date is Buddhist-era.
+		"period=" + label,
+		"period_exact=" + from + ".." + until,
 		"total_spent=" + joyboyNum(list.Total),
 		"entries=" + strconv.FormatInt(list.Entries, 10),
 	}
@@ -389,6 +493,181 @@ func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) str
 	if int64(len(list.Expenses)) < list.Entries || list.HasMore {
 		lines = append(lines, "note=แสดงเฉพาะรายการล่าสุด ไม่ใช่ทั้งหมด")
 	}
+	// This table holds only what the owner typed in by hand — it is not the shop's
+	// cost base, which lives in the recipes. Asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่
+	// เหลือเท่าไหร่" the model subtracted one 300-baht entry from a month of
+	// revenue and called the remainder what was left, which reads as profit and is
+	// off by the entire ingredient cost.
+	lines = append(lines, expenseIsNotTheCostBase)
+	return joyboyJoin(lines)
+}
+
+// joyboyPeakForPeriodBody renders the busiest weekday and hour over a named
+// window, rather than the fixed 30-day snapshot the peak tool otherwise reads.
+//
+// The two lines are separate rankings over the same window — the note is the
+// same one the snapshot sheet carries, and for the same reason: given only
+// "busiest weekday" and "busiest hour" the model reported the hour as the
+// busiest hour *of that weekday*, a nested fact neither line states.
+func joyboyPeakForPeriodBody(label string, weekdays, hours []repository.AIPeriodSummary) string {
+	if len(weekdays) == 0 && len(hours) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_orders_recorded_in_period")})
+	}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	if len(weekdays) > 0 {
+		lines = append(lines, fmt.Sprintf("busiest_weekday=%s weekday_orders=%d",
+			thaiWeekdayName(weekdays[0].Period), weekdays[0].Orders))
+	}
+	if len(hours) > 0 {
+		lines = append(lines, fmt.Sprintf("busiest_hour_across_all_days=%02d:00 hour_orders=%d",
+			hours[0].Period, hours[0].Orders))
+	}
+	lines = append(lines, "note=สองบรรทัดนี้นับคนละแกน วันที่คับคั่งที่สุดกับชั่วโมงที่คับคั่งที่สุดนับรวมทุกวันในช่วงนี้ "+
+		"ห้ามบอกว่าชั่วโมงนั้นเป็นชั่วโมงที่คับคั่งที่สุดของวันนั้น")
+	return joyboyJoin(lines)
+}
+
+// joyboyOrderTypeForPeriodBody splits paid orders by service type over a named
+// window. The snapshot version is fixed at 30 days, so "เดือนที่แล้วสั่งกลับกี่ที่"
+// was answered about a window the owner did not ask for.
+func joyboyOrderTypeForPeriodBody(label string, rows []repository.AIOrderTypeSummary) string {
+	if len(rows) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_orders_recorded_in_period")})
+	}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	for _, row := range rows {
+		lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
+			aiOrderTypeThai(row.OrderType), row.Orders, joyboyNum(row.Revenue)))
+	}
+	return joyboyJoin(lines)
+}
+
+// aiOrderTypeThai turns the stored service type into the owner's words. Left as
+// "dine_in" the model translates it itself, differently each time — the same
+// reason the order statuses are translated here rather than in the answer.
+func aiOrderTypeThai(orderType string) string {
+	switch orderType {
+	case "dine_in":
+		return "กินที่ร้าน"
+	case "takeaway":
+		return "สั่งกลับบ้าน"
+	case "delivery":
+		return "เดลิเวอรี"
+	}
+	return orderType
+}
+
+// aiStockStatusThai turns the raw stock flag into the owner's words. Left as
+// "out"/"low", the model pastes it straight through — the owner read "ไก่สับ
+// (out) 0.00 กรัม", an English code sitting in a Thai answer, the same leak
+// dine_in and the order statuses had. Only "out" and "low" ever reach a fact
+// sheet; "ok" items are filtered out before this is called.
+func aiStockStatusThai(status string) string {
+	switch status {
+	case "out":
+		return "หมดสต๊อกแล้ว"
+	case "low":
+		return "ใกล้หมด"
+	}
+	return status
+}
+
+// aiOrderStatusThai turns a stored status into the words the owner uses. The
+// model would otherwise translate "sent_to_kitchen" itself, differently each
+// time, and one of those readings ("ส่งครัวแล้ว" vs "กำลังทำ") changes what the
+// owner thinks the kitchen is doing.
+var aiOrderStatusThai = map[string]string{
+	entity.OrderStatusOpen:          "เปิดบิลแล้ว ยังไม่ส่งครัว",
+	entity.OrderStatusSentToKitchen: "ส่งครัวแล้ว รอครัวเริ่มทำ",
+	entity.OrderStatusCooking:       "ครัวกำลังทำ",
+	entity.OrderStatusReady:         "ครัวทำเสร็จ รอเสิร์ฟ",
+	entity.OrderStatusServed:        "เสิร์ฟแล้ว รอเก็บเงิน",
+}
+
+// joyboyActiveOrdersBody renders the floor right now: what the kitchen is
+// working on and which bills are still open.
+//
+// Every other tool reports history, so "ตอนนี้บิลไหนยังไม่จ่าย" had no source at
+// all. The waiting time is computed here rather than left as a timestamp,
+// because the model may not do arithmetic and "opened 14:05" is not an answer to
+// "which table has been waiting longest".
+func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) string {
+	if len(orders) == 0 {
+		return joyboyJoin([]string{
+			"as_of=ตอนนี้",
+			"capability=read_only",
+			joyboyNoData("no_active_orders_right_now"),
+			"note=ไม่มีออเดอร์ค้างอยู่เลย ทุกบิลปิดหมดแล้ว",
+		})
+	}
+
+	var unpaidTotal float64
+	var unpaidCount, kitchenCount int
+	lines := []string{
+		"as_of=ตอนนี้",
+		"capability=read_only",
+		"note=ดูได้อย่างเดียว รับออเดอร์ ปิดบิล หรือเปลี่ยนสถานะครัวให้ไม่ได้ " +
+			"ถ้าผู้ใช้ขอให้ทำ ห้ามบอกว่าทำให้แล้ว ให้บอกว่าต้องไปกดเองที่หน้าขายหรือหน้าครัว",
+		fmt.Sprintf("active_orders=%d", len(orders)),
+	}
+	rows := make([]string, 0, len(orders))
+	for _, order := range orders {
+		if order.PaymentStatus == "unpaid" {
+			unpaidCount++
+			unpaidTotal += order.GrandTotal
+		}
+		if order.Status == entity.OrderStatusSentToKitchen || order.Status == entity.OrderStatusCooking {
+			kitchenCount++
+		}
+		where := strings.TrimSpace(order.TableNumber)
+		if where == "" {
+			where = "สั่งกลับบ้าน"
+		} else {
+			where = "โต๊ะ " + where
+		}
+		status := aiOrderStatusThai[order.Status]
+		if status == "" {
+			status = order.Status
+		}
+		waited := int(now.Sub(order.OpenedAt).Minutes())
+		if waited < 0 {
+			waited = 0
+		}
+		rows = append(rows, fmt.Sprintf("order=%s %s สถานะ=%s ยอด=%s การชำระ=%s เปิดมาแล้ว=%d นาที คน=%d",
+			order.OrderNumber, where, status, joyboyNum(order.GrandTotal),
+			map[string]string{"unpaid": "ยังไม่จ่าย", "paid": "จ่ายแล้ว"}[order.PaymentStatus],
+			waited, order.CustomerCount))
+	}
+	lines = append(lines,
+		fmt.Sprintf("in_kitchen_now=%d", kitchenCount),
+		fmt.Sprintf("unpaid_bills=%d unpaid_total=%s", unpaidCount, joyboyNum(roundBaht(unpaidTotal))))
+	lines = append(lines, rows...)
+	return joyboyJoin(lines)
+}
+
+// joyboyShopProfileBody renders the shop's own identity — the answer to
+// "ร้านเราชื่ออะไร", which had no tool and so came back as a sales total.
+//
+// Only identity and hours go on the sheet. The address, phone, PromptPay name
+// and tax rates are the shop's, and the owner may see them, but this sheet is
+// sent to a model provider outside the system and none of them is needed to say
+// what the shop is called or when it opens.
+func joyboyShopProfileBody(r *entity.Restaurant) string {
+	if r == nil {
+		return joyboyNoData("no_restaurant_profile")
+	}
+	lines := []string{"shop_name=" + strings.TrimSpace(r.Name)}
+	if branch := strings.TrimSpace(r.BranchName); branch != "" {
+		lines = append(lines, "branch="+branch)
+	}
+	if kind := strings.TrimSpace(r.RestaurantType); kind != "" {
+		lines = append(lines, "type="+kind)
+	}
+	open, close := strings.TrimSpace(r.OpenTime), strings.TrimSpace(r.CloseTime)
+	if open != "" || close != "" {
+		lines = append(lines, fmt.Sprintf("hours=%s-%s", open, close))
+	}
+	lines = append(lines, fmt.Sprintf("table_count=%d", r.TableCount))
 	return joyboyJoin(lines)
 }
 
@@ -401,7 +680,8 @@ func joyboyExpenseSummaryBody(from, until string, list *ExpenseListResponse) str
 // table is being held for; the number stays in the database.
 func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 	if len(tables) == 0 {
-		return joyboyNoData("no_tables_configured")
+		return joyboyNotSetUpYet("no_tables_configured",
+			"ยังไม่ได้ตั้งค่าโต๊ะในระบบ ห้ามตอบว่าร้านไม่มีโต๊ะว่างหรือโต๊ะเต็ม ให้บอกว่าต้องไปตั้งค่าโต๊ะก่อน")
 	}
 
 	var free, occupied, reserved, inactive int
@@ -500,6 +780,45 @@ func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSumm
 	return joyboyJoin(lines)
 }
 
+// joyboyProfitForPeriodBody totals revenue, cost and profit over a named calendar
+// period.
+//
+// get_profit_summary only ever reads the rolling 30-day snapshot, and asked
+// "กำไรเดือนที่แล้วเท่าไหร่" the model reported that window's figure as last
+// month's profit — a wrong number stated with full confidence, which is worse
+// than no answer. The sheet did carry "period=30 วันล่าสุด", but a label the
+// model may or may not repeat is not a fix for reading the wrong window.
+//
+// Coverage is reported for the same reason the snapshot reports it: below full
+// coverage the cost is understated, so the profit is a floor rather than a
+// figure.
+func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSummary) string {
+	var revenue, cost, profit, costedRevenue float64
+	for _, m := range metrics {
+		revenue += m.Revenue
+		cost += m.Cost
+		profit += m.Profit
+		if m.Cost > 0 {
+			costedRevenue += m.Revenue
+		}
+	}
+	if revenue == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_paid_sales_in_period")})
+	}
+	lines := []string{
+		"period=" + label,
+		"scope=named_period_not_30day_window",
+		fmt.Sprintf("revenue=%s cost=%s profit=%s margin_pct=%s",
+			joyboyNum(roundBaht(revenue)), joyboyNum(roundBaht(cost)), joyboyNum(roundBaht(profit)),
+			joyboyNum(roundBaht(profit/revenue*100))),
+	}
+	if coverage := costedRevenue / revenue * 100; coverage < 99.5 {
+		lines = append(lines, fmt.Sprintf(
+			"note=cost_covers_only_%s_pct_of_revenue_so_profit_is_a_floor", joyboyNum(roundBaht(coverage))))
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboySalesForPeriodBody renders the whole-store paid-sales total for one
 // named window (a day, month, or year). Revenue is grand_total straight from
 // the orders table — the authoritative figure — so the model states it rather
@@ -509,13 +828,21 @@ func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
 	if d.Orders == 0 {
 		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", joyboyNoData("no_paid_orders_in_period")})
 	}
-	return joyboyJoin([]string{
+	lines := []string{
 		"period=" + label,
 		"scope=named_period_paid_sales_whole_store",
 		"revenue=" + joyboyNum(d.Revenue),
 		fmt.Sprintf("orders=%d", d.Orders),
 		fmt.Sprintf("selling_days=%d", d.Days),
-	})
+	}
+	// The average bill is revenue ÷ orders, a division the model is forbidden to
+	// do — so "เดือนที่แล้วบิลเฉลี่ยเท่าไหร่" had nothing to read and either made
+	// the figure up (caught by the reconcile guard, then answered "ไม่ทราบ") or
+	// leaned on the 30-day AOV tool for a period it did not ask about. Go divides.
+	if d.Orders > 0 {
+		lines = append(lines, "avg_per_order="+joyboyNum(roundBaht(d.Revenue/float64(d.Orders))))
+	}
+	return joyboyJoin(lines)
 }
 
 // joyboySalesComparisonBody renders two windows plus the percent change between
@@ -527,6 +854,14 @@ func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPerio
 		"scope=named_period_comparison_whole_store",
 		fmt.Sprintf("period_a=%s revenue_a=%s orders_a=%d", a.Label, joyboyNum(da.Revenue), da.Orders),
 		fmt.Sprintf("period_b=%s revenue_b=%s orders_b=%d", b.Label, joyboyNum(db.Revenue), db.Orders),
+	}
+	// The average bill per period, for "บิลเฉลี่ยเดือนนี้เทียบเดือนก่อนต่างกันไหม" —
+	// the model cannot divide, so both averages are computed here.
+	if da.Orders > 0 {
+		lines = append(lines, "avg_per_order_a="+joyboyNum(roundBaht(da.Revenue/float64(da.Orders))))
+	}
+	if db.Orders > 0 {
+		lines = append(lines, "avg_per_order_b="+joyboyNum(roundBaht(db.Revenue/float64(db.Orders))))
 	}
 	switch {
 	case db.Revenue > 0:

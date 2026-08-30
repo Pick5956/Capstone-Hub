@@ -75,37 +75,43 @@ html {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
+/* A thumb and nothing else. The track was a grey channel painted down the side
+   of every card that scrolls; transparent lets the surface it sits on show
+   through, and the padding-box border floats the thumb off the edge instead of
+   ruling a line along it. */
 * {
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: var(--scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 *::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
 }
 
 *::-webkit-scrollbar-thumb {
-  min-height: 40px;
-  border: 2px solid var(--scrollbar-track);
+  min-height: 32px;
+  border: 2px solid transparent;
   border-radius: 999px;
   background: var(--scrollbar-thumb);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-corner {
-  background: var(--scrollbar-corner);
+  background: transparent;
 }
 
 /* Interactive controls should advertise that they can be clicked. Keep these
@@ -626,27 +632,6 @@ html {
   transform: translateY(1px) scale(0.99);
 }
 
-/* Wiggles for as long as the cursor sits on it. Written with the standalone
-   `rotate`/`translate` properties rather than `transform`, so it stacks with
-   whatever transform a utility class (or `.ui-press:active` above) already
-   sets instead of replacing it. Small angles: this runs on figures that still
-   have to be readable while they move. */
-@keyframes ui-shake {
-  0%,
-  100% {
-    rotate: -0.5deg;
-    translate: -0.5px 0;
-  }
-  50% {
-    rotate: 0.5deg;
-    translate: 0.5px 0;
-  }
-}
-
-.ui-shake:hover:not(:disabled) {
-  animation: ui-shake 320ms ease-in-out infinite;
-}
-
 /* A ledger row that lifts and tilts under the cursor, like a card being picked
    up. On a <table> row the shadow only paints when the table is
    border-separate — a collapsed table drops it silently. */
@@ -783,10 +768,6 @@ html {
 
   .ui-row-lift:hover {
     transform: none;
-  }
-
-  .ui-shake:hover:not(:disabled) {
-    animation: none;
   }
 
   ::view-transition-group(*),

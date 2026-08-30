@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Mic, Receipt, X } from "lucide-react";
+import { Loader2, Mic, Plus, Receipt, X } from "lucide-react";
 import { extractReceipt } from "@/src/lib/ai";
 import HoverTip from "@/src/components/shared/HoverTip";
 
@@ -30,6 +30,9 @@ type Props = {
   /** Filled while listening so a caller can drive its own controls next to the
    *  input bar: `stop` keeps what was said, `cancel` throws it away. Null when idle. */
   voiceControlsRef?: React.RefObject<{ stop: () => void; cancel: () => void } | null>;
+  /** Which tools to render. Split the bar by mounting one instance per side —
+   *  e.g. tools={["scan"]} on the left, tools={["voice"]} on the right. */
+  tools?: Array<"voice" | "scan">;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -67,12 +70,15 @@ export default function AIInputTools({
   onListeningChange,
   onVoiceLevel,
   voiceControlsRef,
+  tools = ["voice", "scan"],
 }: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -137,6 +143,25 @@ export default function AIInputTools({
   }, [onVoiceLevel]);
 
   useEffect(() => stopMeter, [stopMeter]);
+
+  // Close the "+" menu on an outside tap or Escape. It holds the receipt scanner
+  // (and anything added later), so it must not linger behind a tap meant for the
+  // chat or the send button.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
 
   if (!AI_TOOLS_ENABLED) return null;
 
@@ -226,10 +251,13 @@ export default function AIInputTools({
 
   const iconBtn =
     "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-all hover:-translate-y-0.5 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-orange-950/30 dark:hover:text-orange-400";
+  const iconBtnActive =
+    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-600 transition-all dark:bg-orange-950/30 dark:text-orange-400";
 
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5">
+      {tools.includes("voice") && (
       <HoverTip label={t("พูดเพื่อพิมพ์", "Speak to type")}>
         <button
           type="button"
@@ -245,19 +273,52 @@ export default function AIInputTools({
           <Mic className="h-4 w-4" />
         </button>
       </HoverTip>
-      <HoverTip label={t("สแกนบิล แล้วเปิดหน้ารายจ่ายให้บันทึก", "Scan a bill, then open Expenses to save")}>
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={disabled || scanning}
-          aria-label={t("สแกนบิลไปหน้ารายจ่าย", "Scan a bill into Expenses")}
-          className={iconBtn}
-        >
-          {scanning ? <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> : <Receipt className="h-4 w-4" />}
-        </button>
-      </HoverTip>
+      )}
+      {tools.includes("scan") && (
+      <div className="relative" ref={menuRef}>
+        <HoverTip label={t("เพิ่มเติม", "More")}>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            disabled={disabled || scanning}
+            aria-label={t("เพิ่มเติม", "More")}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className={menuOpen ? iconBtnActive : iconBtn}
+          >
+            {scanning ? (
+              <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+            ) : (
+              <Plus className={`h-4 w-4 transition-transform duration-200 ${menuOpen ? "rotate-45" : ""}`} />
+            )}
+          </button>
+        </HoverTip>
+        {menuOpen && (
+          <div
+            role="menu"
+            className="absolute bottom-full left-0 z-50 mb-2 min-w-[168px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg shadow-gray-950/10 dark:border-gray-800 dark:bg-gray-950"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                fileRef.current?.click();
+              }}
+              disabled={disabled || scanning}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-200 dark:hover:bg-orange-950/30 dark:hover:text-orange-300"
+            >
+              <Receipt className="h-4 w-4 shrink-0" />
+              <span>{t("สแกนบิล", "Scan bill")}</span>
+            </button>
+          </div>
+        )}
       </div>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
+      )}
+      </div>
+      {tools.includes("scan") && (
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
+      )}
 
       {error && (
         <div

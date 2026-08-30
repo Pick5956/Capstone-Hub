@@ -579,6 +579,19 @@ export default function AIAssistantPage() {
         createdAt: new Date(),
       },
     ]);
+    // A confirmed plan changed the shop, so the cached snapshot behind the stats
+    // panel is stale. Confirming a single action already refetched it; a plan —
+    // which can change several things at once — did not, so the numbers on this
+    // page kept showing the state from before the write until a reload.
+    snapshotRequests.invalidate();
+    // A request that arrives and changes nothing still returns HTTP 200 — the
+    // failure is in the body. Without this the bar read "saved, takes effect now"
+    // in green over a plan where every item failed. Throwing hands the backend's
+    // own words to the bar, which shows them and stays on the confirm button so
+    // the owner can try again.
+    if (response.data.succeeded === 0 && response.data.failed > 0) {
+      throw new Error(response.data.message);
+    }
   };
 
   const handlePlanCancel = () => {
@@ -650,7 +663,7 @@ export default function AIAssistantPage() {
   const isEmpty = messages.length <= 1;
 
   return (
-    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-4 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
+    <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
@@ -702,7 +715,7 @@ export default function AIAssistantPage() {
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
-            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-2 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
+            className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-1 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
               /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
               isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
             }`}
@@ -738,17 +751,17 @@ export default function AIAssistantPage() {
               messages.map((msg) => {
               if (msg.role === "user") {
                 return (
-                  <div key={msg.id} className="ml-auto flex max-w-[92%] items-end justify-end gap-2.5 sm:max-w-[85%]">
-                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
+                  <div key={msg.id} className="ml-auto flex max-w-[96%] items-end justify-end gap-2.5 sm:max-w-[85%]">
+                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-xs leading-relaxed text-white shadow-sm shadow-orange-500/25 sm:text-[13px]">
                       {msg.content}
                     </div>
                   </div>
                 );
               }
               return (
-                <div key={msg.id} className="flex max-w-[96%] items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
+                <div key={msg.id} className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
-                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
+                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.forecast && msg.forecast.forecast.length > 0 && (
                       <ForecastChart data={msg.forecast} language={language} />
@@ -923,9 +936,18 @@ export default function AIAssistantPage() {
               className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
                 voiceListening
                   ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
-                  : "border-gray-200 bg-white pl-4 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
+                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
               }`}
             >
+              {/* Scan / tools — far-left slot, only when not dictating */}
+              {!voiceListening && (
+                <AIInputTools
+                  tools={["scan"]}
+                  language={language}
+                  disabled={loading || actionConfirming || actionCancelling}
+                  onInsertText={handleVoiceText}
+                />
+              )}
               {/* Discard the take — left slot, like a voice memo's cancel */}
               {voiceListening && (
                 <HoverTip label={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}>
@@ -961,6 +983,7 @@ export default function AIAssistantPage() {
               {/* Kept mounted while dictating (it owns the mic session), just hidden */}
               <div className={voiceListening ? "hidden" : "contents"}>
                 <AIInputTools
+                  tools={["voice"]}
                   language={language}
                   disabled={loading || actionConfirming || actionCancelling}
                   onInsertText={handleVoiceText}
