@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Sparkles, Square, TrendingUp, Wallet, X } from "lucide-react";
+import { ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -56,20 +56,6 @@ type Message = {
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
-
-function formatCurrency(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    style: "currency",
-    currency: "THB",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatNumber(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value);
-}
 
 function buildCopy(language: "th" | "en") {
   return language === "th"
@@ -125,22 +111,6 @@ function buildCopy(language: "th" | "en") {
           "Are there stockout or overbuying risks?",
         ],
       };
-}
-
-function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="mt-1 truncate text-lg font-semibold text-gray-950 dark:text-white">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function AIAssistantPage() {
@@ -657,9 +627,6 @@ export default function AIAssistantPage() {
     );
   }
 
-  const salesDays = latestSnapshot?.sales_days ?? [];
-  const stockRisks = latestSnapshot?.stock_risks ?? [];
-  const inventorySummary = latestSnapshot?.inventory_summary;
   const isEmpty = messages.length <= 1;
 
   return (
@@ -1062,29 +1029,21 @@ export default function AIAssistantPage() {
           }`}
           aria-hidden={!drawerOpen}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-            <span className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
-              <Sparkles className="h-4 w-4 text-orange-500" />
-              {language === "th" ? "ข้อมูลร้านวันนี้" : "Shop insights"}
-            </span>
+          {/* No title bar: the panel is a notification list and already names
+              itself. A second heading above its own heading was two titles for
+              one thing, so only the close control stays, pinned right. */}
+          <div className="flex justify-end px-3 pt-3">
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
               aria-label={language === "th" ? "ปิด" : "Close"}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="ai-scroll min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+          <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             <AIInsightsPanel language={language} onCount={setInsightsCount} />
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
-            <Sparkles className="h-4 w-4 text-orange-500" />
-            {copy.snapshot}
-          </h2>
-          <MetricCard icon={<TrendingUp className="h-4 w-4" />} label={copy.salesDays} value={formatNumber(salesDays.length, language)} />
-          <MetricCard icon={<Wallet className="h-4 w-4" />} label={copy.inventoryValue} value={formatCurrency(inventorySummary?.value ?? 0, language)} />
-          <MetricCard icon={<AlertTriangle className="h-4 w-4" />} label={copy.stockRisks} value={formatNumber(stockRisks.length, language)} />
           </div>
         </aside>
     </main>
