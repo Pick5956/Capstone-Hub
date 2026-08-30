@@ -30,6 +30,9 @@ type Props = {
   /** Filled while listening so a caller can drive its own controls next to the
    *  input bar: `stop` keeps what was said, `cancel` throws it away. Null when idle. */
   voiceControlsRef?: React.RefObject<{ stop: () => void; cancel: () => void } | null>;
+  /** Which tools to render. Split the bar by mounting one instance per side —
+   *  e.g. tools={["scan"]} on the left, tools={["voice"]} on the right. */
+  tools?: Array<"voice" | "scan">;
 };
 
 // Shrink a photo to a modest JPEG before upload — smaller = faster + cheaper +
@@ -67,6 +70,7 @@ export default function AIInputTools({
   onListeningChange,
   onVoiceLevel,
   voiceControlsRef,
+  tools = ["voice", "scan"],
 }: Props) {
   const router = useRouter();
   const [listening, setListening] = useState(false);
@@ -253,6 +257,7 @@ export default function AIInputTools({
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5">
+      {tools.includes("voice") && (
       <HoverTip label={t("พูดเพื่อพิมพ์", "Speak to type")}>
         <button
           type="button"
@@ -268,6 +273,8 @@ export default function AIInputTools({
           <Mic className="h-4 w-4" />
         </button>
       </HoverTip>
+      )}
+      {tools.includes("scan") && (
       <div className="relative" ref={menuRef}>
         <HoverTip label={t("เพิ่มเติม", "More")}>
           <button
@@ -289,7 +296,7 @@ export default function AIInputTools({
         {menuOpen && (
           <div
             role="menu"
-            className="absolute bottom-full right-0 z-50 mb-2 min-w-[168px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg shadow-gray-950/10 dark:border-gray-800 dark:bg-gray-950"
+            className="absolute bottom-full left-0 z-50 mb-2 min-w-[168px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg shadow-gray-950/10 dark:border-gray-800 dark:bg-gray-950"
           >
             <button
               type="button"
@@ -307,8 +314,11 @@ export default function AIInputTools({
           </div>
         )}
       </div>
+      )}
       </div>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
+      {tools.includes("scan") && (
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPickImage} className="hidden" />
+      )}
 
       {error && (
         <div

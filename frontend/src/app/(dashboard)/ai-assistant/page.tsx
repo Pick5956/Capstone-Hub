@@ -752,7 +752,7 @@ export default function AIAssistantPage() {
               if (msg.role === "user") {
                 return (
                   <div key={msg.id} className="ml-auto flex max-w-[96%] items-end justify-end gap-2.5 sm:max-w-[85%]">
-                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-sm leading-relaxed text-white shadow-sm shadow-orange-500/25">
+                    <div className="break-words rounded-2xl rounded-br-md bg-gradient-to-br from-orange-500 to-amber-500 px-4 py-2.5 text-xs leading-relaxed text-white shadow-sm shadow-orange-500/25 sm:text-[13px]">
                       {msg.content}
                     </div>
                   </div>
@@ -761,7 +761,7 @@ export default function AIAssistantPage() {
               return (
                 <div key={msg.id} className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
-                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-sm text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100">
+                  <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
                     {msg.forecast && msg.forecast.forecast.length > 0 && (
                       <ForecastChart data={msg.forecast} language={language} />
@@ -936,9 +936,18 @@ export default function AIAssistantPage() {
               className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
                 voiceListening
                   ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
-                  : "border-gray-200 bg-white pl-4 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
+                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
               }`}
             >
+              {/* Scan / tools — far-left slot, only when not dictating */}
+              {!voiceListening && (
+                <AIInputTools
+                  tools={["scan"]}
+                  language={language}
+                  disabled={loading || actionConfirming || actionCancelling}
+                  onInsertText={handleVoiceText}
+                />
+              )}
               {/* Discard the take — left slot, like a voice memo's cancel */}
               {voiceListening && (
                 <HoverTip label={language === "th" ? "ยกเลิก ไม่เอาเสียงนี้" : "Cancel, discard this take"}>
@@ -974,6 +983,7 @@ export default function AIAssistantPage() {
               {/* Kept mounted while dictating (it owns the mic session), just hidden */}
               <div className={voiceListening ? "hidden" : "contents"}>
                 <AIInputTools
+                  tools={["voice"]}
                   language={language}
                   disabled={loading || actionConfirming || actionCancelling}
                   onInsertText={handleVoiceText}

@@ -1073,7 +1073,13 @@ export default function AIOperationsFloatingChat() {
                matching the full AI page. sm+ keeps the bordered footer. */
             className="bg-transparent px-3 pb-3 pt-1 dark:bg-transparent sm:rounded-b-2xl sm:border-t sm:border-gray-200 sm:bg-white sm:p-3.5 sm:dark:border-gray-800 sm:dark:bg-gray-950"
           >
-            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 pl-4 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
+              <AIInputTools
+                tools={["scan"]}
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
+              />
               <input
                 ref={inputRef}
                 type="text"
@@ -1085,6 +1091,7 @@ export default function AIOperationsFloatingChat() {
                 className="min-h-9 min-w-0 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
               <AIInputTools
+                tools={["voice"]}
                 language={language}
                 disabled={loading || actionConfirming || actionCancelling}
                 onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
