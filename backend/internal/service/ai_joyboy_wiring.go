@@ -302,6 +302,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyActiveOrdersBody(orders, repository.BangkokNow()), true, true
 
+	case joyboyToolMenuList:
+		// The menu itself, read live: it is the shop's own catalogue rather than a
+		// window of sales, so the 30-day snapshot has no version of it.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		items, err := t.service.repo.MenuCatalogue(t.restaurantID)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyMenuListBody(items), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

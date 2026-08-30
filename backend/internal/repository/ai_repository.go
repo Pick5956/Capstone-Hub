@@ -54,6 +54,16 @@ type AIMenuPrice struct {
 	Price float64 `json:"price"`
 }
 
+// AIMenuCatalogueItem is one row of the shop's own menu — what is on it, not what
+// sold. Every other menu list here is ranked by sales, so a menu that has never
+// been ordered appears in none of them.
+type AIMenuCatalogueItem struct {
+	Name        string  `json:"name"`
+	Price       float64 `json:"price"`
+	IsAvailable bool    `json:"is_available"`
+	Category    string  `json:"category"`
+}
+
 // AIIngredientUsage combines each ingredient's current stock with how much of it
 // was consumed (and its cost) over the analysis window. One query serves the
 // reorder-forecast, dead-stock, and top-cost-ingredient tools.
@@ -298,6 +308,23 @@ func (r *AIRepository) MostExpensiveMenus(restaurantID uint) ([]AIMenuPrice, err
 		Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
 		Order("price desc, name asc").
 		Limit(100).
+		Scan(&rows).Error
+	return rows, err
+}
+
+// MenuCatalogue lists the shop's whole menu — every item, sold or not, with its
+// price, whether it is currently on sale, and its category. It is not
+// time-windowed and not ranked by sales, which is exactly what separates it from
+// every other menu list in this file: those answer "what sells", this answers
+// "what do we serve". Ordered by category then name so the fact sheet reads like
+// the menu board rather than a database dump.
+func (r *AIRepository) MenuCatalogue(restaurantID uint) ([]AIMenuCatalogueItem, error) {
+	var rows []AIMenuCatalogueItem
+	err := r.db.Table("menu_items").
+		Select("menu_items.name, menu_items.price, menu_items.is_available, COALESCE(categories.name, '') AS category").
+		Joins("LEFT JOIN categories ON categories.id = menu_items.category_id AND categories.deleted_at IS NULL").
+		Where("menu_items.restaurant_id = ? AND menu_items.deleted_at IS NULL", restaurantID).
+		Order("category asc, menu_items.name asc").
 		Scan(&rows).Error
 	return rows, err
 }

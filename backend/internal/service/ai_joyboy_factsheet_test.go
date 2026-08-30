@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -293,6 +294,60 @@ func TestStockSheetsCarryTheTotalsTheModelCannotCompute(t *testing.T) {
 	})
 	if !strings.Contains(dead, "dead_value_total=650") {
 		t.Errorf("dead-stock sheet should total the money sitting idle:\n%s", dead)
+	}
+}
+
+// "ร้านมีกี่เมนู / มีเมนูอะไรบ้าง" had no source: every other menu tool ranks by
+// sales, so a menu nobody ordered appears in none of them and the model fell
+// through to chat and asked the owner for the menu. The sheet has to carry the
+// exact count (Go's, not the model's), the on/off-sale split, and the names.
+func TestMenuListSheetCountsTheWholeMenu(t *testing.T) {
+	body := joyboyMenuListBody([]repository.AIMenuCatalogueItem{
+		{Name: "ต้มยำกุ้งน้ำข้น", Price: 139, IsAvailable: true, Category: "อาหารจานเดียว"},
+		{Name: "ชาไทยเย็น", Price: 49, IsAvailable: true, Category: "เครื่องดื่ม"},
+		{Name: "ยำวุ้นเส้น", Price: 89, IsAvailable: false, Category: "ยำ"},
+	})
+	for _, want := range []string{
+		"total_menu_items=3",
+		"on_sale=2",
+		"off_sale=1",
+		"ต้มยำกุ้งน้ำข้น",
+		"ปิดขายอยู่", // the closed item must be marked, not silently listed
+		"เครื่องดื่ม",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the menu list sheet lost %q:\n%s", want, body)
+		}
+	}
+}
+
+// A shop with a long menu gets a cut list, and an uncut count. Unsaid, the model
+// reads the last row as the last menu — the misreading the ranked lists already
+// made once.
+func TestMenuListSheetSaysWhenTheListIsCut(t *testing.T) {
+	items := make([]repository.AIMenuCatalogueItem, 0, joyboyMenuListMaxRows+5)
+	for i := 0; i < joyboyMenuListMaxRows+5; i++ {
+		items = append(items, repository.AIMenuCatalogueItem{
+			Name: fmt.Sprintf("เมนู %d", i+1), Price: 60, IsAvailable: true, Category: "ทั่วไป",
+		})
+	}
+	body := joyboyMenuListBody(items)
+	if !strings.Contains(body, fmt.Sprintf("total_menu_items=%d", len(items))) {
+		t.Errorf("the count must stay exact even when the list is cut:\n%s", body)
+	}
+	if !strings.Contains(body, "แสดงรายชื่อแค่") {
+		t.Errorf("a cut list must say so:\n%s", body)
+	}
+	if strings.Contains(body, fmt.Sprintf("menu=เมนู %d ", len(items))) {
+		t.Errorf("rows past the cap should not be rendered:\n%s", body)
+	}
+}
+
+// An empty menu is a setup gap, not a shop with zero dishes.
+func TestMenuListSheetTreatsAnEmptyMenuAsNotSetUp(t *testing.T) {
+	body := joyboyMenuListBody(nil)
+	if !strings.Contains(body, "no_menu_items_recorded") {
+		t.Errorf("an empty menu should report the setup gap:\n%s", body)
 	}
 }
 

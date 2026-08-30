@@ -67,3 +67,20 @@ func TestTheAnswerPromptAsksForBoundedFormatting(t *testing.T) {
 		t.Fatal("the blanket heading ban is back and contradicts the formatting rules")
 	}
 }
+
+// A follow-up that points back ("ทำไมถึงเป็นเมนูนี้") has to be answered about the
+// thing that was actually named. Asked exactly that, the assistant had suggested
+// ข้าวผัดหมูไข่ดาว one turn earlier and then explained ข้าวกะเพราไก่ไข่ดาว — a
+// different dish, which reads as the assistant having forgotten its own sentence.
+// The rule lives in the persona so both prompts (with data and without) carry it.
+func TestBothPromptsRequireTheNameFromTheConversation(t *testing.T) {
+	prompts := []string{
+		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, ""),
+		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, "menu=ข้าวผัดหมูไข่ดาว qty=12"),
+	}
+	for _, prompt := range prompts {
+		if !strings.Contains(prompt, "ให้ใช้ชื่อเดิมเป๊ะ ๆ") {
+			t.Fatalf("the prompt no longer pins a follow-up to the name already used:\n%s", prompt)
+		}
+	}
+}

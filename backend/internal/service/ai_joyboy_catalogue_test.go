@@ -83,6 +83,43 @@ func TestRevenueRankingDefersToCountForBareBestSeller(t *testing.T) {
 	}
 }
 
+// A tool whose wiring reads a named period has to SAY so. The expense and profit
+// tools have resolved "สัปดาห์ก่อน" / "เดือนที่แล้ว" through periodNamedIn for
+// weeks, but both descriptions still opened with a flat "30 วันล่าสุด" — so asked
+// "สัปดาห์ก่อนจ่ายอะไรไปบ้าง" the model judged the tool out of scope, picked
+// nothing, and asked the owner which kind of spending they meant. A capability
+// the description hides does not exist as far as the selection round is concerned.
+func TestPeriodCapableToolsAdvertiseThatTheyTakeAPeriod(t *testing.T) {
+	for _, name := range []AIToolName{joyboyToolExpenseSummary, AIToolGetProfitSummary} {
+		guide := joyboyExtraToolGuide[name]
+		if guide == "" {
+			guide = joyboyToolGuide[name]
+		}
+		if !strings.Contains(guide, "เลือกช่วงเวลาได้") {
+			t.Errorf("%s reads named periods but its guide does not say so:\n%s", name, guide)
+		}
+		if !strings.Contains(guide, "สัปดาห์ก่อน") {
+			t.Errorf("%s should name a relative period it can handle, not only months:\n%s", name, guide)
+		}
+	}
+}
+
+// The menu tools all rank by sales, so "ร้านมีกี่เมนู / มีเมนูอะไรบ้าง" had no
+// home and fell through to chat. get_menu_list is the shop's own catalogue, and
+// its guide has to separate itself from the ranking tools or the model will keep
+// reaching for the best-seller list.
+func TestMenuListGuideSeparatesItselfFromTheSalesRankings(t *testing.T) {
+	guide := joyboyExtraToolGuide[joyboyToolMenuList]
+	if guide == "" {
+		t.Fatal("get_menu_list has no description, so it is invisible to the model")
+	}
+	for _, want := range []string{"มีกี่เมนู", "มีเมนูอะไรบ้าง", "get_top_selling_menus", "get_menu_detail"} {
+		if !strings.Contains(guide, want) {
+			t.Errorf("the menu-list guide lost %q:\n%s", want, guide)
+		}
+	}
+}
+
 // get_data_coverage is a joyboy-only tool answering "how far back does the data
 // reach?". Its fact sheet must carry the span as raw figures — first and last
 // day, plus the count — and fall back to no-data when there are no paid sales,

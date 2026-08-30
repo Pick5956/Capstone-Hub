@@ -147,6 +147,13 @@ const (
 // so this shape of question had no source at all.
 const joyboyToolActiveOrders AIToolName = "get_active_orders"
 
+// joyboyToolMenuList reads the menu itself. Every other menu tool here ranks by
+// sales or margin, so a plain "มีเมนูอะไรบ้าง / มีกี่เมนู" had nowhere to land: the
+// model fell through to chat and asked the owner to supply the menu, which is the
+// one source it could never come from. The same shape of gap get_shop_profile
+// closed for "ร้านเราชื่ออะไร".
+const joyboyToolMenuList AIToolName = "get_menu_list"
+
 // joyboyToolShopProfile reads the shop's own identity — its name, branch, type
 // and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
 // end the model filled by dumping a sales total.
@@ -171,6 +178,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolMenuDetail,
 	joyboyToolShopProfile,
 	joyboyToolActiveOrders,
+	joyboyToolMenuList,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -181,9 +189,13 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ยอดขายรวมทั้งหมดตั้งแต่เปิดร้าน ออเดอร์รวมทั้งหมด",
 	AIToolSearchSystemDocs: "ค้นคู่มือการใช้งานเว็บ Dishy เพื่อตอบวิธีใช้ระบบ " +
 		"ใช้ตอบ: ใช้ระบบยังไง เมนูตรงไหน ตั้งค่าอะไรที่ไหน ทำอะไรได้บ้าง ระบบมีข้อจำกัดอะไร แก้ปัญหายังไง",
-	AIToolGetProfitSummary: "กำไรรวมทั้งร้านในช่วงที่วิเคราะห์ คือรายได้รวม ลบ ต้นทุนวัตถุดิบรวม " +
+	AIToolGetProfitSummary: "กำไรรวมทั้งร้าน คือรายได้รวม ลบ ต้นทุนวัตถุดิบรวม " +
 		"เหลือกำไรรวม พร้อม margin เฉลี่ยทั้งร้าน เป็นภาพรวมทั้งร้าน ไม่ใช่รายเมนู " +
-		"ใช้ตอบ: ร้านกำไรเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
+		// Same fix as the expense tool: the wiring has read named periods for weeks,
+		// but the description never said so, so period questions looked out of scope.
+		"**เครื่องมือนี้เลือกช่วงเวลาได้** ถ้าคำถามเอ่ยช่วงเวลา (สัปดาห์ก่อน เดือนที่แล้ว เดือนกรกฎาคม) " +
+		"ระบบจะคิดกำไรของช่วงนั้นให้เอง ถ้าไม่เอ่ยช่วงเวลาจะใช้ 30 วันล่าสุด " +
+		"ใช้ตอบ: ร้านกำไรเท่าไหร่ กำไรเดือนที่แล้วเท่าไหร่ ต้นทุนรวมเท่าไหร่ กำไรสุทธิเท่าไหร่ margin ทั้งร้านกี่เปอร์เซ็นต์ " +
 		"ถ้าถามแค่ยอดขายรวมไม่พูดถึงกำไรหรือต้นทุน ให้ใช้ get_sales_summary แทน " +
 		"ถ้าถามกำไรของเมนูตัวใดตัวหนึ่ง ให้ใช้ get_highest_margin_menu หรือ get_lowest_margin_menu แทน",
 	joyboyToolIngredientDetail: "ข้อมูลของ \"วัตถุดิบตัวที่ผู้ใช้เอ่ยชื่อ\" โดยเฉพาะ " +
@@ -197,9 +209,16 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ข้าวผัดปูใช้วัตถุดิบอะไร · ถ้าปิดขายเมนูนี้จะกระทบยอดขายแค่ไหน " +
 		"**สำคัญ: ถ้าคำถามเอ่ยชื่อเมนูเจาะจง ให้ใช้เครื่องมือนี้ ห้ามใช้ลิสต์อันดับ** " +
 		"เพราะลิสต์อันดับมีแค่ไม่กี่ตัว เมนูที่ไม่อยู่ในลิสต์ไม่ได้แปลว่าไม่มียอดขาย",
-	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริงใน 30 วันล่าสุด แยกตามหมวด " +
+	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริง แยกตามหมวด " +
 		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
-		"ใช้ตอบ: จ่ายอะไรไปบ้าง รายจ่ายเท่าไหร่ ค่าไฟเดือนนี้เท่าไหร่ หมวดไหนจ่ายเยอะสุด ต้นทุนคงที่เท่าไหร่ " +
+		// The window used to be described as a hard "30 วันล่าสุด". Asked
+		// "สัปดาห์ก่อนจ่ายอะไรไปบ้าง" the model read that as "this tool cannot do
+		// last week", picked nothing, and replied by asking the owner which kind of
+		// spending they meant — over a tool that had already supported named
+		// periods for weeks. The scope has to be described as it actually behaves.
+		"**เครื่องมือนี้เลือกช่วงเวลาได้** ถ้าคำถามเอ่ยช่วงเวลา (สัปดาห์ก่อน เมื่อวาน เดือนที่แล้ว เดือนกรกฎาคม) " +
+		"ระบบจะดึงรายจ่ายของช่วงนั้นให้เอง ถ้าไม่เอ่ยช่วงเวลาจะใช้ 30 วันล่าสุด " +
+		"ใช้ตอบ: จ่ายอะไรไปบ้าง สัปดาห์ก่อนจ่ายอะไรไปบ้าง รายจ่ายเท่าไหร่ ค่าไฟเดือนนี้เท่าไหร่ หมวดไหนจ่ายเยอะสุด ต้นทุนคงที่เท่าไหร่ " +
 		"นี่คือเงินสดที่จ่ายออกไป คนละอย่างกับต้นทุนวัตถุดิบของอาหารที่ขายไปแล้ว " +
 		"ถ้าถามกำไรจากการขาย ให้ใช้ get_profit_summary แทน",
 	joyboyToolTableStatus: "สถานะโต๊ะในร้าน \"ตอนนี้เดี๋ยวนี้\" ไม่ใช่ข้อมูลย้อนหลัง " +
@@ -227,6 +246,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"มีบิลค้างนานสุดกี่นาที ยอดค้างชำระรวมเท่าไหร่ ร้านยุ่งอยู่ไหม " +
 		"ดูได้อย่างเดียว รับออเดอร์หรือปิดบิลให้ไม่ได้ " +
 		"ถ้าถามยอดขายที่ปิดบิลไปแล้ว ให้ใช้ get_sales_summary หรือ get_sales_for_period แทน",
+	joyboyToolMenuList: "รายการเมนูทั้งหมดที่ร้านมี พร้อมจำนวนเมนูทั้งหมด ราคา หมวด และเปิดขายหรือปิดขายอยู่ " +
+		"เป็น \"เมนูที่ร้านมี\" ไม่ใช่ \"เมนูที่ขายดี\" จึงรวมเมนูที่ยังไม่เคยขายได้เลยด้วย " +
+		"ใช้ตอบ: ร้านมีกี่เมนู มีเมนูอะไรบ้าง ขอดูรายการเมนู เมนูไหนปิดขายอยู่บ้าง เมนูทั้งหมดมีอะไร ราคาเมนูแต่ละตัวเท่าไหร่ " +
+		"ถ้าถามว่าเมนูไหนขายดีหรือทำเงินได้เท่าไหร่ ให้ใช้ get_top_selling_menus หรือ get_menu_revenue_ranking แทน " +
+		"ถ้าถามถึงเมนูตัวใดตัวหนึ่งที่เอ่ยชื่อ ให้ใช้ get_menu_detail แทน",
 	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
 		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
 		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
@@ -250,6 +274,7 @@ var joyboyToolGroups = []struct {
 	Tools   []AIToolName
 }{
 	{"เมนู", []AIToolName{
+		joyboyToolMenuList,
 		AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus,
 		AIToolGetHighestMarginMenu, AIToolGetLowestMarginMenu, AIToolGetLowestCostMenu,
 		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering, joyboyToolMenuForPeriod,

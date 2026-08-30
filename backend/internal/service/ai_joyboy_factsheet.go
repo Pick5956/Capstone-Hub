@@ -645,6 +645,59 @@ func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) st
 	return joyboyJoin(lines)
 }
 
+// joyboyMenuListMaxRows caps how many menu names travel to the model. A shop
+// with a hundred items would otherwise send a wall of text the model has to
+// re-read on every turn; the counts above the list stay exact either way.
+const joyboyMenuListMaxRows = 40
+
+// joyboyMenuListBody renders the menu itself: how many items the shop serves,
+// how many are on sale right now, and their names and prices by category.
+//
+// Every other menu tool ranks by sales, so "เมนูในร้านมีกี่เมนู" and "มีเมนูอะไรบ้าง"
+// had no source at all — the model answered by asking the owner for the menu,
+// which is the one place the answer could not come from. Go does the counting;
+// the model is only allowed to phrase it.
+func joyboyMenuListBody(items []repository.AIMenuCatalogueItem) string {
+	if len(items) == 0 {
+		return joyboyNotSetUpYet("no_menu_items_recorded",
+			"ยังไม่มีเมนูในระบบเลย ห้ามตอบว่ามี 0 เมนูเฉย ๆ ให้บอกว่าต้องไปเพิ่มเมนูที่หน้าจัดการเมนูก่อน")
+	}
+
+	available := 0
+	for _, item := range items {
+		if item.IsAvailable {
+			available++
+		}
+	}
+	lines := []string{
+		"scope=current_menu",
+		fmt.Sprintf("total_menu_items=%d on_sale=%d off_sale=%d", len(items), available, len(items)-available),
+	}
+
+	shown := items
+	if len(shown) > joyboyMenuListMaxRows {
+		shown = shown[:joyboyMenuListMaxRows]
+		// Saying the list is cut is what stops the model from reading the last
+		// row as the last menu, the same misreading the ranked lists had.
+		lines = append(lines, fmt.Sprintf(
+			"note=แสดงรายชื่อแค่ %d เมนูแรกจากทั้งหมด %d เมนู ตัวเลขจำนวนเมนูด้านบนคือของจริงทั้งร้าน "+
+				"ถ้าผู้ใช้อยากเห็นครบให้บอกว่าดูได้ที่หน้าจัดการเมนู", len(shown), len(items)))
+	}
+	for _, item := range shown {
+		status := "เปิดขาย"
+		if !item.IsAvailable {
+			status = "ปิดขายอยู่"
+		}
+		category := strings.TrimSpace(item.Category)
+		if category == "" {
+			category = "ไม่ระบุหมวด"
+		}
+		lines = append(lines, fmt.Sprintf("menu=%s หมวด=%s ราคา=%s บาท สถานะ=%s",
+			item.Name, category, joyboyNum(item.Price), status))
+	}
+	return joyboyJoin(lines)
+}
+
 // joyboyShopProfileBody renders the shop's own identity — the answer to
 // "ร้านเราชื่ออะไร", which had no tool and so came back as a sales total.
 //
