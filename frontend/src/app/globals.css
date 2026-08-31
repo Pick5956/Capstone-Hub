@@ -119,6 +119,26 @@ html {
   display: none;
 }
 
+/* The rule above is the old, WebKit-only way of saying it, and Windows 11 browsers
+   have started ignoring it: their newer scrollbars draw an up and a down arrow at
+   the ends of every scrollable panel, which is what the owner saw in the chat.
+   The standard properties have no stepper buttons at all — there is nothing to
+   switch off — so they are stated here as well, on every scroller. Both models
+   coexist: a browser that honours the standard one ignores the WebKit rules for
+   that element, and one that does not falls back to them. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* scrollbar-thin was applied in several components and never defined anywhere, so
+   it did nothing. It keeps its name and now means what it says, for anyone who
+   reaches for it expecting a slimmer bar than the page default. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
 /* Interactive controls should advertise that they can be clicked. Keep these
    selectors at zero specificity so an intentional cursor utility still wins. */
 :where(
