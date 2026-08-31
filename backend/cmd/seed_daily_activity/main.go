@@ -38,6 +38,7 @@ func main() {
 	force := flag.Bool("force", false, "re-seed even if this day already has activity")
 	purge := flag.Bool("purge", false, "remove the activity previously seeded for this day")
 	restock := flag.Bool("restock", false, "top every ingredient that is below its minimum back up to a working level")
+	calibrate := flag.Bool("calibrate", false, "set each ingredient's minimum from how fast it is actually used, then refill the shelves")
 	flag.Parse()
 
 	if err := config.LoadRuntimeEnvironment(); err != nil {
@@ -68,6 +69,11 @@ func main() {
 
 	if *restock {
 		restockShelves(db, *restaurantID)
+		return
+	}
+
+	if *calibrate {
+		calibrateStock(db, *restaurantID)
 		return
 	}
 
@@ -300,6 +306,80 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 		return nil
 	})
 	return summary, err
+}
+
+// Days of cover the calibration aims for. The minimum is the line where the
+// shop should already be ordering, so it sits a couple of days ahead of running
+// dry; the refill target is a week, which is what a small kitchen actually holds.
+const (
+	calibrateMinDays   = 2.0
+	calibrateStockDays = 7.0
+	calibrateWindow    = 30.0 // days of history the usage rate is read from
+)
+
+// calibrateStock sets each ingredient's minimum from how fast it is really used,
+// then refills the shelves to about a week of cover.
+//
+// The demo data had minimums that bore no relation to consumption: soda is used
+// 3,902 ml a day with its minimum set to 325 ml — a line the shop crosses within
+// minutes of opening, so the panel warned about almost every ingredient, every
+// day, and the warning stopped meaning anything. Restocking to three times that
+// minimum did not help, because three times a wrong number is still wrong.
+//
+// Ingredients with no recorded usage are left alone: there is no consumption to
+// derive a sensible minimum from, and their stock is a dead-stock question
+// rather than a reorder one.
+func calibrateStock(db *gorm.DB, restaurantID uint) {
+	var ingredients []entity.Ingredient
+	if err := db.Where("restaurant_id = ?", restaurantID).Find(&ingredients).Error; err != nil {
+		log.Fatalf("load ingredients: %v", err)
+	}
+
+	type usageRow struct {
+		IngredientID uint
+		Used         float64
+	}
+	var rows []usageRow
+	// order_inventory_deductions, not ingredient_transactions: the deductions are
+	// what cooking actually consumed, and they are the same rows the assistant's
+	// own "ใช้เฉลี่ย X/วัน" figure is computed from. Reading a different table
+	// would tune the minimum against a number nobody sees.
+	if err := db.Table("order_inventory_deductions").
+		Select("ingredient_id, SUM(quantity) AS used").
+		Where("created_at >= ? AND deleted_at IS NULL",
+			time.Now().AddDate(0, 0, -int(calibrateWindow))).
+		Group("ingredient_id").
+		Scan(&rows).Error; err != nil {
+		log.Fatalf("read usage: %v", err)
+	}
+	usedByID := make(map[uint]float64, len(rows))
+	for _, r := range rows {
+		usedByID[r.IngredientID] = r.Used
+	}
+
+	tuned, filled, untouched := 0, 0, 0
+	for _, ing := range ingredients {
+		dailyUse := usedByID[ing.ID] / calibrateWindow
+		if dailyUse <= 0 {
+			untouched++
+			continue
+		}
+		updates := map[string]interface{}{
+			"min_stock": round2(dailyUse * calibrateMinDays),
+		}
+		tuned++
+		if target := round2(dailyUse * calibrateStockDays); ing.Stock < target {
+			updates["stock"] = target
+			filled++
+		}
+		if err := db.Model(&entity.Ingredient{}).
+			Where("id = ? AND restaurant_id = ?", ing.ID, restaurantID).
+			Updates(updates).Error; err != nil {
+			log.Fatalf("calibrate %s: %v", ing.Name, err)
+		}
+	}
+	log.Printf("ตั้งขั้นต่ำตามการใช้จริงแล้ว %d ตัว (พอใช้ %.0f วัน) · เติมสต๊อกให้พอใช้ %.0f วัน %d ตัว · ไม่แตะ %d ตัวที่ไม่มีการใช้เลย",
+		tuned, calibrateMinDays, calibrateStockDays, filled, untouched)
 }
 
 // restockShelves refills every ingredient sitting at or below its minimum, the
