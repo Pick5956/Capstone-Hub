@@ -23,6 +23,11 @@ type AIConversationMessage struct {
 	ID      string `json:"id,omitempty"`
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Topic is filled only for history rebuilt from stored turns: a short Thai
+	// label for what that turn was about, so a turn too old for the verbatim
+	// window still appears in the thread index. Never sent to or accepted from the
+	// client — the client has no tool metadata to put in it.
+	Topic string `json:"-"`
 }
 
 type AIAskResponse struct {

@@ -670,7 +670,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 func joyboyHistory(history []AIConversationMessage) []joyboy.Turn {
 	turns := make([]joyboy.Turn, 0, len(history))
 	for _, message := range history {
-		turns = append(turns, joyboy.Turn{Role: message.Role, Content: message.Content})
+		turns = append(turns, joyboy.Turn{Role: message.Role, Content: message.Content, Topic: message.Topic})
 	}
 	return turns
 }

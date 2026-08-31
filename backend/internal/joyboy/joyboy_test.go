@@ -244,20 +244,89 @@ func TestFactSheetLabelsEveryBlockAndSkipsEmptyOnes(t *testing.T) {
 	}
 }
 
-func TestHistoryIsTrimmedAndOmittedWhenEmpty(t *testing.T) {
+// The thread is trimmed by size now, not by a count of exchanges. The count was
+// the wrong unit: two chatty turns cost less than half of one long stock listing,
+// so a fixed count either threw away a short conversation the owner was still
+// referring back to, or spent an unpredictable amount on a long one.
+func TestHistoryIsTrimmedBySizeNotByCount(t *testing.T) {
 	if formatHistory(nil) != "\n" {
 		t.Fatalf("empty history = %q, want no heading", formatHistory(nil))
 	}
-	long := make([]Turn, 0, 10)
+
+	// Ten short exchanges are a normal chat and now all survive — this is exactly
+	// what the old four-message cap threw away.
+	short := make([]Turn, 0, 20)
 	for i := 0; i < 10; i++ {
-		long = append(long, Turn{Role: "user", Content: "คำถามที่ " + string(rune('0'+i))})
+		short = append(short,
+			Turn{Role: "user", Content: "คำถามที่ " + string(rune('0'+i))},
+			Turn{Role: "assistant", Content: "คำตอบที่ " + string(rune('0'+i))})
 	}
-	rendered := formatHistory(long)
-	if strings.Contains(rendered, "คำถามที่ 0") {
-		t.Fatal("the oldest turns should be trimmed away")
+	rendered := formatHistory(short)
+	for i := 0; i < 10; i++ {
+		if !strings.Contains(rendered, "คำถามที่ "+string(rune('0'+i))) {
+			t.Fatalf("a short conversation should be remembered whole; lost turn %d:\n%s", i, rendered)
+		}
 	}
-	if !strings.Contains(rendered, "คำถามที่ 9") {
-		t.Fatal("the newest turn must survive")
+
+	// Long exchanges spend the budget quickly, so the oldest fall off while the
+	// newest — what "อันนั้น" points at — always stays.
+	long := make([]Turn, 0, 20)
+	for i := 0; i < 10; i++ {
+		long = append(long,
+			Turn{Role: "user", Content: "คำถามยาวที่ " + string(rune('0'+i)) + strings.Repeat("ก", 150)},
+			Turn{Role: "assistant", Content: "คำตอบยาวที่ " + string(rune('0'+i)) + strings.Repeat("ข", 150)})
+	}
+	rendered = formatHistory(long)
+	verbatim := rendered
+	if at := strings.Index(rendered, "บทสนทนาก่อนหน้า:"); at >= 0 {
+		verbatim = rendered[at:]
+	}
+	// The oldest long turns leave the verbatim window...
+	if strings.Contains(verbatim, "คำถามยาวที่ 0") {
+		t.Fatalf("the oldest long turns should leave the verbatim window:\n%s", rendered)
+	}
+	// ...but they are not forgotten: each leaves a line in the thread index, which
+	// is what lets the assistant answer "what did we talk about" honestly.
+	if !strings.Contains(rendered, "เรื่องที่คุยกันไปก่อนหน้านี้") {
+		t.Fatalf("trimmed turns should still be indexed:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "คำถามยาวที่ 0") {
+		t.Fatalf("the oldest question should survive as an index line:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "คำตอบยาวที่ 9") {
+		t.Fatalf("the newest turn must survive:\n%s", rendered)
+	}
+	if runes := []rune(rendered); len(runes) > historyBudgetChars*2 {
+		t.Fatalf("the rendered thread overran its budget: %d characters", len(runes))
+	}
+}
+
+// One enormous answer must not silently disappear: a follow-up usually points at
+// the end of it ("อันสุดท้ายที่บอก"), so it is cut rather than dropped.
+func TestAnOversizedMessageIsCutNotDropped(t *testing.T) {
+	huge := Turn{Role: "assistant", Content: "เริ่มต้น" + strings.Repeat("ค", 5000) + "ท้ายสุดคือชาไทยเย็น"}
+	rendered := formatHistory([]Turn{{Role: "user", Content: "ขอลิสต์ยาว ๆ"}, huge})
+	if !strings.Contains(rendered, "ท้ายสุดคือชาไทยเย็น") {
+		t.Fatalf("the tail of a long answer is what follow-ups point at:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "เริ่มต้น") {
+		t.Fatalf("the message should have been cut from the front:\n%s", rendered)
+	}
+}
+
+// A thread that opens on an answer whose question was trimmed away reads as the
+// assistant talking to itself.
+func TestTheThreadNeverStartsOnAnOrphanAnswer(t *testing.T) {
+	turns := []Turn{}
+	for i := 0; i < 8; i++ {
+		turns = append(turns,
+			Turn{Role: "user", Content: "ถาม " + string(rune('0'+i)) + strings.Repeat("ก", 120)},
+			Turn{Role: "assistant", Content: "ตอบ " + string(rune('0'+i)) + strings.Repeat("ข", 120)})
+	}
+	rendered := formatHistory(turns)
+	body := strings.TrimPrefix(rendered, "\nบทสนทนาก่อนหน้า:\n")
+	if strings.HasPrefix(body, "ผู้ช่วย: ") {
+		t.Fatalf("the thread should not open on an orphan answer:\n%s", rendered)
 	}
 }
 
@@ -374,5 +443,50 @@ func TestAskDoesNotRewriteAnAnswerThatMatchesTheSheet(t *testing.T) {
 	}
 	if chat.writeCalls != 1 {
 		t.Errorf("writeCalls = %d, want a single write", chat.writeCalls)
+	}
+}
+
+// The index is what stops a long conversation from being forgotten outright, and
+// what it deliberately leaves out matters as much as what it keeps: no figures.
+// A number remembered from ten minutes ago is stale the moment an order is
+// cooked, so the index says only what was discussed and sends the next answer
+// back through the tool to read the database now.
+func TestTheThreadIndexRemembersTopicsWithoutFigures(t *testing.T) {
+	turns := []Turn{
+		{Role: "user", Content: "เมื่อวานขายได้เท่าไหร่", Topic: "ยอดขายและกำไร"},
+		{Role: "assistant", Content: "เมื่อวานขายได้ 7,880 บาทครับ"},
+		{Role: "user", Content: "กะเพราเหลือเท่าไหร่", Topic: "วัตถุดิบและสต๊อก"},
+		{Role: "assistant", Content: "กะเพราเหลือ 423 กรัมครับ"},
+	}
+	index := formatThreadIndex(turns)
+
+	for _, want := range []string{"เมื่อวานขายได้เท่าไหร่", "กะเพราเหลือเท่าไหร่", "ยอดขายและกำไร", "วัตถุดิบและสต๊อก"} {
+		if !strings.Contains(index, want) {
+			t.Errorf("the index lost %q:\n%s", want, index)
+		}
+	}
+	// The answers held real figures; none of them may reach the index.
+	for _, figure := range []string{"7,880", "423"} {
+		if strings.Contains(index, figure) {
+			t.Errorf("a figure leaked into the index (%s) — it would be quoted as current:\n%s", figure, index)
+		}
+	}
+	if !strings.Contains(index, "เรียกเครื่องมือใหม่") {
+		t.Errorf("the index must tell the model to re-read the data for numbers:\n%s", index)
+	}
+	if formatThreadIndex(nil) != "" {
+		t.Error("no older turns should produce no index at all")
+	}
+}
+
+// A tool name in the prompt is one the model has copied into an answer before,
+// and the answer cleaner only strips the bracketed form. The index uses the
+// section heading instead, so there is nothing raw to copy.
+func TestTheThreadIndexNeverCarriesRawToolNames(t *testing.T) {
+	index := formatThreadIndex([]Turn{
+		{Role: "user", Content: "เมนูไหนขายดี", Topic: "เมนู"},
+	})
+	if strings.Contains(index, "get_") {
+		t.Errorf("a raw tool name reached the prompt:\n%s", index)
 	}
 }

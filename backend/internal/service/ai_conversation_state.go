@@ -110,11 +110,30 @@ func conversationTurnsToMessages(turns []entity.AIConversationTurn) []AIConversa
 	for _, turn := range turns {
 		turnID := strings.TrimSpace(turn.ID)
 		messages = append(messages,
-			AIConversationMessage{ID: turnID + "-user", Role: "user", Content: turn.Question},
+			AIConversationMessage{
+				ID: turnID + "-user", Role: "user", Content: turn.Question,
+				Topic: conversationTurnTopic(turn),
+			},
 			AIConversationMessage{ID: turnID + "-assistant", Role: "assistant", Content: providerSafeConversationAnswer(turn)},
 		)
 	}
 	return sanitizeConversationHistoryInternal(messages, true)
+}
+
+// conversationTurnTopic labels a stored turn for the thread index.
+//
+// It uses the tool's own section heading ("วัตถุดิบและสต๊อก", "เมนู") rather than
+// the tool name. Two reasons: the headings are already written for people and
+// kept up to date, and a raw name like get_top_selling_menus in the prompt is one
+// the model has copied into an answer before — the cleaner only strips the
+// bracketed form, so the bare one would reach the owner.
+func conversationTurnTopic(turn entity.AIConversationTurn) string {
+	for _, name := range strings.Split(turn.Tool, ",") {
+		if heading := joyboyToolGroupHeading(AIToolName(strings.TrimSpace(name))); heading != "" {
+			return heading
+		}
+	}
+	return ""
 }
 
 func providerSafeConversationAnswer(turn entity.AIConversationTurn) string {

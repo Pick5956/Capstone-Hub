@@ -86,6 +86,15 @@ type Tools interface {
 type Turn struct {
 	Role    string
 	Content string
+
+	// Topic is a short Thai label for what this turn was about, written by the
+	// caller from what the turn actually used (its tool's section: "วัตถุดิบและ
+	// สต๊อก", "เมนู"). It exists so a turn that falls outside the verbatim window
+	// still leaves a trace the model can read — the thread index — instead of
+	// vanishing. Deliberately carries no figures: the index says WHAT was
+	// discussed, never WHAT THE NUMBER WAS, so an answer about it has to call the
+	// tool again and read fresh data. Empty for turns with no tool behind them.
+	Topic string
 }
 
 // Request is one question to answer.

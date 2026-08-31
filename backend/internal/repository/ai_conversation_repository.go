@@ -24,7 +24,14 @@ const (
 	AIConversationQuestionMaxRunes     = 800
 	AIConversationAnswerMaxRunes       = 16 * 1024
 	AIConversationMaxStoredTurns       = 50
-	defaultConversationTurnLimit       = 6
+	// Six was chosen when the prompt showed the model two exchanges: loading more
+	// than it could read was waste. The prompt now takes what fits a character
+	// budget and summarises what does not, so the loader must hand it enough to do
+	// both — the older turns become the index that answers "สรุปที่คุยกันไปบ้าง"
+	// and "กลับไปเรื่องกะเพรา". Twenty-four is well under the fifty this table
+	// keeps per conversation, and these rows are small: a question, an answer, and
+	// two short metadata fields.
+	defaultConversationTurnLimit       = 24
 	maxConversationTurnLimit           = AIConversationMaxStoredTurns
 	defaultConversationCleanupLimit    = 500
 	maxConversationCleanupLimit        = 5000

@@ -20,10 +20,35 @@ import (
 // rather than running forever. Raising THAT is the knob for longer answers, and
 // it costs quota — this file's job is only to not throw away what came back.
 
-// historyTurns is how far back the model is shown. Two exchanges is enough to
-// resolve "แล้วอันที่สองล่ะ" without pushing the older half of a long
-// conversation into every prompt.
-const historyTurns = 4
+// How much of the thread the model is shown, measured in characters rather than
+// in exchanges.
+//
+// It used to be a count: four messages, two exchanges. A count is the wrong unit
+// because exchanges are not the same size. Two chatty ones cost less than half of
+// one long stock listing, so a count either wastes the budget on short talk or
+// blows it on long answers — and the cost per question is unpredictable either
+// way. A character budget spends the same amount every time and simply remembers
+// further back when the talk is short, which is when people ramble and refer back
+// the most.
+//
+// 1,400 is measured, not guessed: the median exchange in this shop's own logs is
+// 118 characters, so the budget holds roughly ten of them, and about four of the
+// longest ones seen (~360). At ~2 characters per token for Thai that is under 700
+// tokens per round.
+//
+// historyMessageMaxChars stops one enormous answer from eating the whole budget:
+// past it the message is cut, because the tail of a long answer is what a
+// follow-up usually points at ("อันสุดท้ายที่บอก"), and a cut message still
+// resolves a reference that a dropped one cannot.
+const (
+	historyBudgetChars     = 1400
+	historyMessageMaxChars = 400
+	// One index line per older turn: the owner's question cut to a glance, plus
+	// which part of the shop it touched. Twenty lines is more conversation than a
+	// shop owner has in one sitting, and costs about as much as two full exchanges.
+	threadIndexQuestionMaxChars = 60
+	threadIndexMaxLines         = 20
+)
 
 // joyboyPersona opens both prompts, because a question about the assistant
 // itself arrives on either path — with tools when the model reaches for one, and
@@ -52,6 +77,11 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   "ข้าวผัดหมูไข่ดาว" แล้วถูกถามว่าทำไมถึงเป็นเมนูนี้ ต้องพูดถึงข้าวผัดหมูไข่ดาว
   ห้ามเปลี่ยนไปพูดถึงเมนูอื่นที่ชื่อคล้ายกัน เพราะเจ้าของร้านจะงงว่าตอบคนละเรื่อง
   ถ้าหาชื่อเดิมในบทสนทนาไม่เจอ ให้ถามกลับว่าหมายถึงอันไหน
+- **เรื่องความจำ** คุณเห็นบทสนทนาล่าสุดแบบเต็ม ๆ และเห็นเรื่องเก่ากว่านั้นเป็นรายการย่อ
+  (มีแต่ว่าถามอะไรและเรื่องอะไร ไม่มีตัวเลข) ถ้าถูกขอให้สรุปว่าคุยอะไรกันไปบ้าง
+  ให้สรุปจากทั้งสองส่วน และ**ถ้าตัวเลขที่ถูกถามอยู่ในส่วนย่อ ห้ามเดาจากความจำ
+  ให้ไปเรียกข้อมูลใหม่** เพราะตัวเลขของร้านเปลี่ยนตลอดเวลา ของเมื่อกี้อาจไม่ใช่ของตอนนี้
+  ถ้าถูกถามถึงเรื่องที่เก่ากว่าที่คุณเห็น ให้บอกตรง ๆ ว่ามองย้อนไปไม่ถึง อย่าเดา
 - ถ้าคำถามกำกวมหรืออ่านแล้วไม่แน่ใจว่าหมายถึงอะไร ให้ถามกลับสั้น ๆ ก่อน
   ห้ามเดาความหมายแล้วตอบยาว
 - หน้าที่หลักของคุณคือช่วยเรื่องร้านอาหารร้านนี้ แต่ถ้าถูกถามเรื่องทั่วไปที่ตอบได้
@@ -260,25 +290,95 @@ func answerPrompt(question string, history []Turn, sheet string) string {
 // formatHistory renders the recent exchanges, or nothing at all when there are
 // none — an empty "บทสนทนาก่อนหน้า" heading invites the model to invent one.
 func formatHistory(history []Turn) string {
-	if len(history) > historyTurns {
-		history = history[len(history)-historyTurns:]
-	}
+	// Walk backwards so the newest exchange is the one guaranteed to fit: it is
+	// what "อันนั้น" almost always points at.
 	var lines []string
-	for _, turn := range history {
-		content := strings.TrimSpace(turn.Content)
+	spent, kept := 0, 0
+	for i := len(history) - 1; i >= 0; i-- {
+		content := strings.TrimSpace(history[i].Content)
 		if content == "" {
 			continue
 		}
+		if runes := []rune(content); len(runes) > historyMessageMaxChars {
+			content = string(runes[len(runes)-historyMessageMaxChars:])
+			content = "…" + content
+		}
+		cost := len([]rune(content))
+		// Always keep the newest message even when it alone overruns the budget —
+		// a prompt with no thread at all cannot resolve any reference.
+		if spent+cost > historyBudgetChars && len(lines) > 0 {
+			break
+		}
+		spent += cost
+		kept++
 		who := "เจ้าของร้าน"
-		if turn.Role == "assistant" {
+		if history[i].Role == "assistant" {
 			who = "ผู้ช่วย"
 		}
 		lines = append(lines, who+": "+content)
 	}
-	if len(lines) == 0 {
-		return "\n"
+	// The walk was newest-first; the model reads oldest-first.
+	for left, right := 0, len(lines)-1; left < right; left, right = left+1, right-1 {
+		lines[left], lines[right] = lines[right], lines[left]
 	}
-	return "\nบทสนทนาก่อนหน้า:\n" + strings.Join(lines, "\n") + "\n"
+	// A thread that starts on an answer whose question was trimmed away reads as
+	// the assistant talking to itself; drop the orphan.
+	if len(lines) > 1 && strings.HasPrefix(lines[0], "ผู้ช่วย: ") {
+		lines = lines[1:]
+	}
+	// Everything the budget could not fit still gets one line each, so a long
+	// conversation is remembered as a list of what was discussed rather than
+	// forgotten outright.
+	shown := len(history) - kept
+	if shown < 0 {
+		shown = 0
+	}
+	index := formatThreadIndex(history[:shown])
+	if len(lines) == 0 {
+		return index + "\n"
+	}
+	return index + "\nบทสนทนาก่อนหน้า:\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// formatThreadIndex lists the turns that did not fit the verbatim budget: what
+// was asked and which part of the shop it was about, and deliberately nothing
+// else.
+//
+// It carries no figures, and that is the point rather than a limitation. A
+// remembered number goes stale the moment the shop changes — stock moves every
+// time an order is cooked — so an assistant reciting one from ten minutes ago is
+// confidently wrong. An index that says only "we talked about stock" forces the
+// next answer back through the tool, which reads the database now.
+//
+// Nothing here can be invented: the question is the owner's own words as stored,
+// and the label comes from the tool the turn actually used.
+func formatThreadIndex(older []Turn) string {
+	lines := make([]string, 0, len(older))
+	for _, turn := range older {
+		if turn.Role != "user" {
+			continue
+		}
+		question := strings.TrimSpace(turn.Content)
+		if question == "" {
+			continue
+		}
+		if runes := []rune(question); len(runes) > threadIndexQuestionMaxChars {
+			question = string(runes[:threadIndexQuestionMaxChars]) + "…"
+		}
+		line := "· ถาม “" + question + "”"
+		if topic := strings.TrimSpace(turn.Topic); topic != "" {
+			line += " — เรื่อง" + topic
+		}
+		lines = append(lines, line)
+		if len(lines) >= threadIndexMaxLines {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\nเรื่องที่คุยกันไปก่อนหน้านี้ (ย่อ ไม่มีตัวเลข ถ้าต้องตอบตัวเลขให้เรียกเครื่องมือใหม่):\n" +
+		strings.Join(lines, "\n") + "\n"
 }
 
 // toolLabelInAnswer matches a fact sheet label that survived into the answer.
