@@ -114,6 +114,11 @@ html {
   background: transparent;
 }
 
+/* No stepper buttons at the ends of the bar: the thumb is the whole control. */
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Interactive controls should advertise that they can be clicked. Keep these
    selectors at zero specificity so an intentional cursor utility still wins. */
 :where(
@@ -689,30 +694,30 @@ html {
   background: var(--dashboard-shell-border);
 }
 
-.sidebar-nav-scroll {
+.sidebar-nav-scroll, .scroll-minimal {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar {
+.sidebar-nav-scroll::-webkit-scrollbar, .scroll-minimal::-webkit-scrollbar {
   width: 8px;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-track {
+.sidebar-nav-scroll::-webkit-scrollbar-track, .scroll-minimal::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+.sidebar-nav-scroll::-webkit-scrollbar-thumb, .scroll-minimal::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   background-clip: padding-box;
   background-color: transparent;
 }
 
-.sidebar-nav-scroll:hover {
+.sidebar-nav-scroll:hover, .scroll-minimal:hover {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-.sidebar-nav-scroll:hover::-webkit-scrollbar-thumb {
+.sidebar-nav-scroll:hover::-webkit-scrollbar-thumb, .scroll-minimal:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
 }
 
