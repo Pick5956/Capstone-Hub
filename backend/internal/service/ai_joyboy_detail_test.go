@@ -43,7 +43,7 @@ func aiDetailMenus() []entity.MenuItem {
 // "หมูสับเหลือเท่าไหร่" is the question an owner asks most, and before this tool
 // existed the assistant answered "ไม่มีข้อมูล" over a shelf row it could see.
 func TestIngredientDetailAnswersANamedIngredient(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "หมูสับเหลือเท่าไหร่แล้ว")
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "หมูสับเหลือเท่าไหร่แล้ว", nil)
 
 	for _, want := range []string{"ingredient=หมูสับ", "stock=5000", "unit=กรัม", "min_stock=1500", "status=ปกติ"} {
 		if !strings.Contains(body, want) {
@@ -60,7 +60,7 @@ func TestIngredientDetailAnswersANamedIngredient(t *testing.T) {
 // used to answer it by inventing a menu name out of the ingredient's name
 // ("กะเพราไก่" for a shop selling "ข้าวกะเพราไก่ไข่ดาว").
 func TestIngredientDetailNamesTheMenusFromTheStoredRecipe(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ถ้ากะเพราหมดจะกระทบเมนูไหนบ้าง")
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ถ้ากะเพราหมดจะกระทบเมนูไหนบ้าง", nil)
 
 	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว") {
 		t.Errorf("the real menu name should come from the recipe:\n%s", body)
@@ -72,7 +72,7 @@ func TestIngredientDetailNamesTheMenusFromTheStoredRecipe(t *testing.T) {
 
 // Low stock is a different state from empty, and the owner acts differently on it.
 func TestIngredientDetailFlagsBelowMinimum(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กุ้งสดเหลือเท่าไหร่")
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กุ้งสดเหลือเท่าไหร่", nil)
 	if !strings.Contains(body, "status=ต่ำกว่าขั้นต่ำ") {
 		t.Errorf("400 against a 1000 minimum is below minimum:\n%s", body)
 	}
@@ -81,7 +81,7 @@ func TestIngredientDetailFlagsBelowMinimum(t *testing.T) {
 // No name in the question is a question back, not a dead end — and the sheet
 // carries real names so the owner can answer in one word.
 func TestIngredientDetailAsksWhichOneWhenNoNameIsGiven(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ของในคลังเป็นไงบ้าง")
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ของในคลังเป็นไงบ้าง", nil)
 	if !strings.Contains(body, "no_ingredient_named_in_question") {
 		t.Errorf("should report that no ingredient was named:\n%s", body)
 	}
@@ -99,7 +99,7 @@ func aiDetailMargins() []repository.AIMenuMarginSummary {
 // The failure this replaces: asked about a menu outside the top five, the
 // assistant reported it had no sales at all.
 func TestMenuDetailAnswersAMenuOutsideTheTopRanking(t *testing.T) {
-	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด", "ผัดไทยกุ้งสดขายได้กี่รายการ")
+	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด", "ผัดไทยกุ้งสดขายได้กี่รายการ", nil)
 
 	for _, want := range []string{"menu=ผัดไทยกุ้งสด", "qty_sold=313", "price=89", "selling_status=เปิดขายอยู่"} {
 		if !strings.Contains(body, want) {
@@ -117,7 +117,7 @@ func TestMenuDetailAnswersAMenuOutsideTheTopRanking(t *testing.T) {
 // A menu with no sales in the window is a real zero, and must not read the same
 // as a menu the system does not know.
 func TestMenuDetailSeparatesZeroSalesFromUnknownMenu(t *testing.T) {
-	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด", "ต้มยำกุ้งน้ำข้นขายได้เท่าไหร่")
+	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด", "ต้มยำกุ้งน้ำข้นขายได้เท่าไหร่", nil)
 	if !strings.Contains(body, "qty_sold=0") {
 		t.Errorf("no sales in the window is zero, not missing:\n%s", body)
 	}
@@ -147,5 +147,43 @@ func TestRecipeLinkUsesIngredientID(t *testing.T) {
 	}
 	if got := aiMenusUsingIngredient([]entity.MenuItem{menu}, 7); len(got) != 0 {
 		t.Fatalf("unrelated ingredient matched: %v", got)
+	}
+}
+
+
+// A question can point at a menu or an ingredient without naming it — "เมนูแรก
+// ที่บอกไป กำไรดีไหม" right after the assistant said the best seller was
+// ชาไทยเย็น. The selector now picks the detail tool for those, but the tool used
+// to match names against the sentence alone, found none, and answered "ไม่พบ
+// ข้อมูล" over data that was one lookup away.
+func TestDetailToolsResolveANameFromTheConversation(t *testing.T) {
+	history := []AIConversationMessage{
+		{Role: "user", Content: "เมนูไหนขายดีที่สุด"},
+		{Role: "assistant", Content: "เมนูขายดีที่สุดคือ ผัดไทยกุ้งสดครับ"},
+	}
+	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด",
+		"เมนูแรกที่บอกไป กำไรดีไหม", history)
+	if strings.Contains(body, "no_menu_named_in_question") {
+		t.Fatalf("the menu named one turn earlier was not resolved: %s", body)
+	}
+	if !strings.Contains(body, "ผัดไทยกุ้งสด") {
+		t.Fatalf("the sheet should be about the menu from the thread: %s", body)
+	}
+
+	shelfBody := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "แล้วตัวนั้นเหลือเท่าไหร่",
+		[]AIConversationMessage{{Role: "assistant", Content: "หมูสับใกล้หมดแล้วครับ"}})
+	if !strings.Contains(shelfBody, "หมูสับ") {
+		t.Fatalf("the ingredient named one turn earlier was not resolved: %s", shelfBody)
+	}
+}
+
+// A name written in THIS turn always wins over one mentioned earlier, or a
+// follow-up about a different thing would silently answer about the old one.
+func TestTheNameInTheQuestionBeatsTheOneInTheThread(t *testing.T) {
+	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด",
+		"ต้มยำกุ้งน้ำข้นขายได้เท่าไหร่",
+		[]AIConversationMessage{{Role: "assistant", Content: "เมนูขายดีที่สุดคือ ผัดไทยกุ้งสดครับ"}})
+	if !strings.Contains(body, "ต้มยำกุ้งน้ำข้น") {
+		t.Fatalf("the question's own name must win: %s", body)
 	}
 }

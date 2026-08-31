@@ -87,3 +87,30 @@ func TestSelectionPromptForcesDocsForHowToQuestions(t *testing.T) {
 		}
 	}
 }
+
+// A question can point at a menu without spelling its name. Asked "เมนูแรกที่บอกไป
+// กำไรดีไหม" one turn after being told the best seller was ชาไทยเย็น, the selector
+// picked no tool and the answer came back "ไม่ทราบกำไรของชาไทยเย็น" — over a shop
+// whose margin per menu is one tool call away. The detail rule only fires on a
+// name, so the prompt has to say: resolve the reference first, then choose as if
+// the name had been typed.
+func TestSelectionPromptResolvesBackReferencesToNames(t *testing.T) {
+	history := []Turn{
+		{Role: "user", Content: "เมนูไหนขายดีที่สุด"},
+		{Role: "assistant", Content: "เมนูขายดีที่สุดคือ ชาไทยเย็นครับ"},
+	}
+	prompt := selectionPrompt("เมนูแรกที่บอกไป กำไรดีไหม", history, nil)
+	for _, want := range []string{
+		"อ้างถึงของที่พูดไปแล้ว",
+		"หาชื่อจริงจากบทสนทนาก่อนหน้า",
+		"get_menu_detail",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the back-reference rule lost %q", want)
+		}
+	}
+	// The history itself must reach the prompt, or there is nothing to resolve from.
+	if !strings.Contains(prompt, "ชาไทยเย็น") {
+		t.Fatal("the conversation the reference points at is not in the prompt")
+	}
+}

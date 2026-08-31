@@ -205,7 +205,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.actionMenus != nil {
 			menus, _ = t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
 		}
-		return joyboyIngredientDetailBody(shelf, menus, question), true, true
+		return joyboyIngredientDetailBody(shelf, menus, question, t.history), true, true
 
 	case joyboyToolMenuDetail:
 		if t.service.actionMenus == nil || t.service.repo == nil {
@@ -224,7 +224,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s margins failed (%v) → reporting without sales", tool, err)
 			margins = nil
 		}
-		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question), true, true
+		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question, t.history), true, true
 
 	case joyboyToolExpenseSummary:
 		if t.service.actionExpenses == nil {

@@ -28,6 +28,28 @@ import (
 // aiFindNamedRows returns the indexes of rows whose name appears in the question,
 // longest name first so "ต้มยำกุ้งน้ำข้น" wins over a shorter "ต้มยำกุ้ง" that is
 // contained in it. Matching is on the shop's real names, never on a word list.
+// aiFindNamedRowsInThread resolves a name the question points at without spelling
+// out: "เมนูแรกที่บอกไป กำไรดีไหม" one turn after the assistant said the best
+// seller was ชาไทยเย็น. The selection round now picks get_menu_detail for those,
+// but the detail tool matched against the sentence alone, found no menu in it,
+// and reported "ไม่พบข้อมูล" over a shop whose margin was one lookup away.
+//
+// The question always wins: a name written in this turn is what the owner is
+// asking about. Only when the sentence names nothing does the thread get read,
+// newest turn first, so "อันนั้น" resolves to the thing most recently discussed
+// rather than something from five turns ago.
+func aiFindNamedRowsInThread(names []string, question string, history []AIConversationMessage) []int {
+	if found := aiFindNamedRows(names, question); len(found) > 0 {
+		return found
+	}
+	for i := len(history) - 1; i >= 0; i-- {
+		if found := aiFindNamedRows(names, history[i].Content); len(found) > 0 {
+			return found
+		}
+	}
+	return nil
+}
+
 func aiFindNamedRows(names []string, question string) []int {
 	haystack := aiNormalizeName(question)
 	if haystack == "" {
@@ -78,7 +100,7 @@ func aiFindNamedRows(names []string, question string) []int {
 // joyboyIngredientDetailBody reports everything known about the ingredients named
 // in the question, including which menus consume them — the recipe link no other
 // tool exposes.
-func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, question string) string {
+func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, question string, history []AIConversationMessage) string {
 	if len(shelf) == 0 {
 		return joyboyNoData("no_ingredients_recorded")
 	}
@@ -86,7 +108,7 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 	for index, item := range shelf {
 		names[index] = item.Name
 	}
-	found := aiFindNamedRows(names, question)
+	found := aiFindNamedRowsInThread(names, question, history)
 	if len(found) == 0 {
 		// Naming what the shop actually stocks turns a dead end into a question the
 		// owner can answer in one word.
@@ -149,7 +171,7 @@ func aiMenusUsingIngredient(menus []entity.MenuItem, ingredientID uint) []string
 
 // joyboyMenuDetailBody reports one named menu: its price, whether it is being
 // sold, what it did over the analysis window, and what it is made of.
-func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMarginSummary, window, question string) string {
+func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMarginSummary, window, question string, history []AIConversationMessage) string {
 	if len(menus) == 0 {
 		return joyboyNoData("no_menu_items_recorded")
 	}
@@ -157,7 +179,7 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 	for index, item := range menus {
 		names[index] = item.Name
 	}
-	found := aiFindNamedRows(names, question)
+	found := aiFindNamedRowsInThread(names, question, history)
 	if len(found) == 0 {
 		sample := make([]string, 0, 8)
 		for _, item := range menus {
