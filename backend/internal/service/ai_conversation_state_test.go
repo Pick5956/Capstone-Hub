@@ -304,3 +304,40 @@ func TestDeleteConversationRequiresOwnerContext(t *testing.T) {
 		t.Fatalf("delete calls = %d", store.deleteCalls)
 	}
 }
+
+// The sanitiser sits between the stored turns and the prompt, and it used to
+// rebuild each message as {ID, Role, Content} — silently dropping Topic, which
+// the server had just written from the tool that turn actually used. The thread
+// index still rendered, with every label missing, and only in production: the
+// joyboy tests build their turns directly and never cross this line. That is the
+// gap this test closes.
+func TestSanitisingHistoryKeepsTheTopicLabel(t *testing.T) {
+	cleaned := sanitizeConversationHistory([]AIConversationMessage{
+		{ID: "t1-user", Role: "user", Content: "กะเพราเหลือเท่าไหร่", Topic: "วัตถุดิบและสต๊อก"},
+	})
+	if len(cleaned) != 1 {
+		t.Fatalf("expected the message to survive, got %d", len(cleaned))
+	}
+	if cleaned[0].Topic != "วัตถุดิบและสต๊อก" {
+		t.Fatalf("the topic label was dropped: %+v", cleaned[0])
+	}
+}
+
+// An over-long message is cut to its END, because a follow-up points at what was
+// said last. Cutting from the front here removed the tail before the prompt
+// builder — which cuts from the front for exactly that reason — ever saw it.
+func TestSanitisingHistoryKeepsTheEndOfALongMessage(t *testing.T) {
+	tail := "ท้ายสุดคือชาไทยเย็น"
+	cleaned := sanitizeConversationHistory([]AIConversationMessage{
+		{Role: "assistant", Content: "เริ่มต้น" + strings.Repeat("ก", 900) + tail},
+	})
+	if len(cleaned) != 1 {
+		t.Fatalf("expected the message to survive, got %d", len(cleaned))
+	}
+	if !strings.Contains(cleaned[0].Content, tail) {
+		t.Fatalf("the tail a follow-up points at was cut away: %q", cleaned[0].Content)
+	}
+	if strings.Contains(cleaned[0].Content, "เริ่มต้น") {
+		t.Fatalf("the message should have been cut from the front: %q", cleaned[0].Content)
+	}
+}

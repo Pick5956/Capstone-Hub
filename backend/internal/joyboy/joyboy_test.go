@@ -490,3 +490,26 @@ func TestTheThreadIndexNeverCarriesRawToolNames(t *testing.T) {
 		t.Errorf("a raw tool name reached the prompt:\n%s", index)
 	}
 }
+
+// "แล้วอันที่สองล่ะ" in the index says nothing on its own — the thing it points
+// at is in the question before it. Pairing them keeps the line readable once the
+// verbatim window has moved past both.
+func TestTheIndexPairsAShortFollowUpWithWhatItFollowed(t *testing.T) {
+	index := formatThreadIndex([]Turn{
+		{Role: "user", Content: "เมนูไหนขายดีที่สุด", Topic: "เมนู"},
+		{Role: "assistant", Content: "ชาไทยเย็นครับ"},
+		{Role: "user", Content: "แล้วอันที่สองล่ะ", Topic: "เมนู"},
+	})
+	if !strings.Contains(index, "ต่อจาก") || !strings.Contains(index, "เมนูไหนขายดีที่สุด") {
+		t.Fatalf("a short follow-up should carry what it followed:\n%s", index)
+	}
+	// A question that stands on its own is left alone.
+	plain := formatThreadIndex([]Turn{
+		{Role: "user", Content: "เดือนที่แล้วจ่ายค่าอะไรไปเยอะที่สุด", Topic: "รายจ่าย"},
+		{Role: "assistant", Content: "ค่าวัตถุดิบครับ"},
+		{Role: "user", Content: "แล้วเดือนก่อนหน้านั้นล่ะจ่ายอะไรเยอะสุด", Topic: "รายจ่าย"},
+	})
+	if strings.Contains(plain, "ต่อจาก") {
+		t.Fatalf("a self-contained question needs no pairing:\n%s", plain)
+	}
+}

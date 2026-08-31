@@ -48,6 +48,10 @@ const (
 	// shop owner has in one sitting, and costs about as much as two full exchanges.
 	threadIndexQuestionMaxChars = 60
 	threadIndexMaxLines         = 20
+	// Under this length a question is almost certainly a follow-up that means
+	// nothing without the one before it. Twenty characters is about "แล้วอันที่
+	// สองล่ะ" — real questions that stand alone are longer.
+	threadIndexShortQuestionChars = 20
 )
 
 // joyboyPersona opens both prompts, because a question about the assistant
@@ -360,6 +364,7 @@ func formatHistory(history []Turn) string {
 // and the label comes from the tool the turn actually used.
 func formatThreadIndex(older []Turn) string {
 	lines := make([]string, 0, len(older))
+	previousQuestion := ""
 	for _, turn := range older {
 		if turn.Role != "user" {
 			continue
@@ -368,10 +373,25 @@ func formatThreadIndex(older []Turn) string {
 		if question == "" {
 			continue
 		}
+		// A very short question is nearly always a follow-up — "แล้วอันที่สองล่ะ",
+		// "อันนั้นล่ะ" — and on its own in the index it says nothing at all. Pairing
+		// it with the question before it restores the meaning: "แล้วอันที่สองล่ะ
+		// (ต่อจาก เมนูไหนขายดี)". The trigger is length and position, never a list
+		// of Thai words to match on, so no phrasing can slip past it and no new
+		// phrasing needs adding to keep it working.
+		context := ""
+		if len([]rune(question)) <= threadIndexShortQuestionChars && previousQuestion != "" {
+			previous := previousQuestion
+			if runes := []rune(previous); len(runes) > threadIndexQuestionMaxChars {
+				previous = string(runes[:threadIndexQuestionMaxChars]) + "…"
+			}
+			context = " (ต่อจาก “" + previous + "”)"
+		}
+		previousQuestion = question
 		if runes := []rune(question); len(runes) > threadIndexQuestionMaxChars {
 			question = string(runes[:threadIndexQuestionMaxChars]) + "…"
 		}
-		line := "· ถาม “" + question + "”"
+		line := "· ถาม “" + question + "”" + context
 		if topic := strings.TrimSpace(turn.Topic); topic != "" {
 			line += " — เรื่อง" + topic
 		}
