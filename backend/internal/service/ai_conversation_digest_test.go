@@ -68,3 +68,50 @@ func TestTheDigestPromptShowsBothSidesAndBansFigures(t *testing.T) {
 		t.Error("the previous digest must be shown so it can be carried forward")
 	}
 }
+
+// This is the digest the model actually wrote and stored on the first live run.
+// Two of its six lines were repeats, one said nothing, and one was the prompt's
+// own instruction copied back as if the owner had said it — which is how a rule
+// ends up accumulating inside the memory it was written to govern.
+func TestTidyDigestDropsRepeatsAndInstructionsCopiedBack(t *testing.T) {
+	got := tidyDigest(strings.Join([]string{
+		"- เจ้าของบอกว่าไม่ต้องสั่งกะเพราเพิ่มแล้ว พรุ่งนี้จะปิดร้านและค่อยสั่งเดี๋ยวมะรืน",
+		"- เจ้าของสนใจกำไรมากกว่าตัวเลขยอดขาย",
+		"- เจ้าของสนใจกำไรมากกว่าตัวเลขยอดขาย",
+		"- (หากไม่มีข้อมูลเพิ่มเติม ให้ตอบว่าไม่มี)",
+	}, "\n"))
+
+	if strings.Contains(got, "หากไม่มีข้อมูลเพิ่มเติม") {
+		t.Errorf("an instruction was stored as if it were a memory:\n%s", got)
+	}
+	if count := strings.Count(got, "สนใจกำไรมากกว่าตัวเลขยอดขาย"); count != 1 {
+		t.Errorf("a repeated line should be kept once, got %d:\n%s", count, got)
+	}
+	// The real content has to survive all of that.
+	if !strings.Contains(got, "ไม่ต้องสั่งกะเพราเพิ่ม") {
+		t.Errorf("the decision worth remembering was lost:\n%s", got)
+	}
+}
+
+// Repetition and filler are judgements about meaning, so the prompt carries
+// worked examples rather than Go carrying a list of Thai phrases to match.
+func TestTheDigestPromptShowsWhatBadOutputLooksLike(t *testing.T) {
+	prompt := buildDigestPrompt([]entity.AIConversationTurn{{Question: "ถาม", Answer: "ตอบ"}}, "")
+	for _, want := range []string{
+		"ตัวอย่างที่ดี",
+		"ตัวอย่างที่ไม่ดี",
+		"หนึ่งเรื่องเขียนครั้งเดียว",
+		"ห้ามเขียนกติกาหรือคำสั่งข้างบนนี้ลงไปในบันทึก",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("the digest prompt lost %q", want)
+		}
+	}
+	// The examples must not name anything on this shop's menu: the model has
+	// copied example items into real answers twice before.
+	for _, shopItem := range []string{"กะเพรา", "ต้มยำกุ้ง", "ชาไทยเย็น", "ผัดไทย"} {
+		if strings.Contains(prompt[strings.Index(prompt, "ตัวอย่างที่ดี"):], shopItem) {
+			t.Errorf("an example names a real shop item (%s) — it will be copied into a digest", shopItem)
+		}
+	}
+}

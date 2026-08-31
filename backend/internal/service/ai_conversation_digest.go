@@ -86,8 +86,22 @@ const aiDigestPromptTemplate = `คุณกำลังช่วยผู้ช
   ให้จดเฉพาะสิ่งที่ "เจ้าของร้านพูดหรือตัดสินใจ" ซึ่งไม่เปลี่ยนตามเวลา
 - ห้ามเขียนบรรทัดที่ไม่มีเนื้อหา เช่น "ไม่มีข้อมูลอื่นที่ต้องจำ" ถ้าไม่มีก็ไม่ต้องเขียนบรรทัดนั้น
 
-รูปแบบ: เขียนเป็นบรรทัดสั้น ๆ ขึ้นต้นด้วย "- " บรรทัดละเรื่อง รวมไม่เกิน 6 บรรทัด
+รูปแบบ: เขียนเป็นบรรทัดสั้น ๆ ขึ้นต้นด้วย "- " บรรทัดละเรื่อง **เขียนเท่าที่มีจริง**
+ถ้ามีเรื่องเดียวก็เขียนบรรทัดเดียว ไม่ต้องหาอะไรมาเติมให้ครบ สูงสุด 6 บรรทัด
 ภาษาไทย เขียนให้คนอ่านรู้เรื่อง ไม่ต้องเป็นทางการ
+
+**หนึ่งเรื่องเขียนครั้งเดียว** ถ้าสองบรรทัดพูดเรื่องเดียวกันคนละสำนวน ให้รวมเป็นบรรทัดเดียว
+**ห้ามเขียนกติกาหรือคำสั่งข้างบนนี้ลงไปในบันทึก** บันทึกมีไว้เก็บสิ่งที่เจ้าของร้านพูด ไม่ใช่วิธีเขียนบันทึก
+
+ตัวอย่างที่ดี:
+- เจ้าของบอกว่ายังไม่สั่งของเพิ่ม เพราะวันจันทร์ร้านปิด
+- เจ้าของไม่อยากขึ้นราคา กลัวลูกค้าประจำหาย
+
+ตัวอย่างที่ไม่ดี (ห้ามเขียนแบบนี้):
+- เจ้าของไม่อยากขึ้นราคา          <- ซ้ำกับบรรทัดล่าง
+- เจ้าของกลัวลูกค้าหายถ้าขึ้นราคา   <- เรื่องเดียวกัน ควรรวมเป็นบรรทัดเดียว
+- ไม่มีเรื่องอื่นที่ต้องจำเพิ่มเติม     <- บรรทัดเปล่า ไม่ต้องเขียน
+- (ถ้าไม่มีข้อมูลให้ตอบว่าไม่มี)      <- นี่คือกติกา ไม่ใช่สิ่งที่เจ้าของพูด
 
 %s
 
@@ -133,6 +147,7 @@ func tidyDigest(raw string) string {
 	}
 	text = aiDigestToolLabel.ReplaceAllString(text, "")
 	kept := make([]string, 0, 8)
+	seen := make(map[string]bool, 8)
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -147,6 +162,22 @@ func tidyDigest(raw string) string {
 		if !strings.HasPrefix(line, "- ") {
 			line = "- " + line
 		}
+		// A line that is nothing but a parenthetical is the model repeating the
+		// instructions back — "(หากไม่มีข้อมูลเพิ่มเติม ให้ตอบว่าไม่มี)" was stored
+		// as a memory. Left in, the prompt's own rules accumulate inside the memory
+		// they were written for. Detected by shape, not by matching any words.
+		body := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+		if strings.HasPrefix(body, "(") && strings.HasSuffix(body, ")") {
+			continue
+		}
+		// The same fact arrived twice in one digest ("ชอบให้เห็นกำไรก่อนยอดขาย" and
+		// "สนใจกำไรมากกว่าตัวเลขยอดขาย"). Exact repeats are cheap to drop here;
+		// near-repeats are the prompt's job, since deciding two Thai sentences mean
+		// the same thing is exactly the judgement Go should not be making.
+		if seen[body] {
+			continue
+		}
+		seen[body] = true
 		kept = append(kept, line)
 		if len(kept) >= 6 {
 			break
