@@ -84,3 +84,20 @@ func TestBothPromptsRequireTheNameFromTheConversation(t *testing.T) {
 		}
 	}
 }
+
+// A figure from the fact sheet is a computed value, not a guess. Asked what
+// yesterday took, the assistant answered "ผมคิดว่าตอนเมื่อวานยอดขายรวม 7,880
+// บาท" — hedging a number the database had handed it exactly, which makes an
+// owner distrust a figure that was right all along.
+func TestTheAnswerPromptForbidsHedgingComputedFigures(t *testing.T) {
+	prompt := answerPrompt("เมื่อวานขายได้เท่าไหร่", nil, "revenue=7880.00")
+	for _, want := range []string{"ห้ามใส่คำเผื่อ", "ผมคิดว่า", "น่าจะ"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the no-hedging rule lost %q", want)
+		}
+	}
+	// Forecasts are the one place uncertainty must still be stated.
+	if !strings.Contains(prompt, "ยกเว้นตัวเลขพยากรณ์อนาคต") {
+		t.Fatal("the rule must not silence the forecast caveat")
+	}
+}
