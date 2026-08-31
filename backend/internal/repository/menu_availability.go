@@ -11,12 +11,14 @@ import (
 //
 //	remaining(menu) = min over recipe ingredients of floor((stock - committed) / qtyPerPortion)
 //
-// "committed" is the recipe demand of every order item still queued
-// (pending/cooking/ready) that has not consumed stock yet — deduction only happens
-// when an item is served, so those queued items are reserved here instead. This is
-// the "available to promise" view: it lets the ordering UIs show a dish as sold out
-// the moment the queue has claimed the last portion, without waiting for the kitchen
-// to actually cook it.
+// "committed" is the recipe demand of every order item still queued and NOT yet
+// deducted from stock — that is items in status pending or cooking. Stock is deducted
+// the moment an item is marked ready (see deductInventoryForCompletedKitchenItem), so
+// ready/served items must NOT be counted here: their consumption already shows up in
+// ing.stock, and reserving them again would subtract the same portions twice and make
+// a dish look sold out while raw stock is still on hand. This is the "available to
+// promise" view: it lets the ordering UIs show a dish as sold out the moment the
+// pending queue has claimed the last portion, without waiting for the kitchen to cook.
 //
 // Menu items without any recipe are NOT included in the map (they are not limited by
 // stock). Returned counts are clamped to >= 0.
@@ -31,7 +33,7 @@ SELECT mii.ingredient_id AS ingredient_id, COALESCE(SUM(mii.quantity * oi.quanti
 FROM order_items oi
 JOIN orders o ON o.id = oi.order_id AND o.deleted_at IS NULL
 JOIN menu_item_ingredients mii ON mii.menu_item_id = oi.menu_id AND mii.deleted_at IS NULL AND mii.restaurant_id = ?
-WHERE oi.restaurant_id = ? AND oi.deleted_at IS NULL AND oi.status IN ('pending','cooking','ready')
+WHERE oi.restaurant_id = ? AND oi.deleted_at IS NULL AND oi.status IN ('pending','cooking')
 GROUP BY mii.ingredient_id`, restaurantID, restaurantID).Scan(&usage).Error; err != nil {
 		return nil, err
 	}
