@@ -23,24 +23,35 @@ describe("selectOperationsSnapshot", () => {
 });
 
 describe("AI snapshot integration", () => {
-  const sources = [
-    "../../app/(dashboard)/ai-assistant/page.tsx",
-    "../../components/shared/AIOperationsFloatingChat.tsx",
-  ].map((relativePath) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8"));
+  const read = (relativePath: string) =>
+    readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+
+  // Only the floating chat still shows a snapshot: its stats panel renders
+  // sales_days, stock_risks and inventory_summary. The AI page used to fetch the
+  // same payload for a stats block that has since been removed, so it kept
+  // paying for a request nobody read — see the assertions below.
+  const floatingChat = read("../../components/shared/AIOperationsFloatingChat.tsx");
 
   it("clears restaurant-scoped snapshot state whenever the chat storage scope changes", () => {
-    for (const source of sources) {
-      expect(source).toContain("snapshotRequestedRef.current = false;");
-      expect(source).toContain("setLatestSnapshot(null);");
-    }
+    expect(floatingChat).toContain("snapshotRequestedRef.current = false;");
+    expect(floatingChat).toContain("setLatestSnapshot(null);");
   });
 
   it("guards every snapshot update against stale request ordering", () => {
-    for (const source of sources) {
-      expect(source).toContain("const [snapshotRequests] = useState(createRequestGeneration);");
-      expect(source).toContain("snapshotRequests.invalidate();");
-      expect(source.match(/const snapshotGeneration = snapshotRequests\.begin\(\);/g)).toHaveLength(3);
-      expect(source.match(/setLatestSnapshot\(\(current\) => selectOperationsSnapshot\(current,/g)).toHaveLength(4);
+    expect(floatingChat).toContain("const [snapshotRequests] = useState(createRequestGeneration);");
+    expect(floatingChat).toContain("snapshotRequests.invalidate();");
+    expect(floatingChat.match(/const snapshotGeneration = snapshotRequests\.begin\(\);/g)).toHaveLength(3);
+    expect(floatingChat.match(/setLatestSnapshot\(\(current\) => selectOperationsSnapshot\(current,/g)).toHaveLength(4);
+  });
+
+  // The AI page dropped its stats block, so a snapshot fetched there is a request
+  // whose result is stored and never shown — three per question, plus one on
+  // open. It must not creep back with the next feature that "just needs the
+  // numbers"; whatever needs them should render them.
+  it("keeps the AI page off the snapshot endpoint it has nothing to show from", () => {
+    const page = read("../../app/(dashboard)/ai-assistant/page.tsx");
+    for (const dead of ["getOperationsSnapshot", "selectOperationsSnapshot", "latestSnapshot"]) {
+      expect(page).not.toContain(dead);
     }
   });
 });

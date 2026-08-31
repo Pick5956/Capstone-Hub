@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
@@ -12,7 +12,6 @@ import {
   getAIActionErrorMessage,
   isTerminalAIActionCancellationError,
 } from "@/src/lib/aiActionPreview";
-import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
@@ -30,7 +29,7 @@ import {
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
-import type { AIActionPreview, AIActionPlan, AISnapshot, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
+import type { AIActionPreview, AIActionPlan, AIConversationMessage, AIForecastResult, AIChartData } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
@@ -60,24 +59,14 @@ type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
 function buildCopy(language: "th" | "en") {
   return language === "th"
     ? {
-        eyebrow: "AI Operations",
         title: "ผู้ช่วยวิเคราะห์ร้าน",
-        subtitle: "ถามจากยอดขายและคลังวัตถุดิบล่าสุดของร้าน",
         askPlaceholder: "พิมพ์คำถามของคุณที่นี่...",
         ask: "ถาม AI",
         thinking: "กำลังวิเคราะห์",
         newChat: "เริ่มแชทใหม่",
-        snapshot: "ข้อมูลที่ใช้วิเคราะห์",
-        salesDays: "วันที่มียอดขาย",
-        inventoryValue: "มูลค่าคงคลัง",
-        stockRisks: "รายการเสี่ยง",
         permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
-        empty: "เลือกคำถามลัดหรือพิมพ์คำถามเพื่อเริ่มวิเคราะห์",
         welcome: "สวัสดีครับ ผมเป็นผู้ช่วยวิเคราะห์ร้าน ถามผมได้เลยเรื่องยอดขาย กำไรเมนู หรือคลังวัตถุดิบครับ",
         error: "เรียก AI ไม่สำเร็จ",
-        stockOut: "หมด",
-        stockLow: "ต่ำ",
-        restock: "แนะนำเติม",
         quickQuestions: [
           "สรุปร้าน",
           "เมนูขายดี",
@@ -86,24 +75,14 @@ function buildCopy(language: "th" | "en") {
         ],
       }
     : {
-        eyebrow: "AI Operations",
         title: "Restaurant AI assistant",
-        subtitle: "Ask against the restaurant's latest sales and inventory data",
         askPlaceholder: "Type your question here...",
         ask: "Ask AI",
         thinking: "Analyzing",
         newChat: "New chat",
-        snapshot: "Analysis snapshot",
-        salesDays: "Sales days",
-        inventoryValue: "Inventory value",
-        stockRisks: "Stock risks",
         permissionDenied: "This page is for the restaurant owner only",
-        empty: "Pick a quick question or type one to start",
         welcome: "Hi! I'm your restaurant analysis assistant. Ask me about sales, menu profit, or ingredient stock.",
         error: "AI request failed",
-        stockOut: "Out",
-        stockLow: "Low",
-        restock: "Restock",
         quickQuestions: [
           "Summarize today's restaurant situation.",
           "What ingredients should we prepare tomorrow?",
@@ -148,15 +127,12 @@ export default function AIAssistantPage() {
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
-  const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
   const [conversationRequests] = useState(createRequestGeneration);
-  const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
   const sendAfterVoiceRef = useRef(false);
-  const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
   const canUseAI = activeMembership?.role?.name === "owner";
 
@@ -233,28 +209,6 @@ export default function AIAssistantPage() {
       body.style.overflow = prevBody;
     };
   }, []);
-
-  useEffect(() => {
-    snapshotRequests.invalidate();
-    snapshotRequestedRef.current = false;
-    setLatestSnapshot(null);
-  }, [canUseAI, snapshotRequests, storageKey]);
-
-  // Populate the sidebar snapshot once for each restaurant/user scope.
-  useEffect(() => {
-    if (!canUseAI || snapshotRequestedRef.current) return;
-    snapshotRequestedRef.current = true;
-    const snapshotGeneration = snapshotRequests.begin();
-    getOperationsSnapshot()
-      .then((response) => {
-        if (snapshotRequests.isCurrent(snapshotGeneration) && response?.data) {
-          setLatestSnapshot((current) => selectOperationsSnapshot(current, response.data));
-        }
-      })
-      .catch(() => {
-        if (snapshotRequests.isCurrent(snapshotGeneration)) snapshotRequestedRef.current = false;
-      });
-  }, [canUseAI, snapshotRequests, storageKey]);
 
   const conversationHistory = (): AIConversationMessage[] =>
     messages
@@ -350,10 +304,6 @@ export default function AIAssistantPage() {
         setConversationId(data.conversation_id);
         saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
       }
-      if (data.snapshot) {
-        snapshotRequests.invalidate();
-        setLatestSnapshot((current) => selectOperationsSnapshot(current, data.snapshot));
-      }
       if (data.action_preview) {
         actionResolvedRef.current = false;
         setPendingActionPreview(data.action_preview);
@@ -442,18 +392,6 @@ export default function AIAssistantPage() {
           createdAt: new Date(),
         },
       ]);
-      const snapshotGeneration = snapshotRequests.begin();
-      getOperationsSnapshot()
-        .then((snapshotResponse) => {
-          if (
-            conversationRequests.isCurrent(requestGeneration)
-            && snapshotRequests.isCurrent(snapshotGeneration)
-            && snapshotResponse?.data
-          ) {
-            setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
-          }
-        })
-        .catch(() => undefined);
     } catch (actionError: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       setActionPreviewError(getAIActionErrorMessage(actionError, language));
@@ -487,18 +425,6 @@ export default function AIAssistantPage() {
       if (!conversationRequests.isCurrent(requestGeneration)) return false;
       if (isTerminalAIActionCancellationError(cancellationError)) {
         setPendingActionPreview((current) => current?.id === preview.id ? null : current);
-        const snapshotGeneration = snapshotRequests.begin();
-        getOperationsSnapshot()
-          .then((snapshotResponse) => {
-            if (
-              conversationRequests.isCurrent(requestGeneration)
-              && snapshotRequests.isCurrent(snapshotGeneration)
-              && snapshotResponse?.data
-            ) {
-              setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
-            }
-          })
-          .catch(() => undefined);
         return true;
       }
       setActionPreviewError(getAIActionCancellationErrorMessage(language));
@@ -549,11 +475,6 @@ export default function AIAssistantPage() {
         createdAt: new Date(),
       },
     ]);
-    // A confirmed plan changed the shop, so the cached snapshot behind the stats
-    // panel is stale. Confirming a single action already refetched it; a plan —
-    // which can change several things at once — did not, so the numbers on this
-    // page kept showing the state from before the write until a reload.
-    snapshotRequests.invalidate();
     // A request that arrives and changes nothing still returns HTTP 200 — the
     // failure is in the body. Without this the bar read "saved, takes effect now"
     // in green over a plan where every item failed. Throwing hands the backend's
