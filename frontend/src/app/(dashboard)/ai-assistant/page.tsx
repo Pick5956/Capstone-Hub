@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
+import { ArrowUp, Bell, Bot, ChevronDown, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -64,6 +64,10 @@ function buildCopy(language: "th" | "en") {
         ask: "ถาม AI",
         thinking: "กำลังวิเคราะห์",
         newChat: "เริ่มแชทใหม่",
+        newChatConfirm: "เริ่มแชทใหม่จะลบบทสนทนานี้ทิ้งทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        newChatYes: "ลบแล้วเริ่มใหม่",
+        newChatNo: "ไม่ลบ",
+        scrollToLatest: "ไปที่ข้อความล่าสุด",
         permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
         welcome: "สวัสดีครับ ผมเป็นผู้ช่วยวิเคราะห์ร้าน ถามผมได้เลยเรื่องยอดขาย กำไรเมนู หรือคลังวัตถุดิบครับ",
         error: "เรียก AI ไม่สำเร็จ",
@@ -80,6 +84,10 @@ function buildCopy(language: "th" | "en") {
         ask: "Ask AI",
         thinking: "Analyzing",
         newChat: "New chat",
+        newChatConfirm: "Starting a new chat deletes this conversation, and the assistant will not remember any of it.",
+        newChatYes: "Delete and start over",
+        newChatNo: "Keep it",
+        scrollToLatest: "Jump to the latest message",
         permissionDenied: "This page is for the restaurant owner only",
         welcome: "Hi! I'm your restaurant analysis assistant. Ask me about sales, menu profit, or ingredient stock.",
         error: "AI request failed",
@@ -131,6 +139,12 @@ export default function AIAssistantPage() {
   const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  // The jump button only earns its place when the reader is not already at the
+  // end; shown always, it covers a message to offer a trip to where they are.
+  const [atLatest, setAtLatest] = useState(true);
+  // Clearing deletes the server copy too and cannot be undone, so it asks first.
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
   const sendAfterVoiceRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
@@ -585,7 +599,7 @@ export default function AIAssistantPage() {
             <HoverTip label={copy.newChat} placement="bottom">
               <button
                 type="button"
-                onClick={() => void handleClearChat()}
+                onClick={() => setConfirmingClear(true)}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.newChat}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
@@ -611,6 +625,14 @@ export default function AIAssistantPage() {
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
+            ref={scrollAreaRef}
+            onScroll={() => {
+              const area = scrollAreaRef.current;
+              if (!area) return;
+              // A couple of lines of slack, so the button does not flash on the
+              // half-pixel drift a smooth scroll leaves behind.
+              setAtLatest(area.scrollHeight - area.scrollTop - area.clientHeight <= 48);
+            }}
             className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-1 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
               /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
               isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
@@ -817,6 +839,39 @@ export default function AIAssistantPage() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Asked before the thread is deleted, not after: the server copy goes
+              with it and there is no undo. */}
+          {confirmingClear && (
+            <div className="mx-auto w-full max-w-2xl px-3 pb-1">
+              <AIInlineConfirm
+                message={copy.newChatConfirm}
+                confirmLabel={copy.newChatYes}
+                cancelLabel={copy.newChatNo}
+                onConfirm={() => {
+                  setConfirmingClear(false);
+                  void handleClearChat();
+                }}
+                onCancel={() => setConfirmingClear(false)}
+                disabled={loading || actionConfirming || actionCancelling}
+              />
+            </div>
+          )}
+
+          {/* A way back to the newest message once the reader has scrolled up. */}
+          {!atLatest && messages.length > 1 && (
+            <div className="pointer-events-none relative z-20 h-0">
+              <button
+                type="button"
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+                aria-label={copy.scrollToLatest}
+                title={copy.scrollToLatest}
+                className="pointer-events-auto absolute -top-11 left-1/2 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200/80 bg-white/90 text-gray-600 shadow-md backdrop-blur transition-all hover:-translate-y-0.5 hover:text-orange-600 active:scale-95 dark:border-gray-700/80 dark:bg-gray-900/90 dark:text-gray-300 dark:hover:text-orange-300"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
             </div>
           )}
 

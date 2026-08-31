@@ -12,7 +12,8 @@ import {
   X,
   BarChart2,
   Lightbulb,
-  RotateCcw
+  RotateCcw,
+  ChevronDown
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
@@ -48,6 +49,7 @@ import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 
 type Message = {
   id: string;
@@ -169,6 +171,10 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
+        clearChatConfirm: "เริ่มแชทใหม่จะลบบทสนทนานี้ทิ้งทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        clearChatYes: "ลบแล้วเริ่มใหม่",
+        clearChatNo: "ไม่ลบ",
+        scrollToLatest: "ไปที่ข้อความล่าสุด",
       }
     : {
         openAssistant: "Open AI assistant",
@@ -178,6 +184,10 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
         clearChat: "New chat",
+        clearChatConfirm: "Starting a new chat deletes this conversation, and the assistant will not remember any of it.",
+        clearChatYes: "Delete and start over",
+        clearChatNo: "Keep it",
+        scrollToLatest: "Jump to the latest message",
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -207,6 +217,14 @@ export default function AIOperationsFloatingChat() {
   const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  // Whether the thread is scrolled to its end. The jump button only earns its
+  // place when it is not: shown always, it covers a message to offer a trip to
+  // where the reader already is.
+  const [atLatest, setAtLatest] = useState(true);
+  // Clearing deletes the conversation on the server as well, and there is no
+  // undo, so the button asks first. It used to wipe the thread on one stray tap.
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const chatDialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -346,8 +364,24 @@ export default function AIOperationsFloatingChat() {
   }), [resetConversation, storageKey]);
 
   // Start a fresh chat: drop the stored history and reset to the welcome message.
+  // How far from the bottom still counts as "at the latest". A couple of lines of
+  // slack, so the button does not flash on the half-pixel drift a smooth scroll
+  // leaves behind.
+  const scrollSlack = 48;
+
+  const handleThreadScroll = () => {
+    const area = scrollAreaRef.current;
+    if (!area) return;
+    setAtLatest(area.scrollHeight - area.scrollTop - area.clientHeight <= scrollSlack);
+  };
+
+  const jumpToLatest = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
+
   const handleClearChat = async () => {
     if (loading || actionConfirming || actionCancelling) return;
+    setConfirmingClear(false);
     if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (canAskAI && serverConversationId) {
@@ -856,7 +890,7 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void handleClearChat();
+                  setConfirmingClear(true);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
               >
@@ -879,7 +913,11 @@ export default function AIOperationsFloatingChat() {
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
-          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
+          <div
+            ref={scrollAreaRef}
+            onScroll={handleThreadScroll}
+            className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4"
+          >
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
@@ -1018,6 +1056,42 @@ export default function AIOperationsFloatingChat() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Asked before the thread is deleted, not after. The server copy goes
+              too and there is no undo, so a stray tap on a small screen used to
+              cost the whole conversation. */}
+          {confirmingClear && (
+            <div className="px-3 pb-2 sm:px-4">
+              <AIInlineConfirm
+                message={labels.clearChatConfirm}
+                confirmLabel={labels.clearChatYes}
+                cancelLabel={labels.clearChatNo}
+                onConfirm={() => void handleClearChat()}
+                onCancel={() => setConfirmingClear(false)}
+                disabled={loading || actionConfirming || actionCancelling}
+              />
+            </div>
+          )}
+
+          {/* A way back to the newest message once the reader has scrolled up.
+              It sits just above the input and only appears when there is
+              somewhere to go, so it never covers a message the reader is on. */}
+          {!atLatest && messages.length > 1 && (
+            <div className="pointer-events-none relative z-20 h-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  jumpToLatest();
+                }}
+                aria-label={labels.scrollToLatest}
+                title={labels.scrollToLatest}
+                className="pointer-events-auto absolute -top-11 left-1/2 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200/80 bg-white/90 text-gray-600 shadow-md backdrop-blur transition-all hover:-translate-y-0.5 hover:text-orange-600 active:scale-95 dark:border-gray-700/80 dark:bg-gray-900/90 dark:text-gray-300 dark:hover:text-orange-300"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
             </div>
           )}
 
