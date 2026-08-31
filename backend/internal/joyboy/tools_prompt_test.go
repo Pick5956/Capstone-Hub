@@ -114,3 +114,27 @@ func TestSelectionPromptResolvesBackReferencesToNames(t *testing.T) {
 		t.Fatal("the conversation the reference points at is not in the prompt")
 	}
 }
+
+// "สรุปที่คุยกันวันนี้ให้หน่อย" asks the assistant to recap the conversation. The
+// overview rule listed "สรุปให้หน่อย" as a store-overview phrase, so the word
+// "สรุป" plus "วันนี้" pulled the question to the sales tools and the owner got a
+// store report over a conversation that had been about tables and expenses —
+// the assistant answering a question nobody asked.
+func TestSelectionPromptSeparatesRecappingTheChatFromSummarisingTheShop(t *testing.T) {
+	prompt := selectionPrompt("สรุปที่คุยกันวันนี้ให้หน่อย", nil, []ToolSpec{
+		{Name: "get_sales_summary", Description: "ยอดขายรวม"},
+	})
+	for _, want := range []string{
+		`สรุป "บทสนทนา" ไม่ใช่ "ร้าน"`,
+		"สรุปที่คุยกันวันนี้ให้หน่อย",
+		`ถึงจะมีคำว่า "วันนี้"`,
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the recap rule lost %q", want)
+		}
+	}
+	// The genuine store question must stay on the data path.
+	if !strings.Contains(prompt, `"สรุปร้านวันนี้"`) {
+		t.Fatal("the rule must still send a real store question to the tools")
+	}
+}
