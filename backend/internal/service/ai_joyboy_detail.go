@@ -28,26 +28,58 @@ import (
 // aiFindNamedRows returns the indexes of rows whose name appears in the question,
 // longest name first so "ต้มยำกุ้งน้ำข้น" wins over a shorter "ต้มยำกุ้ง" that is
 // contained in it. Matching is on the shop's real names, never on a word list.
-// aiFindNamedRowsInThread resolves a name the question points at without spelling
-// out: "เมนูแรกที่บอกไป กำไรดีไหม" one turn after the assistant said the best
-// seller was ชาไทยเย็น. The selection round now picks get_menu_detail for those,
-// but the detail tool matched against the sentence alone, found no menu in it,
-// and reported "ไม่พบข้อมูล" over a shop whose margin was one lookup away.
+// aiFindNamedRowsInThread resolves what the question points at when it does not
+// spell the name out: "เมนูแรกที่บอกไปตอนต้น กำไรดีไหม".
 //
-// The question always wins: a name written in this turn is what the owner is
-// asking about. Only when the sentence names nothing does the thread get read,
-// newest turn first, so "อันนั้น" resolves to the thing most recently discussed
-// rather than something from five turns ago.
+// The question always wins — a name written in this turn is what the owner is
+// asking about. Only when the sentence names nothing is the thread read, and
+// then it returns EVERY name the conversation has touched, oldest first, not
+// just one.
+//
+// Returning one was the first attempt and it was wrong in a way worth recording.
+// It resolved to the most recently mentioned name, which reads sensible for
+// "อันนั้น" and is exactly backwards for "เมนูแรกที่บอกไปตอนต้น": asked that
+// after a thread about ชาไทยเย็น then แกงเขียวหวานไก่, it fetched the second one
+// and the assistant answered "ชาไทยเย็นไม่ได้อยู่ในรายการที่ดึงมา" — data about
+// the wrong dish, which reads as the assistant not following its own
+// conversation.
+//
+// Go cannot tell "แรก" from "ล่าสุด" from "อันนั้น" without understanding the
+// sentence, and guessing at it is how a word list quietly answers the wrong
+// question. So Go stops guessing: it hands over every candidate in the order they
+// were discussed, and the model — which does read the sentence — picks. Same
+// division as everywhere else here: the model decides what was meant, Go supplies
+// the figures.
 func aiFindNamedRowsInThread(names []string, question string, history []AIConversationMessage) []int {
 	if found := aiFindNamedRows(names, question); len(found) > 0 {
 		return found
 	}
-	for i := len(history) - 1; i >= 0; i-- {
-		if found := aiFindNamedRows(names, history[i].Content); len(found) > 0 {
-			return found
+	seen := make(map[int]bool, 4)
+	ordered := make([]int, 0, 4)
+	for _, message := range history {
+		for _, index := range aiFindNamedRows(names, message.Content) {
+			if seen[index] {
+				continue
+			}
+			seen[index] = true
+			ordered = append(ordered, index)
+			if len(ordered) >= aiThreadNameCandidates {
+				return ordered
+			}
 		}
 	}
-	return nil
+	return ordered
+}
+
+// aiThreadNameCandidates caps how many things the thread can offer at once. Four
+// covers "the first one / the second one / that one" without turning the sheet
+// into a catalogue the model has to wade through.
+const aiThreadNameCandidates = 4
+
+// aiQuestionNamesARow reports whether the sentence itself named one of the rows,
+// which decides whether the sheet is an answer or a set of candidates.
+func aiQuestionNamesARow(names []string, question string) bool {
+	return len(aiFindNamedRows(names, question)) > 0
 }
 
 func aiFindNamedRows(names []string, question string) []int {
@@ -203,6 +235,16 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 
 	lines := make([]string, 0, len(found)*7)
 	lines = append(lines, window)
+	// When the sentence named nothing, these rows are the things the conversation
+	// has touched, oldest first — candidates, not an answer. Saying so is what lets
+	// the model resolve "เมนูแรกที่บอกไปตอนต้น" (take the first) apart from
+	// "อันนั้น" (take the last); left unsaid it reads the first row as the answer.
+	if len(found) > 1 && !aiQuestionNamesARow(names, question) {
+		lines = append(lines, "note=คำถามไม่ได้พิมพ์ชื่อมา รายการด้านล่างคือสิ่งที่คุยกันในบทสนทนานี้ "+
+			"เรียงจากที่พูดถึงก่อนไปหลัง ให้เลือกตัวที่ตรงกับคำถาม "+
+			"(\"อันแรก/ตอนต้น\" = ตัวบนสุด · \"อันล่าสุด/อันนั้น\" = ตัวล่างสุด) "+
+			"แล้วตอบเฉพาะตัวนั้น ถ้ายังไม่แน่ใจให้ถามกลับว่าหมายถึงตัวไหน")
+	}
 	for _, index := range found {
 		menu := menus[index]
 		lines = append(lines, "menu="+menu.Name, fmt.Sprintf("price=%s", joyboyNum(menu.Price)))

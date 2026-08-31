@@ -45,3 +45,17 @@ func TestThePersonaNamesNoProvider(t *testing.T) {
 		}
 	}
 }
+
+// The assistant is the same character every day, so it uses one pronoun. Left
+// unsaid it drifted: "ฉันเป็น AI ไม่ได้กินอาหารเลยครับ" in the middle of a thread
+// where every other answer said "ผม", which reads as a different person replying.
+func TestThePersonaPinsOnePronoun(t *testing.T) {
+	for _, prompt := range []string{
+		answerPrompt("ชอบกินอะไร", nil, ""),
+		answerPrompt("ยอดขายเท่าไหร่", nil, "revenue=7880.00"),
+	} {
+		if !strings.Contains(prompt, `เรียกตัวเองว่า "ผม" เสมอ`) {
+			t.Fatal("the persona stopped pinning a pronoun")
+		}
+	}
+}

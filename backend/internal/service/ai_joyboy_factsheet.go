@@ -94,7 +94,16 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 
 	case AIToolGetLowStockIngredients:
 		if len(result.LowStockIngredients) == 0 {
-			return joyboyNoData("no_ingredient_below_its_minimum"), true
+			// "Nothing is low" is a finding, not missing data, and the difference
+			// reaches the owner. Handed the bare no_data code the model wrote
+			// "ผมไม่มีข้อมูลวัตถุดิบใกล้หมด" — which reads as a broken assistant over
+			// a shop whose shelves are simply fine. The sheet states the fact.
+			return joyboyJoin([]string{
+				"scope=current_stock_level",
+				"items_below_minimum=0",
+				"note=ตรวจแล้วไม่มีวัตถุดิบตัวไหนต่ำกว่าขั้นต่ำเลย ให้ตอบว่าสต๊อกยังปกติ ยังไม่ต้องสั่งเพิ่ม " +
+					"ห้ามตอบว่าไม่มีข้อมูลหรือดูไม่ได้ เพราะระบบตรวจให้แล้วและผลคือไม่มีตัวไหนใกล้หมด",
+			}), true
 		}
 		lines := []string{"scope=current_stock_level"}
 		// The cost of restocking everything on this list is a multiply-then-sum,
