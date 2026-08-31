@@ -62,3 +62,10 @@ PRODUCT.md
 
 # seed ข้อมูลทดสอบ — เก็บ local เท่านั้น ไม่ push
 backend/cmd/seed_demo_orders/
+
+# Throwaway debugging commands (zzturns dumps AI conversation turns from the DB).
+# They are named zz* so they sort last and read as temporary; ignoring them means
+# a stray "git add -A" can never publish a local dev tool. zztesttoken, which
+# minted JWTs for hitting the API by hand, was deleted rather than ignored — an
+# access-token minter has no business in the repository at all.
+/backend/cmd/zz*
