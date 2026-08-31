@@ -53,7 +53,7 @@ const EMPTY_EXPENSE_DATA: ExpensePageData = {
 // the app's palette — utilities/equipment were pulled back from the off-system
 // violet/rose to indigo/red.
 const categoryBadgeClass =
-  "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200";
+  "border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200";
 
 const categoryDotClass: Record<ExpenseCategory, string> = {
   ingredient: "bg-emerald-500",
@@ -439,7 +439,7 @@ export default function ExpensesPage() {
     setPage(1);
   };
   const inputClass =
-    "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:focus:border-white";
+    "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[14px] outline-none focus:border-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:focus:border-white";
 
   return (
     <OperationalPageShell
@@ -479,10 +479,10 @@ export default function ExpensesPage() {
         <span className="hidden text-[16px] font-semibold print:block">{monthLabel}</span>
         <span className="text-[11px] text-gray-500 dark:text-gray-400 print:hidden">{scopedData.entries} {copy.entries}</span>
         {/* Icon-only, so the label has to survive as an accessible name. */}
-        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+        <Link href="/home" aria-label={copy.back} title={copy.back} className="ui-press ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 print:hidden">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
-        <button type="button" onClick={() => void exportPdf()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden">
+        <button type="button" onClick={() => void exportPdf()} disabled={loading || !scopedData.expenses.length} className="ui-press inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 print:hidden">
           <Printer className="h-4 w-4" aria-hidden="true" />
           {copy.exportPdf}
         </button>
@@ -493,7 +493,7 @@ export default function ExpensesPage() {
             {copy.add}
           </button>
         ) : (
-          <p className="inline-flex h-9 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-[12px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
+          <p className="inline-flex h-9 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-[12px] text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400 print:hidden">{copy.readOnly}</p>
         )}
       </div>
 
@@ -549,7 +549,7 @@ export default function ExpensesPage() {
         </tfoot>
       </table>
 
-      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 print:hidden">
+      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 print:hidden">
         <div className="hidden grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] gap-3 border-b border-gray-200 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 lg:grid">
           {([
             { key: "spent_at", label: copy.date, end: false },
@@ -595,7 +595,7 @@ export default function ExpensesPage() {
                       onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEdit(expense); } },
                     }
                   : {})}
-                className={`grid grid-cols-2 gap-x-3 gap-y-1 bg-white px-4 py-3 text-[14px] transition-colors hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900 lg:grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] lg:items-center ${canEdit && expense.ingredient_transaction_id == null ? "cursor-pointer" : ""}`}
+                className={`grid grid-cols-2 gap-x-3 gap-y-1 bg-white px-4 py-3 text-[14px] transition-colors hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800 lg:grid-cols-[110px_130px_minmax(0,1fr)_140px_120px] lg:items-center ${canEdit && expense.ingredient_transaction_id == null ? "cursor-pointer" : ""}`}
               >
                 <span className="font-mono text-[13px] tabular-nums text-gray-500 dark:text-gray-400">
                   {new Date(expense.spent_at).toLocaleDateString(locale, { day: "2-digit", month: "short" })}
@@ -650,11 +650,11 @@ export default function ExpensesPage() {
               {copy.perPage}
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} aria-label={copy.previousPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} aria-label={copy.previousPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </button>
               <span className="px-2 text-[12px] tabular-nums text-gray-600 dark:text-gray-300">{copy.pageOf(currentPage, pageCount)}</span>
-              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount} aria-label={copy.nextPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount} aria-label={copy.nextPage} className="ui-press inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
@@ -670,11 +670,11 @@ export default function ExpensesPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="expense-form-title"
-            className="motion-dialog flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950"
+            className="motion-dialog flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-900"
           >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 id="expense-form-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{form.id === null ? copy.add : copy.edit}</h2>
-              <button type="button" onClick={() => setFormOpen(false)} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.cancel}</button>
+              <button type="button" onClick={() => setFormOpen(false)} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.cancel}</button>
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">

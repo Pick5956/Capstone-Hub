@@ -793,7 +793,7 @@ export default function StaffPage() {
   if (!restaurantId) return null;
 
   return (
-    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <h1 className="sr-only">{copy.title}</h1>
 
       {error && (
@@ -812,7 +812,7 @@ export default function StaffPage() {
       <div className="space-y-4">
         <section className="space-y-4">
           {(canManageInvites || canManageRoles) && (
-            <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
               <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                 <div className="min-w-0">
                   <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{canManageInvites ? copy.inviteTitle : copy.roleManagerTitle}</h2>
@@ -832,7 +832,7 @@ export default function StaffPage() {
                     <button
                       type="button"
                       onClick={openRoleManager}
-                      className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+                      className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
                     >
                       {copy.rolePanelAction}
                     </button>
@@ -860,7 +860,7 @@ export default function StaffPage() {
             </div>
           )}
 
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.membersTitle}</h2>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.membersHint}</p>
@@ -889,7 +889,7 @@ export default function StaffPage() {
                     const busy = updatingMemberIds.includes(member.ID);
 
                     return (
-                      <div key={member.ID} className="relative grid gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 lg:grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] lg:items-center lg:gap-3 lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-3 lg:last:border-b-0 lg:dark:bg-transparent">
+                      <div key={member.ID} className="relative grid gap-3 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 lg:grid-cols-[minmax(170px,1.35fr)_minmax(150px,1fr)_minmax(76px,0.55fr)_minmax(112px,0.75fr)_minmax(104px,0.85fr)] lg:items-center lg:gap-3 lg:border-0 lg:border-b lg:bg-transparent lg:px-0 lg:py-3 lg:last:border-b-0 lg:dark:bg-transparent">
                         <div className="flex min-w-0 items-center gap-3">
                           <UserAvatar src={member.user?.profile_image} name={displayUserName(member, language)} size={40} className="h-10 w-10 text-[12px]" />
                           <div className="min-w-0">
@@ -938,22 +938,22 @@ export default function StaffPage() {
                           {hasMemberActions ? (
                             <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-1 xl:grid-cols-2">
                               {canEditMemberRole && (
-                                <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 xl:col-span-2">
+                                <button type="button" onClick={() => openMemberPermissions(member)} disabled={busy} className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 xl:col-span-2">
                                   {language === "th" ? "สิทธิ์" : "Permissions"}
                                 </button>
                               )}
                               {canEditMemberStatus && (
                                 <>
                                   {member.status !== "active" ? (
-                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-8 min-w-0 rounded-md border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-950 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "active")} disabled={busy} className="h-8 min-w-0 rounded-md border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-900/50 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
                                       {copy.restore}
                                     </button>
                                   ) : (
-                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-8 min-w-0 rounded-md border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-950 dark:text-amber-300 dark:hover:bg-amber-900/20">
+                                    <button type="button" onClick={() => void changeMemberStatus(member.ID, "suspended")} disabled={busy} className="h-8 min-w-0 rounded-md border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/50 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-900/20">
                                       {copy.suspend}
                                     </button>
                                   )}
-                                  <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-8 min-w-0 rounded-md border border-red-200 bg-white px-2 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
+                                  <button type="button" onClick={() => void changeMemberStatus(member.ID, "removed")} disabled={busy || member.status === "removed"} className="h-8 min-w-0 rounded-md border border-red-200 bg-white px-2 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20">
                                     {copy.remove}
                                   </button>
                                 </>
@@ -970,7 +970,7 @@ export default function StaffPage() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400">
                   {copy.noMembers}
                 </div>
               )}
@@ -978,7 +978,7 @@ export default function StaffPage() {
           </div>
 
           {canManageInvites && (
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.pendingTitle}</h2>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.pendingHint}</p>
@@ -992,7 +992,7 @@ export default function StaffPage() {
               ) : invitations.length ? (
                 <div className="space-y-2">
                   {invitations.map((invitation) => (
-                    <div key={invitation.ID} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+                    <div key={invitation.ID} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="min-w-0">
                           <p className="text-[13px] font-semibold text-gray-900 dark:text-white">{invitation.email || copy.openLink}</p>
@@ -1003,15 +1003,15 @@ export default function StaffPage() {
                         </div>
                         {canManageInvites && (
                           <div className="flex shrink-0 flex-wrap gap-2">
-                            <button type="button" onClick={() => void copyInvite(invitation.token)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-800">
+                            <button type="button" onClick={() => void copyInvite(invitation.token)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
                               {copiedToken === invitation.token ? copy.copied : copy.copy}
                             </button>
                             {invitation.email && (
-                              <button type="button" onClick={() => sendInviteEmail(invitation)} className="h-9 rounded-md border border-sky-200 bg-white px-3 text-[12px] font-medium text-sky-700 transition-colors hover:bg-sky-50 dark:border-sky-900/50 dark:bg-gray-950 dark:text-sky-300 dark:hover:bg-sky-900/20">
+                              <button type="button" onClick={() => sendInviteEmail(invitation)} className="h-9 rounded-md border border-sky-200 bg-white px-3 text-[12px] font-medium text-sky-700 transition-colors hover:bg-sky-50 dark:border-sky-900/50 dark:bg-gray-900 dark:text-sky-300 dark:hover:bg-sky-900/20">
                                 {copy.sendEmail}
                               </button>
                             )}
-                            <button type="button" onClick={() => void revokeInvite(invitation.ID)} disabled={revokingIds.includes(invitation.ID)} className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20">
+                            <button type="button" onClick={() => void revokeInvite(invitation.ID)} disabled={revokingIds.includes(invitation.ID)} className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20">
                               {revokingIds.includes(invitation.ID) ? copy.revoking : copy.revoke}
                             </button>
                           </div>
@@ -1021,7 +1021,7 @@ export default function StaffPage() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center dark:border-gray-800 dark:bg-gray-900">
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center dark:border-gray-800 dark:bg-gray-800">
                   <p className="text-[13px] font-medium text-gray-900 dark:text-white">{copy.noPendingTitle}</p>
                   <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.noPendingBody}</p>
                 </div>
@@ -1031,7 +1031,7 @@ export default function StaffPage() {
           )}
 
           {canViewAuditLog && (
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.auditTitle}</h2>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{copy.auditHint}</p>
@@ -1047,7 +1047,7 @@ export default function StaffPage() {
                     <div className="space-y-3 sm:hidden">
                       <div className="space-y-2">
                         {auditMobileLogs.map((log) => (
-                          <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+                          <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
                             <div className="space-y-1.5">
                               <p className="break-words text-[12px] font-medium text-gray-900 dark:text-white">{auditMessage(log, language)}</p>
                               <p className="break-words text-[11px] text-gray-500 dark:text-gray-400">
@@ -1064,7 +1064,7 @@ export default function StaffPage() {
                           type="button"
                           onClick={goToPreviousAuditPage}
                           disabled={!auditCanGoBack}
-                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
                           {copy.previousAuditPage}
                         </button>
@@ -1072,7 +1072,7 @@ export default function StaffPage() {
                           type="button"
                           onClick={() => void goToNextAuditPage()}
                           disabled={!auditCanGoNext || auditLoadingMore}
-                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-45 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                          className="h-10 rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-45 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
                           {auditLoadingMore ? copy.loadingMoreAudit : copy.nextAuditPage}
                         </button>
@@ -1081,7 +1081,7 @@ export default function StaffPage() {
                     <div className="hidden max-h-[min(52vh,520px)] overflow-y-auto pr-1 sm:block">
                       <div className="space-y-2">
                         {auditLogs.map((log) => (
-                      <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+                      <div key={log.ID} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                           <div className="min-w-0">
                             <p className="break-words text-[12px] font-medium text-gray-900 dark:text-white">{auditMessage(log, language)}</p>
@@ -1101,14 +1101,14 @@ export default function StaffPage() {
                         type="button"
                         onClick={() => void loadMoreAuditLogs()}
                         disabled={auditLoadingMore}
-                        className="hidden h-10 w-full rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 sm:block"
+                        className="hidden h-10 w-full rounded-md border border-gray-200 bg-white text-[12px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 sm:block"
                       >
                         {auditLoadingMore ? copy.loadingMoreAudit : copy.loadMoreAudit}
                       </button>
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+                  <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-8 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400">
                     {copy.noAudit}
                   </div>
               )}
@@ -1125,14 +1125,14 @@ export default function StaffPage() {
         >
           <form
             onSubmit={createInvite}
-            className={`${inviteModalClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] w-[calc(100dvw-1.5rem)] max-w-lg flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+            className={`${inviteModalClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100dvh-1.5rem)] w-[calc(100dvw-1.5rem)] max-w-lg flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}
           >
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="min-w-0">
                 <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">{copy.inviteTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.inviteHint}</p>
               </div>
-              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeInviteModal()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1149,7 +1149,7 @@ export default function StaffPage() {
                     placeholder={copy.emailPlaceholder}
                     disabled={!canManageInvites}
                     aria-invalid={Boolean(inviteError)}
-                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-900 ${
+                    className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:bg-gray-800 ${
                       inviteError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"
                     }`}
                   />
@@ -1193,7 +1193,7 @@ export default function StaffPage() {
                 <ol className="mt-3 space-y-2 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
                   {copy.flow.map((item, index) => (
                     <li key={item} className="grid grid-cols-[20px_minmax(0,1fr)] gap-2">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-[10px] font-semibold tabular-nums text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md border border-gray-200 bg-gray-50 text-[10px] font-semibold tabular-nums text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400">
                         {index + 1}
                       </span>
                       <span>{item}</span>
@@ -1208,7 +1208,7 @@ export default function StaffPage() {
                 type="button"
                 onClick={() => closeInviteModal()}
                 disabled={submitting}
-                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
                 {copy.cancelAction}
               </button>
@@ -1228,18 +1228,18 @@ export default function StaffPage() {
             {...roleManagerBackdrop}
             className={`${roleManagerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-40 cursor-default bg-gray-950/45 backdrop-blur-sm`}
           />
-          <aside className={`${roleManagerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <aside className={`${roleManagerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.rolePanelTitle}</p>
                 <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{copy.roleManagerTitle}</h2>
                 <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.roleManagerHint}</p>
               </div>
-              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={() => closeRoleManager()} className="h-8 w-8 shrink-0 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <form onSubmit={(event) => void createCustomRole(event)} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900">
+              <form onSubmit={(event) => void createCustomRole(event)} className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800">
                 <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.customRoleTitle}</p>
                 <label className="mt-3 block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.roleNameLabel}</span>
@@ -1249,7 +1249,7 @@ export default function StaffPage() {
                     onChange={(event) => setNewRoleName(event.target.value)}
                     placeholder={copy.roleNamePlaceholder}
                     disabled={!canManageRoles || creatingRole}
-                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                   />
                 </label>
                 <button
@@ -1281,10 +1281,10 @@ export default function StaffPage() {
                           openRolePermissions(role);
                         }
                       }}
-                      className={`group/card rounded-md border border-gray-200 bg-white p-2.5 outline-none transition-colors dark:border-gray-800 dark:bg-gray-950 ${
+                      className={`group/card rounded-md border border-gray-200 bg-white p-2.5 outline-none transition-colors dark:border-gray-800 dark:bg-gray-900 ${
                         roleCardDisabled
                           ? "cursor-not-allowed opacity-70"
-                          : "cursor-pointer hover:border-gray-300 hover:bg-gray-50 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:hover:border-gray-700 dark:hover:bg-gray-900"
+                          : "cursor-pointer hover:border-gray-300 hover:bg-gray-50 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:hover:border-gray-700 dark:hover:bg-gray-800"
                       }`}
                     >
                       <div className="grid grid-cols-[minmax(0,1fr)_40px] items-center gap-2">
@@ -1311,7 +1311,7 @@ export default function StaffPage() {
 
       {permissionTarget && canManageRoles && (
         <div {...permissionBackdrop} className={`${permissionClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-stretch justify-center bg-gray-950/45 p-2 backdrop-blur-sm sm:p-4 lg:p-6`}>
-          <div className={`${permissionClosing ? "motion-dialog-exit" : "motion-dialog"} flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${permissionClosing ? "motion-dialog-exit" : "motion-dialog"} flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-6">
               <div className="min-w-0 flex-1">
                 {permissionTarget.type === "role" ? (
@@ -1338,7 +1338,7 @@ export default function StaffPage() {
                             aria-invalid={Boolean(roleRenameError)}
                             aria-describedby={roleRenameError ? roleRenameErrorId : undefined}
                             disabled={roleDialogPolicy.busy}
-                            className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2.5 text-[14px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+                            className="h-11 min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2.5 text-[14px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
                           />
                           <button
                             type="submit"
@@ -1359,7 +1359,7 @@ export default function StaffPage() {
                               setRoleRenameError("");
                               setEditingRoleName(false);
                             }}
-                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                           >
                             <X className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
                           </button>
@@ -1390,7 +1390,7 @@ export default function StaffPage() {
                             setRoleRenameError("");
                             setEditingRoleName(true);
                           }}
-                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-45 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                         >
                           <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} aria-hidden="true" />
                         </button>
@@ -1416,7 +1416,7 @@ export default function StaffPage() {
                 aria-label={copy.cancelAction}
                 disabled={!roleDialogPolicy.canDismiss}
                 onClick={() => closePermissionModal()}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-900 dark:hover:text-gray-200"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-45 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               >
                 <X className="h-4.5 w-4.5" strokeWidth={2.1} aria-hidden="true" />
               </button>
@@ -1449,7 +1449,7 @@ export default function StaffPage() {
                   type="button"
                   disabled={permissionTarget.type === "member" && useRolePermissions}
                   onClick={() => setPermissionDraft((current) => replaceGrantablePermissionSelection(current, grantablePermissions, true))}
-                  className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                  className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   {language === "th" ? "เลือกทั้งหมด" : "Select all"}
                 </button>
@@ -1457,7 +1457,7 @@ export default function StaffPage() {
                   type="button"
                   disabled={permissionTarget.type === "member" && useRolePermissions}
                   onClick={() => setPermissionDraft((current) => replaceGrantablePermissionSelection(current, grantablePermissions, false))}
-                  className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                  className="h-8 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   {language === "th" ? "เอาที่เลือกออกทั้งหมด" : "Clear selected"}
                 </button>
@@ -1465,7 +1465,7 @@ export default function StaffPage() {
               <div className="space-y-5">
                 {visiblePermissionSections.map((section) => (
                   <section key={section.id} className="overflow-hidden rounded-md border border-gray-200 dark:border-gray-800">
-                    <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/70">
+                    <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800/70">
                       <h3 className="text-[15px] font-semibold text-gray-950 dark:text-white">{language === "th" ? section.th : section.en}</h3>
                     </div>
                     <div>
@@ -1494,7 +1494,7 @@ export default function StaffPage() {
                               {(() => {
                                 const checked = row.permissions.every((permission) => permissionDraft.includes(permission));
                                 return (
-                                  <div className={`inline-flex overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 ${disabled ? "opacity-55" : ""}`}>
+                                  <div className={`inline-flex overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 ${disabled ? "opacity-55" : ""}`}>
                                     <button
                                       type="button"
                                       disabled={disabled}
@@ -1542,7 +1542,7 @@ export default function StaffPage() {
                     type="button"
                     onClick={() => void removeRole(permissionTarget.role)}
                     disabled={!roleDialogPolicy.canDeleteRole}
-                    className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                    className="h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20"
                   >
                     {copy.deleteRole}
                   </button>

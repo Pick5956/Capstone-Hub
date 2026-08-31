@@ -107,8 +107,8 @@ function statusMeta(status: ItemStatus, copy: Copy) {
     bar: "from-emerald-500 to-teal-400",
     badge: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300",
     value: "text-slate-900 dark:text-white",
-    accent: "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950",
-    row: "hover:bg-slate-50 dark:hover:bg-gray-900/40",
+    accent: "border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900",
+    row: "hover:bg-slate-50 dark:hover:bg-gray-800/40",
   };
 }
 
@@ -920,7 +920,7 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative w-full sm:w-64">
@@ -940,7 +940,7 @@ export default function InventoryPage() {
               className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-[12px] font-semibold transition ${
                 statusFilter !== "all" || categoryFilter !== 0
                   ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-300"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
               }`}
             >
               <Filter className="h-4 w-4" />
@@ -954,7 +954,7 @@ export default function InventoryPage() {
             {filtersOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={closeFilters} />
-                <div className={`${filtersClosing ? "smooth-pop-exit" : "smooth-pop"} absolute right-0 top-full z-50 mt-2 w-80 origin-top-right rounded-md border border-slate-200 bg-white p-4 text-left shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+                <div className={`${filtersClosing ? "smooth-pop-exit" : "smooth-pop"} absolute right-0 top-full z-50 mt-2 w-80 origin-top-right rounded-md border border-slate-200 bg-white p-4 text-left shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">{copy.filter}</p>
                     <button
@@ -975,7 +975,7 @@ export default function InventoryPage() {
                         className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
                           statusFilter === status
                             ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:text-white"
                         }`}
                       >
                         {status === "all" ? copy.filterAll : status === "ok" ? copy.filterOk : status === "low" ? copy.filterLow : copy.filterOut}
@@ -989,7 +989,7 @@ export default function InventoryPage() {
                       className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
                         categoryFilter === 0
                           ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:text-white"
                       }`}
                     >
                       {lang === "th" ? "ทุกหมวด" : "All"}
@@ -1001,7 +1001,7 @@ export default function InventoryPage() {
                         className={`rounded-md border px-3 py-1.5 text-[13px] font-semibold transition ${
                           categoryFilter === category.ID
                             ? "border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900"
-                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:text-white"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:text-white"
                         }`}
                       >
                         {category.name}
@@ -1015,7 +1015,7 @@ export default function InventoryPage() {
                         setStatusFilter("all");
                         setCategoryFilter(0);
                       }}
-                      className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
+                      className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-800 dark:hover:text-white"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
                       {lang === "th" ? "ล้างตัวกรอง" : "Clear filters"}
@@ -1042,7 +1042,7 @@ export default function InventoryPage() {
                 setCategoryModalClosing(false);
                 setCategoryModalOpen(true);
               }}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
             >
               <Tags className="h-4 w-4" />
               {lang === "th" ? "จัดการหมวด" : "Categories"}
@@ -1052,7 +1052,7 @@ export default function InventoryPage() {
             <button
               type="button"
               onClick={openBulk}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-slate-300 dark:hover:bg-gray-900"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
             >
               <Plus className="h-4 w-4" />
               {lang === "th" ? "หลายรายการ" : "Bulk add"}
@@ -1077,7 +1077,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={() => setStatusFilter("all")}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
               >
                 {lang === "th" ? "สถานะ" : "Status"} ·{" "}
                 {statusFilter === "ok" ? copy.filterOk : statusFilter === "low" ? copy.filterLow : copy.filterOut}
@@ -1088,7 +1088,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={() => setCategoryFilter(0)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
               >
                 {copy.category} · {categoryNameById.get(categoryFilter) ?? ""}
                 <X className="h-3 w-3" />
@@ -1111,11 +1111,11 @@ export default function InventoryPage() {
 
 
           <div className="grid gap-4">
-            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="rounded-md border border-slate-200 bg-white dark:border-gray-800 dark:bg-gray-900">
               <div className="overflow-x-auto">
                 {filtered.length === 0 ? (
                   <div className="m-2 flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-200 px-6 py-12 text-center dark:border-gray-800">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-900 dark:text-slate-500">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-gray-800 dark:text-slate-500">
                       <Boxes className="h-6 w-6" />
                     </div>
                     <p className="text-base font-semibold text-slate-700 dark:text-slate-200">
@@ -1202,7 +1202,7 @@ export default function InventoryPage() {
                                   type="button"
                                   onClick={() => openTransactions(item)}
                                   title={copy.history}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
                                 >
                                   <History className="h-4 w-4" />
                                 </button>
@@ -1220,7 +1220,7 @@ export default function InventoryPage() {
                                       type="button"
                                       onClick={() => openEdit(item)}
                                       title={copy.edit}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
                                     >
                                       <Pencil className="h-4 w-4" />
                                     </button>
@@ -1251,7 +1251,7 @@ export default function InventoryPage() {
                     <select
                       value={pageSize}
                       onChange={(event) => setPageSize(Number(event.target.value))}
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none transition focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200"
+                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 outline-none transition focus:border-orange-400 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-200"
                     >
                       {[10, 25, 50, 100].map((size) => (
                         <option key={size} value={size}>
@@ -1270,7 +1270,7 @@ export default function InventoryPage() {
                         onClick={() => setPage(safePage - 1)}
                         disabled={safePage <= 1}
                         aria-label="previous page"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </button>
@@ -1282,7 +1282,7 @@ export default function InventoryPage() {
                         onClick={() => setPage(safePage + 1)}
                         disabled={safePage >= totalPages}
                         aria-label="next page"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-900"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-slate-300 dark:hover:bg-gray-800"
                       >
                         <ChevronRight className="h-4 w-4" />
                       </button>
@@ -1307,7 +1307,7 @@ export default function InventoryPage() {
               event.preventDefault();
               void handleSave();
             }}
-            className={`${modalClosing ? "smooth-drawer-exit" : "smooth-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+            className={`${modalClosing ? "smooth-drawer-exit" : "smooth-drawer"} fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-gray-800">
               <div>
@@ -1321,7 +1321,7 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={closeModal}
-                className="h-8 w-8 rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-gray-900 dark:hover:text-slate-200"
+                className="h-8 w-8 rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-gray-800 dark:hover:text-slate-200"
               >
                 <X className="mx-auto h-4 w-4" />
               </button>
@@ -1462,7 +1462,7 @@ export default function InventoryPage() {
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`${bulkClosing ? "smooth-pop-exit" : "smooth-pop"} flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+            className={`${bulkClosing ? "smooth-pop-exit" : "smooth-pop"} flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-gray-800">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -1603,7 +1603,7 @@ export default function InventoryPage() {
 
       {categoryModalOpen && (
         <div {...categoryBackdrop} className={`${categoryModalClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-[var(--z-modal)] flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${categoryModalClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${categoryModalClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.manageCategories}</h2>
               <button
@@ -1655,7 +1655,7 @@ export default function InventoryPage() {
                   ) : (
                     <div
                       key={cat.ID}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-slate-50 dark:hover:bg-gray-900"
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-slate-50 dark:hover:bg-gray-800"
                     >
                       <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">{cat.name}</span>
                       <button
@@ -1715,7 +1715,7 @@ export default function InventoryPage() {
 
       {deleteTarget && (
         <div {...deleteBackdrop} className={`${deleteClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${deleteClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${deleteClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="px-6 py-5">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300">
                 <Trash2 className="h-5 w-5" />
@@ -1743,7 +1743,7 @@ export default function InventoryPage() {
 
       {adjustTarget && (
         <div {...adjustBackdrop} className={`${adjustClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${adjustClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${adjustClosing ? "smooth-pop-exit" : "smooth-pop"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="border-b border-slate-200 px-6 py-4 dark:border-gray-800">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{copy.adjustTitle}</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -1820,7 +1820,7 @@ export default function InventoryPage() {
                 />
               </div>
               {adjustPreview !== null && (
-                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 dark:bg-gray-900">
+                <div className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 dark:bg-gray-800">
                   <span className="text-xs text-slate-400">{copy.previewAfter}</span>
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <span className="tabular-nums text-slate-400">{formatNumber(adjustTarget.stock, lang)}</span>
@@ -1864,7 +1864,7 @@ export default function InventoryPage() {
       {txTarget && (
         <div {...txBackdrop} className={`${txClosing ? "smooth-overlay-exit" : "smooth-overlay"} fixed inset-0 z-50 flex justify-end bg-gray-950/45 backdrop-blur-sm`}>
           <div
-            className={`${txClosing ? "smooth-drawer-exit" : "smooth-drawer"} flex h-full w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}
+            className={`${txClosing ? "smooth-drawer-exit" : "smooth-drawer"} flex h-full w-full max-w-sm flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-gray-800">
               <div>
@@ -1892,7 +1892,7 @@ export default function InventoryPage() {
                         {items.map((tx) => (
                           <div
                             key={tx.ID}
-                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-950"
+                            className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 dark:border-gray-800 dark:bg-gray-900"
                           >
                             <div
                               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
@@ -1900,7 +1900,7 @@ export default function InventoryPage() {
                                   ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300"
                                   : tx.type === "out"
                                     ? "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300"
-                                    : "bg-slate-100 text-slate-500 dark:bg-gray-900 dark:text-slate-300"
+                                    : "bg-slate-100 text-slate-500 dark:bg-gray-800 dark:text-slate-300"
                               }`}
                             >
                               {tx.type === "in" ? (
