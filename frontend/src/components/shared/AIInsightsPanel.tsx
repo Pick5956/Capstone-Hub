@@ -17,7 +17,16 @@ import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
 
 type Props = {
   language: "th" | "en";
+  /** Reports how many cards the owner has NOT seen yet, which is what the bell
+   *  badge should show. A badge that counts everything nags about the same three
+   *  things every day until they stop meaning anything. */
   onCount?: (count: number) => void;
+  /** True while the panel is actually on screen. The component stays mounted
+   *  when the panel is closed, so mounting cannot be what marks a card as read. */
+  open?: boolean;
+  /** Scopes the read state to one owner and shop, so two accounts on the same
+   *  browser do not silence each other's warnings. */
+  scopeKey?: string;
   /** When given, a close control sits on the title row instead of on a bar of
    *  its own — one row of chrome rather than two. */
   onClose?: () => void;
@@ -113,7 +122,39 @@ function iconFor(kind: string) {
   }
 }
 
-export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
+// A card is identified by what it says, not by its position: the list is
+// re-ranked and re-cut every time it is built, so an index would mark the wrong
+// card as read the moment anything changed. Kind and headline together change
+// exactly when the situation does — "กะเพรา พอใช้อีก 2 วัน" becoming "กะเพรา
+// หมดสต๊อกแล้ว" is a new fact and rightly counts as unread again.
+export function insightKey(insight: AIInsight) {
+  return `${insight.kind}|${insight.title}`;
+}
+
+const seenStoragePrefix = "dishy_insights_seen";
+
+function readSeen(scopeKey: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(`${seenStoragePrefix}:${scopeKey}`);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === "string") : [];
+  } catch {
+    // Private windows and blocked storage both throw. A badge that counts
+    // everything is a worse outcome than a badge that never quiets down, so
+    // failing here simply means nothing is remembered.
+    return [];
+  }
+}
+
+function writeSeen(scopeKey: string, keys: string[]) {
+  try {
+    window.localStorage.setItem(`${seenStoragePrefix}:${scopeKey}`, JSON.stringify(keys));
+  } catch {
+    /* nothing to do — the badge just keeps counting */
+  }
+}
+
+export default function AIInsightsPanel({ language, onCount, onClose, open = true, scopeKey = "default" }: Props) {
   const copy = copyByLang[language];
   const [insights, setInsights] = useState<AIInsight[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -130,6 +171,14 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
     onCountRef.current = onCount;
   });
 
+  // Read state lives in the browser, like the chat history does. It is a
+  // per-device convenience — "I have looked at these" — not shop data, so it does
+  // not belong in the database and nothing breaks when it is absent.
+  const [seen, setSeen] = useState<string[]>([]);
+  useEffect(() => {
+    setSeen(readSeen(scopeKey));
+  }, [scopeKey]);
+
   useEffect(() => {
     let active = true;
     getProactiveInsights()
@@ -137,7 +186,6 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
         if (!active) return;
         const list = res.data?.insights ?? [];
         setInsights(list);
-        onCountRef.current?.(list.length);
         // next frame → trigger the staggered entrance transition
         requestAnimationFrame(() => active && setMounted(true));
       })
@@ -151,6 +199,29 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
       active = false;
     };
   }, []);
+
+  // Opening the panel is what marks its cards read — mounting is not, because the
+  // component stays mounted behind a closed panel and would silence the badge for
+  // cards nobody ever looked at.
+  useEffect(() => {
+    if (!open || !insights || insights.length === 0) return;
+    const keys = insights.map(insightKey);
+    setSeen((current) => {
+      const merged = Array.from(new Set([...current, ...keys]));
+      // Drop anything no longer on the list, so the record cannot grow forever on
+      // a shop that has been running for months.
+      const pruned = merged.filter((key) => keys.includes(key));
+      writeSeen(scopeKey, pruned);
+      return pruned;
+    });
+  }, [open, insights, scopeKey]);
+
+  // The badge counts what has not been looked at. Everything read → no badge,
+  // and a genuinely new card brings it straight back.
+  useEffect(() => {
+    if (!insights) return;
+    onCountRef.current?.(insights.filter((insight) => !seen.includes(insightKey(insight))).length);
+  }, [insights, seen]);
 
   const urgentCount = insights?.filter((i) => i.severity === "critical").length ?? 0;
 

@@ -1028,6 +1028,13 @@ export default function AIAssistantPage() {
               language={language}
               onCount={setInsightsCount}
               onClose={() => setDrawerOpen(false)}
+              // The panel stays mounted behind the closed drawer, so it needs to
+              // be told when it is actually being looked at — that is what marks
+              // its cards read and quiets the bell.
+              open={drawerOpen}
+              // Null before the membership resolves; the panel falls back to its
+              // own default until then rather than storing under "null".
+              scopeKey={storageKey ?? undefined}
             />
           </div>
         </aside>

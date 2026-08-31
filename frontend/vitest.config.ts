@@ -11,6 +11,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "src/lib/__tests__/ai*.test.{ts,tsx}",
+      "src/lib/__tests__/aiInsightsRead.test.ts",
       "src/lib/__tests__/orderItemGroups.test.ts",
       "src/lib/__tests__/homeDashboard.test.ts",
       "src/lib/__tests__/documentTitle.test.ts",
