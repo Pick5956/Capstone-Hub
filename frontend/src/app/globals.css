@@ -988,7 +988,7 @@ input[type="number"]::-webkit-inner-spin-button {
     display: none;
   }
 
-  /* The white surface beside the rail. It is flush and square now - the inset
+  /* The canvas beside the rail. It is flush and square now - the inset
      and radius variables are 0 - but it keeps its own height and overflow so
      [data-shell-scroll] inside it stays the scroller. That is what page-level
      sticky headers anchor to, so this box cannot go away. */
@@ -998,7 +998,7 @@ input[type="number"]::-webkit-inner-spin-button {
     margin: var(--shell-pad) var(--shell-gap) var(--shell-pad) 0;
     overflow: hidden;
     border-radius: var(--shell-radius);
-    background-color: #ffffff;
+    background-color: #f1f5f9;
     box-shadow: none;
   }
 
@@ -1015,7 +1015,7 @@ input[type="number"]::-webkit-inner-spin-button {
     position: sticky;
     top: 0;
     z-index: 20;
-    background-color: #ffffff;
+    background-color: #f1f5f9;
     backdrop-filter: none;
   }
 
