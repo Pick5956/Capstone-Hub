@@ -269,6 +269,12 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		return err
 	}
 	response.TurnID = turn.ID
+	// AppendTurn moved the row on in the database but not in this copy. Anything
+	// that writes after it — the digest does — must use the new version or its
+	// write is rejected as a conflict every single time, which is exactly how the
+	// digest came to be composed correctly and thrown away on every turn.
+	session.conversation.Version++
+	session.conversation.NextTurnSequence = turn.Sequence + 1
 	s.maybeSummarizeConversation(actor, session, turn.Sequence)
 	return nil
 }
