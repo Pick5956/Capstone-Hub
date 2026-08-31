@@ -47,7 +47,8 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	// catalogue leads (so Groq caches the whole instruction+rules prefix), and the
 	// dynamic history and question come last.
 	selection, err := a.chat.Complete(ctx, fmt.Sprintf(
-		selectToolsTemplate, renderCatalogue(catalogue), formatHistory(request.History), question), CallSelectTools)
+		selectToolsTemplate, renderCatalogue(catalogue),
+		formatDigest(request.Digest)+formatHistory(request.History), question), CallSelectTools)
 	if err != nil {
 		return Answer{}, fmt.Errorf("%w: choosing tools: %w", ErrUnavailable, err)
 	}
@@ -65,7 +66,7 @@ func (a *Assistant) Ask(ctx context.Context, request Request) (Answer, error) {
 	}
 
 	sheet := buildFactSheet(results)
-	text, err := a.write(ctx, question, request.History, sheet)
+	text, err := a.write(ctx, question, request.History, request.Digest, sheet)
 	if err != nil {
 		return Answer{}, err
 	}
@@ -103,8 +104,8 @@ func answeredTools(results []ToolResult) []string {
 // owner still read the invented number. Naming the figure back to the model gets
 // a clean answer, and it fires rarely enough — once in about twenty-five
 // questions here — to be worth the extra call when it does.
-func (a *Assistant) write(ctx context.Context, question string, history []Turn, sheet string) (string, error) {
-	text, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, sheet), sheet)
+func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string) (string, error) {
+	text, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet)
 	if err != nil || len(unmatched) == 0 {
 		return text, err
 	}
@@ -113,7 +114,7 @@ func (a *Assistant) write(ctx context.Context, question string, history []Turn, 
 	}
 
 	retry, stillUnmatched, retryErr := a.writeOnce(ctx,
-		answerPrompt(question, history, sheet)+fmt.Sprintf(rewriteWithoutInventedFigures, strings.Join(unmatched, ", ")),
+		answerPrompt(question, history, digest, sheet)+fmt.Sprintf(rewriteWithoutInventedFigures, strings.Join(unmatched, ", ")),
 		sheet)
 	if retryErr != nil || len(stillUnmatched) > 0 {
 		// The rewrite is no better than what we have, so keep the first answer

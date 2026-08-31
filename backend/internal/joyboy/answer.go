@@ -287,14 +287,27 @@ const rewriteWithoutInventedFigures = `
 ให้ตอบด้วยเลขที่อยู่ในข้อมูลเท่านั้น ถ้าคำถามอยากได้ผลต่างหรือผลรวมที่ไม่มีให้
 ให้บอกตรง ๆ ว่ายังไม่มีตัวเลขนั้น พร้อมยกเลขที่มีให้ดูแทน`
 
-func answerPrompt(question string, history []Turn, sheet string) string {
+// formatDigest prints the memory the caller wrote about the older part of this
+// conversation. joyboy does not interpret it — it only makes sure the model reads
+// it as "this was said before", not as "this is true now", because the shop's
+// figures move under it constantly.
+func formatDigest(digest string) string {
+	digest = strings.TrimSpace(digest)
+	if digest == "" {
+		return ""
+	}
+	return "\nบันทึกช่วยจำจากที่คุยกันก่อนหน้า (เป็นสิ่งที่เคยพูดไว้ ไม่ใช่สถานะปัจจุบัน " +
+		"และไม่มีตัวเลข ถ้าต้องตอบตัวเลขให้เรียกเครื่องมือใหม่เสมอ):\n" + digest + "\n"
+}
+
+func answerPrompt(question string, history []Turn, digest, sheet string) string {
 	// Argument order follows each template's cache-friendly layout: the static
 	// persona and rules lead, and the dynamic parts (history, sheet, question)
 	// come last, question at the very end.
 	if strings.TrimSpace(sheet) == "" {
-		return fmt.Sprintf(noDataAnswerTemplate, formatHistory(history), question)
+		return fmt.Sprintf(noDataAnswerTemplate, formatDigest(digest)+formatHistory(history), question)
 	}
-	return fmt.Sprintf(answerTemplate, formatHistory(history), sheet, question)
+	return fmt.Sprintf(answerTemplate, formatDigest(digest)+formatHistory(history), sheet, question)
 }
 
 // formatHistory renders the recent exchanges, or nothing at all when there are

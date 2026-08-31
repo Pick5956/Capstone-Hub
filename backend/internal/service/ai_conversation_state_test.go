@@ -17,6 +17,7 @@ type fakeAIConversationStore struct {
 	listCalls    int
 	appendCalls  int
 	deleteCalls  int
+	updateStateCalls int
 	cleanupCalls int
 	appendActor  AIActorContext
 	appended     *entity.AIConversationTurn
@@ -62,6 +63,15 @@ func (f *fakeAIConversationStore) AppendTurn(restaurantID, ownerUserID uint, con
 	turn.ID = "turn-created"
 	f.appendActor = AIActorContext{RestaurantID: restaurantID, OwnerUserID: ownerUserID, Role: "owner"}
 	f.appended = turn
+	f.nextState = nextStateJSON
+	return nil
+}
+
+func (f *fakeAIConversationStore) UpdateState(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, nextStateJSON string) error {
+	f.updateStateCalls++
+	if f.err != nil {
+		return f.err
+	}
 	f.nextState = nextStateJSON
 	return nil
 }

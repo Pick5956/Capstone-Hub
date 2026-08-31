@@ -9,8 +9,8 @@ import (
 // sometimes reaches for a tool even then. The rules have to travel with both.
 func TestPersonaReachesBothPaths(t *testing.T) {
 	prompts := map[string]string{
-		"with data":    answerPrompt("นายรันด้วยโมเดลอะไร", nil, "rank=1 menu=ต้มยำกุ้ง qty=109"),
-		"without data": answerPrompt("นายรันด้วยโมเดลอะไร", nil, ""),
+		"with data":    answerPrompt("นายรันด้วยโมเดลอะไร", nil, "", "rank=1 menu=ต้มยำกุ้ง qty=109"),
+		"without data": answerPrompt("นายรันด้วยโมเดลอะไร", nil, "", ""),
 	}
 	for path, prompt := range prompts {
 		if !strings.Contains(prompt, joyboyPersona) {
@@ -51,8 +51,8 @@ func TestThePersonaNamesNoProvider(t *testing.T) {
 // where every other answer said "ผม", which reads as a different person replying.
 func TestThePersonaPinsOnePronoun(t *testing.T) {
 	for _, prompt := range []string{
-		answerPrompt("ชอบกินอะไร", nil, ""),
-		answerPrompt("ยอดขายเท่าไหร่", nil, "revenue=7880.00"),
+		answerPrompt("ชอบกินอะไร", nil, "", ""),
+		answerPrompt("ยอดขายเท่าไหร่", nil, "", "revenue=7880.00"),
 	} {
 		if !strings.Contains(prompt, `เรียกตัวเองว่า "ผม" เสมอ`) {
 			t.Fatal("the persona stopped pinning a pronoun")

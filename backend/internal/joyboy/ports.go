@@ -101,6 +101,11 @@ type Turn struct {
 type Request struct {
 	Question string
 	History  []Turn
+	// Digest is the memory of the older part of this conversation, already
+	// composed by the caller. joyboy prints it into both prompts and does not
+	// interpret it: what it says, and whether it deserves to be trusted, is
+	// decided where it was written.
+	Digest string
 }
 
 // Answer is what the owner reads, plus the tools that produced it, which the

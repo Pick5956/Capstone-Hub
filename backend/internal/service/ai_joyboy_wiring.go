@@ -624,6 +624,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	answer, err := assistant.Ask(ctx, joyboy.Request{
 		Question: request.Question,
 		History:  joyboyHistory(request.History),
+		Digest:   request.Digest,
 	})
 	if err != nil {
 		if errors.Is(err, joyboy.ErrUnavailable) {
