@@ -6,12 +6,24 @@ export type AISalesSummary = {
 
 export type AIInsightSeverity = "critical" | "warning" | "info";
 
+export type AIInsightItem = {
+  /** The bare thing, for the collapsed preview ("ไก่สับ"). */
+  name: string;
+  /** The thing plus its situation, for the opened list. */
+  title: string;
+  detail: string;
+};
+
 export type AIInsight = {
   kind: string;
   severity: AIInsightSeverity;
   title: string;
   metric: string;
   detail: string;
+  /** Set when several facts of one kind are folded into a single card. */
+  items?: AIInsightItem[];
+  /** Rows the card could not list, so the count is never understated. */
+  more?: number;
 };
 
 export type AIReceiptDraft = {

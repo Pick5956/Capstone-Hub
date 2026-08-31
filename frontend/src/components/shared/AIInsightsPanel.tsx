@@ -10,6 +10,7 @@ import {
   TrendingDown,
   TrendingUp,
   X,
+  ChevronDown,
 } from "lucide-react";
 import { getProactiveInsights } from "@/src/lib/ai";
 import type { AIInsight, AIInsightSeverity } from "@/src/types/ai";
@@ -29,6 +30,9 @@ const copyByLang = {
     loading: "กำลังตรวจข้อมูลร้าน",
     urgent: (n: number) => `${n} เรื่องด่วน`,
     items: (n: number) => `${n} เรื่อง`,
+    more: (n: number) => `อีก ${n} อย่าง`,
+    expand: "ดูรายการทั้งหมด",
+    collapse: "ย่อรายการ",
   },
   en: {
     title: "Today's insights",
@@ -36,6 +40,9 @@ const copyByLang = {
     loading: "Checking the shop",
     urgent: (n: number) => `${n} urgent`,
     items: (n: number) => `${n} items`,
+    more: (n: number) => `+${n} more`,
+    expand: "Show all",
+    collapse: "Show less",
   },
 };
 
@@ -111,6 +118,10 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
   const [insights, setInsights] = useState<AIInsight[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  // Which folded cards the owner has opened. Collapsed by default: the panel's
+  // job is to say what happened in three seconds, and the names inside are the
+  // follow-up question, not the headline.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // onCount is a parent callback that can be re-created every render. Keeping
   // it in a ref lets the fetch stay mount-once without an incomplete dep list.
@@ -197,6 +208,16 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
             const Icon = iconFor(insight.kind);
             const tone = toneFor(insight.kind, insight.severity);
             const style = toneStyle[tone];
+            const cardKey = `${insight.kind}-${index}`;
+            const folded = (insight.items?.length ?? 0) > 0;
+            const isOpen = Boolean(expanded[cardKey]);
+            // Rows the card holds but does not list: the fold cap here plus the
+            // ones the upstream ranking already dropped, which the server counted.
+            const listed = insight.items?.length ?? 0;
+            const hiddenBeyondList = insight.more ?? 0;
+            const previewNames = (insight.items ?? []).slice(0, 3).map((item) => item.name).join(" · ");
+            const rest = Math.max(0, listed - 3) + hiddenBeyondList;
+            const preview = rest > 0 ? `${previewNames} · ${copy.more(rest)}` : previewNames;
             return (
               <article
                 key={`${insight.kind}-${index}`}
@@ -222,12 +243,53 @@ export default function AIInsightsPanel({ language, onCount, onClose }: Props) {
                   <p className="text-[14.5px] font-bold leading-snug tracking-[-0.01em] text-gray-950 dark:text-white">
                     {insight.title}
                   </p>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-gray-500 tabular-nums dark:text-gray-400">
-                    {insight.metric && (
-                      <span className={`font-bold ${style.metric}`}>{insight.metric} · </span>
-                    )}
-                    {insight.detail}
-                  </p>
+                  {folded ? (
+                    <>
+                      {/* Collapsed: names only. Enough to tell whether this is the
+                          shelf you care about, without the card becoming a list. */}
+                      <button
+                        type="button"
+                        onClick={() => setExpanded((open) => ({ ...open, [cardKey]: !isOpen }))}
+                        aria-expanded={isOpen}
+                        aria-label={isOpen ? copy.collapse : copy.expand}
+                        className="mt-1 flex w-full items-center gap-1.5 rounded-lg text-left transition-opacity hover:opacity-75"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400">
+                          {preview}
+                        </span>
+                        <ChevronDown
+                          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                          aria-hidden
+                        />
+                      </button>
+                      {isOpen && (
+                        <ul className="mt-2.5 space-y-2 border-t border-gray-200/70 pt-2.5 dark:border-gray-700/50">
+                          {insight.items?.map((item) => (
+                            <li key={item.title}>
+                              <p className="text-[13px] font-semibold leading-snug text-gray-800 dark:text-gray-100">
+                                {item.title}
+                              </p>
+                              <p className="text-[12px] leading-relaxed text-gray-500 tabular-nums dark:text-gray-400">
+                                {item.detail}
+                              </p>
+                            </li>
+                          ))}
+                          {hiddenBeyondList > 0 && (
+                            <li className="text-[12px] text-gray-400 dark:text-gray-500">
+                              {copy.more(hiddenBeyondList)}
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-gray-500 tabular-nums dark:text-gray-400">
+                      {insight.metric && (
+                        <span className={`font-bold ${style.metric}`}>{insight.metric} · </span>
+                      )}
+                      {insight.detail}
+                    </p>
+                  )}
                 </div>
               </article>
             );

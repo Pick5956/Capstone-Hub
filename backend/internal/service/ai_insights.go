@@ -22,6 +22,27 @@ type AIInsight struct {
 	Title    string `json:"title"`
 	Metric   string `json:"metric"`
 	Detail   string `json:"detail"`
+
+	// Items is set when several facts of one kind are folded into a single card.
+	// Seven ingredients at zero used to be three identical-looking cards — the cap
+	// hid the other four, and the three that showed pushed the sales and margin
+	// cards off a five-card panel. One card says how many there really are and
+	// carries the rest inside, so the panel keeps room for the other kinds.
+	// Empty for an ordinary one-fact card, which is most of them.
+	Items []AIInsightItem `json:"items,omitempty"`
+	// More counts the rows past what Items carries, so a shop with a very long
+	// list is never told it has fewer problems than it does.
+	More int `json:"more,omitempty"`
+}
+
+// AIInsightItem is one row inside a folded card: the thing, and its figures.
+// Name is the bare thing ("ไก่สับ"); Title is that plus its situation
+// ("ไก่สับ หมดสต๊อกแล้ว"). The collapsed card previews names, the opened one
+// shows titles — splitting them here keeps the client from parsing a sentence.
+type AIInsightItem struct {
+	Name   string `json:"name"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
 }
 
 // A card is read in about three seconds, so its figures are rounded to what the
@@ -51,6 +72,9 @@ const (
 	insightReorderDaysThreshold = 3.0  // flag ingredients with this many days left or fewer
 	insightMaxPerKind           = 3    // cap one kind so it cannot bury the others
 	insightMaxCards             = 5
+	// Rows carried inside a folded card. Past this the card says "and N more"
+	// rather than growing without end.
+	insightMaxFoldedRows = 8
 )
 
 // computeProactiveInsights surfaces the few most actionable facts, most urgent
@@ -60,18 +84,38 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 
 	// 1) Ingredients about to run out — the most operationally urgent. Capped so a
 	// shop that is low on many items does not bury every other kind of insight.
-	lowCount := 0
+	// Collect every ingredient that is urgent, then decide how to present them.
+	// The old code stopped after three, which made the count on screen a property
+	// of the cap rather than of the shop.
+	type urgentStock struct {
+		name       string
+		title      string
+		detail     string
+		outOfStock bool
+		critical   bool
+	}
+	// ComputeReorderForecast keeps only the eight soonest to run out, which is the
+	// right size for a tool answer and the wrong number to count from: a shop with
+	// twelve empty shelves would be told it had eight. The headline counts the
+	// whole shelf list; the rows below it come from the ranked, capped forecast.
+	urgentTotal := 0
+	for _, u := range snapshot.IngredientUsage {
+		if u.Used <= 0 {
+			continue
+		}
+		dailyUse := u.Used / analysisWindowDays
+		if dailyUse <= 0 {
+			continue
+		}
+		if u.Stock/dailyUse <= insightReorderDaysThreshold {
+			urgentTotal++
+		}
+	}
+
+	urgent := make([]urgentStock, 0, 8)
 	for _, it := range computeReorderForecast(snapshot.IngredientUsage) {
 		if it.DaysLeft > insightReorderDaysThreshold {
 			continue
-		}
-		if lowCount >= insightMaxPerKind {
-			break
-		}
-		lowCount++
-		severity := "warning"
-		if it.DaysLeft <= 1 {
-			severity = "critical"
 		}
 		// The headline has to say which of three different situations this is.
 		// "ใกล้หมด" over a shelf that is already empty is wrong, and it was the
@@ -83,15 +127,79 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 		case it.DaysLeft < 1:
 			title = fmt.Sprintf("%s จะหมดภายในวันนี้", it.Name)
 		}
+		urgent = append(urgent, urgentStock{
+			name:  it.Name,
+			title: title,
+			// The headline already carries the time left, so the figures line
+			// carries what is on the shelf and how fast it goes — the two numbers
+			// an owner needs to decide how much to order.
+			detail:     "เหลือ " + insightQty(it.Stock, it.Unit) + " · ใช้เฉลี่ย " + insightQty(it.DailyUse, it.Unit) + "/วัน",
+			outOfStock: it.Stock <= 0,
+			critical:   it.DaysLeft <= 1,
+		})
+	}
+
+	switch {
+	case urgentTotal == 1 && len(urgent) == 1:
+		// One ingredient reads better as itself than as a group of one.
+		only := urgent[0]
+		severity := "warning"
+		if only.critical {
+			severity = "critical"
+		}
+		insights = append(insights, AIInsight{
+			Kind:     "ingredient_low",
+			Severity: severity,
+			Title:    only.title,
+			Detail:   only.detail,
+		})
+	case urgentTotal > 1:
+		outCount, anyCritical := 0, false
+		for _, u := range urgent {
+			if u.outOfStock {
+				outCount++
+			}
+			if u.critical {
+				anyCritical = true
+			}
+		}
+		// Name the situation the owner is actually in. "ใกล้หมด" over seven empty
+		// shelves understates it; "หมดสต๊อก" over a mixed list overstates it.
+		title := fmt.Sprintf("วัตถุดิบ %d อย่างใกล้หมด", urgentTotal)
+		detail := ""
+		switch {
+		// The out/low split can only be read from the rows we actually have, so it
+		// is stated only when those rows are the whole list.
+		case outCount == urgentTotal:
+			title = fmt.Sprintf("วัตถุดิบ %d อย่างหมดสต๊อก", urgentTotal)
+		case outCount > 0 && len(urgent) == urgentTotal:
+			title = fmt.Sprintf("วัตถุดิบ %d อย่างต้องเติม", urgentTotal)
+			detail = fmt.Sprintf("หมดแล้ว %d · ใกล้หมด %d", outCount, urgentTotal-outCount)
+		case outCount > 0:
+			title = fmt.Sprintf("วัตถุดิบ %d อย่างต้องเติม", urgentTotal)
+		}
+		severity := "warning"
+		if anyCritical {
+			severity = "critical"
+		}
+		rows := urgent
+		if len(rows) > insightMaxFoldedRows {
+			rows = rows[:insightMaxFoldedRows]
+		}
+		// Everything the card could not list, whether the forecast dropped it or
+		// the fold cap did. Silence here would read as "that is all of them".
+		more := urgentTotal - len(rows)
+		items := make([]AIInsightItem, 0, len(rows))
+		for _, r := range rows {
+			items = append(items, AIInsightItem{Name: r.name, Title: r.title, Detail: r.detail})
+		}
 		insights = append(insights, AIInsight{
 			Kind:     "ingredient_low",
 			Severity: severity,
 			Title:    title,
-			// The headline already carries the time left, so the figures line
-			// carries what is on the shelf and how fast it goes — the two numbers
-			// an owner needs to decide how much to order.
-			Metric: "เหลือ " + insightQty(it.Stock, it.Unit),
-			Detail: fmt.Sprintf("ใช้เฉลี่ย %s/วัน", insightQty(it.DailyUse, it.Unit)),
+			Detail:   detail,
+			Items:    items,
+			More:     more,
 		})
 	}
 

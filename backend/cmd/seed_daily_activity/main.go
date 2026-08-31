@@ -37,6 +37,7 @@ func main() {
 	dateFlag := flag.String("date", "", "day to seed as YYYY-MM-DD (default: today in Bangkok)")
 	force := flag.Bool("force", false, "re-seed even if this day already has activity")
 	purge := flag.Bool("purge", false, "remove the activity previously seeded for this day")
+	restock := flag.Bool("restock", false, "top every ingredient that is below its minimum back up to a working level")
 	flag.Parse()
 
 	if err := config.LoadRuntimeEnvironment(); err != nil {
@@ -62,6 +63,11 @@ func main() {
 
 	if *purge {
 		purgeDay(db, *restaurantID, marker)
+		return
+	}
+
+	if *restock {
+		restockShelves(db, *restaurantID)
 		return
 	}
 
@@ -253,12 +259,16 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 		}
 
 		// ---- an expense or two: a restock, sometimes a utility bill ---------
-		expenses := buildExpenses(restaurantID, day, staffID, marker, ingredients, rng)
-		if len(expenses) > 0 {
-			if err := tx.Create(&expenses).Error; err != nil {
+		seeded := buildExpenses(restaurantID, day, staffID, marker, ingredients, rng)
+		if len(seeded) > 0 {
+			rows := make([]entity.Expense, 0, len(seeded))
+			for _, item := range seeded {
+				rows = append(rows, item.expense)
+			}
+			if err := tx.Create(&rows).Error; err != nil {
 				return err
 			}
-			summary.expenses = len(expenses)
+			summary.expenses = len(rows)
 		}
 
 		// ---- drop live stock by what today's cooking consumed ---------------
@@ -277,19 +287,58 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 		}
 		// The restock expense also puts stock back for the item it bought, so the
 		// movement goes both ways and one ingredient climbs while others fall.
-		for _, expense := range expenses {
-			if expense.Category != "ingredient" || expense.IngredientTransactionID == nil {
+		for _, item := range seeded {
+			if item.restockID == 0 {
 				continue
 			}
 			if err := tx.Model(&entity.Ingredient{}).
-				Where("id = ? AND restaurant_id = ?", *expense.IngredientTransactionID, restaurantID).
-				Update("stock", gorm.Expr("stock + ?", restockUnits(expense.Amount))).Error; err != nil {
+				Where("id = ? AND restaurant_id = ?", item.restockID, restaurantID).
+				Update("stock", gorm.Expr("stock + ?", restockUnits(item.expense.Amount))).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
 	return summary, err
+}
+
+// restockShelves refills every ingredient sitting at or below its minimum, the
+// way an owner would after a delivery. It exists because a broken restock path
+// let daily seeding drain the whole pantry: cooking subtracted every day, the
+// purchase that was supposed to add stock back never ran, and twenty-four of
+// twenty-seven ingredients ended up below their minimum. Fixing the seeding
+// stops the bleeding; this puts the shelves back.
+//
+// The target is three times the minimum — enough that a day of cooking does not
+// immediately drop it back into the warning band, and not so much that the
+// inventory value stops looking like a real small shop's.
+func restockShelves(db *gorm.DB, restaurantID uint) {
+	var ingredients []entity.Ingredient
+	if err := db.Where("restaurant_id = ?", restaurantID).Find(&ingredients).Error; err != nil {
+		log.Fatalf("load ingredients: %v", err)
+	}
+	filled := 0
+	for _, ing := range ingredients {
+		target := ing.MinStock * 3
+		if target <= 0 {
+			// No minimum recorded, so there is no shortage to judge — leave it be
+			// unless the shelf is actually empty.
+			if ing.Stock > 0 {
+				continue
+			}
+			target = 1000
+		}
+		if ing.Stock > ing.MinStock {
+			continue
+		}
+		if err := db.Model(&entity.Ingredient{}).
+			Where("id = ? AND restaurant_id = ?", ing.ID, restaurantID).
+			Update("stock", round2(target)).Error; err != nil {
+			log.Fatalf("restock %s: %v", ing.Name, err)
+		}
+		filled++
+	}
+	log.Printf("เติมสต๊อกให้วัตถุดิบที่ต่ำกว่าขั้นต่ำแล้ว %d ตัว จากทั้งหมด %d ตัว", filled, len(ingredients))
 }
 
 // activeItemStatus keeps an item's kitchen state consistent with its order's.
@@ -404,9 +453,23 @@ func buildCost(item *entity.OrderItem, ingredients []entity.Ingredient, staffID 
 
 // buildExpenses writes what an owner would actually enter on a normal day: an
 // ingredient restock most days, and now and then a utility bill.
-func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string, ingredients []entity.Ingredient, rng *rand.Rand) []entity.Expense {
+// seededExpense pairs a ledger row with the ingredient it restocks, if any.
+// That link used to be smuggled through Expense.IngredientTransactionID, which
+// points at a different table and is unique. Clearing it fixed the crash and
+// silently killed the restock — the loop that adds stock back skipped every row,
+// so the shelves only ever drained. Twenty-four of twenty-seven ingredients were
+// below their minimum a day later. The link belongs here, beside the row, not in
+// a column that means something else.
+type seededExpense struct {
+	expense entity.Expense
+	// restockID is the ingredient this purchase puts back on the shelf; 0 when the
+	// expense buys nothing stocked (a utility bill).
+	restockID uint
+}
+
+func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string, ingredients []entity.Ingredient, rng *rand.Rand) []seededExpense {
 	spentAt := time.Date(day.Year(), day.Month(), day.Day(), 9, rng.Intn(50), 0, 0, day.Location())
-	expenses := []entity.Expense{}
+	expenses := []seededExpense{}
 
 	if len(ingredients) > 0 {
 		// Restock whichever ingredient is lowest, so the buy is one the shop needs.
@@ -424,19 +487,22 @@ func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string
 		// the wrong table and, being unique, broke the whole seeding run on the
 		// first day the same ingredient came up lowest twice (SQLSTATE 23505).
 		// These rows stand for expenses the owner typed in, so nil is also correct.
-		expenses = append(expenses, entity.Expense{
-			Model:        gorm.Model{CreatedAt: spentAt, UpdatedAt: spentAt},
-			RestaurantID: restaurantID,
-			Category:     "ingredient",
-			Amount:       amount,
-			SpentAt:      spentAt,
-			Note:         marker + " ซื้อ" + lowest.Name,
-			CreatedByID:  staffID,
+		expenses = append(expenses, seededExpense{
+			expense: entity.Expense{
+				Model:        gorm.Model{CreatedAt: spentAt, UpdatedAt: spentAt},
+				RestaurantID: restaurantID,
+				Category:     "ingredient",
+				Amount:       amount,
+				SpentAt:      spentAt,
+				Note:         marker + " ซื้อ" + lowest.Name,
+				CreatedByID:  staffID,
+			},
+			restockID: lowest.ID,
 		})
 	}
 	if rng.Float64() < 0.25 {
 		utility := spentAt.Add(2 * time.Hour)
-		expenses = append(expenses, entity.Expense{
+		expenses = append(expenses, seededExpense{expense: entity.Expense{
 			Model:        gorm.Model{CreatedAt: utility, UpdatedAt: utility},
 			RestaurantID: restaurantID,
 			Category:     "utilities",
@@ -444,7 +510,7 @@ func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string
 			SpentAt:      utility,
 			Note:         marker + " ค่าน้ำค่าไฟรายวัน",
 			CreatedByID:  staffID,
-		})
+		}})
 	}
 	return expenses
 }

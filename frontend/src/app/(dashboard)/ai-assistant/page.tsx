@@ -953,7 +953,12 @@ export default function AIAssistantPage() {
             The right/top offsets match the bell's own (main's padding + its
             right-3/top-3) so the card's edge lines up with the control. */}
         <aside
-          className={`fixed inset-0 z-[60] flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-gray-900 sm:absolute sm:inset-auto sm:right-9 sm:top-16 sm:w-[380px] sm:max-h-[min(32rem,calc(100%-6rem))] sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-gray-950/20 sm:dark:border-gray-800 lg:right-11 ${
+          /* Phone: the sheet stops at the app bar rather than running under it.
+             inset-0 covered the bar geometrically but the bar paints from a
+             higher stacking context, so it sat on top of the panel's own title
+             row and hid the close button. Starting below it also keeps the bell
+             and the menu reachable while the panel is open. */
+          className={`fixed inset-x-0 bottom-0 top-14 z-[60] flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-gray-900 sm:absolute sm:left-auto sm:bottom-auto sm:right-9 sm:top-16 sm:w-[380px] sm:max-h-[min(32rem,calc(100%-6rem))] sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-gray-950/20 sm:dark:border-gray-800 lg:right-11 ${
             drawerOpen
               ? "translate-y-0 opacity-100 sm:scale-100"
               : "pointer-events-none translate-y-full opacity-0 sm:translate-y-0 sm:scale-95"
@@ -963,7 +968,7 @@ export default function AIAssistantPage() {
           {/* No chrome of its own: the close control rides the panel's own title
               row. A bar holding nothing but an X was a thick empty band above the
               heading — two rows of furniture for one list. */}
-          <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-4 sm:pt-3">
+          <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-3">
             <AIInsightsPanel
               language={language}
               onCount={setInsightsCount}
