@@ -273,7 +273,12 @@ export default function AIAssistantPage() {
     setLastQuestion(trimmed);
     setPendingAction(null);
     setPendingActionPreview(null);
-    setPendingActionPlan(null);
+    // The pending plan deliberately survives a new question. Clearing it here hid
+    // the confirm bar while the server still held the plan, and the server answers
+    // the next command with "there is still something waiting — confirm or cancel
+    // it above" over a box that is no longer on screen. The owner could then
+    // neither confirm nor cancel, and had to wait out the expiry. The bar carries
+    // its own countdown and terminal states, so leaving it up is safe.
     setActionPreviewError("");
 
     const history = conversationHistory();
