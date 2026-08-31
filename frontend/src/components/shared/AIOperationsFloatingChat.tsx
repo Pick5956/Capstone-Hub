@@ -803,9 +803,52 @@ export default function AIOperationsFloatingChat() {
             aria-labelledby="ai-operations-chat-title"
             className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-t-2xl rounded-b-none border border-gray-200 bg-[#faf8f2] shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30 sm:rounded-2xl sm:bg-white"
           >
-          {/* Phone: no header bar — the controls float top-right over the canvas,
-              the same glassy treatment as the full AI page. Reset + close only. */}
-          <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:hidden">
+          {/* No header bar at any width. The phone had one treatment and the desktop
+              another — a titled, bordered bar — and the owner preferred the phone's:
+              the panel is small enough that a bar naming what you just opened spends
+              a row of it saying nothing. The controls float over the canvas instead,
+              and the ones that only make sense on a wider screen keep their own
+              width gates rather than living in a separate header. */}
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+            {messages.length <= 1 && (
+              <button
+                type="button"
+                aria-label={labels.toggleTips}
+                aria-pressed={showTips}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTips(!showTips);
+                }}
+                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 sm:inline-flex ${
+                  showTips
+                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
+                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+                }`}
+              >
+                <Lightbulb className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {messages.length > 1 && (
+              <button
+                type="button"
+                aria-label={labels.toggleStats}
+                aria-pressed={showStats}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showStats) {
+                    setHasOpenedStats(true);
+                  }
+                  setShowStats(!showStats);
+                }}
+                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 lg:inline-flex ${
+                  showStats
+                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
+                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+                }`}
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             {messages.length > 1 && (
               <button
                 type="button"
@@ -831,90 +874,6 @@ export default function AIOperationsFloatingChat() {
             >
               <X className="h-3.5 w-3.5" />
             </button>
-          </div>
-          {/* Header (sm+ only) */}
-          <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:flex sm:px-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
-              <div className="flex min-w-0 items-center">
-                <h2 id="ai-operations-chat-title" className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white">{copy.title}</h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {/* Tips Toggle Button (Lightbulb) */}
-              {messages.length <= 1 && (
-                <button
-                  type="button"
-                  aria-label={labels.toggleTips}
-                  aria-pressed={showTips}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTips(!showTips);
-                  }}
-                  title={language === "th" ? "เปิด/ปิดคำถามแนะนำ" : "Toggle Suggested Questions"}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 ${
-                    showTips
-                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <Lightbulb className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* Stats Panel Toggle Button with tactile scale click */}
-              {canAskAI && (
-                <button
-                  type="button"
-                  aria-label={labels.toggleStats}
-                  aria-expanded={showStats}
-                  aria-controls="ai-operations-stats"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!showStats) {
-                      setHasOpenedStats(true);
-                    }
-                    setShowStats(!showStats);
-                  }}
-                  title={copy.toggleStatsTooltip}
-                  className={`hidden h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 lg:inline-flex ${
-                    showStats
-                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <BarChart2 className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* New Chat / Clear History */}
-              {messages.length > 1 && (
-                <button
-                  type="button"
-                  aria-label={labels.clearChat}
-                  title={labels.clearChat}
-                  disabled={loading || actionConfirming || actionCancelling}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleClearChat();
-                  }}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
-                >
-                  <RotateCcw className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* Close Panel */}
-              <button
-                type="button"
-                aria-label={labels.closeAssistant}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsOpen(false);
-                }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
-              >
-                <X className="h-4.5 w-4.5" />
-              </button>
-            </div>
           </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation.

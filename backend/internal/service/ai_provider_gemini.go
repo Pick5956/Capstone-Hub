@@ -74,10 +74,10 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Gemini key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Gemini key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Gemini key %s failed: %v → rotating", attempt.Label(), err)
 	}
 
 	return "", "", lastErr
@@ -473,10 +473,10 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Gemini second-round key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Gemini second-round key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini second-round key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Gemini second-round key %s failed: %v → rotating", attempt.Label(), err)
 	}
 	return "", "", lastErr
 }
