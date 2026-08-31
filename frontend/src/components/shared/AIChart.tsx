@@ -23,7 +23,7 @@ function fmtNum(v: number) {
 
 // A small, distinct palette for the bars — orange leads (the app accent), slate
 // follows, so a two-period comparison reads "this vs that" at a glance.
-const BAR_COLORS = ["#ea580c", "#64748b", "#0ea5e9", "#16a34a", "#a855f7"];
+export const BAR_COLORS = ["#ea580c", "#64748b", "#0ea5e9", "#16a34a", "#a855f7"];
 
 type ChartTooltipEntry = {
   name?: string;
@@ -40,7 +40,7 @@ type ChartTooltipProps = {
   unit?: string;
 };
 
-function ChartTooltip({ active, payload, label, unit }: ChartTooltipProps) {
+export function ChartTooltip({ active, payload, label, unit }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   // Bars/lines carry the category in `label`; a pie slice carries it on the
   // point instead, so fall back to that.

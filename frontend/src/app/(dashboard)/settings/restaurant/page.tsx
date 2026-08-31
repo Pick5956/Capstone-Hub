@@ -504,13 +504,13 @@ export default function RestaurantSettingsPage() {
     >
       <form id="restaurant-settings-form" onSubmit={save} className="space-y-4 pb-20 sm:pb-0">
         {loading ? (
-          <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">{copy.loading}</div>
+          <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">{copy.loading}</div>
         ) : (
           <>
             <SettingsPanel title={copy.identity} hint={copy.identityHint}>
               <div className="grid gap-4 md:grid-cols-2 mb-4">
                 {/* Logo Uploader */}
-                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/60 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
                       {form.logo ? <Image src={form.logo} alt={form.name || copy.logo} width={64} height={64} unoptimized className="h-full w-full object-cover" /> : copy.noLogo}
@@ -521,13 +521,13 @@ export default function RestaurantSettingsPage() {
                     </div>
                   </div>
                   <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadLogo} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
                     {uploading ? copy.uploading : copy.upload}
                   </button>
                 </div>
 
                 {/* Cover Image Uploader */}
-                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/60 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="relative flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
                       {form.cover_image ? <Image src={form.cover_image} alt={form.name || copy.coverImage} width={96} height={64} unoptimized className="h-full w-full object-cover" /> : <span className="p-1 line-clamp-2 text-[10px] leading-tight">{copy.noCover}</span>}
@@ -538,7 +538,7 @@ export default function RestaurantSettingsPage() {
                     </div>
                   </div>
                   <input ref={coverFileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadCover} />
-                  <button type="button" onClick={() => coverFileInputRef.current?.click()} disabled={uploadingCover} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                  <button type="button" onClick={() => coverFileInputRef.current?.click()} disabled={uploadingCover} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
                     {uploadingCover ? copy.uploadingCover : copy.uploadCover}
                   </button>
                 </div>
@@ -596,7 +596,7 @@ export default function RestaurantSettingsPage() {
                 </div>
                 <Field label={copy.promptpayName} value={form.promptpay_name} onChange={(value) => setField("promptpay_name", value)} />
                 {/* PromptPay QR Uploader */}
-                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/60 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/60 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-orange-50 text-center text-[11px] font-semibold text-orange-600 dark:bg-orange-900/20 dark:text-orange-300">
                       {form.promptpay_qr_image ? <Image src={form.promptpay_qr_image} alt={copy.promptpayQr} width={64} height={64} unoptimized className="h-full w-full object-contain" /> : <span className="p-1 line-clamp-2 text-[10px] leading-tight">{copy.noQr}</span>}
@@ -607,7 +607,7 @@ export default function RestaurantSettingsPage() {
                     </div>
                   </div>
                   <input ref={qrFileInputRef} type="file" accept="image/*" className="hidden" onChange={uploadQr} />
-                  <button type="button" onClick={() => qrFileInputRef.current?.click()} disabled={uploadingQr} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900">
+                  <button type="button" onClick={() => qrFileInputRef.current?.click()} disabled={uploadingQr} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
                     {uploadingQr ? copy.uploadingQr : copy.uploadQr}
                   </button>
                 </div>
@@ -633,7 +633,7 @@ export default function RestaurantSettingsPage() {
                         type="button"
                         onClick={useCurrentLocation}
                         disabled={locating}
-                        className="ui-press h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900"
+                        className="ui-press h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
                       >
                         {locating ? copy.locating : copy.useCurrentLocation}
                       </button>
@@ -669,7 +669,7 @@ export default function RestaurantSettingsPage() {
                   type="button"
                   disabled={!isOwner}
                   onClick={() => { setDeleteModalClosing(false); setDeleteModalOpen(true); }}
-                  className="ui-press shrink-0 h-10 px-4 rounded-md border border-red-200 bg-white hover:bg-red-50 text-[12px] font-semibold text-red-600 hover:text-red-750 disabled:opacity-40 disabled:cursor-not-allowed dark:border-red-900/40 dark:bg-gray-950 dark:text-red-400 dark:hover:bg-red-950/30"
+                  className="ui-press shrink-0 h-10 px-4 rounded-md border border-red-200 bg-white hover:bg-red-50 text-[12px] font-semibold text-red-600 hover:text-red-750 disabled:opacity-40 disabled:cursor-not-allowed dark:border-red-900/40 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-red-950/30"
                 >
                   {copy.deleteRestaurant}
                 </button>
@@ -679,7 +679,7 @@ export default function RestaurantSettingsPage() {
           </>
         )}
 
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 p-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-200 bg-white/95 p-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95 sm:hidden">
           <button type="submit" disabled={saving || loading} className="ui-press flex h-12 w-full items-center justify-center rounded-md bg-orange-700 px-4 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
             {saving ? copy.saving : copy.save}
           </button>
@@ -688,10 +688,10 @@ export default function RestaurantSettingsPage() {
 
       {deleteModalOpen && (
         <div {...deleteBackdrop} className={`${deleteModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${deleteModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-md flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${deleteModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-md flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-red-750 dark:text-red-400">{copy.confirmDeleteTitle}</h2>
-              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeDeleteModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
             <form onSubmit={handleDeleteRestaurant} className="p-4 space-y-4">
               <p className="text-[13px] text-gray-650 dark:text-gray-400 leading-relaxed">
@@ -709,7 +709,7 @@ export default function RestaurantSettingsPage() {
                   setDeleteError("");
                 }}
                 placeholder={copy.confirmDeleteInputPlaceholder}
-                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-gray-700 dark:bg-gray-900 text-gray-900 dark:text-white"
+                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white"
               />
               {deleteError && (
                 <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{deleteError}</p>
@@ -719,7 +719,7 @@ export default function RestaurantSettingsPage() {
                   type="button"
                   onClick={closeDeleteModal}
                   disabled={deleting}
-                  className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                  className="h-10 rounded-md border border-gray-200 bg-white px-4 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
                   {copy.cancel}
                 </button>

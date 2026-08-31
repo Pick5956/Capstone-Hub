@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
+import { BAR_COLORS, ChartTooltip } from "@/src/components/shared/AIChart";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { formatCurrency, formatNumber } from "@/src/lib/format";
@@ -85,8 +86,8 @@ type KitchenTicket = {
   total: number;
   status: LaneStatus;
 };
-type ChartPoint = { key: string; label: string; value: number };
-type ChartMode = "day" | "month";
+type ChartPoint = { key: string; label: string; value: number | null };
+type ChartMode = "month" | "year";
 type ChartMetric = "revenue" | "cost" | "profit";
 type ExpenseLedgerState = {
   restaurantId: number | null;
@@ -177,8 +178,7 @@ function buildCopy(language: "th" | "en") {
         thisDay: "ทั้งวัน",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
-        chartDay: "รายวัน",
-        chartMonth: "รายเดือน",
+        thisYear: "ทั้งปี",
         drillHint: "กดแท่งกราฟเพื่อดูบิล",
         drillTitle: "บิล",
         drillClose: "ปิด",
@@ -269,8 +269,7 @@ function buildCopy(language: "th" | "en") {
         thisDay: "This day",
         expenseCategory: "Category",
         expenseNote: "Details",
-        chartDay: "Daily",
-        chartMonth: "Monthly",
+        thisYear: "This year",
         drillHint: "Click a bar to see its bills",
         drillTitle: "Bills",
         drillClose: "Close",
@@ -391,7 +390,7 @@ function ChartBox({
               <Cell
                 key={point.key}
                 fill={
-                  lossColoring && point.value < 0
+                  lossColoring && (point.value ?? 0) < 0
                     ? "#dc2626"
                     : selectedKey === point.key
                     ? "#0ea5e9"
@@ -565,7 +564,7 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         style={{ order: collapsedRank }}
-        className={`ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-xl border-2 border-orange-700/60 bg-slate-50 p-6 text-left sm:aspect-[3/4] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:bg-gray-900 ${faceClass ?? ""}`}
+        className={`ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-xl border border-gray-200 bg-slate-50 p-6 text-left hover:border-2 hover:border-orange-700/60 dark:border-gray-800 sm:aspect-[3/4] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:bg-gray-900 ${faceClass ?? ""}`}
       >
         {/* The card's own name is the loudest thing on it: bigger than
             anything below and on a tinted band of its own, so the tile reads
@@ -805,7 +804,7 @@ export default function Home() {
     else sessionStorage.removeItem(expandedCardStorageKey);
     setExpandedKey(next);
   };
-  const [chartMode, setChartMode] = useState<ChartMode>("day");
+  const [chartMode, setChartMode] = useState<ChartMode>("month");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
   // The total-orders tile opens the day's full order sheet under the tiles.
   const [dayOrdersOpen, setDayOrdersOpen] = useState(false);
@@ -921,7 +920,7 @@ export default function Home() {
     if (salesDaysLoadedRef.current || !activeMembership?.restaurant_id) return;
     salesDaysLoadedRef.current = true;
     setSalesDaysLoading(true);
-    getManagerReport(90)
+    getManagerReport(365)
       .then((res) => {
         setSalesDays(res.data.sales_days ?? []);
         // Same response the reports page used to draw its stock-risk grid
@@ -982,8 +981,12 @@ export default function Home() {
       };
     }
     const anchor = new Date(`${expenseMonth}-01T12:00:00`);
-    const from = new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
-    const until = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
+    const from = chartMode === "year"
+      ? new Date(anchor.getFullYear(), 0, 1, 12)
+      : new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
+    const until = chartMode === "year"
+      ? new Date(anchor.getFullYear(), 11, 31, 12)
+      : new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
     const requestedRestaurantId = restaurantId;
     setExpenseLedger((current) => (current.restaurantId === restaurantId ? current : EMPTY_EXPENSE_LEDGER));
     setExpensesLoading(true);
@@ -1006,7 +1009,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [expenseMonth, restaurantId, canViewExpenses, refreshTick]);
+  }, [expenseMonth, restaurantId, canViewExpenses, refreshTick, chartMode]);
 
   // Both views plot days, so a bar's key is the YYYY-MM-DD it stands for.
   useEffect(() => {
@@ -1273,7 +1276,7 @@ export default function Home() {
     .map((item) => ({ name: item.menu_name, sold: item.quantity }))
     .sort((first, second) => second.sold - first.sold || first.name.localeCompare(second.name));
 
-  const topItemColors = ["#0f172a", "#0ea5e9", "#10b981", "#f59e0b", "#cbd5e1"];
+  const topItemColors = BAR_COLORS;
   const topItems = sortedItems.slice(0, 4);
   const otherItemsSold = sortedItems.slice(4).reduce((sum, item) => sum + item.sold, 0);
   const topItemsPie = otherItemsSold > 0 ? [...topItems, { name: copy.otherItems, sold: otherItemsSold }] : topItems;
@@ -1299,16 +1302,25 @@ export default function Home() {
     return day ? day[visibleChartMetric] : 0;
   };
 
-  // Day view: the Monday-Sunday week containing the selected date.
-  const weekdayIndex = selectedDateAtNoon.getDay();
-  const mondayOffset = weekdayIndex === 0 ? -6 : 1 - weekdayIndex;
-  const weekStart = new Date(selectedDateAtNoon);
-  weekStart.setDate(selectedDateAtNoon.getDate() + mondayOffset);
-  const weekdayLabels = language === "th" ? ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const dailyPoints: ChartPoint[] = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    return { key: toDashboardDate(date), label: weekdayLabels[index], value: valueForDate(date) };
+  // Year view: one bar per month of the calendar year the selected date falls
+  // in. Keys are `YYYY-MM`, which no daily key can match — that is what stops a
+  // stale drill-down from surviving a switch between the two windows.
+  const monthLabels = language === "th"
+    ? ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const yearlyPoints: ChartPoint[] = Array.from({ length: 12 }, (_, index) => {
+    const key = `${selectedDateAtNoon.getFullYear()}-${String(index + 1).padStart(2, "0")}`;
+    if (visibleChartMetric === "cost") {
+      const spent = expenseDaily.filter((entry) => entry.date.startsWith(key));
+      return { key, label: monthLabels[index], value: spent.length ? totalDailyExpensesForMonth(expenseDaily, key) : null };
+    }
+    const metric = visibleChartMetric;
+    const traded = salesDays.filter((day) => day.order_date.startsWith(key));
+    return {
+      key,
+      label: monthLabels[index],
+      value: traded.length ? traded.reduce((sum, day) => sum + day[metric], 0) : null,
+    };
   });
 
   // Month view: every day of the calendar month containing the selected date.
@@ -1325,13 +1337,13 @@ export default function Home() {
     { key: "profit", label: copy.metricProfit },
   ];
   const chartModeOptions: { key: ChartMode; label: string }[] = [
-    { key: "day", label: copy.chartDay },
-    { key: "month", label: copy.chartMonth },
+    { key: "month", label: copy.thisMonth },
+    { key: "year", label: copy.thisYear },
   ];
   // Only the tooltip needs this now: the two toggles above the chart already
   // name the metric and the window, so a heading would just repeat them.
   const activeChartTitle = metricOptions.find((option) => option.key === visibleChartMetric)?.label ?? "";
-  const activeChartData = chartMode === "day" ? dailyPoints : monthlyPoints;
+  const activeChartData = chartMode === "month" ? monthlyPoints : yearlyPoints;
   // Only block on the very first load. A background refresh keeps the current
   // bars on screen instead of blinking the chart to a spinner every minute —
   // the header already shows that a refresh is in flight.
@@ -1339,7 +1351,9 @@ export default function Home() {
     visibleChartMetric === "cost" ? expensesLoading && expenseDaily.length === 0 : salesDaysLoading;
   const activeChartHasData =
     visibleChartMetric === "cost"
-      ? activeChartData.some((point) => point.value > 0)
+      ? activeChartData.some((point) => (point.value ?? 0) > 0)
+      : chartMode === "year"
+      ? activeChartData.some((point) => point.value !== null)
       : activeChartData.some((point) => salesByDate.has(point.key));
   // Switching view keeps the drilled-into bar when the same date is plotted in
   // both. Switching metric keeps it too, which is right — the table already
@@ -1710,7 +1724,7 @@ export default function Home() {
                     onClick={() => setSalesPane("day")}
                     className={`ui-press border-b-2 pb-1.5 text-[17px] font-bold uppercase tracking-wide ${
                       salesPane === "day"
-                        ? "border-gray-900 text-gray-950 dark:border-white dark:text-white"
+                        ? "border-orange-500 text-orange-600 dark:border-orange-400 dark:text-orange-400"
                         : "border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                     }`}
                   >
@@ -1939,7 +1953,7 @@ export default function Home() {
                                   <Cell key={entry.name} fill={topItemColors[index % topItemColors.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip wrapperStyle={{ zIndex: 20 }} formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
+                              <Tooltip wrapperStyle={{ zIndex: 20 }} content={<ChartTooltip unit={copy.dishes} />} />
                             </PieChart>
                             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                               <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
@@ -2013,7 +2027,7 @@ export default function Home() {
                           language={language}
                           lossColoring={visibleChartMetric === "profit"}
                           selectedKey={activeDetailBar?.key ?? null}
-                          onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
+                          onSelect={chartMode === "month" ? (point) => setDetailBar((current) => (current?.key === point.key ? null : point)) : undefined}
                         />
                       ) : (
                         <div className="flex h-56 items-center justify-center px-3 text-center text-[12px] text-gray-500">

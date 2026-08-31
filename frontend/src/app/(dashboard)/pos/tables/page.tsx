@@ -25,7 +25,7 @@ import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
 const activeOrderStatuses = ["open", "sent_to_kitchen", "cooking", "ready", "served"];
 const tableRefreshIntervalMs = 60_000;
-const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-950 dark:text-white";
+const tagBadgeClass = "border-2 border-gray-950 bg-white text-gray-950 shadow-none dark:border-white dark:bg-gray-900 dark:text-white";
 type TableSheetMode = "open" | "reserved";
 
 // Thai numbers are 9 digits (landline) or 10 (mobile): keep digits only and cap at 10.
@@ -263,7 +263,7 @@ export default function PosTablesPage() {
     `ui-press inline-flex h-10 shrink-0 items-center gap-1.5 rounded-md border px-3 text-[13px] font-semibold transition-colors ${
       on
         ? "border-orange-700 bg-orange-700 text-white"
-        : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200"
+        : "border-[color:var(--dashboard-shell-border)] bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200"
     }`;
 
   const load = useCallback(async (showLoading = true) => {
@@ -519,7 +519,7 @@ export default function PosTablesPage() {
   const customerCountField = (
     <label className="block">
       <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.customerCount}</span>
-      <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+      <div className="grid grid-cols-[56px_1fr_56px] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
         <button type="button" onClick={() => setCustomerCount((current) => Math.max(1, current - 1))} disabled={customerCount <= 1} className="ui-press h-14 border-r border-gray-200 text-xl font-semibold text-gray-700 disabled:opacity-40 dark:border-gray-700 dark:text-gray-200">
           -
         </button>
@@ -529,10 +529,10 @@ export default function PosTablesPage() {
         </button>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => setCustomerCount((current) => current + 5)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+        <button type="button" onClick={() => setCustomerCount((current) => current + 5)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
           +5
         </button>
-        <button type="button" onClick={() => setCustomerCount((current) => current + 10)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">
+        <button type="button" onClick={() => setCustomerCount((current) => current + 10)} className="ui-press h-10 rounded-md border border-gray-200 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-800">
           +10
         </button>
       </div>
@@ -544,7 +544,7 @@ export default function PosTablesPage() {
       {isNavigating ? (
         <div aria-hidden="true" className="fixed inset-0 z-[var(--z-modal)] cursor-wait bg-transparent" />
       ) : null}
-      <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
+      <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <h1 className="sr-only">{copy.eyebrow}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-5">
           <div className="mx-auto grid w-full max-w-7xl gap-1.5 lg:flex lg:items-center lg:gap-2">
@@ -555,7 +555,7 @@ export default function PosTablesPage() {
                 onChange={(event) => setSearch(event.target.value)}
                 disabled={isNavigating}
                 placeholder={copy.search}
-                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-9 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
                 aria-label={copy.search}
               />
             </label>
@@ -563,7 +563,7 @@ export default function PosTablesPage() {
               type="button"
               disabled={isNavigating}
               onClick={openTakeawaySheet}
-              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-900 lg:order-last lg:ml-auto"
+              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:order-last lg:ml-auto"
             >
               <ShoppingBag className="h-4 w-4" />
               {copy.takeaway}
@@ -637,7 +637,7 @@ export default function PosTablesPage() {
                       data-table-id={table.ID}
                       disabled={isNavigating}
                       onClick={handleTableClick}
-                      className={`ui-press group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-900 ${disabled ? "cursor-default opacity-70" : "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700 dark:hover:bg-gray-800"}`}
+                      className={`ui-press group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-800 ${disabled ? "cursor-default opacity-70" : "hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700 dark:hover:bg-gray-800"}`}
                     >
                       <span className={`w-1.5 shrink-0 ${tableAccentClass(status)}`} />
                       <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
@@ -679,7 +679,7 @@ export default function PosTablesPage() {
                           ) : (
                             <div className="flex min-h-[22px] flex-wrap items-start gap-1 overflow-hidden">
                               {shownTags.map((tag) => <span key={tag.ID} className={`rounded-[4px] px-2 py-0.5 text-[10px] font-extrabold leading-4 tracking-[0.01em] ${tagBadgeClass}`}>{tag.name}</span>)}
-                              {extraTags > 0 ? <span className="rounded-[4px] border-2 border-gray-950 bg-white px-2 py-0.5 text-[10px] font-extrabold leading-4 text-gray-950 dark:border-white dark:bg-gray-950 dark:text-white">+{extraTags}</span> : null}
+                              {extraTags > 0 ? <span className="rounded-[4px] border-2 border-gray-950 bg-white px-2 py-0.5 text-[10px] font-extrabold leading-4 text-gray-950 dark:border-white dark:bg-gray-900 dark:text-white">+{extraTags}</span> : null}
                             </div>
                           )}
                         </div>
@@ -690,7 +690,7 @@ export default function PosTablesPage() {
               </div>
             </section>
           )) : (
-            <div className="rounded-md border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-[13px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+            <div className="rounded-md border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-[13px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
               {copy.noSearchResults}
             </div>
           )}
@@ -699,7 +699,7 @@ export default function PosTablesPage() {
 
       {(selectedTable || takeawayOpen) && (
         <div {...openOrderBackdrop} className={`${sheetClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm`}>
-          <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${sheetClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[15px] font-semibold text-gray-900 dark:text-white">
                 {takeawayOpen ? copy.openTakeaway : `${sheetMode === "reserved" ? copy.reserved : copy.openOrder} · ${selectedTable?.table_number ?? ""}`}
@@ -717,7 +717,7 @@ export default function PosTablesPage() {
                   {customerCountField}
                 </div>
                 <div className="grid grid-cols-2 gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-10 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                     {copy.cancel}
                   </button>
                   <button type="button" disabled={submitting || isNavigating} onClick={cancelReservation} className="ui-press h-10 rounded-md border border-sky-200 bg-sky-50 px-3 text-[13px] font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200 dark:hover:bg-sky-950/50">
@@ -739,7 +739,7 @@ export default function PosTablesPage() {
                           value={customerName}
                           onChange={(event) => setCustomerName(event.target.value)}
                           placeholder={copy.customerNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="block">
@@ -749,7 +749,7 @@ export default function PosTablesPage() {
                           onChange={(event) => setCustomerPhone(event.target.value)}
                           inputMode="tel"
                           placeholder={copy.customerPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>
@@ -757,7 +757,7 @@ export default function PosTablesPage() {
                   {customerCountField}
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 sm:min-h-20 sm:text-[13px]" />
+                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:min-h-20 sm:text-[13px]" />
                   </label>
                   {reservationDraftOpen && (
                     <div className="motion-reservation-panel rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/60 dark:bg-sky-950/25">
@@ -769,7 +769,7 @@ export default function PosTablesPage() {
                           inputMode="tel"
                           autoFocus
                           placeholder={copy.reservationPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-950 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="mt-3 block">
@@ -778,7 +778,7 @@ export default function PosTablesPage() {
                           value={reservationName}
                           onChange={(event) => setReservationName(event.target.value)}
                           placeholder={copy.reservationNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-950 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>
@@ -790,7 +790,7 @@ export default function PosTablesPage() {
                       {reservationDraftOpen ? copy.confirmReservation : copy.reserveTable}
                     </button>
                   )}
-                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 sm:h-9 sm:text-[12px]">
+                  <button type="button" disabled={isNavigating} onClick={closeOpenOrderSheet} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 sm:h-9 sm:text-[12px]">
                     {copy.cancel}
                   </button>
                   <button type="button" disabled={submitting || isNavigating} onClick={openOrder} className="ui-press inline-flex h-11 items-center justify-center gap-2 rounded-md bg-orange-700 px-3 text-[13px] font-semibold text-white hover:bg-orange-800 disabled:cursor-wait disabled:opacity-60 dark:bg-orange-700 dark:text-white sm:h-9 sm:text-[12px]">

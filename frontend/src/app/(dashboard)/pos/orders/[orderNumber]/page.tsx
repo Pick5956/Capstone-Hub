@@ -590,7 +590,7 @@ export default function PosOrderDetailPage() {
     const canAdjustQuantity = allowQuantityAdjustment && group.pendingItems.length === group.items.length;
 
     return (
-      <div key={group.key} className={variant === "row" ? "bg-white px-3 py-3.5 dark:bg-gray-950 sm:px-4" : "rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950"}>
+      <div key={group.key} className={variant === "row" ? "bg-white px-3 py-3.5 dark:bg-gray-900 sm:px-4" : "rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900"}>
         <div className={variant === "row" ? "grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]" : "grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"}>
           {variant === "row" ? (
             <div
@@ -608,10 +608,10 @@ export default function PosOrderDetailPage() {
           <div className={variant === "row" ? `flex shrink-0 justify-end text-right ${canAdjustQuantity ? "flex-col items-end gap-2" : "items-baseline gap-2"}` : "flex flex-wrap items-center gap-2 sm:justify-end"}>
             <p data-order-price className={`${variant === "row" ? "" : "mr-auto sm:mr-0"} font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white`}>฿{group.subtotal.toLocaleString()}</p>
             {canAdjustQuantity ? (
-              <div className="inline-grid grid-cols-[2.25rem_2.5rem_2.25rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
-                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, -1); }} aria-label={group.quantity === 1 ? (language === "th" ? "ลบรายการ" : "Remove item") : (language === "th" ? "ลดจำนวน" : "Decrease quantity")} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
+              <div className="inline-grid grid-cols-[2.25rem_2.5rem_2.25rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, -1); }} aria-label={group.quantity === 1 ? (language === "th" ? "ลบรายการ" : "Remove item") : (language === "th" ? "ลดจำนวน" : "Decrease quantity")} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><Minus className="h-4 w-4" aria-hidden="true" /></button>
                 <span className="inline-flex h-9 items-center justify-center font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{group.quantity}</span>
-                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, 1); }} aria-label={language === "th" ? "เพิ่มจำนวน" : "Increase quantity"} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                <button type="button" disabled={submitting} onClick={() => { void adjustPendingGroup(group, 1); }} aria-label={language === "th" ? "เพิ่มจำนวน" : "Increase quantity"} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><Plus className="h-4 w-4" aria-hidden="true" /></button>
               </div>
             ) : <span className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">x{group.quantity}</span>}
           </div>
@@ -621,8 +621,8 @@ export default function PosOrderDetailPage() {
   };
   const renderFlatFulfillmentSection = (section: FulfillmentSection, showLabel: boolean, allowQuantityAdjustment: boolean) => (
     <section key={section.key}>
-      {showLabel ? <div className="border-y border-gray-100 bg-gray-50 px-4 py-2 text-[12px] font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</div> : null}
-      <div className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-950">
+      {showLabel ? <div className="border-y border-gray-100 bg-gray-50 px-4 py-2 text-[12px] font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200">{fulfillmentLabel(section.key, language)}</div> : null}
+      <div className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900">
         {section.groups.map((group) => renderOrderItemGroup(group, "row", allowQuantityAdjustment))}
       </div>
     </section>
@@ -827,17 +827,17 @@ export default function PosOrderDetailPage() {
   if (!canTake) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className={`min-h-dvh w-full bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
-      <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-50/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
+    <div className={`min-h-dvh w-full bg-slate-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
+      <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <div className="px-4 py-2 sm:px-6 lg:px-8">
           <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(12rem,0.7fr)_minmax(8rem,13rem)_auto_minmax(0,1fr)] lg:items-center">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
-            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-900 lg:order-1">
+            <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-800 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
               <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
-                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[13px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-900">
+                <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[13px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-800">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
                     <span className="hidden xl:inline">{copy.tableLabel}</span>
@@ -857,7 +857,7 @@ export default function PosOrderDetailPage() {
                   </span>
                 </button>
                 {canCloseTable ? (
-                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-900">
+                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800">
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
@@ -874,7 +874,7 @@ export default function PosOrderDetailPage() {
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(7.5rem,10rem)] gap-1.5 lg:contents">
               <div className="relative min-w-0 lg:order-2">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800" />
               </div>
               <ThemedSelect
                 className="lg:order-3"
@@ -918,7 +918,7 @@ export default function PosOrderDetailPage() {
                 const lowStock = !soldOut && typeof item.remaining_servings === "number" && item.remaining_servings > 0 && item.remaining_servings <= 10;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 sm:min-h-[214px] sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 sm:min-h-[214px] sm:hover:-translate-y-0.5">
                     {soldOut ? (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
@@ -977,9 +977,9 @@ export default function PosOrderDetailPage() {
 
       {selectedMenu && (
         <div {...menuPickerBackdrop} className={`${selectedMenuClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4`}>
-          <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
+          <div className={`${selectedMenuClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 sm:max-h-[calc(100vh-2rem)]`}>
             <div className="relative aspect-[4/3] w-full rounded-t-md bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${selectedMenu.image_url || "/menu-placeholder-v2.webp"})` }}>
-              <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-950/90 dark:text-gray-200 dark:shadow-black/30">
+              <button type="button" aria-label={language === "th" ? "ปิด" : "Close"} onClick={closeMenuPicker} className="ui-press absolute left-3 top-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/70 bg-white/95 text-gray-700 shadow-md shadow-gray-950/15 hover:bg-white dark:border-gray-700 dark:bg-gray-900/90 dark:text-gray-200 dark:shadow-black/30">
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
@@ -1001,7 +1001,7 @@ export default function PosOrderDetailPage() {
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{group.name}</span>
                           <div className="flex shrink-0 items-center gap-1.5">
-                            <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                            <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                               {optionLimitLabel(selectedCount, minSelect, maxSelect)}
                             </span>
                             {group.required && <span className="rounded-md bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">{copy.requiredOption}</span>}
@@ -1012,7 +1012,7 @@ export default function PosOrderDetailPage() {
                             const selected = selectedOptionIds.includes(option.ID);
                             const limitReached = maxSelect > 1 && selectedCount >= maxSelect && !selected;
                             return (
-                              <button key={option.ID} type="button" disabled={limitReached} aria-pressed={selected} onClick={() => toggleOption(options.map((current) => current.ID), option.ID, minSelect, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"}`}>
+                              <button key={option.ID} type="button" disabled={limitReached} aria-pressed={selected} onClick={() => toggleOption(options.map((current) => current.ID), option.ID, minSelect, maxSelect)} className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 text-left text-[12px] disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900" : "border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"}`}>
                                 <span>{option.name}</span>
                                 <span className="font-mono tabular-nums">{option.price_delta ? `+฿${option.price_delta.toLocaleString()}` : ""}</span>
                               </button>
@@ -1028,7 +1028,7 @@ export default function PosOrderDetailPage() {
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.quantity}</span>
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} className="h-10 w-10 rounded-md border border-gray-200 text-lg font-semibold dark:border-gray-800">-</button>
-                  <input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))} className="h-10 min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 text-center text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                  <input type="number" min={1} value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))} className="h-10 min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 text-center text-[13px] dark:border-gray-700 dark:bg-gray-800" />
                   <button type="button" onClick={() => setQuantity((current) => current + 1)} className="h-10 w-10 rounded-md border border-gray-200 text-lg font-semibold dark:border-gray-800">+</button>
                 </div>
               </label>
@@ -1042,7 +1042,7 @@ export default function PosOrderDetailPage() {
                       onClick={() => setSelectedFulfillment(value)}
                       className={`h-10 rounded-md border px-3 text-[12px] font-semibold transition-colors ${selectedFulfillment === value
                           ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
                         }`}
                     >
                       {value === "takeaway" ? takeawayItemLabel : dineInItemLabel}
@@ -1052,7 +1052,7 @@ export default function PosOrderDetailPage() {
               </div>
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-20 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
               </label>
             </div>
             <div className="border-t border-gray-200 px-4 py-3 dark:border-gray-800">
@@ -1078,7 +1078,7 @@ export default function PosOrderDetailPage() {
                   <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                 </button>
               </div>
-              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-950">
+              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-900">
                 {orderSummaryGroups.length
                   ? orderSummarySections.map((section) => renderFlatFulfillmentSection(
                     section,
@@ -1087,7 +1087,7 @@ export default function PosOrderDetailPage() {
                   ))
                   : <p className="px-4 py-12 text-center text-[13px] text-gray-500">{orderSummaryCopy.empty}</p>}
               </div>
-              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900 sm:px-5">
                 <div className="flex min-w-0 items-baseline justify-end gap-2 text-right">
                   <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
                   <p className="font-mono text-[20px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{order.total_amount.toLocaleString()}</p>
@@ -1111,7 +1111,7 @@ export default function PosOrderDetailPage() {
                   <X className="h-5 w-5" strokeWidth={2.25} aria-hidden="true" />
                 </button>
               </div>
-              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-950">
+              <div data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white dark:bg-gray-900">
                 {pendingGroupedOrderItems.length
                   ? pendingFulfillmentSections.map((section) => renderFlatFulfillmentSection(
                     section,
@@ -1120,7 +1120,7 @@ export default function PosOrderDetailPage() {
                   ))
                   : <p className="px-4 py-12 text-center text-[13px] text-gray-500">{currentRoundCopy.empty}</p>}
               </div>
-              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+              <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-5">
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.total}</p>
@@ -1144,7 +1144,7 @@ export default function PosOrderDetailPage() {
         const renderBillGroup = (group: OrderItemGroup) => {
           const item = group.firstItem;
           return (
-            <div data-bill-item key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+            <div data-bill-item key={group.key} className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
               <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 sm:grid-cols-[4rem_minmax(0,1fr)_auto]">
                 <div
                   role="img"
@@ -1169,10 +1169,10 @@ export default function PosOrderDetailPage() {
               </div>
               {billEditMode ? (
                 <div data-screen-only className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-gray-200 pt-2 dark:border-gray-800">
-                  <div className="inline-grid grid-cols-[2.5rem_2.75rem_2.5rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-950">
-                    <button type="button" disabled={submitting} onClick={() => decreaseBillGroup(group)} aria-label={copy.decreaseQty} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Minus className="h-4 w-4" aria-hidden="true" /></button>
+                  <div className="inline-grid grid-cols-[2.5rem_2.75rem_2.5rem] overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+                    <button type="button" disabled={submitting} onClick={() => decreaseBillGroup(group)} aria-label={copy.decreaseQty} className="ui-press inline-flex h-9 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><Minus className="h-4 w-4" aria-hidden="true" /></button>
                     <span className="inline-flex h-9 items-center justify-center font-mono text-[13px] font-semibold tabular-nums text-gray-900 dark:text-white">{group.quantity}</span>
-                    <button type="button" disabled={submitting} onClick={() => increaseBillGroup(group)} aria-label={copy.increaseQty} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"><Plus className="h-4 w-4" aria-hidden="true" /></button>
+                    <button type="button" disabled={submitting} onClick={() => increaseBillGroup(group)} aria-label={copy.increaseQty} className="ui-press inline-flex h-9 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"><Plus className="h-4 w-4" aria-hidden="true" /></button>
                   </div>
                   <button
                     type="button"
@@ -1205,9 +1205,9 @@ export default function PosOrderDetailPage() {
                 #print-bill [data-bill-item] { border: 0 !important; border-bottom: 1px solid #e5e7eb !important; border-radius: 0 !important; padding: 2mm 0 !important; }
               }
             `}</style>
-            <div data-print-dialog role="dialog" aria-modal="true" aria-labelledby="bill-view-title" className={`${billViewClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]`}>
+            <div data-print-dialog role="dialog" aria-modal="true" aria-labelledby="bill-view-title" className={`${billViewClosing ? "motion-dialog-exit" : "motion-dialog"} flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-slate-50 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-900 sm:max-h-[calc(100vh-2rem)]`}>
               <div id="print-bill" className="flex min-h-0 flex-1 flex-col">
-                <div data-screen-receipt className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                <div data-screen-receipt className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-5">
                   <div data-screen-only className="min-w-0">
                     <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{orderLocationLabel(bill.order, language)} · {bill.order.order_number}</p>
                     <h2 id="bill-view-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{copy.close}</h2>
@@ -1222,27 +1222,27 @@ export default function PosOrderDetailPage() {
                         type="button"
                         disabled={submitting}
                         onClick={() => { setBillEditMode((value) => !value); setBillAddOpen(false); setBillCancelTarget(null); setError(""); }}
-                        className={`ui-press h-9 rounded-md border px-3 text-[12px] font-semibold disabled:opacity-50 ${billEditMode ? "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}
+                        className={`ui-press h-9 rounded-md border px-3 text-[12px] font-semibold disabled:opacity-50 ${billEditMode ? "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"}`}
                       >
                         {billEditMode ? copy.doneEditing : copy.editItems}
                       </button>
                     ) : null}
-                    <button type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{orderSummaryCopy.close}</button>
+                    <button type="button" onClick={closeBillModal} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">{orderSummaryCopy.close}</button>
                   </div>
                 </div>
                 <div data-screen-receipt data-receipt-scroll data-pos-modal-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
                   {billAddOpen ? (
-                    <section data-screen-only className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                    <section data-screen-only className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.addServed}</h3>
-                        <button type="button" onClick={() => setBillAddOpen(false)} className="ui-press h-8 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.backToBill}</button>
+                        <button type="button" onClick={() => setBillAddOpen(false)} className="ui-press h-8 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">{copy.backToBill}</button>
                       </div>
                       <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">{copy.addServedHint}</p>
                       <input
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder={copy.search}
-                        className="mb-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-900"
+                        className="mb-2 h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-800 dark:bg-gray-800"
                       />
                       <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
                         {categoryOptions.map((option) => {
@@ -1252,7 +1252,7 @@ export default function PosOrderDetailPage() {
                               key={option.value}
                               type="button"
                               onClick={() => setCategoryId(option.value === "all" ? "all" : Number(option.value))}
-                              className={`h-8 shrink-0 rounded-md border px-3 text-[12px] font-semibold ${active ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"}`}
+                              className={`h-8 shrink-0 rounded-md border px-3 text-[12px] font-semibold ${active ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"}`}
                             >
                               {option.label}
                             </button>
@@ -1269,7 +1269,7 @@ export default function PosOrderDetailPage() {
                               type="button"
                               disabled={disabled}
                               onClick={() => { void addServedItem(menu); }}
-                              className="ui-press flex flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950"
+                              className="ui-press flex flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900"
                             >
                               <div role="img" aria-hidden="true" className="aspect-[4/3] w-full bg-transparent bg-cover bg-center" style={{ backgroundImage: `url(${menu.image_url || "/menu-placeholder-v2.webp"})` }} />
                               <div className="min-w-0 p-2">
@@ -1283,7 +1283,7 @@ export default function PosOrderDetailPage() {
                       </div>
                     </section>
                   ) : (
-                    <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950">
+                    <section className="rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.allItems}</h3>
                         <p className="font-mono text-[12px] font-semibold tabular-nums text-gray-500 dark:text-gray-400">{billItemCount} {language === "th" ? "รายการ" : "items"}</p>
@@ -1313,7 +1313,7 @@ export default function PosOrderDetailPage() {
                     </section>
                   )}
                 </div>
-                <div data-screen-receipt className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 text-[12px] dark:border-gray-800 dark:bg-gray-950 sm:px-5">
+                <div data-screen-receipt className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 text-[12px] dark:border-gray-800 dark:bg-gray-900 sm:px-5">
                   <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
                     <div className="flex justify-between gap-4"><span>{copy.total}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.total_amount.toLocaleString()}</span></div>
                     <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.service_charge_amount.toLocaleString()}</span></div>
@@ -1333,7 +1333,7 @@ export default function PosOrderDetailPage() {
               </div>
 
               {!paymentComplete ? (
-                <div className="shrink-0 space-y-3 border-t border-gray-200 bg-slate-50 p-3 dark:border-gray-800 dark:bg-gray-950 sm:px-4">
+                <div className="shrink-0 space-y-3 border-t border-gray-200 bg-slate-50 p-3 dark:border-gray-800 dark:bg-gray-900 sm:px-4">
                   {billUndelivered > 0 ? (
                     <div data-screen-only className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -1342,21 +1342,21 @@ export default function PosOrderDetailPage() {
                   ) : null}
                   <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.paymentMethod}</p>
-                    <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-950 sm:w-auto sm:min-w-[220px]">
-                      <button type="button" onClick={() => setPaymentMethod("cash")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "cash" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{copy.cash}</button>
-                      <button type="button" onClick={() => setPaymentMethod("promptpay_qr")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "promptpay_qr" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{copy.qr}</button>
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-1 rounded-md border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900 sm:w-auto sm:min-w-[220px]">
+                      <button type="button" onClick={() => setPaymentMethod("cash")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "cash" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"}`}>{copy.cash}</button>
+                      <button type="button" onClick={() => setPaymentMethod("promptpay_qr")} className={`h-9 rounded-[4px] px-3 text-[12px] font-semibold ${paymentMethod === "promptpay_qr" ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900" : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"}`}>{copy.qr}</button>
                     </div>
                   </div>
                   {paymentMethod === "promptpay_qr" ? (
-                    <div className="rounded-md border border-gray-200 bg-white p-3 text-center dark:border-gray-800 dark:bg-gray-950">
-                      {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-900">No QR</div>}
+                    <div className="rounded-md border border-gray-200 bg-white p-3 text-center dark:border-gray-800 dark:bg-gray-900">
+                      {bill.promptpay_qr_image ? <Image src={bill.promptpay_qr_image} alt="PromptPay QR" width={176} height={176} unoptimized className="mx-auto h-44 w-44 rounded-md object-contain" /> : <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-gray-100 text-[12px] text-gray-500 dark:bg-gray-800">No QR</div>}
                       <p className="mt-2 text-[13px] font-semibold text-gray-900 dark:text-white">{bill.promptpay_name || copy.qr}</p>
                     </div>
                   ) : null}
                 </div>
               ) : null}
 
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
                 {paymentComplete ? (
                   <div className="mr-auto flex min-w-0 items-center gap-2 text-[12px] text-emerald-700 dark:text-emerald-400">
                     <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
@@ -1373,7 +1373,7 @@ export default function PosOrderDetailPage() {
 
       {billCancelTarget ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-950/50 p-4 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" aria-labelledby="bill-cancel-title" className="w-full max-w-sm rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950">
+          <div role="dialog" aria-modal="true" aria-labelledby="bill-cancel-title" className="w-full max-w-sm rounded-md border border-gray-200 bg-white p-4 shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-900">
             <h2 id="bill-cancel-title" className="text-[15px] font-semibold text-gray-950 dark:text-white">{billCancelMode === "unit" ? copy.voidUnitTitle : copy.cancelItemTitle}</h2>
             <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">{billCancelMode === "unit" ? copy.voidUnitDescription(billCancelTarget.firstItem.menu_name) : `${billCancelTarget.firstItem.menu_name} · x${billCancelTarget.quantity}`}</p>
             <label htmlFor="bill-cancel-reason" className="mt-3 block text-[12px] font-semibold text-gray-700 dark:text-gray-300">{copy.cancelItemReason}</label>
@@ -1385,10 +1385,10 @@ export default function PosOrderDetailPage() {
               maxLength={500}
               placeholder={copy.cancelItemPlaceholder}
               autoFocus
-              className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              className="mt-1.5 w-full resize-none rounded-md border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
             />
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); setBillCancelMode("line"); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.keepItemBtn}</button>
+              <button type="button" disabled={submitting} onClick={() => { setBillCancelTarget(null); setBillCancelReason(""); setBillCancelMode("line"); }} className="h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.keepItemBtn}</button>
               <button type="button" disabled={submitting || !billCancelReason.trim()} onClick={() => { void confirmCancelBillItem(); }} className="h-10 rounded-md bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-400">{copy.confirmCancelItem}</button>
             </div>
           </div>

@@ -53,7 +53,7 @@ export default function DisplaySettingsPage() {
               <p className="mt-1.5 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{copy.languageHint}</p>
             </label>
 
-            <div className="flex items-center justify-between rounded-xl border border-gray-150 p-4 dark:border-gray-800/80 bg-gray-50/30 dark:bg-gray-900/10 hover:border-gray-200 transition-all duration-300">
+            <div className="flex items-center justify-between rounded-xl border border-gray-150 p-4 dark:border-gray-800/80 bg-gray-50/30 dark:bg-gray-800/10 hover:border-gray-200 transition-all duration-300">
               <div className="pr-4">
                 <span className="mb-1 block text-[13px] font-semibold text-gray-800 dark:text-gray-200">{copy.aiAssistant}</span>
                 <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">{copy.aiAssistantHint}</p>
