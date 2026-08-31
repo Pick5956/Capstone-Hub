@@ -808,14 +808,14 @@ export default function MenuPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <h1 className="sr-only">{copy.title}</h1>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
       <div>
         <section className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
@@ -826,7 +826,7 @@ export default function MenuPage() {
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder={copy.searchPlaceholder}
                       aria-label={copy.searchPlaceholder}
-                      className="h-9 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+                      className="h-9 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
                     />
                   </label>
                   <div className="w-full sm:w-52">
@@ -839,7 +839,7 @@ export default function MenuPage() {
                 </div>
                 {canManage ? (
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+                    <button type="button" onClick={() => { setCategoryModalClosing(false); setCategoryModalOpen(true); }} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
                       {copy.categoryManager}
                     </button>
                     <button type="button" onClick={startCreateItem} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">
@@ -862,7 +862,7 @@ export default function MenuPage() {
                   {filteredItems.map((item) => {
                     const availabilityBadgeClassName = item.is_available
                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                      : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+                      : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";
 
                     return (
                     <article
@@ -890,7 +890,7 @@ export default function MenuPage() {
                             const category = categories.find((cat) => cat.ID === categoryId);
                             if (!category) return null;
                             return (
-                              <span key={categoryId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                              <span key={categoryId} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                                 {category.name}
                               </span>
                             );
@@ -939,10 +939,10 @@ export default function MenuPage() {
 
       {categoryModalOpen && canManage && (
         <div {...categoryBackdrop} className={`${categoryModalClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${categoryModalClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} flex max-h-[86vh] w-full max-w-sm flex-col rounded-md border border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.categoryManager}</h2>
-              <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeCategoryModal} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <div className="space-y-1">
@@ -961,7 +961,7 @@ export default function MenuPage() {
                     className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
                       editingCategory?.ID === category.ID
                         ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
-                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/60"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"
                     }`}
                   >
                     <div className="min-w-0">
@@ -979,7 +979,7 @@ export default function MenuPage() {
                             event.stopPropagation();
                             void moveCategoryOrder(category.ID, -1);
                           }}
-                          className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900"
+                          className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-800"
                         >
                           <ChevronUp className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -992,7 +992,7 @@ export default function MenuPage() {
                             event.stopPropagation();
                             void moveCategoryOrder(category.ID, 1);
                           }}
-                          className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+                          className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                         >
                           <ChevronDown className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -1015,7 +1015,7 @@ export default function MenuPage() {
                   }}
                   placeholder={copy.categoryPlaceholder}
                   aria-invalid={Boolean(categoryError)}
-                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
+                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
                 />
                 <button disabled={submitting} className="ui-press h-10 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
                   {editingCategory ? copy.saveCategory : copy.createCategory}
@@ -1035,13 +1035,13 @@ export default function MenuPage() {
         <>
           <button type="button" aria-label={copy.cancel} {...itemDrawerBackdrop} className={`${drawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
           <div className="pointer-events-none fixed inset-0 z-40 flex items-end justify-center px-3 pb-3 pt-10 sm:items-center sm:p-6">
-          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-dialog-exit" : "motion-dialog"} pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-950`}>
+          <form onSubmit={saveItem} className={`${drawerClosing ? "motion-dialog-exit" : "motion-dialog"} pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.editorTitle}</p>
                 <h2 className="mt-0.5 truncate text-[16px] font-semibold text-gray-900 dark:text-white">{editingItem ? copy.editItem : copy.addItem}</h2>
               </div>
-              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeItemDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
             <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-800 sm:px-5">
               <div className="flex gap-2 overflow-x-auto">
@@ -1057,7 +1057,7 @@ export default function MenuPage() {
                     className={`h-9 shrink-0 rounded-md border px-3 text-[12px] font-medium transition-colors ${
                       itemEditorTab === tab.id
                         ? "border-orange-400 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                        : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:text-orange-200"
                     }`}
                   >
                     {tab.label}
@@ -1086,7 +1086,7 @@ export default function MenuPage() {
                               className={`inline-flex h-8 items-center rounded-[4px] border px-3 text-[12px] font-medium transition-[background-color,border-color,color,box-shadow] ${
                                 selected
                                   ? "border-orange-300 bg-orange-50 text-orange-800 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.2)] dark:border-orange-800 dark:bg-orange-950/35 dark:text-orange-200"
-                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-gray-900 dark:hover:text-orange-200"
+                                  : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:bg-gray-50 hover:text-orange-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-orange-700 dark:hover:bg-gray-800 dark:hover:text-orange-200"
                               }`}
                             >
                               {category.name}
@@ -1095,9 +1095,9 @@ export default function MenuPage() {
                         })}
                       </div>
                     ) : (
-                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{copy.createCategoryFirst}</p>
+                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{copy.createCategoryFirst}</p>
                     )}
-                    <div className="grid grid-cols-[1fr_auto] gap-2 rounded-md bg-gray-50 p-2 dark:bg-gray-900/70">
+                    <div className="grid grid-cols-[1fr_auto] gap-2 rounded-md bg-gray-50 p-2 dark:bg-gray-800/70">
                       <input
                         value={inlineCategoryName}
                         onChange={(event) => {
@@ -1111,13 +1111,13 @@ export default function MenuPage() {
                           }
                         }}
                         placeholder={copy.inlineCategoryPlaceholder}
-                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-950"
+                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
                       />
                       <button
                         type="button"
                         disabled={inlineCategorySaving || !inlineCategoryName.trim()}
                         onClick={createInlineCategory}
-                        className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 hover:border-orange-300 hover:text-orange-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
+                        className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-800 hover:border-orange-300 hover:text-orange-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-orange-700 dark:hover:text-orange-200"
                       >
                         {inlineCategorySaving ? "..." : copy.createCategory}
                       </button>
@@ -1129,17 +1129,17 @@ export default function MenuPage() {
                 </div>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
-                  <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
+                  <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
                   {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
-                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemOrder}</span>
-                    <input value={itemForm.display_order || ""} onChange={(event) => setItemForm({ ...itemForm, display_order: Number(event.target.value) })} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                    <input value={itemForm.display_order || ""} onChange={(event) => setItemForm({ ...itemForm, display_order: Number(event.target.value) })} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
                   </label>
                 </div>
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
@@ -1188,7 +1188,7 @@ export default function MenuPage() {
                 </div>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
-                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
                 </label>
                   </div>
                 </div>
@@ -1200,7 +1200,7 @@ export default function MenuPage() {
                       <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.optionsTitle}</p>
                       <p className="mt-0.5 text-[11px] text-gray-500">{copy.optionsHint}</p>
                     </div>
-                    <button type="button" onClick={() => updateOptionGroups((groups) => [...groups, emptyOptionGroup()])} className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                    <button type="button" onClick={() => updateOptionGroups((groups) => [...groups, emptyOptionGroup()])} className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                       {copy.addOptionGroup}
                     </button>
                   </div>
@@ -1210,7 +1210,7 @@ export default function MenuPage() {
                         <div className="flex items-start justify-between gap-2">
                           <label className="min-w-0 flex-1">
                             <span className="mb-1.5 block text-[11px] font-medium text-gray-500">{copy.optionGroupName}</span>
-                            <input value={group.name} onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })} placeholder={copy.optionGroupPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
+                            <input value={group.name} onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })} placeholder={copy.optionGroupPlaceholder} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
                           </label>
                           <button type="button" onClick={() => updateOptionGroups((groups) => groups.filter((_, index) => index !== groupIndex))} className="mt-6 h-8 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
                             {copy.removeOptionGroup}
@@ -1223,20 +1223,20 @@ export default function MenuPage() {
                           </label>
                           <label>
                             <span className="sr-only">{copy.maxSelect}</span>
-                            <input type="number" min={1} value={group.max_select || 1} onChange={(event) => updateOptionGroup(groupIndex, { max_select: Number(event.target.value) || 1 })} title={copy.maxSelect} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-900" />
+                            <input type="number" min={1} value={group.max_select || 1} onChange={(event) => updateOptionGroup(groupIndex, { max_select: Number(event.target.value) || 1 })} title={copy.maxSelect} className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-800" />
                           </label>
                         </div>
                         <div className="mt-3 space-y-2">
                           {group.options.map((option, optionIndex) => (
                             <div key={optionIndex} className="grid grid-cols-[1fr_88px_auto] gap-2">
-                              <input value={option.name} onChange={(event) => updateOption(groupIndex, optionIndex, { name: event.target.value })} placeholder={copy.optionNamePlaceholder} className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" />
-                              <input type="number" min={0} value={option.price_delta || ""} onChange={(event) => updateOption(groupIndex, optionIndex, { price_delta: Number(event.target.value) || 0 })} placeholder={copy.optionPrice} className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-900" />
+                              <input value={option.name} onChange={(event) => updateOption(groupIndex, optionIndex, { name: event.target.value })} placeholder={copy.optionNamePlaceholder} className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
+                              <input type="number" min={0} value={option.price_delta || ""} onChange={(event) => updateOption(groupIndex, optionIndex, { price_delta: Number(event.target.value) || 0 })} placeholder={copy.optionPrice} className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-800" />
                               <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: currentGroup.options.filter((_, currentOptionIndex) => currentOptionIndex !== optionIndex) } : currentGroup))} className="h-9 rounded-md px-2 text-[11px] font-medium text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/20">
                                 {copy.removeOption}
                               </button>
                             </div>
                           ))}
-                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: [...currentGroup.options, { name: "", price_delta: 0, is_default: false, display_order: currentGroup.options.length, is_active: true }] } : currentGroup))} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+                          <button type="button" onClick={() => updateOptionGroups((groups) => groups.map((currentGroup, currentGroupIndex) => currentGroupIndex === groupIndex ? { ...currentGroup, options: [...currentGroup.options, { name: "", price_delta: 0, is_default: false, display_order: currentGroup.options.length, is_active: true }] } : currentGroup))} className="h-8 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                             {copy.addOption}
                           </button>
                         </div>
@@ -1257,14 +1257,14 @@ export default function MenuPage() {
                       type="button"
                       disabled={!recipeIngredients.length}
                       onClick={() => updateRecipeComponents((components) => [...components, emptyRecipeComponent()])}
-                      className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                      className="h-8 shrink-0 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
                     >
                       {copy.addRecipeComponent}
                     </button>
                   </div>
                   <div className="space-y-3 p-3">
                     {!recipeIngredients.length && (
-                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-900 dark:text-gray-400">{copy.noIngredients}</p>
+                      <p className="rounded-md bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{copy.noIngredients}</p>
                     )}
                     {(itemForm.ingredients ?? []).map((component, componentIndex) => {
                       const selectedIngredient = recipeIngredients.find((ingredient) => ingredient.ID === component.ingredient_id);
@@ -1286,13 +1286,13 @@ export default function MenuPage() {
                               value={component.quantity || ""}
                               onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
                               placeholder={copy.quantity}
-                              className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
+                              className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800"
                             />
                             <input
                               value={component.unit || selectedIngredient?.unit || ""}
                               onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, unit: event.target.value } : current))}
                               placeholder={copy.unit}
-                              className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-900"
+                              className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[12px] dark:border-gray-700 dark:bg-gray-800"
                             />
                             <button
                               type="button"
@@ -1306,12 +1306,12 @@ export default function MenuPage() {
                             value={component.note || ""}
                             onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, note: event.target.value } : current))}
                             placeholder={copy.note}
-                            className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-900"
+                            className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] dark:border-gray-700 dark:bg-gray-800"
                           />
                         </div>
                       );
                     })}
-                    <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-[12px] dark:bg-gray-900">
+                    <div className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-[12px] dark:bg-gray-800">
                       <span className="font-medium text-gray-500 dark:text-gray-400">{copy.recipeCost}</span>
                       <span className="font-semibold text-gray-900 dark:text-white">
                         {formatCurrency(recipeCost(itemForm.ingredients ?? [], recipeIngredients), language, 2)}
@@ -1330,7 +1330,7 @@ export default function MenuPage() {
                   type="button"
                   disabled={submitting}
                   onClick={() => setDeleteTarget({ type: "item", id: editingItem.ID, name: editingItem.name })}
-                  className="ui-press h-10 rounded-md border border-red-200 bg-white px-4 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                  className="ui-press h-10 rounded-md border border-red-200 bg-white px-4 text-[13px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20"
                 >
                   {copy.delete}
                 </button>
@@ -1344,7 +1344,7 @@ export default function MenuPage() {
 
       {deleteTarget && (
         <div {...deleteBackdrop} className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
@@ -1353,14 +1353,14 @@ export default function MenuPage() {
               <p className="truncate text-[13px] font-medium text-gray-900 dark:text-white">{deleteTarget.name}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
-              <button type="button" onClick={() => closeDeleteModal()} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+              <button type="button" onClick={() => closeDeleteModal()} disabled={submitting} className="ui-press h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
                 {copy.cancel}
               </button>
               <button
                 type="button"
                 disabled={submitting}
                 onClick={() => void (deleteTarget.type === "category" ? removeCategory(deleteTarget.id) : removeItem(deleteTarget.id))}
-                className="ui-press h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-950 dark:text-red-300 dark:hover:bg-red-900/20"
+                className="ui-press h-9 rounded-md border border-red-200 bg-white px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-900/20"
               >
                 {copy.confirmDelete}
               </button>

@@ -6,8 +6,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  --app-text-scale: 1;
-  --sidebar-w: 196px;
+  /* The UI-size preference was removed. Every text-[Npx] utility below is
+     multiplied by this one constant, which is the old "normal" step. Change it
+     here if the whole app should read larger or smaller. */
+  --app-text-scale: 1.08;
+  --sidebar-w: 220px;
   --dashboard-shell-row: 62px;
   --dashboard-shell-border: #dfe3e8;
   --scrollbar-track: #f1f5f9;
@@ -111,6 +114,11 @@ html {
   background: transparent;
 }
 
+/* No stepper buttons at the ends of the bar: the thumb is the whole control. */
+*::-webkit-scrollbar-button {
+  display: none;
+}
+
 /* Interactive controls should advertise that they can be clicked. Keep these
    selectors at zero specificity so an intentional cursor utility still wins. */
 :where(
@@ -166,21 +174,6 @@ html {
   cursor: not-allowed;
 }
 
-html[data-font-size="small"] {
-  --app-text-scale: 1;
-}
-
-html[data-font-size="normal"] {
-  --app-text-scale: 1.08;
-}
-
-html[data-font-size="large"] {
-  --app-text-scale: 1.16;
-}
-
-html[data-font-size="extra-large"] {
-  --app-text-scale: 1.28;
-}
 
 .text-\[9px\] { font-size: calc(9px * var(--app-text-scale)); }
 .text-\[10px\] { font-size: calc(10px * var(--app-text-scale)); }
@@ -701,30 +694,30 @@ html[data-font-size="extra-large"] {
   background: var(--dashboard-shell-border);
 }
 
-.sidebar-nav-scroll {
+.sidebar-nav-scroll, .scroll-minimal {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar {
+.sidebar-nav-scroll::-webkit-scrollbar, .scroll-minimal::-webkit-scrollbar {
   width: 8px;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-track {
+.sidebar-nav-scroll::-webkit-scrollbar-track, .scroll-minimal::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+.sidebar-nav-scroll::-webkit-scrollbar-thumb, .scroll-minimal::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   background-clip: padding-box;
   background-color: transparent;
 }
 
-.sidebar-nav-scroll:hover {
+.sidebar-nav-scroll:hover, .scroll-minimal:hover {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-.sidebar-nav-scroll:hover::-webkit-scrollbar-thumb {
+.sidebar-nav-scroll:hover::-webkit-scrollbar-thumb, .scroll-minimal:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
 }
 
@@ -995,7 +988,7 @@ input[type="number"]::-webkit-inner-spin-button {
     display: none;
   }
 
-  /* The white surface beside the rail. It is flush and square now - the inset
+  /* The canvas beside the rail. It is flush and square now - the inset
      and radius variables are 0 - but it keeps its own height and overflow so
      [data-shell-scroll] inside it stays the scroller. That is what page-level
      sticky headers anchor to, so this box cannot go away. */
@@ -1005,7 +998,7 @@ input[type="number"]::-webkit-inner-spin-button {
     margin: var(--shell-pad) var(--shell-gap) var(--shell-pad) 0;
     overflow: hidden;
     border-radius: var(--shell-radius);
-    background-color: #ffffff;
+    background-color: #f1f5f9;
     box-shadow: none;
   }
 
@@ -1022,7 +1015,7 @@ input[type="number"]::-webkit-inner-spin-button {
     position: sticky;
     top: 0;
     z-index: 20;
-    background-color: #ffffff;
+    background-color: #f1f5f9;
     backdrop-filter: none;
   }
 
@@ -1038,10 +1031,9 @@ input[type="number"]::-webkit-inner-spin-button {
      night background from patterns.css .dishy-bg-night instead. */
   .dark [data-shell-sheet] {
     background-color: #1a0d06;
-    background-image:
-      radial-gradient(1100px 620px at 72% -12%, rgba(249, 115, 22, 0.22), transparent 62%),
-      radial-gradient(760px 520px at -8% 108%, rgba(124, 45, 18, 0.5), transparent 60%);
-    background-size: auto, auto;
+    /* Flat, like the light sheet. The glows used to sit strongest along the top
+       edge, which is exactly where a sticky header paints its own solid fill -
+       so the bar cut a hard rectangle out of them at the top right. */
   }
 
   .dark [data-shell-scroll] {

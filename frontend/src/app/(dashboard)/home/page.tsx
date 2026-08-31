@@ -25,6 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Tooltip, XAxis, YAxis } from "recharts";
+import { BAR_COLORS, ChartTooltip } from "@/src/components/shared/AIChart";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { formatCurrency, formatNumber } from "@/src/lib/format";
@@ -85,8 +86,8 @@ type KitchenTicket = {
   total: number;
   status: LaneStatus;
 };
-type ChartPoint = { key: string; label: string; value: number };
-type ChartMode = "day" | "month";
+type ChartPoint = { key: string; label: string; value: number | null };
+type ChartMode = "month" | "year";
 type ChartMetric = "revenue" | "cost" | "profit";
 type ExpenseLedgerState = {
   restaurantId: number | null;
@@ -177,8 +178,7 @@ function buildCopy(language: "th" | "en") {
         thisDay: "ทั้งวัน",
         expenseCategory: "ประเภท",
         expenseNote: "รายละเอียด",
-        chartDay: "รายวัน",
-        chartMonth: "รายเดือน",
+        thisYear: "ทั้งปี",
         drillHint: "กดแท่งกราฟเพื่อดูบิล",
         drillTitle: "บิล",
         drillClose: "ปิด",
@@ -269,8 +269,7 @@ function buildCopy(language: "th" | "en") {
         thisDay: "This day",
         expenseCategory: "Category",
         expenseNote: "Details",
-        chartDay: "Daily",
-        chartMonth: "Monthly",
+        thisYear: "This year",
         drillHint: "Click a bar to see its bills",
         drillTitle: "Bills",
         drillClose: "Close",
@@ -391,7 +390,7 @@ function ChartBox({
               <Cell
                 key={point.key}
                 fill={
-                  lossColoring && point.value < 0
+                  lossColoring && (point.value ?? 0) < 0
                     ? "#dc2626"
                     : selectedKey === point.key
                     ? "#0ea5e9"
@@ -456,7 +455,7 @@ const cardToneTile: Record<CardTone, string> = {
   cost: "border-red-400 bg-red-200 text-red-900 dark:border-red-600 dark:bg-red-900/70 dark:text-red-100",
 };
 const cardToneRow = cardToneTile;
-const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400";
+const cardToneNeutral = "border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-400";
 
 // Money out is red, money in is green — a loss is money out. Same rule in the
 // day pane and the month pane, so the two never disagree about a colour.
@@ -551,7 +550,7 @@ function CollapsibleCard({
           type="button"
           onClick={onToggle}
           aria-label={title}
-          className={`${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-gray-600 hover:bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-950`}
+          className={`${cardTabShape} translate-y-px border-gray-200 bg-slate-300 text-gray-600 hover:bg-white dark:border-gray-800 dark:bg-black dark:text-gray-300 dark:hover:bg-gray-900`}
           style={{ order: collapsedRank }}
         >
           <Icon className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />
@@ -565,7 +564,7 @@ function CollapsibleCard({
         type="button"
         onClick={onToggle}
         style={{ order: collapsedRank }}
-        className={`ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-xl border border-gray-200 bg-white p-6 text-left sm:aspect-[3/4] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:border-gray-800 dark:bg-gray-950 ${faceClass ?? ""}`}
+        className={`ui-press group relative flex w-full flex-col items-stretch justify-between gap-3 rounded-xl border border-gray-200 bg-slate-50 p-6 text-left hover:border-2 hover:border-orange-700/60 dark:border-gray-800 sm:aspect-[3/4] !transition-all !duration-300 !ease-out motion-reduce:!transition-none hover:z-10 hover:-rotate-1 hover:scale-[1.05] motion-reduce:hover:rotate-0 motion-reduce:hover:scale-100 hover:shadow-lg dark:bg-gray-900 ${faceClass ?? ""}`}
       >
         {/* The card's own name is the loudest thing on it: bigger than
             anything below and on a tinted band of its own, so the tile reads
@@ -573,7 +572,7 @@ function CollapsibleCard({
             a card that is only worth opening — the name takes the middle of
             the tile instead of sitting on top of empty space. */}
         <div className={`text-center ${hasFaceTable ? "" : "my-auto"}`}>
-          <h2 className={`text-[24px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-900" : ""}`}>{title}</h2>
+          <h2 className={`text-[24px] font-bold leading-tight text-gray-950 dark:text-white ${hasFaceTable ? "rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800" : ""}`}>{title}</h2>
           {subtitle ? <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-500">{subtitle}</p> : null}
         </div>
         {rows?.length ? (
@@ -594,11 +593,11 @@ function CollapsibleCard({
                 // the tile's spare space is split from there — a lane with
                 // nothing in it is a strip, a full one takes the room. Past
                 // that it scrolls inside itself.
-                className="flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800"
+                className="flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden rounded-lg bg-white dark:bg-gray-800"
               >
                 <div
                   style={{ fontSize: rowTopicText }}
-                  className={`flex items-baseline gap-1.5 border-b border-gray-200 bg-gray-50 px-2 py-0.5 leading-tight dark:border-gray-800 dark:bg-gray-900 ${block.head.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
+                  className={`flex items-baseline gap-1.5 border-b border-gray-200 bg-gray-50 px-2 py-0.5 leading-tight dark:border-gray-800 dark:bg-gray-700 ${block.head.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
                 >
                   <span className="truncate font-bold uppercase tracking-wide">{block.head.label}</span>
                   <span className="ml-auto shrink-0 font-mono font-bold tabular-nums">{block.head.value}</span>
@@ -606,7 +605,7 @@ function CollapsibleCard({
                 {/* The lane's own scroller: a state with a dozen free tables
                     lists them all, and the block stays the height of its
                     neighbours instead of clipping the tail off. */}
-                <div className="min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-hidden dark:divide-gray-800">
+                <div className="scroll-minimal min-h-0 flex-1 divide-y divide-gray-100 overflow-y-auto overflow-x-hidden dark:divide-gray-800">
                   {block.items.map((item) => item.chips ? (
                     // A lane whose tables carry no clock shows them as pips
                     // rather than one line each: the whole set fits the block,
@@ -624,8 +623,8 @@ function CollapsibleCard({
                           // Two rounds off one table are two pips reading the same thing, so
                           // the position is what tells them apart.
                           key={`${chip.text}-${chip.note ?? ""}-${index}`}
-                          style={{ minWidth: chipWidth(item.chips) }}
-                          className={`inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border border-current/30 px-1.5 py-1 font-mono ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
+                          style={{ minWidth: item.key.endsWith("-none") ? `calc(2ch + 0.75rem)` : chipWidth(item.chips) }}
+                          className={`inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-md border-2 border-current/30 bg-current/10 px-1.5 py-1 font-mono ${item.key.endsWith("-none") ? "aspect-square" : ""} ${item.valueClass ?? "text-gray-500 dark:text-gray-400"}`}
                         >
                           <span className="max-w-full truncate">{chip.text}</span>
                           {chip.note ? <span className="max-w-full truncate text-[0.68em] opacity-70">{chip.note}</span> : null}
@@ -693,7 +692,7 @@ function CollapsibleCard({
         onClick={onToggle}
         aria-label={title}
         style={{ order: collapsedRank }}
-        className={`${cardTabShape} relative z-10 -mb-px border-b-0 border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:hover:bg-gray-900`}
+        className={`${cardTabShape} relative z-10 -mb-px border-b-0 border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800`}
       >
         <Icon className="h-4 w-4 shrink-0 text-gray-950 dark:text-white sm:hidden" aria-hidden="true" />
         {/* The subtitle rides beside the name, not under it: a two-line tab
@@ -714,14 +713,14 @@ function CollapsibleCard({
           reached inside the card — the lists below have their own scrollers. */}
       <section
         style={{ order: 100 }}
-        className="col-span-full max-h-[70dvh] w-full overflow-y-auto overflow-x-hidden rounded-b-xl border sm:rounded-tr-xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
+        className="scroll-minimal col-span-full max-h-[70dvh] w-full overflow-y-auto overflow-x-hidden rounded-b-xl border sm:rounded-tr-xl border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
       >
         {summary?.length && showSummaryWhenExpanded ? (
           // Sits flush in the body's top corners, so it has to match them.
           <div className="grid grid-cols-2 gap-px overflow-hidden border-b border-gray-200 bg-gray-200 dark:border-gray-800 dark:bg-gray-800 sm:rounded-tr-xl lg:grid-cols-4">
             {summary.map((item) => {
               // A tile with an `href` drills into its own page.
-              const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-950 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
+              const className = `px-4 py-3.5 ${item.tone ? cardToneRow[item.tone] : "bg-white text-gray-500 dark:bg-gray-900 dark:text-gray-400"} ${item.href ? "cursor-pointer hover:brightness-95 dark:hover:brightness-125" : ""}`;
               const content = (
                 <>
                   <p className="text-[13px] font-bold uppercase tracking-wide">{item.label}</p>
@@ -752,7 +751,7 @@ function orderStatusClass(status: OrderStatus) {
   if (status === "cancelled") return "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300";
   if (status === "cooking" || status === "sent_to_kitchen") return "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300";
   if (status === "ready") return "bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-300";
-  return "bg-gray-100 text-gray-600 dark:bg-gray-900 dark:text-gray-300";
+  return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300";
 }
 
 export default function Home() {
@@ -805,7 +804,7 @@ export default function Home() {
     else sessionStorage.removeItem(expandedCardStorageKey);
     setExpandedKey(next);
   };
-  const [chartMode, setChartMode] = useState<ChartMode>("day");
+  const [chartMode, setChartMode] = useState<ChartMode>("month");
   const [chartMetric, setChartMetric] = useState<ChartMetric>("revenue");
   // The total-orders tile opens the day's full order sheet under the tiles.
   const [dayOrdersOpen, setDayOrdersOpen] = useState(false);
@@ -921,7 +920,7 @@ export default function Home() {
     if (salesDaysLoadedRef.current || !activeMembership?.restaurant_id) return;
     salesDaysLoadedRef.current = true;
     setSalesDaysLoading(true);
-    getManagerReport(90)
+    getManagerReport(365)
       .then((res) => {
         setSalesDays(res.data.sales_days ?? []);
         // Same response the reports page used to draw its stock-risk grid
@@ -982,8 +981,12 @@ export default function Home() {
       };
     }
     const anchor = new Date(`${expenseMonth}-01T12:00:00`);
-    const from = new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
-    const until = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
+    const from = chartMode === "year"
+      ? new Date(anchor.getFullYear(), 0, 1, 12)
+      : new Date(anchor.getFullYear(), anchor.getMonth(), -6, 12);
+    const until = chartMode === "year"
+      ? new Date(anchor.getFullYear(), 11, 31, 12)
+      : new Date(anchor.getFullYear(), anchor.getMonth() + 1, 7, 12);
     const requestedRestaurantId = restaurantId;
     setExpenseLedger((current) => (current.restaurantId === restaurantId ? current : EMPTY_EXPENSE_LEDGER));
     setExpensesLoading(true);
@@ -1006,7 +1009,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [expenseMonth, restaurantId, canViewExpenses, refreshTick]);
+  }, [expenseMonth, restaurantId, canViewExpenses, refreshTick, chartMode]);
 
   // Both views plot days, so a bar's key is the YYYY-MM-DD it stands for.
   useEffect(() => {
@@ -1273,7 +1276,7 @@ export default function Home() {
     .map((item) => ({ name: item.menu_name, sold: item.quantity }))
     .sort((first, second) => second.sold - first.sold || first.name.localeCompare(second.name));
 
-  const topItemColors = ["#0f172a", "#0ea5e9", "#10b981", "#f59e0b", "#cbd5e1"];
+  const topItemColors = BAR_COLORS;
   const topItems = sortedItems.slice(0, 4);
   const otherItemsSold = sortedItems.slice(4).reduce((sum, item) => sum + item.sold, 0);
   const topItemsPie = otherItemsSold > 0 ? [...topItems, { name: copy.otherItems, sold: otherItemsSold }] : topItems;
@@ -1299,16 +1302,25 @@ export default function Home() {
     return day ? day[visibleChartMetric] : 0;
   };
 
-  // Day view: the Monday-Sunday week containing the selected date.
-  const weekdayIndex = selectedDateAtNoon.getDay();
-  const mondayOffset = weekdayIndex === 0 ? -6 : 1 - weekdayIndex;
-  const weekStart = new Date(selectedDateAtNoon);
-  weekStart.setDate(selectedDateAtNoon.getDate() + mondayOffset);
-  const weekdayLabels = language === "th" ? ["จ", "อ", "พ", "พฤ", "ศ", "ส", "อา"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const dailyPoints: ChartPoint[] = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    return { key: toDashboardDate(date), label: weekdayLabels[index], value: valueForDate(date) };
+  // Year view: one bar per month of the calendar year the selected date falls
+  // in. Keys are `YYYY-MM`, which no daily key can match — that is what stops a
+  // stale drill-down from surviving a switch between the two windows.
+  const monthLabels = language === "th"
+    ? ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const yearlyPoints: ChartPoint[] = Array.from({ length: 12 }, (_, index) => {
+    const key = `${selectedDateAtNoon.getFullYear()}-${String(index + 1).padStart(2, "0")}`;
+    if (visibleChartMetric === "cost") {
+      const spent = expenseDaily.filter((entry) => entry.date.startsWith(key));
+      return { key, label: monthLabels[index], value: spent.length ? totalDailyExpensesForMonth(expenseDaily, key) : null };
+    }
+    const metric = visibleChartMetric;
+    const traded = salesDays.filter((day) => day.order_date.startsWith(key));
+    return {
+      key,
+      label: monthLabels[index],
+      value: traded.length ? traded.reduce((sum, day) => sum + day[metric], 0) : null,
+    };
   });
 
   // Month view: every day of the calendar month containing the selected date.
@@ -1325,13 +1337,13 @@ export default function Home() {
     { key: "profit", label: copy.metricProfit },
   ];
   const chartModeOptions: { key: ChartMode; label: string }[] = [
-    { key: "day", label: copy.chartDay },
-    { key: "month", label: copy.chartMonth },
+    { key: "month", label: copy.thisMonth },
+    { key: "year", label: copy.thisYear },
   ];
   // Only the tooltip needs this now: the two toggles above the chart already
   // name the metric and the window, so a heading would just repeat them.
   const activeChartTitle = metricOptions.find((option) => option.key === visibleChartMetric)?.label ?? "";
-  const activeChartData = chartMode === "day" ? dailyPoints : monthlyPoints;
+  const activeChartData = chartMode === "month" ? monthlyPoints : yearlyPoints;
   // Only block on the very first load. A background refresh keeps the current
   // bars on screen instead of blinking the chart to a spinner every minute —
   // the header already shows that a refresh is in flight.
@@ -1339,7 +1351,9 @@ export default function Home() {
     visibleChartMetric === "cost" ? expensesLoading && expenseDaily.length === 0 : salesDaysLoading;
   const activeChartHasData =
     visibleChartMetric === "cost"
-      ? activeChartData.some((point) => point.value > 0)
+      ? activeChartData.some((point) => (point.value ?? 0) > 0)
+      : chartMode === "year"
+      ? activeChartData.some((point) => point.value !== null)
       : activeChartData.some((point) => salesByDate.has(point.key));
   // Switching view keeps the drilled-into bar when the same date is plotted in
   // both. Switching metric keeps it too, which is right — the table already
@@ -1424,7 +1438,7 @@ export default function Home() {
   // where two written-out rows used to.
   // An empty lane says so in words: a table of blank lines leaves you
   // wondering whether it is empty or still loading.
-  const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-500" });
+  const emptyRow = (key: string): CardRow => ({ key: `${key}-none`, label: copy.nothingHere, value: "", valueClass: "text-gray-300 dark:text-gray-700", chips: [{ text: "+" }] });
   const attentionRows: CardRow[] = [
     // Done needs no attention, so it stays off the cover — the open card still
     // lists it.
@@ -1612,7 +1626,7 @@ export default function Home() {
       // taller: MobileTopBar sits above <main> (pt-14), so a flat min-h-dvh would
       // push an empty dashboard past the viewport. On lg the shell sheet owns the
       // height, so no viewport min-height is set at all.
-      className="min-h-[calc(100dvh-3.5rem)] touch-pan-y bg-slate-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100"
+      className="min-h-[calc(100dvh-3.5rem)] touch-pan-y bg-slate-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100"
       onWheel={wheelSwipe}
       onPointerDown={startSwipe}
       onPointerMove={moveSwipe}
@@ -1622,7 +1636,7 @@ export default function Home() {
       onPointerCancel={(event) => endSwipe(event, false)}
       onPointerLeave={(event) => endSwipe(event, false)}
     >
-      <header className="sticky top-14 z-20 border-b border-gray-200 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:px-6 lg:top-0 lg:px-8">
+      <header className="sticky top-14 z-20 border-b border-gray-200 bg-slate-100/95 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/95 sm:px-6 lg:top-0 lg:px-8">
         <div className="mx-auto flex w-full max-w-6xl min-w-0 items-center gap-2">
           <h1 className="text-[28px] font-bold tracking-tight text-gray-950 dark:text-white sm:text-[34px]">{copy.title}</h1>
           {refreshing ? <Loader2 className="h-5 w-5 animate-spin text-gray-500" aria-label={copy.loading} /> : null}
@@ -1635,14 +1649,14 @@ export default function Home() {
         {/* The date sits in the same stack as the cards it filters, and rides
             the same swipe: change the day and control and content move as one. */}
         <div className="flex items-center gap-2">
-          <div className="inline-flex min-w-0 flex-1 overflow-hidden rounded-md border border-gray-200 bg-white sm:flex-initial dark:border-gray-800 dark:bg-gray-950">
-            <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+          <div className="inline-flex min-w-0 flex-1 overflow-hidden rounded-md border border-gray-200 bg-white sm:flex-initial dark:border-gray-800 dark:bg-gray-900">
+            <button type="button" onClick={() => selectDate(shiftDashboardDate(selectedDate, -1))} aria-label={copy.previousDay} title={copy.previousDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-r border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {/* The native input drives the value but renders the browser's own
                 numeric format, so it sits transparent on top and the readable
                 weekday/date is drawn underneath it. */}
-            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-900">
+            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-800">
               <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
               <span className="sr-only">{copy.chooseDate}</span>
               {/* Fixed width: the label is a long weekday and month name, so
@@ -1660,17 +1674,17 @@ export default function Home() {
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               />
             </label>
-            <button type="button" disabled={selectedDate >= today} onClick={() => selectDate(shiftDashboardDate(selectedDate, 1))} aria-label={copy.nextDay} title={copy.nextDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">
+            <button type="button" disabled={selectedDate >= today} onClick={() => selectDate(shiftDashboardDate(selectedDate, 1))} aria-label={copy.nextDay} title={copy.nextDay} className="ui-press inline-flex h-10 w-10 items-center justify-center border-l border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
-          {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.today}</button> : null}
+          {!isToday ? <button type="button" onClick={() => selectDate(today)} className="ui-press h-10 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.today}</button> : null}
         </div>
         {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">{error}</div> : null}
         <RealtimeConnectionNotice language={language} status={realtimeStatus} />
 
         {dateLoading ? (
-          <div className="flex min-h-72 items-center justify-center rounded-xl border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+          <div className="flex min-h-72 items-center justify-center rounded-xl border border-gray-200 bg-white text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {copy.loading}
           </div>
@@ -1710,7 +1724,7 @@ export default function Home() {
                     onClick={() => setSalesPane("day")}
                     className={`ui-press border-b-2 pb-1.5 text-[17px] font-bold uppercase tracking-wide ${
                       salesPane === "day"
-                        ? "border-gray-900 text-gray-950 dark:border-white dark:text-white"
+                        ? "border-orange-500 text-orange-600 dark:border-orange-400 dark:text-orange-400"
                         : "border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                     }`}
                   >
@@ -1782,7 +1796,7 @@ export default function Home() {
                             type="button"
                             onClick={() => printA4("day-orders-sheet")}
                             disabled={!validOrders.length}
-                            className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden"
+                            className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 print:hidden"
                           >
                             <Download className="h-3.5 w-3.5" aria-hidden="true" />
                             {copy.exportPdf}
@@ -1805,7 +1819,7 @@ export default function Home() {
                                 wrapper scrolls on Y, that turns into a
                                 horizontal scrollbar. */}
                             <table className="w-full table-fixed border-separate border-spacing-0 text-left text-[11px] [&_tbody_td]:border-b [&_tbody_td]:border-gray-100 dark:[&_tbody_td]:border-gray-800">
-                              <thead className="bg-gray-50 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400">
+                              <thead className="bg-gray-50 text-[10px] font-medium text-gray-500 dark:bg-gray-800/50 dark:text-gray-400">
                                 <tr>
                                   <th className="px-3 py-1.5 font-medium">{copy.order}</th>
                                   <th className="px-3 py-1.5 font-medium">{copy.location}</th>
@@ -1821,7 +1835,7 @@ export default function Home() {
                                     onClick={() => void openOrderBill(order.ID)}
                                     aria-haspopup="dialog"
                                     aria-busy={orderBillLoadingId === order.ID}
-                                    className={`ui-row-lift cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 ${orderBillLoadingId === order.ID ? "opacity-50" : ""}`}
+                                    className={`ui-row-lift cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${orderBillLoadingId === order.ID ? "opacity-50" : ""}`}
                                   >
                                     <td className="px-3 py-1.5 font-mono font-semibold text-gray-950 dark:text-white">#{order.order_number}</td>
                                     <td className="px-3 py-1.5 truncate text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</td>
@@ -1884,7 +1898,7 @@ export default function Home() {
                 </div>
                 {/* The month the selected day falls in. The revenue and expense
                     figures are themselves the links to their full monthly pages. */}
-                <div className={`min-w-0 bg-slate-100/70 p-4 dark:bg-gray-900/50 ${
+                <div className={`min-w-0 bg-slate-100/70 p-4 dark:bg-gray-800/50 ${
                   salesPane === "month" ? "" : "hidden"
                 }`}>
                   <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1939,7 +1953,7 @@ export default function Home() {
                                   <Cell key={entry.name} fill={topItemColors[index % topItemColors.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip wrapperStyle={{ zIndex: 20 }} formatter={(value, name) => [`${value} ${copy.dishes}`, name]} />
+                              <Tooltip wrapperStyle={{ zIndex: 20 }} content={<ChartTooltip unit={copy.dishes} />} />
                             </PieChart>
                             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                               <span className="font-mono text-[16px] font-semibold tabular-nums text-gray-950 dark:text-white">{totalItemsSold.toLocaleString()}</span>
@@ -1976,7 +1990,7 @@ export default function Home() {
                               className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
                                 visibleChartMetric === metric
                                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                               }`}
                             >
                               {label}
@@ -1992,7 +2006,7 @@ export default function Home() {
                               className={`ui-press px-2.5 py-1 text-[11px] font-semibold ${
                                 chartMode === option.key
                                   ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                                  : "bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
                               }`}
                             >
                               {option.label}
@@ -2013,7 +2027,7 @@ export default function Home() {
                           language={language}
                           lossColoring={visibleChartMetric === "profit"}
                           selectedKey={activeDetailBar?.key ?? null}
-                          onSelect={(point) => setDetailBar((current) => (current?.key === point.key ? null : point))}
+                          onSelect={chartMode === "month" ? (point) => setDetailBar((current) => (current?.key === point.key ? null : point)) : undefined}
                         />
                       ) : (
                         <div className="flex h-56 items-center justify-center px-3 text-center text-[12px] text-gray-500">
@@ -2045,7 +2059,7 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() => setDetailBar(null)}
-                              className="ui-press shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900"
+                              className="ui-press shrink-0 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
                             >
                               {copy.drillClose}
                             </button>
@@ -2058,7 +2072,7 @@ export default function Home() {
                             </div>
                           ) : shownExpenses.length ? (
                             <div className="max-h-64 overflow-y-auto">
-                              <div className="grid grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                              <div className="grid grid-cols-[minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,0.6fr)] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
                                 <span>{copy.expenseCategory}</span>
                                 <span>{copy.expenseNote}</span>
                                 <span className="text-right">{copy.metricCost}</span>
@@ -2078,7 +2092,7 @@ export default function Home() {
                             </div>
                           ) : shownSales?.orders.length ? (
                             <div className="max-h-64 overflow-y-auto">
-                              <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/50 dark:text-gray-400">
+                              <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
                                 <span>{copy.order}</span>
                                 <span>{copy.location}</span>
                                 <span className="text-right">{copy.time}</span>
@@ -2092,7 +2106,7 @@ export default function Home() {
                                     key={row.order_id}
                                     type="button"
                                     onClick={() => router.push(orderPosHref({ ID: row.order_id, order_number: row.order_number }))}
-                                    className="ui-press grid w-full grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-900"
+                                    className="ui-press grid w-full grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_60px_repeat(3,minmax(0,0.7fr))] items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
                                   >
                                     <span className="font-mono text-[11px] font-semibold text-gray-950 dark:text-white">#{row.order_number}</span>
                                     <span className="truncate text-[11px] text-gray-600 dark:text-gray-300">
@@ -2158,7 +2172,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => { void exportMonthPdf(); }}
-                    className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900 print:hidden"
+                    className="ui-press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 print:hidden"
                   >
                     <Download className="h-3.5 w-3.5" aria-hidden="true" />
                     {copy.exportPdf}
@@ -2264,8 +2278,8 @@ export default function Home() {
                 style={{ order: collapsedRank("sales") }}
                 className={
                   openCard !== null
-                    ? `${cardTabShape} translate-y-px border-gray-200 bg-gray-100 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300`
-                    : "flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white p-6 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400"
+                    ? `${cardTabShape} translate-y-px border-gray-200 bg-slate-300 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-black dark:text-gray-300`
+                    : "flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white p-6 text-center text-[13px] text-gray-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400"
                 }
               >
                 <CalendarDays
@@ -2294,7 +2308,7 @@ export default function Home() {
                         <h3 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.kitchenQueue}</h3>
                         <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{tickets.length} {copy.tickets}</p>
                       </div>
-                      <button type="button" onClick={() => router.push("/kitchen")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewKitchen}<ArrowRight className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => router.push("/kitchen")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.viewKitchen}<ArrowRight className="h-3.5 w-3.5" /></button>
                     </div>
                     {/* Stacked, a lane keeps a ticket's width rather than the
                         card's: a table number and an order number stretched
@@ -2305,7 +2319,7 @@ export default function Home() {
                         {lanes.map((lane) => {
                           const Icon = lane.icon;
                           return (
-                            <div key={lane.key} className="bg-white dark:bg-gray-950">
+                            <div key={lane.key} className="bg-white dark:bg-gray-900">
                               {/* Each lane's header wears the lane's colour, so
                                   a glance down the open card tells overdue from
                                   cooking from done without reading a word. */}
@@ -2336,7 +2350,7 @@ export default function Home() {
                                       setTicketTip({ x: Math.min(rect.left, window.innerWidth - 260), y: rect.bottom + 6, capped: false, table: ticket.table, orderNumber: ticket.orderNumber, items: ticket.items });
                                     }}
                                     onMouseLeave={() => setTicketTip(null)}
-                                    className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900">
+                                    className="ui-press block w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800">
                                     <div className="flex items-center justify-between gap-3">
                                       <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{ticket.table}</span>
                                       <span className="font-mono text-[11px] text-gray-500">#{ticket.orderNumber}</span>
@@ -2371,18 +2385,18 @@ export default function Home() {
                       <h3 className="text-[13px] font-semibold text-gray-950 dark:text-white">{copy.dailyOrders}</h3>
                       <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{validOrders.length} {copy.order}</p>
                     </div>
-                    <button type="button" onClick={() => router.push("/orders")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewAllOrders}<ArrowRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => router.push("/orders")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.viewAllOrders}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   {orders.length ? (
                     <div className="max-h-56 divide-y divide-gray-100 overflow-y-auto overflow-x-hidden dark:divide-gray-800">
                       {/* Five columns need ~580px including gaps. That is more
                           than a phone-width card has at `sm`, so the row only
                           becomes a table from `md` and stacks below it. */}
-                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-900/50 dark:text-gray-400 md:grid">
+                      <div className="hidden grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] gap-3 bg-gray-50 px-4 py-2 text-[10px] font-medium text-gray-500 dark:bg-gray-800/50 dark:text-gray-400 md:grid">
                         <span>{copy.order}</span><span>{copy.location}</span><span>{copy.status}</span><span className="text-right">{copy.total}</span><span className="text-right">{copy.time}</span>
                       </div>
                       {orders.map((order) => (
-                        <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-900 md:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] md:items-center md:gap-3">
+                        <button key={order.ID} type="button" onClick={() => router.push(orderPosHref(order))} className="ui-press grid w-full gap-2 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 md:grid-cols-[minmax(100px,0.65fr)_minmax(140px,1fr)_minmax(110px,0.7fr)_110px_70px] md:items-center md:gap-3">
                           <span className="font-mono text-[12px] font-semibold text-gray-950 dark:text-white">#{order.order_number}</span>
                           <span className="truncate text-[12px] text-gray-600 dark:text-gray-300">{orderLocationLabel(order, language)}</span>
                           <span><span className={`inline-flex rounded-md px-2 py-1 text-[10px] font-semibold ${orderStatusClass(order.status)}`}>{orderStatusLabel(order.status, copy)}</span></span>
@@ -2405,7 +2419,7 @@ export default function Home() {
                       <h3 className="text-[13px] font-semibold">{copy.stockRisks}</h3>
                       <p className="mt-0.5 text-[11px] opacity-80">{stockRisks.length} {copy.ingredients}</p>
                     </div>
-                    <button type="button" onClick={() => router.push("/inventory")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.viewInventory}<ArrowRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => router.push("/inventory")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.viewInventory}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   {stockRisks.length ? (
                     <div className="grid max-h-56 gap-2 overflow-y-auto overflow-x-hidden px-4 pb-4 pt-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -2414,7 +2428,7 @@ export default function Home() {
                           key={risk.id}
                           type="button"
                           onClick={() => router.push(`/inventory?adjust=${risk.id}`)}
-                          className="ui-press w-full rounded-md border border-gray-200 px-3 py-2.5 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
+                          className="ui-press w-full rounded-md border border-gray-200 px-3 py-2.5 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -2450,11 +2464,11 @@ export default function Home() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{copy.occupied} {occupied.length} · {copy.available} {availableTables.length} · {copy.reserved} {reservedTables.length}</p>
-                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => router.push("/pos/tables")} className="ui-press inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.openOrderTaking}<ArrowRight className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="grid grid-cols-2 gap-px bg-gray-200 dark:bg-gray-800 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {tables.map((table) => (
-                      <button key={table.key} type="button" onClick={() => router.push("/pos/tables")} className="ui-press min-h-24 bg-white p-3 text-left hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900">
+                      <button key={table.key} type="button" onClick={() => router.push("/pos/tables")} className="ui-press min-h-24 bg-white p-3 text-left hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13px] font-semibold text-gray-950 dark:text-white">{table.label}</span>
                           <span className={`text-[10px] font-semibold ${table.status === "occupied" ? "text-amber-600" : table.status === "available" ? "text-emerald-600" : table.status === "reserved" ? "text-sky-600" : "text-gray-500"}`}>{copy[table.status]}</span>
@@ -2491,9 +2505,9 @@ export default function Home() {
         <div
           ref={ticketTipRef}
           style={{ left: ticketTip.x, top: ticketTip.y }}
-          className="fixed z-50 max-w-[15rem] overflow-hidden rounded-md border border-gray-200 bg-white text-[13px] leading-snug text-gray-700 shadow-lg dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
+          className="fixed z-50 max-w-[15rem] overflow-hidden rounded-md border border-gray-200 bg-white text-[13px] leading-snug text-gray-700 shadow-lg dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
         >
-          <div className="flex items-baseline justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-900/60">
+          <div className="flex items-baseline justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-1.5 dark:border-gray-800 dark:bg-gray-800/60">
             <span className="truncate font-semibold text-gray-950 dark:text-white">{ticketTip.table}</span>
             <span className="shrink-0 font-mono text-[11px] text-gray-500 dark:text-gray-400">#{ticketTip.orderNumber}</span>
           </div>

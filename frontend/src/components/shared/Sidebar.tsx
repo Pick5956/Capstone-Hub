@@ -355,7 +355,7 @@ function RestaurantSwitcherCard({ collapsed }: { collapsed: boolean }) {
         <>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[12px] font-bold leading-[1.6] text-orange-50">{name}</span>
-            {detail && <span className="truncate text-[11px] leading-[1.6] text-orange-200">{detail}</span>}
+            {detail && <span className="truncate text-[11px] leading-[1.6] text-orange-200 [@media(max-height:760px)]:hidden">{detail}</span>}
           </span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-orange-200" aria-hidden="true">
             <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
@@ -464,7 +464,7 @@ export default function Sidebar() {
         className={`
           dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-dvh flex-col overflow-hidden bg-orange-800 dark:bg-orange-900 lg:flex
           transition-[width] duration-300 ease-in-out will-change-[width]
-          ${collapsed ? 'w-[68px]' : 'w-[196px]'}
+          ${collapsed ? 'w-[68px]' : 'w-[220px]'}
         `}
       >
         <div className="flex h-[62px] shrink-0 flex-col justify-center px-3">
@@ -503,9 +503,9 @@ export default function Sidebar() {
 
         <NavLinks collapsed={collapsed} />
 
-        <div className={`shrink-0 border-t border-orange-700 px-3 py-2 flex items-center gap-1 ${collapsed ? 'flex-col' : ''}`}>
+        <div className={`shrink-0 border-t border-orange-700 px-3 py-2 flex flex-col ${collapsed ? 'items-center gap-1' : 'gap-0.5'}`}>
           <RestaurantSwitcherCard collapsed={collapsed} />
-          <DashboardAccountMenu />
+          <DashboardAccountMenu variant={collapsed ? 'icon' : 'rail'} />
         </div>
       </aside>
     </>

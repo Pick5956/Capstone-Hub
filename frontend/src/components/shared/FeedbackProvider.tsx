@@ -44,34 +44,34 @@ type ConfirmContextValue = {
 const ToastContext = createContext<ToastContextValue | null>(null);
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
-const toneStyles: Record<ToastTone, { icon: LucideIcon; className: string; accentClassName: string; iconWrapClassName: string; iconClassName: string }> = {
+// Every tone shares one neutral surface and differs only in its accent bar and
+// icon tile - the same vocabulary the table cards use (a white card, a w-1.5
+// status bar, a soft tinted pill). The old table flooded the whole panel with
+// the hue, which made the toast the only surface in the product that did that,
+// and left `success` as a near-black card with no relation to green at all.
+const TOAST_SURFACE =
+  "border-gray-200 bg-white text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white";
+
+const toneStyles: Record<ToastTone, { icon: LucideIcon; accentClassName: string; iconWrapClassName: string }> = {
   success: {
     icon: CheckCircle2,
-    className: "border-gray-900 bg-gray-950 text-white shadow-gray-950/25 dark:border-white/10 dark:bg-white dark:text-gray-950 dark:shadow-black/40",
-    accentClassName: "bg-emerald-500 dark:bg-emerald-500",
-    iconWrapClassName: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white",
-    iconClassName: "text-white",
+    accentClassName: "bg-emerald-500",
+    iconWrapClassName: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
   },
   error: {
     icon: XCircle,
-    className: "border-red-600 bg-red-600 text-white shadow-red-950/25 dark:border-red-500 dark:bg-red-500 dark:text-white dark:shadow-black/40",
-    accentClassName: "bg-white/70",
-    iconWrapClassName: "bg-white/15 text-white",
-    iconClassName: "text-white",
+    accentClassName: "bg-red-500",
+    iconWrapClassName: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
   },
   warning: {
     icon: AlertTriangle,
-    className: "border-amber-400 bg-amber-400 text-amber-950 shadow-amber-950/20 dark:border-amber-300 dark:bg-amber-300 dark:text-amber-950 dark:shadow-black/40",
-    accentClassName: "bg-gray-950/75",
-    iconWrapClassName: "bg-amber-950 text-amber-100",
-    iconClassName: "text-amber-100",
+    accentClassName: "bg-amber-500",
+    iconWrapClassName: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
   },
   info: {
     icon: Info,
-    className: "border-sky-600 bg-sky-600 text-white shadow-sky-950/25 dark:border-sky-500 dark:bg-sky-500 dark:text-white dark:shadow-black/40",
-    accentClassName: "bg-white/70",
-    iconWrapClassName: "bg-white/15 text-white",
-    iconClassName: "text-white",
+    accentClassName: "bg-sky-500",
+    iconWrapClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
   },
 };
 
@@ -201,23 +201,23 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
             return (
               <div
                 key={toast.id}
-                className={`animate-slide-down pointer-events-auto relative flex min-h-14 items-center gap-3 overflow-hidden rounded-md border py-3 pl-4 pr-2 shadow-2xl backdrop-blur ${styles.className}`}
+                className={`animate-slide-down pointer-events-auto relative flex min-h-14 items-center gap-3 overflow-hidden rounded-xl border py-3 pl-4 pr-2 shadow-[0_2px_6px_rgba(15,23,42,0.08),0_16px_48px_rgba(15,23,42,0.20)] dark:shadow-[0_2px_6px_rgba(0,0,0,0.35),0_16px_48px_rgba(0,0,0,0.55)] ${TOAST_SURFACE}`}
                 role={urgent ? "alert" : "status"}
                 aria-live={urgent ? "assertive" : "polite"}
                 aria-atomic="true"
               >
-                <span className={`absolute bottom-0 left-0 top-0 w-1 ${styles.accentClassName}`} aria-hidden="true" />
+                <span className={`absolute bottom-0 left-0 top-0 w-1.5 ${styles.accentClassName}`} aria-hidden="true" />
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${styles.iconWrapClassName}`} aria-hidden="true">
-                  <Icon className={`h-5 w-5 ${styles.iconClassName}`} />
+                  <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-semibold leading-5">{toast.title}</p>
-                  {toast.message && <p className="mt-0.5 text-[12px] leading-5 opacity-85">{toast.message}</p>}
+                  {toast.message && <p className="mt-0.5 text-[12px] leading-5 text-gray-500 dark:text-gray-400">{toast.message}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => dismissToast(toast.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md opacity-75 transition-colors hover:bg-white/15 hover:opacity-100 dark:hover:bg-black/10"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-300"
                   aria-label={language === "th" ? "ปิดแจ้งเตือน" : "Dismiss notification"}
                 >
                   <X className="h-4 w-4" aria-hidden="true" />

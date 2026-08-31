@@ -659,12 +659,12 @@ export default function TablesPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
         <div className="flex flex-wrap gap-2">
-          {canManage && <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.zoneManager}</button>}
-          {canManage && <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900">{copy.tagManager}</button>}
+          {canManage && <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>}
+          {canManage && <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>}
           {canManage && <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>}
         </div>
       </div>
@@ -673,7 +673,7 @@ export default function TablesPage() {
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.inactive, value: inactiveCount }, { label: copy.zones, value: zones.length }].map((item) => (
-          <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-950">
+          <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
             <p className="text-[11px] text-gray-500">{item.label}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums">{item.value}</p>
           </div>
@@ -682,7 +682,7 @@ export default function TablesPage() {
 
       <div className="grid gap-4">
         <section className="space-y-4">
-          <div className={`grid gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-950 ${hasAnyZone ? "sm:grid-cols-2" : ""}`}>
+          <div className={`grid gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${hasAnyZone ? "sm:grid-cols-2" : ""}`}>
             {hasAnyZone && (
               <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
             )}
@@ -705,7 +705,7 @@ export default function TablesPage() {
                     type="button"
                     disabled={!canManage}
                     onClick={() => startEditTable(table)}
-                    className={`group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-900 ${canManage ? "ui-press hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700 dark:hover:bg-gray-800" : ""}`}
+                    className={`group relative flex min-h-[118px] overflow-hidden rounded-md border border-gray-200 bg-white text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] dark:border-gray-800 dark:bg-gray-800 ${canManage ? "ui-press hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md dark:hover:border-gray-700 dark:hover:bg-gray-800" : ""}`}
                   >
                     <span className={`w-1.5 shrink-0 ${tableAccentClass(table.status)}`} />
                     <div className="flex min-w-0 flex-1 flex-col px-3 py-3">
@@ -719,7 +719,7 @@ export default function TablesPage() {
                       <div className="mt-auto">
                         <div className="flex min-h-[22px] flex-wrap items-start gap-1 overflow-hidden">
                           {shownTags.map((tag) => <span key={tag.ID} className={`rounded-[4px] px-2 py-0.5 text-[10px] font-extrabold leading-4 tracking-[0.01em] ${tagBadgeClass}`}>{tag.name}</span>)}
-                          {extraTags > 0 ? <span className="rounded-[4px] border-2 border-gray-950 bg-white px-2 py-0.5 text-[10px] font-extrabold leading-4 text-gray-950 dark:border-white dark:bg-gray-950 dark:text-white">+{extraTags}</span> : null}
+                          {extraTags > 0 ? <span className="rounded-[4px] border-2 border-gray-950 bg-white px-2 py-0.5 text-[10px] font-extrabold leading-4 text-gray-950 dark:border-white dark:bg-gray-900 dark:text-white">+{extraTags}</span> : null}
                         </div>
                       </div>
                     </div>
@@ -728,7 +728,7 @@ export default function TablesPage() {
               })}
             </div>
           ) : (
-            <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-950">
+            <div className="rounded-md border border-gray-200 bg-white px-4 py-10 text-center dark:border-gray-800 dark:bg-gray-900">
               <p className="text-[14px] font-semibold">{copy.emptyTitle}</p>
               <p className="mt-1 text-[12px] text-gray-500">{canManage ? copy.emptyManage : copy.emptyView}</p>
             </div>
@@ -740,14 +740,14 @@ export default function TablesPage() {
       {tableDrawerOpen && canManage && (
         <>
           <button type="button" aria-label={copy.cancel} {...tableDrawerBackdrop} className={`${tableDrawerClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-30 cursor-default bg-gray-950/45 backdrop-blur-sm`} />
-          <form onSubmit={saveTable} className={`${tableDrawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-950`}>
+          <form onSubmit={saveTable} className={`${tableDrawerClosing ? "motion-drawer-exit" : "motion-drawer"} fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900`}>
             <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{copy.tableEditor}</p>
                 <h2 className="mt-0.5 text-[15px] font-semibold text-gray-900 dark:text-white">{editingTable ? copy.saveTable : copy.createTable}</h2>
                 <p className="mt-1 text-[11px] text-gray-500">{editingTable ? `${copy.autoNumber}: ${editingTable.display_label || editingTable.table_number}` : copy.autoNumber}</p>
               </div>
-              <button type="button" onClick={closeTableDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+              <button type="button" onClick={closeTableDrawer} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -765,16 +765,16 @@ export default function TablesPage() {
                       {!editingTable && (
                         <label className="block">
                           <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.count}</span>
-                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" aria-label={copy.count} />
+                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.count} />
                         </label>
                       )}
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.capacity}</span>
-                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900" aria-label={copy.capacity} />
+                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.capacity} />
                       </label>
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.status}</span>
-                        <span className="flex h-10 items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-900">
+                        <span className="flex h-10 items-center justify-between gap-3 rounded-md border border-gray-200 bg-white px-3 dark:border-gray-700 dark:bg-gray-800">
                           <span className={`truncate rounded-md px-2 py-1 text-[12px] font-semibold leading-none ${tableStatusPillClass(tableEditorStatus.status)}`}>
                             {STATUS[tableEditorStatus.status].label}
                           </span>
@@ -804,7 +804,7 @@ export default function TablesPage() {
                       <p className="mb-1.5 text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.tags}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {activeTags.map((tag) => (
-                          <button key={tag.ID} type="button" onClick={() => toggleTableTag(tag.ID)} className={`rounded-[4px] px-2 py-1 text-[11px] font-bold ${tableForm.tag_ids?.includes(tag.ID) ? tagBadgeClass : "border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"}`}>{tag.name}</button>
+                          <button key={tag.ID} type="button" onClick={() => toggleTableTag(tag.ID)} className={`rounded-[4px] px-2 py-1 text-[11px] font-bold ${tableForm.tag_ids?.includes(tag.ID) ? tagBadgeClass : "border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"}`}>{tag.name}</button>
                         ))}
                       </div>
                     </div>
@@ -812,14 +812,14 @@ export default function TablesPage() {
                 </div>
 
                 {editingTable && customerOrderLink && (
-                  <div className="relative rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
+                  <div className="relative rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/40">
                     <button
                       type="button"
                       onClick={regenerateCustomerQr}
                       disabled={submitting}
                       aria-label={copy.regenerateQr}
                       title={copy.regenerateQr}
-                      className="ui-press absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-red-600 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-200"
+                      className="ui-press absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-red-600 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-red-300 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-200"
                     >
                       <KeyRound className="h-4 w-4" aria-hidden="true" />
                     </button>
@@ -849,8 +849,8 @@ export default function TablesPage() {
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button type="button" onClick={copyCustomerOrderLink} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.copyLink}</button>
-                      <button type="button" onClick={downloadCustomerQr} disabled={downloadingQr || !customerOrderQr} className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+                      <button type="button" onClick={copyCustomerOrderLink} className="h-9 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">{copy.copyLink}</button>
+                      <button type="button" onClick={downloadCustomerQr} disabled={downloadingQr || !customerOrderQr} className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         {copy.downloadQr}
                       </button>
@@ -890,11 +890,11 @@ export default function TablesPage() {
             ))}
           </div>
           <form onSubmit={saveZone} className="mt-4 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-800">
-            <input value={zoneForm.name} onChange={(event) => setZoneForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.zoneName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+            <input value={zoneForm.name} onChange={(event) => setZoneForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.zoneName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-800" />
             <div className="grid gap-2">
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.prefix}</span>
-                <input value={zoneForm.prefix} onChange={(event) => setZoneForm((current) => ({ ...current, prefix: event.target.value }))} placeholder={copy.prefixPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+                <input value={zoneForm.prefix} onChange={(event) => setZoneForm((current) => ({ ...current, prefix: event.target.value }))} placeholder={copy.prefixPlaceholder} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-800" />
                 <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{copy.prefixHelp}</span>
               </label>
             </div>
@@ -924,7 +924,7 @@ export default function TablesPage() {
             ))}
           </div>
           <form onSubmit={saveTag} className="mt-4 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-800">
-            <input value={tagForm.name} onChange={(event) => setTagForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.tagName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" />
+            <input value={tagForm.name} onChange={(event) => setTagForm((current) => ({ ...current, name: event.target.value }))} placeholder={copy.tagName} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-800" />
             <button disabled={submitting} className="h-10 w-full rounded-md bg-orange-700 text-[13px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">{editingTag ? copy.saveTag : copy.addTag}</button>
           </form>
         </ManagerModal>
@@ -932,13 +932,13 @@ export default function TablesPage() {
 
       {deleteTarget && (
         <div {...deleteBackdrop} className={`${deleteClosing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
+          <div className={`${deleteClosing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} w-full max-w-sm rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900`}>
             <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
               <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{copy.confirmDeleteTitle}</h2>
               <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{copy.confirmDeleteBody}</p>
             </div>
             <div className="flex justify-end gap-2 px-4 py-3">
-              <button type="button" onClick={closeDeleteModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-900">{copy.cancel}</button>
+              <button type="button" onClick={closeDeleteModal} className="h-9 rounded-md border border-gray-200 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800">{copy.cancel}</button>
               <button type="button" onClick={confirmDelete} disabled={submitting} className="h-9 rounded-md border border-red-200 px-3 text-[12px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-900/20">{copy.delete}</button>
             </div>
           </div>
@@ -959,10 +959,10 @@ function ManagerModal({ title, onClose, children }: { title: string; onClose: ()
 
   return (
     <div {...backdrop} className={`${closing ? "motion-overlay-exit" : "motion-overlay"} fixed inset-0 z-50 flex items-end justify-center bg-gray-950/45 px-3 pb-3 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-0`}>
-      <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-950`}>
+      <div className={`${closing ? "motion-bottom-sheet-exit" : "motion-bottom-sheet"} max-h-[86vh] w-full max-w-md overflow-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-800 dark:bg-gray-900`}>
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
           <h2 className="text-[14px] font-semibold text-gray-900 dark:text-white">{title}</h2>
-          <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-900 dark:hover:text-gray-200">×</button>
+          <button type="button" onClick={close} className="h-8 w-8 rounded-md text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200">×</button>
         </div>
         <div className="p-4">{children}</div>
       </div>
@@ -1011,7 +1011,7 @@ function ManagerRow({
       className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
         selected
           ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
-          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-900/60"
+          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"
       }`}
     >
       <p className={`truncate text-[13px] font-medium ${muted ? "text-gray-500 line-through" : badgeClass ? `w-fit rounded-[4px] px-2 py-1 ${badgeClass}` : "text-gray-900 dark:text-white"}`}>{title}</p>
@@ -1027,7 +1027,7 @@ function ManagerRow({
                 event.stopPropagation();
                 onMoveUp();
               }}
-              className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-900"
+              className="grid h-8 w-8 place-items-center text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ChevronUp className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -1040,7 +1040,7 @@ function ManagerRow({
                 event.stopPropagation();
                 onMoveDown();
               }}
-              className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
+              className="grid h-8 w-8 place-items-center border-l border-gray-200 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-35 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             </button>

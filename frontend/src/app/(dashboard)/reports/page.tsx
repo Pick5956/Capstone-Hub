@@ -166,10 +166,10 @@ export default function ReportsPage() {
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <div className="min-h-dvh bg-gray-50 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
-        <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">
+        <Link href="/home" className="ui-press inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           {copy.back}
         </Link>
@@ -193,7 +193,7 @@ export default function ReportsPage() {
               { label: copy.profit, value: formatCurrency(report.summary.profit, lang), icon: <TrendingUp className="h-4 w-4" /> },
               { label: copy.margin, value: `${formatNumber(report.summary.margin, lang)}%`, icon: <TrendingUp className="h-4 w-4" /> },
             ].map((card) => (
-              <div key={card.label} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-950">
+              <div key={card.label} className="rounded-md border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex items-center justify-between gap-3 text-gray-500">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.14em]">{card.label}</span>
                   {card.icon}
@@ -204,7 +204,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_1.35fr]">
-            <section className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
               <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.salesDays}</h2>
               </div>
@@ -232,7 +232,7 @@ export default function ReportsPage() {
                             key={day.order_date}
                             onClick={() => toggleDay(day.order_date)}
                             aria-haspopup="dialog"
-                            className={`cursor-pointer transition-colors ${open ? "bg-gray-100 dark:bg-gray-900" : "bg-white hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60"}`}
+                            className={`cursor-pointer transition-colors ${open ? "bg-gray-100 dark:bg-gray-800" : "bg-white hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800/60"}`}
                           >
                             <td className="px-4 py-2.5 font-medium">
                               <span className="inline-flex items-center gap-1.5">
@@ -256,7 +256,7 @@ export default function ReportsPage() {
               )}
             </section>
 
-            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+            <section className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
               <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
                 <h2 className="text-sm font-semibold">{copy.menuMargins}</h2>
               </div>
@@ -292,13 +292,13 @@ export default function ReportsPage() {
 
       {openDay ? (
         <div {...dayBackdrop} className="motion-overlay fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-sm sm:p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="sales-day-title" className="motion-dialog flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-950 sm:max-h-[calc(100vh-2rem)]">
+          <div role="dialog" aria-modal="true" aria-labelledby="sales-day-title" className="motion-dialog flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl shadow-black/20 dark:border-gray-800 dark:bg-gray-900 sm:max-h-[calc(100vh-2rem)]">
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-800 sm:px-5">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{copy.salesDays}</p>
                 <h2 id="sales-day-title" className="mt-0.5 text-[16px] font-semibold text-gray-950 dark:text-white">{openDay}</h2>
               </div>
-              <button type="button" onClick={() => setOpenDay(null)} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900">{copy.close}</button>
+              <button type="button" onClick={() => setOpenDay(null)} className="ui-press h-9 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800">{copy.close}</button>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5">
@@ -326,7 +326,7 @@ export default function ReportsPage() {
                           onClick={() => void openReceipt(order.order_id)}
                           aria-haspopup="dialog"
                           aria-busy={receiptLoadingId === order.order_id}
-                          className={`cursor-pointer bg-white transition-colors hover:bg-gray-50 dark:bg-gray-950 dark:hover:bg-gray-900/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
+                          className={`cursor-pointer bg-white transition-colors hover:bg-gray-50 dark:bg-gray-900 dark:hover:bg-gray-800/60 ${receiptLoadingId === order.order_id ? "opacity-50" : ""}`}
                         >
                           <td className="py-1.5 font-mono">{order.order_number}</td>
                           <td className="py-1.5 truncate">{order.table_label || order.customer_name || "-"}</td>

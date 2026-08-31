@@ -187,7 +187,7 @@ export default function AccountSettingsPage() {
                 </div>
               </div>
               <input ref={profileInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={uploadPhoto} />
-              <button type="button" onClick={() => profileInputRef.current?.click()} disabled={!user || uploading} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 sm:h-10">
+              <button type="button" onClick={() => profileInputRef.current?.click()} disabled={!user || uploading} className="ui-press h-11 rounded-md border border-gray-200 px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 sm:h-10">
                 {uploading ? copy.uploading : copy.upload}
               </button>
             </div>
@@ -218,8 +218,8 @@ export default function AccountSettingsPage() {
               { label: copy.local, connected: !isGoogleAccount, mark: "@" },
             ].map((account) => {
               const connectedAccountClassName = "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300";
-              const disconnectedMarkClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-500";
-              const disconnectedBadgeClassName = "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+              const disconnectedMarkClassName = "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500";
+              const disconnectedBadgeClassName = "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";
 
               return (
               <div key={account.label} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-md border border-gray-200 px-3 py-3 dark:border-gray-800">
@@ -251,7 +251,7 @@ export default function AccountSettingsPage() {
                   : null;
                 const badgeClassName = isActive
                   ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                  : "bg-gray-100 text-gray-500 dark:bg-gray-900 dark:text-gray-400";
+                  : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400";
 
                 return (
                   <div

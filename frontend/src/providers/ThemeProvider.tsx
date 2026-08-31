@@ -3,27 +3,20 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark';
-export type FontSize = 'small' | 'normal' | 'large' | 'extra-large';
 
 interface ThemeCtx {
   theme: Theme;
-  fontSize: FontSize;
   showAIAssistant: boolean;
   mounted: boolean;
   toggle: () => void;
-  setFontSize: (size: FontSize) => void;
   setShowAIAssistant: (show: boolean) => void;
 }
 
-const FONT_SIZES: FontSize[] = ['small', 'normal', 'large', 'extra-large'];
-
 const ThemeContext = createContext<ThemeCtx>({
   theme: 'light',
-  fontSize: 'large',
   showAIAssistant: true,
   mounted: false,
   toggle: () => {},
-  setFontSize: () => {},
   setShowAIAssistant: () => {},
 });
 
@@ -32,12 +25,6 @@ function getInitialTheme(): Theme {
   const stored = localStorage.getItem('theme') as Theme | null;
   if (stored === 'light' || stored === 'dark') return stored;
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function getInitialFontSize(): FontSize {
-  if (typeof window === 'undefined') return 'large';
-  const stored = localStorage.getItem('fontSize') as FontSize | null;
-  return stored && FONT_SIZES.includes(stored) ? stored : 'large';
 }
 
 function getInitialShowAIAssistant(): boolean {
@@ -49,15 +36,10 @@ function getInitialShowAIAssistant(): boolean {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<Theme>('light');
-  const [fontSize, setFontSizeState] = useState<FontSize>('large');
   const [showAIAssistant, setShowAIAssistantState] = useState<boolean>(true);
 
   const applyTheme = useCallback((t: Theme) => {
     setTheme(t);
-  }, []);
-
-  const applyFontSize = useCallback((size: FontSize) => {
-    setFontSizeState(size);
   }, []);
 
   const applyShowAIAssistant = useCallback((show: boolean) => {
@@ -67,7 +49,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setTheme(getInitialTheme());
-      setFontSizeState(getInitialFontSize());
       setShowAIAssistantState(getInitialShowAIAssistant());
       setMounted(true);
     });
@@ -78,22 +59,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!mounted) return;
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    document.documentElement.dataset.fontSize = fontSize;
     localStorage.setItem('theme', theme);
-    localStorage.setItem('fontSize', fontSize);
     localStorage.setItem('showAIAssistant', String(showAIAssistant));
-  }, [fontSize, mounted, theme, showAIAssistant]);
+    // The UI-size preference was removed; drop any value an earlier build left
+    // behind so it cannot be read back if the feature ever returns.
+    localStorage.removeItem('fontSize');
+    delete document.documentElement.dataset.fontSize;
+  }, [mounted, theme, showAIAssistant]);
 
   const toggle = () => applyTheme(theme === 'dark' ? 'light' : 'dark');
 
   return (
-    <ThemeContext.Provider value={{ 
-      theme, 
-      fontSize, 
-      showAIAssistant, 
-      mounted, 
-      toggle, 
-      setFontSize: applyFontSize,
+    <ThemeContext.Provider value={{
+      theme,
+      showAIAssistant,
+      mounted,
+      toggle,
       setShowAIAssistant: applyShowAIAssistant
     }}>
       {children}

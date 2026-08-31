@@ -619,7 +619,7 @@ export default function AIAssistantPage() {
   if (!canUseAI) {
     return (
       <main className="flex w-full flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-        <section className="rounded-md border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-950">
+        <section className="rounded-md border border-gray-200 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
           <Bot className="mx-auto h-10 w-10 text-gray-500" />
           <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">{copy.permissionDenied}</h1>
         </section>
@@ -636,7 +636,7 @@ export default function AIAssistantPage() {
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
       <section className="relative flex min-h-0 flex-1">
         {/* Conversation — full width */}
-        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-950">
+        <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-900">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
             {/* Insights live behind a bell, the control everyone already reads as
@@ -667,7 +667,7 @@ export default function AIAssistantPage() {
                 onClick={() => void handleClearChat()}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.newChat}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
@@ -680,7 +680,7 @@ export default function AIAssistantPage() {
                 type="button"
                 onClick={() => setSettingsOpen(true)}
                 aria-label={language === "th" ? "ตั้งค่า AI" : "AI settings"}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
               >
                 <Settings className="h-3.5 w-3.5" />
               </button>
@@ -751,7 +751,7 @@ export default function AIAssistantPage() {
                             key={`${msg.id}-${action.id}`}
                             type="button"
                             onClick={() => handleGuidedAction(action, msg.id)}
-                            className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
+                            className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-900 dark:text-orange-300 dark:hover:border-orange-800"
                           >
                             {action.label}
                           </button>
@@ -866,7 +866,7 @@ export default function AIAssistantPage() {
           {/* Dictation spotlight — the big orb rises over the conversation while
               the mic is live, so the empty state isn't the only place it reacts. */}
           {voiceListening && !isEmpty && (
-            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/45 backdrop-blur-[2px] dark:bg-gray-950/55">
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/45 backdrop-blur-[2px] dark:bg-gray-900/55">
               <div className="flex flex-col items-center gap-4">
                 <SiriOrb
                   size="150px"
@@ -874,7 +874,7 @@ export default function AIAssistantPage() {
                   active
                   level={voiceLevel}
                 />
-                <span className="rounded-full bg-white/85 px-3.5 py-1.5 text-xs font-semibold text-orange-600 shadow-sm dark:bg-gray-900/85 dark:text-orange-400">
+                <span className="rounded-full bg-white/85 px-3.5 py-1.5 text-xs font-semibold text-orange-600 shadow-sm dark:bg-gray-800/85 dark:text-orange-400">
                   {language === "th" ? "กำลังฟัง… พูดได้เลยครับ" : "Listening… go ahead"}
                 </span>
               </div>
@@ -890,7 +890,7 @@ export default function AIAssistantPage() {
                     key={item}
                     type="button"
                     onClick={() => submitQuestion(item)}
-                    className="rounded-full border border-gray-200 bg-white/60 px-4 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
+                    className="rounded-full border border-gray-200 bg-white/60 px-4 py-2 text-left text-xs font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
                   >
                     {item}
                   </button>
@@ -911,7 +911,7 @@ export default function AIAssistantPage() {
               className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
                 voiceListening
                   ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
-                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900"
+                  : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-800"
               }`}
             >
               {/* Scan / tools — far-left slot, only when not dictating */}
@@ -930,7 +930,7 @@ export default function AIAssistantPage() {
                     type="button"
                     onClick={() => voiceControlsRef.current?.cancel()}
                     aria-label={language === "th" ? "ยกเลิกการอัด" : "Cancel recording"}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-white"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-all hover:border-gray-300 hover:text-gray-800 active:scale-95 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-white"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -974,7 +974,7 @@ export default function AIAssistantPage() {
                       type="button"
                       onClick={() => voiceControlsRef.current?.stop()}
                       aria-label={language === "th" ? "หยุดอัด" : "Stop recording"}
-                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition-all hover:border-gray-300 hover:text-gray-900 active:scale-95 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-white"
                     >
                       <Square className="h-3 w-3 fill-current" />
                     </button>
@@ -1032,7 +1032,7 @@ export default function AIAssistantPage() {
             The right/top offsets match the bell's own (main's padding + its
             right-3/top-3) so the card's edge lines up with the control. */}
         <aside
-          className={`fixed inset-0 z-[60] flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-gray-950 sm:absolute sm:inset-auto sm:right-9 sm:top-16 sm:w-[380px] sm:max-h-[min(32rem,calc(100%-6rem))] sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-gray-950/20 sm:dark:border-gray-800 lg:right-11 ${
+          className={`fixed inset-0 z-[60] flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out dark:bg-gray-900 sm:absolute sm:inset-auto sm:right-9 sm:top-16 sm:w-[380px] sm:max-h-[min(32rem,calc(100%-6rem))] sm:rounded-2xl sm:border sm:border-gray-200 sm:shadow-gray-950/20 sm:dark:border-gray-800 lg:right-11 ${
             drawerOpen
               ? "translate-y-0 opacity-100 sm:scale-100"
               : "pointer-events-none translate-y-full opacity-0 sm:translate-y-0 sm:scale-95"

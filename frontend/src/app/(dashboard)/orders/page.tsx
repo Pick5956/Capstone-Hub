@@ -243,7 +243,7 @@ export default function OrdersPage() {
           onChange={(event) => setQuery(event.target.value)}
           placeholder={copy.search}
           aria-label={copy.search}
-          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-900"
+          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
         />
       </label>
     </div>
@@ -271,7 +271,7 @@ export default function OrdersPage() {
             className={`ui-press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
               statusFilter === item.value
                 ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 dark:hover:bg-gray-900"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
             }`}
           >
             {item.label}
@@ -285,7 +285,7 @@ export default function OrdersPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+      <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
           <div className="lg:min-w-[980px]">
             <div className="hidden border-b border-gray-200 px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:text-gray-400 lg:grid lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center lg:gap-3">
@@ -318,8 +318,8 @@ export default function OrdersPage() {
                     key={order.ID}
                     className={`grid w-full gap-3 px-4 py-3 text-left text-[14px] transition-colors lg:grid-cols-[minmax(90px,0.8fr)_minmax(80px,0.7fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(90px,0.8fr)_minmax(90px,0.8fr)_minmax(100px,0.9fr)_minmax(170px,1.4fr)] lg:items-center ${
                       index % 2 === 0
-                        ? "bg-white hover:bg-gray-100 dark:bg-gray-950 dark:hover:bg-gray-800/70"
-                        : "bg-slate-100/70 hover:bg-slate-200/70 dark:bg-gray-900/55 dark:hover:bg-gray-800/80"
+                        ? "bg-white hover:bg-gray-100 dark:bg-gray-900 dark:hover:bg-gray-800/70"
+                        : "bg-slate-100/70 hover:bg-slate-200/70 dark:bg-gray-800/55 dark:hover:bg-gray-800/80"
                     }`}
                   >
                     <div className="min-w-0 lg:w-full lg:text-center">
@@ -378,7 +378,7 @@ export default function OrdersPage() {
                       ) : (
                         <Link
                           href={orderPosHref(order)}
-                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900 lg:w-auto"
+                          className="ui-press inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800 lg:w-auto"
                         >
                           {copy.openOrder}
                           <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
@@ -412,7 +412,7 @@ export default function OrdersPage() {
               type="button"
               onClick={() => goToPage(page - 1)}
               disabled={loading || page <= 1}
-              className="ui-press inline-flex h-9 items-center gap-1 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+              className="ui-press inline-flex h-9 items-center gap-1 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               ‹ {copy.previous}
             </button>
@@ -429,7 +429,7 @@ export default function OrdersPage() {
                     className={`ui-press inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-2 text-[13px] font-semibold tabular-nums ${
                       entry === page
                         ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
                     }`}
                   >
                     {entry}
@@ -441,7 +441,7 @@ export default function OrdersPage() {
               type="button"
               onClick={() => goToPage(page + 1)}
               disabled={loading || page >= totalPages}
-              className="ui-press inline-flex h-9 items-center gap-1 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+              className="ui-press inline-flex h-9 items-center gap-1 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
             >
               {copy.next} ›
             </button>
