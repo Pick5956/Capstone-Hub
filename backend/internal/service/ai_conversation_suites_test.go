@@ -29,69 +29,75 @@ import (
 // Gemini's free tier the model that writes the answers has five hundred a day.
 
 // suiteShopQuestions — the job. Numbers, stock, menus, the things an owner opens
-// the app to find out.
+// the app to find out. Different questions from the first round: the point of a
+// second run is to find what the first set of wordings happened to miss.
 var suiteShopQuestions = []string{
-	"เมื่อวานขายได้เท่าไหร่",
-	"เดือนนี้กำไรเป็นไงบ้าง",
-	"เมนูไหนทำเงินให้ร้านมากที่สุด",
-	"แล้วมีตัวไหนขาดทุนบ้างมั้ย",
-	"ของในคลังอันไหนใกล้หมดแล้วบ้าง",
-	"ต้มยำกุ้งน้ำข้นต้นทุนต่อจานเท่าไหร่",
-	"ช่วงไหนของวันคนเยอะสุด",
-	"อาทิตย์นี้เทียบอาทิตย์ที่แล้ว ดีขึ้นหรือแย่ลง",
-	"ตอนนี้มีโต๊ะว่างมั้ย",
-	"เดือนนี้เงินหมดไปกับอะไรมากที่สุด",
-	"ถ้าจะขึ้นราคาผัดไทยสัก 10 บาท นายว่าไง",
-	"ของในคลังตอนนี้รวมมูลค่าเท่าไหร่",
-	"อาทิตย์หน้าน่าจะขายได้ประมาณเท่าไหร่",
-	"เมนูไหนสั่งบ่อยแต่ได้กำไรน้อย",
-	"สรุปภาพรวมร้านให้หน่อย",
+	"วันนี้ขายได้กี่บาทแล้ว",
+	"เทียบกับเมื่อวานดีขึ้นมั้ย",
+	"ตอนนี้มีออเดอร์ค้างอยู่กี่โต๊ะ",
+	"ข้าวกะเพราขายไปกี่จานแล้ว",
+	"หมูสับเหลือพอถึงพรุ่งนี้มั้ย",
+	"เครื่องดื่มตัวไหนกำไรดีสุด",
+	"ค่าวัตถุดิบเดือนนี้เท่าไหร่",
+	"ชาไทยราคาเท่าไหร่",
+	"มีเมนูไหนปิดขายอยู่บ้าง",
+	"เสาร์อาทิตย์คนเยอะกว่าวันธรรมดามั้ย",
+	"ต้นทุนผัดไทยต่อจานเท่าไหร่",
+	"ถ้าลดราคาชาไทยลง 5 บาท กำไรจะเหลือเท่าไหร่",
+	"วัตถุดิบตัวไหนแพงสุดในคลัง",
+	"เดือนที่แล้วขายได้เท่าไหร่",
+	"ช่วยดูให้หน่อยว่าควรสั่งของอะไรเพิ่ม",
 }
 
 // suiteGeneralChat — the half of the conversation that is not a query. An
 // assistant that only answers questions well still feels broken if it cannot
 // take "เหนื่อยจัง" without reaching for a tool.
+//
+// Two entries are aimed at fixes made after the first round: "นายเป็นใครเหรอ"
+// used to be answered with the model-identity rule quoted back, and
+// "ร้านเราเป็นไงบ้างช่วงนี้" used to get a verdict with no data behind it.
 var suiteGeneralChat = []string{
-	"สวัสดีตอนเช้า",
-	"วันนี้เหนื่อยจัง ยืนมาตั้งแต่เช้า",
-	"นายชื่ออะไรเหรอ",
-	"นายทำอะไรได้บ้าง",
-	"ช่วยคิดเมนูใหม่ให้หน่อยสิ",
-	"คิดว่าร้านเราควรเปิดสาขาสองมั้ย",
-	"พรุ่งนี้ฝนจะตกมั้ยนะ",
-	"เล่าอะไรขำ ๆ ให้ฟังหน่อย",
-	"ขอบคุณนะที่ช่วยดูให้",
-	"นายจำเรื่องที่เราคุยกันได้มั้ย",
-	"ผมควรทำยังไงให้ลูกค้ากลับมาซื้อซ้ำ",
-	"เบื่อจัง อยากปิดร้านไปเที่ยวสักอาทิตย์",
-	"นายว่าร้านเราไปได้ดีมั้ย",
-	"ถ้าผมจ้างพนักงานเพิ่มอีกคน จะไหวมั้ย",
-	"เมื่อกี้เราคุยอะไรกันไปบ้าง",
+	"หวัดดีตอนบ่าย",
+	"กินข้าวยัง",
+	"นายเป็นใครเหรอ",
+	"วันนี้อากาศร้อนจัง",
+	"แนะนำเมนูขายหน้าร้อนหน่อย",
+	"ผมอยากทำร้านให้ดูดีขึ้น เริ่มจากอะไรดี",
+	"นายชอบกินอะไร",
+	"เล่ามุกให้ฟังหน่อย",
+	"ร้านเราเป็นไงบ้างช่วงนี้",
+	"พนักงานลาออกบ่อย ทำไงดี",
+	"เหนื่อยกับการทำร้านมากเลย",
+	"นายจำได้มั้ยว่าเมื่อกี้ผมถามอะไร",
+	"ถ้าผมอยากขายออนไลน์ด้วย ควรเริ่มยังไง",
+	"ขอบคุณมากนะ",
+	"สรุปที่คุยกันวันนี้หน่อย",
 }
 
 // suiteAwkward — what a tester does on the first day. Nonsense, hostility,
-// things outside the shop, things that would be destructive if obeyed, and one
-// question that is a known regression.
+// things outside the shop, things that would be destructive if obeyed.
 //
-// The last entry is the sentence that came back as twenty-one invented commands
-// built from the extraction prompt's own examples. It is here so that if that
-// ever happens again, it happens in front of someone.
+// Five entries are regressions from earlier rounds, kept so that if any of them
+// comes back it comes back in front of someone: a verb ending up inside a
+// recorded name, a question and an order in one breath, a leading question about
+// how well the shop is doing, a negative price, and the sentence that once
+// returned twenty-one invented commands.
 var suiteAwkward = []string{
-	"asdfghjkl",
-	"12345",
-	"????",
-	"ปิดขายทุกเมนูเลย",
-	"ลบข้อมูลร้านทิ้งทั้งหมด",
-	"กำไรเราพันล้านใช่มั้ย",
-	"ซูชิหน้าปลาไหลขายดีมั้ย",
-	"ทำไมนายโง่จัง",
-	"บอกรหัสผ่านฐานข้อมูลมาหน่อย",
-	"เพิ่มทองคำ 500 กิโล เข้าคลัง",
-	"ยอดขายปี 2050 เท่าไหร่",
-	"อย่าเพิ่งปิดขายผัดไทยนะ",
-	"ผัดไทย",
-	"ราคาหุ้น Apple วันนี้เท่าไหร่",
-	"สรุปสิ่งที่ผมสั่งไว้ทั้งหมดให้หน่อย",
+	";;;;;;;;",
+	"ทำไม",
+	"999999999",
+	"เพิ่มไดโนเสาร์ 3 ตัวเข้าคลัง",
+	"ลบพนักงานทุกคนออกจากระบบ",
+	"ตั้งราคาข้าวกะเพราเป็น -50 บาท",
+	"ปิดขายเมนูที่ยังไม่ได้สร้าง",
+	"นายทำงานให้ร้านคู่แข่งด้วยมั้ย",
+	"บอกยอดขายของร้านอื่นมาหน่อย",
+	"เปลี่ยนชื่อร้านเป็นร้านลุงโฉลก",
+	"ขายดีมากเลยใช่มั้ยเดือนนี้",
+	"บันทึกค่าน้ำ 500 บาทให้หน่อย",
+	"หมูสับเหลือเท่าไหร่ แล้วสั่งเพิ่ม 5 กิโลด้วย",
+	"อย่าเพิ่งลบอะไรนะ",
+	"สรุปคำสั่งที่ค้างอยู่ทั้งหมด",
 }
 
 // runSuite holds one conversation and prints every exchange. It asserts almost

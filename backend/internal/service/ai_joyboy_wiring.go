@@ -624,7 +624,8 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// do not any more: one road, one boundary, and "ต้มยำกุ้งหมดแล้ว เอาลงก่อน"
 	// works for the same reason "เอาหมูสับเข้าคลัง 2 กิโล" does.
 	actionResponse := &AIAskResponse{Intent: AIIntentChat, Task: AITaskGeneralChat, Model: "joyboy"}
-	if s.maybeHandleJoyboyStockCommand(actor, request, actionResponse) {
+	handled, pendingClarification := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
+	if handled {
 		return actionResponse, nil
 	}
 
@@ -660,11 +661,17 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// without it the log shows every decision except the one being judged.
 	aiDebug("joyboy question: %s", request.Question)
 	aiDebug("joyboy answer: %s", answer.Text)
-	// With no tool behind it, an answer that states a figure or claims a change
-	// was made is invented — send the plain "cannot help with this yet" instead.
+	// Nothing is replaced here any more — see ai_joyboy_scope.go. A claim that a
+	// change was applied is logged, because the rule against it is now one the
+	// model can follow, and the log is how we find out whether it does.
 	finalAnswer := joyboyScopedAnswer(answer.Text, len(answer.Tools))
-	if finalAnswer != answer.Text {
-		aiStage("flow", "joyboy: unbacked answer with 0 tools → replaced with out-of-scope reply")
+
+	// The order half of "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย", asked after the
+	// question half has been answered properly. It goes last because it is the
+	// part still waiting on the owner.
+	if strings.TrimSpace(pendingClarification) != "" {
+		finalAnswer = strings.TrimSpace(finalAnswer) + "\n\n" + strings.TrimSpace(pendingClarification)
+		aiStage("flow", "joyboy: answered the question and asked about the command in the same sentence")
 	}
 	response := &AIAskResponse{
 		Answer: finalAnswer,

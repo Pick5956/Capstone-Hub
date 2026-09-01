@@ -142,3 +142,24 @@ func TestPromptDoesNotHandTheModelASentenceToRecite(t *testing.T) {
 		}
 	}
 }
+
+// Two rules that were doing damage by being too broad, and one that was missing.
+func TestPersonaScopesAndForbidsWhatItShould(t *testing.T) {
+	// G — "นายชื่ออะไรเหรอ" was answered "ผมไม่มีข้อมูลส่วนนั้นครับ รบกวนสอบถาม
+	// ผู้ดูแลระบบ", which is the model-identity rule applied to a question about
+	// its name. It is also, word for word, the rule itself.
+	if !strings.Contains(joyboyPersona, "ข้อนี้ใช้เฉพาะคำถามเรื่องโมเดล/ค่าย/เครื่องที่รันเท่านั้น") {
+		t.Error("the model-identity rule must be scoped, or it swallows 'what is your name'")
+	}
+	if !strings.Contains(joyboyPersona, "คุณคือผู้ช่วยของ Dishy ยังไม่มีชื่อเล่นเป็นของตัวเอง") {
+		t.Error("the assistant needs a true answer to give when asked its name")
+	}
+
+	// C — "นายว่าร้านเราไปได้ดีมั้ย" came back "ผมว่าร้านเราน่าจะไปได้ดีนะครับ
+	// เพราะมีลูกค้าแวะเวียนมาอุดหนุนอยู่เรื่อย ๆ" with no tool behind it. The old
+	// rule only banned figures, and this sentence carries none — which is exactly
+	// why it is worse: there is nothing in it the owner could check.
+	if !strings.Contains(noDataAnswerTemplate, "ห้ามตัดสินว่าร้านนี้เป็นยังไงด้วย") {
+		t.Error("a verdict on how the shop is doing needs data too, not just figures")
+	}
+}

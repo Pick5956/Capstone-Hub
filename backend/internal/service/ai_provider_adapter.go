@@ -154,6 +154,13 @@ func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvide
 }
 
 func (a *groqProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	// Groq's model comes from GROQ_MODEL and this adapter has no per-call
+	// override. Saying so out loud costs one log line and saves someone setting
+	// AI_SUPPORT_MODEL, seeing no change, and having nothing to go on — a
+	// setting that silently does nothing is worse than one that does not exist.
+	if strings.TrimSpace(opts.Model) != "" {
+		aiStage("warn", "AI_SUPPORT_MODEL=%q is ignored on Groq — only Gemini reads it", opts.Model)
+	}
 	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt, opts)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }

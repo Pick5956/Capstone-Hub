@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The bug this guard exists for: a request for a summary came back as the
 // prompt's own examples, presented as twenty-one things the owner had ordered.
@@ -42,5 +45,18 @@ func TestNamesFromTheConversationSurvive(t *testing.T) {
 		"เพิ่มเลย 500 กก.", history)
 	if len(kept) != 1 {
 		t.Fatalf("a name carried over from the conversation must survive, got %+v", kept)
+	}
+}
+
+// The confirmation card read 'เพิ่มรายจ่าย "บันทึกค่าไฟ"' — the verb the owner
+// used to give the order had become part of the thing being recorded.
+func TestExtractionPromptForbidsVerbsInsideNames(t *testing.T) {
+	for _, rule := range []string{
+		"ห้ามเอาคำกริยามาไว้ในชื่อ",
+		`"บันทึกค่าไฟ 3200" → name="ค่าไฟ"`,
+	} {
+		if !strings.Contains(aiStockExtractionPrompt, rule) {
+			t.Errorf("the extraction prompt no longer says: %s", rule)
+		}
 	}
 }
