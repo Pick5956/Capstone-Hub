@@ -49,7 +49,6 @@ import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
-import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
 import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 
 type Message = {
