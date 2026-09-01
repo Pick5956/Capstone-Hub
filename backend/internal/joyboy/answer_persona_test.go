@@ -100,3 +100,45 @@ func TestPersonaForbidsOutcomeClaimsWithoutJudgement(t *testing.T) {
 		t.Error("the conditional phrasing is back — the rule now depends on knowledge the model does not have")
 	}
 }
+
+// A rule that dictates a sentence gets emitted as that sentence.
+//
+// "ให้บอกสั้น ๆ ว่ายังไม่แน่ใจ แล้วขอให้ผู้ใช้พิมพ์สั่งใหม่ให้ชัดอีกที" came back
+// as "ผมยังไม่แน่ใจครับ ขอให้ผู้ใช้พิมพ์สั่งใหม่ให้ชัดอีกทีครับ" on seven of
+// fifteen questions — nearly word for word, including "ผู้ใช้", which is the
+// prompt's word for the person the model is talking to, not a word anyone uses
+// to someone's face.
+//
+// The same failure had already appeared once elsewhere: the command extractor
+// returned its own twenty-one worked examples as if the owner had ordered them.
+// Both times the model could not tell the rules from the thing it was asked to
+// produce. The file's own notes reached this conclusion before either of us did
+// — "The fix is not another prohibition — it is telling it what the answer looks
+// like without handing it a sentence to fill in."
+//
+// So: state the goal, never the words. This test fails if a script comes back.
+func TestPromptDoesNotHandTheModelASentenceToRecite(t *testing.T) {
+	for name, template := range map[string]string{
+		"answerTemplate":       answerTemplate,
+		"noDataAnswerTemplate": noDataAnswerTemplate,
+	} {
+		// The exact script that was being recited.
+		if strings.Contains(template, "ขอให้ผู้ใช้พิมพ์สั่งใหม่") {
+			t.Errorf("%s hands the model a sentence again — it will be recited, third person and all", name)
+		}
+		// The replacement has to say whose words to use, or the model reaches for
+		// the nearest sentence in the prompt.
+		if !strings.Contains(template, "ด้วยคำพูดของคุณเอง") {
+			t.Errorf("%s asks for clarification without saying to use its own words", name)
+		}
+		// Both paths must carry the boundary between rules and output.
+		if !strings.Contains(template, "ไม่ใช่ประโยคที่เอาไว้ลอกไปตอบ") {
+			t.Errorf("%s does not tell the model that the rules are not the answer", name)
+		}
+		// "ผู้ใช้" reaching the owner is the visible symptom, so it is named
+		// outright rather than left to the general rule.
+		if !strings.Contains(template, `ห้ามใช้คำว่า "ผู้ใช้" ในคำตอบเด็ดขาด`) {
+			t.Errorf("%s does not forbid addressing the owner as \"ผู้ใช้\"", name)
+		}
+	}
+}
