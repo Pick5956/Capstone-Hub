@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -64,7 +65,21 @@ func joyboyCompleteOptions(kind joyboy.CallKind) aiProviderCompleteOptions {
 	if kind == joyboy.CallWriteAnswer {
 		return aiProviderCompleteOptions{ReasoningEffort: "medium", MaxCompletionTokens: joyboyWriteCeiling}
 	}
-	return aiProviderCompleteOptions{ReasoningEffort: "medium"}
+	// Choosing tools is judgement, but judgement from a fixed list against a
+	// question — not writing. It goes to the support model so the writing model's
+	// daily budget is spent only on what the owner reads. Empty when no support
+	// model is configured, which leaves every call exactly where it was.
+	return aiProviderCompleteOptions{ReasoningEffort: "medium", Model: aiSupportModel()}
+}
+
+// aiSupportModel names the model for the calls nobody reads: choosing a tool,
+// and reading a sentence into JSON. Empty means "same as everything else".
+//
+// It is deliberately a separate setting rather than a hardcoded name. Which
+// model is the cheap one changes every few months, and the free tier's limits
+// change with it; a name in the environment can follow that without a release.
+func aiSupportModel() string {
+	return strings.TrimSpace(os.Getenv("AI_SUPPORT_MODEL"))
 }
 
 // joyboyTools runs read-only tools for one restaurant. The restaurant is fixed

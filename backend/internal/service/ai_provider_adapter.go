@@ -59,6 +59,21 @@ type aiProviderCompleteOptions struct {
 	// thinking from being cut off. Groq reserves this against the daily budget at
 	// request time, so it is set only where it is needed.
 	MaxCompletionTokens int
+	// Model overrides the provider's configured model for this one call. Empty
+	// keeps whatever the provider is set to, which is what every caller wanted
+	// until the free tier's numbers were actually read.
+	//
+	// On Gemini's free tier the daily request budget is per model, and the gap is
+	// not small: the Flash-Lite models allow 500 requests a day while every Flash
+	// model allows 20. A question costs about three calls, so putting all three
+	// on one model caps the shop at 161 questions a day, and putting them on a
+	// Flash model caps it at six.
+	//
+	// Only one of those three calls writes anything a person reads. The other two
+	// pick a tool and shape a sentence into JSON — both structured, both work a
+	// smaller model does well. Sending them to a different model spends a
+	// different daily budget, and the one model that matters keeps its own.
+	Model string
 }
 
 // aiProviderAdapter is the provider-neutral boundary used by AIService.
@@ -212,8 +227,8 @@ func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 // path, and a preference that cannot be expressed is not a reason to refuse the
 // call — the reply is still a reply. Dropping it here is what keeps the option a
 // hint rather than a contract every provider has to honour.
-func (a *geminiProviderAdapter) Complete(prompt string, _ aiProviderCompleteOptions) (aiProviderAnswer, error) {
-	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt)
+func (a *geminiProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt, opts.Model)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 

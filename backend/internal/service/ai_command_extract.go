@@ -63,115 +63,65 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 
 กฎร่วม:
 - ถ้าผู้ใช้ไม่ได้บอกจำนวน ให้ quantity เป็น 0 · ถ้าไม่ได้บอกหน่วย ให้ unit เป็น ""
-- ห้ามเดาชื่อที่ผู้ใช้ไม่ได้พูด ห้ามเดาตัวเลข
-- **ยกชื่อมาให้ครบตามที่ผู้ใช้พูด ห้ามตัดให้สั้นลง** เช่น "สปาเก็ตตี้ขี้เมาซีฟู้ดหมดแล้ว"
-  → name="ต้มยำกุ้งน้ำข้น" ไม่ใช่ "ต้มยำกุ้ง"
-- **name ต้องเป็นชื่อล้วน ห้ามติดหน่วยหรือคำบอกปริมาณ** เช่น "ผงกะหรี่ซองละ 6" → name="ผงกะหรี่" unit="ซอง"
-  · "หมูกิโลละ 180" → name="หมู" unit="กก." · "กะเพรากำละ 10" → name="กะเพรา" unit="กำ"
+- **ห้ามเดาชื่อที่ผู้ใช้ไม่ได้พูด** ทุกชื่อที่ตอบกลับมาต้องมาจากข้อความของผู้ใช้
+  หรือจากบทสนทนาก่อนหน้าเท่านั้น ระบบจะทิ้งชื่อที่ไม่ได้มาจากสองที่นี้
+- **ยกชื่อมาให้ครบตามที่ผู้ใช้พูด ห้ามตัดให้สั้นลง**
+- **name ต้องเป็นชื่อล้วน ห้ามติดหน่วยหรือคำบอกปริมาณ**
+  เช่น "ของXซองละ 6" → name="ของX" unit="ซอง" · "ของYกิโลละ 180" → name="ของY" unit="กก."
 - ปนกันได้ ข้อความเดียวมีทั้งคำสั่งเมนูและคำสั่งคลังพร้อมกันก็ได้
 - **สานต่อจากบทสนทนาก่อนหน้าได้** ถ้าผู้ช่วยเพิ่งถามหรือเพิ่งเสนอทำอะไรกับวัตถุดิบ/เมนูตัวหนึ่ง
   แล้วข้อความล่าสุดของผู้ใช้เป็นการตอบรับ (เช่น "เพิ่มเลย" "เอาเลย" "ตกลง") หรือบอกแค่จำนวน/หน่วย
   ให้ยกชื่อและชนิดคำสั่งจากที่ผู้ช่วยเสนอมาเติมให้ครบ — **ไม่ถือว่าเป็นการเดา** เพราะมาจากบทสนทนาจริง
-- **ถ้าเป็นคำถาม ไม่ใช่คำสั่ง ให้ตอบ []** เช่น "เมนูไหนควรปิดขาย" "วัตถุดิบไหนใกล้หมด"
+- **ถ้าเป็นคำถาม ไม่ใช่คำสั่ง ให้ตอบ []** เช่น "เมนูไหนควรปิดขาย" "เดือนนี้จ่ายอะไรไปบ้าง"
+  "สรุปสิ่งที่สั่งไว้ทั้งหมด" — การขอให้สรุปหรือขอให้เล่า ไม่ใช่คำสั่งให้แก้ข้อมูล
 - **ถ้าข้อความมีแต่ชื่อของอย่างเดียว ไม่มีคำสั่งและไม่มีตัวเลข ให้ตอบ []**
-  เช่นพิมพ์มาว่า "ไข่ไก่" หรือ "ต้มยำกุ้ง" เฉย ๆ นั่นคือเขาอยากรู้ข้อมูลของสิ่งนั้น
-  ไม่ใช่สั่งให้แก้ ห้ามเติมจำนวนหรือหน่วยที่เขาไม่ได้พิมพ์ และห้ามยกตัวเลขจากตัวอย่างด้านล่างมาใช้
+  นั่นคือเขาอยากรู้ข้อมูลของสิ่งนั้น ไม่ใช่สั่งให้แก้
 - **ประโยคที่บอกให้ "ยังอย่าเพิ่งทำ" หรือ "อย่าทำ" ไม่ใช่คำสั่ง ให้ตอบ []**
   เช่น "อย่าเพิ่งปิดขาย..." "ยังไม่ต้องเพิ่ม..." "ไม่ต้องปิด..." "อย่าเพิ่งสั่งของ..."
-  พวกนี้คือการบอกให้รอหรือให้คงสภาพเดิมไว้ ห้ามอ่านเป็นคำสั่งให้ทำ
   ระวังเป็นพิเศษ อย่าเห็นคำว่า "ปิดขาย" หรือ "เพิ่ม" ในประโยคแล้วรีบแปลงเป็นคำสั่ง
-  ต้องดูทั้งประโยคว่าเจ้าของสั่งให้ทำ หรือสั่งให้ "อย่าเพิ่งทำ"
 - ถ้าข้อความไม่ใช่คำสั่งเลย ให้ตอบ []
 - **ถ้าประโยคสั่งหลายอย่าง แล้วมีอันที่รู้ว่าเป็นคำสั่งแต่ไม่รู้ว่าหมายถึงของชิ้นไหน
   ห้ามทิ้งอันนั้น** ให้ส่งมาด้วยโดยให้ name เป็น "" และใส่คำพูดเดิมของผู้ใช้ไว้ใน note
   ระบบจะถามกลับเอง · ถ้าทิ้งไป เจ้าของจะสั่งสองอย่างแต่ได้ยินเรื่องเดียวโดยไม่รู้ตัว
-  **ห้ามเดาชื่อของที่ผู้ใช้ไม่ได้พูด และห้ามลอกชื่อจากตัวอย่างด้านล่างมาใช้**
-  ตัวอย่างมีไว้ให้ดูรูปแบบ ไม่ใช่ให้ยกคำตอบมาใช้ซ้ำ
 - **ถ้าผู้ช่วยเพิ่งบอกว่า "... — รับทราบแล้วครับ" แล้วถามต่อว่าอีกอันหมายถึงตัวไหน
   ให้ส่งกลับมาทั้งสองอัน** ทั้งอันที่รับทราบไปแล้ว (ยกจำนวนและหน่วยเดิมมาให้ครบ)
   และอันที่ผู้ใช้เพิ่งบอกชื่อ ห้ามส่งมาแค่อันใหม่ ไม่งั้นอันแรกจะหายไปเงียบ ๆ
 
-ตัวอย่าง
-ข้อความ: "รับผักชีเข้า 2 กก. เต้าหู้ขาว 5 กก."
-ตอบ: [{"name":"ผักชี","kind":"in","quantity":2,"unit":"กก."},{"name":"เต้าหู้ขาว","kind":"in","quantity":5,"unit":"กก."}]
+ตัวอย่าง — **ชื่อในตัวอย่างเป็นชื่อสมมติ ไม่มีอยู่จริงในร้านไหน
+ห้ามลอกชื่อพวกนี้ไปใส่คำตอบเด็ดขาด ดูแค่รูปแบบพอ**
 
-ข้อความ: "ปิดขายซุปเห็ดครีม"
-ตอบ: [{"name":"ซุปเห็ดครีม","kind":"menu_off","quantity":0,"unit":""}]
+ข้อความ: "รับของA เข้า 2 กก. ของB 5 กก."
+ตอบ: [{"name":"ของA","kind":"in","quantity":2,"unit":"กก."},{"name":"ของB","kind":"in","quantity":5,"unit":"กก."}]
 
-ข้อความ: "พะแนงเนื้อหมดแล้ว เอาลงก่อนนะ"
-ตอบ: [{"name":"พะแนงเนื้อ","kind":"menu_off","quantity":0,"unit":""}]
+ข้อความ: "เมนูX หมดแล้ว เอาลงก่อนนะ แล้วก็รับของA เข้า 2 กก."
+ตอบ: [{"name":"เมนูX","kind":"menu_off","quantity":0,"unit":""},{"name":"ของA","kind":"in","quantity":2,"unit":"กก."}]
 
-ข้อความ: "เปิดขายข้าวหมกไก่กับซุปเห็ดครีมด้วย"
-ตอบ: [{"name":"ข้าวหมกไก่","kind":"menu_on","quantity":0,"unit":""},{"name":"ซุปเห็ดครีม","kind":"menu_on","quantity":0,"unit":""}]
+ข้อความ: "เปิดขายเมนูY ด้วย ขายจานละ 89 นะ"
+ตอบ: [{"name":"เมนูY","kind":"menu_on","quantity":0,"unit":""},{"name":"เมนูY","kind":"menu_price","quantity":89,"unit":""}]
 
-ข้อความ: "ปิดขายซุปเห็ดครีม แล้วก็รับเต้าหู้ขาวเข้า 2 กก."
-ตอบ: [{"name":"ซุปเห็ดครีม","kind":"menu_off","quantity":0,"unit":""},{"name":"เต้าหู้ขาว","kind":"in","quantity":2,"unit":"กก."}]
+ข้อความ: "ปรับของA เป็น 500 กรัม ตัดของB ออก ตั้งขั้นต่ำของA 1 กก."
+ตอบ: [{"name":"ของA","kind":"adjust","quantity":500,"unit":"กรัม"},{"name":"ของB","kind":"out","quantity":0,"unit":""},{"name":"ของA","kind":"min","quantity":1,"unit":"กก."}]
 
-ข้อความ: "ขึ้นราคาพะแนงเนื้อเป็น 159"
-ตอบ: [{"name":"พะแนงเนื้อ","kind":"menu_price","quantity":159,"unit":""}]
+ข้อความ: "ของA ขึ้นราคาเป็นกิโลละ 180"
+ตอบ: [{"name":"ของA","kind":"cost","quantity":180,"unit":"กก."}]
 
-ข้อความ: "ข้าวหมกไก่ขายจานละ 89 นะ"
-ตอบ: [{"name":"ข้าวหมกไก่","kind":"menu_price","quantity":89,"unit":""}]
+ข้อความ: "เพิ่มของC เข้าคลังหน่อย หน่วยกรัม"
+ตอบ: [{"name":"ของC","kind":"create","quantity":0,"unit":"กรัม"}]
 
-ข้อความ: "จ่ายค่าไฟไป 3200"
-ตอบ: [{"name":"ค่าไฟ","kind":"expense","quantity":3200,"unit":"","category":"utilities","date":"","note":"ค่าไฟ"}]
+ข้อความ: "เมื่อวานจ่ายค่าแรงพนักงาน 2 คน 1,200 บาท แล้วก็ซื้อกระทะใหม่ 1500"
+ตอบ: [{"name":"ค่าแรงพนักงาน","kind":"expense","quantity":1200,"unit":"","category":"labor","date":"","note":"ค่าแรงพนักงาน 2 คน"},{"name":"กระทะ","kind":"expense","quantity":1500,"unit":"","category":"equipment","date":"","note":"ซื้อกระทะใหม่"}]
 
-ข้อความ: "เมื่อวานจ่ายค่าแรงพนักงาน 2 คน 1,200 บาท"
-ตอบ: [{"name":"ค่าแรงพนักงาน","kind":"expense","quantity":1200,"unit":"","category":"labor","date":"","note":"ค่าแรงพนักงาน 2 คน"}]
-
-ข้อความ: "ซื้อกระทะใหม่ 1500"
-ตอบ: [{"name":"กระทะ","kind":"expense","quantity":1500,"unit":"","category":"equipment","date":"","note":"ซื้อกระทะใหม่"}]
-
-ข้อความ: "เดือนนี้จ่ายอะไรไปบ้าง"
-ตอบ: []
-
-ข้อความ: "เมนูไหนควรปิดขายดี"
-ตอบ: []
-
-ข้อความ: "อย่าเพิ่งปิดขายสปาเก็ตตี้ขี้เมานะ"
-ตอบ: []
-
-ข้อความ: "ยังไม่ต้องเพิ่มเต้าหู้ขาวตอนนี้ รอดูของก่อน"
-ตอบ: []
-
-ข้อความ: "ปรับผักชีเป็น 500 กรัม"
-ตอบ: [{"name":"ผักชี","kind":"adjust","quantity":500,"unit":"กรัม"}]
-
-ข้อความ: "ตัดเต้าหู้ขาวออก"
-ตอบ: [{"name":"เต้าหู้ขาว","kind":"out","quantity":0,"unit":""}]
-
-ข้อความ: "ตั้งขั้นต่ำผักชีเป็น 1 กก."
-ตอบ: [{"name":"ผักชี","kind":"min","quantity":1,"unit":"กก."}]
-
-ข้อความ: "ผงกะหรี่ขึ้นราคาเป็นกิโลละ 180"
-ตอบ: [{"name":"ผงกะหรี่","kind":"cost","quantity":180,"unit":"กก."}]
-
-ข้อความ: "ซีอิ๊วขาวขวดละ 45 บาท"
-ตอบ: [{"name":"ซีอิ๊วขาว","kind":"cost","quantity":45,"unit":"ขวด"}]
-
-ข้อความ: "ผงกะหรี่"
-ตอบ: []
-
-ข้อความ: "เพิ่มผักชีเข้าคลังหน่อย หน่วยกรัม"
-ตอบ: [{"name":"ผักชี","kind":"create","quantity":0,"unit":"กรัม"}]
+ข้อความ: "รับของA เข้า 5 กก. แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย"
+ตอบ: [{"name":"ของA","kind":"in","quantity":5,"unit":"กก."},{"name":"","kind":"in","quantity":0,"unit":"","note":"ของอีกตัวที่หมดไปเมื่อวาน"}]
 
 (บทสนทนาก่อนหน้า)
-ผู้ช่วย: ยังไม่มี "หัวหอม" ในคลังครับ ให้ผมเพิ่มเข้าคลังให้ไหม (บอกหน่วยด้วย)
+ผู้ช่วย: ยังไม่มี "ของC" ในคลังครับ ให้ผมเพิ่มเข้าคลังให้ไหม (บอกหน่วยด้วย)
 ข้อความล่าสุด: เพิ่มเลย 5000 กรัม
-ตอบ: [{"name":"หัวหอม","kind":"create","quantity":5000,"unit":"กรัม"}]
+ตอบ: [{"name":"ของC","kind":"create","quantity":5000,"unit":"กรัม"}]
 
-ข้อความ: "ยอดขายวันนี้เท่าไหร่"
-ตอบ: []
-
-ข้อความ: "รับแป้งมันสำปะหลังเข้า 5 กก. แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย"
-ตอบ: [{"name":"แป้งมันสำปะหลัง","kind":"in","quantity":5,"unit":"กก."},{"name":"","kind":"in","quantity":0,"unit":"","note":"ของอีกตัวที่หมดไปเมื่อวาน"}]
-
-(บทสนทนาก่อนหน้า)
-ผู้ใช้: รับแป้งมันสำปะหลังเข้า 5 กก. แล้วก็เติมของอีกตัวที่หมดไปเมื่อวานด้วย
-ผู้ช่วย: แป้งมันสำปะหลัง 5 กก. — รับทราบแล้วครับ
-ส่วน “ของอีกตัวที่หมดไปเมื่อวาน” หมายถึงตัวไหนครับ บอกชื่อมาได้เลย
-ข้อความล่าสุด: ซีอิ๊วขาว 3 ขวด
-ตอบ: [{"name":"แป้งมันสำปะหลัง","kind":"in","quantity":5,"unit":"กก."},{"name":"ซีอิ๊วขาว","kind":"in","quantity":3,"unit":"ขวด"}]
+ข้อความที่ตอบ [] : "ยอดขายวันนี้เท่าไหร่" · "เมนูไหนควรปิดขายดี" · "เดือนนี้จ่ายอะไรไปบ้าง"
+· "สรุปสิ่งที่ผมสั่งไว้ทั้งหมด" · "ของA" (ชื่อเปล่า ๆ) · "อย่าเพิ่งปิดขายเมนูX นะ"
+· "ยังไม่ต้องเพิ่มของB ตอนนี้ รอดูของก่อน"
 
 ข้อความของเจ้าของร้าน:
 `
@@ -187,7 +137,7 @@ func (s *AIService) ExtractStockCommands(question string, history []AIConversati
 	// date, and the model cannot count back from a day it was never told.
 	today := fmt.Sprintf("(วันนี้คือ %s)\n", repository.BangkokNow().Format("2006-01-02"))
 	prompt := aiStockExtractionPrompt + today + aiRecentTurnsForExtraction(history) + strings.TrimSpace(question)
-	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low"})
+	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low", Model: aiSupportModel()})
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +149,51 @@ func (s *AIService) ExtractStockCommands(question string, history []AIConversati
 	if aiDebugEnabled() {
 		aiStage("debug", "joyboy command: read %d draft(s) from %q → %s", len(drafts), question, strings.TrimSpace(text))
 	}
-	return drafts, err
+	return keepDraftsTheOwnerNamed(drafts, question, history), err
+}
+
+// keepDraftsTheOwnerNamed drops any draft naming something nobody said.
+//
+// "สรุปสิ่งที่ผมสั่งไว้ทั้งหมดให้หน่อย" — a request for a summary, containing no
+// command at all — came back as twenty-one drafts. They were the prompt's own
+// worked examples, in the order they appear in it, with the example quantities
+// intact: ค่าไฟ 3200, ค่าแรงพนักงาน 1200, ผักชี, ซุปเห็ดครีม. The words "สั่ง"
+// and "ทั้งหมด" read to the model as "list every command", and the only list it
+// could see was the one teaching it the format.
+//
+// The prompt forbids this in as many words. It was ignored, so the rule is
+// enforced here instead, on the model's output rather than on the owner's
+// question: every name has to appear in what the owner just wrote or in the
+// recent conversation. That is the difference between checking provenance and
+// interpreting meaning — nothing here decides what the owner wanted, only
+// whether the model is quoting them or inventing.
+//
+// An empty name is kept: the prompt asks for one deliberately when a command's
+// target is unclear, so that the assistant asks instead of guessing.
+func keepDraftsTheOwnerNamed(drafts []AIStockCommandDraft, question string, history []AIConversationMessage) []AIStockCommandDraft {
+	if len(drafts) == 0 {
+		return drafts
+	}
+	// Thai has no spaces between words, so a name written into a sentence is
+	// simply a substring of it. Spaces are stripped from both sides because the
+	// model tends to normalise them and the owner does not.
+	said := strings.ReplaceAll(question, " ", "")
+	for _, message := range history {
+		said += "\n" + strings.ReplaceAll(message.Content, " ", "")
+	}
+	kept := make([]AIStockCommandDraft, 0, len(drafts))
+	for _, draft := range drafts {
+		name := strings.ReplaceAll(strings.TrimSpace(draft.Name), " ", "")
+		if name == "" || strings.Contains(said, name) {
+			kept = append(kept, draft)
+			continue
+		}
+		// Logged rather than dropped silently: a name the owner did say but wrote
+		// differently would disappear here, and the log is the only way anyone
+		// would find out.
+		aiStage("warn", "joyboy command: dropped invented name %q — not in the owner's words", draft.Name)
+	}
+	return kept
 }
 
 // aiRecentTurnsForExtraction renders the last exchanges so a one-word reply can

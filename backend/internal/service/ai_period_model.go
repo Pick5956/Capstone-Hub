@@ -89,7 +89,7 @@ func (s *AIService) resolveDatedSalesWithModel(question string, history []AIConv
 		aiPeriodPrompt, now.Format("2006-01-02"), thaiWeekdayName(int(now.Weekday())),
 		aiRecentTurnsForExtraction(history), strings.TrimSpace(question))
 
-	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low"})
+	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low", Model: aiSupportModel()})
 	if err != nil {
 		return datedSalesRequest{}, false
 	}
