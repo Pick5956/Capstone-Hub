@@ -305,7 +305,17 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 	if note == "" {
 		note = strings.TrimSpace(draft.Name)
 	}
-	title := note
+	// The card shows the name, not the note.
+	//
+	// The note is free text — "จ่ายค่าอะไรไป เขียนสั้น ๆ เป็นคำพูด" — so it comes
+	// back as whatever the owner said, verb and amount included. Using it as the
+	// title put 'บันทึกรายจ่าย "บันทึกค่าน้ำ 500 บาท"' on screen for
+	// "บันทึกค่าน้ำ 500 บาทให้หน่อย", where the extractor had correctly separated
+	// name="ค่าน้ำ" all along. The name is the field that is meant to be a name.
+	title := strings.TrimSpace(draft.Name)
+	if title == "" {
+		title = note
+	}
 	if title == "" {
 		title = "รายจ่าย"
 	}

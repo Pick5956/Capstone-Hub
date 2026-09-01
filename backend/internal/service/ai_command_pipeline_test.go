@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/entity"
 )
@@ -195,5 +196,30 @@ func TestNewIngredientWithAUnitDoesNotAskForTheUnitAgain(t *testing.T) {
 	})
 	if missing.Kind != AICommandOutcomeOfferCreate {
 		t.Fatalf("with no unit the pipeline still has to ask, got %q", missing.Kind)
+	}
+}
+
+// The confirmation card read 'บันทึกรายจ่าย "บันทึกค่าน้ำ 500 บาท"'. The
+// extractor had already done its job — name="ค่าน้ำ" — and the card was reading
+// the note instead, which is free text and carries whatever the owner said.
+func TestExpenseCardShowsTheNameNotTheNote(t *testing.T) {
+	resolution := ResolveExpenseCommand(AIStockCommandDraft{
+		Name: "ค่าน้ำ", Kind: "expense", Quantity: 500,
+		Category: "utilities", Note: "บันทึกค่าน้ำ 500 บาท",
+	}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+
+	if resolution.Kind != AICommandOutcomeReady {
+		t.Fatalf("a complete expense should be ready, got %q — %s", resolution.Kind, resolution.Question)
+	}
+	if resolution.Title != "ค่าน้ำ" {
+		t.Errorf("the card should be titled with the name, got %q", resolution.Title)
+	}
+
+	// With no name to use, the note is still better than nothing.
+	fallback := ResolveExpenseCommand(AIStockCommandDraft{
+		Kind: "expense", Quantity: 500, Category: "utilities", Note: "ค่าน้ำประปา",
+	}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+	if fallback.Title != "ค่าน้ำประปา" {
+		t.Errorf("with no name the note should title the card, got %q", fallback.Title)
 	}
 }
