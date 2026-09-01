@@ -530,6 +530,31 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 				Question: fmt.Sprintf("“%s” หมายถึงตัวไหนครับ — %s", title, strings.Join(names, " / ")),
 			}
 		}
+		// Nothing on the shelf answers to this name, so the only thing the owner
+		// can have meant is a new ingredient.
+		//
+		// If they already said the unit, do not ask for it again. "เพิ่ม
+		// หมูสามชั้น 3000 กก เข้าคลัง" arrived here as a complete draft — name,
+		// quantity, unit — and the reply was still "ให้ผมเพิ่มเข้าคลังให้ไหม
+		// (บอกหน่วยด้วย)", which reads as though the assistant did not listen.
+		// It cost two extra turns to say back what the first sentence contained.
+		//
+		// Handing it straight to the confirmation card is not skipping the
+		// question: the card IS the question, and it shows the name, unit and
+		// opening quantity before anything is written.
+		if unit := strings.TrimSpace(draft.Unit); unit != "" {
+			return AICommandResolution{
+				Kind:  AICommandOutcomeReady,
+				Title: title,
+				Command: AIAdjustStockCommand{
+					Kind:     "create",
+					Quantity: draft.Quantity,
+					Name:     title,
+					Unit:     unit,
+					Note:     strings.TrimSpace(draft.Note),
+				},
+			}
+		}
 		return AICommandResolution{
 			Kind:     AICommandOutcomeOfferCreate,
 			Title:    title,

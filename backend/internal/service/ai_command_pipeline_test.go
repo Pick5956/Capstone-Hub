@@ -108,9 +108,20 @@ func TestResolveStockCommandOutcomes(t *testing.T) {
 
 	unknown := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ผักชี", Kind: "in", Quantity: 1, Unit: "กรัม"})
 	_ = unknown
+	// An unknown name with a unit goes straight to the confirmation card rather
+	// than to a sentence asking permission to create it. This used to expect the
+	// sentence, and the sentence asked for the unit the owner had already given
+	// — "เพิ่ม หมูสามชั้น 3000 กก" was answered with "บอกหน่วยด้วย". The card is
+	// still a question; it just asks the one that is left.
 	missing := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ปลาหมึก", Kind: "in", Quantity: 1, Unit: "กก."})
-	if missing.Kind != AICommandOutcomeOfferCreate || !strings.Contains(missing.Question, "เพิ่มเข้าคลัง") {
-		t.Errorf("an unknown ingredient should offer to create it, got %+v", missing)
+	if missing.Kind != AICommandOutcomeReady || missing.Command.Kind != "create" {
+		t.Errorf("an unknown ingredient with a unit should be ready to create, got %+v", missing)
+	}
+
+	// Without a unit there is nothing to build a create from, so it still asks.
+	missingUnit := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ปลาหมึก", Kind: "in", Quantity: 1})
+	if missingUnit.Kind != AICommandOutcomeOfferCreate || !strings.Contains(missingUnit.Question, "เพิ่มเข้าคลัง") {
+		t.Errorf("an unknown ingredient with no unit should offer to create it, got %+v", missingUnit)
 	}
 
 	badUnit := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "in", Quantity: 3, Unit: "กำ"})
@@ -155,5 +166,34 @@ func TestParseStockCommandDrafts(t *testing.T) {
 	nameless, err := ParseStockCommandDrafts("[{\"name\":\"  \",\"kind\":\"in\",\"quantity\":2}]")
 	if err != nil || len(nameless) != 0 {
 		t.Errorf("a nameless draft should be dropped, got %+v", nameless)
+	}
+}
+
+// The owner said the unit in the first sentence. Asking for it again is the
+// single most irritating thing this pipeline can do, and it did it: "เพิ่ม
+// หมูสามชั้น 3000 กก เข้าคลังวัตถุดิบให้หน่อย" produced a complete draft and the
+// reply was still "ให้ผมเพิ่มเข้าคลังให้ไหม (บอกหน่วยด้วย)".
+func TestNewIngredientWithAUnitDoesNotAskForTheUnitAgain(t *testing.T) {
+	shelf := []entity.Ingredient{{Name: "หมูสับ", Unit: "กรัม"}}
+
+	resolution := ResolveStockCommand(shelf, AIStockCommandDraft{
+		Name: "หมูสามชั้น", Kind: "in", Quantity: 3000, Unit: "กก.",
+	})
+	if resolution.Kind != AICommandOutcomeReady {
+		t.Fatalf("expected the command to be ready to confirm, got %q — %s", resolution.Kind, resolution.Question)
+	}
+	if resolution.Command.Kind != "create" {
+		t.Errorf("a name the shelf does not have has to become a create, got %q", resolution.Command.Kind)
+	}
+	if resolution.Command.Unit != "กก." || resolution.Command.Quantity != 3000 {
+		t.Errorf("the unit and quantity the owner gave were dropped: %+v", resolution.Command)
+	}
+
+	// Without a unit there is genuinely nothing to go on, so asking is right.
+	missing := ResolveStockCommand(shelf, AIStockCommandDraft{
+		Name: "หมูสามชั้น", Kind: "in", Quantity: 3000,
+	})
+	if missing.Kind != AICommandOutcomeOfferCreate {
+		t.Fatalf("with no unit the pipeline still has to ask, got %q", missing.Kind)
 	}
 }
