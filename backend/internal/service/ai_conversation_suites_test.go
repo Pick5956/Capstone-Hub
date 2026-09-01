@@ -133,3 +133,15 @@ func TestSuiteShopQuestions(t *testing.T) { runSuite(t, "ชุด 1 — เร�
 func TestSuiteGeneralChat(t *testing.T) { runSuite(t, "ชุด 2 — คุยทั่วไป", suiteGeneralChat) }
 
 func TestSuiteAwkward(t *testing.T) { runSuite(t, "ชุด 3 — เคสแปลก", suiteAwkward) }
+
+// sleepBetweenLiveQuestions paces a live run at whatever the suites are set to,
+// so a second script does not have to restate the pacing rule.
+func sleepBetweenLiveQuestions() {
+	pause := liveConversationPause
+	if raw := strings.TrimSpace(os.Getenv("AI_SUITE_PAUSE_SECONDS")); raw != "" {
+		if seconds, err := time.ParseDuration(raw + "s"); err == nil {
+			pause = seconds
+		}
+	}
+	time.Sleep(pause)
+}

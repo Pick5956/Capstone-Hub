@@ -59,3 +59,44 @@ func TestThePersonaPinsOnePronoun(t *testing.T) {
 		}
 	}
 }
+
+// The rule about claiming a change has to be one the model can follow without
+// knowing what happened this round — that is the whole point of it.
+//
+// The old phrasing was "do not say you did something, BECAUSE nothing happened
+// this round". That asks the model to know what happened, which it cannot: it
+// sees a prompt and a fact sheet, not the write path. So the rule was
+// unfollowable in principle, and Go compensated by reading the Thai and throwing
+// answers away — which is how a recipe step became "I can't help with this".
+//
+// The unconditional version costs the owner nothing, because the confirmation
+// card was always the thing that actually announced the outcome.
+func TestPersonaForbidsOutcomeClaimsWithoutJudgement(t *testing.T) {
+	// Both answer paths need the rule: the one with a fact sheet and the one
+	// without. A model with no data is the more likely to improvise a result.
+	for name, template := range map[string]string{
+		"answerTemplate":       answerTemplate,
+		"noDataAnswerTemplate": noDataAnswerTemplate,
+	} {
+		if !strings.Contains(template, "ไม่ว่ากรณีใด") {
+			t.Errorf("%s must forbid outcome claims outright, not conditionally", name)
+		}
+		// A prohibition with no explanation of who does announce the result reads
+		// as a gag order, and the model works around gag orders.
+		if !strings.Contains(template, "ระบบมีกล่องยืนยันเป็นคนประกาศผลเอง") {
+			t.Errorf("%s must say that the confirmation card announces the outcome", name)
+		}
+	}
+
+	// Reading stored state back is not a claim about having changed it, and
+	// losing that distinction would make the assistant unable to report a booking.
+	if !strings.Contains(answerTemplate, "การรายงานสถานะที่อ่านมาไม่ถือว่าผิดข้อนี้") {
+		t.Error("reporting state read from the shop must stay allowed")
+	}
+
+	// The old conditional phrasing asked the model to know what happened this
+	// round. If it comes back, the rule becomes unfollowable again.
+	if strings.Contains(answerTemplate, "เพราะรอบนี้เป็นการอ่านข้อมูลมาตอบเท่านั้น") {
+		t.Error("the conditional phrasing is back — the rule now depends on knowledge the model does not have")
+	}
+}
