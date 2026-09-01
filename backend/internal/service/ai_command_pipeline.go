@@ -44,10 +44,6 @@ type AIStockCommandDraft struct {
 // AICommandKindsAll lists what the extractor may propose.
 var AICommandKindsAll = []string{"in", "out", "adjust", "min", "cost", "create", "menu_on", "menu_off", "expense"}
 
-func aiIsStockKind(kind string) bool {
-	return kind == "in" || kind == "out" || kind == "adjust"
-}
-
 // AIMenuCommandKind reports whether a drafted command is about a menu rather
 // than the shelf, which decides which catalogue the name is resolved against.
 func AIMenuCommandKind(kind string) bool {

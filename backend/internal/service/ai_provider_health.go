@@ -94,11 +94,6 @@ func (h *providerKeyHealth) init() {
 	})
 }
 
-func (h *providerKeyHealth) now() time.Time {
-	h.init()
-	return h.nowFunc()
-}
-
 func keyHealthID(provider string, keyIndex int) string {
 	return provider + "#" + strconv.Itoa(keyIndex)
 }

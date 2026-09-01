@@ -41,8 +41,6 @@ import (
 // the prompt is what tells the model not to invent shop numbers, and the log is
 // how we find out if it ever does.
 
-const joyboyOutOfScopeAnswer = "ขอโทษครับ เรื่องนี้ผมยังช่วยไม่ได้ครับ"
-
 // The verbs that name something this system can actually do. On their own they
 // prove nothing — a recipe uses half of them.
 const joyboyChangeVerbs = `(?:ปิดขาย|เปิดขาย|ปิดสถานะ|เปิดสถานะ|บันทึก|อัปเดต|อัพเดต|แก้ไข|ปรับ|เพิ่ม|ลบ|สร้าง|ตั้งค่า|ย้าย|จอง|ยกเลิก|ดำเนินการ)`
