@@ -1173,15 +1173,16 @@ html:not(.dark) [data-shell-sheet] .hover\:border-gray-400:hover {
 
 /* ── Warm confirm dialog ──────────────────────────────────────────────────
    The one place in the app that asks before destroying something the user
-   cannot get back. Everything about it is deliberate: the cream glass reads
-   as part of the shop's warm palette rather than a browser alert, and the
-   single red button is the only red surface in the assistant, so it cannot be
-   mistaken for the button beside it.
+   cannot get back. Everything about it is deliberate: a white glass panel
+   over the warm page, with terracotta and ink for everything drawn on it, so
+   it reads as part of the shop rather than as a browser alert. The single red
+   button is the only red surface in the assistant, so it cannot be mistaken
+   for the quiet one beside it.
 
    The palette is written here rather than in the component because these are
-   exact values from a design spec, not Tailwind steps — cream #f9f4ed,
-   terracotta #c67139, ink #201e1d, and a destructive red that is darker than
-   Tailwind's red-600 so cream text on it clears contrast comfortably. */
+   exact values from a design spec, not Tailwind steps — terracotta #c67139,
+   ink #201e1d, and a destructive red that is darker than Tailwind's red-600
+   so the cream label on it clears contrast comfortably. */
 .warm-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -1204,7 +1205,7 @@ html:not(.dark) [data-shell-sheet] .hover\:border-gray-400:hover {
   gap: 14px;
   padding: 26px 22px 18px;
   border-radius: 30px;
-  background: rgba(249, 244, 237, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   backdrop-filter: blur(24px) saturate(1.6);
   box-shadow: 0 18px 44px rgba(46, 43, 37, 0.28);
