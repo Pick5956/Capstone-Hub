@@ -57,6 +57,10 @@ type Message = {
   content: string;
   createdAt: Date;
   actions?: AIGuidedAction[];
+  // ใบยืนยันเป็นของคำตอบใบใดใบหนึ่ง ไม่ใช่ของทั้งบทสนทนา · เก็บ id ไว้กับ
+  // ข้อความที่สร้างมัน กล่องจะได้อยู่ใต้คำตอบนั้นแทนที่จะไหลไปท้ายสายเสมอ
+  planId?: string;
+  previewId?: string;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & {
@@ -523,6 +527,8 @@ export default function AIOperationsFloatingChat() {
           : data.intent === "analysis"
             ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool, data.scope_assumed)
             : undefined,
+        planId: data.action_plan?.id,
+        previewId: data.action_preview?.id,
       };
       
       setMessages(prev => [...prev, assistantMsg]);
@@ -692,6 +698,55 @@ export default function AIOperationsFloatingChat() {
   const salesDays = latestSnapshot?.sales_days ?? [];
   const stockRisks = latestSnapshot?.stock_risks ?? [];
   const inventorySummary = latestSnapshot?.inventory_summary;
+
+  // A confirmation card belongs under the answer that proposed it, not at the
+  // end of the thread. See the same block on the AI assistant page — both
+  // surfaces used to render these after messages.map, so the card always sat
+  // last and slid down under whatever question came next.
+  //
+  // The fallback matters: with no owning message the card renders at the end as
+  // before, because the server still refuses every other command until it is
+  // confirmed or cancelled, and a card nobody can see is a deadlock.
+  const planCard =
+    pendingActionPlan && pendingActionPlan.items.length > 0 ? (
+      <InlineDbConfirmBar
+        key={pendingActionPlan.id}
+        summary={pendingActionPlan.summary}
+        items={pendingActionPlan.items.map((planItem) => ({
+          title: planItem.title,
+          change: planItem.change,
+          unit: planItem.unit,
+          sideEffects: planItem.side_effects,
+        }))}
+        warnings={pendingActionPlan.warnings}
+        detail={language === "th"
+          ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+          : `changes ${pendingActionPlan.items.length} record(s)`}
+        expiresAt={pendingActionPlan.expires_at}
+        onConfirm={handlePlanConfirm}
+        onCancel={handlePlanCancel}
+        language={language}
+      />
+    ) : null;
+
+  const previewCard = pendingActionPreview ? (
+    <AIActionPreviewCard
+      preview={pendingActionPreview}
+      language={language}
+      confirming={actionConfirming}
+      cancelling={actionCancelling}
+      error={actionPreviewError}
+      onConfirm={handleConfirmActionPreview}
+      onCancel={handleCancelActionPreview}
+    />
+  ) : null;
+
+  const planAnchorId = pendingActionPlan
+    ? messages.find((message) => message.planId === pendingActionPlan.id)?.id ?? null
+    : null;
+  const previewAnchorId = pendingActionPreview
+    ? messages.find((message) => message.previewId === pendingActionPreview.id)?.id ?? null
+    : null;
 
   return (
     <>
@@ -946,7 +1001,8 @@ export default function AIOperationsFloatingChat() {
 
               // Assistant/AI message
               return (
-                <div key={msg.id} className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
+                <React.Fragment key={msg.id}>
+                <div className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
@@ -966,6 +1022,9 @@ export default function AIOperationsFloatingChat() {
                     )}
                   </div>
                 </div>
+                {planAnchorId === msg.id && planCard}
+                {previewAnchorId === msg.id && previewCard}
+                </React.Fragment>
               );
             })}
 
@@ -993,37 +1052,10 @@ export default function AIOperationsFloatingChat() {
                 }}
               />
             )}
-            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
-              <InlineDbConfirmBar
-                key={pendingActionPlan.id}
-                summary={pendingActionPlan.summary}
-                items={pendingActionPlan.items.map((planItem) => ({
-                  title: planItem.title,
-                  change: planItem.change,
-                  unit: planItem.unit,
-                  sideEffects: planItem.side_effects,
-                }))}
-                warnings={pendingActionPlan.warnings}
-                detail={language === "th"
-                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
-                  : `changes ${pendingActionPlan.items.length} record(s)`}
-                expiresAt={pendingActionPlan.expires_at}
-                onConfirm={handlePlanConfirm}
-                onCancel={handlePlanCancel}
-                language={language}
-              />
-            )}
-            {pendingActionPreview && (
-              <AIActionPreviewCard
-                preview={pendingActionPreview}
-                language={language}
-                confirming={actionConfirming}
-                cancelling={actionCancelling}
-                error={actionPreviewError}
-                onConfirm={handleConfirmActionPreview}
-                onCancel={handleCancelActionPreview}
-              />
-            )}
+            {/* fallback: ไม่เจอข้อความเจ้าของใบ จึงวางท้ายสายเหมือนเดิม
+                ดีกว่าไม่แสดงเลย เพราะเซิร์ฟเวอร์ยังกันคำสั่งอื่นอยู่ */}
+            {planAnchorId === null && planCard}
+            {previewAnchorId === null && previewCard}
             <div ref={messagesEndRef} />
           </div>
 

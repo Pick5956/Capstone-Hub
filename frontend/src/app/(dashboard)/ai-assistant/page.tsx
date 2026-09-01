@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowUp, Bell, Bot, ChevronDown, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
@@ -53,6 +53,10 @@ type Message = {
   model?: string;
   forecast?: AIForecastResult;
   chart?: AIChartData;
+  // ใบยืนยันเป็นของคำตอบใบใดใบหนึ่ง ไม่ใช่ของทั้งบทสนทนา · เก็บ id ไว้กับ
+  // ข้อความที่สร้างมัน กล่องจะได้อยู่ใต้คำตอบนั้นแทนที่จะไหลไปท้ายสายเสมอ
+  planId?: string;
+  previewId?: string;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
@@ -353,6 +357,8 @@ export default function AIAssistantPage() {
           model: data.model,
           forecast: data.forecast,
           chart: data.chart,
+          planId: data.action_plan?.id,
+          previewId: data.action_preview?.id,
         },
       ]);
     } catch (err: unknown) {
@@ -572,6 +578,77 @@ export default function AIAssistantPage() {
 
   const isEmpty = messages.length <= 1;
 
+  // A confirmation card belongs under the answer that proposed it, not at the
+  // end of the thread.
+  //
+  // It used to render after messages.map, so it always sat last. Ask another
+  // question while one is open and the card slid down to sit under the new
+  // answer, which reads as though it belongs to the question just asked — and
+  // after it resolved, "ยกเลิกแล้ว" kept following the conversation down.
+  //
+  // Anchoring needs a fallback: if the owning message is gone (a thread restored
+  // from storage, a trimmed history), the card renders at the end as before.
+  // Dropping it instead would be the worse bug, because the server still refuses
+  // every other command until this card is confirmed or cancelled.
+  const planCard =
+    pendingActionPlan && pendingActionPlan.items.length > 0 ? (
+      <InlineDbConfirmBar
+        key={pendingActionPlan.id}
+        summary={pendingActionPlan.summary}
+        items={pendingActionPlan.items.map((planItem) => ({
+          title: planItem.title,
+          change: planItem.change,
+          unit: planItem.unit,
+          sideEffects: planItem.side_effects,
+        }))}
+        warnings={pendingActionPlan.warnings}
+        detail={language === "th"
+          ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+          : `changes ${pendingActionPlan.items.length} record(s)`}
+        expiresAt={pendingActionPlan.expires_at}
+        onConfirm={handlePlanConfirm}
+        onCancel={handlePlanCancel}
+        onReissue={handlePlanReissue}
+        onResolved={() => { actionResolvedRef.current = true; }}
+        language={language}
+      />
+    ) : null;
+
+  const previewCard = pendingActionPreview ? (
+    pendingActionPreview.action_type === "set_menu_availability" ? (
+      <InlineDbConfirmBar
+        key={pendingActionPreview.id}
+        itemName={pendingActionPreview.target.name}
+        fromLabel={availabilityLabel(pendingActionPreview.current.is_available)}
+        toLabel={availabilityLabel(pendingActionPreview.requested.is_available)}
+        detail={language === "th" ? "แก้ข้อมูลจริง 1 รายการ" : "changes 1 record"}
+        expiresAt={pendingActionPreview.expires_at}
+        onConfirm={handleInlineActionConfirm}
+        onCancel={handleInlineActionCancel}
+        onReissue={handleInlineActionReissue}
+        onResolved={() => { actionResolvedRef.current = true; }}
+        language={language}
+      />
+    ) : (
+      <AIActionPreviewCard
+        preview={pendingActionPreview}
+        language={language}
+        confirming={actionConfirming}
+        cancelling={actionCancelling}
+        error={actionPreviewError}
+        onConfirm={handleConfirmActionPreview}
+        onCancel={handleCancelActionPreview}
+      />
+    )
+  ) : null;
+
+  const planAnchorId = pendingActionPlan
+    ? messages.find((message) => message.planId === pendingActionPlan.id)?.id ?? null
+    : null;
+  const previewAnchorId = pendingActionPreview
+    ? messages.find((message) => message.previewId === pendingActionPreview.id)?.id ?? null
+    : null;
+
   return (
     <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
@@ -685,7 +762,8 @@ export default function AIAssistantPage() {
                 );
               }
               return (
-                <div key={msg.id} className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
+                <Fragment key={msg.id}>
+                <div className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
                   <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
@@ -724,6 +802,9 @@ export default function AIAssistantPage() {
                     )}
                   </div>
                 </div>
+                {planAnchorId === msg.id && planCard}
+                {previewAnchorId === msg.id && previewCard}
+                </Fragment>
               );
               })
             )}
@@ -760,56 +841,10 @@ export default function AIAssistantPage() {
               </div>
             )}
 
-            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
-              <InlineDbConfirmBar
-                key={pendingActionPlan.id}
-                summary={pendingActionPlan.summary}
-                items={pendingActionPlan.items.map((planItem) => ({
-                  title: planItem.title,
-                  change: planItem.change,
-                  unit: planItem.unit,
-                  sideEffects: planItem.side_effects,
-                }))}
-                warnings={pendingActionPlan.warnings}
-                detail={language === "th"
-                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
-                  : `changes ${pendingActionPlan.items.length} record(s)`}
-                expiresAt={pendingActionPlan.expires_at}
-                onConfirm={handlePlanConfirm}
-                onCancel={handlePlanCancel}
-                onReissue={handlePlanReissue}
-                onResolved={() => { actionResolvedRef.current = true; }}
-                language={language}
-              />
-            )}
-
-            {pendingActionPreview && (
-              pendingActionPreview.action_type === "set_menu_availability" ? (
-                <InlineDbConfirmBar
-                  key={pendingActionPreview.id}
-                  itemName={pendingActionPreview.target.name}
-                  fromLabel={availabilityLabel(pendingActionPreview.current.is_available)}
-                  toLabel={availabilityLabel(pendingActionPreview.requested.is_available)}
-                  detail={language === "th" ? "แก้ข้อมูลจริง 1 รายการ" : "changes 1 record"}
-                  expiresAt={pendingActionPreview.expires_at}
-                  onConfirm={handleInlineActionConfirm}
-                  onCancel={handleInlineActionCancel}
-                  onReissue={handleInlineActionReissue}
-                  onResolved={() => { actionResolvedRef.current = true; }}
-                  language={language}
-                />
-              ) : (
-                <AIActionPreviewCard
-                  preview={pendingActionPreview}
-                  language={language}
-                  confirming={actionConfirming}
-                  cancelling={actionCancelling}
-                  error={actionPreviewError}
-                  onConfirm={handleConfirmActionPreview}
-                  onCancel={handleCancelActionPreview}
-                />
-              )
-            )}
+            {/* fallback: ไม่เจอข้อความเจ้าของใบ จึงวางท้ายสายเหมือนเดิม
+                ดีกว่าไม่แสดงเลย เพราะเซิร์ฟเวอร์ยังกันคำสั่งอื่นอยู่ */}
+            {planAnchorId === null && planCard}
+            {previewAnchorId === null && previewCard}
 
             <div ref={messagesEndRef} />
           </div>
