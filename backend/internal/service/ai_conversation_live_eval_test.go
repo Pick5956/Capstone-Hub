@@ -186,6 +186,102 @@ func TestLiveConversationRemembersWhatWasDecided(t *testing.T) {
 	t.Logf("conversation_id=%s — บันทึกที่โมเดลเขียนอยู่ใน ai_conversations.state_json แถวนี้", conversationID)
 }
 
+// The second memory test, and the one that can actually fail.
+//
+// The first script asks about a decision using the words "ที่คุยเรื่องกะเพราไว้
+// ตอนแรก" — which hands the model both the topic and the instruction to look
+// back. Passing it proves the plumbing works. It does not prove the assistant
+// would survive a real conversation, and a test written by the same person who
+// tuned the prompts is exactly the test that quietly stops measuring anything.
+//
+// So this one removes the help, four ways:
+//
+//   1. The decision CHANGES. The owner says "order tomorrow" and then, five
+//      turns later, "actually move it to Monday". Remembering the first answer
+//      is now wrong. A digest that appends without revising will fail here, and
+//      that is the single most likely way this feature breaks in real use.
+//   2. The question that asks about it never names it — "ตัวที่ผมให้จดไว้" — so
+//      the model has to know what was being talked about, not match a keyword.
+//   3. One question asks about something that never happened. Confirming it is
+//      a failure. A memory that says yes to everything is worse than none.
+//   4. The preference is about HOW to answer, not what to answer, so obeying it
+//      cannot be faked by quoting it back.
+func TestLiveConversationSurvivesAChangeOfMind(t *testing.T) {
+	service, actor := liveConversationServiceOrSkip(t)
+
+	script := []string{
+		"วันนี้ขายได้เท่าไหร่แล้ว",
+		"หมูสับเหลือเท่าไหร่",
+		"งั้นสั่งเพิ่มพรุ่งนี้เลย จดไว้ให้หน่อย",
+		"เมนูไหนขายดีสุด",
+		"อีกอย่าง ผมไม่ชอบอ่านตัวเลขเยอะ ๆ ต่อไปตอบสั้น ๆ พอนะ",
+		"ตอนนี้โต๊ะเต็มมั้ย",
+		"เออ เดี๋ยวก่อน ที่จะสั่งพรุ่งนี้ เลื่อนเป็นวันจันทร์แทน เจ้าประจำหยุด",
+		"เดือนนี้จ่ายค่าอะไรไปบ้าง",
+		"เหนื่อยว่ะ วันนี้คนเยอะกว่าปกติ",
+		"ต้มยำกุ้งน้ำข้นต้นทุนเท่าไหร่",
+		"แล้วตัวที่ผมให้จดไว้ ตกลงวันไหนนะ",
+		"ผมเคยบอกอะไรไว้มั้ยเรื่องวิธีตอบของนาย",
+		"เมื่อกี้เราคุยเรื่องเงินเดือนพนักงานกันใช่มั้ย",
+		"สรุปสิ่งที่ผมสั่งไว้ทั้งหมดให้หน่อย",
+	}
+
+	conversationID := ""
+	answers := make([]string, 0, len(script))
+	for index, question := range script {
+		response := askWithPatience(t, service, actor, question, conversationID)
+		if strings.TrimSpace(response.ConversationID) != "" {
+			conversationID = response.ConversationID
+		}
+		answers = append(answers, response.Answer)
+		t.Logf("[%d] ถาม: %s\n     ตอบ: %s", index+1, question, response.Answer)
+		if index < len(script)-1 {
+			time.Sleep(liveConversationPause)
+		}
+	}
+
+	// The one that matters. Turn 3 said tomorrow, turn 7 said Monday, and turn
+	// 11 asks without naming the thing. Saying "พรุ่งนี้" here is not a smaller
+	// mistake than saying nothing — it is an assistant confidently repeating an
+	// instruction the owner cancelled.
+	revised := answers[10]
+	if !strings.Contains(revised, "จันทร์") {
+		t.Errorf("the assistant did not carry the revised date:\n%s", revised)
+	}
+	if strings.Contains(revised, "พรุ่งนี้") {
+		t.Errorf("the assistant repeated the cancelled date:\n%s", revised)
+	}
+
+	// Turn 12: the preference from turn 5, which is about form rather than
+	// content and so cannot be answered from any tool.
+	style := answers[11]
+	if !strings.Contains(style, "สั้น") && !strings.Contains(style, "ตัวเลข") {
+		t.Errorf("the assistant lost the instruction about how to answer:\n%s", style)
+	}
+
+	// Turn 13 is bait. Nothing in this conversation touched wages. Agreeing is
+	// the failure mode that makes a remembering assistant untrustworthy, because
+	// the owner has no way to tell an invented memory from a real one.
+	bait := answers[12]
+	agreed := strings.Contains(bait, "ใช่ครับ") || strings.Contains(bait, "ใช่ค่ะ") ||
+		strings.Contains(bait, "ถูกต้องครับ") || strings.Contains(bait, "เราคุยกันเรื่องเงินเดือน")
+	if agreed {
+		t.Errorf("the assistant agreed to a conversation that never happened:\n%s", bait)
+	}
+
+	// Turn 14 should read as a list of what the owner decided, with the revised
+	// date, and without wages.
+	summary := answers[13]
+	if !strings.Contains(summary, "จันทร์") {
+		t.Errorf("the closing summary lost the revised date:\n%s", summary)
+	}
+	if strings.Contains(summary, "เงินเดือน") {
+		t.Errorf("the closing summary invented a topic from the bait question:\n%s", summary)
+	}
+
+	t.Logf("conversation_id=%s — บันทึกที่โมเดลเขียนอยู่ใน ai_conversations.state_json แถวนี้", conversationID)
+}
+
 // A one-question smoke test, so a harness fault costs one call instead of
 // fifteen. It exists because the first version of this file answered
 // "ผมไม่ทราบว่ากะเพราเหลือเท่าไหร่" — not a model failure but a wiring one — and
