@@ -61,12 +61,23 @@ export function resolveBackendMediaUrl(value: string, apiBaseUrl: string) {
   return trimmed;
 }
 
+// Only a JSON body carries media fields. A Blob or ArrayBuffer — a CSV export
+// coming back from the API — is an object too, and the rebuild below would turn
+// it into an empty {} and hand the user a 0-byte file.
+function isPlainJSONObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export function normalizeApiMediaUrls<T>(payload: T, apiBaseUrl: string): T {
   if (Array.isArray(payload)) {
     return payload.map((value) => normalizeApiMediaUrls(value, apiBaseUrl)) as T;
   }
 
-  if (!payload || typeof payload !== "object") {
+  if (!isPlainJSONObject(payload)) {
     return payload;
   }
 

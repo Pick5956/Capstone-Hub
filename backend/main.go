@@ -70,7 +70,10 @@ func CORSMiddleware() gin.HandlerFunc {
 
 		c.Writer.Header().Set(
 			"Access-Control-Expose-Headers",
-			"Content-Length, Content-Type, Idempotency-Replayed",
+			// Content-Disposition carries the CSV export filename, and the export
+			// headers say when a download was capped — a fetch() cannot read any
+			// of them unless they are exposed here.
+			"Content-Length, Content-Type, Idempotency-Replayed, Content-Disposition, X-Export-Total, X-Export-Rows",
 		)
 
 		if c.Request.Method == "OPTIONS" {

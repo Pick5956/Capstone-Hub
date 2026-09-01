@@ -2,6 +2,7 @@ package repository
 
 import (
 	"strings"
+	"time"
 
 	"Project-M/internal/entity"
 
@@ -13,12 +14,13 @@ import (
 // A zero Limit means "return everything" — the historical behaviour — so small
 // inventories stay one fast request and only large ones opt into paging.
 type IngredientListQuery struct {
-	Search string // case-insensitive match on name
-	Status string // "", "ok", "low", "out" (computed from stock vs min_stock)
-	Sort   string // "", "name", "stock", "priority" (out→low→ok)
-	Desc   bool
-	Limit  int // 0 = no limit
-	Offset int
+	Search     string // case-insensitive match on name
+	Status     string // "", "ok", "low", "out" (computed from stock vs min_stock)
+	CategoryID uint   // 0 = every category
+	Sort       string // "", "name", "stock", "priority" (out→low→ok)
+	Desc       bool
+	Limit      int // 0 = no limit
+	Offset     int
 }
 
 type IngredientRepository struct {
@@ -72,6 +74,9 @@ func ingredientListBaseQuery(db *gorm.DB, restaurantID uint, q IngredientListQue
 	base := db.Model(&entity.Ingredient{}).Where("restaurant_id = ?", restaurantID)
 	if search := strings.TrimSpace(q.Search); search != "" {
 		base = base.Where("name ILIKE ?", "%"+search+"%")
+	}
+	if q.CategoryID != 0 {
+		base = base.Where("category_id = ?", q.CategoryID)
 	}
 	switch q.Status {
 	case "out":
@@ -188,16 +193,6 @@ func (r *IngredientRepository) CreateExpense(expense *entity.Expense) error {
 	return r.db.Create(expense).Error
 }
 
-func (r *IngredientRepository) ListTransactions(restaurantID, ingredientID uint) ([]entity.IngredientTransaction, error) {
-	var txs []entity.IngredientTransaction
-	query := r.db.Where("restaurant_id = ?", restaurantID)
-	if ingredientID != 0 {
-		query = query.Where("ingredient_id = ?", ingredientID)
-	}
-	err := query.Order("created_at desc").Limit(100).Find(&txs).Error
-	return txs, err
-}
-
 func (r *IngredientRepository) ListCategories(restaurantID uint, includeInactive bool) ([]entity.IngredientCategory, error) {
 	var categories []entity.IngredientCategory
 	query := r.db.Where("restaurant_id = ?", restaurantID)
@@ -250,4 +245,94 @@ func (r *IngredientRepository) DeleteCategory(restaurantID, categoryID uint) err
 	return r.db.Unscoped().
 		Where("restaurant_id = ? AND id = ?", restaurantID, categoryID).
 		Delete(&entity.IngredientCategory{}).Error
+}
+
+// IngredientTransactionQuery describes a filtered, paged read of the stock
+// movement log. A zero IngredientID means "every ingredient in this restaurant"
+// (the whole-inventory history), and a zero Limit means "no limit" — which the
+// CSV export relies on to hand back a full period rather than one screen.
+type IngredientTransactionQuery struct {
+	IngredientID uint
+	CategoryID   uint
+	Type         string    // "", "in", "out", "adjust"
+	Search       string    // case-insensitive match on the ingredient name
+	From         time.Time // zero = open start; inclusive
+	To           time.Time // zero = open end; exclusive
+	Limit        int       // 0 = no limit
+	Offset       int
+}
+
+// IngredientTransactionRow is one movement joined to the names a human needs to
+// read it. The log stores only ingredient_id and created_by_id, so a per-item
+// view can get away without this — the whole-inventory view and the CSV cannot,
+// they would be a wall of numbers.
+type IngredientTransactionRow struct {
+	entity.IngredientTransaction
+	IngredientName string `json:"ingredient_name"`
+	IngredientUnit string `json:"ingredient_unit"`
+	CategoryName   string `json:"category_name"`
+	CreatedByName  string `json:"created_by_name"`
+}
+
+// ingredientTransactionBaseQuery holds the conditions shared by the count and the
+// page query, so the total always describes the exact rows being paged through.
+// Reads go through Table/Scan rather than the model, so the soft-delete condition
+// is spelled out here — GORM only adds it automatically for model queries.
+func ingredientTransactionBaseQuery(db *gorm.DB, restaurantID uint, q IngredientTransactionQuery) *gorm.DB {
+	base := db.Table("ingredient_transactions").
+		Joins("LEFT JOIN ingredients ON ingredients.id = ingredient_transactions.ingredient_id").
+		Joins("LEFT JOIN ingredient_categories ON ingredient_categories.id = ingredients.category_id").
+		Joins("LEFT JOIN users ON users.id = ingredient_transactions.created_by_id").
+		Where("ingredient_transactions.restaurant_id = ? AND ingredient_transactions.deleted_at IS NULL", restaurantID)
+	if q.IngredientID != 0 {
+		base = base.Where("ingredient_transactions.ingredient_id = ?", q.IngredientID)
+	}
+	if q.CategoryID != 0 {
+		base = base.Where("ingredients.category_id = ?", q.CategoryID)
+	}
+	switch q.Type {
+	case "in", "out", "adjust":
+		base = base.Where("ingredient_transactions.type = ?", q.Type)
+	}
+	if search := strings.TrimSpace(q.Search); search != "" {
+		base = base.Where("ingredients.name ILIKE ?", "%"+search+"%")
+	}
+	if !q.From.IsZero() {
+		base = base.Where("ingredient_transactions.created_at >= ?", q.From)
+	}
+	if !q.To.IsZero() {
+		base = base.Where("ingredient_transactions.created_at < ?", q.To)
+	}
+	return base
+}
+
+// ListTransactionsFiltered returns a page of movements plus the total matching
+// count. Ordering is newest first with the id as a tie-breaker, so two movements
+// written in the same instant cannot swap places between pages.
+func (r *IngredientRepository) ListTransactionsFiltered(
+	restaurantID uint,
+	q IngredientTransactionQuery,
+) ([]IngredientTransactionRow, int64, error) {
+	var total int64
+	if err := ingredientTransactionBaseQuery(r.db, restaurantID, q).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	query := ingredientTransactionBaseQuery(r.db, restaurantID, q).
+		Select(`ingredient_transactions.*,
+			COALESCE(ingredients.name, '') AS ingredient_name,
+			COALESCE(ingredients.unit, '') AS ingredient_unit,
+			COALESCE(ingredient_categories.name, '') AS category_name,
+			TRIM(COALESCE(users.first_name, '') || ' ' || COALESCE(users.last_name, '')) AS created_by_name`).
+		Order("ingredient_transactions.created_at desc").
+		Order("ingredient_transactions.id desc")
+	if q.Limit > 0 {
+		query = query.Limit(q.Limit).Offset(q.Offset)
+	}
+
+	rows := make([]IngredientTransactionRow, 0)
+	if err := query.Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }

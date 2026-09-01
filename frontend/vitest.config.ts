@@ -35,6 +35,7 @@ export default defineConfig({
       "src/app/(dashboard)/orders/ordersPageUtils.test.ts",
       "src/app/(dashboard)/tables/tablesPageUtils.test.ts",
       "src/app/(dashboard)/inventory/inventoryPageUtils.test.ts",
+      "src/app/(dashboard)/inventory/inventoryHistoryUtils.test.ts",
       "src/app/(dashboard)/expenses/expensesPage.test.ts",
       "src/app/(dashboard)/staff/staffPermissionPolicy.test.ts",
       "src/components/shared/RealtimeConnectionNotice.test.tsx",

@@ -303,8 +303,14 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 	return updated, nil
 }
 
-func (s *IngredientService) ListTransactions(restaurantID, ingredientID uint) ([]entity.IngredientTransaction, error) {
-	return s.repo.ListTransactions(restaurantID, ingredientID)
+// ListTransactions reads the stock movement log. The query carries the filters
+// the history view and the CSV export share, and the returned rows are joined to
+// the ingredient/category/user names so a whole-inventory read is readable.
+func (s *IngredientService) ListTransactions(
+	restaurantID uint,
+	q repository.IngredientTransactionQuery,
+) ([]repository.IngredientTransactionRow, int64, error) {
+	return s.repo.ListTransactionsFiltered(restaurantID, q)
 }
 
 func (s *IngredientService) normalizeIngredientFields(

@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Boxes,
   Check,
+  Download,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -29,6 +30,7 @@ import {
   createIngredientCategory,
   deleteIngredient,
   deleteIngredientCategory,
+  exportStockCSV,
   listIngredientCategories,
   listIngredients,
   listTransactions,
@@ -41,6 +43,7 @@ import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import InventoryHistoryTab from "./InventoryHistoryTab";
 import {
   emptyForm,
   buildAdjustStockPayload,
@@ -364,6 +367,8 @@ export default function InventoryPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"stock" | "history">("stock");
+  const [stockExporting, setStockExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StockStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<number>(0);
@@ -848,6 +853,32 @@ export default function InventoryPage() {
     }
   }
 
+  // The stock sheet is exported by the server so it reflects the same filters the
+  // list is showing, rather than only the page currently in memory.
+  async function handleExportStock() {
+    setStockExporting(true);
+    try {
+      const result = await exportStockCSV(
+        {
+          search,
+          status: statusFilter,
+          category_id: categoryFilter || undefined,
+          sort: sortKey === "stock" ? "stock" : sortKey === "name" ? "name" : undefined,
+          order: sortDir,
+        },
+        lang,
+      );
+      showToast({
+        title: lang === "th" ? "ดาวน์โหลดแล้ว" : "Downloaded",
+        message: lang === "th" ? `${result.rows} รายการ` : `${result.rows} rows`,
+      });
+    } catch {
+      showToast({ title: lang === "th" ? "ส่งออกไม่สำเร็จ" : "Export failed", tone: "error" });
+    } finally {
+      setStockExporting(false);
+    }
+  }
+
   function closeModal() {
     if (modalClosing) return;
     setModalClosing(true);
@@ -922,6 +953,31 @@ export default function InventoryPage() {
   return (
     <div className="min-h-dvh bg-slate-100 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-5">
+        <div className="flex w-fit items-center gap-1 rounded-md border border-slate-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900">
+          {(["stock", "history"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`inline-flex h-8 items-center rounded px-3 text-[12px] font-semibold transition ${
+                tab === key
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                  : "text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-gray-800"
+              }`}
+            >
+              {key === "stock"
+                ? lang === "th"
+                  ? "สต๊อกปัจจุบัน"
+                  : "Stock"
+                : lang === "th"
+                  ? "ประวัติทั้งคลัง"
+                  : "History"}
+            </button>
+          ))}
+        </div>
+
+        {tab === "stock" && (
+        <>
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1033,6 +1089,21 @@ export default function InventoryPage() {
             </span>
           </div>
           <div className="flex-1" />
+          <button
+            type="button"
+            disabled={stockExporting}
+            onClick={() => void handleExportStock()}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+          >
+            <Download className="h-4 w-4" />
+            {stockExporting
+              ? lang === "th"
+                ? "กำลังสร้างไฟล์…"
+                : "Preparing…"
+              : lang === "th"
+                ? "ส่งออก CSV"
+                : "Export CSV"}
+          </button>
           {canManage && (
             <button
               type="button"
@@ -1292,6 +1363,10 @@ export default function InventoryPage() {
               )}
             </section>
           </div>
+        </>
+        )}
+
+        {tab === "history" && <InventoryHistoryTab categories={categories} lang={lang} />}
         </div>
 
       {modalOpen && (
@@ -1914,8 +1989,15 @@ export default function InventoryPage() {
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                 {tx.type === "in" ? copy.adjustIn : tx.type === "out" ? copy.adjustOut : copy.adjustSet}
+                                {tx.amount > 0 && (
+                                  <span className="ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    {formatCurrency(tx.amount, lang, 2)}
+                                  </span>
+                                )}
                               </p>
-                              {tx.note && <p className="truncate text-xs text-slate-400">{tx.note}</p>}
+                              <p className="truncate text-xs text-slate-400">
+                                {[tx.created_by_name, tx.note].filter(Boolean).join(" · ")}
+                              </p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p
