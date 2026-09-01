@@ -30,7 +30,11 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // geolocation=(self): the geofence setup (settings) and customer geofence check
+  // call navigator.geolocation, which the browser blocks outright (no prompt) when
+  // this policy is empty. Allow it for our own origin only; camera/microphone stay
+  // fully disabled since nothing uses them.
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
