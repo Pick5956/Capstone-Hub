@@ -106,23 +106,30 @@ func answeredTools(results []ToolResult) []string {
 // questions here — to be worth the extra call when it does.
 func (a *Assistant) write(ctx context.Context, question string, history []Turn, digest, sheet string) (string, error) {
 	text, unmatched, err := a.writeOnce(ctx, answerPrompt(question, history, digest, sheet), sheet)
-	if err != nil || len(unmatched) == 0 {
+	if err != nil {
 		return text, err
 	}
+	// Reported, not rewritten.
+	//
+	// A second call used to fire here telling the model those figures did not
+	// exist and to write the answer again. Ninety live questions produced two
+	// firings and both were wrong: "2569", the Buddhist year inside "เดือน
+	// กันยายน 2569", and "2050", a year the owner had typed himself. Nothing
+	// invented was ever caught, and each miss cost a whole extra call.
+	//
+	// It also has to go for the answer to be able to do arithmetic at all. The
+	// owner asked "ถ้าลดราคาชาไทยลง 5 บาท กำไรจะเหลือเท่าไหร่" — the result of
+	// that subtraction is by definition not in the fact sheet, so the rewrite
+	// would have deleted the answer to the question every single time.
+	//
+	// Working from figures the sheet supplies is not inventing them, and the
+	// prompt now asks for the starting figures to be named so the owner can
+	// follow the arithmetic. What stays here is the log, which is how we find
+	// out whether that trust was misplaced.
 	for _, figure := range unmatched {
-		a.log("joyboy: answer figure %q is not in the fact sheet → asking again", figure)
+		a.log("joyboy: answer figure %q is not in the fact sheet — derived, or invented", figure)
 	}
-
-	retry, stillUnmatched, retryErr := a.writeOnce(ctx,
-		answerPrompt(question, history, digest, sheet)+fmt.Sprintf(rewriteWithoutInventedFigures, strings.Join(unmatched, ", ")),
-		sheet)
-	if retryErr != nil || len(stillUnmatched) > 0 {
-		// The rewrite is no better than what we have, so keep the first answer
-		// rather than trading one unbacked figure for another.
-		a.log("joyboy: the rewrite did not come back clean, keeping the first answer")
-		return text, nil
-	}
-	return retry, nil
+	return text, nil
 }
 
 // writeOnce gives the model exactly one second chance. That retry is for a reply

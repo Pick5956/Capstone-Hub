@@ -221,7 +221,12 @@ const answerTemplate = joyboyPersona + `
 - ชื่อในวงเล็บเหลี่ยม เช่น [get_sales_trend] เป็นชื่อเครื่องมือภายในระบบ ห้ามเอ่ยถึง
 
 ข้อห้าม:
-- ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง ห้ามคิดเลขใหม่ ห้ามคำนวณเพิ่มเอง
+- ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง **ห้ามแต่งตัวเลขที่ไม่มีอยู่**
+- **แต่คิดเลขต่อจากตัวเลขในข้อมูลได้** ถ้าเจ้าของถามแบบ "ถ้า...แล้วจะเป็นเท่าไหร่"
+  เช่นถามว่าลดราคาลง 5 บาทแล้วกำไรเหลือเท่าไหร่ ให้เอากำไรต่อหน่วยในข้อมูลมาลบ 5 แล้วตอบไปเลย
+  **ต้องบอกด้วยว่าเอาตัวเลขไหนมาคิด** เพื่อให้เจ้าของร้านตรวจตามได้
+  เช่น "ตอนนี้กำไรต่อแก้ว 31 บาท ถ้าลด 5 บาท จะเหลือ 26 บาทครับ"
+  ห้ามตอบแค่ผลลัพธ์ลอย ๆ โดยไม่บอกที่มา และห้ามคิดจากตัวเลขที่ไม่มีในข้อมูล
 - ห้ามตั้งเกณฑ์ตัดสินขึ้นเองแล้วสรุปจากเกณฑ์นั้น เช่นนิยามเองว่า "ขายดี" คือกี่จาน
   ให้ยึดลำดับและค่าที่ข้อมูลให้มา
 - ห้ามเพิ่มข้อเท็จจริงจากความรู้ของคุณเอง เช่นค่าเฉลี่ยของร้านอื่นหรือราคาตลาด
@@ -295,17 +300,6 @@ const noDataAnswerTemplate = joyboyPersona + `
 คำถามของเจ้าของร้าน:
 %s`
 
-// rewriteWithoutInventedFigures is appended to the same prompt when the first
-// answer stated a figure the fact sheet does not contain. It names the figures
-// rather than repeating the rule in general terms, because the rule was already
-// in the prompt and was already followed everywhere except on those numbers —
-// so what the model needs is which ones, not the rule again.
-const rewriteWithoutInventedFigures = `
-
-**เขียนคำตอบใหม่ ตัวเลขเหล่านี้ไม่มีอยู่ในข้อมูลข้างบน: %s**
-ตัวเลขนี้น่าจะเกิดจากคุณบวกลบเอง ซึ่งห้ามทำ เพราะเลขที่คิดเองอาจผิดโดยที่ไม่มีใครรู้
-ให้ตอบด้วยเลขที่อยู่ในข้อมูลเท่านั้น ถ้าคำถามอยากได้ผลต่างหรือผลรวมที่ไม่มีให้
-ให้บอกตรง ๆ ว่ายังไม่มีตัวเลขนั้น พร้อมยกเลขที่มีให้ดูแทน`
 
 // formatDigest prints the memory the caller wrote about the older part of this
 // conversation. joyboy does not interpret it — it only makes sure the model reads
