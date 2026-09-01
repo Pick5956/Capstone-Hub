@@ -963,7 +963,7 @@ export default function PosOrderDetailPage() {
                     ) : null}
                     {orderedQuantity > 0 && (
                       <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
-                        {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
+                        x{orderedQuantity}
                       </span>
                     )}
                     <div
@@ -974,7 +974,6 @@ export default function PosOrderDetailPage() {
                     <div className="flex min-w-0 flex-1 flex-col p-3">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                      <p className="mt-2 truncate text-[11px] text-gray-500">{item.category?.name ?? ""}</p>
                     </div>
                   </button>
                 );
