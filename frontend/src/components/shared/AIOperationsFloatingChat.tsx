@@ -50,6 +50,7 @@ import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
+import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 
 type Message = {
   id: string;
@@ -171,7 +172,8 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
-        clearChatConfirm: "เริ่มแชทใหม่จะลบบทสนทนานี้ทิ้งทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        clearChatTitle: "เริ่มแชทใหม่ไหม?",
+        clearChatConfirm: "บทสนทนานี้จะถูกลบทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
         clearChatYes: "ลบแล้วเริ่มใหม่",
         clearChatNo: "ไม่ลบ",
         scrollToLatest: "ไปที่ข้อความล่าสุด",
@@ -184,7 +186,8 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
         clearChat: "New chat",
-        clearChatConfirm: "Starting a new chat deletes this conversation, and the assistant will not remember any of it.",
+        clearChatTitle: "Start a new chat?",
+        clearChatConfirm: "This conversation will be deleted, and the assistant will not remember any of it.",
         clearChatYes: "Delete and start over",
         clearChatNo: "Keep it",
         scrollToLatest: "Jump to the latest message",
@@ -1066,19 +1069,22 @@ export default function AIOperationsFloatingChat() {
 
           {/* Asked before the thread is deleted, not after. The server copy goes
               too and there is no undo, so a stray tap on a small screen used to
-              cost the whole conversation. */}
-          {confirmingClear && (
-            <div className="px-3 pb-2 sm:px-4">
-              <AIInlineConfirm
-                message={labels.clearChatConfirm}
-                confirmLabel={labels.clearChatYes}
-                cancelLabel={labels.clearChatNo}
-                onConfirm={() => void handleClearChat()}
-                onCancel={() => setConfirmingClear(false)}
-                disabled={loading || actionConfirming || actionCancelling}
-              />
-            </div>
-          )}
+              cost the whole conversation.
+
+              A modal rather than an inline card: the inline version lived at the
+              bottom of the message column, so on a phone the question could be
+              scrolled away from while the thread it was about to delete stayed on
+              screen. This one cannot be scrolled past or missed. */}
+          <WarmConfirmDialog
+            open={confirmingClear}
+            title={labels.clearChatTitle}
+            description={labels.clearChatConfirm}
+            confirmLabel={labels.clearChatYes}
+            cancelLabel={labels.clearChatNo}
+            onConfirm={() => void handleClearChat()}
+            onCancel={() => setConfirmingClear(false)}
+            busy={loading || actionConfirming || actionCancelling}
+          />
 
           {/* A way back to the newest message once the reader has scrolled up.
               It sits just above the input and only appears when there is

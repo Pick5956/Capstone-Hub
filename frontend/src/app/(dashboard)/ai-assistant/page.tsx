@@ -33,6 +33,7 @@ import type { AIActionPreview, AIActionPlan, AIConversationMessage, AIForecastRe
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
+import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
@@ -64,7 +65,8 @@ function buildCopy(language: "th" | "en") {
         ask: "ถาม AI",
         thinking: "กำลังวิเคราะห์",
         newChat: "เริ่มแชทใหม่",
-        newChatConfirm: "เริ่มแชทใหม่จะลบบทสนทนานี้ทิ้งทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        newChatTitle: "เริ่มแชทใหม่ไหม?",
+        newChatConfirm: "บทสนทนานี้จะถูกลบทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
         newChatYes: "ลบแล้วเริ่มใหม่",
         newChatNo: "ไม่ลบ",
         scrollToLatest: "ไปที่ข้อความล่าสุด",
@@ -84,7 +86,8 @@ function buildCopy(language: "th" | "en") {
         ask: "Ask AI",
         thinking: "Analyzing",
         newChat: "New chat",
-        newChatConfirm: "Starting a new chat deletes this conversation, and the assistant will not remember any of it.",
+        newChatTitle: "Start a new chat?",
+        newChatConfirm: "This conversation will be deleted, and the assistant will not remember any of it.",
         newChatYes: "Delete and start over",
         newChatNo: "Keep it",
         scrollToLatest: "Jump to the latest message",
@@ -848,22 +851,21 @@ export default function AIAssistantPage() {
           )}
 
           {/* Asked before the thread is deleted, not after: the server copy goes
-              with it and there is no undo. */}
-          {confirmingClear && (
-            <div className="mx-auto w-full max-w-2xl px-3 pb-1">
-              <AIInlineConfirm
-                message={copy.newChatConfirm}
-                confirmLabel={copy.newChatYes}
-                cancelLabel={copy.newChatNo}
-                onConfirm={() => {
-                  setConfirmingClear(false);
-                  void handleClearChat();
-                }}
-                onCancel={() => setConfirmingClear(false)}
-                disabled={loading || actionConfirming || actionCancelling}
-              />
-            </div>
-          )}
+              with it and there is no undo. Same modal as the floating chat, so
+              the question looks and behaves identically on both surfaces. */}
+          <WarmConfirmDialog
+            open={confirmingClear}
+            title={copy.newChatTitle}
+            description={copy.newChatConfirm}
+            confirmLabel={copy.newChatYes}
+            cancelLabel={copy.newChatNo}
+            onConfirm={() => {
+              setConfirmingClear(false);
+              void handleClearChat();
+            }}
+            onCancel={() => setConfirmingClear(false)}
+            busy={loading || actionConfirming || actionCancelling}
+          />
 
           {/* A way back to the newest message once the reader has scrolled up. */}
           {!atLatest && messages.length > 1 && (
