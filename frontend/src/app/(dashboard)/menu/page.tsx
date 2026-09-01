@@ -71,6 +71,12 @@ export default function MenuPage() {
   const saveItemOnceRef = useRef(createSingleFlight());
   const deleteCategoryOnceRef = useRef(createSingleFlight());
   const deleteItemOnceRef = useRef(createSingleFlight());
+  // The toolbar is a fixed bar under the mobile top bar; this reserves the exact
+  // space it takes so the grid doesn't slide underneath it. On lg the bar is a
+  // sticky element in normal flow (see [data-shell-sticky] in globals.css), so the
+  // spacer is hidden there and no measurement is needed.
+  const stickyToolbarRef = useRef<HTMLDivElement>(null);
+  const [stickyToolbarHeight, setStickyToolbarHeight] = useState(0);
 
   const copy = language === "th"
     ? {
@@ -383,6 +389,18 @@ export default function MenuPage() {
     return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, language]);
+
+  // Track the fixed toolbar's height so the mobile spacer matches it exactly,
+  // even as the toolbar wraps to a different number of rows across breakpoints.
+  useEffect(() => {
+    const node = stickyToolbarRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setStickyToolbarHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canView, canManage]);
 
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -808,16 +826,15 @@ export default function MenuPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <h1 className="sr-only">{copy.title}</h1>
-
-      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
-
-      <div>
-        <section className="space-y-4">
-          <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <div className="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <>
+      <div
+        data-shell-sticky=""
+        ref={stickyToolbarRef}
+        className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto"
+      >
+        <h1 className="sr-only">{copy.title}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
                   <label className="relative block w-full sm:w-[336px]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
@@ -847,9 +864,15 @@ export default function MenuPage() {
                     </button>
                   </div>
                 ) : null}
-              </div>
-            </div>
-
+          </div>
+        </div>
+      </div>
+      <div aria-hidden="true" className="lg:hidden" style={{ height: stickyToolbarHeight }} />
+      <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+        {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+        <div>
+          <section className="space-y-4">
+            <div className="rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
             <div className="p-4">
               {loading ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -1127,19 +1150,15 @@ export default function MenuPage() {
                     )}
                   </div>
                 </div>
-                <label className="block">
-                  <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
-                  <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
-                  {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-start">
+                  <label className="block">
+                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
+                    <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
+                    {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
+                  </label>
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
                     <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemOrder}</span>
-                    <input value={itemForm.display_order || ""} onChange={(event) => setItemForm({ ...itemForm, display_order: Number(event.target.value) })} placeholder={copy.categoryOrderPlaceholder} type="number" className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
                   </label>
                 </div>
                 <div className="rounded-md border border-gray-200 dark:border-gray-800">
@@ -1369,5 +1388,6 @@ export default function MenuPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
