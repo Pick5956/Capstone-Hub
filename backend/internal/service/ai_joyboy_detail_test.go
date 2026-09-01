@@ -187,3 +187,47 @@ func TestTheNameInTheQuestionBeatsTheOneInTheThread(t *testing.T) {
 		t.Fatalf("the question's own name must win: %s", body)
 	}
 }
+
+// "ผัดไทย" came back as "ผัดไทยไม่ได้อยู่ในเมนูของร้านครับ" while the shop was
+// selling ผัดไทยกุ้งสด three hundred times a month — the assistant telling the
+// owner a fact about their own shop that was flatly untrue, three times across
+// two test runs.
+//
+// Nobody says a whole stored name. The row lookup needed the entire name inside
+// the question, so every shortened form found nothing, and a fact sheet with
+// nothing in it left the model to conclude the dish did not exist.
+func TestPartlyNamedRowsFindsTheDishTheOwnerMeant(t *testing.T) {
+	menus := []string{"ผัดไทยกุ้งสด", "ต้มยำกุ้งน้ำข้น", "ข้าวกะเพราไก่ไข่ดาว", "ข้าวผัดปู", "ชาไทยเย็น"}
+
+	for _, testCase := range []struct{ question, want string }{
+		{"ผัดไทย", "ผัดไทยกุ้งสด"},
+		{"ผัดไทยทำยังไง", "ผัดไทยกุ้งสด"},
+		// The distinguishing part, not the head of the name.
+		{"กะเพราเหลือเท่าไหร่", "ข้าวกะเพราไก่ไข่ดาว"},
+		{"ต้มยำกุ้งต้นทุนเท่าไหร่", "ต้มยำกุ้งน้ำข้น"},
+		{"ชาไทย", "ชาไทยเย็น"},
+	} {
+		found := aiPartlyNamedRows(menus, testCase.question)
+		if len(found) == 0 {
+			t.Errorf("%q matched nothing at all", testCase.question)
+			continue
+		}
+		// First place, not merely present: the sheet is read top down, and the
+		// closest match is the one the owner is most likely to have meant.
+		if menus[found[0]] != testCase.want {
+			t.Errorf("%q ranked %q first, expected %q (all: %v)",
+				testCase.question, menus[found[0]], testCase.want, found)
+		}
+	}
+
+	// A dish the shop does not sell must still match nothing, or "we don't have
+	// that" becomes impossible to say when it is the true answer.
+	if found := aiPartlyNamedRows(menus, "ซูชิหน้าปลาไหล"); len(found) != 0 {
+		t.Errorf("a dish the shop does not sell should match nothing, got %v", found)
+	}
+
+	// Exact naming keeps going through the strict path untouched.
+	if found := aiFindNamedRows(menus, "ผัดไทยกุ้งสดขายดีมั้ย"); len(found) != 1 || menus[found[0]] != "ผัดไทยกุ้งสด" {
+		t.Errorf("the exact lookup must be unaffected, got %v", found)
+	}
+}
