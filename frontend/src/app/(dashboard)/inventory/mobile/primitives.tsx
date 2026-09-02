@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, Minus, Plus, X } from "lucide-react";
 
@@ -59,12 +59,26 @@ export function BottomSheet({
   useScrollLock(open);
 
   const dismiss = useCallback(() => {
+    // With reduced motion there is no exit animation, so animationend never
+    // fires — close at once instead of waiting for an event that never comes.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onClose();
+      return;
+    }
     setClosing(true);
-    window.setTimeout(() => {
+  }, [onClose]);
+
+  // Unmount exactly when the exit keyframe finishes, whatever its duration is.
+  // A fixed timer used to fire 40ms before the scrim finished fading, so every
+  // dismiss ended with a visible snap.
+  const finishClose = useCallback(
+    (event: React.AnimationEvent<HTMLDivElement>) => {
+      if (!closing || event.target !== event.currentTarget) return;
       setClosing(false);
       onClose();
-    }, 200);
-  }, [onClose]);
+    },
+    [closing, onClose],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -85,12 +99,13 @@ export function BottomSheet({
         type="button"
         aria-label="close"
         onClick={dismiss}
-        className={`absolute inset-0 cursor-default bg-(--inv-scrim) backdrop-blur-sm ${closing ? "smooth-overlay-exit" : "smooth-overlay"}`}
+        className={`absolute inset-0 cursor-default bg-(--inv-scrim) ${closing ? "inv-scrim-exit" : "inv-scrim-enter"}`}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        onAnimationEnd={finishClose}
         className={`relative max-h-[88vh] overflow-hidden rounded-t-(--inv-radius-lg) bg-(--inv-surface) ${
           closing ? "inv-sheet-exit" : "inv-sheet-enter"
         }`}
