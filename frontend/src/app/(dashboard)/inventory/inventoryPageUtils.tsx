@@ -33,10 +33,6 @@ export function getTargetStock(item: Ingredient) {
   return item.min_stock > 0 ? item.min_stock * 2 : Math.max(item.stock, 1);
 }
 
-export function getRestockAmount(item: Ingredient) {
-  return Math.max(0, getTargetStock(item) - item.stock);
-}
-
 export function getInventoryValue(item: Ingredient) {
   return item.stock * item.cost_per_unit;
 }
@@ -70,37 +66,6 @@ export function formatDateTime(value: string | undefined, language: "th" | "en")
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-export function SectionCard({
-  label,
-  value,
-  helper,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-  tone?: "default" | "warm" | "danger" | "success";
-}) {
-  const toneClass =
-    tone === "warm"
-      ? "border-orange-200/80 bg-orange-50/80 dark:border-orange-900/40 dark:bg-orange-950/20"
-      : tone === "danger"
-        ? "border-red-200/80 bg-red-50/80 dark:border-red-900/40 dark:bg-red-950/20"
-        : tone === "success"
-          ? "border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-          : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950";
-
-  return (
-    <div className={`rounded-md border px-2.5 py-1.5 ${toneClass}`}>
-      <span className="text-[11px] leading-none text-gray-500">{label}</span>
-      <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight text-gray-900 tabular-nums dark:text-white">
-        {value}
-      </p>
-      {helper ? <p className="mt-0.5 text-[10px] leading-tight text-gray-500 dark:text-gray-400">{helper}</p> : null}
-    </div>
-  );
 }
 
 export const inputCls =

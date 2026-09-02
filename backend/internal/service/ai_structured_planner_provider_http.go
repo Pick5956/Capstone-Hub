@@ -484,13 +484,6 @@ func normalizedStructuredPlannerKeys(keys []string) []string {
 	return normalized
 }
 
-func structuredPlannerModel(environmentName string, fallback string) string {
-	if configured := strings.TrimSpace(os.Getenv(environmentName)); configured != "" {
-		return configured
-	}
-	return fallback
-}
-
 // structuredPlannerModelChain resolves the planner model from the most specific
 // setting to the least: a planner-only override, then the model the rest of the
 // assistant already uses, then the built-in default. This keeps one model

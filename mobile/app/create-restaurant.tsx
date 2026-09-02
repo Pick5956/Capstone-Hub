@@ -89,8 +89,8 @@ export default function CreateRestaurantScreen() {
         />
       ) : null}
       <View style={{ gap: spacing.xl }}>
-        <TextField icon="storefront-outline" label={copy('ชื่อร้าน', 'Restaurant name')} value={name} onChangeText={setName} />
-        <TextField icon="location-outline" label={copy('สาขา', 'Branch')} value={branch} onChangeText={setBranch} />
+        <TextField icon="storefront-outline" label={copy('ชื่อร้าน', 'Restaurant name')} value={name} onChangeText={setName} maxLength={120} />
+        <TextField icon="location-outline" label={copy('สาขา', 'Branch')} value={branch} onChangeText={setBranch} maxLength={120} />
         <ChipGroup
           label={copy('ประเภทร้าน', 'Restaurant type')}
           value={type}
@@ -131,6 +131,7 @@ export default function CreateRestaurantScreen() {
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
+              maxLength={40}
             />
             <TextField
               icon="navigate-outline"
@@ -138,6 +139,7 @@ export default function CreateRestaurantScreen() {
               value={address}
               onChangeText={setAddress}
               multiline
+              maxLength={500}
             />
           </View>
         ) : null}
@@ -167,6 +169,7 @@ export default function CreateRestaurantScreen() {
           value={tables}
           onChangeText={setTables}
           keyboardType="number-pad"
+          maxLength={3}
         />
         <ChipGroup
           label={copy('รูปแบบโต๊ะเริ่มต้น', 'Initial table layout')}

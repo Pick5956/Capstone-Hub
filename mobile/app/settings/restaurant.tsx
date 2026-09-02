@@ -305,11 +305,13 @@ export default function RestaurantSettingsScreen() {
           label={copy('ชื่อร้าน', 'Restaurant name')}
           value={name}
           onChangeText={setName}
+          maxLength={120}
         />
         <TextField
           label={copy('สาขา', 'Branch')}
           value={branch}
           onChangeText={setBranch}
+          maxLength={120}
         />
         <ChipGroup
           label={copy('ประเภทร้าน', 'Restaurant type')}
@@ -322,12 +324,14 @@ export default function RestaurantSettingsScreen() {
           value={address}
           onChangeText={setAddress}
           multiline
+          maxLength={500}
         />
         <TextField
           label={copy('เบอร์โทรร้าน', 'Restaurant phone')}
           value={phone}
           onChangeText={setPhone}
           keyboardType="phone-pad"
+          maxLength={40}
         />
         <TextField
           label={copy('ลิงก์โลโก้', 'Logo URL')}

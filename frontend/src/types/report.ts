@@ -39,22 +39,6 @@ export type SalesDetailReport = {
   has_more: boolean;
 };
 
-export type ReportExpenseDetailItem = {
-  ingredient_id: number;
-  ingredient_name: string;
-  unit: string;
-  quantity: number;
-  cost: number;
-};
-
-export type ExpenseDetailReport = {
-  date: string;
-  hour: number | null;
-  items: ReportExpenseDetailItem[];
-  total: number;
-  has_more: boolean;
-};
-
 export type ReportMenuMargin = {
   menu_id: number;
   menu_name: string;

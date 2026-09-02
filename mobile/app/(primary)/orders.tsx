@@ -231,10 +231,13 @@ export default function OrdersScreen() {
               key={order.ID}
               onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
               style={({ pressed }) => ({
+                // Two stable columns. flexGrow used to fight the 48.5% width and
+                // stretched a lone card on the last row across the workspace.
                 width: '48.5%',
                 minHeight: 98,
-                flexGrow: 1,
-                flexBasis: 340,
+                flexGrow: 0,
+                flexBasis: 'auto',
+                minWidth: 300,
                 gap: spacing.sm,
                 borderWidth: 1,
                 borderColor: palette.border,

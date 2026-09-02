@@ -62,10 +62,6 @@ export function getBill(id: number) {
   return apiRequest<Bill>(`/api/v1/orders/${id}/bill`);
 }
 
-export function cancelOrder(id: number, reason: string) {
-  return apiRequest<Order>(`/api/v1/orders/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
-}
-
 export function closeEmptyTable(id: number) {
   return apiRequest<Order>(`/api/v1/orders/${id}/close-empty-table`, { method: 'POST' });
 }

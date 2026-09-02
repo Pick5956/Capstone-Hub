@@ -15,7 +15,7 @@ import {
   useDisplayPreferences,
 } from '@/src/providers/display-preferences-provider';
 import { APP_FONT_FAMILIES } from '@/src/lib/app-font';
-import { shouldLockPortrait } from '@/src/lib/orientation-lock';
+import { orientationLockFor } from '@/src/lib/orientation-lock';
 import { colors } from '@/src/theme';
 
 export {
@@ -46,29 +46,41 @@ function TabletWorkspaceStackLayout({ children }: { children: ReactNode }) {
   return <TabletWorkspaceFrame>{children}</TabletWorkspaceFrame>;
 }
 
-// Pin phones to upright portrait and leave tablets free to rotate, so the POS
-// still works on a tablet stand. The effect keys off the boolean rather than the
-// raw dimensions, so rotating a tablet does not churn lock/unlock calls.
-function usePortraitLockOnPhones() {
+// Pin phones to upright portrait and tablets to landscape, so the POS, kitchen
+// board and table grid always get the shape they were designed for. The effect
+// keys off the resolved mode rather than the raw dimensions, so turning a device
+// does not churn lock calls - the mode is derived from the smallest side, which
+// rotation never changes.
+//
+// LANDSCAPE (not LANDSCAPE_LEFT) keeps both sideways positions, so a tablet can
+// be flipped either way on its stand without the home button ending up wherever
+// the cable is not.
+//
+// iPad caveat: iOS ignores orientation locks while an app supports Slide Over /
+// Split View, so this only takes effect with ios.requireFullScreen set in
+// app.json - and never inside Expo Go, which ships its own Info.plist.
+function useOrientationLock() {
   const { width, height } = useWindowDimensions();
-  const lockPortrait = shouldLockPortrait({ width, height });
+  const mode = orientationLockFor({ width, height });
 
   useEffect(() => {
     // react-native-web has no equivalent lock and throws on desktop browsers.
     if (Platform.OS === 'web') return;
+    // Dimensions are not readable yet; leave whatever the system is doing.
+    if (!mode) return;
 
     void (async () => {
       try {
-        if (lockPortrait) {
-          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        } else {
-          await ScreenOrientation.unlockAsync();
-        }
+        await ScreenOrientation.lockAsync(
+          mode === 'portrait'
+            ? ScreenOrientation.OrientationLock.PORTRAIT_UP
+            : ScreenOrientation.OrientationLock.LANDSCAPE,
+        );
       } catch {
         // Orientation control is a nicety - never let it break startup.
       }
     })();
-  }, [lockPortrait]);
+  }, [mode]);
 }
 
 function AppNavigator() {
@@ -123,7 +135,7 @@ function AppNavigator() {
 }
 
 export default function RootLayout() {
-  usePortraitLockOnPhones();
+  useOrientationLock();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>

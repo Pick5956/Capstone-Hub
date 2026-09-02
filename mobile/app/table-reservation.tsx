@@ -240,6 +240,7 @@ export default function TableReservationScreen() {
               value={guestCount}
               onChangeText={setGuestCount}
               keyboardType="number-pad"
+              maxLength={4}
             />
           </>
         ) : (
@@ -249,6 +250,7 @@ export default function TableReservationScreen() {
               label={copy('ชื่อเล่นที่จอง (ไม่บังคับ)', 'Reservation name (optional)')}
               value={name}
               onChangeText={setName}
+              maxLength={80}
             />
             <TextField
               icon="call-outline"
@@ -256,6 +258,7 @@ export default function TableReservationScreen() {
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
+              maxLength={32}
             />
             {tabletWorkspace ? <Button
               icon="calendar-outline"

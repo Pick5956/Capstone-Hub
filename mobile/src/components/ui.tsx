@@ -283,6 +283,7 @@ export function TextField({
   hideLabel,
   icon,
   multiline,
+  maxLength,
   error,
 }: {
   label: string;
@@ -297,6 +298,9 @@ export function TextField({
   hideLabel?: string;
   icon?: AppIconName;
   multiline?: boolean;
+  /** Hard cap on typed characters. Mirror the backend `binding:"max=N"` for the
+   *  field so the keyboard stops before the API rejects the request. */
+  maxLength?: number;
   error?: string | null;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -330,6 +334,7 @@ export function TextField({
           autoCapitalize={keyboardType === 'email-address' || secureTextEntry ? 'none' : 'sentences'}
           autoCorrect={keyboardType !== 'email-address' && !secureTextEntry}
           keyboardType={keyboardType}
+          maxLength={maxLength}
           multiline={multiline}
           onChangeText={onChangeText}
           onBlur={() => setFocused(false)}

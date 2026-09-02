@@ -171,13 +171,16 @@ export default function TablesScreen() {
                 {group.tables.map((table) => {
                   const order = activeOrderByTable.get(table.ID);
                   const ready = (order?.items || []).filter((item) => item.status === 'ready').reduce((sum, item) => sum + item.quantity, 0);
-                  const tone = ready ? 'success' : order ? 'warning' : table.status === 'reserved' ? 'info' : table.status === 'inactive' ? 'neutral' : 'success';
+                  // A table with an active order always reads as occupied (amber),
+                  // matching web POS. Ready food is a separate emerald badge - on the
+                  // floor green means "free", so tinting a busy table green misreads
+                  // at a glance, which is the whole job of this tile.
+                  const tone = order ? 'warning' : table.status === 'reserved' ? 'info' : table.status === 'inactive' ? 'neutral' : 'success';
                   const tint = statusTone(tone);
-                  const statusLabel = ready
-                    ? copy(`พร้อม ${ready.toLocaleString('th-TH')} รายการ`, `${ready.toLocaleString('en-US')} ready`)
-                    : order
-                      ? copy('กำลังใช้งาน', 'In use')
-                      : tableStatusLabel(table.status, language);
+                  const readyTint = statusTone('success');
+                  const statusLabel = order
+                    ? copy('กำลังใช้งาน', 'In use')
+                    : tableStatusLabel(table.status, language);
                   return (
                     <Pressable
                       accessibilityLabel={copy(
@@ -187,7 +190,10 @@ export default function TablesScreen() {
                       accessibilityRole="button"
                       key={table.ID}
                       onPress={() => open(table)}
-                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, minHeight: 148, flexGrow: 1, flexBasis: tabletWorkspace ? 176 : 150, gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
+                      // Phones get an exact two-column grid; tablets may grow to fill a
+                      // row but are capped, so one card left over on the last row keeps
+                      // the size of every other card instead of spanning the workspace.
+                      style={({ pressed }) => ({ width: tabletWorkspace ? undefined : '48%', minWidth: tabletWorkspace ? 164 : 0, maxWidth: tabletWorkspace ? 260 : undefined, minHeight: 148, flexGrow: tabletWorkspace ? 1 : 0, flexBasis: tabletWorkspace ? 176 : 'auto', gap: spacing.sm, borderWidth: 1, borderColor: tint.borderColor, borderRadius: radius.md, backgroundColor: tint.backgroundColor, padding: spacing.md, opacity: pressed ? 0.72 : 1, transform: [{ translateY: pressed ? 1 : 0 }] })}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                         <Text selectable numberOfLines={1} style={{ minWidth: 0, flex: 1, color: tint.color, fontSize: 23, fontWeight: '800', lineHeight: 30 }}>{table.display_label || table.table_number}</Text>
@@ -196,6 +202,13 @@ export default function TablesScreen() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                         <View style={{ width: 8, height: 8, borderRadius: radius.full, backgroundColor: tint.color }} />
                         <Text selectable numberOfLines={1} style={[typeScale.caption, { minWidth: 0, flex: 1, color: tint.color, fontWeight: '700' }]}>{statusLabel}</Text>
+                        {ready ? (
+                          <View style={{ borderWidth: 1, borderColor: readyTint.borderColor, borderRadius: radius.sm, backgroundColor: readyTint.backgroundColor, paddingHorizontal: 6, paddingVertical: 1 }}>
+                            <Text selectable numberOfLines={1} style={[typeScale.caption, { color: readyTint.color, fontWeight: '800' }]}>
+                              {copy(`พร้อม ${ready.toLocaleString('th-TH')}`, `${ready.toLocaleString('en-US')} ready`)}
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
                       <Text selectable numberOfLines={2} style={[typeScale.caption, { color: palette.muted }]}>{order
                         ? copy(`${order.customer_count.toLocaleString('th-TH')} คน`, `${order.customer_count.toLocaleString('en-US')} guests`)

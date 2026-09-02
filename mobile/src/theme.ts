@@ -78,27 +78,6 @@ export const layout = StyleSheet.create({
   },
 });
 
-export const inputStyles = StyleSheet.create({
-  fieldGroup: {
-    gap: spacing.sm,
-  },
-  label: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  input: {
-    minHeight: 52,
-    borderWidth: 1,
-    borderColor: palette.controlBorder,
-    borderRadius: radius.md,
-    backgroundColor: palette.surfaceSubtle,
-    color: palette.textStrong,
-    fontSize: 16,
-    paddingHorizontal: spacing.md,
-  },
-});
-
 export function statusTone(tone: 'success' | 'warning' | 'danger' | 'info' | 'neutral') {
   switch (tone) {
     case 'success':

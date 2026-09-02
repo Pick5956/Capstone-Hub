@@ -87,14 +87,14 @@ export default function AccountSettingsScreen() {
           <EdgeSection style={{ gap: spacing.md, padding: spacing.lg }}>
           <View style={{ flexDirection: tabletWorkspace ? 'row' : 'column', gap: spacing.md }}>
             <View style={{ minWidth: 0, flex: 1 }}>
-              <TextField label={copy('ชื่อ', 'First name')} value={firstName} onChangeText={setFirstName} icon="person-outline" />
+              <TextField label={copy('ชื่อ', 'First name')} value={firstName} onChangeText={setFirstName} icon="person-outline" maxLength={100} />
             </View>
             <View style={{ minWidth: 0, flex: 1 }}>
-              <TextField label={copy('นามสกุล', 'Last name')} value={lastName} onChangeText={setLastName} />
+              <TextField label={copy('นามสกุล', 'Last name')} value={lastName} onChangeText={setLastName} maxLength={100} />
             </View>
           </View>
-          <TextField label={copy('ชื่อเล่นในร้าน', 'Restaurant nickname')} value={nickname} onChangeText={setNickname} icon="id-card-outline" />
-          <TextField label={copy('เบอร์โทร', 'Phone number')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" icon="call-outline" />
+          <TextField label={copy('ชื่อเล่นในร้าน', 'Restaurant nickname')} value={nickname} onChangeText={setNickname} icon="id-card-outline" maxLength={100} />
+          <TextField label={copy('เบอร์โทร', 'Phone number')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" icon="call-outline" maxLength={40} />
           {tabletWorkspace ? (
             <Button icon="checkmark" label={copy('บันทึกบัญชี', 'Save account')} onPress={save} loading={saving} />
           ) : null}

@@ -3,12 +3,12 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { listCategories, listMenuItems } from '@/src/api/menu';
-import { cancelOrder, closeEmptyTable, deleteOrderItem, getOrder, updateOrderItem } from '@/src/api/order';
+import { closeEmptyTable, deleteOrderItem, getOrder, updateOrderItem } from '@/src/api/order';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import {
   CURRENT_ROUND_BAR_COLORS,
@@ -21,10 +21,8 @@ import {
 } from '@/src/lib/order-detail-runtime';
 import {
   activeOrderItems,
-  canCancelOrderFromDetail,
   canCloseEmptyOrder,
   canOpenOrderBill,
-  validateKitchenCancelReason,
 } from '@/src/lib/order-workflow';
 import { orderDetailLoadResources } from '@/src/lib/permission-parity';
 import { createRequestGeneration } from '@/src/lib/request-generation';
@@ -185,8 +183,6 @@ export default function OrderDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmEmptyClose, setConfirmEmptyClose] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-  const [confirmCancel, setConfirmCancel] = useState(false);
   const requestGuardRef = useRef(createOrderDetailRequestGuard(createRequestGeneration()));
   const foregroundLoadRef = useRef<number | null>(null);
   const canTakeOrder = can(activeMembership, 'take_order');
@@ -268,8 +264,6 @@ export default function OrderDetailScreen() {
   }, [categoryId, menuItems, search]);
   const locked = order?.status === 'completed' || order?.status === 'cancelled';
   const canCloseEmpty = canTakeOrder && canCloseEmptyOrder(order);
-  const canCancelCurrent = canTakeOrder
-    && canCancelOrderFromDetail(order, activeMembership?.role?.name);
 
   async function mutate(action: () => Promise<Order>, success?: string): Promise<boolean> {
     if (!requestGuardRef.current.beginMutation()) return false;
@@ -303,16 +297,6 @@ export default function OrderDetailScreen() {
     if (!confirmEmptyClose) { setConfirmEmptyClose(true); return; }
     const closed = await mutate(() => closeEmptyTable(orderId));
     if (closed) router.replace('/tables');
-  }
-
-  async function cancelCurrentOrder() {
-    if (!canCancelCurrent) return;
-    const validation = validateKitchenCancelReason(cancelReason);
-    if (validation.error === 'required') { setError(copy('กรอกเหตุผลที่ยกเลิกออเดอร์', 'Enter a reason for cancelling the order.')); return; }
-    if (validation.error === 'too_long') { setError(copy('เหตุผลต้องไม่เกิน 500 ตัวอักษร', 'The reason must be 500 characters or fewer.')); return; }
-    if (!confirmCancel) { setConfirmCancel(true); return; }
-    const cancelled = await mutate(() => cancelOrder(orderId, validation.reason), copy('ยกเลิกออเดอร์แล้ว', 'Order cancelled'));
-    if (cancelled) setConfirmCancel(false);
   }
 
   const canOpenBill = Boolean(
@@ -470,21 +454,8 @@ export default function OrderDetailScreen() {
         <View style={{ flexDirection: stackActions ? 'column' : 'row', gap: spacing.sm }}>{confirmEmptyClose ? <Button variant="secondary" label={copy('ยกเลิก', 'Cancel')} onPress={() => setConfirmEmptyClose(false)} style={actionStyle} /> : null}<Button variant={confirmEmptyClose ? 'danger' : 'secondary'} label={confirmEmptyClose ? copy('ยืนยันปิดโต๊ะ', 'Confirm table close') : copy('ปิดโต๊ะว่าง', 'Close empty table')} onPress={closeEmpty} loading={submitting} style={actionStyle} /></View>
       </>
     ) : null;
-    const cancelContent = canCancelCurrent ? (
-      <>
-        <SectionHeader title={copy('ยกเลิกออเดอร์', 'Cancel order')} detail={confirmCancel ? copy('ตรวจเหตุผล แล้วแตะยืนยันอีกครั้ง', 'Check the reason, then confirm once more.') : copy('ใช้เมื่อไม่สามารถทำหรือส่งมอบออเดอร์นี้ได้', 'Use this when the order cannot be prepared or fulfilled.')} />
-        <TextField label={copy('เหตุผลที่ยกเลิก', 'Cancellation reason')} value={cancelReason} onChangeText={(value) => { setCancelReason(value); setConfirmCancel(false); }} multiline />
-        <View style={{ flexDirection: stackActions ? 'column' : 'row', gap: spacing.sm }}>{confirmCancel ? <Button variant="secondary" label={copy('กลับไปทำออเดอร์ต่อ', 'Continue order')} onPress={() => setConfirmCancel(false)} style={actionStyle} /> : null}<Button variant={confirmCancel ? 'danger' : 'secondary'} label={confirmCancel ? copy('ยืนยันยกเลิกออเดอร์', 'Confirm order cancellation') : copy('ยกเลิกออเดอร์', 'Cancel order')} onPress={cancelCurrentOrder} loading={submitting} style={actionStyle} /></View>
-      </>
-    ) : null;
-
-    if (!closeEmptyContent && !cancelContent) return null;
-    return (
-      <>
-        {closeEmptyContent ? <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>{closeEmptyContent}</Surface> : null}
-        {cancelContent ? <Surface style={{ borderColor: confirmCancel ? palette.danger : palette.border }}>{cancelContent}</Surface> : null}
-      </>
-    );
+    if (!closeEmptyContent) return null;
+    return <Surface style={{ borderColor: confirmEmptyClose ? palette.danger : palette.border }}>{closeEmptyContent}</Surface>;
   }
 
   if (!canAccessOrder) {
