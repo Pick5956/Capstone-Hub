@@ -1004,9 +1004,15 @@ export default function InventoryPage() {
           </div>
           {/* The history tab brings its own search box and export button, so the
               stock toolbar would duplicate both — it belongs to the stock tab only. */}
+          {/* Below sm the header is a column, so every direct child becomes its own
+              full-width row. Inside a FIXED bar that turned eight children into a
+              slab covering most of a phone screen, so the children are grouped:
+              search + filter share one row, and the actions wrap instead of
+              stacking. Same shape the tables page uses. */}
           {tab === "stock" && (
           <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:w-64">
+          <div className="flex w-full items-center gap-2 sm:contents">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -1108,14 +1114,18 @@ export default function InventoryPage() {
               </>
             )}
           </div>
-          {/* Inventory value — took over from the removed summary cards */}
+          </div>
+          {/* Value and the action buttons wrap onto as few rows as fit, rather than
+              one row each. The flex-1 spacer only exists to push them right on a
+              wide row, so it is hidden where the header is a column. */}
+          <div className="hidden flex-1 sm:block" />
+          <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 text-center dark:border-orange-900/40 dark:bg-orange-950/20">
             <span className="text-[11px] text-slate-500 dark:text-slate-400">{lang === "th" ? "มูลค่า" : "Value"}</span>
             <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
               {formatCurrency(totalValue, lang)}
             </span>
           </div>
-          <div className="flex-1" />
           <button
             type="button"
             disabled={stockExporting}
@@ -1166,6 +1176,7 @@ export default function InventoryPage() {
               {copy.add}
             </button>
           )}
+          </div>
           </header>
           )}
         </div>
