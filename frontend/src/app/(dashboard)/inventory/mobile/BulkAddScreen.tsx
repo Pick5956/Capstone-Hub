@@ -140,7 +140,7 @@ export default function BulkAddScreen({
   }
 
   return (
-    <div data-inventory-mobile className="min-h-dvh pb-32">
+    <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-32">
       <ScreenNav
         title={copy.title}
         onBack={onCancel}

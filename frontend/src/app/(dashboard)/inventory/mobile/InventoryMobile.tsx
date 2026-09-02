@@ -362,7 +362,7 @@ export default function InventoryMobile({
   }
 
   return (
-    <div data-inventory-mobile className="min-h-dvh pb-28">
+    <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-28">
       <div className="space-y-3 px-4 pt-3">
         {selecting ? (
           <div className="flex items-center justify-between gap-2">

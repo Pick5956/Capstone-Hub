@@ -131,7 +131,7 @@ export default function AddIngredientScreen({
   }
 
   return (
-    <div data-inventory-mobile className="min-h-dvh pb-28">
+    <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-28">
       <ScreenNav title={copy.title} onBack={onCancel} backLabel={copy.cancel} />
 
       <div className="px-4 pt-4">

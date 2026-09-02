@@ -1336,9 +1336,10 @@ input[type="number"]::-webkit-inner-spin-button {
   --inv-shadow: 0 1px 2px rgba(15, 23, 43, 0.06);
   --inv-radius: 6px;
   --inv-radius-lg: 12px;
-
-  background: var(--inv-canvas);
-  color: var(--inv-body);
+  /* Tokens only — no paint. The sheet portal carries this attribute so its
+     children can resolve the variables, and a background here would turn that
+     full-screen wrapper into an opaque wall over the page it is meant to dim.
+     Each screen root paints its own canvas explicitly. */
 }
 
 .dark [data-inventory-mobile] {

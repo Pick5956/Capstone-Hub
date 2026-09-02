@@ -85,7 +85,7 @@ export function BottomSheet({
         type="button"
         aria-label="close"
         onClick={dismiss}
-        className={`absolute inset-0 cursor-default bg-(--inv-scrim) ${closing ? "smooth-overlay-exit" : "smooth-overlay"}`}
+        className={`absolute inset-0 cursor-default bg-(--inv-scrim) backdrop-blur-sm ${closing ? "smooth-overlay-exit" : "smooth-overlay"}`}
       />
       <div
         role="dialog"

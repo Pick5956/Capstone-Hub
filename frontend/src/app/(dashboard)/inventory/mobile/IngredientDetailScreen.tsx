@@ -94,7 +94,7 @@ export default function IngredientDetailScreen({
   const lastCounted = rows.find((row) => row.type === "adjust");
 
   return (
-    <div data-inventory-mobile className="min-h-dvh pb-8">
+    <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-8">
       <ScreenNav
         title={item.name}
         onBack={onBack}

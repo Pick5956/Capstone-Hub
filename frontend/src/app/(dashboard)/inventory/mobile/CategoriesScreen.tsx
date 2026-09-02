@@ -125,7 +125,7 @@ export default function CategoriesScreen({
   }
 
   return (
-    <div data-inventory-mobile className="min-h-dvh pb-10">
+    <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-10">
       <ScreenNav title={copy.title} onBack={onBack} />
 
       <div className="px-4 pt-4">
