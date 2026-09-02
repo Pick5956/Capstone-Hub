@@ -52,7 +52,7 @@ import CategoriesScreen from "./CategoriesScreen";
 import HistoryScreen from "./HistoryScreen";
 
 type Screen = "list" | "detail" | "add" | "edit" | "bulk" | "categories" | "history";
-type SheetKind = "none" | "row" | "restock" | "count" | "filter" | "manage" | "sort";
+type SheetKind = "none" | "row" | "restock" | "count" | "filter" | "manage" | "sort" | "batch";
 
 function buildCopy(lang: "th" | "en") {
   return lang === "th"
@@ -97,6 +97,16 @@ function buildCopy(lang: "th" | "en") {
         selectAll: "เลือกทั้งหมด",
         adjustMany: "ปรับยอด",
         restockMany: (n: number) => `เติมสต็อก ${n} รายการ`,
+        batchInTitle: "เติมสต็อกหลายรายการ",
+        batchSetTitle: "ปรับยอดหลายรายการ",
+        batchInHint: "ตัวเลขที่ใส่ให้คือจำนวนที่แนะนำ แก้ได้ทุกแถว ใส่ 0 เพื่อข้ามแถวนั้น",
+        batchSetHint: "กรอกจำนวนที่นับได้จริงของแต่ละตัว แถวที่ไม่เปลี่ยนจะถูกข้าม",
+        batchInSave: (n: number) => `เติม ${n} รายการ`,
+        batchSetSave: (n: number) => `บันทึกยอด ${n} รายการ`,
+        batchDone: (n: number) => `ทำรายการ ${n} รายการแล้ว`,
+        batchPartial: (ok: number, fail: number) => `สำเร็จ ${ok} · ไม่สำเร็จ ${fail} (ยังเลือกไว้ให้ลองใหม่)`,
+        batchExpenseNote: "การเติมสต็อกที่มีต้นทุนต่อหน่วย จะบันทึกเป็นรายจ่ายให้อัตโนมัติ",
+        now: "ตอนนี้",
         noUsage: "ยังไม่มีข้อมูลการใช้",
         loading: "กำลังโหลด",
         restocked: (name: string, n: string, unit: string) => `เติม ${name} แล้ว ${n} ${unit}`,
@@ -147,6 +157,16 @@ function buildCopy(lang: "th" | "en") {
         selectAll: "Select all",
         adjustMany: "Set quantity",
         restockMany: (n: number) => `Restock ${n} items`,
+        batchInTitle: "Restock several",
+        batchSetTitle: "Set quantities",
+        batchInHint: "The numbers are a suggestion — edit any row, or set 0 to skip it",
+        batchSetHint: "Enter what you counted for each; unchanged rows are skipped",
+        batchInSave: (n: number) => `Restock ${n}`,
+        batchSetSave: (n: number) => `Save ${n}`,
+        batchDone: (n: number) => `${n} items updated`,
+        batchPartial: (ok: number, fail: number) => `${ok} done · ${fail} failed (left selected to retry)`,
+        batchExpenseNote: "A restock on an ingredient with a unit cost also writes an expense",
+        now: "Now",
         noUsage: "No usage data",
         loading: "Loading",
         restocked: (name: string, n: string, unit: string) => `Added ${n} ${unit} to ${name}`,
@@ -185,9 +205,29 @@ export default function InventoryMobile({
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [amount, setAmount] = useState(0);
+  const [batchMode, setBatchMode] = useState<"in" | "adjust">("in");
+  const [batchDraft, setBatchDraft] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
 
   const totals = useMemo(() => inventoryTotals(ingredients), [ingredients]);
+
+  const selectedItems = useMemo(
+    () => ingredients.filter((item) => selected.has(item.ID)),
+    [ingredients, selected],
+  );
+
+
+  // How many rows the batch will actually touch: a 0 (or an unchanged count)
+  // means skip, so the button never promises more than it will do.
+  const batchCount = useMemo(
+    () =>
+      selectedItems.filter((item) => {
+        const quantity = Number(batchDraft[item.ID]) || 0;
+        if (quantity <= 0) return false;
+        return batchMode === "in" || quantity !== item.stock;
+      }).length,
+    [selectedItems, batchDraft, batchMode],
+  );
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -270,17 +310,52 @@ export default function InventoryMobile({
     });
   }
 
-  async function restockSelected() {
-    const targets = ingredients.filter((item) => selected.has(item.ID));
+  /**
+   * Opens the batch sheet with a number already filled in per row. The suggestion
+   * tops each ingredient up to twice its reorder level, but it is only a
+   * suggestion — every row stays editable and a row set to 0 is skipped.
+   *
+   * This used to fire the writes straight from the dock with that suggested
+   * number and no screen at all. A stock-in also writes an expense row when the
+   * ingredient has a unit cost, so one tap was silently spending money nobody
+   * had typed.
+   */
+  function openBatch(mode: "in" | "adjust") {
+    const draft: Record<number, string> = {};
+    for (const item of selectedItems) {
+      draft[item.ID] =
+        mode === "in" ? String(Math.max(0, item.min_stock * 2 - item.stock)) : String(item.stock);
+    }
+    setBatchMode(mode);
+    setBatchDraft(draft);
+    setSheet("batch");
+  }
+
+  async function submitBatch() {
     await guard(async () => {
-      // No bulk endpoint exists — these are separate requests, and an early
-      // failure leaves the ones before it already committed.
-      for (const item of targets) {
-        const top = Math.max(0, item.min_stock * 2 - item.stock);
-        if (top <= 0) continue;
-        await actions.restock(item.ID, { type: "in", quantity: top });
+      // No bulk endpoint exists, so these are separate requests with no
+      // transaction spanning them: report what actually landed, and keep the
+      // rows that failed selected so they can be retried.
+      const failed = new Set<number>();
+      let done = 0;
+      for (const item of selectedItems) {
+        const quantity = Number(batchDraft[item.ID]) || 0;
+        if (quantity <= 0) continue;
+        if (batchMode === "adjust" && quantity === item.stock) continue;
+        try {
+          await actions.restock(item.ID, { type: batchMode, quantity });
+          done += 1;
+        } catch {
+          failed.add(item.ID);
+        }
       }
-      show(copy.restockMany(targets.length));
+      setSheet("none");
+      if (failed.size > 0) {
+        setSelected(failed);
+        show(copy.batchPartial(done, failed.size));
+        return;
+      }
+      show(copy.batchDone(done));
       setSelecting(false);
       setSelected(new Set());
     });
@@ -591,16 +666,10 @@ export default function InventoryMobile({
         >
           {selecting ? (
             <div className="flex gap-2">
-              <SecondaryButton
-                onClick={() => {
-                  const first = ingredients.find((item) => selected.has(item.ID));
-                  if (first) openSheet(first, "count");
-                }}
-                disabled={selected.size === 0 || busy}
-              >
+              <SecondaryButton onClick={() => openBatch("adjust")} disabled={selected.size === 0 || busy}>
                 {copy.adjustMany}
               </SecondaryButton>
-              <PrimaryButton onClick={restockSelected} disabled={selected.size === 0 || busy}>
+              <PrimaryButton onClick={() => openBatch("in")} disabled={selected.size === 0 || busy}>
                 {copy.restockMany(selected.size)}
               </PrimaryButton>
             </div>
@@ -705,6 +774,50 @@ export default function InventoryMobile({
             { value: "value", label: copy.sortValue },
           ]}
         />
+      </BottomSheet>
+
+      <BottomSheet
+        open={sheet === "batch"}
+        title={batchMode === "in" ? copy.batchInTitle : copy.batchSetTitle}
+        onClose={() => setSheet("none")}
+        footer={
+          <PrimaryButton onClick={submitBatch} disabled={busy || batchCount === 0}>
+            {batchMode === "in" ? copy.batchInSave(batchCount) : copy.batchSetSave(batchCount)}
+          </PrimaryButton>
+        }
+      >
+        <p className="mb-3 text-[12px] leading-snug text-(--inv-muted)">
+          {batchMode === "in" ? copy.batchInHint : copy.batchSetHint}
+        </p>
+        <div className="space-y-2">
+          {selectedItems.map((item) => (
+            <div key={item.ID} className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-(--inv-heading)">{item.name}</p>
+                <p className="truncate text-[11px] text-(--inv-faint)">
+                  {copy.now} {formatNumber(item.stock, lang)} {item.unit}
+                </p>
+              </div>
+              <div className="relative w-[132px] shrink-0">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={batchDraft[item.ID] ?? ""}
+                  onChange={(event) =>
+                    setBatchDraft((current) => ({ ...current, [item.ID]: event.target.value }))
+                  }
+                  className={`${inputBase} h-[52px] border-(--inv-hairline) pr-12 text-right tabular-nums`}
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-(--inv-muted)">
+                  {item.unit}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {batchMode === "in" && (
+          <p className="mt-3 text-[11px] leading-snug text-(--inv-faint)">{copy.batchExpenseNote}</p>
+        )}
       </BottomSheet>
 
       <BottomSheet open={sheet === "manage"} title={copy.manage} onClose={() => setSheet("none")}>

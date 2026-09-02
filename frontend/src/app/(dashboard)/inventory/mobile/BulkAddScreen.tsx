@@ -49,8 +49,8 @@ export default function BulkAddScreen({
             title: "เพิ่มหลายรายการ",
             cancel: "ยกเลิก",
             clear: "ล้าง",
-            defaultCategory: "หมวดของแถวใหม่",
-            applyAll: "ใช้กับทุกแถว",
+            defaultCategory: "หมวดของวัตถุดิบที่เพิ่มใหม่",
+            applyAll: "ใช้หมวดหมู่กับทุกวัตถุดิบ",
             noCategory: "ไม่มีหมวด",
             name: "ชื่อวัตถุดิบ",
             quantity: "จำนวน",
@@ -61,14 +61,14 @@ export default function BulkAddScreen({
             pickCategory: "เลือกหมวดหมู่",
             pickUnit: "เลือกหน่วยนับ",
             partial: (ok: number, fail: number) => `บันทึกได้ ${ok} · ไม่สำเร็จ ${fail}`,
-            addRow: "เพิ่มแถว",
+            addRow: "เพิ่มวัตถุดิบ",
           }
         : {
             title: "Add several",
             cancel: "Cancel",
             clear: "Clear",
-            defaultCategory: "Category for new rows",
-            applyAll: "Apply to all rows",
+            defaultCategory: "Category for new ingredients",
+            applyAll: "Apply this category to every ingredient",
             noCategory: "Uncategorised",
             name: "Ingredient name",
             quantity: "Qty",
@@ -79,7 +79,7 @@ export default function BulkAddScreen({
             pickCategory: "Pick a category",
             pickUnit: "Pick a unit",
             partial: (ok: number, fail: number) => `Saved ${ok} · failed ${fail}`,
-            addRow: "Add row",
+            addRow: "Add ingredient",
           },
     [lang],
   );
@@ -162,7 +162,6 @@ export default function BulkAddScreen({
       <ScreenNav
         title={copy.title}
         onBack={onCancel}
-        backLabel={copy.cancel}
         trailing={
           <button
             type="button"
@@ -255,7 +254,7 @@ export default function BulkAddScreen({
                 {row.name.trim() !== "" && (
                   <button
                     type="button"
-                    aria-label="ลบแถว"
+                    aria-label={lang === "th" ? "ลบวัตถุดิบนี้" : "Remove this ingredient"}
                     onClick={() => setRows((current) => current.filter((r) => r.key !== row.key))}
                     className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-(--inv-radius) text-(--inv-out) ${TAP}`}
                   >

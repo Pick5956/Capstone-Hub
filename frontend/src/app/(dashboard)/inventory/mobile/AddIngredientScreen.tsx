@@ -132,7 +132,10 @@ export default function AddIngredientScreen({
 
   return (
     <div data-inventory-mobile className="min-h-dvh bg-(--inv-canvas) text-(--inv-body) pb-28">
-      <ScreenNav title={copy.title} onBack={onCancel} backLabel={copy.cancel} />
+      {/* Chevron, not a "ยกเลิก" word: the bottom bar already carries a
+          cancel button, and two of them on one screen read as two different
+          outcomes. */}
+      <ScreenNav title={copy.title} onBack={onCancel} />
 
       <div className="px-4 pt-4">
         <FormGroup label={copy.groupInfo}>
