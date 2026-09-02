@@ -328,7 +328,14 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 			Question: fmt.Sprintf("“%s” จัดเป็นรายจ่ายหมวดไหนครับ — %s", title, strings.Join(options, " / ")),
 		}
 	}
-	if draft.Quantity <= 0 {
+	if draft.Quantity < 0 {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” ใส่เป็นยอดติดลบไม่ได้ครับ จ่ายไปเท่าไหร่ครับ", title),
+		}
+	}
+	if draft.Quantity == 0 {
 		return AICommandResolution{
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
@@ -415,7 +422,20 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 	}
 
 	if kind == "menu_price" {
-		if draft.Quantity <= 0 {
+		// ติดลบกับไม่ได้บอกมา เป็นคนละเรื่อง และเจ้าของร้านต้องได้ยินคนละคำตอบ
+		//
+		// "ตั้งราคาข้าวกะเพราเป็น -50 บาท" เคยได้คำตอบว่า "ผู้ช่วยทำให้ไม่ได้ครับ
+		// ต้องไปจัดการเรื่องราคาในระบบเองครับ" ซึ่งผลลัพธ์ถูกแต่เหตุผลผิด —
+		// การเปลี่ยนราคาเมนูเป็นสิ่งที่ผู้ช่วยทำได้ ติดแค่ตัวเลขนั้นตัวเดียว
+		// เจ้าของอ่านแล้วจะเข้าใจว่าเปลี่ยนราคาผ่านผู้ช่วยไม่ได้เลย ทั้งที่ได้
+		if draft.Quantity < 0 {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    match.Exact.Name,
+				Question: fmt.Sprintf("“%s” ตั้งราคาติดลบไม่ได้ครับ อยากตั้งเป็นเท่าไหร่ครับ", match.Exact.Name),
+			}
+		}
+		if draft.Quantity == 0 {
 			return AICommandResolution{
 				Kind:     AICommandOutcomeAsk,
 				Title:    match.Exact.Name,
@@ -568,7 +588,14 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 		}
 	}
 
-	if draft.Quantity <= 0 {
+	if draft.Quantity < 0 {
+		question := fmt.Sprintf("“%s” ใส่จำนวนติดลบไม่ได้ครับ เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit)
+		if kind == "cost" {
+			question = fmt.Sprintf("“%s” ตั้งราคาติดลบไม่ได้ครับ ราคาต่อ%sเท่าไหร่ครับ", match.Exact.Name, match.Exact.Unit)
+		}
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: question}
+	}
+	if draft.Quantity == 0 {
 		question := fmt.Sprintf("“%s” เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit)
 		if kind == "cost" {
 			question = fmt.Sprintf("“%s” ราคาต่อ%sเท่าไหร่ครับ", match.Exact.Name, match.Exact.Unit)

@@ -63,6 +63,10 @@ const aiStockExtractionPrompt = `คุณคือตัวแปลงคำ�
 
 กฎร่วม:
 - ถ้าผู้ใช้ไม่ได้บอกจำนวน ให้ quantity เป็น 0 · ถ้าไม่ได้บอกหน่วย ให้ unit เป็น ""
+- **ถ้าตัวเลขที่เขาบอกดูผิดปกติ ก็ยังต้องส่งมาตามที่เขาพูด** เช่นราคาติดลบ จำนวนติดลบ
+  **ห้ามทิ้งทั้งคำสั่งเพราะเห็นว่าตัวเลขแปลก** ระบบมีด่านตรวจตัวเลขอยู่แล้ว
+  และมันจะอธิบายให้เจ้าของร้านฟังได้ตรงจุดว่าติดตรงไหน
+  ถ้าคุณทิ้งไปเงียบ ๆ เจ้าของจะได้คำตอบกว้าง ๆ ว่าทำให้ไม่ได้ โดยไม่รู้ว่าเพราะอะไร
 - **ห้ามเดาชื่อที่ผู้ใช้ไม่ได้พูด** ทุกชื่อที่ตอบกลับมาต้องมาจากข้อความของผู้ใช้
   หรือจากบทสนทนาก่อนหน้าเท่านั้น ระบบจะทิ้งชื่อที่ไม่ได้มาจากสองที่นี้
 - **ยกชื่อมาให้ครบตามที่ผู้ใช้พูด ห้ามตัดให้สั้นลง**
@@ -264,9 +268,17 @@ func ParseStockCommandDrafts(raw string) ([]AIStockCommandDraft, error) {
 		if draft.Name == "" && draft.Note == "" {
 			continue
 		}
-		if draft.Quantity < 0 {
-			draft.Quantity = 0
-		}
+		// A negative number is kept, not flattened to zero.
+		//
+		// Zeroing it here made every impossible number look like a number nobody
+		// said, so "ตั้งราคาข้าวกะเพราเป็น -50 บาท" reached the resolver as a price
+		// of nothing and came back as the bare "ตั้งราคาเท่าไหร่ครับ" — and when the
+		// answer round had no data at all it filled the gap with "ผู้ช่วยทำให้ไม่ได้
+		// ครับ", which is false: changing a menu price is exactly what it can do.
+		// The owner was told the wrong thing was impossible.
+		//
+		// Bounds are checked in Go against the live shelf, which is where the
+		// reason for a refusal is actually known. This layer only reads.
 		cleaned = append(cleaned, draft)
 	}
 	return cleaned, nil

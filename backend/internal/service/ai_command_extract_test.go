@@ -60,3 +60,23 @@ func TestExtractionPromptForbidsVerbsInsideNames(t *testing.T) {
 		}
 	}
 }
+
+// A negative number has to survive the parser to reach the code that knows why
+// it is wrong.
+//
+// It used to be flattened to zero here, which erased the difference between "the
+// owner said something impossible" and "the owner said nothing". The resolver
+// then asked the bare "ตั้งราคาเท่าไหร่ครับ", and on the turns where no tool ran
+// the answer round filled the silence with "ผู้ช่วยทำให้ไม่ได้ครับ ต้องไปทำใน
+// ระบบเองครับ" — telling the owner that menu prices cannot be changed through
+// the assistant, which is one of the nine things it can do.
+func TestNegativeQuantitiesSurviveParsing(t *testing.T) {
+	drafts, err := ParseStockCommandDrafts(
+		`[{"name":"ข้าวกะเพรา","kind":"menu_price","quantity":-50,"unit":""}]`)
+	if err != nil || len(drafts) != 1 {
+		t.Fatalf("parse = %+v err=%v", drafts, err)
+	}
+	if drafts[0].Quantity != -50 {
+		t.Errorf("the number the owner said was changed to %v — the resolver can no longer explain it", drafts[0].Quantity)
+	}
+}

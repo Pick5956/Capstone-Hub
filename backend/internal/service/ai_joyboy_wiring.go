@@ -669,9 +669,28 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// The order half of "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย", asked after the
 	// question half has been answered properly. It goes last because it is the
 	// part still waiting on the owner.
-	if strings.TrimSpace(pendingClarification) != "" {
-		finalAnswer = strings.TrimSpace(finalAnswer) + "\n\n" + strings.TrimSpace(pendingClarification)
-		aiStage("flow", "joyboy: answered the question and asked about the command in the same sentence")
+	//
+	// Whether the model's own sentence survives depends on whether it had anything
+	// to say. Tools ran means there was a question in the turn and its answer is
+	// the reason this path was taken at all. No tools means the turn was only the
+	// command, and then the model is writing about a change with no data — which
+	// after it was taught to refuse impossible commands produced answers that
+	// argued with themselves:
+	//
+	//	"ผู้ช่วยทำให้ไม่ได้ครับ ต้องไปจัดการเรื่องราคาในระบบเองครับ"
+	//	"ข้าวกะเพราไก่ไข่ดาว ตั้งราคาติดลบไม่ได้ครับ อยากตั้งเป็นเท่าไหร่ครับ"
+	//
+	// The first sentence is wrong — setting a menu price is one of the nine things
+	// the assistant does — and it is the one the owner reads first. Go knows which
+	// of the two is true here, so the guess goes and the fact stays.
+	if clarification := strings.TrimSpace(pendingClarification); clarification != "" {
+		if len(answer.Tools) == 0 {
+			finalAnswer = clarification
+			aiStage("flow", "joyboy: the turn was only a command — sending the question Go could answer precisely")
+		} else {
+			finalAnswer = strings.TrimSpace(finalAnswer) + "\n\n" + clarification
+			aiStage("flow", "joyboy: answered the question and asked about the command in the same sentence")
+		}
 	}
 	response := &AIAskResponse{
 		Answer: finalAnswer,

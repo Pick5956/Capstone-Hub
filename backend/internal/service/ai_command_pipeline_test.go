@@ -223,3 +223,52 @@ func TestExpenseCardShowsTheNameNotTheNote(t *testing.T) {
 		t.Errorf("with no name the note should title the card, got %q", fallback.Title)
 	}
 }
+
+// "ตั้งราคาข้าวกะเพราเป็น -50 บาท" was answered "ผู้ช่วยทำให้ไม่ได้ครับ คุณต้อง
+// ไปจัดการเรื่องราคาในระบบเองครับ" — right outcome, wrong reason. Changing a menu
+// price is something the assistant does; only that one number was impossible.
+// The owner walks away believing prices cannot be changed through the assistant
+// at all, which is false.
+//
+// Nothing said and something impossible are different problems, so they get
+// different sentences.
+func TestNegativeNumbersSayWhyRatherThanJustAsking(t *testing.T) {
+	menus := []entity.MenuItem{{Name: "ข้าวกะเพราไก่ไข่ดาว", Price: 60, IsAvailable: true}}
+	shelf := aiCommandTestShelf()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		what       string
+		resolution AICommandResolution
+		mustSay    string
+	}{
+		{"ราคาเมนูติดลบ",
+			ResolveMenuCommand(menus, AIStockCommandDraft{Name: "ข้าวกะเพราไก่ไข่ดาว", Kind: "menu_price", Quantity: -50}),
+			"ติดลบไม่ได้"},
+		{"จำนวนสต๊อกติดลบ",
+			ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "in", Quantity: -5, Unit: "กรัม"}),
+			"ติดลบไม่ได้"},
+		{"ราคาทุนติดลบ",
+			ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "cost", Quantity: -20}),
+			"ติดลบไม่ได้"},
+		{"รายจ่ายติดลบ",
+			ResolveExpenseCommand(AIStockCommandDraft{Name: "ค่าไฟ", Kind: "expense", Quantity: -100, Category: "utilities"}, now),
+			"ติดลบไม่ได้"},
+	}
+	for _, c := range cases {
+		if c.resolution.Kind != AICommandOutcomeAsk {
+			t.Errorf("%s: should ask, got %q", c.what, c.resolution.Kind)
+			continue
+		}
+		if !strings.Contains(c.resolution.Question, c.mustSay) {
+			t.Errorf("%s: the owner is not told what was wrong: %q", c.what, c.resolution.Question)
+		}
+	}
+
+	// A number that was simply never said still asks the plain question — saying
+	// "cannot be negative" about a number nobody gave would be nonsense.
+	quiet := ResolveMenuCommand(menus, AIStockCommandDraft{Name: "ข้าวกะเพราไก่ไข่ดาว", Kind: "menu_price"})
+	if quiet.Kind != AICommandOutcomeAsk || strings.Contains(quiet.Question, "ติดลบ") {
+		t.Errorf("a missing price should just ask, got %q", quiet.Question)
+	}
+}
