@@ -12,7 +12,8 @@ import {
   X,
   BarChart2,
   Lightbulb,
-  RotateCcw
+  RotateCcw,
+  ChevronDown
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
@@ -48,6 +49,7 @@ import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
+import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 
 type Message = {
   id: string;
@@ -55,6 +57,10 @@ type Message = {
   content: string;
   createdAt: Date;
   actions?: AIGuidedAction[];
+  // ใบยืนยันเป็นของคำตอบใบใดใบหนึ่ง ไม่ใช่ของทั้งบทสนทนา · เก็บ id ไว้กับ
+  // ข้อความที่สร้างมัน กล่องจะได้อยู่ใต้คำตอบนั้นแทนที่จะไหลไปท้ายสายเสมอ
+  planId?: string;
+  previewId?: string;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & {
@@ -169,6 +175,11 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
+        clearChatTitle: "เริ่มแชทใหม่ไหม?",
+        clearChatConfirm: "บทสนทนานี้จะถูกลบทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        clearChatYes: "ลบแล้วเริ่มใหม่",
+        clearChatNo: "ไม่ลบ",
+        scrollToLatest: "ไปที่ข้อความล่าสุด",
       }
     : {
         openAssistant: "Open AI assistant",
@@ -178,6 +189,11 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
         clearChat: "New chat",
+        clearChatTitle: "Start a new chat?",
+        clearChatConfirm: "This conversation will be deleted, and the assistant will not remember any of it.",
+        clearChatYes: "Delete and start over",
+        clearChatNo: "Keep it",
+        scrollToLatest: "Jump to the latest message",
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -207,6 +223,14 @@ export default function AIOperationsFloatingChat() {
   const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  // Whether the thread is scrolled to its end. The jump button only earns its
+  // place when it is not: shown always, it covers a message to offer a trip to
+  // where the reader already is.
+  const [atLatest, setAtLatest] = useState(true);
+  // Clearing deletes the conversation on the server as well, and there is no
+  // undo, so the button asks first. It used to wipe the thread on one stray tap.
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const chatDialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -346,8 +370,24 @@ export default function AIOperationsFloatingChat() {
   }), [resetConversation, storageKey]);
 
   // Start a fresh chat: drop the stored history and reset to the welcome message.
+  // How far from the bottom still counts as "at the latest". A couple of lines of
+  // slack, so the button does not flash on the half-pixel drift a smooth scroll
+  // leaves behind.
+  const scrollSlack = 48;
+
+  const handleThreadScroll = () => {
+    const area = scrollAreaRef.current;
+    if (!area) return;
+    setAtLatest(area.scrollHeight - area.scrollTop - area.clientHeight <= scrollSlack);
+  };
+
+  const jumpToLatest = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  };
+
   const handleClearChat = async () => {
     if (loading || actionConfirming || actionCancelling) return;
+    setConfirmingClear(false);
     if (pendingActionPreview && !(await discardPendingActionPreview())) return;
     const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
     if (canAskAI && serverConversationId) {
@@ -394,7 +434,12 @@ export default function AIOperationsFloatingChat() {
 
     setInput("");
     setPendingActionPreview(null);
-    setPendingActionPlan(null);
+    // The pending plan deliberately survives a new question. Clearing it here hid
+    // the confirm bar while the server still held the plan, and the server answers
+    // the next command with "there is still something waiting — confirm or cancel
+    // it above" over a box that is no longer on screen. The owner could then
+    // neither confirm nor cancel, and had to wait out the expiry. The bar carries
+    // its own countdown and terminal states, so leaving it up is safe.
     setActionPreviewError("");
     
     setMessages((previous) => [
@@ -482,6 +527,8 @@ export default function AIOperationsFloatingChat() {
           : data.intent === "analysis"
             ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool, data.scope_assumed)
             : undefined,
+        planId: data.action_plan?.id,
+        previewId: data.action_preview?.id,
       };
       
       setMessages(prev => [...prev, assistantMsg]);
@@ -652,6 +699,55 @@ export default function AIOperationsFloatingChat() {
   const stockRisks = latestSnapshot?.stock_risks ?? [];
   const inventorySummary = latestSnapshot?.inventory_summary;
 
+  // A confirmation card belongs under the answer that proposed it, not at the
+  // end of the thread. See the same block on the AI assistant page — both
+  // surfaces used to render these after messages.map, so the card always sat
+  // last and slid down under whatever question came next.
+  //
+  // The fallback matters: with no owning message the card renders at the end as
+  // before, because the server still refuses every other command until it is
+  // confirmed or cancelled, and a card nobody can see is a deadlock.
+  const planCard =
+    pendingActionPlan && pendingActionPlan.items.length > 0 ? (
+      <InlineDbConfirmBar
+        key={pendingActionPlan.id}
+        summary={pendingActionPlan.summary}
+        items={pendingActionPlan.items.map((planItem) => ({
+          title: planItem.title,
+          change: planItem.change,
+          unit: planItem.unit,
+          sideEffects: planItem.side_effects,
+        }))}
+        warnings={pendingActionPlan.warnings}
+        detail={language === "th"
+          ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+          : `changes ${pendingActionPlan.items.length} record(s)`}
+        expiresAt={pendingActionPlan.expires_at}
+        onConfirm={handlePlanConfirm}
+        onCancel={handlePlanCancel}
+        language={language}
+      />
+    ) : null;
+
+  const previewCard = pendingActionPreview ? (
+    <AIActionPreviewCard
+      preview={pendingActionPreview}
+      language={language}
+      confirming={actionConfirming}
+      cancelling={actionCancelling}
+      error={actionPreviewError}
+      onConfirm={handleConfirmActionPreview}
+      onCancel={handleCancelActionPreview}
+    />
+  ) : null;
+
+  const planAnchorId = pendingActionPlan
+    ? messages.find((message) => message.planId === pendingActionPlan.id)?.id ?? null
+    : null;
+  const previewAnchorId = pendingActionPreview
+    ? messages.find((message) => message.previewId === pendingActionPreview.id)?.id ?? null
+    : null;
+
   return (
     <>
       {/* Local motion keeps the floating assistant responsive without page-level choreography. */}
@@ -803,9 +899,52 @@ export default function AIOperationsFloatingChat() {
             aria-labelledby="ai-operations-chat-title"
             className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-t-2xl rounded-b-none border border-gray-200 bg-[#faf8f2] shadow-xl shadow-gray-950/10 transition-shadow duration-200 dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30 sm:rounded-2xl sm:bg-white"
           >
-          {/* Phone: no header bar — the controls float top-right over the canvas,
-              the same glassy treatment as the full AI page. Reset + close only. */}
-          <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:hidden">
+          {/* No header bar at any width. The phone had one treatment and the desktop
+              another — a titled, bordered bar — and the owner preferred the phone's:
+              the panel is small enough that a bar naming what you just opened spends
+              a row of it saying nothing. The controls float over the canvas instead,
+              and the ones that only make sense on a wider screen keep their own
+              width gates rather than living in a separate header. */}
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+            {messages.length <= 1 && (
+              <button
+                type="button"
+                aria-label={labels.toggleTips}
+                aria-pressed={showTips}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTips(!showTips);
+                }}
+                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 sm:inline-flex ${
+                  showTips
+                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
+                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+                }`}
+              >
+                <Lightbulb className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {messages.length > 1 && (
+              <button
+                type="button"
+                aria-label={labels.toggleStats}
+                aria-pressed={showStats}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!showStats) {
+                    setHasOpenedStats(true);
+                  }
+                  setShowStats(!showStats);
+                }}
+                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 lg:inline-flex ${
+                  showStats
+                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
+                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
+                }`}
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             {messages.length > 1 && (
               <button
                 type="button"
@@ -813,7 +952,7 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void handleClearChat();
+                  setConfirmingClear(true);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
               >
@@ -832,95 +971,15 @@ export default function AIOperationsFloatingChat() {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          {/* Header (sm+ only) */}
-          <div className="hidden items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-3 dark:border-gray-800 dark:bg-gray-900/50 sm:flex sm:px-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <SiriOrb size="34px" className="shrink-0" animationDuration={8} />
-              <div className="flex min-w-0 items-center">
-                <h2 id="ai-operations-chat-title" className="truncate text-sm font-semibold leading-tight text-gray-900 dark:text-white">{copy.title}</h2>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {/* Tips Toggle Button (Lightbulb) */}
-              {messages.length <= 1 && (
-                <button
-                  type="button"
-                  aria-label={labels.toggleTips}
-                  aria-pressed={showTips}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowTips(!showTips);
-                  }}
-                  title={language === "th" ? "เปิด/ปิดคำถามแนะนำ" : "Toggle Suggested Questions"}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 ${
-                    showTips
-                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <Lightbulb className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* Stats Panel Toggle Button with tactile scale click */}
-              {canAskAI && (
-                <button
-                  type="button"
-                  aria-label={labels.toggleStats}
-                  aria-expanded={showStats}
-                  aria-controls="ai-operations-stats"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!showStats) {
-                      setHasOpenedStats(true);
-                    }
-                    setShowStats(!showStats);
-                  }}
-                  title={copy.toggleStatsTooltip}
-                  className={`hidden h-11 w-11 items-center justify-center rounded-md transition-colors active:scale-[0.98] sm:h-10 sm:w-10 lg:inline-flex ${
-                    showStats
-                      ? "bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-                      : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  }`}
-                >
-                  <BarChart2 className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* New Chat / Clear History */}
-              {messages.length > 1 && (
-                <button
-                  type="button"
-                  aria-label={labels.clearChat}
-                  title={labels.clearChat}
-                  disabled={loading || actionConfirming || actionCancelling}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleClearChat();
-                  }}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
-                >
-                  <RotateCcw className="h-4.5 w-4.5" />
-                </button>
-              )}
-              {/* Close Panel */}
-              <button
-                type="button"
-                aria-label={labels.closeAssistant}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsOpen(false);
-                }}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:w-10"
-              >
-                <X className="h-4.5 w-4.5" />
-              </button>
-            </div>
-          </div>
 
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
-          <div className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4">
+          <div
+            ref={scrollAreaRef}
+            onScroll={handleThreadScroll}
+            className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4"
+          >
             {messages.map((msg) => {
               if (msg.role === "system") {
                 return (
@@ -942,7 +1001,8 @@ export default function AIOperationsFloatingChat() {
 
               // Assistant/AI message
               return (
-                <div key={msg.id} className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
+                <React.Fragment key={msg.id}>
+                <div className="flex max-w-full items-start gap-2.5 animate-message-slide sm:max-w-[90%]">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
@@ -962,6 +1022,9 @@ export default function AIOperationsFloatingChat() {
                     )}
                   </div>
                 </div>
+                {planAnchorId === msg.id && planCard}
+                {previewAnchorId === msg.id && previewCard}
+                </React.Fragment>
               );
             })}
 
@@ -989,37 +1052,10 @@ export default function AIOperationsFloatingChat() {
                 }}
               />
             )}
-            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
-              <InlineDbConfirmBar
-                key={pendingActionPlan.id}
-                summary={pendingActionPlan.summary}
-                items={pendingActionPlan.items.map((planItem) => ({
-                  title: planItem.title,
-                  change: planItem.change,
-                  unit: planItem.unit,
-                  sideEffects: planItem.side_effects,
-                }))}
-                warnings={pendingActionPlan.warnings}
-                detail={language === "th"
-                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
-                  : `changes ${pendingActionPlan.items.length} record(s)`}
-                expiresAt={pendingActionPlan.expires_at}
-                onConfirm={handlePlanConfirm}
-                onCancel={handlePlanCancel}
-                language={language}
-              />
-            )}
-            {pendingActionPreview && (
-              <AIActionPreviewCard
-                preview={pendingActionPreview}
-                language={language}
-                confirming={actionConfirming}
-                cancelling={actionCancelling}
-                error={actionPreviewError}
-                onConfirm={handleConfirmActionPreview}
-                onCancel={handleCancelActionPreview}
-              />
-            )}
+            {/* fallback: ไม่เจอข้อความเจ้าของใบ จึงวางท้ายสายเหมือนเดิม
+                ดีกว่าไม่แสดงเลย เพราะเซิร์ฟเวอร์ยังกันคำสั่งอื่นอยู่ */}
+            {planAnchorId === null && planCard}
+            {previewAnchorId === null && previewCard}
             <div ref={messagesEndRef} />
           </div>
 
@@ -1059,6 +1095,45 @@ export default function AIOperationsFloatingChat() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Asked before the thread is deleted, not after. The server copy goes
+              too and there is no undo, so a stray tap on a small screen used to
+              cost the whole conversation.
+
+              A modal rather than an inline card: the inline version lived at the
+              bottom of the message column, so on a phone the question could be
+              scrolled away from while the thread it was about to delete stayed on
+              screen. This one cannot be scrolled past or missed. */}
+          <WarmConfirmDialog
+            open={confirmingClear}
+            title={labels.clearChatTitle}
+            description={labels.clearChatConfirm}
+            confirmLabel={labels.clearChatYes}
+            cancelLabel={labels.clearChatNo}
+            onConfirm={() => void handleClearChat()}
+            onCancel={() => setConfirmingClear(false)}
+            busy={loading || actionConfirming || actionCancelling}
+          />
+
+          {/* A way back to the newest message once the reader has scrolled up.
+              It sits just above the input and only appears when there is
+              somewhere to go, so it never covers a message the reader is on. */}
+          {!atLatest && messages.length > 1 && (
+            <div className="pointer-events-none relative z-20 h-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  jumpToLatest();
+                }}
+                aria-label={labels.scrollToLatest}
+                title={labels.scrollToLatest}
+                className="pointer-events-auto absolute -top-11 left-1/2 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200/80 bg-white/90 text-gray-600 shadow-md backdrop-blur transition-all hover:-translate-y-0.5 hover:text-orange-600 active:scale-95 dark:border-gray-700/80 dark:bg-gray-900/90 dark:text-gray-300 dark:hover:text-orange-300"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
             </div>
           )}
 

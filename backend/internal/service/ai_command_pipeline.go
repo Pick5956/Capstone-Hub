@@ -301,7 +301,17 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 	if note == "" {
 		note = strings.TrimSpace(draft.Name)
 	}
-	title := note
+	// The card shows the name, not the note.
+	//
+	// The note is free text — "จ่ายค่าอะไรไป เขียนสั้น ๆ เป็นคำพูด" — so it comes
+	// back as whatever the owner said, verb and amount included. Using it as the
+	// title put 'บันทึกรายจ่าย "บันทึกค่าน้ำ 500 บาท"' on screen for
+	// "บันทึกค่าน้ำ 500 บาทให้หน่อย", where the extractor had correctly separated
+	// name="ค่าน้ำ" all along. The name is the field that is meant to be a name.
+	title := strings.TrimSpace(draft.Name)
+	if title == "" {
+		title = note
+	}
 	if title == "" {
 		title = "รายจ่าย"
 	}
@@ -318,7 +328,14 @@ func ResolveExpenseCommand(draft AIStockCommandDraft, now time.Time) AICommandRe
 			Question: fmt.Sprintf("“%s” จัดเป็นรายจ่ายหมวดไหนครับ — %s", title, strings.Join(options, " / ")),
 		}
 	}
-	if draft.Quantity <= 0 {
+	if draft.Quantity < 0 {
+		return AICommandResolution{
+			Kind:     AICommandOutcomeAsk,
+			Title:    title,
+			Question: fmt.Sprintf("“%s” ใส่เป็นยอดติดลบไม่ได้ครับ จ่ายไปเท่าไหร่ครับ", title),
+		}
+	}
+	if draft.Quantity == 0 {
 		return AICommandResolution{
 			Kind:     AICommandOutcomeAsk,
 			Title:    title,
@@ -405,7 +422,20 @@ func ResolveMenuCommand(menus []entity.MenuItem, draft AIStockCommandDraft) AICo
 	}
 
 	if kind == "menu_price" {
-		if draft.Quantity <= 0 {
+		// ติดลบกับไม่ได้บอกมา เป็นคนละเรื่อง และเจ้าของร้านต้องได้ยินคนละคำตอบ
+		//
+		// "ตั้งราคาข้าวกะเพราเป็น -50 บาท" เคยได้คำตอบว่า "ผู้ช่วยทำให้ไม่ได้ครับ
+		// ต้องไปจัดการเรื่องราคาในระบบเองครับ" ซึ่งผลลัพธ์ถูกแต่เหตุผลผิด —
+		// การเปลี่ยนราคาเมนูเป็นสิ่งที่ผู้ช่วยทำได้ ติดแค่ตัวเลขนั้นตัวเดียว
+		// เจ้าของอ่านแล้วจะเข้าใจว่าเปลี่ยนราคาผ่านผู้ช่วยไม่ได้เลย ทั้งที่ได้
+		if draft.Quantity < 0 {
+			return AICommandResolution{
+				Kind:     AICommandOutcomeAsk,
+				Title:    match.Exact.Name,
+				Question: fmt.Sprintf("“%s” ตั้งราคาติดลบไม่ได้ครับ อยากตั้งเป็นเท่าไหร่ครับ", match.Exact.Name),
+			}
+		}
+		if draft.Quantity == 0 {
 			return AICommandResolution{
 				Kind:     AICommandOutcomeAsk,
 				Title:    match.Exact.Name,
@@ -526,6 +556,31 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 				Question: fmt.Sprintf("“%s” หมายถึงตัวไหนครับ — %s", title, strings.Join(names, " / ")),
 			}
 		}
+		// Nothing on the shelf answers to this name, so the only thing the owner
+		// can have meant is a new ingredient.
+		//
+		// If they already said the unit, do not ask for it again. "เพิ่ม
+		// หมูสามชั้น 3000 กก เข้าคลัง" arrived here as a complete draft — name,
+		// quantity, unit — and the reply was still "ให้ผมเพิ่มเข้าคลังให้ไหม
+		// (บอกหน่วยด้วย)", which reads as though the assistant did not listen.
+		// It cost two extra turns to say back what the first sentence contained.
+		//
+		// Handing it straight to the confirmation card is not skipping the
+		// question: the card IS the question, and it shows the name, unit and
+		// opening quantity before anything is written.
+		if unit := strings.TrimSpace(draft.Unit); unit != "" {
+			return AICommandResolution{
+				Kind:  AICommandOutcomeReady,
+				Title: title,
+				Command: AIAdjustStockCommand{
+					Kind:     "create",
+					Quantity: draft.Quantity,
+					Name:     title,
+					Unit:     unit,
+					Note:     strings.TrimSpace(draft.Note),
+				},
+			}
+		}
 		return AICommandResolution{
 			Kind:     AICommandOutcomeOfferCreate,
 			Title:    title,
@@ -533,7 +588,14 @@ func ResolveStockCommand(shelf []entity.Ingredient, draft AIStockCommandDraft) A
 		}
 	}
 
-	if draft.Quantity <= 0 {
+	if draft.Quantity < 0 {
+		question := fmt.Sprintf("“%s” ใส่จำนวนติดลบไม่ได้ครับ เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit)
+		if kind == "cost" {
+			question = fmt.Sprintf("“%s” ตั้งราคาติดลบไม่ได้ครับ ราคาต่อ%sเท่าไหร่ครับ", match.Exact.Name, match.Exact.Unit)
+		}
+		return AICommandResolution{Kind: AICommandOutcomeAsk, Title: title, Question: question}
+	}
+	if draft.Quantity == 0 {
 		question := fmt.Sprintf("“%s” เท่าไหร่ครับ (หน่วย%s)", match.Exact.Name, match.Exact.Unit)
 		if kind == "cost" {
 			question = fmt.Sprintf("“%s” ราคาต่อ%sเท่าไหร่ครับ", match.Exact.Name, match.Exact.Unit)

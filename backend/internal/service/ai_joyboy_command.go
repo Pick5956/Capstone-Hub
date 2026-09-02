@@ -38,9 +38,18 @@ type AIActionPlanItemResponse struct {
 // maybeHandleJoyboyStockCommand answers an inventory command. It reports handled
 // = true whenever it has taken over the reply, so the caller skips the normal
 // read/answer flow and the model never free-writes about a write.
-func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request *AIAskRequest, response *AIAskResponse) bool {
+//
+// clarify comes back when the sentence held a command this path could not
+// resolve AND nothing else about it was understood. The turn is then NOT taken
+// over — the caller answers the question normally and appends this line.
+//
+// That case is not rare, because people put both halves in one breath:
+// "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย" is a question and an order. Taking
+// the whole turn for the order dropped the question with no trace, and the owner
+// got a request for a quantity instead of the number they asked for.
+func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request *AIAskRequest, response *AIAskResponse) (handled bool, clarify string) {
 	if s.actionPlanStore == nil || s.actionIngredients == nil || s.repo == nil {
-		return false
+		return false, ""
 	}
 	// No keyword gate. Deciding whether a sentence is a command is exactly the
 	// judgement the model is good at, and a keyword list can only ever cover the
@@ -49,7 +58,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 	// way of saying it working.
 	drafts, err := s.ExtractStockCommands(request.Question, request.History)
 	if err != nil || len(drafts) == 0 {
-		return false
+		return false, ""
 	}
 
 	// Actions off (or not the owner): say so rather than letting the answer round
@@ -63,13 +72,13 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-action-disabled"
-		return true
+		return true, ""
 	}
 
 	shelf, err := s.actionIngredients.ListIngredients(actor.RestaurantID)
 	if err != nil {
 		aiStage("warn", "joyboy command: listing ingredients failed (%v) → answering normally", err)
-		return false
+		return false, ""
 	}
 	// The menu catalogue is only fetched when something in the sentence is about a
 	// menu, so an inventory-only command costs exactly what it did before.
@@ -80,12 +89,12 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 			response.Intent = AIIntentChat
 			response.Task = AITaskGeneralChat
 			response.Model = "joyboy-command-unavailable"
-			return true
+			return true, ""
 		}
 		menus, err = s.actionMenus.ListMenuItems(actor.RestaurantID, true, 0)
 		if err != nil {
 			aiStage("warn", "joyboy command: listing menus failed (%v) → answering normally", err)
-			return false
+			return false, ""
 		}
 	}
 
@@ -119,9 +128,27 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		}
 	}
 
+	// Two drafts about the same thing ask the same question, and it was printed
+	// twice: "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย" came back as
+	// `"กะเพรา" เท่าไหร่ครับ (หน่วยกรัม)` on two consecutive lines. Nothing
+	// downstream compares them, so identical text is dropped here.
+	questions = aiDropRepeats(questions)
+	notices = aiDropRepeats(notices)
+
 	// Anything unclear is asked before a plan is built, so the owner never
 	// confirms half of what they said without knowing.
 	if len(questions) > 0 {
+		// Nothing was understood and nothing is ready: the sentence may well have
+		// been a question with an order tacked on. Hand the question back so it gets
+		// a real answer, and carry the clarification along to be appended to it.
+		//
+		// Only in that exact case. Once anything has been acknowledged or a command
+		// is ready, this path has to own the reply — the "รับทราบแล้วครับ" line is
+		// what the next turn reads to rebuild the rest of the command, and burying
+		// it under an unrelated answer is how half an order goes missing.
+		if len(acknowledged) == 0 && len(commands) == 0 && len(notices) == 0 {
+			return false, strings.Join(questions, "\n")
+		}
 		lines := notices
 		// Say what was understood before asking about what was not. Without this the
 		// owner sees only the question and cannot tell whether the part that was
@@ -134,7 +161,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		response.Intent = AIIntentUnclear
 		response.Task = AITaskUnclear
 		response.Model = "joyboy-command-clarify"
-		return true
+		return true, ""
 	}
 	if len(commands) == 0 {
 		if len(notices) > 0 {
@@ -142,9 +169,9 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 			response.Intent = AIIntentChat
 			response.Task = AITaskGeneralChat
 			response.Model = "joyboy-command-noop"
-			return true
+			return true, ""
 		}
-		return false
+		return false, ""
 	}
 
 	draft := BuildAdjustStockPlan(s.actionPorts(), actor.RestaurantID, commands, titles)
@@ -153,7 +180,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-rejected"
-		return true
+		return true, ""
 	}
 
 	summary := aiStockPlanSummary(draft.Items, draft.Previews)
@@ -186,7 +213,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-already-pending"
-		return true
+		return true, ""
 	}
 
 	plan, token, err := s.actionPlanStore.CreateAIActionPlan(repository.CreateAIActionPlanParams{
@@ -201,7 +228,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		response.Intent = AIIntentChat
 		response.Task = AITaskGeneralChat
 		response.Model = "joyboy-command-failed"
-		return true
+		return true, ""
 	}
 
 	items := make([]AIActionPlanItemResponse, 0, len(draft.Previews))
@@ -239,7 +266,7 @@ func (s *AIService) maybeHandleJoyboyStockCommand(actor AIActorContext, request 
 		Items:             items,
 		Warnings:          warnings,
 	}
-	return true
+	return true, ""
 }
 
 // aiCommandAsSaid renders one understood command the way the owner said it, for
@@ -406,22 +433,49 @@ func (s *AIService) ConfirmAIActionPlanForOwner(actor AIActorContext, planID, co
 		return newAIActionPlanConfirmation(plan, true), nil
 	}
 
-	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
-	for _, item := range plan.Items {
-		execErr := executeAIActionItem(s.actionPorts(), actor.RestaurantID, actor.OwnerUserID, item)
-		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
-		if execErr != nil {
-			outcome.ErrorText = execErr.Error()
-			aiStage("warn", "joyboy plan %s item %d failed: %v", plan.ID, item.ID, execErr)
-		}
-		outcomes = append(outcomes, outcome)
-	}
+	outcomes := runAIActionPlanItems(s.actionPlanStore, s.actionPorts(), actor, plan)
 
 	finished, err := s.actionPlanStore.FinishAIActionPlan(plan.ID, outcomes)
 	if err != nil {
 		return nil, err
 	}
 	return newAIActionPlanConfirmation(finished, false), nil
+}
+
+// runAIActionPlanItems executes a claimed plan item by item and returns every
+// item's outcome, the ones it ran and the ones it found already done.
+//
+// An item that already reads "executed" is not run again. That is the case a
+// re-claim exists for: the first attempt died after writing item 1, the plan sat
+// in "executing" past the claim timeout, and the owner (or a retry) confirmed
+// again. Running item 1 a second time would book the same delivery twice. Its
+// stored outcome is carried into the totals instead, so the final message still
+// counts it.
+//
+// Each outcome is written the moment it is known — before the next item runs —
+// which is what makes the skip possible on the next attempt. If that write
+// itself fails the run continues; the outcome still reaches FinishAIActionPlan
+// with the rest, and the worst case is the one this code already had.
+func runAIActionPlanItems(store AIActionPlanStore, ports AIActionPorts, actor AIActorContext, plan *entity.AIActionPlan) []repository.AIActionPlanItemOutcome {
+	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
+	for _, item := range plan.Items {
+		if item.Status == entity.AIActionItemStatusExecuted {
+			aiStage("flow", "joyboy plan %s item %d already executed on an earlier attempt → not run again", plan.ID, item.ID)
+			outcomes = append(outcomes, repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: true})
+			continue
+		}
+		execErr := executeAIActionItem(ports, actor.RestaurantID, actor.OwnerUserID, item)
+		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
+		if execErr != nil {
+			outcome.ErrorText = execErr.Error()
+			aiStage("warn", "joyboy plan %s item %d failed: %v", plan.ID, item.ID, execErr)
+		}
+		if err := store.RecordAIActionPlanItem(outcome); err != nil {
+			aiStage("warn", "joyboy plan %s item %d: could not record the outcome yet (%v) → continuing", plan.ID, item.ID, err)
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	return outcomes
 }
 
 // CancelAIActionPlanForOwner drops a pending plan without writing anything.
@@ -482,6 +536,17 @@ func newAIActionPlanConfirmation(plan *entity.AIActionPlan, replayed bool) *AIAc
 	default:
 		confirmation.Message = fmt.Sprintf("สำเร็จ %d รายการ ไม่สำเร็จ %d รายการครับ", confirmation.Succeeded, confirmation.Failed)
 	}
+	// The reason each item failed goes into the message itself. The chat shows
+	// only Message, so without this the owner read "ไม่สำเร็จ 1 รายการ" and had
+	// no way to learn that it was refused because a colleague had changed the
+	// stock while the card was on screen — which is the one thing they need to
+	// know to decide what to do next.
+	for _, item := range confirmation.Items {
+		if item.Succeeded || strings.TrimSpace(item.Error) == "" {
+			continue
+		}
+		confirmation.Message += fmt.Sprintf("\n- %s: %s", item.Title, item.Error)
+	}
 	return confirmation
 }
 
@@ -491,4 +556,23 @@ func aiActionItemTitle(item entity.AIActionPlanItem) string {
 		return preview.Title
 	}
 	return item.ActionType
+}
+
+// aiDropRepeats keeps the first of each identical line, order preserved. The
+// owner reading the same question twice reads it as a bug, because it is one.
+func aiDropRepeats(lines []string) []string {
+	if len(lines) < 2 {
+		return lines
+	}
+	seen := make(map[string]bool, len(lines))
+	kept := lines[:0:0]
+	for _, line := range lines {
+		key := strings.TrimSpace(line)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		kept = append(kept, line)
+	}
+	return kept
 }

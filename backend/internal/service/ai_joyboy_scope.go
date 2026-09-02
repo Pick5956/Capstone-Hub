@@ -13,7 +13,24 @@ import (
 //
 // A claim that something was DONE is always false here: joyboy's write path
 // short-circuits long before this point, so no change can have happened on the
-// road that produced this sentence. That one is replaced.
+// road that produced this sentence. That one used to be replaced.
+//
+// It no longer is, and the reason is worth keeping. The rule the model was given
+// asked it to judge: "do not say you did something, because nothing happened this
+// round" — which requires knowing what happened this round, and the model cannot
+// know that. It sees a prompt and a fact sheet. So Go read the Thai and threw the
+// answer away when the judgement went wrong, which is how a recipe step ("เพิ่ม
+// น้ำมันแล้วใส่กระเทียม") once became "I can't help with this".
+//
+// The rule is now unconditional instead: never state the outcome of a write, in
+// any situation, because the confirmation card announces it. That is checkable
+// without judgement — and it costs the owner nothing, because the card was always
+// the thing that actually said "บันทึกลงระบบแล้ว", in green, with an icon and a
+// countdown. The sentence was never carrying that information.
+//
+// What stays here is a tripwire. Nothing is replaced or edited; a claim that slips
+// through is logged so the decision can be revisited from evidence rather than
+// from either of us guessing.
 //
 // A figure used to be replaced too, on the theory that a number with no tool
 // behind it must be invented. That caught real inventions, and it also caught
@@ -23,8 +40,6 @@ import (
 // looked broken over a unit of measure. So the figure check now only reports;
 // the prompt is what tells the model not to invent shop numbers, and the log is
 // how we find out if it ever does.
-
-const joyboyOutOfScopeAnswer = "ขอโทษครับ เรื่องนี้ผมยังช่วยไม่ได้ครับ"
 
 // The verbs that name something this system can actually do. On their own they
 // prove nothing — a recipe uses half of them.
@@ -66,7 +81,7 @@ func joyboyScopedAnswer(answer string, toolCount int) string {
 		return answer
 	}
 	if joyboyClaimsSomethingWasDone(text) {
-		return joyboyOutOfScopeAnswer
+		aiStage("warn", "joyboy: answer claims a change was applied with no tool behind it — the persona rule was not followed")
 	}
 	if joyboyMoneyFigure.MatchString(text) {
 		aiStage("warn", "joyboy: answer states a baht figure with no tool behind it — check for invention")

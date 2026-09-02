@@ -74,10 +74,10 @@ func (s *AIService) askGroqWithRotation(question string, history []AIConversatio
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Groq key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Groq key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Groq key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Groq key %s failed: %v → rotating", attempt.Label(), err)
 	}
 
 	return "", "", lastErr
@@ -567,10 +567,10 @@ func (s *AIService) askSecondRoundGroqWithRotation(prompt string, opts aiProvide
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Groq second-round key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Groq second-round key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Groq second-round key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Groq second-round key %s failed: %v → rotating", attempt.Label(), err)
 	}
 	return "", "", lastErr
 }

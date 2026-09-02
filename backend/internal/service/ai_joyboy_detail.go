@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"Project-M/internal/aitools"
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
@@ -50,9 +51,22 @@ import (
 // were discussed, and the model — which does read the sentence — picks. Same
 // division as everywhere else here: the model decides what was meant, Go supplies
 // the figures.
-func aiFindNamedRowsInThread(names []string, question string, history []AIConversationMessage) []int {
+// partial reports that the rows came from a shortened name rather than a whole
+// one, which the sheet has to say out loud — the model is choosing between
+// near misses, not reading an answer.
+func aiFindNamedRowsInThread(names []string, question string, history []AIConversationMessage) (rows []int, partial bool) {
 	if found := aiFindNamedRows(names, question); len(found) > 0 {
-		return found
+		return found, false
+	}
+	// Before the thread. A name half-written in THIS sentence is what the owner
+	// is asking about; a name fully written two turns ago is not.
+	//
+	// Getting this order wrong is not theoretical: with the partial match placed
+	// after the thread instead, "ต้มยำกุ้งต้นทุนเท่าไหร่" returned ผัดไทยกุ้งสด
+	// and กะเพรา — the subjects of the previous three turns — and the assistant
+	// answered "มองย้อนไปไม่ถึงต้มยำกุ้งครับ" about a dish sitting on its own menu.
+	if found := aiPartlyNamedRows(names, question); len(found) > 0 {
+		return found, true
 	}
 	seen := make(map[int]bool, 4)
 	ordered := make([]int, 0, 4)
@@ -64,11 +78,11 @@ func aiFindNamedRowsInThread(names []string, question string, history []AIConver
 			seen[index] = true
 			ordered = append(ordered, index)
 			if len(ordered) >= aiThreadNameCandidates {
-				return ordered
+				return ordered, false
 			}
 		}
 	}
-	return ordered
+	return ordered, false
 }
 
 // aiThreadNameCandidates caps how many things the thread can offer at once. Four
@@ -129,10 +143,84 @@ func aiFindNamedRows(names []string, question string) []int {
 	return kept
 }
 
+// aiPartlyNamedRows finds rows the owner named by part of their name.
+//
+// aiFindNamedRows above needs the whole stored name inside the question, which
+// is how "ผัดไทย" came back as "ผัดไทยไม่ได้อยู่ในเมนูของร้านครับ" while the shop
+// was selling ผัดไทยกุ้งสด three hundred times a month. Nobody says the whole
+// name. They say the head of it, or the part that distinguishes the dish —
+// "กะเพรา" for ข้าวกะเพราไก่ไข่ดาว, "ต้มยำ" for ต้มยำกุ้งน้ำข้น.
+//
+// The command path already reads names this way: aiMatchNames accepts
+// containment in either direction. It could not simply be reused here because it
+// compares a name to a name, and this side has a whole sentence — so the same
+// idea is expressed the other way round, by looking for any long enough run of
+// the stored name inside the question.
+//
+// This does not decide what the owner meant. Every hit goes back as a candidate,
+// longest match first, and the model picks — the same division as everywhere
+// else in this file. Go widening the shortlist is the opposite of Go guessing:
+// today it hands over nothing and the model is left to conclude the dish does
+// not exist.
+func aiPartlyNamedRows(names []string, question string) []int {
+	haystack := aiNormalizeName(question)
+	if haystack == "" {
+		return nil
+	}
+	type hit struct {
+		index   int
+		matched int
+	}
+	hits := make([]hit, 0, 4)
+	for index, name := range names {
+		runes := []rune(aiNormalizeName(name))
+		if len(runes) < aiPartialNameMinRunes {
+			continue
+		}
+		// Longest run first, so a hit is the most of the name the owner actually
+		// said rather than the first four characters that happen to line up.
+		best := 0
+		for length := len(runes); length >= aiPartialNameMinRunes && best == 0; length-- {
+			for start := 0; start+length <= len(runes); start++ {
+				if strings.Contains(haystack, string(runes[start:start+length])) {
+					best = length
+					break
+				}
+			}
+		}
+		if best > 0 {
+			hits = append(hits, hit{index: index, matched: best})
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].matched > hits[j].matched })
+	kept := make([]int, 0, aiThreadNameCandidates)
+	for _, h := range hits {
+		kept = append(kept, h.index)
+		if len(kept) == aiThreadNameCandidates {
+			break
+		}
+	}
+	return kept
+}
+
+// aiPartialNameMinRunes is how much of a name has to appear before it counts as
+// having been named. Four is short enough for "กะเพรา" to reach
+// ข้าวกะเพราไก่ไข่ดาว and long enough that "ข้าว" alone does not drag in every
+// rice dish on the menu ahead of the one that was asked about — and if it does,
+// the longer match still sorts above it.
+const aiPartialNameMinRunes = 4
+
 // joyboyIngredientDetailBody reports everything known about the ingredients named
 // in the question, including which menus consume them — the recipe link no other
 // tool exposes.
-func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, question string, history []AIConversationMessage) string {
+//
+// usage is the 30-day consumption per ingredient, the same rows the reorder
+// forecast reads. It is here because "อีกกี่วันต้องสั่งกุ้งสดเพิ่ม" names an
+// ingredient, so the selector reaches for this sheet rather than the forecast —
+// and this sheet used to carry stock with no rate of use, so the model answered
+// "ประมาณ 10 วัน" over a figure the data put at 7.5. A sheet that names the
+// ingredient has to carry the one number that question is about.
+func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, usage []repository.AIIngredientUsage, question string, history []AIConversationMessage) string {
 	if len(shelf) == 0 {
 		return joyboyNoData("no_ingredients_recorded")
 	}
@@ -140,7 +228,7 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 	for index, item := range shelf {
 		names[index] = item.Name
 	}
-	found := aiFindNamedRowsInThread(names, question, history)
+	found, partial := aiFindNamedRowsInThread(names, question, history)
 	if len(found) == 0 {
 		// Naming what the shop actually stocks turns a dead end into a question the
 		// owner can answer in one word.
@@ -153,13 +241,22 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 		}
 		return joyboyJoin([]string{
 			joyboyNoData("no_ingredient_named_in_question"),
-			"note=ยังไม่รู้ว่าถามถึงวัตถุดิบตัวไหน ให้ถามกลับว่าหมายถึงตัวไหน",
+			// Saying the list is partial matters: with eight of twenty-seven names
+			// and no such warning, "ผัดไทยไม่ได้อยู่ในเมนูของร้านครับ" is a
+			// reasonable thing for a model to conclude, and it was wrong.
+			"note=ยังไม่รู้ว่าถามถึงวัตถุดิบตัวไหน ให้ถามกลับว่าหมายถึงตัวไหน "+
+				"รายการข้างล่างเป็นแค่ตัวอย่างบางส่วน ไม่ใช่ทั้งหมด "+
+				"ห้ามสรุปว่าของที่เขาถามไม่มีอยู่ในร้าน",
 			"ingredients_in_stock_sample=" + strings.Join(sample, ", "),
 			fmt.Sprintf("total_ingredients=%d", len(shelf)),
 		})
 	}
 
-	lines := make([]string, 0, len(found)*6)
+	lines := make([]string, 0, len(found)*6+1)
+	if partial {
+		lines = append(lines, "note=รายการด้านล่างคือตัวที่ชื่อใกล้เคียงกับที่ถาม เรียงจากใกล้ที่สุด "+
+			"ให้เลือกตัวที่ตรงกับคำถามแล้วตอบเฉพาะตัวนั้น ถ้าไม่แน่ใจให้ถามกลับว่าหมายถึงตัวไหน")
+	}
 	for _, index := range found {
 		item := shelf[index]
 		lines = append(lines,
@@ -182,18 +279,58 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 		} else {
 			lines = append(lines, "used_by_menus=ไม่มีเมนูไหนใช้วัตถุดิบนี้ตามสูตรที่บันทึกไว้")
 		}
+		lines = append(lines, joyboyIngredientDaysLeftLines(item, usage)...)
 	}
 	return joyboyJoin(lines)
 }
 
+// joyboyIngredientDaysLeftLines is the forecast for one ingredient, computed the
+// way get_ingredient_reorder_forecast computes it (30-day use ÷ 30 = daily use,
+// stock ÷ daily use = days left) so the two tools never quote different days for
+// the same shelf. Nothing is printed when usage was not fetched; a line saying
+// the rate cannot be computed is printed when the ingredient was not used at
+// all, because a missing figure reads as "no data" and a zero reads as "runs
+// out today".
+func joyboyIngredientDaysLeftLines(item entity.Ingredient, usage []repository.AIIngredientUsage) []string {
+	if usage == nil {
+		return nil
+	}
+	for _, row := range usage {
+		if aiNormalizeName(row.Name) != aiNormalizeName(item.Name) {
+			continue
+		}
+		if row.Used <= 0 {
+			return []string{"days_left=คำนวณไม่ได้ ยังไม่มีการใช้วัตถุดิบนี้ใน 30 วันล่าสุด"}
+		}
+		dailyUse := row.Used / aitools.AnalysisWindowDays
+		daysLeft := item.Stock / dailyUse
+		return []string{
+			fmt.Sprintf("used_30d=%s %s daily_use=%s %s days_left=%s",
+				joyboyNum(row.Used), item.Unit, joyboyNum(dailyUse), item.Unit, joyboyNum(daysLeft)),
+			"days_left_means=จำนวนวันที่ของจะพอใช้ คิดจากอัตราใช้เฉลี่ย 30 วันล่าสุด " +
+				"ถ้าถามว่าจะหมดเมื่อไหร่ หรืออีกกี่วันต้องสั่งเพิ่ม ให้ตอบจากค่านี้ ห้ามประมาณเอง",
+		}
+	}
+	return nil
+}
+
 // aiMenusUsingIngredient reads the stored recipes rather than guessing from the
 // name. The invented "กะเพราไก่" came from having no such list to read.
+//
+// Each menu carries how much of the ingredient one serving uses. Names alone
+// answered "ไข่ไก่ขึ้นฟองละ 2 บาท เมนูไหนโดนหนักสุด" with "ทุกเมนูใช้ไข่ไก่เหมือนกันหมด" —
+// the model had a list of four menus and nothing to rank them by. The quantity
+// is what a price rise multiplies, so it is the one figure that question needs.
 func aiMenusUsingIngredient(menus []entity.MenuItem, ingredientID uint) []string {
 	used := make([]string, 0, 4)
 	for _, menu := range menus {
 		for _, component := range menu.Ingredients {
 			if component.IngredientID == ingredientID {
-				used = append(used, menu.Name)
+				entry := menu.Name
+				if component.Quantity > 0 {
+					entry += " (ใช้ " + strings.TrimSpace(joyboyNum(component.Quantity)+" "+component.Unit) + " ต่อรายการ)"
+				}
+				used = append(used, entry)
 				break
 			}
 		}
@@ -211,7 +348,7 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 	for index, item := range menus {
 		names[index] = item.Name
 	}
-	found := aiFindNamedRowsInThread(names, question, history)
+	found, partial := aiFindNamedRowsInThread(names, question, history)
 	if len(found) == 0 {
 		sample := make([]string, 0, 8)
 		for _, item := range menus {
@@ -222,7 +359,9 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 		}
 		return joyboyJoin([]string{
 			joyboyNoData("no_menu_named_in_question"),
-			"note=ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับว่าหมายถึงเมนูไหน",
+			"note=ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับว่าหมายถึงเมนูไหน "+
+				"รายการข้างล่างเป็นแค่ตัวอย่างบางส่วน ไม่ใช่ทั้งหมด "+
+				"ห้ามสรุปว่าเมนูที่เขาถามไม่มีอยู่ในร้าน",
 			"menus_sample=" + strings.Join(sample, ", "),
 			fmt.Sprintf("total_menus=%d", len(menus)),
 		})
@@ -239,7 +378,9 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 	// has touched, oldest first — candidates, not an answer. Saying so is what lets
 	// the model resolve "เมนูแรกที่บอกไปตอนต้น" (take the first) apart from
 	// "อันนั้น" (take the last); left unsaid it reads the first row as the answer.
-	if len(found) > 1 && !aiQuestionNamesARow(names, question) {
+	if partial {
+		lines = append(lines, "note=รายการด้านล่างคือตัวที่ชื่อใกล้เคียงกับที่ถาม เรียงจากใกล้ที่สุด ให้เลือกตัวที่ตรงกับคำถามแล้วตอบเฉพาะตัวนั้น ถ้าไม่แน่ใจให้ถามกลับว่าหมายถึงตัวไหน")
+	} else if len(found) > 1 && !aiQuestionNamesARow(names, question) {
 		lines = append(lines, "note=คำถามไม่ได้พิมพ์ชื่อมา รายการด้านล่างคือสิ่งที่คุยกันในบทสนทนานี้ "+
 			"เรียงจากที่พูดถึงก่อนไปหลัง ให้เลือกตัวที่ตรงกับคำถาม "+
 			"(\"อันแรก/ตอนต้น\" = ตัวบนสุด · \"อันล่าสุด/อันนั้น\" = ตัวล่างสุด) "+

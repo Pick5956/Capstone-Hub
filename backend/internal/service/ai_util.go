@@ -35,15 +35,25 @@ func sanitizeConversationHistoryInternal(history []AIConversationMessage, trustR
 				content = reduceSystemDocsAnswerForProvider(content, docURLs)
 			}
 		}
+		// Keep the END of an over-long message, not the start. A follow-up points
+		// at what was said last ("อันสุดท้ายที่บอก", "ตัวที่สองที่ยกมา"), and the
+		// prompt builder was already cutting from the front for that reason — but
+		// this cut runs first, so the tail was gone before it ever got there and
+		// the rule downstream never fired.
 		runes := []rune(content)
 		if len(runes) > 400 {
-			content = string(runes[:400])
+			content = "…" + string(runes[len(runes)-400:])
 		}
 		id := strings.TrimSpace(message.ID)
 		if len([]rune(id)) > 128 {
 			id = ""
 		}
-		cleaned = append(cleaned, AIConversationMessage{ID: id, Role: role, Content: content})
+		// Topic has to survive the sanitiser. It is written by the server from the
+		// tool a stored turn actually used, and it is what turns a trimmed turn
+		// into a readable index line ("— เรื่องวัตถุดิบและสต๊อก"). Dropped here, the
+		// index still rendered — just with every label missing, in production only:
+		// the joyboy tests build their turns directly and never crossed this line.
+		cleaned = append(cleaned, AIConversationMessage{ID: id, Role: role, Content: content, Topic: message.Topic})
 	}
 	return cleaned
 }

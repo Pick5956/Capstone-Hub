@@ -59,6 +59,21 @@ type aiProviderCompleteOptions struct {
 	// thinking from being cut off. Groq reserves this against the daily budget at
 	// request time, so it is set only where it is needed.
 	MaxCompletionTokens int
+	// Model overrides the provider's configured model for this one call. Empty
+	// keeps whatever the provider is set to, which is what every caller wanted
+	// until the free tier's numbers were actually read.
+	//
+	// On Gemini's free tier the daily request budget is per model, and the gap is
+	// not small: the Flash-Lite models allow 500 requests a day while every Flash
+	// model allows 20. A question costs about three calls, so putting all three
+	// on one model caps the shop at 161 questions a day, and putting them on a
+	// Flash model caps it at six.
+	//
+	// Only one of those three calls writes anything a person reads. The other two
+	// pick a tool and shape a sentence into JSON — both structured, both work a
+	// smaller model does well. Sending them to a different model spends a
+	// different daily budget, and the one model that matters keeps its own.
+	Model string
 }
 
 // aiProviderAdapter is the provider-neutral boundary used by AIService.
@@ -115,10 +130,10 @@ func (a *groqProviderAdapter) Classify(question string) (AIRouterResult, error) 
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			a.service.keyHealth.park("groq", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Groq classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Groq classifier key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Groq classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Groq classifier key %s failed: %v → rotating", attempt.Label(), err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Groq classifier exhausted configured keys: %w", lastErr)
 }
@@ -139,6 +154,13 @@ func (a *groqProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvide
 }
 
 func (a *groqProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	// Groq's model comes from GROQ_MODEL and this adapter has no per-call
+	// override. Saying so out loud costs one log line and saves someone setting
+	// AI_SUPPORT_MODEL, seeing no change, and having nothing to go on — a
+	// setting that silently does nothing is worse than one that does not exist.
+	if strings.TrimSpace(opts.Model) != "" {
+		aiStage("warn", "AI_SUPPORT_MODEL=%q is ignored on Groq — only Gemini reads it", opts.Model)
+	}
 	text, model, err := a.service.askSecondRoundGroqWithRotation(prompt, opts)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
@@ -185,10 +207,10 @@ func (a *geminiProviderAdapter) Classify(question string) (AIRouterResult, error
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			a.service.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Gemini classifier key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Gemini classifier key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini classifier key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Gemini classifier key %s failed: %v → rotating", attempt.Label(), err)
 	}
 	return AIRouterResult{}, fmt.Errorf("Gemini classifier exhausted configured keys: %w", lastErr)
 }
@@ -212,8 +234,8 @@ func (a *geminiProviderAdapter) Answer(request aiProviderAnswerRequest) (aiProvi
 // path, and a preference that cannot be expressed is not a reason to refuse the
 // call — the reply is still a reply. Dropping it here is what keeps the option a
 // hint rather than a contract every provider has to honour.
-func (a *geminiProviderAdapter) Complete(prompt string, _ aiProviderCompleteOptions) (aiProviderAnswer, error) {
-	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt)
+func (a *geminiProviderAdapter) Complete(prompt string, opts aiProviderCompleteOptions) (aiProviderAnswer, error) {
+	text, model, err := a.service.askSecondRoundGeminiWithRotation(prompt, opts.Model)
 	return aiProviderAnswer{Text: text, Model: model}, err
 }
 

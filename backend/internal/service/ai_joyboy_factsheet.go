@@ -21,6 +21,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -32,8 +33,53 @@ import (
 // joyboyNoData marks a tool that ran correctly but had nothing to report, with
 // the reason attached — "no sales recorded" and "costs not filled in yet" call
 // for different answers, and only the tool knows which one happened.
+// joyboyNoData renders a gap in the data, and it never renders one bare.
+//
+// A bare "status=no_data reason=every_stocked_ingredient_was_used_in_period" is
+// what the model read when the owner asked "เงินจมอยู่กับของอะไรบ้าง", and it
+// answered "มูลค่าคงคลังรวม 35,770 บาท" — a figure larger than the whole shelf is
+// worth. The question asked for money; the sheet gave a code in English; the
+// model filled the gap. Every gap therefore carries, in Thai, what it means and
+// what the true answer is (usually zero, or "not recorded", which are different
+// things). The map is the contract: TestEveryNoDataReasonHasAMeaning fails the
+// build for any reason used in this package that is missing from it.
 func joyboyNoData(reason string) string {
-	return "status=no_data reason=" + reason
+	note, known := joyboyNoDataMeaning[reason]
+	if !known {
+		note = "ไม่มีข้อมูลส่วนนี้ ให้บอกตรง ๆ ว่าไม่มี ห้ามประมาณตัวเลขเอง"
+	}
+	return "status=no_data reason=" + reason + "\nnote=" + note
+}
+
+// joyboyNoDataMeaning is what each gap means, written for the model to read and
+// the owner to hear. Two rules for every entry: say what the correct answer IS
+// (zero / not recorded / not in the shop), and say that no other figure exists
+// on this sheet — the model fills a silence with a number; it does not fill a
+// sentence that already answered.
+var joyboyNoDataMeaning = map[string]string{
+	"every_stocked_ingredient_was_used_in_period": "วัตถุดิบทุกตัวที่มีในสต็อกถูกใช้ในช่วงนี้ เงินจม = 0 บาท ไม่มีของค้าง " +
+		"ใบนี้ไม่มีตัวเลขอื่น ถ้าถามมูลค่าคลังรวม ให้บอกว่าต้องถามแยกต่างหาก ห้ามประมาณ",
+	"no_ingredient_usage_recorded_in_period":      "ยังไม่มีการตัดสต็อกจากการขายในช่วงนี้ จึงยังไม่มีต้นทุนวัตถุดิบที่ใช้ไป = 0 บาท ไม่ใช่ว่าร้านไม่มีต้นทุน",
+	"no_ingredient_usage_recorded_to_project_from": "ยังไม่มีการใช้วัตถุดิบในช่วงนี้ จึงคำนวณไม่ได้ว่าของจะหมดในกี่วัน ห้ามประมาณจำนวนวันเอง",
+	"no_orders_recorded_in_period":                "ยังไม่มีบิลในช่วงนี้ ยอดขาย = 0 บาท ออเดอร์ = 0 ไม่มีตัวเลขอื่นให้อ้าง",
+	"no_orders_recorded_in_that_period":           "ช่วงที่ถามไม่มีบิลที่ชำระเงินเลย ยอดขาย = 0 บาท ออเดอร์ = 0 ห้ามยกตัวเลขช่วงอื่นมาแทน",
+	"no_paid_orders_in_period":                    "ช่วงที่ถามไม่มีบิลที่ชำระเงินเลย ยอดขาย = 0 บาท ออเดอร์ = 0 ห้ามยกตัวเลขช่วงอื่นมาแทน",
+	"no_paid_sales_in_period":                     "ช่วงที่ถามไม่มียอดขายที่ชำระเงิน รายได้ ต้นทุน กำไร = 0 ทั้งหมด ห้ามยกตัวเลขช่วงอื่นมาแทน",
+	"no_paid_sales_recorded_at_all":               "ระบบยังไม่มีบิลที่ชำระเงินเลยแม้แต่ใบเดียว จึงยังบอกช่วงข้อมูลไม่ได้",
+	"no_menu_sales_recorded_in_period":            "ช่วงนี้ไม่มีเมนูไหนขายได้เลย จึงไม่มีอันดับให้จัด ห้ามแต่งอันดับหรือจำนวน",
+	"no_prior_week_to_compare_against":            "ยังไม่มีข้อมูลสัปดาห์ก่อนหน้าให้เทียบ บอกได้แค่ตัวเลขช่วงล่าสุด ห้ามคิดเปอร์เซ็นต์เปลี่ยนแปลงเอง",
+	"margin_needs_recorded_sales_and_ingredient_costs": "ยังคำนวณกำไรต่อเมนูไม่ได้ เพราะยังไม่มียอดขายหรือยังไม่ได้ผูกต้นทุนวัตถุดิบกับเมนู ไม่ใช่ว่ากำไรเป็นศูนย์",
+	"menu_classification_needs_sales_and_costs":   "ยังจัดกลุ่มเมนู (ดาว/ม้างาน/ปริศนา/หมา) ไม่ได้ เพราะยังไม่มีทั้งยอดขายและต้นทุนครบ",
+	"period_not_recognised":                       "อ่านช่วงเวลาที่ถามไม่ออก ให้ถามกลับว่าหมายถึงวันไหนหรือเดือนไหน ห้ามเดาช่วง",
+	"no_expenses_recorded_in_window":              "ช่วงนี้ยังไม่มีรายจ่ายบันทึกไว้ในระบบ รายจ่ายที่บันทึก = 0 บาท 0 รายการ ไม่ได้แปลว่าร้านไม่มีค่าใช้จ่าย",
+	"no_active_orders_right_now":                  "ไม่มีออเดอร์ค้างอยู่เลย ทุกบิลปิดหมดแล้ว บิลค้าง = 0",
+	"no_restaurant_profile":                       "ยังไม่มีข้อมูลตัวร้าน (ชื่อ สาขา เวลาเปิด) ในระบบ ให้บอกว่ายังไม่ได้ตั้งค่า",
+	"not_enough_daily_history_to_forecast":        "ข้อมูลรายวันยังน้อยเกินกว่าจะพยากรณ์ ห้ามประมาณยอดขายล่วงหน้าเอง",
+	"no_matching_documentation":                   "ไม่พบหัวข้อนี้ในคู่มือระบบ ให้บอกว่าไม่พบ ห้ามเดาวิธีใช้",
+	"no_ingredients_recorded":                     "ยังไม่มีวัตถุดิบในคลังเลย ต้องไปเพิ่มที่หน้าคลังก่อน",
+	"no_ingredient_named_in_question":             "ยังไม่รู้ว่าถามถึงวัตถุดิบตัวไหน ให้ถามกลับ ห้ามเดาตัวเลขของตัวไหน",
+	"no_menu_items_recorded":                      "ยังไม่มีเมนูในระบบเลย ต้องไปเพิ่มที่หน้าจัดการเมนูก่อน",
+	"no_menu_named_in_question":                   "ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับ ห้ามเดาตัวเลขของเมนูไหน",
 }
 
 func joyboyNum(value float64) string {
@@ -172,7 +218,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 	case AIToolGetSalesSummary:
 		summary := result.SalesSummary
 		if summary == nil || summary.Orders == 0 {
-			return joyboyNoData("no_orders_recorded_in_period"), true
+			return joyboyJoin([]string{window, "orders=0 revenue=0.00", joyboyNoData("no_orders_recorded_in_period")}), true
 		}
 		return joyboyJoin([]string{
 			window,
@@ -325,7 +371,11 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 
 	case AIToolGetDeadStock:
 		if len(result.DeadStock) == 0 {
-			return joyboyNoData("every_stocked_ingredient_was_used_in_period"), true
+			// The zero is printed as a figure, not only described: the question
+			// "เงินจมเท่าไหร่" wants a number, and a sheet that has one to give
+			// is a sheet the model does not have to invent one for.
+			return joyboyJoin([]string{window, "dead_items=0 dead_value_total=0.00",
+				joyboyNoData("every_stocked_ingredient_was_used_in_period")}), true
 		}
 		lines := []string{window, "meaning=held_in_stock_but_never_used_in_period"}
 		var deadValue float64
@@ -405,6 +455,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if period.Orders == 0 {
 			return joyboyJoin([]string{
 				"period=" + period.Label,
+				"orders=0 revenue=0.00",
 				joyboyNoData("no_orders_recorded_in_that_period"),
 			}), true
 		}
@@ -465,6 +516,7 @@ func joyboyExpenseSummaryBody(label, from, until string, list *ExpenseListRespon
 	if list == nil || list.Entries == 0 {
 		return joyboyJoin([]string{
 			"period=" + label,
+			"expense_items=0 expenses_total=0.00",
 			joyboyNoData("no_expenses_recorded_in_window"),
 			expenseIsNotTheCostBase,
 		})
@@ -605,8 +657,8 @@ func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) st
 		return joyboyJoin([]string{
 			"as_of=ตอนนี้",
 			"capability=read_only",
+			"active_orders=0 unpaid_total=0.00",
 			joyboyNoData("no_active_orders_right_now"),
-			"note=ไม่มีออเดอร์ค้างอยู่เลย ทุกบิลปิดหมดแล้ว",
 		})
 	}
 
@@ -697,10 +749,7 @@ func joyboyMenuListBody(items []repository.AIMenuCatalogueItem) string {
 		if !item.IsAvailable {
 			status = "ปิดขายอยู่"
 		}
-		category := strings.TrimSpace(item.Category)
-		if category == "" {
-			category = "ไม่ระบุหมวด"
-		}
+		category := joyboyCategoryName(item.Category)
 		lines = append(lines, fmt.Sprintf("menu=%s หมวด=%s ราคา=%s บาท สถานะ=%s",
 			item.Name, category, joyboyNum(item.Price), status))
 	}
@@ -842,6 +891,184 @@ func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSumm
 	return joyboyJoin(lines)
 }
 
+// joyboyCategoryName is how a menu's section of the board is named on a fact
+// sheet. A menu filed under nothing gets a name of its own rather than an empty
+// value, because the model reads a blank as missing data and says so.
+func joyboyCategoryName(raw string) string {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "ไม่ระบุหมวด"
+	}
+	return name
+}
+
+// The two caps on the category sheet. Per category, the tail of a ranking nobody
+// asked about; overall, the point where the sheet stops being a table and starts
+// being a wall the model re-reads every turn. Category totals are unaffected by
+// either — they are summed before anything is cut, and every category keeps its
+// own line however many menus are listed under it.
+const (
+	joyboyCategoryMenuMaxRows = 8
+	joyboyCategoryMenuRowsCap = 45
+)
+
+// joyboyCategoryProfit is one section of the menu board with its sales totalled.
+type joyboyCategoryProfit struct {
+	Name        string
+	MenusOnMenu int
+	MenusSold   int
+	Quantity    int64
+	Revenue     float64
+	Cost        float64
+	Profit      float64
+	Menus       []repository.AICategoryMenuMargin
+}
+
+// joyboyMenuProfitByCategoryBody ranks the menu board's sections by the baht they
+// keep, and lists the menus inside each one ranked the same way.
+//
+// Go does every sum, ranking and per-dish division here. The model is handed a
+// finished table and picks which part of it the question was about — reading one
+// category out for "เครื่องดื่มตัวไหนกำไรดีสุด", comparing the category lines for
+// "หมวดไหนกำไรดีสุด".
+//
+// The catalogue is merged in rather than only the sold rows, because a category
+// that sold nothing has to appear as a category with no sales. Left out, it is
+// indistinguishable from a category the shop does not have — which is the answer
+// the assistant kept giving about drinks: "ยังไม่มีข้อมูลของเครื่องดื่ม", said about
+// three drinks that were on the menu the whole time.
+func joyboyMenuProfitByCategoryBody(sold []repository.AICategoryMenuMargin, menu []repository.AIMenuCatalogueItem) string {
+	if len(sold) == 0 && len(menu) == 0 {
+		return joyboyNotSetUpYet("no_menu_items_recorded",
+			"ยังไม่มีเมนูในระบบเลย จึงยังแยกกำไรตามหมวดไม่ได้ ให้บอกว่าต้องไปเพิ่มเมนูและหมวดที่หน้าจัดการเมนูก่อน")
+	}
+
+	index := map[string]*joyboyCategoryProfit{}
+	var categories []*joyboyCategoryProfit
+	find := func(name string) *joyboyCategoryProfit {
+		category, known := index[name]
+		if !known {
+			category = &joyboyCategoryProfit{Name: name}
+			index[name] = category
+			categories = append(categories, category)
+		}
+		return category
+	}
+	for _, item := range menu {
+		find(joyboyCategoryName(item.Category)).MenusOnMenu++
+	}
+	for _, row := range sold {
+		category := find(joyboyCategoryName(row.Category))
+		category.MenusSold++
+		category.Quantity += row.Quantity
+		category.Revenue += row.Revenue
+		category.Cost += row.Cost
+		category.Profit += row.Profit
+		category.Menus = append(category.Menus, row)
+	}
+
+	var shopProfit, shopRevenue float64
+	categoriesWithSales := 0
+	for _, category := range categories {
+		shopProfit += category.Profit
+		shopRevenue += category.Revenue
+		if category.MenusSold > 0 {
+			categoriesWithSales++
+		}
+		sort.SliceStable(category.Menus, func(i, j int) bool {
+			return joyboyMenuOutranks(category.Menus[i], category.Menus[j])
+		})
+	}
+	sort.SliceStable(categories, func(i, j int) bool {
+		left, right := categories[i], categories[j]
+		if left.Profit != right.Profit {
+			return left.Profit > right.Profit
+		}
+		if left.Revenue != right.Revenue {
+			return left.Revenue > right.Revenue
+		}
+		return left.Name < right.Name
+	})
+
+	lines := []string{
+		"period=" + analysisWindowLabel(),
+		"scope=every_category_on_the_menu",
+		"ranked_by=category_profit desc",
+		fmt.Sprintf("categories=%d categories_with_sales=%d", len(categories), categoriesWithSales),
+		"note=ใบนี้มีครบทุกหมวดที่ร้านมี หมวดที่ยังไม่มีการขายในช่วงนี้เขียนว่า status=no_sales_in_period " +
+			"ไม่ได้แปลว่าร้านไม่มีหมวดนั้นหรือไม่มีข้อมูล ให้ตอบเฉพาะหมวดที่ผู้ใช้ถาม " +
+			"ถ้า menus_listed น้อยกว่า menus_sold แปลว่าหมวดนั้นแสดงแค่เมนูอันดับต้น ไม่ใช่ทั้งหมด",
+	}
+
+	rowsLeft := joyboyCategoryMenuRowsCap
+	for rank, category := range categories {
+		listed := len(category.Menus)
+		if listed > joyboyCategoryMenuMaxRows {
+			listed = joyboyCategoryMenuMaxRows
+		}
+		if listed > rowsLeft {
+			listed = rowsLeft
+		}
+		rowsLeft -= listed
+
+		if category.MenusSold == 0 {
+			// No margin_pct and no share: a category that sold nothing has no margin,
+			// and printing 0.00 would state a rate that was never measured.
+			lines = append(lines, fmt.Sprintf(
+				"category_rank=%d category=%s menus_on_menu=%d menus_sold=0 menus_listed=0 qty=0 revenue=0.00 cost=0.00 profit=0.00 status=no_sales_in_period",
+				rank+1, category.Name, category.MenusOnMenu))
+			continue
+		}
+		line := fmt.Sprintf(
+			"category_rank=%d category=%s menus_on_menu=%d menus_sold=%d menus_listed=%d qty=%d revenue=%s cost=%s profit=%s margin_pct=%s",
+			rank+1, category.Name, category.MenusOnMenu, category.MenusSold, listed, category.Quantity,
+			joyboyNum(roundBaht(category.Revenue)), joyboyNum(roundBaht(category.Cost)),
+			joyboyNum(roundBaht(category.Profit)), joyboyNum(roundBaht(joyboyPercent(category.Profit, category.Revenue))))
+		if shopProfit > 0 {
+			line += " profit_share_pct=" + joyboyNum(roundBaht(joyboyPercent(category.Profit, shopProfit)))
+		}
+		lines = append(lines, line)
+
+		for i, m := range category.Menus[:listed] {
+			row := fmt.Sprintf("category=%s menu_rank=%d menu=%s qty=%d revenue=%s cost=%s profit=%s margin_pct=%s",
+				category.Name, i+1, m.MenuName, m.Quantity,
+				joyboyNum(roundBaht(m.Revenue)), joyboyNum(roundBaht(m.Cost)),
+				joyboyNum(roundBaht(m.Profit)), joyboyNum(roundBaht(m.Margin)))
+			if m.Quantity > 0 {
+				dishes := float64(m.Quantity)
+				row += fmt.Sprintf(" cost_per_dish=%s profit_per_dish=%s",
+					joyboyNum(roundBaht(m.Cost/dishes)), joyboyNum(roundBaht(m.Profit/dishes)))
+			}
+			lines = append(lines, row)
+		}
+	}
+	lines = append(lines, fmt.Sprintf("profit_all_categories=%s revenue_all_categories=%s",
+		joyboyNum(roundBaht(shopProfit)), joyboyNum(roundBaht(shopRevenue))))
+	return joyboyJoin(lines)
+}
+
+// joyboyMenuOutranks orders two menus by the money they keep, with revenue and
+// then the name breaking ties so the same figures always render the same list.
+func joyboyMenuOutranks(left, right repository.AICategoryMenuMargin) bool {
+	if left.Profit != right.Profit {
+		return left.Profit > right.Profit
+	}
+	if left.Revenue != right.Revenue {
+		return left.Revenue > right.Revenue
+	}
+	return left.MenuName < right.MenuName
+}
+
+// joyboyPercent is part/whole as a percentage, and 0 when the whole is 0 rather
+// than NaN — a NaN reaches the model as the word "NaN" and comes back out in the
+// answer.
+func joyboyPercent(part, whole float64) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return part / whole * 100
+}
+
 // joyboyProfitForPeriodBody totals revenue, cost and profit over a named calendar
 // period.
 //
@@ -865,7 +1092,7 @@ func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSu
 		}
 	}
 	if revenue == 0 {
-		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_paid_sales_in_period")})
+		return joyboyJoin([]string{"period=" + label, "revenue=0.00 cost=0.00 profit=0.00", joyboyNoData("no_paid_sales_in_period")})
 	}
 	lines := []string{
 		"period=" + label,
@@ -888,7 +1115,7 @@ func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSu
 // anything that is not a menu subtotal).
 func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
 	if d.Orders == 0 {
-		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", joyboyNoData("no_paid_orders_in_period")})
+		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", "orders=0 revenue=0.00", joyboyNoData("no_paid_orders_in_period")})
 	}
 	lines := []string{
 		"period=" + label,
