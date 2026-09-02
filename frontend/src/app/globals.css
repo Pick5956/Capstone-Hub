@@ -1299,3 +1299,85 @@ input[type="number"]::-webkit-inner-spin-button {
     animation-duration: 0.01ms;
   }
 }
+
+/* ---- Inventory mobile tree -------------------------------------------------
+   Every colour the mobile inventory screens use resolves through these tokens,
+   so the whole look swaps in one block instead of across a thousand utility
+   classes.
+
+   The values below are the app's OWN palette — the same slate/orange the other
+   twelve dashboard routes use — because a route that ships its own colour system
+   reads as a different product the moment a user crosses into it.
+
+   The mobile design brief also lists a warm clay palette (canvas #FFF7ED,
+   surface #FFFCF8, hairline #FED7AA, body #3F2A20, headings #21130C, track
+   #FFEDD5). None of those values exists anywhere else in this repo, and the
+   warm border set that did exist was deliberately deleted in 514b4ea. To try it,
+   replace the light block below — nothing else has to change. */
+[data-inventory-mobile] {
+  --inv-canvas: #f1f5f9;
+  --inv-surface: #ffffff;
+  --inv-surface-strong: #e2e8f0;
+  --inv-hairline: #e2e8f0;
+  --inv-heading: #0f172b;
+  --inv-body: #314158;
+  --inv-muted: #62748e;
+  --inv-faint: #90a1b9;
+  --inv-action: #c53c00;
+  --inv-action-strong: #9f2d00;
+  --inv-action-soft: #ffedd5;
+  --inv-ok: #009767;
+  --inv-low: #f99c00;
+  --inv-out: #fb2c36;
+  --inv-ok-soft: #d0fae5;
+  --inv-low-soft: #fef3c6;
+  --inv-out-soft: #ffe2e2;
+  --inv-scrim: rgba(15, 23, 43, 0.45);
+  --inv-shadow: 0 1px 2px rgba(15, 23, 43, 0.06);
+  --inv-radius: 6px;
+  --inv-radius-lg: 12px;
+
+  background: var(--inv-canvas);
+  color: var(--inv-body);
+}
+
+.dark [data-inventory-mobile] {
+  --inv-canvas: #0f0f0f;
+  --inv-surface: #212121;
+  --inv-surface-strong: #303030;
+  --inv-hairline: #303030;
+  --inv-heading: #ffffff;
+  --inv-body: #e2e8f0;
+  --inv-muted: #90a1b9;
+  --inv-faint: #62748e;
+  --inv-action: #c53c00;
+  --inv-action-strong: #9f2d00;
+  --inv-action-soft: rgba(197, 60, 0, 0.18);
+  --inv-ok-soft: rgba(0, 151, 103, 0.18);
+  --inv-low-soft: rgba(249, 156, 0, 0.18);
+  --inv-out-soft: rgba(251, 44, 54, 0.18);
+  --inv-scrim: rgba(0, 0, 0, 0.6);
+  --inv-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* A sheet rises from off-screen. .motion-bottom-sheet is a 18px dialog pop
+   despite the name, so the real thing lives here. */
+@keyframes inv-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes inv-sheet-out {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+.inv-sheet-enter { animation: inv-sheet-in 260ms cubic-bezier(0.32, 0.72, 0, 1); }
+.inv-sheet-exit { animation: inv-sheet-out 200ms cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-sheet-enter,
+  .inv-sheet-exit {
+    animation: none;
+  }
+}

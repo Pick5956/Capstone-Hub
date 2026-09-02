@@ -44,6 +44,8 @@ import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import InventoryHistoryTab from "./InventoryHistoryTab";
+import InventoryMobile from "./mobile/InventoryMobile";
+import { useIsMobile } from "./mobile/primitives";
 import {
   emptyForm,
   buildAdjustStockPayload,
@@ -348,6 +350,9 @@ function groupTxByDate(txs: IngredientTransaction[], copy: Copy) {
 
 export default function InventoryPage() {
   const { activeMembership } = useAuth();
+  // One tree renders at a time rather than two hidden by CSS: both mounted would
+  // run the inventory fetch twice and keep two copies of the same state.
+  const isMobile = useIsMobile();
   const { language } = useLanguage();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -967,6 +972,10 @@ export default function InventoryPage() {
 
   if (!canView) {
     return <div className="flex h-64 items-center justify-center text-sm text-slate-400">{copy.permissionDenied}</div>;
+  }
+
+  if (isMobile) {
+    return <InventoryMobile canView={canView} canManage={canManage} />;
   }
 
   return (
