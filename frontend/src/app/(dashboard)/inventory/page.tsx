@@ -49,6 +49,7 @@ import {
   buildAdjustStockPayload,
   getInventoryValue,
   getStatus,
+  formatDaysLeft,
   getStockPercent,
   inputCls,
   STORAGE_TYPES,
@@ -1264,6 +1265,7 @@ export default function InventoryPage() {
                         const status = getStatus(item);
                         const meta = statusMeta(status, copy);
                         const percent = getStockPercent(item);
+                        const cover = formatDaysLeft(item, lang);
 
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
@@ -1288,9 +1290,21 @@ export default function InventoryPage() {
                                     {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
                                   </span>
                                 </div>
-                                <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
-                                  <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
-                                </div>
+                                {/* percent is null when the ingredient has never been
+                                    cooked with — there is no rate to forecast from, so
+                                    the bar says so instead of drawing an empty tank. */}
+                                {percent === null ? (
+                                  <p className="mt-1.5 text-[10px] leading-none text-slate-400">
+                                    {lang === "th" ? "ยังไม่มีข้อมูลการใช้" : "No usage data"}
+                                  </p>
+                                ) : (
+                                  <>
+                                    <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                                      <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
+                                    </div>
+                                    {cover && <p className="mt-1 text-[10px] leading-none text-slate-400">{cover}</p>}
+                                  </>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3">

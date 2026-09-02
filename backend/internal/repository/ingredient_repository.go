@@ -336,3 +336,57 @@ func (r *IngredientRepository) ListTransactionsFiltered(
 	}
 	return rows, total, nil
 }
+
+// IngredientUsageWindowDays is the rolling window used to turn recent
+// consumption into a daily rate. It deliberately matches aitools.AnalysisWindowDays
+// so the inventory page and the assistant never quote different "lasts N days"
+// figures for the same ingredient; a test in the aitools package pins them together.
+const IngredientUsageWindowDays = 30
+
+// AttachDaysLeft fills DaysLeft/DailyUse on the given ingredients from what was
+// actually cooked, in ONE grouped query rather than one per row.
+//
+// Consumption is read from order_inventory_deductions, not from
+// ingredient_transactions: the deductions are what the kitchen actually used,
+// and they are the same rows the assistant's own usage figures come from.
+// An ingredient with no consumption in the window is left nil — it cannot be
+// forecast, and inventing a rate would be worse than saying nothing.
+func (r *IngredientRepository) AttachDaysLeft(restaurantID uint, items []entity.Ingredient) error {
+	if len(items) == 0 {
+		return nil
+	}
+	since := BangkokNow().AddDate(0, 0, -IngredientUsageWindowDays)
+
+	type usageRow struct {
+		IngredientID uint
+		Used         float64
+	}
+	var rows []usageRow
+	if err := r.db.Table("order_inventory_deductions").
+		Select("ingredient_id, COALESCE(SUM(quantity), 0) AS used").
+		Where("restaurant_id = ? AND deleted_at IS NULL AND created_at >= ?", restaurantID, since).
+		Group("ingredient_id").
+		Scan(&rows).Error; err != nil {
+		return err
+	}
+
+	usedByID := make(map[uint]float64, len(rows))
+	for _, row := range rows {
+		usedByID[row.IngredientID] = row.Used
+	}
+
+	for index := range items {
+		used := usedByID[items[index].ID]
+		if used <= 0 {
+			continue
+		}
+		daily := used / float64(IngredientUsageWindowDays)
+		if daily <= 0 {
+			continue
+		}
+		days := items[index].Stock / daily
+		items[index].DailyUse = &daily
+		items[index].DaysLeft = &days
+	}
+	return nil
+}

@@ -61,12 +61,28 @@ func (s *IngredientService) FindIngredient(restaurantID, ingredientID uint) (*en
 	return s.repo.FindByID(restaurantID, ingredientID)
 }
 
+// List returns the whole inventory with the read-time "lasts N days" figure
+// attached, so the list, the detail view and the CSV all quote the same number.
 func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error) {
-	return s.repo.List(restaurantID)
+	items, err := s.repo.List(restaurantID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.AttachDaysLeft(restaurantID, items); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (s *IngredientService) ListFiltered(restaurantID uint, q repository.IngredientListQuery) ([]entity.Ingredient, int64, error) {
-	return s.repo.ListFiltered(restaurantID, q)
+	items, total, err := s.repo.ListFiltered(restaurantID, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := s.repo.AttachDaysLeft(restaurantID, items); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (s *IngredientService) ListCategories(restaurantID uint, includeInactive bool) ([]entity.IngredientCategory, error) {

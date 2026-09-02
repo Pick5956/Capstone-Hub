@@ -28,6 +28,15 @@ type Ingredient struct {
 
 	Restaurant *Restaurant         `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 	Category   *IngredientCategory `json:"category,omitempty" gorm:"foreignKey:CategoryID"`
+
+	// DaysLeft and DailyUse are computed at read time, not stored: how long the
+	// current stock lasts at the rate this ingredient was actually consumed over
+	// the usage window. They are nil when nothing was consumed in the window —
+	// there is no rate to divide by, and a 0 would read as "runs out today" when
+	// the truth is "we have no idea yet". A client must render the nil case as
+	// "no usage data", never as an empty bar.
+	DaysLeft *float64 `json:"days_left,omitempty" gorm:"-"`
+	DailyUse *float64 `json:"daily_use,omitempty" gorm:"-"`
 }
 
 type IngredientTransaction struct {

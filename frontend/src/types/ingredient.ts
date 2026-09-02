@@ -24,6 +24,16 @@ export interface Ingredient {
   cost_per_unit: number;
   yield_percent?: number;
   storage_type?: string;
+  /**
+   * How many days the current stock lasts at the rate this ingredient was
+   * actually consumed over the last 30 days. Computed at read time, absent when
+   * nothing was consumed in the window — there is no rate to divide by, and a 0
+   * would read as "runs out today". Render the absent case as "no usage data",
+   * never as an empty bar.
+   */
+  days_left?: number;
+  /** The daily rate days_left was derived from, for showing the working. */
+  daily_use?: number;
   category?: IngredientCategory;
   CreatedAt?: string;
   UpdatedAt?: string;

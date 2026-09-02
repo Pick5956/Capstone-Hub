@@ -23,10 +23,38 @@ export function getStatus(item: Ingredient): ItemStatus {
   return "ok";
 }
 
-export function getStockPercent(item: Ingredient) {
-  if (item.min_stock <= 0) return item.stock > 0 ? 100 : 0;
+/**
+ * How many days of cover the bar treats as a full tank. A restaurant that buys
+ * once a week only needs the bar to answer "do I get to the next delivery?", so
+ * anything past a week is equally fine and reads as full.
+ */
+export const FULL_COVER_DAYS = 7;
+
+/**
+ * The bar answers "how long does this last?", not "what fraction of some
+ * ceiling is this?" — the inventory has no ceiling to divide by. The old
+ * version divided by min_stock, which pinned at 100% the moment stock merely
+ * reached the reorder line, so an item at ten times its minimum looked
+ * identical to one exactly at it.
+ *
+ * Returns null when the ingredient has no consumption history: there is no rate
+ * to forecast from, and any percentage would be invented. Callers must render
+ * that as "no usage data" rather than an empty bar.
+ */
+export function getStockPercent(item: Ingredient): number | null {
   if (item.stock <= 0) return 0;
-  return Math.min(100, Math.round((item.stock / item.min_stock) * 100));
+  if (item.days_left === undefined || item.days_left === null) return null;
+  return Math.min(100, Math.round((item.days_left / FULL_COVER_DAYS) * 100));
+}
+
+/** Rounds the cover figure the way it is spoken: "2 วัน", "7 วัน+". */
+export function formatDaysLeft(item: Ingredient, lang: "th" | "en"): string | null {
+  if (item.days_left === undefined || item.days_left === null) return null;
+  if (item.days_left >= FULL_COVER_DAYS) {
+    return lang === "th" ? `พอใช้ ${FULL_COVER_DAYS} วัน+` : `${FULL_COVER_DAYS}+ days left`;
+  }
+  const days = Math.max(0, Math.round(item.days_left * 10) / 10);
+  return lang === "th" ? `พอใช้ ${days} วัน` : `${days} days left`;
 }
 
 export function getTargetStock(item: Ingredient) {
