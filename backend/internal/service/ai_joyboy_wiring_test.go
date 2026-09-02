@@ -50,6 +50,21 @@ func TestJoyboyCatalogueOffersEveryReadOnlyToolWithADescription(t *testing.T) {
 	}
 }
 
+// Declaring a joyboy tool, describing it and offering it are each held by a test;
+// wiring it to a runner is held by nothing. A tool that skips that last step
+// builds and passes every test, and then fails only at run time, silently: the
+// model picks it, runJoyboyExtraTool does not recognise it, the executor does not
+// either, and the model answers from a fact sheet with nothing in it.
+//
+// handled=true over a service with no repository is the cheapest proof the case
+// exists — an unrecognised tool falls through the switch and reports handled=false.
+func TestMenuProfitByCategoryIsWiredToARunner(t *testing.T) {
+	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
+	if _, _, handled := tools.runJoyboyExtraTool(joyboyToolMenuProfitByCategory, "เครื่องดื่มตัวไหนกำไรดีสุด"); !handled {
+		t.Fatal("get_menu_profit_by_category is offered to the model but no runner claims it")
+	}
+}
+
 // Nothing in the catalogue may take arguments: a tool with a restaurant
 // parameter is a tool a model could aim at another shop.
 func TestNoOfferedToolTakesArguments(t *testing.T) {

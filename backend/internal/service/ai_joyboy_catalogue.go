@@ -52,7 +52,10 @@ var joyboyToolGuide = map[AIToolName]string{
 		"ใช้ตอบเมื่อถามยอดขาย/รายได้รวมของช่วงที่ระบุ " +
 		"ถ้าถามถึงเมนูในช่วงนั้น (เมนูขายดี/กำไรของเมนู) ให้ใช้ get_menu_metrics_for_period แทน",
 	AIToolGetSalesTrend: "เทียบยอดขาย 7 วันล่าสุดกับ 7 วันก่อนหน้า พร้อมเปอร์เซ็นต์ที่เปลี่ยน " +
-		"ใช้ตอบ: ยอดขายดีขึ้นหรือแย่ลง เทียบอาทิตย์ก่อนเป็นไง ทำไมยอดตก ทำไมยอดขึ้น",
+		"ช่วงเวลาตายตัว ปรับไม่ได้ " +
+		"ใช้ตอบเฉพาะเมื่อผู้ใช้ไม่ได้ระบุช่วงเวลาเลย เช่น ยอดขายดีขึ้นหรือแย่ลง ช่วงนี้เป็นไง " +
+		"ถ้าผู้ใช้เอ่ยช่วงเวลาใด ๆ ก็ตาม (เทียบเมื่อวาน เทียบเดือนที่แล้ว เทียบปีที่แล้ว) " +
+		"ให้ใช้ get_sales_for_period แทนเสมอ เพราะตัวนั้นเทียบช่วงที่ผู้ใช้ระบุได้จริง",
 	AIToolGetAverageOrderValue: "ยอดขายเฉลี่ยต่อหนึ่งออเดอร์ ของ \"30 วันล่าสุด\" เท่านั้น ช่วงนี้ตายตัว " +
 		"ใช้ตอบเฉพาะเมื่อผู้ใช้ไม่ได้ระบุช่วงเวลาเลย เช่น ลูกค้าจ่ายเฉลี่ยคนละเท่าไหร่ ยอดต่อบิลเท่าไหร่ " +
 		"ถ้าผู้ใช้เอ่ยช่วงเวลาใด ๆ (เมื่อวาน สัปดาห์ที่แล้ว เดือนที่แล้ว กรกฎาคม) " +
@@ -154,6 +157,21 @@ const joyboyToolActiveOrders AIToolName = "get_active_orders"
 // closed for "ร้านเราชื่ออะไร".
 const joyboyToolMenuList AIToolName = "get_menu_list"
 
+// joyboyToolMenuProfitByCategory reads profit split by the sections of the menu
+// board. Every other menu tool ranks the shop as one flat list, so a question
+// about one section of it — "เครื่องดื่มตัวไหนกำไรดีสุด" — could only be answered if a
+// drink happened to be in the top eight of a list that ranks food and drink
+// together. Three rounds of testing it never was, and the model, reading a sheet
+// with no drink on it, reported that the system holds no drinks data at all: a
+// shop with three drinks on the menu told it had none.
+//
+// One sheet carries every category rather than the one the question names,
+// because which section the owner means is the model's read of the sentence, not
+// Go's — the same division of labour every other tool here keeps. It also answers
+// the comparison ("หมวดไหนกำไรดีสุด") from the same figures, with no second tool
+// whose description would differ from this one only by the word "ทุก".
+const joyboyToolMenuProfitByCategory AIToolName = "get_menu_profit_by_category"
+
 // joyboyToolShopProfile reads the shop's own identity — its name, branch, type
 // and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
 // end the model filled by dumping a sales total.
@@ -179,6 +197,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolShopProfile,
 	joyboyToolActiveOrders,
 	joyboyToolMenuList,
+	joyboyToolMenuProfitByCategory,
 }
 
 // joyboyExtraToolGuide describes the extra tools, same shape as joyboyToolGuide.
@@ -251,6 +270,16 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: ร้านมีกี่เมนู มีเมนูอะไรบ้าง ขอดูรายการเมนู เมนูไหนปิดขายอยู่บ้าง เมนูทั้งหมดมีอะไร ราคาเมนูแต่ละตัวเท่าไหร่ " +
 		"ถ้าถามว่าเมนูไหนขายดีหรือทำเงินได้เท่าไหร่ ให้ใช้ get_top_selling_menus หรือ get_menu_revenue_ranking แทน " +
 		"ถ้าถามถึงเมนูตัวใดตัวหนึ่งที่เอ่ยชื่อ ให้ใช้ get_menu_detail แทน",
+	joyboyToolMenuProfitByCategory: "กำไรและยอดขายแยกตาม **หมวดเมนู** (กับข้าว อาหารจานเดียว เครื่องดื่ม ของหวาน ฯลฯ) " +
+		"ใบเดียวมีครบทุกหมวดที่ร้านมี แต่ละหมวดบอกจำนวนจาน ยอดขาย ต้นทุน กำไรรวม margin และสัดส่วนกำไรของหมวดนั้น " +
+		"พร้อมรายชื่อเมนูในหมวดนั้นเรียงจากกำไรมากไปน้อย " +
+		"ใช้ตอบ: เครื่องดื่มตัวไหนกำไรดีสุด · ของหวานเมนูไหนทำเงินได้มากสุด · หมวดไหนทำกำไรให้ร้านมากสุด · " +
+		"กำไรจากอาหารกับเครื่องดื่มอย่างไหนมากกว่ากัน · เครื่องดื่มขายได้เท่าไหร่ · เทียบกำไรหรือยอดขายระหว่างหมวด " +
+		"**ถ้าคำถามเอ่ยชื่อหมวด ให้ใช้เครื่องมือนี้ ห้ามใช้ลิสต์อันดับรวมทั้งร้าน** " +
+		"เพราะลิสต์พวกนั้นไม่แยกหมวดและตัดมาแค่ไม่กี่อันดับ เมนูของหมวดที่ถามอาจไม่ติดอยู่ในลิสต์เลยสักตัว " +
+		"ถ้าถามเมนูกำไรดีสุดของทั้งร้านโดยไม่เอ่ยหมวด ให้ใช้ get_highest_margin_menu แทน " +
+		"ถ้าถามว่าร้านมีเมนูอะไรบ้างในแต่ละหมวด ไม่ได้ถามเรื่องเงิน ให้ใช้ get_menu_list แทน " +
+		"ถ้าถามกำไรรวมของทั้งร้านโดยไม่แยกหมวด ให้ใช้ get_profit_summary แทน",
 	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
 		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
 		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
@@ -278,6 +307,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetTopSellingMenus, AIToolGetMenuRevenueRanking, AIToolGetSlowMovingMenus,
 		AIToolGetHighestMarginMenu, AIToolGetLowestMarginMenu, AIToolGetLowestCostMenu,
 		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering, joyboyToolMenuForPeriod,
+		joyboyToolMenuProfitByCategory,
 	}},
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,

@@ -12,9 +12,9 @@ import (
 // for anyone editing the prompt without running vet.
 func TestPromptsRenderWithoutFormatArtifacts(t *testing.T) {
 	rendered := []string{
-		answerPrompt("เมนูไหนขายดี", nil, "[get_top_selling_menus]\nrank=1 menu=ต้มยำกุ้ง qty=109"),
-		answerPrompt("สวัสดี", nil, ""),
-		answerPrompt("แล้วอันที่สองล่ะ", []Turn{{Role: "user", Content: "เมนูไหนขายดี"}}, "rank=1 menu=ต้มยำกุ้ง"),
+		answerPrompt("เมนูไหนขายดี", nil, "", "[get_top_selling_menus]\nrank=1 menu=ต้มยำกุ้ง qty=109"),
+		answerPrompt("สวัสดี", nil, "", ""),
+		answerPrompt("แล้วอันที่สองล่ะ", []Turn{{Role: "user", Content: "เมนูไหนขายดี"}}, "", "rank=1 menu=ต้มยำกุ้ง"),
 	}
 	for _, prompt := range rendered {
 		if strings.Contains(prompt, "%!") {
@@ -29,11 +29,11 @@ func TestPromptsRenderWithoutFormatArtifacts(t *testing.T) {
 // Both prompts have to carry the question through; a template that drops it
 // still renders cleanly and still ruins the answer.
 func TestBothPromptsCarryTheQuestion(t *testing.T) {
-	withData := answerPrompt("เมนูไหนกำไรดีสุด", nil, "menu=ข้าวกะเพรา margin_pct=69.85")
+	withData := answerPrompt("เมนูไหนกำไรดีสุด", nil, "", "menu=ข้าวกะเพรา margin_pct=69.85")
 	if !strings.Contains(withData, "เมนูไหนกำไรดีสุด") || !strings.Contains(withData, "margin_pct=69.85") {
 		t.Fatal("the question or the data was lost from the data prompt")
 	}
-	withoutData := answerPrompt("กำไรขั้นต้นคืออะไร", nil, "   ")
+	withoutData := answerPrompt("กำไรขั้นต้นคืออะไร", nil, "", "   ")
 	if !strings.Contains(withoutData, "กำไรขั้นต้นคืออะไร") {
 		t.Fatal("the question was lost from the no-data prompt")
 	}
@@ -51,7 +51,7 @@ func TestBothPromptsCarryTheQuestion(t *testing.T) {
 // and plain prose for short answers. It also guards that the old blanket
 // heading ban did not creep back in.
 func TestTheAnswerPromptAsksForBoundedFormatting(t *testing.T) {
-	prompt := answerPrompt("สรุปสถานการณ์ร้าน", nil, "revenue=77340.00")
+	prompt := answerPrompt("สรุปสถานการณ์ร้าน", nil, "", "revenue=77340.00")
 	for _, want := range []string{
 		"ทำตัวหนา **",
 		"คำตอบนั้นตัวเดียว",              // single-answer: bold one
@@ -75,8 +75,8 @@ func TestTheAnswerPromptAsksForBoundedFormatting(t *testing.T) {
 // The rule lives in the persona so both prompts (with data and without) carry it.
 func TestBothPromptsRequireTheNameFromTheConversation(t *testing.T) {
 	prompts := []string{
-		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, ""),
-		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, "menu=ข้าวผัดหมูไข่ดาว qty=12"),
+		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, "", ""),
+		answerPrompt("ทำไมถึงเป็นเมนูนี้", []Turn{{Role: "assistant", Content: "ลองข้าวผัดหมูไข่ดาวครับ"}}, "", "menu=ข้าวผัดหมูไข่ดาว qty=12"),
 	}
 	for _, prompt := range prompts {
 		if !strings.Contains(prompt, "ให้ใช้ชื่อเดิมเป๊ะ ๆ") {
@@ -90,7 +90,7 @@ func TestBothPromptsRequireTheNameFromTheConversation(t *testing.T) {
 // บาท" — hedging a number the database had handed it exactly, which makes an
 // owner distrust a figure that was right all along.
 func TestTheAnswerPromptForbidsHedgingComputedFigures(t *testing.T) {
-	prompt := answerPrompt("เมื่อวานขายได้เท่าไหร่", nil, "revenue=7880.00")
+	prompt := answerPrompt("เมื่อวานขายได้เท่าไหร่", nil, "", "revenue=7880.00")
 	for _, want := range []string{"ห้ามใส่คำเผื่อ", "ผมคิดว่า", "น่าจะ"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("the no-hedging rule lost %q", want)

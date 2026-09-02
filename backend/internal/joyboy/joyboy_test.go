@@ -383,17 +383,22 @@ func TestToolSelectionKeepsOnlyRealToolNames(t *testing.T) {
 	}
 }
 
-// The model is told never to do arithmetic, and it keeps that rule almost always
-// — but asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่" it subtracted the two
-// and reported 347,153, a figure on no sheet, in bold. One rewrite naming the
-// figure is cheaper than an owner acting on an invented number.
-func TestAskRewritesAnAnswerThatStatesAFigureFromNoSheet(t *testing.T) {
+// Arithmetic on figures the sheet supplied is not invention, and the answer now
+// survives.
+//
+// This test used to assert the opposite: the model subtracted 347,453 − 300 and
+// the whole answer was sent back to be rewritten without the result. The example
+// it was built from is the clearest argument against it — the owner had asked
+// "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่", the subtraction WAS the question,
+// and the rewrite deleted the answer to it.
+//
+// Ninety live questions later the rewrite had fired twice and been wrong both
+// times, on a Buddhist year and on a year the owner typed himself. Nothing
+// invented was ever caught. What is left is a log line.
+func TestAskKeepsAnAnswerThatDoesArithmeticOnSheetFigures(t *testing.T) {
 	chat := &fakeChat{
 		selected: []string{"get_top_selling_menus"},
-		replies: []string{
-			"ขายได้ 347,453 บาท จ่ายไป 300 บาท เหลือ 347,153 บาทครับ",
-			"ขายได้ 347,453 บาท จ่ายไป 300 บาท ส่วนยอดคงเหลือยังไม่มีตัวเลขนี้ในระบบครับ",
-		},
+		replies:  []string{"ขายได้ 347,453 บาท จ่ายไป 300 บาท เหลือ 347,153 บาทครับ"},
 	}
 	tools := &fakeTools{results: []ToolResult{{Tool: "get_top_selling_menus", Body: "revenue=347453\nspent=300"}}}
 
@@ -401,32 +406,19 @@ func TestAskRewritesAnAnswerThatStatesAFigureFromNoSheet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ask: %v", err)
 	}
-	if strings.Contains(answer.Text, "347,153") {
-		t.Errorf("the invented figure survived the rewrite: %q", answer.Text)
-	}
-	if chat.writeCalls != 2 {
-		t.Errorf("writeCalls = %d, want one write and one rewrite", chat.writeCalls)
-	}
-	if !strings.Contains(chat.lastPrompt, "347,153") {
-		t.Errorf("the rewrite prompt should name the offending figure:\n%s", chat.lastPrompt)
-	}
-}
-
-// A rewrite that invents a different figure is no better than the first answer,
-// so the first one stands rather than being traded for another unbacked number.
-func TestAskKeepsTheFirstAnswerWhenTheRewriteIsNoCleaner(t *testing.T) {
-	chat := &fakeChat{
-		selected: []string{"get_top_selling_menus"},
-		replies:  []string{"เหลือ 347,153 บาทครับ", "เหลือ 912,644 บาทครับ"},
-	}
-	tools := &fakeTools{results: []ToolResult{{Tool: "get_top_selling_menus", Body: "revenue=347453"}}}
-
-	answer, err := newAssistant(t, chat, tools).Ask(context.Background(), Request{Question: "เหลือเท่าไหร่"})
-	if err != nil {
-		t.Fatalf("Ask: %v", err)
-	}
 	if !strings.Contains(answer.Text, "347,153") {
-		t.Errorf("the first answer should stand, got %q", answer.Text)
+		t.Errorf("the derived figure answers the question and must survive: %q", answer.Text)
+	}
+	// The point of removing the rewrite was the call it cost on every such answer.
+	if chat.writeCalls != 1 {
+		t.Errorf("writeCalls = %d, want one — no second call", chat.writeCalls)
+	}
+	// Both operands are on the sheet, which is what makes the result checkable by
+	// the owner. The prompt asks for them to be named for exactly that reason.
+	for _, operand := range []string{"347,453", "300"} {
+		if !strings.Contains(answer.Text, operand) {
+			t.Errorf("the answer should name what it started from, %q is missing: %q", operand, answer.Text)
+		}
 	}
 }
 
@@ -488,5 +480,28 @@ func TestTheThreadIndexNeverCarriesRawToolNames(t *testing.T) {
 	})
 	if strings.Contains(index, "get_") {
 		t.Errorf("a raw tool name reached the prompt:\n%s", index)
+	}
+}
+
+// "แล้วอันที่สองล่ะ" in the index says nothing on its own — the thing it points
+// at is in the question before it. Pairing them keeps the line readable once the
+// verbatim window has moved past both.
+func TestTheIndexPairsAShortFollowUpWithWhatItFollowed(t *testing.T) {
+	index := formatThreadIndex([]Turn{
+		{Role: "user", Content: "เมนูไหนขายดีที่สุด", Topic: "เมนู"},
+		{Role: "assistant", Content: "ชาไทยเย็นครับ"},
+		{Role: "user", Content: "แล้วอันที่สองล่ะ", Topic: "เมนู"},
+	})
+	if !strings.Contains(index, "ต่อจาก") || !strings.Contains(index, "เมนูไหนขายดีที่สุด") {
+		t.Fatalf("a short follow-up should carry what it followed:\n%s", index)
+	}
+	// A question that stands on its own is left alone.
+	plain := formatThreadIndex([]Turn{
+		{Role: "user", Content: "เดือนที่แล้วจ่ายค่าอะไรไปเยอะที่สุด", Topic: "รายจ่าย"},
+		{Role: "assistant", Content: "ค่าวัตถุดิบครับ"},
+		{Role: "user", Content: "แล้วเดือนก่อนหน้านั้นล่ะจ่ายอะไรเยอะสุด", Topic: "รายจ่าย"},
+	})
+	if strings.Contains(plain, "ต่อจาก") {
+		t.Fatalf("a self-contained question needs no pairing:\n%s", plain)
 	}
 }

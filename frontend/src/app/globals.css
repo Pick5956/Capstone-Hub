@@ -125,6 +125,26 @@ html {
   display: none;
 }
 
+/* The rule above is the old, WebKit-only way of saying it, and Windows 11 browsers
+   have started ignoring it: their newer scrollbars draw an up and a down arrow at
+   the ends of every scrollable panel, which is what the owner saw in the chat.
+   The standard properties have no stepper buttons at all — there is nothing to
+   switch off — so they are stated here as well, on every scroller. Both models
+   coexist: a browser that honours the standard one ignores the WebKit rules for
+   that element, and one that does not falls back to them. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* scrollbar-thin was applied in several components and never defined anywhere, so
+   it did nothing. It keeps its name and now means what it says, for anyone who
+   reaches for it expecting a slimmer bar than the page default. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
 /* Interactive controls should advertise that they can be clicked. Keep these
    selectors at zero specificity so an intentional cursor utility still wins. */
 :where(
@@ -1072,4 +1092,296 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 .ai-aura-layer-2 {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0) 62%, rgba(255, 164, 124, 0.20) 86%, rgba(255, 192, 92, 0.46) 100%);
+}
+
+/* ── Warm confirm dialog ──────────────────────────────────────────────────
+   The one place in the app that asks before destroying something the user
+   cannot get back. Everything about it is deliberate: a white glass panel
+   over the warm page, with terracotta and ink for everything drawn on it, so
+   it reads as part of the shop rather than as a browser alert. The single red
+   button is the only red surface in the assistant, so it cannot be mistaken
+   for the quiet one beside it.
+
+   The palette is written here rather than in the component because these are
+   exact values from a design spec, not Tailwind steps — terracotta #c67139,
+   ink #201e1d, and a destructive red that is darker than Tailwind's red-600
+   so the cream label on it clears contrast comfortably. */
+.warm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.28);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  animation: warm-dialog-fade 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.warm-dialog {
+  width: 300px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 26px 22px 18px;
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: 0 18px 44px rgba(46, 43, 37, 0.28);
+  text-align: center;
+  animation: warm-dialog-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.warm-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  background: #ffe1d0;
+  color: #c67139;
+}
+.warm-dialog-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #201e1d;
+}
+.warm-dialog-body {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #5b544c;
+}
+.warm-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+}
+.warm-dialog-btn {
+  width: 100%;
+  padding: 13px;
+  border: 0;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+/* The design asks for a terracotta ring everywhere, because the browser's
+   default blue focus ring is the one colour in this dialog that belongs to
+   nothing else on screen. */
+.warm-dialog-btn:focus-visible,
+.warm-dialog:focus-visible {
+  outline: 2px solid #c67139;
+  outline-offset: 2px;
+}
+.warm-dialog-btn-danger {
+  background: #b3301c;
+  color: #f9f4ed;
+}
+.warm-dialog-btn-danger:hover {
+  background: #8f2415;
+}
+.warm-dialog-btn-ghost {
+  background: transparent;
+  color: #5b544c;
+}
+.warm-dialog-btn-ghost:hover {
+  background: rgba(32, 30, 29, 0.06);
+}
+.warm-dialog-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Dark mode keeps the shape and the terracotta accent but drops the cream,
+   which would glare as the only bright surface on a dark screen. */
+.dark .warm-dialog {
+  background: rgba(33, 33, 33, 0.94);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+.dark .warm-dialog-icon {
+  background: rgba(198, 113, 57, 0.22);
+  color: #f0a76b;
+}
+.dark .warm-dialog-title {
+  color: #f2ede6;
+}
+.dark .warm-dialog-body {
+  color: #b7b0a7;
+}
+.dark .warm-dialog-btn-danger {
+  background: #c0361f;
+  color: #fdf7f0;
+}
+.dark .warm-dialog-btn-danger:hover {
+  background: #9c2916;
+}
+.dark .warm-dialog-btn-ghost {
+  color: #c8c1b8;
+}
+.dark .warm-dialog-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes warm-dialog-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes warm-dialog-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .warm-dialog-backdrop,
+  .warm-dialog {
+    animation-duration: 0.01ms;
+  }
+}
+
+/* ---- Inventory mobile tree -------------------------------------------------
+   Every colour the mobile inventory screens use resolves through these tokens,
+   so the whole look swaps in one block instead of across a thousand utility
+   classes.
+
+   The values below are the app's OWN palette — the same slate/orange the other
+   twelve dashboard routes use — because a route that ships its own colour system
+   reads as a different product the moment a user crosses into it.
+
+   The mobile design brief also lists a warm clay palette (canvas #FFF7ED,
+   surface #FFFCF8, hairline #FED7AA, body #3F2A20, headings #21130C, track
+   #FFEDD5). None of those values exists anywhere else in this repo, and the
+   warm border set that did exist was deliberately deleted in 514b4ea. To try it,
+   replace the light block below — nothing else has to change. */
+[data-inventory-mobile] {
+  --inv-canvas: #f1f5f9;
+  --inv-surface: #ffffff;
+  --inv-surface-strong: #e2e8f0;
+  --inv-hairline: #e2e8f0;
+  --inv-heading: #0f172b;
+  --inv-body: #314158;
+  --inv-muted: #62748e;
+  --inv-faint: #90a1b9;
+  --inv-action: #c53c00;
+  --inv-action-strong: #9f2d00;
+  --inv-action-soft: #ffedd5;
+  --inv-ok: #009767;
+  --inv-low: #f99c00;
+  --inv-out: #fb2c36;
+  --inv-ok-soft: #d0fae5;
+  --inv-low-soft: #fef3c6;
+  --inv-out-soft: #ffe2e2;
+  --inv-scrim: rgba(15, 23, 43, 0.45);
+  /* What an edge fade blends into. Defaults to the page canvas; anything that
+     sits a scroller on a different surface (a sheet) overrides it locally, so a
+     ChipRow never has to know where it was placed. */
+  --inv-fade: var(--inv-canvas);
+  --inv-shadow: 0 1px 2px rgba(15, 23, 43, 0.06);
+  --inv-radius: 6px;
+  --inv-radius-lg: 12px;
+  /* Tokens only — no paint. The sheet portal carries this attribute so its
+     children can resolve the variables, and a background here would turn that
+     full-screen wrapper into an opaque wall over the page it is meant to dim.
+     Each screen root paints its own canvas explicitly. */
+}
+
+.dark [data-inventory-mobile] {
+  --inv-canvas: #0f0f0f;
+  --inv-surface: #212121;
+  --inv-surface-strong: #303030;
+  --inv-hairline: #303030;
+  --inv-heading: #ffffff;
+  --inv-body: #e2e8f0;
+  --inv-muted: #90a1b9;
+  --inv-faint: #62748e;
+  --inv-action: #c53c00;
+  --inv-action-strong: #9f2d00;
+  --inv-action-soft: rgba(197, 60, 0, 0.18);
+  --inv-ok-soft: rgba(0, 151, 103, 0.18);
+  --inv-low-soft: rgba(249, 156, 0, 0.18);
+  --inv-out-soft: rgba(251, 44, 54, 0.18);
+  --inv-scrim: rgba(0, 0, 0, 0.6);
+  --inv-fade: var(--inv-canvas);
+  --inv-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* A sheet rises from off-screen. .motion-bottom-sheet is a 18px dialog pop
+   despite the name, so the real thing lives here.
+
+   The scrim and the sheet are ONE gesture, so they share one duration and one
+   curve — earlier the scrim borrowed .smooth-overlay (280/240ms, a different
+   easing) while the sheet ran 260/200ms, and the close was cut by a 200ms
+   timer before the scrim finished fading: a visible snap on every dismiss.
+   Only transform and opacity animate (compositor-only), and will-change
+   promotes the layers before the first frame instead of during it. */
+:root {
+  --inv-sheet-in: 300ms;
+  --inv-sheet-out: 220ms;
+  --inv-sheet-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes inv-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes inv-sheet-out {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
+}
+
+@keyframes inv-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes inv-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.inv-sheet-enter {
+  animation: inv-sheet-in var(--inv-sheet-in) var(--inv-sheet-ease) both;
+  will-change: transform;
+}
+.inv-sheet-exit {
+  animation: inv-sheet-out var(--inv-sheet-out) var(--inv-sheet-ease) both;
+  will-change: transform;
+}
+.inv-scrim-enter {
+  animation: inv-scrim-in var(--inv-sheet-in) var(--inv-sheet-ease) both;
+  will-change: opacity;
+}
+.inv-scrim-exit {
+  animation: inv-scrim-out var(--inv-sheet-out) var(--inv-sheet-ease) both;
+  will-change: opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inv-sheet-enter,
+  .inv-sheet-exit,
+  .inv-scrim-enter,
+  .inv-scrim-exit {
+    animation: none;
+  }
 }

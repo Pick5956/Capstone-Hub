@@ -32,10 +32,22 @@ type AIConversationStore interface {
 	AppendTurn(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, turn *entity.AIConversationTurn, nextStateJSON string) error
 	DeleteConversation(restaurantID, ownerUserID uint, conversationID string) error
 	CleanupExpired(limit int) (int64, error)
+	// UpdateState replaces the stored state without appending a turn. The
+	// repository has always had it; the digest is the first caller.
+	UpdateState(restaurantID, ownerUserID uint, conversationID string, expectedVersion uint64, nextStateJSON string) error
 }
 
 type aiConversationSession struct {
 	conversation *entity.AIConversation
+	// digest is what the model wrote about the earlier part of this conversation,
+	// read back from the stored state. It rides on the session because
+	// persistConversationTurn rebuilds the whole state object on every turn and
+	// would otherwise overwrite it with an empty one — the feature would look
+	// implemented and quietly never accumulate anything.
+	digest string
+	// digestThrough is the last turn the digest already covers, so the next
+	// summary only reads what came after it.
+	digestThrough uint64
 }
 
 type aiConversationCompactState struct {
@@ -43,6 +55,13 @@ type aiConversationCompactState struct {
 	LastTask         AITask          `json:"last_task,omitempty"`
 	LastTool         AIToolName      `json:"last_tool,omitempty"`
 	LastResolvedPlan json.RawMessage `json:"last_resolved_plan,omitempty"`
+	// Digest is the model-written memory of the older part of this conversation.
+	// The key deliberately avoids the word "snapshot": the repository rejects any
+	// state object containing one, to keep tool output from being stored here.
+	Digest string `json:"digest,omitempty"`
+	// DigestThrough records how far the digest reaches, so summarising resumes
+	// rather than restarting.
+	DigestThrough uint64 `json:"digest_through,omitempty"`
 }
 
 type aiConversationContextDelta struct {
@@ -95,6 +114,12 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: load conversation turns: %w", ErrAIConversationPersistence, err)
 	}
+	// The stored state has been written on every turn and never read until now.
+	// The digest lives in it, and without this read the assistant would rewrite
+	// its memory from nothing each time.
+	var stored aiConversationCompactState
+	_ = json.Unmarshal([]byte(strings.TrimSpace(conversation.StateJSON)), &stored)
+
 	history := conversationTurnsToMessages(turns)
 	// Transition compatibility: a new backend conversation may be created while
 	// the browser still holds the previous local-only history. Once a server turn
@@ -102,7 +127,11 @@ func (s *AIService) prepareConversationSession(actor AIActorContext, req *AIAskR
 	if len(history) == 0 {
 		history = clientHistory
 	}
-	return &aiConversationSession{conversation: conversation}, history, nil
+	return &aiConversationSession{
+		conversation:  conversation,
+		digest:        stored.Digest,
+		digestThrough: stored.DigestThrough,
+	}, history, nil
 }
 
 func conversationTurnsToMessages(turns []entity.AIConversationTurn) []AIConversationMessage {
@@ -198,6 +227,10 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		LastTask:         response.Task,
 		LastTool:         response.Tool,
 		LastResolvedPlan: planJSON,
+		// Carried forward, not rebuilt. This object replaces the stored state
+		// wholesale on every turn, so anything not copied here is deleted.
+		Digest:        session.digest,
+		DigestThrough: session.digestThrough,
 	}
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
@@ -236,7 +269,78 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		return err
 	}
 	response.TurnID = turn.ID
+	// AppendTurn moved the row on in the database but not in this copy. Anything
+	// that writes after it — the digest does — must use the new version or its
+	// write is rejected as a conflict every single time, which is exactly how the
+	// digest came to be composed correctly and thrown away on every turn.
+	session.conversation.Version++
+	session.conversation.NextTurnSequence = turn.Sequence + 1
+	s.maybeSummarizeConversation(actor, session, turn.Sequence)
 	return nil
+}
+
+// maybeSummarizeConversation writes the model's memory of the older part of this
+// conversation, once enough turns have piled up beyond what it already covers.
+//
+// It runs in the background because the owner is waiting for an answer, not for a
+// memory to be filed, and a slow provider must never make the chat feel slow. If
+// it fails there is nothing to recover: the previous digest stays, and the two
+// deterministic layers of memory keep working regardless — this is the layer that
+// can be absent without the assistant losing the thread.
+func (s *AIService) maybeSummarizeConversation(actor AIActorContext, session *aiConversationSession, latestSequence uint64) {
+	if !aiConversationDigestEnabled() || s.conversationStore == nil || session == nil || session.conversation == nil {
+		return
+	}
+	// The newest turns are already shown to the model word for word; summarising
+	// them would put the same sentences in the prompt twice.
+	uncovered := int64(latestSequence) - int64(session.digestThrough) - aiDigestSkipRecentTurns
+	if uncovered < aiDigestTurnThreshold {
+		return
+	}
+	conversationID := session.conversation.ID
+	version := session.conversation.Version
+	previous := session.digest
+	through := latestSequence - aiDigestSkipRecentTurns
+
+	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				aiStage("warn", "digest: สรุปบทสนทนาแล้วพัง (%v)", recovered)
+			}
+		}()
+		turns, err := s.conversationStore.ListRecentTurns(
+			actor.RestaurantID, actor.OwnerUserID, conversationID, aiConversationContextTurnLimit)
+		if err != nil {
+			aiStage("warn", "digest: อ่านบทสนทนาไม่ได้ (%v)", err)
+			return
+		}
+		pending := make([]entity.AIConversationTurn, 0, len(turns))
+		for _, candidate := range turns {
+			if candidate.Sequence > session.digestThrough && candidate.Sequence <= through {
+				pending = append(pending, candidate)
+			}
+		}
+		digest := s.summarizeConversation(pending, previous)
+		if strings.TrimSpace(digest) == "" {
+			return
+		}
+		state := aiConversationCompactState{
+			SchemaVersion: aiConversationStateVersion,
+			Digest:        digest,
+			DigestThrough: through,
+		}
+		stateJSON, err := json.Marshal(state)
+		if err != nil {
+			return
+		}
+		// A turn may have landed while the summary was being written, which moves
+		// the version on. Dropping the write is correct: the next turn past the
+		// threshold summarises again, over a conversation that now includes it.
+		if err := s.conversationStore.UpdateState(
+			actor.RestaurantID, actor.OwnerUserID, conversationID, version, string(stateJSON)); err != nil {
+			aiStage("flow", "digest: บันทึกไม่ทัน มีเทิร์นใหม่แทรกเข้ามา (%v) — รอบหน้าค่อยสรุปใหม่", err)
+		}
+	}()
 }
 
 func (s *AIService) DeleteConversationForOwner(actor AIActorContext, conversationID string) error {

@@ -215,6 +215,9 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 		return nil, err
 	}
 	request.History = history
+	if session != nil {
+		request.Digest = session.digest
+	}
 
 	if aiOrchestrationMode() == aiOrchestratorJoyboy {
 		aiStage("input", "joyboy | question_length=%d history_turns=%d",

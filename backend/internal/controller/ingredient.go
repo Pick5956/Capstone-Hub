@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -211,22 +212,37 @@ func requireStockExpensePermission(c *gin.Context, amount float64) bool {
 	return requirePermission(c, "manage_expenses", "missing manage_expenses permission")
 }
 
+// ListTransactions serves both the per-ingredient history (an :id in the path)
+// and the whole-inventory one (no path id, filters on the query string). An id in
+// the path wins over ingredient_id in the query string, so the per-item route can
+// never be widened by a crafted URL.
 func (ctrl *IngredientController) ListTransactions(c *gin.Context) {
 	restaurantID, ok := requireRestaurantWithAnyPermission(c, "missing inventory permission", "view_inventory", "manage_inventory")
 	if !ok {
 		return
 	}
-	var ingredientID uint
-	if raw := c.Param("id"); raw != "" && raw != "/" {
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err == nil {
-			ingredientID = uint(id)
-		}
+	query, err := parseIngredientTransactionQuery(c)
+	if err != nil {
+		respondAPIError(c, http.StatusBadRequest, err)
+		return
 	}
-	txs, err := ctrl.svc.ListTransactions(restaurantID, ingredientID)
+	if raw := c.Param("id"); raw != "" && raw != "/" {
+		id, parseErr := strconv.ParseUint(raw, 10, 64)
+		if parseErr != nil {
+			respondAPIError(c, http.StatusBadRequest, errors.New("ingredient id must be a number"))
+			return
+		}
+		query.IngredientID = uint(id)
+	}
+	limit := boundedQueryInt(c, "limit", 100, 1, 200)
+	page := boundedQueryInt(c, "page", 1, 1, 1_000_000)
+	query.Limit = limit
+	query.Offset = (page - 1) * limit
+
+	txs, total, err := ctrl.svc.ListTransactions(restaurantID, query)
 	if err != nil {
 		respondAPIError(c, http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"transactions": txs})
+	c.JSON(http.StatusOK, gin.H{"transactions": txs, "total": total, "page": page, "limit": limit})
 }

@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -64,7 +65,21 @@ func joyboyCompleteOptions(kind joyboy.CallKind) aiProviderCompleteOptions {
 	if kind == joyboy.CallWriteAnswer {
 		return aiProviderCompleteOptions{ReasoningEffort: "medium", MaxCompletionTokens: joyboyWriteCeiling}
 	}
-	return aiProviderCompleteOptions{ReasoningEffort: "medium"}
+	// Choosing tools is judgement, but judgement from a fixed list against a
+	// question — not writing. It goes to the support model so the writing model's
+	// daily budget is spent only on what the owner reads. Empty when no support
+	// model is configured, which leaves every call exactly where it was.
+	return aiProviderCompleteOptions{ReasoningEffort: "medium", Model: aiSupportModel()}
+}
+
+// aiSupportModel names the model for the calls nobody reads: choosing a tool,
+// and reading a sentence into JSON. Empty means "same as everything else".
+//
+// It is deliberately a separate setting rather than a hardcoded name. Which
+// model is the cheap one changes every few months, and the free tier's limits
+// change with it; a name in the environment can follow that without a release.
+func aiSupportModel() string {
+	return strings.TrimSpace(os.Getenv("AI_SUPPORT_MODEL"))
 }
 
 // joyboyTools runs read-only tools for one restaurant. The restaurant is fixed
@@ -205,7 +220,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.actionMenus != nil {
 			menus, _ = t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
 		}
-		return joyboyIngredientDetailBody(shelf, menus, question, t.history), true, true
+		// The 30-day usage is what turns a stock figure into "days left" — the
+		// number "อีกกี่วันต้องสั่ง...เพิ่ม" is asking for. Left out, the sheet has
+		// stock and no rate, and the model estimates the days itself.
+		var usage []repository.AIIngredientUsage
+		if t.service.repo != nil {
+			since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+			if rows, err := t.service.repo.IngredientUsage(t.restaurantID, since); err == nil {
+				usage = rows
+			} else {
+				aiStage("warn", "joyboy: %s usage failed (%v) → sheet without days_left", tool, err)
+			}
+		}
+		return joyboyIngredientDetailBody(shelf, menus, usage, question, t.history), true, true
 
 	case joyboyToolMenuDetail:
 		if t.service.actionMenus == nil || t.service.repo == nil {
@@ -314,6 +341,29 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			return "", false, true
 		}
 		return joyboyMenuListBody(items), true, true
+
+	case joyboyToolMenuProfitByCategory:
+		// Two reads rather than one. The sold rows carry the money; the catalogue
+		// carries the categories that sold nothing, and without those a quiet
+		// category is simply absent from the sheet — which the model reads as a
+		// category the shop does not have. That is the answer drinks kept getting.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+		sold, err := t.service.repo.MenuMarginsByCategory(t.restaurantID, since)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		items, err := t.service.repo.MenuCatalogue(t.restaurantID)
+		if err != nil {
+			// The sold rows alone still answer "which drink earns the most"; only
+			// the categories with no sales are lost, so report what there is.
+			aiStage("warn", "joyboy: %s catalogue failed (%v) → reporting only the categories that sold", tool, err)
+			items = nil
+		}
+		return joyboyMenuProfitByCategoryBody(sold, items), true, true
 
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
@@ -435,7 +485,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				// backwards. The figures are the same either way; only the order the
 				// eye reads them in differs from the sheet's.
 				t.chart = buildSalesComparisonChart(older.Label, dOlder.Revenue, newer.Label, dNewer.Revenue)
-				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
+				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder), t.service.aiSalesCoverageNoteFor(t.restaurantID, older.Start)), true, true
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]
@@ -444,7 +494,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				return joyboyWithCoverage(joyboySalesForPeriodBody(p.Label, d), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
+				return joyboyWithCoverage(joyboySalesForPeriodBody(p.Label, d), t.service.aiSalesCoverageNoteFor(t.restaurantID, p.Start)), true, true
 			}
 		}
 		if year, ok := joyboyYearSalesTotal(question, now); ok {
@@ -453,7 +503,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				aiStage("warn", "joyboy: %s (year) failed (%v) → leaving it out", tool, err)
 				return "", false, true
 			}
-			return joyboySalesForPeriodBody(year.Label, d), true, true
+			return joyboyWithCoverage(joyboySalesForPeriodBody(year.Label, d), t.service.aiSalesCoverageNoteFor(t.restaurantID, year.Start)), true, true
 		}
 		return "", false, false
 	case joyboyToolSalesForecast:
@@ -609,7 +659,8 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// do not any more: one road, one boundary, and "ต้มยำกุ้งหมดแล้ว เอาลงก่อน"
 	// works for the same reason "เอาหมูสับเข้าคลัง 2 กิโล" does.
 	actionResponse := &AIAskResponse{Intent: AIIntentChat, Task: AITaskGeneralChat, Model: "joyboy"}
-	if s.maybeHandleJoyboyStockCommand(actor, request, actionResponse) {
+	handled, pendingClarification := s.maybeHandleJoyboyStockCommand(actor, request, actionResponse)
+	if handled {
 		return actionResponse, nil
 	}
 
@@ -624,6 +675,7 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	answer, err := assistant.Ask(ctx, joyboy.Request{
 		Question: request.Question,
 		History:  joyboyHistory(request.History),
+		Digest:   request.Digest,
 	})
 	if err != nil {
 		if errors.Is(err, joyboy.ErrUnavailable) {
@@ -644,11 +696,36 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 	// without it the log shows every decision except the one being judged.
 	aiDebug("joyboy question: %s", request.Question)
 	aiDebug("joyboy answer: %s", answer.Text)
-	// With no tool behind it, an answer that states a figure or claims a change
-	// was made is invented — send the plain "cannot help with this yet" instead.
+	// Nothing is replaced here any more — see ai_joyboy_scope.go. A claim that a
+	// change was applied is logged, because the rule against it is now one the
+	// model can follow, and the log is how we find out whether it does.
 	finalAnswer := joyboyScopedAnswer(answer.Text, len(answer.Tools))
-	if finalAnswer != answer.Text {
-		aiStage("flow", "joyboy: unbacked answer with 0 tools → replaced with out-of-scope reply")
+
+	// The order half of "กะเพราเหลือเท่าไหร่ แล้วสั่งเพิ่มให้หน่อย", asked after the
+	// question half has been answered properly. It goes last because it is the
+	// part still waiting on the owner.
+	//
+	// Whether the model's own sentence survives depends on whether it had anything
+	// to say. Tools ran means there was a question in the turn and its answer is
+	// the reason this path was taken at all. No tools means the turn was only the
+	// command, and then the model is writing about a change with no data — which
+	// after it was taught to refuse impossible commands produced answers that
+	// argued with themselves:
+	//
+	//	"ผู้ช่วยทำให้ไม่ได้ครับ ต้องไปจัดการเรื่องราคาในระบบเองครับ"
+	//	"ข้าวกะเพราไก่ไข่ดาว ตั้งราคาติดลบไม่ได้ครับ อยากตั้งเป็นเท่าไหร่ครับ"
+	//
+	// The first sentence is wrong — setting a menu price is one of the nine things
+	// the assistant does — and it is the one the owner reads first. Go knows which
+	// of the two is true here, so the guess goes and the fact stays.
+	if clarification := strings.TrimSpace(pendingClarification); clarification != "" {
+		if len(answer.Tools) == 0 {
+			finalAnswer = clarification
+			aiStage("flow", "joyboy: the turn was only a command — sending the question Go could answer precisely")
+		} else {
+			finalAnswer = strings.TrimSpace(finalAnswer) + "\n\n" + clarification
+			aiStage("flow", "joyboy: answered the question and asked about the command in the same sentence")
+		}
 	}
 	response := &AIAskResponse{
 		Answer: finalAnswer,

@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/entity"
 )
@@ -108,9 +109,20 @@ func TestResolveStockCommandOutcomes(t *testing.T) {
 
 	unknown := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ผักชี", Kind: "in", Quantity: 1, Unit: "กรัม"})
 	_ = unknown
+	// An unknown name with a unit goes straight to the confirmation card rather
+	// than to a sentence asking permission to create it. This used to expect the
+	// sentence, and the sentence asked for the unit the owner had already given
+	// — "เพิ่ม หมูสามชั้น 3000 กก" was answered with "บอกหน่วยด้วย". The card is
+	// still a question; it just asks the one that is left.
 	missing := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ปลาหมึก", Kind: "in", Quantity: 1, Unit: "กก."})
-	if missing.Kind != AICommandOutcomeOfferCreate || !strings.Contains(missing.Question, "เพิ่มเข้าคลัง") {
-		t.Errorf("an unknown ingredient should offer to create it, got %+v", missing)
+	if missing.Kind != AICommandOutcomeReady || missing.Command.Kind != "create" {
+		t.Errorf("an unknown ingredient with a unit should be ready to create, got %+v", missing)
+	}
+
+	// Without a unit there is nothing to build a create from, so it still asks.
+	missingUnit := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "ปลาหมึก", Kind: "in", Quantity: 1})
+	if missingUnit.Kind != AICommandOutcomeOfferCreate || !strings.Contains(missingUnit.Question, "เพิ่มเข้าคลัง") {
+		t.Errorf("an unknown ingredient with no unit should offer to create it, got %+v", missingUnit)
 	}
 
 	badUnit := ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "in", Quantity: 3, Unit: "กำ"})
@@ -155,5 +167,108 @@ func TestParseStockCommandDrafts(t *testing.T) {
 	nameless, err := ParseStockCommandDrafts("[{\"name\":\"  \",\"kind\":\"in\",\"quantity\":2}]")
 	if err != nil || len(nameless) != 0 {
 		t.Errorf("a nameless draft should be dropped, got %+v", nameless)
+	}
+}
+
+// The owner said the unit in the first sentence. Asking for it again is the
+// single most irritating thing this pipeline can do, and it did it: "เพิ่ม
+// หมูสามชั้น 3000 กก เข้าคลังวัตถุดิบให้หน่อย" produced a complete draft and the
+// reply was still "ให้ผมเพิ่มเข้าคลังให้ไหม (บอกหน่วยด้วย)".
+func TestNewIngredientWithAUnitDoesNotAskForTheUnitAgain(t *testing.T) {
+	shelf := []entity.Ingredient{{Name: "หมูสับ", Unit: "กรัม"}}
+
+	resolution := ResolveStockCommand(shelf, AIStockCommandDraft{
+		Name: "หมูสามชั้น", Kind: "in", Quantity: 3000, Unit: "กก.",
+	})
+	if resolution.Kind != AICommandOutcomeReady {
+		t.Fatalf("expected the command to be ready to confirm, got %q — %s", resolution.Kind, resolution.Question)
+	}
+	if resolution.Command.Kind != "create" {
+		t.Errorf("a name the shelf does not have has to become a create, got %q", resolution.Command.Kind)
+	}
+	if resolution.Command.Unit != "กก." || resolution.Command.Quantity != 3000 {
+		t.Errorf("the unit and quantity the owner gave were dropped: %+v", resolution.Command)
+	}
+
+	// Without a unit there is genuinely nothing to go on, so asking is right.
+	missing := ResolveStockCommand(shelf, AIStockCommandDraft{
+		Name: "หมูสามชั้น", Kind: "in", Quantity: 3000,
+	})
+	if missing.Kind != AICommandOutcomeOfferCreate {
+		t.Fatalf("with no unit the pipeline still has to ask, got %q", missing.Kind)
+	}
+}
+
+// The confirmation card read 'บันทึกรายจ่าย "บันทึกค่าน้ำ 500 บาท"'. The
+// extractor had already done its job — name="ค่าน้ำ" — and the card was reading
+// the note instead, which is free text and carries whatever the owner said.
+func TestExpenseCardShowsTheNameNotTheNote(t *testing.T) {
+	resolution := ResolveExpenseCommand(AIStockCommandDraft{
+		Name: "ค่าน้ำ", Kind: "expense", Quantity: 500,
+		Category: "utilities", Note: "บันทึกค่าน้ำ 500 บาท",
+	}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+
+	if resolution.Kind != AICommandOutcomeReady {
+		t.Fatalf("a complete expense should be ready, got %q — %s", resolution.Kind, resolution.Question)
+	}
+	if resolution.Title != "ค่าน้ำ" {
+		t.Errorf("the card should be titled with the name, got %q", resolution.Title)
+	}
+
+	// With no name to use, the note is still better than nothing.
+	fallback := ResolveExpenseCommand(AIStockCommandDraft{
+		Kind: "expense", Quantity: 500, Category: "utilities", Note: "ค่าน้ำประปา",
+	}, time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC))
+	if fallback.Title != "ค่าน้ำประปา" {
+		t.Errorf("with no name the note should title the card, got %q", fallback.Title)
+	}
+}
+
+// "ตั้งราคาข้าวกะเพราเป็น -50 บาท" was answered "ผู้ช่วยทำให้ไม่ได้ครับ คุณต้อง
+// ไปจัดการเรื่องราคาในระบบเองครับ" — right outcome, wrong reason. Changing a menu
+// price is something the assistant does; only that one number was impossible.
+// The owner walks away believing prices cannot be changed through the assistant
+// at all, which is false.
+//
+// Nothing said and something impossible are different problems, so they get
+// different sentences.
+func TestNegativeNumbersSayWhyRatherThanJustAsking(t *testing.T) {
+	menus := []entity.MenuItem{{Name: "ข้าวกะเพราไก่ไข่ดาว", Price: 60, IsAvailable: true}}
+	shelf := aiCommandTestShelf()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		what       string
+		resolution AICommandResolution
+		mustSay    string
+	}{
+		{"ราคาเมนูติดลบ",
+			ResolveMenuCommand(menus, AIStockCommandDraft{Name: "ข้าวกะเพราไก่ไข่ดาว", Kind: "menu_price", Quantity: -50}),
+			"ติดลบไม่ได้"},
+		{"จำนวนสต๊อกติดลบ",
+			ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "in", Quantity: -5, Unit: "กรัม"}),
+			"ติดลบไม่ได้"},
+		{"ราคาทุนติดลบ",
+			ResolveStockCommand(shelf, AIStockCommandDraft{Name: "กะเพรา", Kind: "cost", Quantity: -20}),
+			"ติดลบไม่ได้"},
+		{"รายจ่ายติดลบ",
+			ResolveExpenseCommand(AIStockCommandDraft{Name: "ค่าไฟ", Kind: "expense", Quantity: -100, Category: "utilities"}, now),
+			"ติดลบไม่ได้"},
+	}
+	for _, c := range cases {
+		if c.resolution.Kind != AICommandOutcomeAsk {
+			t.Errorf("%s: should ask, got %q", c.what, c.resolution.Kind)
+			continue
+		}
+		if !strings.Contains(c.resolution.Question, c.mustSay) {
+			t.Errorf("%s: the owner is not told what was wrong: %q", c.what, c.resolution.Question)
+		}
+	}
+
+	// A number that was simply never said still asks the plain question — saying
+	// "cannot be negative" about a number nobody gave would be nonsense.
+	quiet := ResolveMenuCommand(menus, AIStockCommandDraft{Name: "ข้าวกะเพราไก่ไข่ดาว", Kind: "menu_price"})
+	if quiet.Kind != AICommandOutcomeAsk || strings.Contains(quiet.Question, "ติดลบ") {
+		t.Errorf("a missing price should just ask, got %q", quiet.Question)
 	}
 }

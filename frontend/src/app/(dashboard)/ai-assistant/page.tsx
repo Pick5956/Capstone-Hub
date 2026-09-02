@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Bell, Bot, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
+import { ArrowUp, Bell, Bot, ChevronDown, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -33,6 +33,7 @@ import type { AIActionPreview, AIActionPlan, AIConversationMessage, AIForecastRe
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
+import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
@@ -52,6 +53,10 @@ type Message = {
   model?: string;
   forecast?: AIForecastResult;
   chart?: AIChartData;
+  // ใบยืนยันเป็นของคำตอบใบใดใบหนึ่ง ไม่ใช่ของทั้งบทสนทนา · เก็บ id ไว้กับ
+  // ข้อความที่สร้างมัน กล่องจะได้อยู่ใต้คำตอบนั้นแทนที่จะไหลไปท้ายสายเสมอ
+  planId?: string;
+  previewId?: string;
 };
 
 type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
@@ -64,6 +69,11 @@ function buildCopy(language: "th" | "en") {
         ask: "ถาม AI",
         thinking: "กำลังวิเคราะห์",
         newChat: "เริ่มแชทใหม่",
+        newChatTitle: "เริ่มแชทใหม่ไหม?",
+        newChatConfirm: "บทสนทนานี้จะถูกลบทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
+        newChatYes: "ลบแล้วเริ่มใหม่",
+        newChatNo: "ไม่ลบ",
+        scrollToLatest: "ไปที่ข้อความล่าสุด",
         permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
         welcome: "สวัสดีครับ ผมเป็นผู้ช่วยวิเคราะห์ร้าน ถามผมได้เลยเรื่องยอดขาย กำไรเมนู หรือคลังวัตถุดิบครับ",
         error: "เรียก AI ไม่สำเร็จ",
@@ -80,6 +90,11 @@ function buildCopy(language: "th" | "en") {
         ask: "Ask AI",
         thinking: "Analyzing",
         newChat: "New chat",
+        newChatTitle: "Start a new chat?",
+        newChatConfirm: "This conversation will be deleted, and the assistant will not remember any of it.",
+        newChatYes: "Delete and start over",
+        newChatNo: "Keep it",
+        scrollToLatest: "Jump to the latest message",
         permissionDenied: "This page is for the restaurant owner only",
         welcome: "Hi! I'm your restaurant analysis assistant. Ask me about sales, menu profit, or ingredient stock.",
         error: "AI request failed",
@@ -131,6 +146,12 @@ export default function AIAssistantPage() {
   const [conversationRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  // The jump button only earns its place when the reader is not already at the
+  // end; shown always, it covers a message to offer a trip to where they are.
+  const [atLatest, setAtLatest] = useState(true);
+  // Clearing deletes the server copy too and cannot be undone, so it asks first.
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
   const sendAfterVoiceRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
@@ -259,7 +280,12 @@ export default function AIAssistantPage() {
     setLastQuestion(trimmed);
     setPendingAction(null);
     setPendingActionPreview(null);
-    setPendingActionPlan(null);
+    // The pending plan deliberately survives a new question. Clearing it here hid
+    // the confirm bar while the server still held the plan, and the server answers
+    // the next command with "there is still something waiting — confirm or cancel
+    // it above" over a box that is no longer on screen. The owner could then
+    // neither confirm nor cancel, and had to wait out the expiry. The bar carries
+    // its own countdown and terminal states, so leaving it up is safe.
     setActionPreviewError("");
 
     const history = conversationHistory();
@@ -331,6 +357,8 @@ export default function AIAssistantPage() {
           model: data.model,
           forecast: data.forecast,
           chart: data.chart,
+          planId: data.action_plan?.id,
+          previewId: data.action_preview?.id,
         },
       ]);
     } catch (err: unknown) {
@@ -550,6 +578,77 @@ export default function AIAssistantPage() {
 
   const isEmpty = messages.length <= 1;
 
+  // A confirmation card belongs under the answer that proposed it, not at the
+  // end of the thread.
+  //
+  // It used to render after messages.map, so it always sat last. Ask another
+  // question while one is open and the card slid down to sit under the new
+  // answer, which reads as though it belongs to the question just asked — and
+  // after it resolved, "ยกเลิกแล้ว" kept following the conversation down.
+  //
+  // Anchoring needs a fallback: if the owning message is gone (a thread restored
+  // from storage, a trimmed history), the card renders at the end as before.
+  // Dropping it instead would be the worse bug, because the server still refuses
+  // every other command until this card is confirmed or cancelled.
+  const planCard =
+    pendingActionPlan && pendingActionPlan.items.length > 0 ? (
+      <InlineDbConfirmBar
+        key={pendingActionPlan.id}
+        summary={pendingActionPlan.summary}
+        items={pendingActionPlan.items.map((planItem) => ({
+          title: planItem.title,
+          change: planItem.change,
+          unit: planItem.unit,
+          sideEffects: planItem.side_effects,
+        }))}
+        warnings={pendingActionPlan.warnings}
+        detail={language === "th"
+          ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
+          : `changes ${pendingActionPlan.items.length} record(s)`}
+        expiresAt={pendingActionPlan.expires_at}
+        onConfirm={handlePlanConfirm}
+        onCancel={handlePlanCancel}
+        onReissue={handlePlanReissue}
+        onResolved={() => { actionResolvedRef.current = true; }}
+        language={language}
+      />
+    ) : null;
+
+  const previewCard = pendingActionPreview ? (
+    pendingActionPreview.action_type === "set_menu_availability" ? (
+      <InlineDbConfirmBar
+        key={pendingActionPreview.id}
+        itemName={pendingActionPreview.target.name}
+        fromLabel={availabilityLabel(pendingActionPreview.current.is_available)}
+        toLabel={availabilityLabel(pendingActionPreview.requested.is_available)}
+        detail={language === "th" ? "แก้ข้อมูลจริง 1 รายการ" : "changes 1 record"}
+        expiresAt={pendingActionPreview.expires_at}
+        onConfirm={handleInlineActionConfirm}
+        onCancel={handleInlineActionCancel}
+        onReissue={handleInlineActionReissue}
+        onResolved={() => { actionResolvedRef.current = true; }}
+        language={language}
+      />
+    ) : (
+      <AIActionPreviewCard
+        preview={pendingActionPreview}
+        language={language}
+        confirming={actionConfirming}
+        cancelling={actionCancelling}
+        error={actionPreviewError}
+        onConfirm={handleConfirmActionPreview}
+        onCancel={handleCancelActionPreview}
+      />
+    )
+  ) : null;
+
+  const planAnchorId = pendingActionPlan
+    ? messages.find((message) => message.planId === pendingActionPlan.id)?.id ?? null
+    : null;
+  const previewAnchorId = pendingActionPreview
+    ? messages.find((message) => message.previewId === pendingActionPreview.id)?.id ?? null
+    : null;
+
   return (
     <main className="ai-aura-bg relative flex h-[calc(100dvh-3.5rem)] min-h-0 w-full flex-col overflow-hidden bg-[#faf8f2] px-2 pt-2 pb-3 sm:px-6 lg:h-[calc(100vh-20px)] lg:px-8 lg:pt-3 lg:pb-4 dark:bg-transparent">
       {/* Sunset Boulevard aura — full-bleed behind the whole page (light theme only) */}
@@ -585,7 +684,7 @@ export default function AIAssistantPage() {
             <HoverTip label={copy.newChat} placement="bottom">
               <button
                 type="button"
-                onClick={() => void handleClearChat()}
+                onClick={() => setConfirmingClear(true)}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.newChat}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
@@ -611,6 +710,14 @@ export default function AIAssistantPage() {
           {/* Messages — scroll area bleeds to the window's right edge so its
               scrollbar sits flush; pr-8 keeps the bubbles off the scrollbar. */}
           <div
+            ref={scrollAreaRef}
+            onScroll={() => {
+              const area = scrollAreaRef.current;
+              if (!area) return;
+              // A couple of lines of slack, so the button does not flash on the
+              // half-pixel drift a smooth scroll leaves behind.
+              setAtLatest(area.scrollHeight - area.scrollTop - area.clientHeight <= 48);
+            }}
             className={`ai-scroll relative flex-1 min-h-0 space-y-4 px-1 pb-4 pt-14 sm:px-5 sm:pb-5 lg:-mr-8 lg:pr-8 ${
               /* Nothing to scroll through yet — don't show a scrollbar on a fresh chat */
               isEmpty && !loading ? "overflow-hidden" : "overflow-y-auto"
@@ -655,7 +762,8 @@ export default function AIAssistantPage() {
                 );
               }
               return (
-                <div key={msg.id} className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
+                <Fragment key={msg.id}>
+                <div className="flex max-w-full items-start gap-2 sm:max-w-[90%] sm:gap-2.5">
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" />
                   <div className="min-w-0 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
@@ -694,6 +802,9 @@ export default function AIAssistantPage() {
                     )}
                   </div>
                 </div>
+                {planAnchorId === msg.id && planCard}
+                {previewAnchorId === msg.id && previewCard}
+                </Fragment>
               );
               })
             )}
@@ -730,56 +841,10 @@ export default function AIAssistantPage() {
               </div>
             )}
 
-            {pendingActionPlan && pendingActionPlan.items.length > 0 && (
-              <InlineDbConfirmBar
-                key={pendingActionPlan.id}
-                summary={pendingActionPlan.summary}
-                items={pendingActionPlan.items.map((planItem) => ({
-                  title: planItem.title,
-                  change: planItem.change,
-                  unit: planItem.unit,
-                  sideEffects: planItem.side_effects,
-                }))}
-                warnings={pendingActionPlan.warnings}
-                detail={language === "th"
-                  ? `แก้ข้อมูลจริง ${pendingActionPlan.items.length} รายการ`
-                  : `changes ${pendingActionPlan.items.length} record(s)`}
-                expiresAt={pendingActionPlan.expires_at}
-                onConfirm={handlePlanConfirm}
-                onCancel={handlePlanCancel}
-                onReissue={handlePlanReissue}
-                onResolved={() => { actionResolvedRef.current = true; }}
-                language={language}
-              />
-            )}
-
-            {pendingActionPreview && (
-              pendingActionPreview.action_type === "set_menu_availability" ? (
-                <InlineDbConfirmBar
-                  key={pendingActionPreview.id}
-                  itemName={pendingActionPreview.target.name}
-                  fromLabel={availabilityLabel(pendingActionPreview.current.is_available)}
-                  toLabel={availabilityLabel(pendingActionPreview.requested.is_available)}
-                  detail={language === "th" ? "แก้ข้อมูลจริง 1 รายการ" : "changes 1 record"}
-                  expiresAt={pendingActionPreview.expires_at}
-                  onConfirm={handleInlineActionConfirm}
-                  onCancel={handleInlineActionCancel}
-                  onReissue={handleInlineActionReissue}
-                  onResolved={() => { actionResolvedRef.current = true; }}
-                  language={language}
-                />
-              ) : (
-                <AIActionPreviewCard
-                  preview={pendingActionPreview}
-                  language={language}
-                  confirming={actionConfirming}
-                  cancelling={actionCancelling}
-                  error={actionPreviewError}
-                  onConfirm={handleConfirmActionPreview}
-                  onCancel={handleCancelActionPreview}
-                />
-              )
-            )}
+            {/* fallback: ไม่เจอข้อความเจ้าของใบ จึงวางท้ายสายเหมือนเดิม
+                ดีกว่าไม่แสดงเลย เพราะเซิร์ฟเวอร์ยังกันคำสั่งอื่นอยู่ */}
+            {planAnchorId === null && planCard}
+            {previewAnchorId === null && previewCard}
 
             <div ref={messagesEndRef} />
           </div>
@@ -817,6 +882,38 @@ export default function AIAssistantPage() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Asked before the thread is deleted, not after: the server copy goes
+              with it and there is no undo. Same modal as the floating chat, so
+              the question looks and behaves identically on both surfaces. */}
+          <WarmConfirmDialog
+            open={confirmingClear}
+            title={copy.newChatTitle}
+            description={copy.newChatConfirm}
+            confirmLabel={copy.newChatYes}
+            cancelLabel={copy.newChatNo}
+            onConfirm={() => {
+              setConfirmingClear(false);
+              void handleClearChat();
+            }}
+            onCancel={() => setConfirmingClear(false)}
+            busy={loading || actionConfirming || actionCancelling}
+          />
+
+          {/* A way back to the newest message once the reader has scrolled up. */}
+          {!atLatest && messages.length > 1 && (
+            <div className="pointer-events-none relative z-20 h-0">
+              <button
+                type="button"
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+                aria-label={copy.scrollToLatest}
+                title={copy.scrollToLatest}
+                className="pointer-events-auto absolute -top-11 left-1/2 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200/80 bg-white/90 text-gray-600 shadow-md backdrop-blur transition-all hover:-translate-y-0.5 hover:text-orange-600 active:scale-95 dark:border-gray-700/80 dark:bg-gray-900/90 dark:text-gray-300 dark:hover:text-orange-300"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
             </div>
           )}
 
@@ -973,6 +1070,13 @@ export default function AIAssistantPage() {
               language={language}
               onCount={setInsightsCount}
               onClose={() => setDrawerOpen(false)}
+              // The panel stays mounted behind the closed drawer, so it needs to
+              // be told when it is actually being looked at — that is what marks
+              // its cards read and quiets the bell.
+              open={drawerOpen}
+              // Null before the membership resolves; the panel falls back to its
+              // own default until then rather than storing under "null".
+              scopeKey={storageKey ?? undefined}
             />
           </div>
         </aside>

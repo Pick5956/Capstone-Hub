@@ -234,7 +234,7 @@ func computeProactiveInsights(snapshot AISnapshot) []AIInsight {
 			insights = append(insights, AIInsight{
 				Kind:     "plowhorse",
 				Severity: "info",
-				Title:    fmt.Sprintf("%s ขายดีแต่กำไรบาง", eng.Plowhorses[0]),
+				Title:    fmt.Sprintf("%s ขายดีแต่ได้กำไรน้อย", eng.Plowhorses[0]),
 				Metric:   "",
 				Detail:   "ทบทวนต้นทุนหรือปรับราคาเพื่อเพิ่มกำไรรวม",
 			})

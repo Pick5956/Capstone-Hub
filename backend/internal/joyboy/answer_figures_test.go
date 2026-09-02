@@ -11,7 +11,7 @@ import (
 // — and those rules then obliged it to quote profit at someone deciding what to
 // have for dinner. This rule is the one that says figures are optional.
 func TestTheAnswerPromptAllowsAnAnswerWithoutFigures(t *testing.T) {
-	prompt := answerPrompt("วันนี้กินอะไรดี", nil, "rank=1 menu=ต้มยำกุ้งน้ำข้น qty=108")
+	prompt := answerPrompt("วันนี้กินอะไรดี", nil, "", "rank=1 menu=ต้มยำกุ้งน้ำข้น qty=108")
 	if !strings.Contains(prompt, "ก็ไม่ต้องยกตัวเลขพวกนั้นมาประกอบ") {
 		t.Fatal("the rule releasing the model from quoting figures is missing")
 	}
@@ -29,7 +29,7 @@ func TestTheAnswerPromptAllowsAnAnswerWithoutFigures(t *testing.T) {
 // at every figure rather than once. Both parts are load-bearing; whoever tidies
 // this rule down to one line is about to reintroduce round four.
 func TestTheAnswerPromptPinsTheThousandSeparator(t *testing.T) {
-	prompt := answerPrompt("ยอดขาย 7 วัน", nil, "period=7 วันล่าสุด\nrevenue=15012.00")
+	prompt := answerPrompt("ยอดขาย 7 วัน", nil, "", "period=7 วันล่าสุด\nrevenue=15012.00")
 	for _, required := range []string{
 		"คั่นหลักพันด้วยจุลภาคเท่านั้น",
 		"ห้ามคั่นด้วยช่องว่าง",
@@ -49,7 +49,7 @@ func TestTheAnswerPromptPinsTheThousandSeparator(t *testing.T) {
 // has to stay an exception to "don't list everything", or the two rules read as
 // a contradiction and the model picks whichever it saw last.
 func TestTheAnswerPromptRequiresEveryBlockOnAnOverview(t *testing.T) {
-	prompt := answerPrompt("สรุปสถานการณ์ร้าน 30 วันล่าสุด", nil,
+	prompt := answerPrompt("สรุปสถานการณ์ร้าน 30 วันล่าสุด", nil, "",
 		"[get_inventory_valuation]\ntotal_value=6957.50")
 	for _, want := range []string{
 		"สรุปสถานการณ์ร้าน",
@@ -74,7 +74,7 @@ func TestTheAnswerPromptRequiresEveryBlockOnAnOverview(t *testing.T) {
 // like 68.33 that need their fraction, so the rule lives in the prompt: keep any
 // fraction that is not .00, do not round.
 func TestTheAnswerPromptKeepsNonZeroFractions(t *testing.T) {
-	prompt := answerPrompt("มูลค่าสต๊อกเท่าไหร่", nil, "total_value=6957.50")
+	prompt := answerPrompt("มูลค่าสต๊อกเท่าไหร่", nil, "", "total_value=6957.50")
 	if !strings.Contains(prompt, "ถ้ามีเศษที่ไม่ใช่ .00 ให้เก็บไว้") {
 		t.Fatal("the rule that keeps a non-zero fraction is missing")
 	}

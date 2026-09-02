@@ -77,7 +77,7 @@ func TestProviderCallLogsExcludeCredentialDerivedMaterial(t *testing.T) {
 		if _, _, err := service.executeGeminiConversation("test question", nil, credential); err != nil {
 			t.Fatalf("Gemini conversation call: %v", err)
 		}
-		if _, _, err := service.executeSecondRoundGemini("test prompt", credential); err != nil {
+		if _, _, err := service.executeSecondRoundGemini("test prompt", credential, ""); err != nil {
 			t.Fatalf("Gemini second-round call: %v", err)
 		}
 	})

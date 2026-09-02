@@ -321,6 +321,30 @@ type AIActionPlanItemOutcome struct {
 	ErrorText string
 }
 
+// RecordAIActionPlanItem writes one item's outcome as soon as it is known,
+// before the next item runs. FinishAIActionPlan used to be the only writer, at
+// the end of the whole plan — so a process that died between item 1 and item 2
+// left every item "pending", the plan stuck in "executing", and the re-claim
+// two minutes later ran item 1 again: a delivery booked twice, with the
+// automatic expense row that cannot be deleted. With the outcome on disk per
+// item, a re-claim can skip what already happened.
+func (r *AIActionPlanRepository) RecordAIActionPlanItem(outcome AIActionPlanItemOutcome) error {
+	if r == nil || r.db == nil {
+		return errors.New("AI action plan repository is not connected")
+	}
+	itemStatus := entity.AIActionItemStatusExecuted
+	if !outcome.Succeeded {
+		itemStatus = entity.AIActionItemStatusFailed
+	}
+	return r.db.Model(&entity.AIActionPlanItem{}).
+		Where("id = ?", outcome.ItemID).
+		Updates(map[string]any{
+			"status":     itemStatus,
+			"error_text": aiActionTrimTo(outcome.ErrorText, 400),
+			"updated_at": r.currentTime(),
+		}).Error
+}
+
 // FinishAIActionPlan records per-item outcomes and the plan's final status:
 // executed when every item succeeded, failed when none did, partial in between.
 func (r *AIActionPlanRepository) FinishAIActionPlan(planID string, outcomes []AIActionPlanItemOutcome) (*entity.AIActionPlan, error) {

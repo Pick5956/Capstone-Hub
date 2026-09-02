@@ -20,4 +20,11 @@ func SetupIngredientRoutes(v1 *gin.RouterGroup) {
 	v1.DELETE("/ingredients/:id", ingredientCtrl.Delete)
 	v1.POST("/ingredients/:id/adjust", ingredientCtrl.AdjustStock)
 	v1.GET("/ingredients/:id/transactions", ingredientCtrl.ListTransactions)
+
+	// The whole-inventory history and the CSV exports sit on their own paths
+	// rather than under /ingredients, so gin never has to choose between a static
+	// segment and the :id wildcard at the same position.
+	v1.GET("/ingredient-transactions", ingredientCtrl.ListTransactions)
+	v1.GET("/ingredient-transactions/export", ingredientCtrl.ExportTransactionsCSV)
+	v1.GET("/ingredient-stock/export", ingredientCtrl.ExportStockCSV)
 }

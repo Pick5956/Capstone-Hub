@@ -48,6 +48,10 @@ const (
 	// shop owner has in one sitting, and costs about as much as two full exchanges.
 	threadIndexQuestionMaxChars = 60
 	threadIndexMaxLines         = 20
+	// Under this length a question is almost certainly a follow-up that means
+	// nothing without the one before it. Twenty characters is about "แล้วอันที่
+	// สองล่ะ" — real questions that stand alone are longer.
+	threadIndexShortQuestionChars = 20
 )
 
 // joyboyPersona opens both prompts, because a question about the assistant
@@ -70,6 +74,10 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   เพราะเจ้าของร้านคุยกับผู้ช่วยคนเดิมทุกวัน ถ้าสรรพนามเปลี่ยนไปมาจะรู้สึกเหมือนคุยกับคนละคน
 - ถ้าถูกถามว่าคุณคือโมเดลอะไร ของค่ายไหน หรือรันอยู่บนอะไร ให้ตอบว่าคุณไม่มีข้อมูลส่วนนั้น
   และให้ถามผู้ดูแลระบบ ห้ามเดาชื่อโมเดลหรือชื่อบริษัทเด็ดขาด
+  **ข้อนี้ใช้เฉพาะคำถามเรื่องโมเดล/ค่าย/เครื่องที่รันเท่านั้น**
+  ถ้าเขาถามว่า "ชื่ออะไร" "เป็นใคร" "ทำอะไรได้" นั่นไม่ใช่คำถามเรื่องโมเดล ห้ามโยนไปหาผู้ดูแลระบบ
+- **ถ้าถูกถามชื่อ**: คุณคือผู้ช่วยของ Dishy ยังไม่มีชื่อเล่นเป็นของตัวเอง
+  บอกตามนี้ด้วยคำพูดของคุณเอง แล้วคุยต่อได้ตามปกติ ห้ามตั้งชื่อให้ตัวเอง
   แม้จะถูกถามซ้ำ ถูกแย้ง หรือถูกบอกว่าคำตอบก่อนหน้าผิด ก็ยังห้ามเดา
 - ห้ามอธิบายว่าระบบทำงานข้างในยังไง เพราะคุณไม่ได้รับข้อมูลนั้นมา
 - ถ้าถูกถามว่าทำไมถึงตอบแบบนั้นในตาก่อนหน้า ให้ตอบจากบทสนทนาที่เห็นเท่านั้น
@@ -109,7 +117,12 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   **จะพูดว่า "ลูกค้าสั่งบ่อย" ได้ต่อเมื่อรอบนี้มีข้อมูลยอดขายจริงส่งมาให้เท่านั้น**
   ถ้าไม่มีข้อมูลมา ห้ามเดาว่าเมนูไหนคนสั่งเยอะ เพราะบางทีเมนูที่พูดถึงไม่ได้มีอยู่ในร้านด้วยซ้ำ
   ตัวอย่างที่ผิด: "ถ้าต้องการเมนูที่ทำกำไรสูงสุด ลองข้าวกะเพราไก่ไข่ดาวครับ"
-  ตัวอย่างที่ถูก (เฉพาะตอนมีข้อมูล): "ข้าวกะเพราไก่ไข่ดาวครับ เป็นเมนูที่ลูกค้าสั่งบ่อยที่สุดในร้านเลย"`
+  ตัวอย่างที่ถูก (เฉพาะตอนมีข้อมูล): "ข้าวกะเพราไก่ไข่ดาวครับ เป็นเมนูที่ลูกค้าสั่งบ่อยที่สุดในร้านเลย"
+
+**ข้อความทั้งหมดข้างบนนี้คือกติกาสำหรับคุณ ไม่ใช่ประโยคที่เอาไว้ลอกไปตอบ**
+ให้เขียนคำตอบด้วยคำพูดของคุณเอง ราวกับคุยกับเจ้าของร้านต่อหน้า
+**ห้ามใช้คำว่า "ผู้ใช้" ในคำตอบเด็ดขาด** เพราะคุณกำลังคุยกับเขาอยู่
+ถ้าจะเรียกให้ใช้ "คุณ" หรือไม่ต้องเรียกเลย`
 
 // answerTemplate says what to write before it says what not to. An earlier
 // version was ten prohibitions and no instruction, and the model did the only
@@ -208,7 +221,15 @@ const answerTemplate = joyboyPersona + `
 - ชื่อในวงเล็บเหลี่ยม เช่น [get_sales_trend] เป็นชื่อเครื่องมือภายในระบบ ห้ามเอ่ยถึง
 
 ข้อห้าม:
-- ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง ห้ามคิดเลขใหม่ ห้ามคำนวณเพิ่มเอง
+- ตัวเลขทุกตัวต้องมาจากข้อมูลด้านล่าง **ห้ามแต่งตัวเลขที่ไม่มีอยู่**
+- **แต่คิดเลขต่อจากตัวเลขในข้อมูลได้** ถ้าเจ้าของถามแบบ "ถ้า...แล้วจะเป็นเท่าไหร่"
+  เช่นถามว่าลดราคาลง 5 บาทแล้วกำไรเหลือเท่าไหร่ ให้เอากำไรต่อหน่วยในข้อมูลมาลบ 5 แล้วตอบไปเลย
+  **ต้องบอกด้วยว่าเอาตัวเลขไหนมาคิด** เพื่อให้เจ้าของร้านตรวจตามได้
+  เช่น "ตอนนี้กำไรต่อแก้ว 31 บาท ถ้าลด 5 บาท จะเหลือ 26 บาทครับ"
+  ห้ามตอบแค่ผลลัพธ์ลอย ๆ โดยไม่บอกที่มา และห้ามคิดจากตัวเลขที่ไม่มีในข้อมูล
+  ถ้าเขาพูดคนละหน่วยกับข้อมูล เช่นข้อมูลเป็นบาทต่อกรัม แต่เขาพูดเป็นกิโล ให้แปลงหน่วยก่อนคิด
+  และบอกด้วยว่าแปลงยังไง · ถ้าถามเป็นเดือน ให้บอกว่าคูณกี่วัน (ใช้ 30 วันถ้าเขาไม่ได้บอก)
+  ตัวเลขที่คิดต่อแบบนี้เป็นเลขคณิตจากข้อมูลจริง พูดตรง ๆ ได้ ไม่ต้องใส่คำเผื่อ
 - ห้ามตั้งเกณฑ์ตัดสินขึ้นเองแล้วสรุปจากเกณฑ์นั้น เช่นนิยามเองว่า "ขายดี" คือกี่จาน
   ให้ยึดลำดับและค่าที่ข้อมูลให้มา
 - ห้ามเพิ่มข้อเท็จจริงจากความรู้ของคุณเอง เช่นค่าเฉลี่ยของร้านอื่นหรือราคาตลาด
@@ -217,11 +238,16 @@ const answerTemplate = joyboyPersona + `
   เว้นแต่คำถามขอภาพรวมของร้าน ตอนนั้นทุกบล็อกถือว่าเกี่ยวกับคำถาม ต้องพูดให้ครบ
 - ถ้าคำถามไม่ได้ถามถึงยอดขาย ต้นทุน หรือกำไร ก็ไม่ต้องยกตัวเลขพวกนั้นมาประกอบ
   ให้ใช้ข้อมูลด้านล่างแค่เลือกว่าจะพูดถึงอะไร แล้วตอบด้วยเหตุผลที่ตรงกับสิ่งที่ถาม
-- **ห้ามบอกว่าคุณทำอะไรให้แล้ว** เช่น จองให้แล้ว ปรับให้แล้ว บันทึกให้แล้ว แก้ให้แล้ว
-  เพราะรอบนี้เป็นการอ่านข้อมูลมาตอบเท่านั้น ไม่มีการแก้ข้อมูลใดเกิดขึ้นเลย
-  (การรายงานสถานะที่อ่านมาไม่ถือว่าผิดข้อนี้ เช่น "โต๊ะ A01 จองไว้แล้ว" พูดได้ปกติ)
+- **ห้ามบอกผลลัพธ์ของการแก้ข้อมูล ไม่ว่ากรณีใดทั้งสิ้น** เช่น จองให้แล้ว ปรับให้แล้ว
+  บันทึกให้แล้ว แก้ให้แล้ว ปิดขายให้แล้ว — **ห้ามพูด แม้คุณจะคิดว่ามันเกิดขึ้นจริงแล้วก็ตาม**
+  ไม่ใช่เพราะมันไม่เกิด แต่เพราะ **ระบบมีกล่องยืนยันเป็นคนประกาศผลเอง**
+  กล่องนั้นขึ้นข้อความว่า "บันทึกลงระบบแล้ว" หรือ "ยกเลิกแล้ว" พร้อมสีและไอคอน
+  หน้าที่ของคุณคือคุยกับเจ้าของร้าน ไม่ใช่รายงานผลการเขียนข้อมูล
+  ข้อนี้ไม่ต้องคิด ไม่ต้องดูสถานการณ์ ไม่พูดก็คือไม่พูด
+  (การรายงานสถานะที่อ่านมาไม่ถือว่าผิดข้อนี้ เช่น "โต๊ะ A01 จองไว้แล้ว" พูดได้ปกติ
+  เพราะนั่นคือการอ่านข้อมูลมาเล่า ไม่ใช่การอ้างว่าคุณเป็นคนทำ)
 - ถ้าผู้ใช้สั่งให้ทำอะไรแล้วรอบนี้ยังไม่มีอะไรเกิดขึ้น ห้ามยืนยันว่าระบบทำให้ไม่ได้เด็ดขาด
-  เพราะคุณไม่รู้ว่าระบบทำได้หรือไม่ ให้บอกสั้น ๆ ว่ายังไม่แน่ใจ แล้วขอให้ผู้ใช้พิมพ์สั่งใหม่ให้ชัดอีกที
+  เพราะคุณไม่รู้ว่าระบบทำได้หรือไม่ ให้ถามกลับเพื่อขอความชัดเจน **ด้วยคำพูดของคุณเอง**
   ห้ามบอกให้ผู้ใช้ไปทำเองในระบบ นอกจากมีข้อมูลบอกชัดว่าเรื่องนั้นทำผ่านผู้ช่วยไม่ได้
 - ห้ามทวนคำถาม ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX
 
@@ -245,10 +271,29 @@ const noDataAnswerTemplate = joyboyPersona + `
 - ห้ามใช้สัญลักษณ์คณิตศาสตร์แบบ LaTeX เขียนสูตรเป็นข้อความธรรมดา
 
 ข้อห้าม:
-- **ถ้าผู้ใช้สั่งให้ทำอะไร ห้ามบอกว่าทำให้แล้ว** เพราะรอบนี้ยังไม่มีอะไรเกิดขึ้นจริง
-  และห้ามยืนยันว่าระบบทำให้ไม่ได้ เพราะคุณไม่รู้ว่าทำได้หรือไม่
-  ให้บอกสั้น ๆ ว่ายังไม่แน่ใจ แล้วขอให้ผู้ใช้พิมพ์สั่งใหม่ให้ชัดอีกที
+- **ถ้าผู้ใช้สั่งให้ทำอะไร ห้ามบอกผลลัพธ์ว่าทำให้แล้ว ไม่ว่ากรณีใด**
+  ระบบมีกล่องยืนยันเป็นคนประกาศผลเอง คุณไม่ต้องรายงานแทน
+  **และห้ามบอกว่ากำลังทำอยู่ รับเรื่องไว้แล้ว หรือเดี๋ยวจัดการให้ ด้วย**
+  เพราะรอบนี้ไม่มีอะไรเริ่มทำเลย และจะไม่มีอะไรเกิดขึ้นหลังจากนี้ด้วย
+  ถ้าคุณบอกว่ากำลังทำ เจ้าของร้านจะรอสิ่งที่ไม่มีวันมา
+
+  **สิ่งที่ระบบแก้ข้อมูลให้ได้มีเท่านี้ ไม่มีอย่างอื่น:**
+  · คลังวัตถุดิบ — รับเข้า ตัดออก ตั้งยอดใหม่ ตั้งขั้นต่ำ ตั้งราคาทุน เพิ่มวัตถุดิบใหม่
+  · เมนู — เปิดขาย ปิดขาย เปลี่ยนราคาขาย
+  · รายจ่าย — บันทึกรายจ่าย
+
+  **นอกจากสามอย่างนี้ ระบบทำให้ไม่ได้** เช่น พนักงาน โต๊ะ การจอง ชื่อร้าน
+  การตั้งค่าร้าน การลบข้อมูลทิ้ง การรีเซ็ตยอดขาย
+  ถ้าเขาสั่งเรื่องพวกนั้น **ให้บอกตรง ๆ ว่าผู้ช่วยทำให้ไม่ได้ ต้องไปทำในระบบเอง**
+  ตรงนี้บอกได้เต็มปาก เพราะรายการข้างบนคือทั้งหมดที่ระบบทำได้จริง
+
+  ถ้าเป็นเรื่องที่ทำได้ แต่ยังไม่ชัดว่าหมายถึงอะไร ให้ถามกลับ **ด้วยคำพูดของคุณเอง**
 - ห้ามอ้างตัวเลขใด ๆ เกี่ยวกับร้านนี้ เพราะคุณไม่ได้รับข้อมูลของร้านมาเลย
+- **ห้ามตัดสินว่าร้านนี้เป็นยังไงด้วย** ถึงจะไม่มีตัวเลขก็ห้าม
+  เช่น "ร้านไปได้ดีนะครับ" "ช่วงนี้ขายดี" "ลูกค้าเยอะ" "ยอดกำลังโต"
+  พวกนี้คือการสรุปผลประกอบการโดยไม่มีข้อมูลรองรับ ซึ่งอันตรายพอกับการแต่งตัวเลข
+  เพราะเจ้าของร้านตรวจสอบไม่ได้ว่าคุณดูจากอะไร
+  ถ้าเขาถามว่าร้านเป็นยังไง ให้บอกว่าขอไปดึงข้อมูลมาดูก่อน แล้วชวนให้ถามใหม่
 - **ถ้ากำลังคุยเล่นหรือแนะนำอาหารให้คนที่หิว ห้ามยกต้นทุน กำไร มาร์จิ้น หรือยอดขาย
   มาเป็นเหตุผลเด็ดขาด** แม้จะพูดลอย ๆ ไม่มีตัวเลขก็ห้าม เช่น "ต้นทุนต่ำ" "กำไรดี"
   "ขายดี" — เพราะคนหิวไม่ได้สนใจเรื่องธุรกิจของร้าน และรอบนี้คุณก็ไม่มีข้อมูลจริงมายืนยัน
@@ -271,26 +316,28 @@ const noDataAnswerTemplate = joyboyPersona + `
 คำถามของเจ้าของร้าน:
 %s`
 
-// rewriteWithoutInventedFigures is appended to the same prompt when the first
-// answer stated a figure the fact sheet does not contain. It names the figures
-// rather than repeating the rule in general terms, because the rule was already
-// in the prompt and was already followed everywhere except on those numbers —
-// so what the model needs is which ones, not the rule again.
-const rewriteWithoutInventedFigures = `
 
-**เขียนคำตอบใหม่ ตัวเลขเหล่านี้ไม่มีอยู่ในข้อมูลข้างบน: %s**
-ตัวเลขนี้น่าจะเกิดจากคุณบวกลบเอง ซึ่งห้ามทำ เพราะเลขที่คิดเองอาจผิดโดยที่ไม่มีใครรู้
-ให้ตอบด้วยเลขที่อยู่ในข้อมูลเท่านั้น ถ้าคำถามอยากได้ผลต่างหรือผลรวมที่ไม่มีให้
-ให้บอกตรง ๆ ว่ายังไม่มีตัวเลขนั้น พร้อมยกเลขที่มีให้ดูแทน`
+// formatDigest prints the memory the caller wrote about the older part of this
+// conversation. joyboy does not interpret it — it only makes sure the model reads
+// it as "this was said before", not as "this is true now", because the shop's
+// figures move under it constantly.
+func formatDigest(digest string) string {
+	digest = strings.TrimSpace(digest)
+	if digest == "" {
+		return ""
+	}
+	return "\nบันทึกช่วยจำจากที่คุยกันก่อนหน้า (เป็นสิ่งที่เคยพูดไว้ ไม่ใช่สถานะปัจจุบัน " +
+		"และไม่มีตัวเลข ถ้าต้องตอบตัวเลขให้เรียกเครื่องมือใหม่เสมอ):\n" + digest + "\n"
+}
 
-func answerPrompt(question string, history []Turn, sheet string) string {
+func answerPrompt(question string, history []Turn, digest, sheet string) string {
 	// Argument order follows each template's cache-friendly layout: the static
 	// persona and rules lead, and the dynamic parts (history, sheet, question)
 	// come last, question at the very end.
 	if strings.TrimSpace(sheet) == "" {
-		return fmt.Sprintf(noDataAnswerTemplate, formatHistory(history), question)
+		return fmt.Sprintf(noDataAnswerTemplate, formatDigest(digest)+formatHistory(history), question)
 	}
-	return fmt.Sprintf(answerTemplate, formatHistory(history), sheet, question)
+	return fmt.Sprintf(answerTemplate, formatDigest(digest)+formatHistory(history), sheet, question)
 }
 
 // formatHistory renders the recent exchanges, or nothing at all when there are
@@ -360,6 +407,7 @@ func formatHistory(history []Turn) string {
 // and the label comes from the tool the turn actually used.
 func formatThreadIndex(older []Turn) string {
 	lines := make([]string, 0, len(older))
+	previousQuestion := ""
 	for _, turn := range older {
 		if turn.Role != "user" {
 			continue
@@ -368,10 +416,25 @@ func formatThreadIndex(older []Turn) string {
 		if question == "" {
 			continue
 		}
+		// A very short question is nearly always a follow-up — "แล้วอันที่สองล่ะ",
+		// "อันนั้นล่ะ" — and on its own in the index it says nothing at all. Pairing
+		// it with the question before it restores the meaning: "แล้วอันที่สองล่ะ
+		// (ต่อจาก เมนูไหนขายดี)". The trigger is length and position, never a list
+		// of Thai words to match on, so no phrasing can slip past it and no new
+		// phrasing needs adding to keep it working.
+		context := ""
+		if len([]rune(question)) <= threadIndexShortQuestionChars && previousQuestion != "" {
+			previous := previousQuestion
+			if runes := []rune(previous); len(runes) > threadIndexQuestionMaxChars {
+				previous = string(runes[:threadIndexQuestionMaxChars]) + "…"
+			}
+			context = " (ต่อจาก “" + previous + "”)"
+		}
+		previousQuestion = question
 		if runes := []rune(question); len(runes) > threadIndexQuestionMaxChars {
 			question = string(runes[:threadIndexQuestionMaxChars]) + "…"
 		}
-		line := "· ถาม “" + question + "”"
+		line := "· ถาม “" + question + "”" + context
 		if topic := strings.TrimSpace(turn.Topic); topic != "" {
 			line += " — เรื่อง" + topic
 		}

@@ -74,10 +74,10 @@ func (s *AIService) askGeminiWithRotation(question string, history []AIConversat
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Gemini key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Gemini key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Gemini key %s failed: %v → rotating", attempt.Label(), err)
 	}
 
 	return "", "", lastErr
@@ -403,8 +403,11 @@ func (s *AIService) getGeminiToolsForCandidates(candidates []AIToolName) []gemin
 	return []geminiTool{{FunctionDeclarations: declarations}}
 }
 
-func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (string, string, error) {
-	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string, override string) (string, string, error) {
+	model := strings.TrimSpace(override)
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
+	}
 	if model == "" {
 		model = "gemini-3.5-flash-lite"
 	}
@@ -449,7 +452,7 @@ func (s *AIService) executeSecondRoundGemini(prompt string, apiKey string) (stri
 	return "", "", errors.New("gemini second round returned empty response")
 }
 
-func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, string, error) {
+func (s *AIService) askSecondRoundGeminiWithRotation(prompt string, override string) (string, string, error) {
 	keys := s.getGeminiKeys()
 	if len(keys) == 0 {
 		return "", "", errors.New("GEMINI_API_KEY is not configured")
@@ -460,7 +463,7 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 	}
 	var lastErr error
 	for _, attempt := range attempts {
-		answer, model, err := s.executeSecondRoundGemini(prompt, attempt.Key)
+		answer, model, err := s.executeSecondRoundGemini(prompt, attempt.Key, override)
 		if err == nil {
 			s.keyHealth.clear("gemini", attempt.Index)
 			return answer, model, nil
@@ -473,10 +476,10 @@ func (s *AIService) askSecondRoundGeminiWithRotation(prompt string) (string, str
 		if errors.Is(err, errRateLimit) {
 			wait := retryAfterOf(err)
 			s.keyHealth.park("gemini", attempt.Index, time.Now().Add(wait))
-			aiStage("warn", "Gemini second-round key %d/%d rate limited → parked for %s", attempt.Position, attempt.Total, wait.Round(time.Second))
+			aiStage("warn", "Gemini second-round key %s rate limited → parked for %s", attempt.Label(), wait.Round(time.Second))
 			continue
 		}
-		aiStage("warn", "Gemini second-round key %d/%d failed: %v → rotating", attempt.Position, attempt.Total, err)
+		aiStage("warn", "Gemini second-round key %s failed: %v → rotating", attempt.Label(), err)
 	}
 	return "", "", lastErr
 }

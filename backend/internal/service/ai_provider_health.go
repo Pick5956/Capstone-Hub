@@ -18,6 +18,8 @@ package service
 //     the calls that were happening anyway.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -90,11 +92,6 @@ func (h *providerKeyHealth) init() {
 			h.nowFunc = time.Now
 		}
 	})
-}
-
-func (h *providerKeyHealth) now() time.Time {
-	h.init()
-	return h.nowFunc()
 }
 
 func keyHealthID(provider string, keyIndex int) string {
@@ -257,6 +254,32 @@ type providerAttempt struct {
 	Index    int // 0-based position in the configured key list
 	Position int // 1-based, for log lines
 	Total    int
+}
+
+// Label names the key in a log line without printing any of it.
+//
+// The logs used to say only "key 3/3 failed", which means counting lines in .env
+// to find the broken one — and points at the wrong one the moment anybody
+// reorders the list.
+//
+// The obvious fix was to show the first and last few characters, the way a
+// provider console does. TestProviderFailureErrorsAndLogsExcludeResponseBody-
+// AndCredentialMaterial rejected it, and the test is right: it forbids the first
+// or last eight characters of a key anywhere in a log line, because logs get
+// pasted into issues and screenshots. Weakening that test to make debugging
+// prettier would trade a real protection for a convenience.
+//
+// So the label is a hash instead. It carries none of the key, stays the same for
+// the same key across restarts, and that is what makes a log readable: "fp
+// 9f3ac1 failed again" is a key you can follow through a file. Which key that is
+// comes from the position, which is the order in .env.
+func (a providerAttempt) Label() string {
+	key := strings.TrimSpace(a.Key)
+	if key == "" {
+		return fmt.Sprintf("%d/%d", a.Position, a.Total)
+	}
+	sum := sha256.Sum256([]byte(key))
+	return fmt.Sprintf("%d/%d fp %s", a.Position, a.Total, hex.EncodeToString(sum[:3]))
 }
 
 // nextProviderAttempts returns the keys worth trying right now, in rotation

@@ -14,6 +14,10 @@ const (
 )
 
 type AIAskRequest struct {
+	// Digest is server-side memory of this conversation. json:"-" on purpose:
+	// a client cannot supply one and never receives one, so nothing a browser
+	// sends can be fed back into the assistant's own memory.
+	Digest         string                  `json:"-"`
 	Question       string                  `json:"question" binding:"required"`
 	History        []AIConversationMessage `json:"history"`
 	ConversationID string                  `json:"conversation_id,omitempty" binding:"omitempty,max=64"`

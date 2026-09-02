@@ -1,0 +1,163 @@
+"use client";
+
+import { useCallback, useEffect, useId, useRef } from "react";
+import { createPortal } from "react-dom";
+import { TriangleAlert } from "lucide-react";
+
+// A modal confirmation for the one kind of action that cannot be undone.
+//
+// The inline version this replaced grew out of the message list, which was fine
+// until it scrolled: on a phone the question could sit above the fold while the
+// thread it was about to delete filled the screen. A modal cannot be scrolled
+// away from, and that is the entire reason to use one here — not decoration.
+//
+// Three details are load-bearing rather than polish:
+//
+//   * It renders through a portal. The floating chat panel sits inside a
+//     transformed, overflow-hidden container, and `position: fixed` inside a
+//     transformed ancestor is positioned against that ancestor, not the
+//     viewport — the dialog would have been clipped into the chat panel.
+//   * Focus starts on the SAFE button and returns to whatever opened the dialog
+//     when it closes. A confirm dialog that opens with the destructive button
+//     focused turns a reflexive Enter into a deleted conversation.
+//   * Tab is trapped. Without it, Tab walks into the page behind the backdrop,
+//     where a screen-reader user cannot tell they have left the question.
+
+type Props = {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy?: boolean;
+};
+
+export default function WarmConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+  busy = false,
+}: Props) {
+  const titleId = useId();
+  const bodyId = useId();
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  // Remembered on open so focus can go back where it came from. Without this
+  // the caret lands on <body> after closing and the next Tab starts from the
+  // top of the page.
+  const openerRef = useRef<HTMLElement | null>(null);
+
+
+  const focusables = useCallback(() => {
+    const root = dialogRef.current;
+    if (!root) return [] as HTMLElement[];
+    return Array.from(
+      root.querySelectorAll<HTMLElement>("button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    openerRef.current = document.activeElement as HTMLElement | null;
+    // Deferred a frame: the element is being animated in and is not focusable
+    // in the same tick it is inserted.
+    const timer = window.setTimeout(() => cancelRef.current?.focus(), 0);
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      // Wrapping by hand rather than relying on the browser, which would walk
+      // out of the dialog and into the page underneath.
+      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+
+    // The page behind a modal should not scroll under it.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      openerRef.current?.focus?.();
+    };
+  }, [open, focusables, onCancel]);
+
+  // No DOM to portal into while the server renders. Nothing is lost by
+  // returning null there: the dialog is always closed on first paint, so the
+  // server and the client agree.
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="warm-dialog-backdrop"
+      // Clicking away from a destructive question means "no". Guarded on the
+      // target so a click that starts inside the dialog and drifts onto the
+      // backdrop does not count as a dismissal.
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        className="warm-dialog"
+      >
+        <span className="warm-dialog-icon" aria-hidden="true">
+          <TriangleAlert size={28} strokeWidth={2.75} />
+        </span>
+        <h2 id={titleId} className="warm-dialog-title">
+          {title}
+        </h2>
+        <p id={bodyId} className="warm-dialog-body">
+          {description}
+        </p>
+        <div className="warm-dialog-actions">
+          <button
+            type="button"
+            className="warm-dialog-btn warm-dialog-btn-danger"
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {confirmLabel}
+          </button>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="warm-dialog-btn warm-dialog-btn-ghost"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

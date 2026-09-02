@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Boxes,
   Check,
+  Download,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -29,6 +30,7 @@ import {
   createIngredientCategory,
   deleteIngredient,
   deleteIngredientCategory,
+  exportStockCSV,
   listIngredientCategories,
   listIngredients,
   listTransactions,
@@ -41,11 +43,15 @@ import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import InventoryHistoryTab from "./InventoryHistoryTab";
+import InventoryMobile from "./mobile/InventoryMobile";
+import { useIsMobile } from "./mobile/primitives";
 import {
   emptyForm,
   buildAdjustStockPayload,
   getInventoryValue,
   getStatus,
+  formatDaysLeft,
   getStockPercent,
   inputCls,
   STORAGE_TYPES,
@@ -344,6 +350,9 @@ function groupTxByDate(txs: IngredientTransaction[], copy: Copy) {
 
 export default function InventoryPage() {
   const { activeMembership } = useAuth();
+  // One tree renders at a time rather than two hidden by CSS: both mounted would
+  // run the inventory fetch twice and keep two copies of the same state.
+  const isMobile = useIsMobile();
   const { language } = useLanguage();
   const { showToast } = useToast();
   const confirm = useConfirm();
@@ -364,6 +373,8 @@ export default function InventoryPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [categories, setCategories] = useState<IngredientCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"stock" | "history">("stock");
+  const [stockExporting, setStockExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StockStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<number>(0);
@@ -866,6 +877,32 @@ export default function InventoryPage() {
     }
   }
 
+  // The stock sheet is exported by the server so it reflects the same filters the
+  // list is showing, rather than only the page currently in memory.
+  async function handleExportStock() {
+    setStockExporting(true);
+    try {
+      const result = await exportStockCSV(
+        {
+          search,
+          status: statusFilter,
+          category_id: categoryFilter || undefined,
+          sort: sortKey === "stock" ? "stock" : sortKey === "name" ? "name" : undefined,
+          order: sortDir,
+        },
+        lang,
+      );
+      showToast({
+        title: lang === "th" ? "ดาวน์โหลดแล้ว" : "Downloaded",
+        message: lang === "th" ? `${result.rows} รายการ` : `${result.rows} rows`,
+      });
+    } catch {
+      showToast({ title: lang === "th" ? "ส่งออกไม่สำเร็จ" : "Export failed", tone: "error" });
+    } finally {
+      setStockExporting(false);
+    }
+  }
+
   function closeModal() {
     if (modalClosing) return;
     setModalClosing(true);
@@ -937,6 +974,10 @@ export default function InventoryPage() {
     return <div className="flex h-64 items-center justify-center text-sm text-slate-400">{copy.permissionDenied}</div>;
   }
 
+  if (isMobile) {
+    return <InventoryMobile canView={canView} canManage={canManage} />;
+  }
+
   return (
     <>
       <div
@@ -946,8 +987,41 @@ export default function InventoryPage() {
       >
         <h1 className="sr-only">{copy.title}</h1>
         <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
+          {/* The tabs live inside the sticky bar so switching views stays reachable
+              on a phone, where the bar is fixed and the list scrolls under it. */}
+          <div className="mb-2 flex w-fit items-center gap-1 rounded-md border border-slate-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900">
+            {(["stock", "history"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`inline-flex h-8 items-center rounded px-3 text-[12px] font-semibold transition ${
+                  tab === key
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                    : "text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-gray-800"
+                }`}
+              >
+                {key === "stock"
+                  ? lang === "th"
+                    ? "สต๊อกปัจจุบัน"
+                    : "Stock"
+                  : lang === "th"
+                    ? "ประวัติทั้งคลัง"
+                    : "History"}
+              </button>
+            ))}
+          </div>
+          {/* The history tab brings its own search box and export button, so the
+              stock toolbar would duplicate both — it belongs to the stock tab only. */}
+          {/* Below sm the header is a column, so every direct child becomes its own
+              full-width row. Inside a FIXED bar that turned eight children into a
+              slab covering most of a phone screen, so the children are grouped:
+              search + filter share one row, and the actions wrap instead of
+              stacking. Same shape the tables page uses. */}
+          {tab === "stock" && (
           <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:w-64">
+          <div className="flex w-full items-center gap-2 sm:contents">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -1049,14 +1123,33 @@ export default function InventoryPage() {
               </>
             )}
           </div>
-          {/* Inventory value — took over from the removed summary cards */}
+          </div>
+          {/* Value and the action buttons wrap onto as few rows as fit, rather than
+              one row each. The flex-1 spacer only exists to push them right on a
+              wide row, so it is hidden where the header is a column. */}
+          <div className="hidden flex-1 sm:block" />
+          <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-orange-200/80 bg-orange-50/80 px-3 text-center dark:border-orange-900/40 dark:bg-orange-950/20">
             <span className="text-[11px] text-slate-500 dark:text-slate-400">{lang === "th" ? "มูลค่า" : "Value"}</span>
             <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">
               {formatCurrency(totalValue, lang)}
             </span>
           </div>
-          <div className="flex-1" />
+          <button
+            type="button"
+            disabled={stockExporting}
+            onClick={() => void handleExportStock()}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-slate-300 dark:hover:bg-gray-800"
+          >
+            <Download className="h-4 w-4" />
+            {stockExporting
+              ? lang === "th"
+                ? "กำลังสร้างไฟล์…"
+                : "Preparing…"
+              : lang === "th"
+                ? "ส่งออก CSV"
+                : "Export CSV"}
+          </button>
           {canManage && (
             <button
               type="button"
@@ -1092,12 +1185,16 @@ export default function InventoryPage() {
               {copy.add}
             </button>
           )}
+          </div>
           </header>
+          )}
         </div>
       </div>
       <div aria-hidden="true" className="lg:hidden" style={{ height: stickyToolbarHeight }} />
       <div className="min-h-dvh bg-slate-100 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
         <div className="space-y-5">
+        {tab === "stock" && (
+        <>
 
         {(statusFilter !== "all" || categoryFilter !== 0) && (
           <div className="flex flex-wrap items-center gap-2">
@@ -1188,6 +1285,7 @@ export default function InventoryPage() {
                         const status = getStatus(item);
                         const meta = statusMeta(status, copy);
                         const percent = getStockPercent(item);
+                        const cover = formatDaysLeft(item, lang);
 
                         return (
                           <tr key={item.ID} className={`transition-colors ${meta.row}`}>
@@ -1212,9 +1310,21 @@ export default function InventoryPage() {
                                     {formatNumber(item.stock, lang)} <span className="text-[11px] font-medium text-slate-400">{item.unit}</span>
                                   </span>
                                 </div>
-                                <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
-                                  <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
-                                </div>
+                                {/* percent is null when the ingredient has never been
+                                    cooked with — there is no rate to forecast from, so
+                                    the bar says so instead of drawing an empty tank. */}
+                                {percent === null ? (
+                                  <p className="mt-1.5 text-[10px] leading-none text-slate-400">
+                                    {lang === "th" ? "ยังไม่มีข้อมูลการใช้" : "No usage data"}
+                                  </p>
+                                ) : (
+                                  <>
+                                    <div className="mt-1.5 h-1.5 rounded-full bg-slate-200/80 dark:bg-gray-800">
+                                      <div className={`h-1.5 rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${percent}%` }} />
+                                    </div>
+                                    {cover && <p className="mt-1 text-[10px] leading-none text-slate-400">{cover}</p>}
+                                  </>
+                                )}
                               </div>
                             </td>
                             <td className="px-4 py-3">
@@ -1321,6 +1431,10 @@ export default function InventoryPage() {
               )}
             </section>
           </div>
+        </>
+        )}
+
+        {tab === "history" && <InventoryHistoryTab categories={categories} lang={lang} />}
         </div>
 
       {modalOpen && (
@@ -1943,8 +2057,15 @@ export default function InventoryPage() {
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                 {tx.type === "in" ? copy.adjustIn : tx.type === "out" ? copy.adjustOut : copy.adjustSet}
+                                {tx.amount > 0 && (
+                                  <span className="ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                    {formatCurrency(tx.amount, lang, 2)}
+                                  </span>
+                                )}
                               </p>
-                              {tx.note && <p className="truncate text-xs text-slate-400">{tx.note}</p>}
+                              <p className="truncate text-xs text-slate-400">
+                                {[tx.created_by_name, tx.note].filter(Boolean).join(" · ")}
+                              </p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p

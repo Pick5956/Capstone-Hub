@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"errors"
 	"net/http"
 	"testing"
@@ -258,5 +259,40 @@ func TestNextProviderAttemptsDoesNotHoldForALongPark(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > maxRateLimitHold {
 		t.Errorf("waited %s on an hour-long park", elapsed)
+	}
+}
+
+// A rotation log has to name the key well enough to follow it through a file,
+// and not well enough to use it. "key 3/3 failed" meant counting lines in .env to
+// find the broken one, and pointed at the wrong one as soon as anybody reordered
+// the list. Showing the first and last characters — the way a provider console
+// does — was the first attempt, and the credential-material test rejected it;
+// this is the version that keeps both properties.
+func TestProviderAttemptLabelIdentifiesTheKeyWithoutExposingIt(t *testing.T) {
+	const secret = "AIzaSyBuc7ExampleKeyMaterialThatMustNotLeak_i5Zs"
+	attempt := providerAttempt{Key: secret, Position: 3, Total: 3}
+	label := attempt.Label()
+
+	// Nothing from the key itself, including the fragments the logging test bans.
+	for _, fragment := range []string{secret, secret[:8], secret[len(secret)-8:], "ExampleKeyMaterial"} {
+		if strings.Contains(label, fragment) {
+			t.Fatalf("key material reached the log: %q", label)
+		}
+	}
+	if !strings.Contains(label, "3/3") {
+		t.Errorf("the label should still say which position failed: %q", label)
+	}
+	// Same key, same fingerprint — that is what makes a log followable.
+	if again := attempt.Label(); again != label {
+		t.Errorf("the fingerprint is not stable: %q then %q", label, again)
+	}
+	// Different keys must be told apart, or the fingerprint says nothing.
+	other := providerAttempt{Key: secret + "x", Position: 3, Total: 3}.Label()
+	if other == label {
+		t.Errorf("two different keys produced the same label: %q", label)
+	}
+	// An empty key must not panic or invent a fingerprint.
+	if got := (providerAttempt{Position: 1, Total: 2}).Label(); !strings.Contains(got, "1/2") {
+		t.Errorf("an empty key should still report its position: %q", got)
 	}
 }

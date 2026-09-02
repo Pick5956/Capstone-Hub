@@ -24,21 +24,68 @@ export interface Ingredient {
   cost_per_unit: number;
   yield_percent?: number;
   storage_type?: string;
+  /**
+   * How many days the current stock lasts at the rate this ingredient was
+   * actually consumed over the last 30 days. Computed at read time, absent when
+   * nothing was consumed in the window — there is no rate to divide by, and a 0
+   * would read as "runs out today". Render the absent case as "no usage data",
+   * never as an empty bar.
+   */
+  days_left?: number;
+  /** The daily rate days_left was derived from, for showing the working. */
+  daily_use?: number;
   category?: IngredientCategory;
   CreatedAt?: string;
   UpdatedAt?: string;
 }
 
+export type TransactionType = "in" | "out" | "adjust";
+
 export interface IngredientTransaction {
   ID: number;
   restaurant_id: number;
   ingredient_id: number;
-  type: "in" | "out" | "adjust";
+  type: TransactionType;
   quantity: number;
+  /** What a restock cost. Only "in" carries money; "out" and "adjust" are always 0. */
+  amount: number;
   note: string;
   created_by_id: number;
-  created_by?: { ID: number; first_name: string; last_name: string };
+  // The log stores ids only — the API joins these names on so a whole-inventory
+  // read is readable. They are empty when the row points at a deleted record.
+  ingredient_name: string;
+  ingredient_unit: string;
+  category_name: string;
+  created_by_name: string;
   CreatedAt?: string;
+}
+
+export interface TransactionQuery {
+  ingredient_id?: number;
+  category_id?: number;
+  type?: TransactionType | "";
+  search?: string;
+  /** Inclusive YYYY-MM-DD in the shop timezone. */
+  from?: string;
+  /** Inclusive YYYY-MM-DD — the API widens it to cover the whole day. */
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface TransactionListResponse {
+  transactions: IngredientTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CSVExportResult {
+  filename: string;
+  /** Rows actually written. Fewer than `total` when the server capped the file. */
+  rows: number;
+  total: number;
+  truncated: boolean;
 }
 
 export interface IngredientInput {
