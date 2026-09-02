@@ -64,6 +64,12 @@ export default function TablesPage() {
   const saveOnceRef = useRef(createSingleFlight());
   const deleteOnceRef = useRef(createSingleFlight());
   const qrOnceRef = useRef(createSingleFlight());
+  // The toolbar is a fixed bar under the mobile top bar; this reserves the exact
+  // space it takes so the table grid doesn't slide underneath it. On lg the bar is
+  // a sticky element in normal flow (see [data-shell-sticky] in globals.css), so
+  // the spacer is hidden there and no measurement is needed.
+  const stickyToolbarRef = useRef<HTMLDivElement>(null);
+  const [stickyToolbarHeight, setStickyToolbarHeight] = useState(0);
 
   const copy = language === "th"
     ? {
@@ -258,6 +264,18 @@ export default function TablesPage() {
     return () => window.clearTimeout(loadTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, language]);
+
+  // Track the fixed toolbar's height so the mobile spacer matches it exactly,
+  // even as the toolbar wraps to a different number of rows across breakpoints.
+  useEffect(() => {
+    const node = stickyToolbarRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setStickyToolbarHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canView, canManage]);
 
   const sortedZones = useMemo(
     () => [...zones].sort((a, b) => (a.display_order - b.display_order) || (a.ID - b.ID)),
@@ -659,35 +677,50 @@ export default function TablesPage() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0"><h1 className="sr-only">{copy.title}</h1></div>
-        <div className="flex flex-wrap gap-2">
-          {canManage && <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>}
-          {canManage && <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>}
-          {canManage && <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>}
+    <>
+      <div
+        data-shell-sticky=""
+        ref={stickyToolbarRef}
+        className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto"
+      >
+        <h1 className="sr-only">{copy.title}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
+              {hasAnyZone && (
+                <div className="w-full sm:w-52">
+                  <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
+                </div>
+              )}
+              <div className="w-full sm:w-52">
+                <ThemedSelect value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
+              </div>
+            </div>
+            {canManage ? (
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>
+                <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>
+                <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
+      <div aria-hidden="true" className="lg:hidden" style={{ height: stickyToolbarHeight }} />
+      <div className="min-h-dvh bg-slate-100 px-4 py-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-8 lg:py-6">
+        {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
 
-      {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.inactive, value: inactiveCount }, { label: copy.zones, value: zones.length }].map((item) => (
+            <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-[11px] text-gray-500">{item.label}</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">{item.value}</p>
+            </div>
+          ))}
+        </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[{ label: copy.total, value: tables.length }, { label: copy.occupied, value: occupiedCount }, { label: copy.inactive, value: inactiveCount }, { label: copy.zones, value: zones.length }].map((item) => (
-          <div key={item.label} className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-900">
-            <p className="text-[11px] text-gray-500">{item.label}</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">{item.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-4">
-        <section className="space-y-4">
-          <div className={`grid gap-2 rounded-md border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${hasAnyZone ? "sm:grid-cols-2" : ""}`}>
-            {hasAnyZone && (
-              <ThemedSelect value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
-            )}
-            <ThemedSelect value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
-          </div>
+        <div className="grid gap-4">
+          <section className="space-y-4">
 
           {loading ? (
             <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7">
@@ -945,6 +978,7 @@ export default function TablesPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

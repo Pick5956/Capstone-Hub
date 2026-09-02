@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
+import { CalendarClock, MapPin, ReceiptText, Search, ShoppingBag, Users } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
@@ -20,6 +20,7 @@ import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
 import RealtimeConnectionNotice from "@/src/components/shared/RealtimeConnectionNotice";
+import ReservationHistoryModal from "@/src/components/tables/ReservationHistoryModal";
 import { useOrderEvents } from "@/src/hooks/useOrderEvents";
 import { useVisiblePolling } from "@/src/hooks/useVisiblePolling";
 
@@ -57,6 +58,7 @@ export default function PosTablesPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [takeawayOpen, setTakeawayOpen] = useState(false);
+  const [reservationsOpen, setReservationsOpen] = useState(false);
   const [sheetMode, setSheetMode] = useState<TableSheetMode>("open");
   const [sheetClosing, setSheetClosing] = useState(false);
   const [customerCount, setCustomerCount] = useState(1);
@@ -89,6 +91,7 @@ export default function PosTablesPage() {
         takeaway: "สั่งกลับบ้าน",
         openTakeaway: "เปิดออเดอร์กลับบ้าน",
         takeawayHelp: "ใช้สำหรับลูกค้าที่ไม่ได้นั่งโต๊ะ",
+        reservationHistory: "ประวัติการจอง",
         customerName: "ชื่อลูกค้า (ไม่บังคับ)",
         customerNamePlaceholder: "เช่น คุณแนน",
         customerPhone: "เบอร์ลูกค้า (ไม่บังคับ)",
@@ -139,6 +142,7 @@ export default function PosTablesPage() {
         takeaway: "Takeaway",
         openTakeaway: "Open takeaway order",
         takeawayHelp: "Use this for customers who are not seated at a table.",
+        reservationHistory: "Reservation history",
         customerName: "Customer name (optional)",
         customerNamePlaceholder: "For example, Nan",
         customerPhone: "Customer phone (optional)",
@@ -559,15 +563,25 @@ export default function PosTablesPage() {
                 aria-label={copy.search}
               />
             </label>
-            <button
-              type="button"
-              disabled={isNavigating}
-              onClick={openTakeawaySheet}
-              className="ui-press inline-flex h-10 items-center justify-center gap-2 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:order-last lg:ml-auto"
-            >
-              <ShoppingBag className="h-4 w-4" />
-              {copy.takeaway}
-            </button>
+            <div className="flex gap-2 lg:order-last lg:ml-auto">
+              <button
+                type="button"
+                onClick={() => setReservationsOpen(true)}
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+              >
+                <CalendarClock className="h-4 w-4" />
+                {copy.reservationHistory}
+              </button>
+              <button
+                type="button"
+                disabled={isNavigating}
+                onClick={openTakeawaySheet}
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                {copy.takeaway}
+              </button>
+            </div>
             {hasAnyZone && (
               <div role="group" aria-label={allZonesLabel} className="hidden min-w-0 flex-1 items-center gap-2 overflow-x-auto lg:flex">
                 <button type="button" onClick={() => setZoneFilter("all")} className={chipClass(zoneFilter === "all")}>
@@ -802,6 +816,8 @@ export default function PosTablesPage() {
           </div>
         </div>
       )}
+
+      <ReservationHistoryModal open={reservationsOpen} onClose={() => setReservationsOpen(false)} language={language} />
       </div>
       </OperationalPageShell>
     </>

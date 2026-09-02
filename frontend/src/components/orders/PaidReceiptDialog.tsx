@@ -40,6 +40,10 @@ export default function PaidReceiptDialog({
     ? new Date(receiptAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" })
     : "";
   const groups = groupOrderItems(bill.items.filter((item) => item.status !== "cancelled"));
+  // Voided/cancelled lines (kitchen cancel, or cancelled before serving) are shown
+  // only in this dialog for the record — never on the printed receipt (they carry no
+  // charge). Kept ungrouped so each cancellation keeps its own reason.
+  const cancelledItems = bill.items.filter((item) => item.status === "cancelled");
   const sections = (["dine_in", "takeaway"] as const)
     .map((key) => ({ key, groups: groups.filter((group) => fulfillmentType(group.firstItem) === key) }))
     .filter((section) => section.groups.length > 0);
@@ -64,6 +68,10 @@ export default function PaidReceiptDialog({
         qty: "จำนวน",
         unitPrice: "ราคา/หน่วย",
         amount: "รวม",
+        cancelledTitle: "รายการที่ยกเลิก",
+        cancelledBadge: "ยกเลิก",
+        reasonLabel: "เหตุผล",
+        noReason: "ไม่ระบุเหตุผล",
       }
     : {
         title: "Payment receipt",
@@ -85,6 +93,10 @@ export default function PaidReceiptDialog({
         qty: "Qty",
         unitPrice: "Unit price",
         amount: "Amount",
+        cancelledTitle: "Cancelled items",
+        cancelledBadge: "Cancelled",
+        reasonLabel: "Reason",
+        noReason: "No reason given",
       };
   const money = (value: number) => `฿${value.toLocaleString(locale, { maximumFractionDigits: 2 })}`;
 
@@ -213,13 +225,38 @@ export default function PaidReceiptDialog({
               </div>
               )}
             </section>
+
+            {cancelledItems.length > 0 ? (
+              <section data-screen-only aria-labelledby="archive-receipt-cancelled-title" className="border-t border-dashed border-gray-200 pb-3 dark:border-gray-800">
+                <h3 id="archive-receipt-cancelled-title" className="py-3 text-[13px] font-semibold text-gray-900 dark:text-white">{copy.cancelledTitle}</h3>
+                <div className="space-y-2">
+                  {cancelledItems.map((item) => (
+                    <div key={item.ID} className="rounded-md border border-red-200 bg-red-50/60 px-3 py-2 dark:border-red-900/40 dark:bg-red-950/20">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-[13px] font-medium text-gray-900 line-through decoration-red-400 dark:text-white">
+                          {item.menu_name}{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                        </p>
+                        <span className="shrink-0 rounded-md border border-red-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:border-red-900/50 dark:bg-transparent dark:text-red-300">{copy.cancelledBadge}</span>
+                      </div>
+                      <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-300">
+                        <span className="text-gray-500 dark:text-gray-400">{copy.reasonLabel}:</span> {item.cancelled_reason?.trim() || copy.noReason}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </div>
 
           <div data-screen-receipt className="shrink-0 space-y-1.5 border-t border-gray-200 bg-white px-4 py-3 text-[12px] text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300 sm:px-5">
             <div className="flex justify-between gap-4"><span>{copy.subtotal}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">{money(bill.subtotal)}</span></div>
             {bill.discount_amount > 0 ? <div className="flex justify-between gap-4"><span>{copy.discount}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">-{money(bill.discount_amount)}</span></div> : null}
-            <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">{money(bill.service_charge_amount)}</span></div>
-            <div className="flex justify-between gap-4"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">{money(bill.vat_amount)}</span></div>
+            {bill.service_charge_enabled || bill.service_charge_amount > 0 ? (
+              <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">{money(bill.service_charge_amount)}</span></div>
+            ) : null}
+            {bill.vat_enabled || bill.vat_amount > 0 ? (
+              <div className="flex justify-between gap-4"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">{money(bill.vat_amount)}</span></div>
+            ) : null}
             <div className="mt-2 flex items-end justify-between gap-4 border-t border-gray-200 pt-2.5 dark:border-gray-800"><span className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.grandTotal}</span><span className="font-mono text-[20px] font-extrabold tabular-nums text-gray-950 dark:text-white">{money(bill.grand_total)}</span></div>
             {payment ? (
               <div className="mt-2 space-y-1.5 border-t border-dashed border-gray-300 pt-2.5 dark:border-gray-700">
