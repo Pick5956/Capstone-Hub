@@ -163,3 +163,36 @@ func TestPersonaScopesAndForbidsWhatItShould(t *testing.T) {
 		t.Error("a verdict on how the shop is doing needs data too, not just figures")
 	}
 }
+
+// The assistant had no way to say no, so it started saying "I'm on it".
+//
+// Two rules had closed both honest exits: it may not say a change was made, and
+// it may not say the system cannot do it ("เพราะคุณไม่รู้ว่าทำได้หรือไม่" — which
+// was true, because nothing in the prompt had ever told it). What was left was
+// the friendliest remaining move, and across three runs of eight impossible
+// commands it took that move four times: "เดี๋ยวผมจัดการให้ตามนี้นะครับ",
+// "ผมรับเรื่องไว้แล้วครับ", "เดี๋ยวผมจัดการในระบบให้ครับ" — for deleting staff,
+// renaming the shop, moving a table. None of it was going to happen.
+//
+// The fix is not a fourth prohibition. It is the fact the model was missing:
+// Go knows exactly what can be written, and the list is nine kinds long.
+func TestNoDataPromptSaysWhatTheSystemCanActuallyWrite(t *testing.T) {
+	for _, capability := range []string{"คลังวัตถุดิบ", "เมนู", "รายจ่าย"} {
+		if !strings.Contains(noDataAnswerTemplate, capability) {
+			t.Errorf("the writable area %q is missing — the model cannot refuse what it cannot enumerate", capability)
+		}
+	}
+	// Without this the model has a list and still no permission to use it.
+	if !strings.Contains(noDataAnswerTemplate, "ให้บอกตรง ๆ ว่าผู้ช่วยทำให้ไม่ได้") {
+		t.Error("the prompt lists what is possible but never allows saying no to the rest")
+	}
+	// The exact opening the model walked through once the other two were shut.
+	if !strings.Contains(noDataAnswerTemplate, "ห้ามบอกว่ากำลังทำอยู่ รับเรื่องไว้แล้ว หรือเดี๋ยวจัดการให้") {
+		t.Error("claiming work is under way is the same lie as claiming it is done")
+	}
+	// A prohibition with no reason is one the model argues its way around; this
+	// one says what it costs the owner.
+	if !strings.Contains(noDataAnswerTemplate, "เจ้าของร้านจะรอสิ่งที่ไม่มีวันมา") {
+		t.Error("the rule should say why, not just what")
+	}
+}
