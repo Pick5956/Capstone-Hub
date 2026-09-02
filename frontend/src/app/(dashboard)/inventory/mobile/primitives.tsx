@@ -13,7 +13,7 @@ export const TAP_LG = "min-h-[52px]";
  * shifts every subsequent tap target. Every text input on these screens uses it.
  */
 export const inputBase =
-  "w-full rounded-[--inv-radius] border bg-[--inv-surface] px-3 text-[16px] text-[--inv-heading] outline-none transition placeholder:text-[--inv-faint] focus:border-[--inv-action] focus:ring-[3px] focus:ring-[--inv-action]/20";
+  "w-full rounded-(--inv-radius) border bg-(--inv-surface) px-3 text-[16px] text-(--inv-heading) outline-none transition placeholder:text-(--inv-faint) focus:border-(--inv-action) focus:ring-[3px] focus:ring-(--inv-action)/20";
 
 export function useIsMobile(breakpoint = 768) {
   // Starts null so the server and the first client paint agree; the tree picks a
@@ -85,34 +85,34 @@ export function BottomSheet({
         type="button"
         aria-label="close"
         onClick={dismiss}
-        className={`absolute inset-0 cursor-default bg-[--inv-scrim] ${closing ? "smooth-overlay-exit" : "smooth-overlay"}`}
+        className={`absolute inset-0 cursor-default bg-(--inv-scrim) ${closing ? "smooth-overlay-exit" : "smooth-overlay"}`}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative max-h-[88vh] overflow-hidden rounded-t-[--inv-radius-lg] bg-[--inv-surface] ${
+        className={`relative max-h-[88vh] overflow-hidden rounded-t-(--inv-radius-lg) bg-(--inv-surface) ${
           closing ? "inv-sheet-exit" : "inv-sheet-enter"
         }`}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex justify-center pt-2">
-          <span className="h-1 w-9 rounded-full bg-[--inv-surface-strong]" />
+          <span className="h-1 w-9 rounded-full bg-(--inv-surface-strong)" />
         </div>
         <div className="flex items-center justify-between gap-3 px-4 pb-[10px] pt-[2px]">
-          <h2 className="text-[15px] font-semibold text-[--inv-heading]">{title}</h2>
+          <h2 className="text-[15px] font-semibold text-(--inv-heading)">{title}</h2>
           <button
             type="button"
             onClick={dismiss}
             aria-label="ปิด"
-            className={`ui-press -mr-2 flex h-11 w-11 items-center justify-center rounded-full text-[--inv-muted] ${TAP}`}
+            className={`ui-press -mr-2 flex h-11 w-11 items-center justify-center rounded-full text-(--inv-muted) ${TAP}`}
           >
             <X className="h-5 w-5" strokeWidth={2} />
           </button>
         </div>
-        <div className="border-t border-[--inv-hairline]" />
+        <div className="border-t border-(--inv-hairline)" />
         <div className="max-h-[64vh] overflow-y-auto overscroll-contain px-4 py-3">{children}</div>
-        {footer && <div className="border-t border-[--inv-hairline] px-4 py-3">{footer}</div>}
+        {footer && <div className="border-t border-(--inv-hairline) px-4 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -137,10 +137,10 @@ export function SheetAction({
       type="button"
       onClick={onClick}
       className={`ui-press flex w-full items-center gap-3 px-1 text-left text-[15px] font-medium ${TAP} ${
-        divided ? "mt-2 border-t border-[--inv-hairline] pt-2" : ""
-      } ${danger ? "text-[--inv-out]" : "text-[--inv-heading]"}`}
+        divided ? "mt-2 border-t border-(--inv-hairline) pt-2" : ""
+      } ${danger ? "text-(--inv-out)" : "text-(--inv-heading)"}`}
     >
-      <span className={danger ? "text-[--inv-out]" : "text-[--inv-muted]"}>{icon}</span>
+      <span className={danger ? "text-(--inv-out)" : "text-(--inv-muted)"}>{icon}</span>
       {label}
     </button>
   );
@@ -158,7 +158,7 @@ export function Segmented<T extends string>({
   return (
     <div
       role="tablist"
-      className="flex items-center gap-1 rounded-[--inv-radius] bg-[--inv-surface-strong] p-1"
+      className="flex items-center gap-1 rounded-(--inv-radius) bg-(--inv-surface-strong) p-1"
     >
       {options.map((option) => {
         const selected = option.value === value;
@@ -169,15 +169,15 @@ export function Segmented<T extends string>({
             aria-selected={selected}
             type="button"
             onClick={() => onChange(option.value)}
-            className={`ui-press flex flex-1 items-center justify-center gap-1.5 rounded-[--inv-radius] px-2 py-2 text-[13px] font-semibold transition ${
+            className={`ui-press flex flex-1 items-center justify-center gap-1.5 rounded-(--inv-radius) px-2 py-2 text-[13px] font-semibold transition ${
               selected
-                ? "bg-[--inv-surface] text-[--inv-heading] shadow-[--inv-shadow]"
-                : "text-[--inv-muted]"
+                ? "bg-(--inv-surface) text-(--inv-heading) shadow-(--inv-shadow)"
+                : "text-(--inv-muted)"
             }`}
           >
             <span className="truncate">{option.label}</span>
             {option.count !== undefined && (
-              <span className={`tabular-nums ${selected ? "text-[--inv-action]" : "text-[--inv-faint]"}`}>
+              <span className={`tabular-nums ${selected ? "text-(--inv-action)" : "text-(--inv-faint)"}`}>
                 {option.count}
               </span>
             )}
@@ -213,7 +213,7 @@ export function Stepper({
         aria-label="ลด"
         onClick={() => onChange(Math.max(0, Math.round((value - safeStep) * 100) / 100))}
         disabled={value <= 0}
-        className={`ui-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] text-[--inv-heading] disabled:opacity-40 ${TAP}`}
+        className={`ui-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) text-(--inv-heading) disabled:opacity-40 ${TAP}`}
       >
         <Minus className="h-5 w-5" strokeWidth={2} />
       </button>
@@ -223,9 +223,9 @@ export function Stepper({
           inputMode="decimal"
           value={Number.isFinite(value) ? value : 0}
           onChange={(event) => onChange(Math.max(0, Number(event.target.value)))}
-          className={`${inputBase} h-[52px] border-[--inv-hairline] pr-14 text-center font-semibold tabular-nums`}
+          className={`${inputBase} h-[52px] border-(--inv-hairline) pr-14 text-center font-semibold tabular-nums`}
         />
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-[--inv-muted]">
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-(--inv-muted)">
           {unit}
         </span>
       </div>
@@ -233,7 +233,7 @@ export function Stepper({
         type="button"
         aria-label="เพิ่ม"
         onClick={() => onChange(Math.round((value + safeStep) * 100) / 100)}
-        className={`ui-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] text-[--inv-heading] ${TAP}`}
+        className={`ui-press flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) text-(--inv-heading) ${TAP}`}
       >
         <Plus className="h-5 w-5" strokeWidth={2} />
       </button>
@@ -257,7 +257,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`ui-press flex w-full items-center justify-center gap-2 rounded-[--inv-radius] bg-[--inv-action] px-4 text-[15px] font-semibold text-white transition disabled:opacity-50 ${TAP_LG}`}
+      className={`ui-press flex w-full items-center justify-center gap-2 rounded-(--inv-radius) bg-(--inv-action) px-4 text-[15px] font-semibold text-white transition disabled:opacity-50 ${TAP_LG}`}
     >
       {children}
     </button>
@@ -278,7 +278,7 @@ export function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`ui-press flex w-full items-center justify-center gap-2 rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] px-4 text-[15px] font-semibold text-[--inv-heading] transition disabled:opacity-50 ${TAP_LG}`}
+      className={`ui-press flex w-full items-center justify-center gap-2 rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) px-4 text-[15px] font-semibold text-(--inv-heading) transition disabled:opacity-50 ${TAP_LG}`}
     >
       {children}
     </button>
@@ -304,8 +304,8 @@ export function ChipRow<T extends string | number>({
           onClick={() => onChange(option.value)}
           className={`ui-press shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-[13px] font-semibold transition ${
             option.value === value
-              ? "border-[--inv-action] bg-[--inv-action-soft] text-[--inv-action]"
-              : "border-[--inv-hairline] bg-[--inv-surface] text-[--inv-muted]"
+              ? "border-(--inv-action) bg-(--inv-action-soft) text-(--inv-action)"
+              : "border-(--inv-hairline) bg-(--inv-surface) text-(--inv-muted)"
           }`}
         >
           {option.label}
@@ -349,15 +349,15 @@ export function ScreenNav({
   trailing?: ReactNode;
 }) {
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-[--inv-hairline] bg-[--inv-canvas]/95 px-2 py-2 backdrop-blur">
+    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-(--inv-hairline) bg-(--inv-canvas)/95 px-2 py-2 backdrop-blur">
       <button
         type="button"
         onClick={onBack}
-        className={`ui-press flex min-w-[64px] items-center gap-1 rounded-[--inv-radius] px-2 text-[15px] font-medium text-[--inv-action] ${TAP}`}
+        className={`ui-press flex min-w-[64px] items-center gap-1 rounded-(--inv-radius) px-2 text-[15px] font-medium text-(--inv-action) ${TAP}`}
       >
         {backLabel ? backLabel : <ChevronLeft className="h-6 w-6" strokeWidth={2} />}
       </button>
-      <h1 className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold text-[--inv-heading]">
+      <h1 className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold text-(--inv-heading)">
         {title}
       </h1>
       <div className="flex min-w-[64px] justify-end">{trailing}</div>
@@ -369,10 +369,10 @@ export function ScreenNav({
 export function FormGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mb-[22px]">
-      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
         {label}
       </p>
-      <div className="overflow-hidden rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface]">
+      <div className="overflow-hidden rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface)">
         {children}
       </div>
     </div>
@@ -397,11 +397,11 @@ export function FormRow({
   divider?: boolean;
 }) {
   const body = (
-    <div className={`flex min-h-[50px] items-center gap-3 px-3 ${divider ? "border-b border-[--inv-hairline]" : ""}`}>
-      <span className="w-[38%] shrink-0 truncate text-[15px] text-[--inv-body]">{label}</span>
+    <div className={`flex min-h-[50px] items-center gap-3 px-3 ${divider ? "border-b border-(--inv-hairline)" : ""}`}>
+      <span className="w-[38%] shrink-0 truncate text-[15px] text-(--inv-body)">{label}</span>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">{children}</div>
       {suffix !== undefined && (
-        <span className="w-[68px] shrink-0 text-right text-[13px] text-[--inv-muted]">{suffix}</span>
+        <span className="w-[68px] shrink-0 text-right text-[13px] text-(--inv-muted)">{suffix}</span>
       )}
     </div>
   );

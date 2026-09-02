@@ -142,23 +142,23 @@ export default function AddIngredientScreen({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={copy.namePlaceholder}
-              className="w-full bg-transparent text-right text-[16px] text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+              className="w-full bg-transparent text-right text-[16px] text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
             />
           </FormRow>
           <FormRow label={copy.category} onPress={() => setPicker("category")}>
-            <span className="truncate text-[15px] text-[--inv-muted]">{categoryName}</span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-[--inv-faint]" strokeWidth={2} />
+            <span className="truncate text-[15px] text-(--inv-muted)">{categoryName}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-(--inv-faint)" strokeWidth={2} />
           </FormRow>
           <FormRow label={copy.unit} onPress={() => setPicker("unit")} divider={false}>
-            <span className="truncate text-[15px] text-[--inv-muted]">{unit}</span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-[--inv-faint]" strokeWidth={2} />
+            <span className="truncate text-[15px] text-(--inv-muted)">{unit}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-(--inv-faint)" strokeWidth={2} />
           </FormRow>
         </FormGroup>
 
         <FormGroup label={copy.groupStock}>
           <FormRow label={copy.openingStock} suffix={unit}>
             {editing ? (
-              <span className="text-[15px] tabular-nums text-[--inv-faint]">{editing.stock}</span>
+              <span className="text-[15px] tabular-nums text-(--inv-faint)">{editing.stock}</span>
             ) : (
               <input
                 type="number"
@@ -166,7 +166,7 @@ export default function AddIngredientScreen({
                 value={stock}
                 onChange={(event) => setStock(event.target.value)}
                 placeholder="0"
-                className="w-full bg-transparent text-right text-[16px] tabular-nums text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+                className="w-full bg-transparent text-right text-[16px] tabular-nums text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
               />
             )}
           </FormRow>
@@ -177,7 +177,7 @@ export default function AddIngredientScreen({
               value={price}
               onChange={(event) => setPrice(event.target.value)}
               placeholder="0"
-              className="w-full bg-transparent text-right text-[16px] tabular-nums text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+              className="w-full bg-transparent text-right text-[16px] tabular-nums text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
             />
           </FormRow>
           <FormRow label={copy.minStock} suffix={unit} divider={false}>
@@ -187,16 +187,16 @@ export default function AddIngredientScreen({
               value={minStock}
               onChange={(event) => setMinStock(event.target.value)}
               placeholder="0"
-              className="w-full bg-transparent text-right text-[16px] tabular-nums text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+              className="w-full bg-transparent text-right text-[16px] tabular-nums text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
             />
           </FormRow>
         </FormGroup>
-        <p className="-mt-4 mb-[22px] px-1 text-[11px] leading-snug text-[--inv-faint]">
+        <p className="-mt-4 mb-[22px] px-1 text-[11px] leading-snug text-(--inv-faint)">
           {copy.minNote}
         </p>
 
         {editing && (
-          <p className="-mt-3 mb-[22px] px-1 text-[11px] leading-snug text-[--inv-faint]">
+          <p className="-mt-3 mb-[22px] px-1 text-[11px] leading-snug text-(--inv-faint)">
             {copy.stockLocked}
           </p>
         )}
@@ -204,18 +204,18 @@ export default function AddIngredientScreen({
         {!editing && (
           <FormGroup label={copy.groupSummary}>
             <FormRow label={copy.openingValue} divider={false}>
-              <span className="text-[15px] font-semibold tabular-nums text-[--inv-heading]">
+              <span className="text-[15px] font-semibold tabular-nums text-(--inv-heading)">
                 {formatCurrency(openingValue, lang)}
               </span>
             </FormRow>
           </FormGroup>
         )}
 
-        {error && <p className="mb-4 px-1 text-[13px] text-[--inv-out]">{error}</p>}
+        {error && <p className="mb-4 px-1 text-[13px] text-(--inv-out)">{error}</p>}
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-30 flex gap-2 bg-[--inv-canvas] px-4 pt-3"
+        className="fixed inset-x-0 bottom-0 z-30 flex gap-2 bg-(--inv-canvas) px-4 pt-3"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         <SecondaryButton onClick={onCancel}>{copy.cancel}</SecondaryButton>
@@ -273,12 +273,12 @@ export function PickerList<T extends string | number>({
           type="button"
           onClick={() => onPick(option.value)}
           className={`ui-press flex w-full items-center justify-between gap-3 px-1 text-left text-[15px] ${TAP} ${
-            index > 0 ? "border-t border-[--inv-hairline]" : ""
-          } ${option.value === value ? "font-semibold text-[--inv-heading]" : "text-[--inv-body]"}`}
+            index > 0 ? "border-t border-(--inv-hairline)" : ""
+          } ${option.value === value ? "font-semibold text-(--inv-heading)" : "text-(--inv-body)"}`}
         >
           <span className="truncate">{option.label}</span>
           {option.value === value && (
-            <Check className="h-5 w-5 shrink-0 text-[--inv-action]" strokeWidth={2} />
+            <Check className="h-5 w-5 shrink-0 text-(--inv-action)" strokeWidth={2} />
           )}
         </button>
       ))}

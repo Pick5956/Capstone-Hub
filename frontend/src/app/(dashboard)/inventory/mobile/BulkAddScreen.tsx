@@ -149,7 +149,7 @@ export default function BulkAddScreen({
           <button
             type="button"
             onClick={() => setRows([emptyRow(defaultCategory, UNITS[1])])}
-            className={`ui-press px-2 text-[15px] font-medium text-[--inv-action] ${TAP}`}
+            className={`ui-press px-2 text-[15px] font-medium text-(--inv-action) ${TAP}`}
           >
             {copy.clear}
           </button>
@@ -158,7 +158,7 @@ export default function BulkAddScreen({
 
       <div className="space-y-3 px-4 pt-3">
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
             {copy.defaultCategory}
           </p>
           <ChipRow
@@ -174,7 +174,7 @@ export default function BulkAddScreen({
             onClick={() =>
               setRows((current) => current.map((row) => ({ ...row, categoryId: defaultCategory })))
             }
-            className={`ui-press mt-1 text-[13px] font-semibold text-[--inv-action] ${TAP}`}
+            className={`ui-press mt-1 text-[13px] font-semibold text-(--inv-action) ${TAP}`}
           >
             {copy.applyAll}
           </button>
@@ -187,29 +187,29 @@ export default function BulkAddScreen({
           return (
             <div
               key={row.key}
-              className="rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface] p-3 shadow-[--inv-shadow]"
+              className="rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface) p-3 shadow-(--inv-shadow)"
             >
               <input
                 type="text"
                 value={row.name}
                 onChange={(event) => patch(row.key, { name: event.target.value })}
                 placeholder={copy.name}
-                className={`${inputBase} h-[52px] border-[--inv-hairline]`}
+                className={`${inputBase} h-[52px] border-(--inv-hairline)`}
               />
 
-              <div className="mt-2 grid grid-cols-3 overflow-hidden rounded-[--inv-radius] border border-[--inv-hairline]">
+              <div className="mt-2 grid grid-cols-3 overflow-hidden rounded-(--inv-radius) border border-(--inv-hairline)">
                 <input
                   type="number"
                   inputMode="decimal"
                   value={row.quantity}
                   onChange={(event) => patch(row.key, { quantity: event.target.value })}
                   placeholder={copy.quantity}
-                  className="min-h-[52px] w-full bg-transparent px-2 text-center text-[16px] tabular-nums text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+                  className="min-h-[52px] w-full bg-transparent px-2 text-center text-[16px] tabular-nums text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
                 />
                 <button
                   type="button"
                   onClick={() => setPicker({ kind: "unit", key: row.key })}
-                  className={`ui-press border-x border-[--inv-hairline] px-2 text-[15px] text-[--inv-body] ${TAP}`}
+                  className={`ui-press border-x border-(--inv-hairline) px-2 text-[15px] text-(--inv-body) ${TAP}`}
                 >
                   {row.unit}
                 </button>
@@ -219,7 +219,7 @@ export default function BulkAddScreen({
                   value={row.price}
                   onChange={(event) => patch(row.key, { price: event.target.value })}
                   placeholder={copy.price}
-                  className="min-h-[52px] w-full bg-transparent px-2 text-center text-[16px] tabular-nums text-[--inv-heading] outline-none placeholder:text-[--inv-faint]"
+                  className="min-h-[52px] w-full bg-transparent px-2 text-center text-[16px] tabular-nums text-(--inv-heading) outline-none placeholder:text-(--inv-faint)"
                 />
               </div>
 
@@ -227,11 +227,11 @@ export default function BulkAddScreen({
                 <button
                   type="button"
                   onClick={() => setPicker({ kind: "category", key: row.key })}
-                  className={`ui-press max-w-[55%] shrink-0 truncate rounded-full bg-[--inv-surface-strong] px-3 py-1 text-[12px] text-[--inv-muted] ${TAP}`}
+                  className={`ui-press max-w-[55%] shrink-0 truncate rounded-full bg-(--inv-surface-strong) px-3 py-1 text-[12px] text-(--inv-muted) ${TAP}`}
                 >
                   {categoryName}
                 </button>
-                <span className="ml-auto text-[13px] font-semibold tabular-nums text-[--inv-heading]">
+                <span className="ml-auto text-[13px] font-semibold tabular-nums text-(--inv-heading)">
                   {formatCurrency(subtotal, lang)}
                 </span>
                 {row.name.trim() !== "" && (
@@ -239,7 +239,7 @@ export default function BulkAddScreen({
                     type="button"
                     aria-label="ลบแถว"
                     onClick={() => setRows((current) => current.filter((r) => r.key !== row.key))}
-                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-[--inv-radius] text-[--inv-out] ${TAP}`}
+                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-(--inv-radius) text-(--inv-out) ${TAP}`}
                   >
                     <Trash2 className="h-5 w-5" strokeWidth={2} />
                   </button>
@@ -249,16 +249,16 @@ export default function BulkAddScreen({
           );
         })}
 
-        {error && <p className="px-1 text-[13px] leading-snug text-[--inv-out]">{error}</p>}
+        {error && <p className="px-1 text-[13px] leading-snug text-(--inv-out)">{error}</p>}
       </div>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-30 space-y-2 bg-[--inv-canvas] px-4 pt-3"
+        className="fixed inset-x-0 bottom-0 z-30 space-y-2 bg-(--inv-canvas) px-4 pt-3"
         style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between text-[13px]">
-          <span className="text-[--inv-muted]">{copy.ready(filled.length)}</span>
-          <span className="font-semibold tabular-nums text-[--inv-heading]">
+          <span className="text-(--inv-muted)">{copy.ready(filled.length)}</span>
+          <span className="font-semibold tabular-nums text-(--inv-heading)">
             {copy.total} {formatCurrency(total, lang)}
           </span>
         </div>

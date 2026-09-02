@@ -130,9 +130,9 @@ export default function CategoriesScreen({
 
       <div className="px-4 pt-4">
         {categories.length === 0 ? (
-          <p className="py-10 text-center text-[13px] text-[--inv-faint]">{copy.empty}</p>
+          <p className="py-10 text-center text-[13px] text-(--inv-faint)">{copy.empty}</p>
         ) : (
-          <div className="overflow-hidden rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface]">
+          <div className="overflow-hidden rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface)">
             {categories.map((category, index) => {
               const stats = usage.get(category.ID) ?? { count: 0, value: 0 };
               const locked = stats.count > 0;
@@ -140,14 +140,14 @@ export default function CategoriesScreen({
                 <div
                   key={category.ID}
                   className={`flex items-center gap-2 px-3 py-2.5 ${
-                    index > 0 ? "border-t border-[--inv-hairline]" : ""
+                    index > 0 ? "border-t border-(--inv-hairline)" : ""
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-medium text-[--inv-heading]">
+                    <p className="truncate text-[15px] font-medium text-(--inv-heading)">
                       {category.name}
                     </p>
-                    <p className="truncate text-[11px] tabular-nums text-[--inv-faint]">
+                    <p className="truncate text-[11px] tabular-nums text-(--inv-faint)">
                       {stats.count} {copy.items} · {formatCurrency(stats.value, lang)}
                     </p>
                   </div>
@@ -159,7 +159,7 @@ export default function CategoriesScreen({
                       setDraft(category.name);
                       setError("");
                     }}
-                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-[--inv-radius] text-[--inv-muted] ${TAP}`}
+                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-(--inv-radius) text-(--inv-muted) ${TAP}`}
                   >
                     <Pencil className="h-5 w-5" strokeWidth={2} />
                   </button>
@@ -169,7 +169,7 @@ export default function CategoriesScreen({
                     title={locked ? copy.blocked(stats.count) : undefined}
                     disabled={locked || busy}
                     onClick={() => remove(category)}
-                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-[--inv-radius] text-[--inv-out] disabled:opacity-30 ${TAP}`}
+                    className={`ui-press flex h-11 w-11 shrink-0 items-center justify-center rounded-(--inv-radius) text-(--inv-out) disabled:opacity-30 ${TAP}`}
                   >
                     <Trash2 className="h-5 w-5" strokeWidth={2} />
                   </button>
@@ -185,14 +185,14 @@ export default function CategoriesScreen({
             setAdding(true);
             setError("");
           }}
-          className={`ui-press mt-3 flex w-full items-center justify-center gap-2 rounded-[--inv-radius-lg] border border-dashed border-[--inv-hairline] bg-[--inv-surface] text-[15px] font-semibold text-[--inv-action] ${TAP}`}
+          className={`ui-press mt-3 flex w-full items-center justify-center gap-2 rounded-(--inv-radius-lg) border border-dashed border-(--inv-hairline) bg-(--inv-surface) text-[15px] font-semibold text-(--inv-action) ${TAP}`}
           style={{ minHeight: 52 }}
         >
           <Plus className="h-5 w-5" strokeWidth={2} />
           {copy.addTitle}
         </button>
 
-        {error && <p className="mt-3 px-1 text-[13px] text-[--inv-out]">{error}</p>}
+        {error && <p className="mt-3 px-1 text-[13px] text-(--inv-out)">{error}</p>}
       </div>
 
       <BottomSheet
@@ -209,10 +209,10 @@ export default function CategoriesScreen({
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          className={`${inputBase} h-[52px] border-[--inv-hairline]`}
+          className={`${inputBase} h-[52px] border-(--inv-hairline)`}
         />
-        <p className="mt-2 text-[11px] leading-snug text-[--inv-faint]">{copy.renameNote}</p>
-        {error && <p className="mt-2 text-[13px] text-[--inv-out]">{error}</p>}
+        <p className="mt-2 text-[11px] leading-snug text-(--inv-faint)">{copy.renameNote}</p>
+        {error && <p className="mt-2 text-[13px] text-(--inv-out)">{error}</p>}
       </BottomSheet>
 
       <BottomSheet
@@ -230,9 +230,9 @@ export default function CategoriesScreen({
           value={newName}
           onChange={(event) => setNewName(event.target.value)}
           placeholder={copy.addPlaceholder}
-          className={`${inputBase} h-[52px] border-[--inv-hairline]`}
+          className={`${inputBase} h-[52px] border-(--inv-hairline)`}
         />
-        {error && <p className="mt-2 text-[13px] text-[--inv-out]">{error}</p>}
+        {error && <p className="mt-2 text-[13px] text-(--inv-out)">{error}</p>}
       </BottomSheet>
     </div>
   );

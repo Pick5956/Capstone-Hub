@@ -59,23 +59,23 @@ export function statusTone(status: ItemStatus, lang: "th" | "en"): StatusTone {
   switch (status) {
     case "out":
       return {
-        text: "text-[--inv-out]",
-        bar: "bg-[--inv-out]",
-        badge: "bg-[--inv-out-soft] text-[--inv-out]",
+        text: "text-(--inv-out)",
+        bar: "bg-(--inv-out)",
+        badge: "bg-(--inv-out-soft) text-(--inv-out)",
         label: lang === "th" ? "หมด" : "Out",
       };
     case "low":
       return {
-        text: "text-[--inv-low]",
-        bar: "bg-[--inv-low]",
-        badge: "bg-[--inv-low-soft] text-[--inv-low]",
+        text: "text-(--inv-low)",
+        bar: "bg-(--inv-low)",
+        badge: "bg-(--inv-low-soft) text-(--inv-low)",
         label: lang === "th" ? "ใกล้หมด" : "Low",
       };
     default:
       return {
-        text: "text-[--inv-heading]",
-        bar: "bg-[--inv-ok]",
-        badge: "bg-[--inv-ok-soft] text-[--inv-ok]",
+        text: "text-(--inv-heading)",
+        bar: "bg-(--inv-ok)",
+        badge: "bg-(--inv-ok-soft) text-(--inv-ok)",
         label: lang === "th" ? "พอใช้" : "OK",
       };
   }

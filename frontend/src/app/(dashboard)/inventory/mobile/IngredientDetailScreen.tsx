@@ -104,7 +104,7 @@ export default function IngredientDetailScreen({
               type="button"
               aria-label={copy.edit}
               onClick={onEdit}
-              className={`ui-press flex h-11 w-11 items-center justify-center rounded-full text-[--inv-muted] ${TAP}`}
+              className={`ui-press flex h-11 w-11 items-center justify-center rounded-full text-(--inv-muted) ${TAP}`}
             >
               <MoreHorizontal className="h-5 w-5" strokeWidth={2} />
             </button>
@@ -113,25 +113,25 @@ export default function IngredientDetailScreen({
       />
 
       <div className="space-y-3 px-4 pt-3">
-        <div className="rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface] p-4 shadow-[--inv-shadow]">
+        <div className="rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface) p-4 shadow-(--inv-shadow)">
           <div className="flex items-baseline gap-2">
             <span className={`text-[40px] font-semibold leading-none tabular-nums ${tone.text}`}>
               {formatNumber(item.stock, lang)}
             </span>
-            <span className="text-[15px] text-[--inv-muted]">{item.unit}</span>
+            <span className="text-[15px] text-(--inv-muted)">{item.unit}</span>
             <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone.badge}`}>
               {tone.label}
             </span>
           </div>
 
           {percent === null ? (
-            <p className="mt-3 text-[12px] text-[--inv-faint]">{copy.noUsage}</p>
+            <p className="mt-3 text-[12px] text-(--inv-faint)">{copy.noUsage}</p>
           ) : (
             <>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[--inv-action-soft]">
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-(--inv-action-soft)">
                 <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${percent}%` }} />
               </div>
-              <div className="mt-1.5 flex items-center justify-between text-[11px] text-[--inv-faint]">
+              <div className="mt-1.5 flex items-center justify-between text-[11px] text-(--inv-faint)">
                 <span>
                   {copy.minimum} {formatNumber(item.min_stock, lang)} {item.unit}
                 </span>
@@ -162,39 +162,39 @@ export default function IngredientDetailScreen({
           </div>
         )}
 
-        <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+        <p className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
           {copy.movements}
         </p>
 
         {rows.length === 0 ? (
-          <p className="py-8 text-center text-[13px] text-[--inv-faint]">{copy.empty}</p>
+          <p className="py-8 text-center text-[13px] text-(--inv-faint)">{copy.empty}</p>
         ) : (
-          <div className="overflow-hidden rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface]">
+          <div className="overflow-hidden rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface)">
             {rows.map((row, index) => {
               const movement = historyMovement(row);
               const at = row.CreatedAt ? new Date(row.CreatedAt) : null;
               const Icon = row.type === "in" ? ArrowUp : row.type === "out" ? ArrowDown : ArrowRight;
               const iconTone =
                 row.type === "in"
-                  ? "bg-[--inv-ok-soft] text-[--inv-ok]"
+                  ? "bg-(--inv-ok-soft) text-(--inv-ok)"
                   : row.type === "out"
-                    ? "bg-[--inv-out-soft] text-[--inv-out]"
-                    : "bg-[--inv-surface-strong] text-[--inv-muted]";
+                    ? "bg-(--inv-out-soft) text-(--inv-out)"
+                    : "bg-(--inv-surface-strong) text-(--inv-muted)";
               return (
                 <div
                   key={row.ID}
                   className={`flex items-center gap-3 px-3 py-3 ${
-                    index > 0 ? "border-t border-[--inv-hairline]" : ""
+                    index > 0 ? "border-t border-(--inv-hairline)" : ""
                   }`}
                 >
                   <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconTone}`}>
                     <Icon className="h-4 w-4" strokeWidth={2} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-[--inv-heading]">
+                    <p className="truncate text-[13px] text-(--inv-heading)">
                       {at ? thaiShortDate(at, lang) : "—"}
                       {at && (
-                        <span className="ml-2 text-[11px] tabular-nums text-[--inv-faint]">
+                        <span className="ml-2 text-[11px] tabular-nums text-(--inv-faint)">
                           {at.toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -202,18 +202,18 @@ export default function IngredientDetailScreen({
                         </span>
                       )}
                     </p>
-                    <p className="truncate text-[11px] text-[--inv-faint]">
+                    <p className="truncate text-[11px] text-(--inv-faint)">
                       {row.created_by_name || "—"}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-[13px] font-semibold tabular-nums text-[--inv-heading]">
+                    <p className="text-[13px] font-semibold tabular-nums text-(--inv-heading)">
                       {movement.setTo !== null
                         ? `= ${formatNumber(movement.setTo, lang)}`
                         : `${(movement.change ?? 0) > 0 ? "+" : ""}${formatNumber(movement.change ?? 0, lang)}`}
-                      <span className="ml-1 text-[11px] font-normal text-[--inv-faint]">{item.unit}</span>
+                      <span className="ml-1 text-[11px] font-normal text-(--inv-faint)">{item.unit}</span>
                     </p>
-                    <p className="text-[11px] tabular-nums text-[--inv-faint]">
+                    <p className="text-[11px] tabular-nums text-(--inv-faint)">
                       {row.amount > 0 ? formatCurrency(row.amount, lang, 2) : "—"}
                     </p>
                   </div>
@@ -228,7 +228,7 @@ export default function IngredientDetailScreen({
         <button
           type="button"
           onClick={onDelete}
-          className={`ui-press mt-6 w-full px-4 text-center text-[13px] font-semibold text-[--inv-out] ${TAP}`}
+          className={`ui-press mt-6 w-full px-4 text-center text-[13px] font-semibold text-(--inv-out) ${TAP}`}
         >
           {lang === "th" ? "ลบวัตถุดิบ" : "Delete ingredient"}
         </button>
@@ -241,9 +241,9 @@ export default function IngredientDetailScreen({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] px-3 py-2.5">
-      <p className="text-[11px] text-[--inv-muted]">{label}</p>
-      <p className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-[--inv-heading]">
+    <div className="rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) px-3 py-2.5">
+      <p className="text-[11px] text-(--inv-muted)">{label}</p>
+      <p className="mt-0.5 truncate text-[15px] font-semibold tabular-nums text-(--inv-heading)">
         {value}
       </p>
     </div>

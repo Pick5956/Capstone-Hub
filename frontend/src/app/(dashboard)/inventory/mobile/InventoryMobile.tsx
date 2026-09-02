@@ -373,17 +373,17 @@ export default function InventoryMobile({
                 setSelected(new Set());
               }}
               aria-label="ปิด"
-              className={`ui-press -ml-2 flex h-11 w-11 items-center justify-center rounded-full text-[--inv-muted] ${TAP}`}
+              className={`ui-press -ml-2 flex h-11 w-11 items-center justify-center rounded-full text-(--inv-muted) ${TAP}`}
             >
               <X className="h-5 w-5" strokeWidth={2} />
             </button>
-            <span className="text-[15px] font-semibold text-[--inv-heading]">
+            <span className="text-[15px] font-semibold text-(--inv-heading)">
               {copy.selected(selected.size)}
             </span>
             <button
               type="button"
               onClick={() => setSelected(new Set(visible.map((item) => item.ID)))}
-              className={`ui-press rounded-[--inv-radius] px-3 text-[13px] font-semibold text-[--inv-action] ${TAP}`}
+              className={`ui-press rounded-(--inv-radius) px-3 text-[13px] font-semibold text-(--inv-action) ${TAP}`}
             >
               {copy.selectAll}
             </button>
@@ -392,7 +392,7 @@ export default function InventoryMobile({
           <div className="grid grid-cols-[minmax(0,1fr)_52px_52px] gap-2">
             <div className="relative min-w-0">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--inv-faint]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--inv-faint)"
                 strokeWidth={2}
               />
               <input
@@ -400,17 +400,17 @@ export default function InventoryMobile({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={copy.search}
-                className={`${inputBase} h-[52px] border-[--inv-hairline] pl-10`}
+                className={`${inputBase} h-[52px] border-(--inv-hairline) pl-10`}
               />
             </div>
             <button
               type="button"
               aria-label={copy.filter}
               onClick={() => setSheet("filter")}
-              className={`ui-press flex h-[52px] items-center justify-center rounded-[--inv-radius] border bg-[--inv-surface] ${
+              className={`ui-press flex h-[52px] items-center justify-center rounded-(--inv-radius) border bg-(--inv-surface) ${
                 categoryId !== 0 || sort !== "urgent"
-                  ? "border-[--inv-action] text-[--inv-action]"
-                  : "border-[--inv-hairline] text-[--inv-muted]"
+                  ? "border-(--inv-action) text-(--inv-action)"
+                  : "border-(--inv-hairline) text-(--inv-muted)"
               }`}
             >
               <Filter className="h-5 w-5" strokeWidth={2} />
@@ -419,7 +419,7 @@ export default function InventoryMobile({
               type="button"
               aria-label={copy.manage}
               onClick={() => setSheet("manage")}
-              className="ui-press flex h-[52px] items-center justify-center rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] text-[--inv-muted]"
+              className="ui-press flex h-[52px] items-center justify-center rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) text-(--inv-muted)"
             >
               <MoreHorizontal className="h-5 w-5" strokeWidth={2} />
             </button>
@@ -436,28 +436,28 @@ export default function InventoryMobile({
           ]}
         />
 
-        <div className="flex items-end justify-between gap-3 rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] px-4 py-3 shadow-[--inv-shadow]">
+        <div className="flex items-end justify-between gap-3 rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) px-4 py-3 shadow-(--inv-shadow)">
           <div className="min-w-0">
-            <p className="text-[11px] text-[--inv-muted]">{copy.totalValue}</p>
-            <p className="truncate text-[20px] font-semibold tabular-nums text-[--inv-heading]">
+            <p className="text-[11px] text-(--inv-muted)">{copy.totalValue}</p>
+            <p className="truncate text-[20px] font-semibold tabular-nums text-(--inv-heading)">
               {formatCurrency(totals.value, lang)}
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[11px] text-[--inv-muted]">{copy.needsOrder}</p>
-            <p className="text-[20px] font-semibold tabular-nums text-[--inv-action]">
+            <p className="text-[11px] text-(--inv-muted)">{copy.needsOrder}</p>
+            <p className="text-[20px] font-semibold tabular-nums text-(--inv-action)">
               {totals.needsOrder}
-              <span className="ml-1 text-[11px] font-medium text-[--inv-muted]">{copy.items}</span>
+              <span className="ml-1 text-[11px] font-medium text-(--inv-muted)">{copy.items}</span>
             </p>
           </div>
         </div>
 
         {loading ? (
-          <p className="py-10 text-center text-[13px] text-[--inv-faint]">{copy.loading}</p>
+          <p className="py-10 text-center text-[13px] text-(--inv-faint)">{copy.loading}</p>
         ) : visible.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-[15px] font-semibold text-[--inv-heading]">{copy.empty}</p>
-            <p className="mt-1 text-[13px] text-[--inv-muted]">{copy.emptyHint}</p>
+            <p className="text-[15px] font-semibold text-(--inv-heading)">{copy.empty}</p>
+            <p className="mt-1 text-[13px] text-(--inv-muted)">{copy.emptyHint}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -469,7 +469,7 @@ export default function InventoryMobile({
               return (
                 <div
                   key={item.ID}
-                  className="flex items-stretch gap-2 rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] p-3 shadow-[--inv-shadow]"
+                  className="flex items-stretch gap-2 rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) p-3 shadow-(--inv-shadow)"
                 >
                   {selecting && (
                     <button
@@ -486,8 +486,8 @@ export default function InventoryMobile({
                       <span
                         className={`flex h-6 w-6 items-center justify-center rounded-[4px] border ${
                           checked
-                            ? "border-[--inv-action] bg-[--inv-action] text-white"
-                            : "border-[--inv-hairline]"
+                            ? "border-(--inv-action) bg-(--inv-action) text-white"
+                            : "border-(--inv-hairline)"
                         }`}
                       >
                         {checked && <Check className="h-4 w-4" strokeWidth={3} />}
@@ -504,7 +504,7 @@ export default function InventoryMobile({
                     className="min-w-0 flex-1 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-[--inv-heading]">
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-(--inv-heading)">
                         {item.name}
                       </span>
                       <span
@@ -518,34 +518,34 @@ export default function InventoryMobile({
                       <span className={`text-[20px] font-semibold tabular-nums ${tone.text}`}>
                         {formatNumber(item.stock, lang)}
                       </span>
-                      <span className="text-[12px] text-[--inv-muted]">{item.unit}</span>
-                      <span className="ml-auto shrink-0 text-[12px] tabular-nums text-[--inv-muted]">
+                      <span className="text-[12px] text-(--inv-muted)">{item.unit}</span>
+                      <span className="ml-auto shrink-0 text-[12px] tabular-nums text-(--inv-muted)">
                         {formatCurrency(item.cost_per_unit, lang, 2)} / {item.unit}
                       </span>
                     </div>
 
                     {percent === null ? (
-                      <p className="mt-2 text-[11px] text-[--inv-faint]">{copy.noUsage}</p>
+                      <p className="mt-2 text-[11px] text-(--inv-faint)">{copy.noUsage}</p>
                     ) : (
                       <>
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[--inv-action-soft]">
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-(--inv-action-soft)">
                           <div
                             className={`h-full rounded-full ${tone.bar}`}
                             style={{ width: `${percent}%` }}
                           />
                         </div>
-                        {cover && <p className="mt-1 text-[11px] text-[--inv-faint]">{cover}</p>}
+                        {cover && <p className="mt-1 text-[11px] text-(--inv-faint)">{cover}</p>}
                       </>
                     )}
 
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="max-w-[45%] shrink-0 truncate rounded-full bg-[--inv-surface-strong] px-2 py-0.5 text-[11px] text-[--inv-muted]">
+                      <span className="max-w-[45%] shrink-0 truncate rounded-full bg-(--inv-surface-strong) px-2 py-0.5 text-[11px] text-(--inv-muted)">
                         {item.category?.name ?? (lang === "th" ? "ไม่มีหมวด" : "Uncategorised")}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-[--inv-faint]">
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-(--inv-faint)">
                         {copy.minimum} {formatNumber(item.min_stock, lang)} {item.unit}
                       </span>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-[--inv-faint]" strokeWidth={2} />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-(--inv-faint)" strokeWidth={2} />
                     </div>
                   </button>
 
@@ -555,7 +555,7 @@ export default function InventoryMobile({
                         type="button"
                         aria-label={copy.restock}
                         onClick={() => openSheet(item, "restock")}
-                        className={`ui-press flex h-11 w-11 items-center justify-center rounded-[--inv-radius] bg-[--inv-action] text-white ${TAP}`}
+                        className={`ui-press flex h-11 w-11 items-center justify-center rounded-(--inv-radius) bg-(--inv-action) text-white ${TAP}`}
                       >
                         <Plus className="h-5 w-5" strokeWidth={2} />
                       </button>
@@ -563,7 +563,7 @@ export default function InventoryMobile({
                         type="button"
                         aria-label={copy.manage}
                         onClick={() => openSheet(item, "row")}
-                        className={`ui-press flex h-11 w-11 items-center justify-center rounded-[--inv-radius] border border-[--inv-hairline] text-[--inv-muted] ${TAP}`}
+                        className={`ui-press flex h-11 w-11 items-center justify-center rounded-(--inv-radius) border border-(--inv-hairline) text-(--inv-muted) ${TAP}`}
                       >
                         <MoreHorizontal className="h-5 w-5" strokeWidth={2} />
                       </button>
@@ -577,14 +577,14 @@ export default function InventoryMobile({
       </div>
 
       {toast && (
-        <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] rounded-[--inv-radius] bg-[--inv-heading] px-4 py-3 text-center text-[13px] font-medium text-[--inv-surface] shadow-lg">
+        <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] rounded-(--inv-radius) bg-(--inv-heading) px-4 py-3 text-center text-[13px] font-medium text-(--inv-surface) shadow-lg">
           {toast}
         </div>
       )}
 
       {canManage && (
         <div
-          className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-[--inv-canvas] via-[--inv-canvas] to-transparent px-4 pb-3 pt-6"
+          className="fixed inset-x-0 bottom-0 z-30 bg-gradient-to-t from-(--inv-canvas) via-(--inv-canvas) to-transparent px-4 pb-3 pt-6"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
         >
           {selecting ? (
@@ -680,7 +680,7 @@ export default function InventoryMobile({
           </div>
         }
       >
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
           {copy.category}
         </p>
         <ChipRow
@@ -691,7 +691,7 @@ export default function InventoryMobile({
             ...categories.map((category) => ({ value: category.ID, label: category.name })),
           ]}
         />
-        <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+        <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
           {copy.sortBy}
         </p>
         <ChipRow
@@ -795,9 +795,9 @@ function RestockAndCountSheets({
         }
       >
         <Stepper value={amount} step={restockStep(active)} unit={active.unit} onChange={setAmount} />
-        <div className="mt-3 flex items-center justify-between rounded-[--inv-radius] bg-[--inv-surface-strong] px-3 py-2">
-          <span className="text-[13px] text-[--inv-muted]">{copy.afterRestock}</span>
-          <span className="text-[15px] font-semibold tabular-nums text-[--inv-heading]">
+        <div className="mt-3 flex items-center justify-between rounded-(--inv-radius) bg-(--inv-surface-strong) px-3 py-2">
+          <span className="text-[13px] text-(--inv-muted)">{copy.afterRestock}</span>
+          <span className="text-[15px] font-semibold tabular-nums text-(--inv-heading)">
             {formatNumber(active.stock + amount, lang)} {active.unit}
           </span>
         </div>
@@ -813,19 +813,19 @@ function RestockAndCountSheets({
           </PrimaryButton>
         }
       >
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
           {copy.counted}
         </p>
         <Stepper value={amount} step={restockStep(active)} unit={active.unit} onChange={setAmount} />
-        <div className="mt-3 flex items-center justify-between rounded-[--inv-radius] bg-[--inv-surface-strong] px-3 py-2">
-          <span className="text-[13px] text-[--inv-muted]">{copy.difference}</span>
+        <div className="mt-3 flex items-center justify-between rounded-(--inv-radius) bg-(--inv-surface-strong) px-3 py-2">
+          <span className="text-[13px] text-(--inv-muted)">{copy.difference}</span>
           <span
             className={`text-[15px] font-semibold tabular-nums ${
               difference > 0
-                ? "text-[--inv-ok]"
+                ? "text-(--inv-ok)"
                 : difference < 0
-                  ? "text-[--inv-out]"
-                  : "text-[--inv-muted]"
+                  ? "text-(--inv-out)"
+                  : "text-(--inv-muted)"
             }`}
           >
             {difference > 0 ? "+" : ""}
@@ -833,7 +833,7 @@ function RestockAndCountSheets({
           </span>
         </div>
         {amount === 0 && (
-          <p className="mt-2 text-[11px] text-[--inv-faint]">{copy.countZeroNote}</p>
+          <p className="mt-2 text-[11px] text-(--inv-faint)">{copy.countZeroNote}</p>
         )}
       </BottomSheet>
     </>

@@ -189,7 +189,7 @@ export default function HistoryScreen({
             type="button"
             aria-label={copy.title}
             onClick={runExport}
-            className={`ui-press flex h-11 w-11 items-center justify-center rounded-full text-[--inv-muted] ${TAP}`}
+            className={`ui-press flex h-11 w-11 items-center justify-center rounded-full text-(--inv-muted) ${TAP}`}
           >
             <Download className="h-5 w-5" strokeWidth={2} />
           </button>
@@ -199,7 +199,7 @@ export default function HistoryScreen({
       <div className="space-y-3 px-4 pt-3">
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[--inv-faint]"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--inv-faint)"
             strokeWidth={2}
           />
           <input
@@ -207,7 +207,7 @@ export default function HistoryScreen({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={copy.search}
-            className={`${inputBase} h-[52px] border-[--inv-hairline] pl-10`}
+            className={`${inputBase} h-[52px] border-(--inv-hairline) pl-10`}
           />
         </div>
 
@@ -241,17 +241,17 @@ export default function HistoryScreen({
             onClick={() => setPicker(true)}
             className={`ui-press shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-[13px] font-semibold ${
               categoryId
-                ? "border-[--inv-action] bg-[--inv-action-soft] text-[--inv-action]"
-                : "border-[--inv-hairline] bg-[--inv-surface] text-[--inv-muted]"
+                ? "border-(--inv-action) bg-(--inv-action-soft) text-(--inv-action)"
+                : "border-(--inv-hairline) bg-(--inv-surface) text-(--inv-muted)"
             }`}
           >
             {categories.find((c) => c.ID === categoryId)?.name ?? copy.category}
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-2 rounded-[--inv-radius] border border-[--inv-hairline] bg-[--inv-surface] px-3 py-2 text-[12px]">
-          <span className="min-w-0 truncate text-[--inv-muted]">
-            <span className="font-semibold tabular-nums text-[--inv-heading]">{rows.length}</span>{" "}
+        <div className="flex items-center justify-between gap-2 rounded-(--inv-radius) border border-(--inv-hairline) bg-(--inv-surface) px-3 py-2 text-[12px]">
+          <span className="min-w-0 truncate text-(--inv-muted)">
+            <span className="font-semibold tabular-nums text-(--inv-heading)">{rows.length}</span>{" "}
             {copy.items}
             {/* Counts only — quantities cannot be summed across กรัม, มล. and ฟอง. */}
             {type === "all" && summary.inCount > 0 && ` · ${copy.in} ${summary.inCount}`}
@@ -259,38 +259,38 @@ export default function HistoryScreen({
             {type === "all" && summary.adjustCount > 0 && ` · ${copy.adjust} ${summary.adjustCount}`}
           </span>
           {summary.received > 0 && (
-            <span className="shrink-0 font-semibold tabular-nums text-[--inv-heading]">
+            <span className="shrink-0 font-semibold tabular-nums text-(--inv-heading)">
               {copy.received} {formatCurrency(summary.received, lang)}
             </span>
           )}
         </div>
 
-        {note && <p className="text-[12px] text-[--inv-muted]">{note}</p>}
+        {note && <p className="text-[12px] text-(--inv-muted)">{note}</p>}
         {total > rows.length && (
-          <p className="text-[11px] text-[--inv-faint]">
+          <p className="text-[11px] text-(--inv-faint)">
             {copy.truncated(rows.length, total)}
           </p>
         )}
 
         {loading ? (
-          <p className="py-10 text-center text-[13px] text-[--inv-faint]">{copy.loading}</p>
+          <p className="py-10 text-center text-[13px] text-(--inv-faint)">{copy.loading}</p>
         ) : rows.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-[15px] font-semibold text-[--inv-heading]">{copy.empty}</p>
-            <p className="mt-1 text-[13px] text-[--inv-muted]">{copy.emptyHint}</p>
+            <p className="text-[15px] font-semibold text-(--inv-heading)">{copy.empty}</p>
+            <p className="mt-1 text-[13px] text-(--inv-muted)">{copy.emptyHint}</p>
           </div>
         ) : (
           grouped.map((group) => (
             <div key={group.key}>
               <div className="mb-1.5 flex items-baseline justify-between px-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[--inv-muted]">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-(--inv-muted)">
                   {dayHeading(group.date, lang)}
                 </p>
-                <span className="text-[11px] tabular-nums text-[--inv-faint]">
+                <span className="text-[11px] tabular-nums text-(--inv-faint)">
                   {group.items.length}
                 </span>
               </div>
-              <div className="overflow-hidden rounded-[--inv-radius-lg] border border-[--inv-hairline] bg-[--inv-surface]">
+              <div className="overflow-hidden rounded-(--inv-radius-lg) border border-(--inv-hairline) bg-(--inv-surface)">
                 {group.items.map((row, index) => {
                   const movement = historyMovement(row);
                   const at = row.CreatedAt ? new Date(row.CreatedAt) : null;
@@ -298,17 +298,17 @@ export default function HistoryScreen({
                     row.type === "in" ? ArrowUp : row.type === "out" ? ArrowDown : ClipboardList;
                   const iconTone =
                     row.type === "in"
-                      ? "bg-[--inv-ok-soft] text-[--inv-ok]"
+                      ? "bg-(--inv-ok-soft) text-(--inv-ok)"
                       : row.type === "out"
-                        ? "bg-[--inv-out-soft] text-[--inv-out]"
-                        : "bg-[--inv-surface-strong] text-[--inv-muted]";
+                        ? "bg-(--inv-out-soft) text-(--inv-out)"
+                        : "bg-(--inv-surface-strong) text-(--inv-muted)";
                   const typeLabel =
                     row.type === "in" ? copy.in : row.type === "out" ? copy.out : copy.adjust;
                   return (
                     <div
                       key={row.ID}
                       className={`flex items-center gap-3 px-3 py-2.5 ${
-                        index > 0 ? "border-t border-[--inv-hairline]" : ""
+                        index > 0 ? "border-t border-(--inv-hairline)" : ""
                       }`}
                     >
                       <span
@@ -317,10 +317,10 @@ export default function HistoryScreen({
                         <Icon className="h-4 w-4" strokeWidth={2} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-medium text-[--inv-heading]">
+                        <p className="truncate text-[14px] font-medium text-(--inv-heading)">
                           {row.ingredient_name || "—"}
                           {at && (
-                            <span className="ml-2 text-[11px] font-normal tabular-nums text-[--inv-faint]">
+                            <span className="ml-2 text-[11px] font-normal tabular-nums text-(--inv-faint)">
                               {at.toLocaleTimeString(lang === "th" ? "th-TH" : "en-US", {
                                 hour: "2-digit",
                                 minute: "2-digit",
@@ -328,21 +328,21 @@ export default function HistoryScreen({
                             </span>
                           )}
                         </p>
-                        <p className="truncate text-[11px] text-[--inv-faint]">
+                        <p className="truncate text-[11px] text-(--inv-faint)">
                           {typeLabel}
                           {row.created_by_name ? ` · ${row.created_by_name}` : ""}
                         </p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-[--inv-heading]">
+                        <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-(--inv-heading)">
                           {movement.setTo !== null
                             ? `= ${formatNumber(movement.setTo, lang)}`
                             : `${(movement.change ?? 0) > 0 ? "+" : ""}${formatNumber(movement.change ?? 0, lang)}`}
-                          <span className="ml-1 text-[11px] font-normal text-[--inv-faint]">
+                          <span className="ml-1 text-[11px] font-normal text-(--inv-faint)">
                             {row.ingredient_unit}
                           </span>
                         </p>
-                        <p className="whitespace-nowrap text-[11px] tabular-nums text-[--inv-faint]">
+                        <p className="whitespace-nowrap text-[11px] tabular-nums text-(--inv-faint)">
                           {row.amount > 0 ? formatCurrency(row.amount, lang, 2) : "—"}
                         </p>
                       </div>
