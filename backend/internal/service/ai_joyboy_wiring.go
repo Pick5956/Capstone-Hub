@@ -330,6 +330,29 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyMenuListBody(items), true, true
 
+	case joyboyToolMenuProfitByCategory:
+		// Two reads rather than one. The sold rows carry the money; the catalogue
+		// carries the categories that sold nothing, and without those a quiet
+		// category is simply absent from the sheet — which the model reads as a
+		// category the shop does not have. That is the answer drinks kept getting.
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+		sold, err := t.service.repo.MenuMarginsByCategory(t.restaurantID, since)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		items, err := t.service.repo.MenuCatalogue(t.restaurantID)
+		if err != nil {
+			// The sold rows alone still answer "which drink earns the most"; only
+			// the categories with no sales are lost, so report what there is.
+			aiStage("warn", "joyboy: %s catalogue failed (%v) → reporting only the categories that sold", tool, err)
+			items = nil
+		}
+		return joyboyMenuProfitByCategoryBody(sold, items), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

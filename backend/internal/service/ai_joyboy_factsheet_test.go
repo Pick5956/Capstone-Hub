@@ -351,6 +351,129 @@ func TestMenuListSheetTreatsAnEmptyMenuAsNotSetUp(t *testing.T) {
 	}
 }
 
+// factSheetLineWith returns the first line of a sheet containing needle, so a
+// test can assert what a single record does not say.
+func factSheetLineWith(body, needle string) string {
+	for _, line := range strings.Split(body, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	return ""
+}
+
+// "เครื่องดื่มตัวไหนกำไรดีสุด" went unanswered for three rounds of testing: every
+// ranked list mixes food and drink into one list of eight, no drink ever reached
+// it, and the model — reading a sheet with no drink on it — reported that the
+// system holds no drinks data at all. The sheet has to rank the categories and
+// the menus inside them, with Go doing every sum and division.
+func TestMenuProfitByCategoryRanksCategoriesAndTheirMenus(t *testing.T) {
+	body := joyboyMenuProfitByCategoryBody(
+		[]repository.AICategoryMenuMargin{
+			{Category: "กับข้าว", MenuName: "ต้มยำกุ้งน้ำข้น", Quantity: 109, Revenue: 15151, Cost: 6060, Profit: 9091, Margin: 60},
+			{Category: "เครื่องดื่ม", MenuName: "กาแฟเย็น", Quantity: 100, Revenue: 4500, Cost: 1800, Profit: 2700, Margin: 60},
+			{Category: "เครื่องดื่ม", MenuName: "ชาไทยเย็น", Quantity: 200, Revenue: 9800, Cost: 2940, Profit: 6860, Margin: 70},
+		},
+		[]repository.AIMenuCatalogueItem{
+			{Name: "ต้มยำกุ้งน้ำข้น", Price: 139, IsAvailable: true, Category: "กับข้าว"},
+			{Name: "ชาไทยเย็น", Price: 49, IsAvailable: true, Category: "เครื่องดื่ม"},
+			{Name: "กาแฟเย็น", Price: 45, IsAvailable: true, Category: "เครื่องดื่ม"},
+			{Name: "น้ำเปล่า", Price: 15, IsAvailable: true, Category: "เครื่องดื่ม"},
+		})
+
+	for _, want := range []string{
+		// Drinks keep more baht than the food category here, so drinks rank first:
+		// the figures decide the order, not the order the rows arrived in. Both
+		// the totals and the 66.85% are Go's arithmetic, not the model's.
+		"category_rank=1 category=เครื่องดื่ม menus_on_menu=3 menus_sold=2 menus_listed=2 qty=300 revenue=14300.00 cost=4740.00 profit=9560.00 margin_pct=66.85",
+		"category_rank=2 category=กับข้าว menus_on_menu=1 menus_sold=1 menus_listed=1",
+		// The ranking inside the category is the answer to the question that
+		// started this: which drink keeps the most.
+		"category=เครื่องดื่ม menu_rank=1 menu=ชาไทยเย็น",
+		"category=เครื่องดื่ม menu_rank=2 menu=กาแฟเย็น",
+		// 2940 / 200 and 6860 / 200, divided in Go.
+		"cost_per_dish=14.70 profit_per_dish=34.30",
+		// 9091 + 2700 + 6860, added in Go.
+		"profit_all_categories=18651.00 revenue_all_categories=29451.00",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the category profit sheet lost %q:\n%s", want, body)
+		}
+	}
+}
+
+// A category that sold nothing in the window must still hold a line. Left off the
+// sheet it is indistinguishable from a category the shop does not have, which is
+// the misreading this whole tool exists to stop.
+func TestMenuProfitByCategoryKeepsCategoriesThatSoldNothing(t *testing.T) {
+	body := joyboyMenuProfitByCategoryBody(
+		[]repository.AICategoryMenuMargin{
+			{Category: "กับข้าว", MenuName: "ต้มยำกุ้งน้ำข้น", Quantity: 10, Revenue: 1390, Cost: 500, Profit: 890, Margin: 64.03},
+			// A menu deleted after it sold has no category row left to join to, and
+			// its sales still count.
+			{Category: "", MenuName: "เมนูเก่าที่ถูกลบไปแล้ว", Quantity: 2, Revenue: 200, Cost: 80, Profit: 120, Margin: 60},
+		},
+		[]repository.AIMenuCatalogueItem{
+			{Name: "ต้มยำกุ้งน้ำข้น", Price: 139, IsAvailable: true, Category: "กับข้าว"},
+			{Name: "ไอศกรีมกะทิ", Price: 59, IsAvailable: true, Category: "ของหวาน"},
+			{Name: "บัวลอย", Price: 55, IsAvailable: false, Category: "ของหวาน"},
+		})
+
+	dessert := factSheetLineWith(body, "category=ของหวาน")
+	if !strings.Contains(dessert, "menus_on_menu=2 menus_sold=0 menus_listed=0 qty=0 revenue=0.00 cost=0.00 profit=0.00 status=no_sales_in_period") {
+		t.Errorf("a category with no sales must stay on the sheet as a category with no sales:\n%s", body)
+	}
+	// A margin over no sales is a rate nobody measured; printed as 0.00 it reads
+	// as a category that sells at no margin at all.
+	if strings.Contains(dessert, "margin_pct") {
+		t.Errorf("a category with no sales must not be given a margin:\n%s", dessert)
+	}
+	if !strings.Contains(body, "categories=3 categories_with_sales=2") {
+		t.Errorf("the counts must cover every category, sold or not:\n%s", body)
+	}
+	if !strings.Contains(body, "category=ไม่ระบุหมวด") {
+		t.Errorf("sales from a menu with no category must be filed, not dropped:\n%s", body)
+	}
+	if !strings.Contains(body, "status=no_sales_in_period ไม่ได้แปลว่าร้านไม่มีหมวดนั้น") {
+		t.Errorf("the sheet must tell the model what an empty category means:\n%s", body)
+	}
+}
+
+// A long category is cut, and says so — but its totals are over everything it
+// sold, not over the rows that fit.
+func TestMenuProfitByCategorySaysWhenACategoryListIsCut(t *testing.T) {
+	var sold []repository.AICategoryMenuMargin
+	var menu []repository.AIMenuCatalogueItem
+	for i := 0; i < joyboyCategoryMenuMaxRows+4; i++ {
+		name := fmt.Sprintf("เมนู %d", i+1)
+		sold = append(sold, repository.AICategoryMenuMargin{
+			Category: "กับข้าว", MenuName: name, Quantity: 10,
+			Revenue: float64(1000 - i*10), Cost: 400, Profit: float64(600 - i*10), Margin: 60,
+		})
+		menu = append(menu, repository.AIMenuCatalogueItem{Name: name, Price: 100, IsAvailable: true, Category: "กับข้าว"})
+	}
+	body := joyboyMenuProfitByCategoryBody(sold, menu)
+
+	if !strings.Contains(body, fmt.Sprintf("menus_sold=%d menus_listed=%d", len(sold), joyboyCategoryMenuMaxRows)) {
+		t.Errorf("a cut category must say how many of its menus are listed:\n%s", body)
+	}
+	if strings.Contains(body, fmt.Sprintf("menu=เมนู %d ", len(sold))) {
+		t.Errorf("rows past the cap should not be rendered:\n%s", body)
+	}
+	// 600 + 590 + ... + 490 over all twelve menus, including the four not listed.
+	if !strings.Contains(body, "profit_all_categories=6540.00") {
+		t.Errorf("the total must cover the whole category, not only the listed rows:\n%s", body)
+	}
+}
+
+// No menu at all is a setup gap, not a shop whose every category earns zero.
+func TestMenuProfitByCategoryTreatsAnEmptyMenuAsNotSetUp(t *testing.T) {
+	body := joyboyMenuProfitByCategoryBody(nil, nil)
+	if !strings.Contains(body, "no_menu_items_recorded") {
+		t.Errorf("an empty menu should report the setup gap:\n%s", body)
+	}
+}
+
 // A raw stock flag ("out"/"low") left in the sheet gets pasted straight into the
 // answer — the owner read "ไก่สับ (out) 0.00 กรัม", an English code in a Thai
 // reply. The sheet must carry the Thai wording so even a verbatim paste reads as

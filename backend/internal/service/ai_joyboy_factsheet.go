@@ -21,6 +21,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -697,10 +698,7 @@ func joyboyMenuListBody(items []repository.AIMenuCatalogueItem) string {
 		if !item.IsAvailable {
 			status = "ปิดขายอยู่"
 		}
-		category := strings.TrimSpace(item.Category)
-		if category == "" {
-			category = "ไม่ระบุหมวด"
-		}
+		category := joyboyCategoryName(item.Category)
 		lines = append(lines, fmt.Sprintf("menu=%s หมวด=%s ราคา=%s บาท สถานะ=%s",
 			item.Name, category, joyboyNum(item.Price), status))
 	}
@@ -840,6 +838,184 @@ func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSumm
 			m.MenuName, m.Quantity, joyboyNum(m.Revenue), joyboyNum(m.Profit), joyboyNum(m.Margin)))
 	}
 	return joyboyJoin(lines)
+}
+
+// joyboyCategoryName is how a menu's section of the board is named on a fact
+// sheet. A menu filed under nothing gets a name of its own rather than an empty
+// value, because the model reads a blank as missing data and says so.
+func joyboyCategoryName(raw string) string {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "ไม่ระบุหมวด"
+	}
+	return name
+}
+
+// The two caps on the category sheet. Per category, the tail of a ranking nobody
+// asked about; overall, the point where the sheet stops being a table and starts
+// being a wall the model re-reads every turn. Category totals are unaffected by
+// either — they are summed before anything is cut, and every category keeps its
+// own line however many menus are listed under it.
+const (
+	joyboyCategoryMenuMaxRows = 8
+	joyboyCategoryMenuRowsCap = 45
+)
+
+// joyboyCategoryProfit is one section of the menu board with its sales totalled.
+type joyboyCategoryProfit struct {
+	Name        string
+	MenusOnMenu int
+	MenusSold   int
+	Quantity    int64
+	Revenue     float64
+	Cost        float64
+	Profit      float64
+	Menus       []repository.AICategoryMenuMargin
+}
+
+// joyboyMenuProfitByCategoryBody ranks the menu board's sections by the baht they
+// keep, and lists the menus inside each one ranked the same way.
+//
+// Go does every sum, ranking and per-dish division here. The model is handed a
+// finished table and picks which part of it the question was about — reading one
+// category out for "เครื่องดื่มตัวไหนกำไรดีสุด", comparing the category lines for
+// "หมวดไหนกำไรดีสุด".
+//
+// The catalogue is merged in rather than only the sold rows, because a category
+// that sold nothing has to appear as a category with no sales. Left out, it is
+// indistinguishable from a category the shop does not have — which is the answer
+// the assistant kept giving about drinks: "ยังไม่มีข้อมูลของเครื่องดื่ม", said about
+// three drinks that were on the menu the whole time.
+func joyboyMenuProfitByCategoryBody(sold []repository.AICategoryMenuMargin, menu []repository.AIMenuCatalogueItem) string {
+	if len(sold) == 0 && len(menu) == 0 {
+		return joyboyNotSetUpYet("no_menu_items_recorded",
+			"ยังไม่มีเมนูในระบบเลย จึงยังแยกกำไรตามหมวดไม่ได้ ให้บอกว่าต้องไปเพิ่มเมนูและหมวดที่หน้าจัดการเมนูก่อน")
+	}
+
+	index := map[string]*joyboyCategoryProfit{}
+	var categories []*joyboyCategoryProfit
+	find := func(name string) *joyboyCategoryProfit {
+		category, known := index[name]
+		if !known {
+			category = &joyboyCategoryProfit{Name: name}
+			index[name] = category
+			categories = append(categories, category)
+		}
+		return category
+	}
+	for _, item := range menu {
+		find(joyboyCategoryName(item.Category)).MenusOnMenu++
+	}
+	for _, row := range sold {
+		category := find(joyboyCategoryName(row.Category))
+		category.MenusSold++
+		category.Quantity += row.Quantity
+		category.Revenue += row.Revenue
+		category.Cost += row.Cost
+		category.Profit += row.Profit
+		category.Menus = append(category.Menus, row)
+	}
+
+	var shopProfit, shopRevenue float64
+	categoriesWithSales := 0
+	for _, category := range categories {
+		shopProfit += category.Profit
+		shopRevenue += category.Revenue
+		if category.MenusSold > 0 {
+			categoriesWithSales++
+		}
+		sort.SliceStable(category.Menus, func(i, j int) bool {
+			return joyboyMenuOutranks(category.Menus[i], category.Menus[j])
+		})
+	}
+	sort.SliceStable(categories, func(i, j int) bool {
+		left, right := categories[i], categories[j]
+		if left.Profit != right.Profit {
+			return left.Profit > right.Profit
+		}
+		if left.Revenue != right.Revenue {
+			return left.Revenue > right.Revenue
+		}
+		return left.Name < right.Name
+	})
+
+	lines := []string{
+		"period=" + analysisWindowLabel(),
+		"scope=every_category_on_the_menu",
+		"ranked_by=category_profit desc",
+		fmt.Sprintf("categories=%d categories_with_sales=%d", len(categories), categoriesWithSales),
+		"note=ใบนี้มีครบทุกหมวดที่ร้านมี หมวดที่ยังไม่มีการขายในช่วงนี้เขียนว่า status=no_sales_in_period " +
+			"ไม่ได้แปลว่าร้านไม่มีหมวดนั้นหรือไม่มีข้อมูล ให้ตอบเฉพาะหมวดที่ผู้ใช้ถาม " +
+			"ถ้า menus_listed น้อยกว่า menus_sold แปลว่าหมวดนั้นแสดงแค่เมนูอันดับต้น ไม่ใช่ทั้งหมด",
+	}
+
+	rowsLeft := joyboyCategoryMenuRowsCap
+	for rank, category := range categories {
+		listed := len(category.Menus)
+		if listed > joyboyCategoryMenuMaxRows {
+			listed = joyboyCategoryMenuMaxRows
+		}
+		if listed > rowsLeft {
+			listed = rowsLeft
+		}
+		rowsLeft -= listed
+
+		if category.MenusSold == 0 {
+			// No margin_pct and no share: a category that sold nothing has no margin,
+			// and printing 0.00 would state a rate that was never measured.
+			lines = append(lines, fmt.Sprintf(
+				"category_rank=%d category=%s menus_on_menu=%d menus_sold=0 menus_listed=0 qty=0 revenue=0.00 cost=0.00 profit=0.00 status=no_sales_in_period",
+				rank+1, category.Name, category.MenusOnMenu))
+			continue
+		}
+		line := fmt.Sprintf(
+			"category_rank=%d category=%s menus_on_menu=%d menus_sold=%d menus_listed=%d qty=%d revenue=%s cost=%s profit=%s margin_pct=%s",
+			rank+1, category.Name, category.MenusOnMenu, category.MenusSold, listed, category.Quantity,
+			joyboyNum(roundBaht(category.Revenue)), joyboyNum(roundBaht(category.Cost)),
+			joyboyNum(roundBaht(category.Profit)), joyboyNum(roundBaht(joyboyPercent(category.Profit, category.Revenue))))
+		if shopProfit > 0 {
+			line += " profit_share_pct=" + joyboyNum(roundBaht(joyboyPercent(category.Profit, shopProfit)))
+		}
+		lines = append(lines, line)
+
+		for i, m := range category.Menus[:listed] {
+			row := fmt.Sprintf("category=%s menu_rank=%d menu=%s qty=%d revenue=%s cost=%s profit=%s margin_pct=%s",
+				category.Name, i+1, m.MenuName, m.Quantity,
+				joyboyNum(roundBaht(m.Revenue)), joyboyNum(roundBaht(m.Cost)),
+				joyboyNum(roundBaht(m.Profit)), joyboyNum(roundBaht(m.Margin)))
+			if m.Quantity > 0 {
+				dishes := float64(m.Quantity)
+				row += fmt.Sprintf(" cost_per_dish=%s profit_per_dish=%s",
+					joyboyNum(roundBaht(m.Cost/dishes)), joyboyNum(roundBaht(m.Profit/dishes)))
+			}
+			lines = append(lines, row)
+		}
+	}
+	lines = append(lines, fmt.Sprintf("profit_all_categories=%s revenue_all_categories=%s",
+		joyboyNum(roundBaht(shopProfit)), joyboyNum(roundBaht(shopRevenue))))
+	return joyboyJoin(lines)
+}
+
+// joyboyMenuOutranks orders two menus by the money they keep, with revenue and
+// then the name breaking ties so the same figures always render the same list.
+func joyboyMenuOutranks(left, right repository.AICategoryMenuMargin) bool {
+	if left.Profit != right.Profit {
+		return left.Profit > right.Profit
+	}
+	if left.Revenue != right.Revenue {
+		return left.Revenue > right.Revenue
+	}
+	return left.MenuName < right.MenuName
+}
+
+// joyboyPercent is part/whole as a percentage, and 0 when the whole is 0 rather
+// than NaN — a NaN reaches the model as the word "NaN" and comes back out in the
+// answer.
+func joyboyPercent(part, whole float64) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return part / whole * 100
 }
 
 // joyboyProfitForPeriodBody totals revenue, cost and profit over a named calendar

@@ -85,6 +85,20 @@ type AIMenuMarginSummary struct {
 	Margin   float64 `json:"margin"`
 }
 
+// AICategoryMenuMargin is one sold menu with the section of the menu board it
+// belongs to. The margin queries group by order_items.menu_name — the name
+// copied onto the order line at the moment of sale — which carries no category
+// at all, so the category has to be read back through order_items.menu_id.
+type AICategoryMenuMargin struct {
+	Category string  `json:"category"`
+	MenuName string  `json:"menu_name"`
+	Quantity int64   `json:"quantity"`
+	Revenue  float64 `json:"revenue"`
+	Cost     float64 `json:"cost"`
+	Profit   float64 `json:"profit"`
+	Margin   float64 `json:"margin"`
+}
+
 type AIAnalysisCoverage struct {
 	SalesItems           int64 `json:"sales_items"`
 	MarginItems          int64 `json:"margin_items"`
@@ -363,19 +377,10 @@ func (r *AIRepository) MenuMargins(restaurantID uint, since time.Time) ([]AIMenu
 func (r *AIRepository) MenuMetricsForRange(restaurantID uint, start, end time.Time) ([]AIMenuMarginSummary, error) {
 	var rows []AIMenuMarginSummary
 	err := r.db.Table("order_items").
-		Select(`
-			order_items.menu_name,
-			COALESCE(SUM(order_items.quantity), 0) AS quantity,
-			COALESCE(SUM(order_items.subtotal), 0) AS revenue,
-			COALESCE(SUM(deductions.cost), 0) AS cost,
-			COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0) AS profit,
-			CASE WHEN COALESCE(SUM(order_items.subtotal), 0) > 0
-				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
-				ELSE 0
-			END AS margin`).
+		Select(aiMenuMarginSelect).
 		Joins("JOIN orders ON orders.id = order_items.order_id").
 		Joins(
-			"LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id",
+			aiMenuMarginCostJoin,
 			restaurantID,
 		).
 		Where(
@@ -399,6 +404,49 @@ func (r *AIRepository) MenuMetricsForRange(restaurantID uint, start, end time.Ti
 // menu-engineering quadrant classification.
 func (r *AIRepository) AllMenuMargins(restaurantID uint, since time.Time) ([]AIMenuMarginSummary, error) {
 	return r.menuMargins(restaurantID, since, "quantity desc, revenue desc", 100)
+}
+
+// MenuMarginsByCategory returns every menu sold in the window with its category
+// attached, so profit can be totalled per section of the menu board. Nothing else
+// here reads categories at all: every ranked list is one flat list of the whole
+// shop, which is why "เครื่องดื่มตัวไหนกำไรดีสุด" could only be answered by hoping a
+// drink had made the top eight.
+//
+// It is a query of its own rather than a category column on menuMargins because
+// grouping by category as well as by name splits one menu into two rows if its
+// name has lived under two categories — harmless when the rows are being summed
+// per category, wrong for the ranked lists that share menuMargins and must show
+// one row per menu.
+//
+// The menu and category joins are LEFT for the same reason MenuCatalogue's is: a
+// menu deleted after it sold still earned its money, and an inner join would drop
+// that money out of the totals without leaving a trace.
+func (r *AIRepository) MenuMarginsByCategory(restaurantID uint, since time.Time) ([]AICategoryMenuMargin, error) {
+	var rows []AICategoryMenuMargin
+	err := r.db.Table("order_items").
+		Select(aiMenuMarginSelect+`,
+			COALESCE(categories.name, '') AS category`).
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Joins(
+			aiMenuMarginCostJoin,
+			restaurantID,
+		).
+		Joins("LEFT JOIN menu_items ON menu_items.id = order_items.menu_id").
+		Joins("LEFT JOIN categories ON categories.id = menu_items.category_id AND categories.deleted_at IS NULL").
+		Where(
+			"order_items.restaurant_id = ? AND order_items.status = ? AND order_items.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("order_items.menu_name, categories.name").
+		Order("profit desc, revenue desc").
+		Limit(200).
+		Scan(&rows).Error
+	return rows, err
 }
 
 func (r *AIRepository) PeakSalesByWeekday(restaurantID uint, since time.Time) ([]AIPeriodSummary, error) {
@@ -542,10 +590,14 @@ func (r *AIRepository) AnalysisCoverage(restaurantID uint, since time.Time) (AIA
 	return coverage, err
 }
 
-func (r *AIRepository) menuMargins(restaurantID uint, since time.Time, orderBy string, limit int) ([]AIMenuMarginSummary, error) {
-	var rows []AIMenuMarginSummary
-	err := r.db.Table("order_items").
-		Select(`
+// aiMenuMarginSelect and aiMenuMarginCostJoin are the per-menu money maths
+// every margin query shares: quantity and revenue off the order lines, cost
+// from the stock actually deducted at the moment of sale, and profit and margin
+// derived from those two. They sit in one place because three queries select
+// them, and an edit made to one copy alone would leave two tools quoting
+// different profit for the same menu.
+const (
+	aiMenuMarginSelect = `
 			order_items.menu_name,
 			COALESCE(SUM(order_items.quantity), 0) AS quantity,
 			COALESCE(SUM(order_items.subtotal), 0) AS revenue,
@@ -554,10 +606,18 @@ func (r *AIRepository) menuMargins(restaurantID uint, since time.Time, orderBy s
 			CASE WHEN COALESCE(SUM(order_items.subtotal), 0) > 0
 				THEN ((COALESCE(SUM(order_items.subtotal), 0) - COALESCE(SUM(deductions.cost), 0)) / COALESCE(SUM(order_items.subtotal), 0)) * 100
 				ELSE 0
-			END AS margin`).
+			END AS margin`
+
+	aiMenuMarginCostJoin = "LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id"
+)
+
+func (r *AIRepository) menuMargins(restaurantID uint, since time.Time, orderBy string, limit int) ([]AIMenuMarginSummary, error) {
+	var rows []AIMenuMarginSummary
+	err := r.db.Table("order_items").
+		Select(aiMenuMarginSelect).
 		Joins("JOIN orders ON orders.id = order_items.order_id").
 		Joins(
-			"LEFT JOIN (SELECT order_item_id, SUM(cost_snapshot) AS cost FROM order_inventory_deductions WHERE restaurant_id = ? AND deleted_at IS NULL GROUP BY order_item_id) deductions ON deductions.order_item_id = order_items.id",
+			aiMenuMarginCostJoin,
 			restaurantID,
 		).
 		Where(
