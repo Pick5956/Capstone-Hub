@@ -433,22 +433,49 @@ func (s *AIService) ConfirmAIActionPlanForOwner(actor AIActorContext, planID, co
 		return newAIActionPlanConfirmation(plan, true), nil
 	}
 
-	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
-	for _, item := range plan.Items {
-		execErr := executeAIActionItem(s.actionPorts(), actor.RestaurantID, actor.OwnerUserID, item)
-		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
-		if execErr != nil {
-			outcome.ErrorText = execErr.Error()
-			aiStage("warn", "joyboy plan %s item %d failed: %v", plan.ID, item.ID, execErr)
-		}
-		outcomes = append(outcomes, outcome)
-	}
+	outcomes := runAIActionPlanItems(s.actionPlanStore, s.actionPorts(), actor, plan)
 
 	finished, err := s.actionPlanStore.FinishAIActionPlan(plan.ID, outcomes)
 	if err != nil {
 		return nil, err
 	}
 	return newAIActionPlanConfirmation(finished, false), nil
+}
+
+// runAIActionPlanItems executes a claimed plan item by item and returns every
+// item's outcome, the ones it ran and the ones it found already done.
+//
+// An item that already reads "executed" is not run again. That is the case a
+// re-claim exists for: the first attempt died after writing item 1, the plan sat
+// in "executing" past the claim timeout, and the owner (or a retry) confirmed
+// again. Running item 1 a second time would book the same delivery twice. Its
+// stored outcome is carried into the totals instead, so the final message still
+// counts it.
+//
+// Each outcome is written the moment it is known — before the next item runs —
+// which is what makes the skip possible on the next attempt. If that write
+// itself fails the run continues; the outcome still reaches FinishAIActionPlan
+// with the rest, and the worst case is the one this code already had.
+func runAIActionPlanItems(store AIActionPlanStore, ports AIActionPorts, actor AIActorContext, plan *entity.AIActionPlan) []repository.AIActionPlanItemOutcome {
+	outcomes := make([]repository.AIActionPlanItemOutcome, 0, len(plan.Items))
+	for _, item := range plan.Items {
+		if item.Status == entity.AIActionItemStatusExecuted {
+			aiStage("flow", "joyboy plan %s item %d already executed on an earlier attempt → not run again", plan.ID, item.ID)
+			outcomes = append(outcomes, repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: true})
+			continue
+		}
+		execErr := executeAIActionItem(ports, actor.RestaurantID, actor.OwnerUserID, item)
+		outcome := repository.AIActionPlanItemOutcome{ItemID: item.ID, Succeeded: execErr == nil}
+		if execErr != nil {
+			outcome.ErrorText = execErr.Error()
+			aiStage("warn", "joyboy plan %s item %d failed: %v", plan.ID, item.ID, execErr)
+		}
+		if err := store.RecordAIActionPlanItem(outcome); err != nil {
+			aiStage("warn", "joyboy plan %s item %d: could not record the outcome yet (%v) → continuing", plan.ID, item.ID, err)
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	return outcomes
 }
 
 // CancelAIActionPlanForOwner drops a pending plan without writing anything.

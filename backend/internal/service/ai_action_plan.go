@@ -33,6 +33,7 @@ type AIActionPlanStore interface {
 	FindAIActionPlan(restaurantID, ownerUserID uint, planID string) (*entity.AIActionPlan, error)
 	PendingAIActionPlan(restaurantID, ownerUserID uint) (*entity.AIActionPlan, error)
 	ClaimAIActionPlan(restaurantID, ownerUserID uint, planID, confirmationToken string) (*entity.AIActionPlan, bool, error)
+	RecordAIActionPlanItem(outcome repository.AIActionPlanItemOutcome) error
 	FinishAIActionPlan(planID string, outcomes []repository.AIActionPlanItemOutcome) (*entity.AIActionPlan, error)
 	CancelAIActionPlan(restaurantID, ownerUserID uint, planID string) (*entity.AIActionPlan, error)
 }
@@ -134,6 +135,39 @@ type AIActionItemPayload struct {
 	// Used by create_expense.
 	Category string `json:"category,omitempty"`
 	Date     string `json:"date,omitempty"`
+
+	// What the row held when the preview was written, for the action types that
+	// overwrite a value outright. The owner confirms "5000 → 3000" having read
+	// it; if the row is at 9000 by the time the button is pressed — a colleague
+	// took a delivery in between — writing 3000 silently destroys that delivery
+	// and reports success. Execution re-reads the row and refuses when it no
+	// longer matches. Relative changes (stock in/out) carry no expectation: a
+	// "+2000" is still right whatever happened meanwhile. The old single-item
+	// preview had this check; the multi-item plan lost it.
+	ExpectedStock       *float64 `json:"expected_stock,omitempty"`
+	ExpectedMinStock    *float64 `json:"expected_min_stock,omitempty"`
+	ExpectedCostPerUnit *float64 `json:"expected_cost_per_unit,omitempty"`
+	ExpectedPrice       *float64 `json:"expected_price,omitempty"`
+	ExpectedAvailable   *bool    `json:"expected_available,omitempty"`
+}
+
+// ErrAIActionChangedMeanwhile is returned by execution when the row no longer
+// matches what the owner was shown. The item is left unwritten; the owner is
+// told what moved and asked to prepare the change again.
+var ErrAIActionChangedMeanwhile = errors.New("ข้อมูลเปลี่ยนไประหว่างรอยืนยัน")
+
+// aiActionChangedMeanwhile names the field that moved and both values, so the
+// owner reads "สต๊อก 5000 → 9000" rather than a bare refusal.
+func aiActionChangedMeanwhile(what, was, now string) error {
+	return fmt.Errorf("%w: %s %s → %s ยังไม่ได้แก้ ขอให้สั่งใหม่อีกครั้ง", ErrAIActionChangedMeanwhile, what, was, now)
+}
+
+func aiFloatsDiffer(expected *float64, actual float64) bool {
+	if expected == nil {
+		return false
+	}
+	diff := *expected - actual
+	return diff > 1e-9 || diff < -1e-9
 }
 
 // AIActionItemPreview is what the owner reads before confirming.
@@ -201,13 +235,18 @@ func validateAdjustStock(port AIActionIngredientPort, restaurantID uint, command
 		preview.SideEffects = append(preview.SideEffects, "สต๊อกเหลือ 0 · เมนูที่ใช้วัตถุดิบนี้จะถูกปิดขายอัตโนมัติ")
 	}
 
-	return AIActionItemPayload{
+	payload := AIActionItemPayload{
 		IngredientID: ingredient.ID,
 		Kind:         kind,
 		Quantity:     command.Quantity,
 		Amount:       command.Amount,
 		Note:         strings.TrimSpace(command.Note),
-	}, preview, nil
+	}
+	if kind == "adjust" {
+		stock := ingredient.Stock
+		payload.ExpectedStock = &stock
+	}
+	return payload, preview, nil
 }
 
 // aiActionNextStock mirrors the inventory rules: "in" adds, "out" subtracts and
@@ -254,6 +293,8 @@ func validateSetIngredientField(port AIActionIngredientPort, restaurantID uint, 
 	switch actionType {
 	case entity.AIActionTypeSetIngredientMinStock:
 		payload.MinStock = value
+		currentMin := ingredient.MinStock
+		payload.ExpectedMinStock = &currentMin
 		preview.Change = fmt.Sprintf("ขั้นต่ำ %s → %s", formatStockNumber(ingredient.MinStock), formatStockNumber(value))
 		preview.Unit = ingredient.Unit
 		if ingredient.Stock < value {
@@ -261,6 +302,8 @@ func validateSetIngredientField(port AIActionIngredientPort, restaurantID uint, 
 		}
 	case entity.AIActionTypeSetIngredientCost:
 		payload.CostPerUnit = value
+		currentCost := ingredient.CostPerUnit
+		payload.ExpectedCostPerUnit = &currentCost
 		preview.Change = fmt.Sprintf("ราคาต่อ%s %s → %s บาท", ingredient.Unit, formatStockNumber(ingredient.CostPerUnit), formatStockNumber(value))
 		preview.SideEffects = append(preview.SideEffects, "กระทบต้นทุนและกำไรของเมนูที่ใช้วัตถุดิบนี้")
 	default:
@@ -329,7 +372,8 @@ func validateSetMenuAvailability(port AIActionMenuPort, restaurantID, menuItemID
 	} else {
 		preview.SideEffects = append(preview.SideEffects, "เมนูนี้จะหายจากหน้าสั่งอาหาร · ออเดอร์ที่สั่งไปแล้วไม่กระทบ")
 	}
-	return AIActionItemPayload{MenuItemID: item.ID, Available: available}, preview, nil
+	currentState := item.IsAvailable
+	return AIActionItemPayload{MenuItemID: item.ID, Available: available, ExpectedAvailable: &currentState}, preview, nil
 }
 
 // validateCreateExpense checks a drafted ledger entry the way the expense form
@@ -399,7 +443,8 @@ func validateSetMenuPrice(port AIActionMenuPort, restaurantID, menuItemID uint, 
 			formatStockNumber(roundBaht(item.Price-cost)), formatStockNumber(roundBaht(next-cost)), formatStockNumber(cost)))
 	}
 	preview.SideEffects = append(preview.SideEffects, "มีผลกับออเดอร์ใหม่เท่านั้น บิลที่เปิดค้างไว้ใช้ราคาเดิม")
-	return AIActionItemPayload{MenuItemID: item.ID, Amount: next}, preview, nil
+	currentPrice := item.Price
+	return AIActionItemPayload{MenuItemID: item.ID, Amount: next, ExpectedPrice: &currentPrice}, preview, nil
 }
 
 // aiMenuRecipeCost adds up what one plate costs from the stored recipe. It
@@ -537,6 +582,16 @@ func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, it
 		if ports.Menus == nil {
 			return ErrAIActionUnavailable
 		}
+		if payload.ExpectedPrice != nil {
+			current, err := ports.Menus.FindMenuItem(restaurantID, payload.MenuItemID)
+			if err != nil || current == nil {
+				return errAIActionTargetNotFound
+			}
+			if aiFloatsDiffer(payload.ExpectedPrice, current.Price) {
+				return aiActionChangedMeanwhile("ราคา "+current.Name,
+					formatStockNumber(*payload.ExpectedPrice)+" บาท", formatStockNumber(current.Price)+" บาท")
+			}
+		}
 		_, err := ports.Menus.UpdateMenuItemPrice(restaurantID, payload.MenuItemID, payload.Amount)
 		return err
 
@@ -550,6 +605,16 @@ func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, it
 		if ports.Menus == nil {
 			return ErrAIActionUnavailable
 		}
+		if payload.ExpectedAvailable != nil {
+			current, err := ports.Menus.FindMenuItem(restaurantID, payload.MenuItemID)
+			if err != nil || current == nil {
+				return errAIActionTargetNotFound
+			}
+			if current.IsAvailable != *payload.ExpectedAvailable {
+				return aiActionChangedMeanwhile(current.Name,
+					aiAvailabilityStateWord(*payload.ExpectedAvailable), aiAvailabilityStateWord(current.IsAvailable))
+			}
+		}
 		_, err := ports.Menus.UpdateMenuItemAvailability(restaurantID, payload.MenuItemID, &MenuItemAvailabilityRequest{
 			IsAvailable: payload.Available,
 		})
@@ -559,6 +624,16 @@ func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, it
 		var payload AIActionItemPayload
 		if err := json.Unmarshal([]byte(item.PayloadJSON), &payload); err != nil {
 			return errors.New("คำสั่งเสียหาย")
+		}
+		if payload.ExpectedStock != nil {
+			current, err := ports.Ingredients.FindIngredient(restaurantID, payload.IngredientID)
+			if err != nil || current == nil {
+				return ErrAIActionUnknownIngredient
+			}
+			if aiFloatsDiffer(payload.ExpectedStock, current.Stock) {
+				return aiActionChangedMeanwhile("สต๊อก "+current.Name,
+					formatStockNumber(*payload.ExpectedStock)+" "+current.Unit, formatStockNumber(current.Stock)+" "+current.Unit)
+			}
 		}
 		_, err := ports.Ingredients.AdjustStock(restaurantID, payload.IngredientID, actorUserID, &AdjustStockRequest{
 			Type:     payload.Kind,
@@ -579,6 +654,14 @@ func executeAIActionItem(ports AIActionPorts, restaurantID, actorUserID uint, it
 		current, err := ports.Ingredients.FindIngredient(restaurantID, payload.IngredientID)
 		if err != nil || current == nil {
 			return ErrAIActionUnknownIngredient
+		}
+		if aiFloatsDiffer(payload.ExpectedMinStock, current.MinStock) {
+			return aiActionChangedMeanwhile("ขั้นต่ำ "+current.Name,
+				formatStockNumber(*payload.ExpectedMinStock)+" "+current.Unit, formatStockNumber(current.MinStock)+" "+current.Unit)
+		}
+		if aiFloatsDiffer(payload.ExpectedCostPerUnit, current.CostPerUnit) {
+			return aiActionChangedMeanwhile("ราคาต่อ"+current.Unit+" "+current.Name,
+				formatStockNumber(*payload.ExpectedCostPerUnit)+" บาท", formatStockNumber(current.CostPerUnit)+" บาท")
 		}
 		request := aiIngredientRequestFrom(current)
 		if item.ActionType == entity.AIActionTypeSetIngredientMinStock {
