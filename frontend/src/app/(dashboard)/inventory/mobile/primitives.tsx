@@ -29,6 +29,21 @@ export function useIsMobile(breakpoint = 768) {
   return isMobile;
 }
 
+/**
+ * iOS Safari only applies :active on touch when a touchstart listener exists
+ * somewhere up the tree — with none, every .ui-press in the app is inert on an
+ * iPhone (the transition is there, the state never fires). One passive no-op
+ * listener on the document is the documented way to turn it on. Registered
+ * once per mount of the mobile tree; removed with it.
+ */
+export function useIOSActiveStates() {
+  useEffect(() => {
+    const noop = () => {};
+    document.addEventListener("touchstart", noop, { passive: true });
+    return () => document.removeEventListener("touchstart", noop);
+  }, []);
+}
+
 /** Freezes the page behind an overlay. Restores whatever was there before. */
 function useScrollLock(active: boolean) {
   useEffect(() => {

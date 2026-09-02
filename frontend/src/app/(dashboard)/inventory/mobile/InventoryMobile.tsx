@@ -35,6 +35,7 @@ import {
   Stepper,
   TAP,
   inputBase,
+  useIOSActiveStates,
   useToastStack,
 } from "./primitives";
 import {
@@ -169,6 +170,7 @@ export default function InventoryMobile({
   const copy = useMemo(() => buildCopy(lang), [lang]);
   const { ingredients, categories, loading, actions } = useInventoryData(canView);
   const { toast, show } = useToastStack();
+  useIOSActiveStates();
 
   const [screen, setScreen] = useState<Screen>("list");
   const [sheet, setSheet] = useState<SheetKind>("none");
