@@ -503,7 +503,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				aiStage("warn", "joyboy: %s (year) failed (%v) → leaving it out", tool, err)
 				return "", false, true
 			}
-			return joyboySalesForPeriodBody(year.Label, d), true, true
+			return joyboyWithCoverage(joyboySalesForPeriodBody(year.Label, d), t.service.aiSalesCoverageNote(t.restaurantID)), true, true
 		}
 		return "", false, false
 	case joyboyToolSalesForecast:

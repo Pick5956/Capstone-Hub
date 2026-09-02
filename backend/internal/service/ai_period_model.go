@@ -54,6 +54,8 @@ const aiPeriodPrompt = `คุณคือตัวอ่าน "ช่วงเ
 - "สัปดาห์ที่แล้ว" คือ จันทร์ถึงอาทิตย์ของสัปดาห์ก่อนหน้า
 - ถ้าผู้ใช้พูดถึงเดือนแบบไม่เต็มยศ (มีน่า มีนา เมษา กุมภา) ให้เข้าใจว่าหมายถึงเดือนนั้น
 - ถ้าพูดว่า "เทียบเดือนต่อเดือน" โดยไม่ระบุเดือน ให้ใช้ เดือนนี้ กับ เดือนที่แล้ว และ comparison=true
+- **"ปีที่แล้ว" "ปีก่อน" "ปี 2568" ที่ไม่ระบุเดือน = ทั้งปี** start=1 ม.ค. end=31 ธ.ค. ของปีนั้น
+  ห้ามตัดให้เหลือแค่ช่วงเดียวกับปีนี้ · ส่วน "ปีนี้" = 1 ม.ค. ถึงเมื่อวาน (ยังไม่จบปี)
 - comparison=true เมื่อผู้ใช้ขอเปรียบเทียบ
 - ถ้าอ่านไม่ออกว่าหมายถึงช่วงไหน ให้ตอบ {"periods":[],"comparison":false}
 - ห้ามเดาช่วงเวลาที่ผู้ใช้ไม่ได้พูดถึง
@@ -62,6 +64,7 @@ const aiPeriodPrompt = `คุณคือตัวอ่าน "ช่วงเ
 ข้อความ: "เดือนมีน่ากับเมษา 69" → {"periods":[{"year":2026,"month":3},{"year":2026,"month":4}],"comparison":true}
 ข้อความ: "ขอดูกราฟเทียบยอดขายเดือนต่อเดือน" → {"periods":[{"year":2026,"month":8},{"year":2026,"month":7}],"comparison":true}
 ข้อความ: "ยอดขายกรกฎาคม" → {"periods":[{"year":2026,"month":7}],"comparison":false}
+ข้อความ: "ปีที่แล้วขายได้เท่าไหร่" (วันนี้ 2026-09-02) → {"periods":[{"start":"2025-01-01","end":"2025-12-31"}],"comparison":false}
 ข้อความ: "เมื่อวานขายได้เท่าไหร่" → {"periods":[{"start":"2026-08-26","end":"2026-08-26"}],"comparison":false}
 ข้อความ: "ยอดขายวันนี้" → {"periods":[{"start":"2026-08-27","end":"2026-08-27"}],"comparison":false}
 ข้อความ: "3 วันที่ผ่านมาขายได้เท่าไหร่" → {"periods":[{"start":"2026-08-24","end":"2026-08-26"}],"comparison":false}
@@ -201,6 +204,11 @@ func aiRangeLabel(start, end, now time.Time) string {
 		}
 		return fmt.Sprintf("วันที่ %d %s %d", start.Day(), thaiMonthName(int(start.Month())), start.Year()+543)
 	}
+	// A span that covers a whole calendar year is that year — "ปี 2568", not
+	// "1 มกราคม 2568 – 31 ธันวาคม 2568", which reads as an odd custom range.
+	if start.Day() == 1 && start.Month() == time.January && end.Day() == 31 && end.Month() == time.December && start.Year() == end.Year() {
+		return fmt.Sprintf("ปี %d", start.Year()+543)
+	}
 	// A span that covers a whole calendar month is that month, and reads better
 	// said that way.
 	if start.Day() == 1 && end.AddDate(0, 0, 1).Day() == 1 && start.Month() == end.Month() && start.Year() == end.Year() {
@@ -242,5 +250,25 @@ func (s *AIService) aiSalesCoverageNote(restaurantID uint) string {
 	if err != nil || strings.TrimSpace(coverage.FirstDate) == "" {
 		return ""
 	}
-	return fmt.Sprintf("data_coverage=%s..%s", coverage.FirstDate, coverage.LastDate)
+	return fmt.Sprintf("data_coverage=%s..%s\nnote=%s", coverage.FirstDate, coverage.LastDate, aiCoverageMeaning(coverage.FirstDate, coverage.LastDate))
+}
+
+// aiCoverageMeaning spells the coverage out in Thai. "data_coverage=2025-08-24.."
+// alone let the model report 93,008 baht for "1 มกราคม – 2 กันยายน 2568" without
+// saying that the first eight months of that span hold no records at all — a
+// true figure with a false frame. The sentence tells the model to say so.
+func aiCoverageMeaning(first, last string) string {
+	return fmt.Sprintf("ระบบมีบิลตั้งแต่ %s ถึง %s เท่านั้น ถ้าช่วงที่ถามเริ่มก่อน %s "+
+		"ตัวเลขที่ให้คือเฉพาะส่วนที่มีข้อมูล ต้องบอกเจ้าของว่าข้อมูลเริ่มวันไหน ห้ามพูดว่าเป็นยอดของทั้งช่วง",
+		aiThaiDate(first), aiThaiDate(last), aiThaiDate(first))
+}
+
+// aiThaiDate renders "2025-08-24" as "24 สิงหาคม 2568"; anything unparseable is
+// returned as it came.
+func aiThaiDate(iso string) string {
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(iso))
+	if err != nil {
+		return iso
+	}
+	return fmt.Sprintf("%d %s %d", parsed.Day(), thaiMonthName(int(parsed.Month())), parsed.Year()+543)
 }
