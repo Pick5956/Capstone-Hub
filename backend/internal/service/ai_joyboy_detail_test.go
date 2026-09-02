@@ -43,7 +43,7 @@ func aiDetailMenus() []entity.MenuItem {
 // "หมูสับเหลือเท่าไหร่" is the question an owner asks most, and before this tool
 // existed the assistant answered "ไม่มีข้อมูล" over a shelf row it could see.
 func TestIngredientDetailAnswersANamedIngredient(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "หมูสับเหลือเท่าไหร่แล้ว", nil)
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "หมูสับเหลือเท่าไหร่แล้ว", nil)
 
 	for _, want := range []string{"ingredient=หมูสับ", "stock=5000", "unit=กรัม", "min_stock=1500", "status=ปกติ"} {
 		if !strings.Contains(body, want) {
@@ -60,7 +60,7 @@ func TestIngredientDetailAnswersANamedIngredient(t *testing.T) {
 // used to answer it by inventing a menu name out of the ingredient's name
 // ("กะเพราไก่" for a shop selling "ข้าวกะเพราไก่ไข่ดาว").
 func TestIngredientDetailNamesTheMenusFromTheStoredRecipe(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ถ้ากะเพราหมดจะกระทบเมนูไหนบ้าง", nil)
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "ถ้ากะเพราหมดจะกระทบเมนูไหนบ้าง", nil)
 
 	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว") {
 		t.Errorf("the real menu name should come from the recipe:\n%s", body)
@@ -72,7 +72,7 @@ func TestIngredientDetailNamesTheMenusFromTheStoredRecipe(t *testing.T) {
 
 // Low stock is a different state from empty, and the owner acts differently on it.
 func TestIngredientDetailFlagsBelowMinimum(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กุ้งสดเหลือเท่าไหร่", nil)
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "กุ้งสดเหลือเท่าไหร่", nil)
 	if !strings.Contains(body, "status=ต่ำกว่าขั้นต่ำ") {
 		t.Errorf("400 against a 1000 minimum is below minimum:\n%s", body)
 	}
@@ -81,7 +81,7 @@ func TestIngredientDetailFlagsBelowMinimum(t *testing.T) {
 // No name in the question is a question back, not a dead end — and the sheet
 // carries real names so the owner can answer in one word.
 func TestIngredientDetailAsksWhichOneWhenNoNameIsGiven(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "ของในคลังเป็นไงบ้าง", nil)
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "ของในคลังเป็นไงบ้าง", nil)
 	if !strings.Contains(body, "no_ingredient_named_in_question") {
 		t.Errorf("should report that no ingredient was named:\n%s", body)
 	}
@@ -170,7 +170,7 @@ func TestDetailToolsResolveANameFromTheConversation(t *testing.T) {
 		t.Fatalf("the sheet should be about the menu from the thread: %s", body)
 	}
 
-	shelfBody := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "แล้วตัวนั้นเหลือเท่าไหร่",
+	shelfBody := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "แล้วตัวนั้นเหลือเท่าไหร่",
 		[]AIConversationMessage{{Role: "assistant", Content: "หมูสับใกล้หมดแล้วครับ"}})
 	if !strings.Contains(shelfBody, "หมูสับ") {
 		t.Fatalf("the ingredient named one turn earlier was not resolved: %s", shelfBody)
@@ -237,8 +237,38 @@ func TestPartlyNamedRowsFindsTheDishTheOwnerMeant(t *testing.T) {
 // uses, so there was nothing to rank by. The per-serving quantity has to be on
 // the line.
 func TestIngredientDetailSaysHowMuchEachMenuUses(t *testing.T) {
-	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กะเพราขึ้นราคา เมนูไหนโดนหนักสุด", nil)
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "กะเพราขึ้นราคา เมนูไหนโดนหนักสุด", nil)
 	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว (ใช้ 30.00 กรัม ต่อรายการ)") {
 		t.Errorf("the recipe quantity is missing from the menu list:\n%s", body)
+	}
+}
+
+// "อีกกี่วันต้องสั่งกุ้งสดเพิ่ม" picked this sheet (the ingredient is named) and
+// the sheet had stock with no rate of use, so the model wrote "ประมาณ 10 วัน"
+// where the data said 7.5. The sheet carries the forecast now, computed the same
+// way the reorder tool computes it.
+func TestIngredientDetailCarriesDaysLeftFromTheSameMathsAsTheForecast(t *testing.T) {
+	usage := []repository.AIIngredientUsage{
+		{Name: "กุ้งสด", Unit: "กรัม", Stock: 2405.66, Used: 9592.74},
+		{Name: "หมูสับ", Unit: "กรัม", Stock: 5000, Used: 0},
+	}
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), usage, "อีกกี่วันต้องสั่งกุ้งสดเพิ่ม", nil)
+	// 9592.74 / 30 = 319.76 per day; the fixture's shrimp stock ÷ that rate.
+	if !strings.Contains(body, "daily_use=319.76 กรัม days_left=") {
+		t.Errorf("the sheet should carry the daily use and the days left:\n%s", body)
+	}
+	if !strings.Contains(body, "days_left_means=") {
+		t.Errorf("the sheet should say what days_left means and that it must not be estimated:\n%s", body)
+	}
+
+	body = joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), usage, "หมูสับจะหมดเมื่อไหร่", nil)
+	if !strings.Contains(body, "days_left=คำนวณไม่ได้") {
+		t.Errorf("an ingredient with no use in the window must say the rate cannot be computed:\n%s", body)
+	}
+
+	// Usage not fetched at all: the sheet simply has no forecast lines.
+	body = joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), nil, "กุ้งสดเหลือเท่าไหร่", nil)
+	if strings.Contains(body, "days_left") {
+		t.Errorf("with no usage rows there must be no days_left line:\n%s", body)
 	}
 }

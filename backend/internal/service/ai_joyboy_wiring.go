@@ -220,7 +220,19 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.actionMenus != nil {
 			menus, _ = t.service.actionMenus.ListMenuItems(t.restaurantID, true, 0)
 		}
-		return joyboyIngredientDetailBody(shelf, menus, question, t.history), true, true
+		// The 30-day usage is what turns a stock figure into "days left" — the
+		// number "อีกกี่วันต้องสั่ง...เพิ่ม" is asking for. Left out, the sheet has
+		// stock and no rate, and the model estimates the days itself.
+		var usage []repository.AIIngredientUsage
+		if t.service.repo != nil {
+			since := repository.BangkokNow().AddDate(0, 0, -int(analysisWindowDays))
+			if rows, err := t.service.repo.IngredientUsage(t.restaurantID, since); err == nil {
+				usage = rows
+			} else {
+				aiStage("warn", "joyboy: %s usage failed (%v) → sheet without days_left", tool, err)
+			}
+		}
+		return joyboyIngredientDetailBody(shelf, menus, usage, question, t.history), true, true
 
 	case joyboyToolMenuDetail:
 		if t.service.actionMenus == nil || t.service.repo == nil {

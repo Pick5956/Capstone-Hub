@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"Project-M/internal/aitools"
 	"Project-M/internal/entity"
 	"Project-M/internal/repository"
 )
@@ -212,7 +213,14 @@ const aiPartialNameMinRunes = 4
 // joyboyIngredientDetailBody reports everything known about the ingredients named
 // in the question, including which menus consume them — the recipe link no other
 // tool exposes.
-func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, question string, history []AIConversationMessage) string {
+//
+// usage is the 30-day consumption per ingredient, the same rows the reorder
+// forecast reads. It is here because "อีกกี่วันต้องสั่งกุ้งสดเพิ่ม" names an
+// ingredient, so the selector reaches for this sheet rather than the forecast —
+// and this sheet used to carry stock with no rate of use, so the model answered
+// "ประมาณ 10 วัน" over a figure the data put at 7.5. A sheet that names the
+// ingredient has to carry the one number that question is about.
+func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuItem, usage []repository.AIIngredientUsage, question string, history []AIConversationMessage) string {
 	if len(shelf) == 0 {
 		return joyboyNoData("no_ingredients_recorded")
 	}
@@ -271,8 +279,39 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 		} else {
 			lines = append(lines, "used_by_menus=ไม่มีเมนูไหนใช้วัตถุดิบนี้ตามสูตรที่บันทึกไว้")
 		}
+		lines = append(lines, joyboyIngredientDaysLeftLines(item, usage)...)
 	}
 	return joyboyJoin(lines)
+}
+
+// joyboyIngredientDaysLeftLines is the forecast for one ingredient, computed the
+// way get_ingredient_reorder_forecast computes it (30-day use ÷ 30 = daily use,
+// stock ÷ daily use = days left) so the two tools never quote different days for
+// the same shelf. Nothing is printed when usage was not fetched; a line saying
+// the rate cannot be computed is printed when the ingredient was not used at
+// all, because a missing figure reads as "no data" and a zero reads as "runs
+// out today".
+func joyboyIngredientDaysLeftLines(item entity.Ingredient, usage []repository.AIIngredientUsage) []string {
+	if usage == nil {
+		return nil
+	}
+	for _, row := range usage {
+		if aiNormalizeName(row.Name) != aiNormalizeName(item.Name) {
+			continue
+		}
+		if row.Used <= 0 {
+			return []string{"days_left=คำนวณไม่ได้ ยังไม่มีการใช้วัตถุดิบนี้ใน 30 วันล่าสุด"}
+		}
+		dailyUse := row.Used / aitools.AnalysisWindowDays
+		daysLeft := item.Stock / dailyUse
+		return []string{
+			fmt.Sprintf("used_30d=%s %s daily_use=%s %s days_left=%s",
+				joyboyNum(row.Used), item.Unit, joyboyNum(dailyUse), item.Unit, joyboyNum(daysLeft)),
+			"days_left_means=จำนวนวันที่ของจะพอใช้ คิดจากอัตราใช้เฉลี่ย 30 วันล่าสุด " +
+				"ถ้าถามว่าจะหมดเมื่อไหร่ หรืออีกกี่วันต้องสั่งเพิ่ม ให้ตอบจากค่านี้ ห้ามประมาณเอง",
+		}
+	}
+	return nil
 }
 
 // aiMenusUsingIngredient reads the stored recipes rather than guessing from the

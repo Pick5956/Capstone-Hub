@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"Project-M/internal/entity"
@@ -105,5 +106,25 @@ func TestEachItemOutcomeIsRecordedBeforeTheNextRuns(t *testing.T) {
 	}
 	if len(outcomes) != 2 {
 		t.Fatalf("expected two outcomes, got %d", len(outcomes))
+	}
+}
+
+// The chat shows the confirmation's Message and nothing else, so the reason an
+// item was refused has to be in it — "ไม่สำเร็จ 1 รายการ" alone leaves the owner
+// guessing whether to retry.
+func TestConfirmationMessageCarriesEachFailureReason(t *testing.T) {
+	plan := &entity.AIActionPlan{ID: "plan-3", Status: entity.AIActionPlanStatusPartial, Items: []entity.AIActionPlanItem{
+		{ID: 1, Status: entity.AIActionItemStatusExecuted, PreviewJSON: `{"title":"กะเพรา"}`},
+		{ID: 2, Status: entity.AIActionItemStatusFailed, PreviewJSON: `{"title":"หมูสับ"}`,
+			ErrorText: "ข้อมูลเปลี่ยนไประหว่างรอยืนยัน: สต๊อก หมูสับ 5000 กรัม → 9000 กรัม ยังไม่ได้แก้ ขอให้สั่งใหม่อีกครั้ง"},
+	}}
+	confirmation := newAIActionPlanConfirmation(plan, false)
+	for _, want := range []string{"สำเร็จ 1 รายการ ไม่สำเร็จ 1 รายการ", "หมูสับ: ", "5000 กรัม → 9000 กรัม"} {
+		if !strings.Contains(confirmation.Message, want) {
+			t.Errorf("the message should carry %q:\n%s", want, confirmation.Message)
+		}
+	}
+	if strings.Contains(confirmation.Message, "กะเพรา:") {
+		t.Errorf("a succeeded item must not be listed as a failure:\n%s", confirmation.Message)
 	}
 }

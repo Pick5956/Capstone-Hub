@@ -536,6 +536,17 @@ func newAIActionPlanConfirmation(plan *entity.AIActionPlan, replayed bool) *AIAc
 	default:
 		confirmation.Message = fmt.Sprintf("สำเร็จ %d รายการ ไม่สำเร็จ %d รายการครับ", confirmation.Succeeded, confirmation.Failed)
 	}
+	// The reason each item failed goes into the message itself. The chat shows
+	// only Message, so without this the owner read "ไม่สำเร็จ 1 รายการ" and had
+	// no way to learn that it was refused because a colleague had changed the
+	// stock while the card was on screen — which is the one thing they need to
+	// know to decide what to do next.
+	for _, item := range confirmation.Items {
+		if item.Succeeded || strings.TrimSpace(item.Error) == "" {
+			continue
+		}
+		confirmation.Message += fmt.Sprintf("\n- %s: %s", item.Title, item.Error)
+	}
 	return confirmation
 }
 
