@@ -238,8 +238,7 @@ func TestPartlyNamedRowsFindsTheDishTheOwnerMeant(t *testing.T) {
 // the line.
 func TestIngredientDetailSaysHowMuchEachMenuUses(t *testing.T) {
 	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กะเพราขึ้นราคา เมนูไหนโดนหนักสุด", nil)
-	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว (ใช้ 30 กรัม ต่อรายการ)") {
-		t.Errorf("the recipe quantity is missing from the menu list:
-%s", body)
+	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว (ใช้ 30.00 กรัม ต่อรายการ)") {
+		t.Errorf("the recipe quantity is missing from the menu list:\n%s", body)
 	}
 }
