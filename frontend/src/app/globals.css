@@ -1333,6 +1333,10 @@ input[type="number"]::-webkit-inner-spin-button {
   --inv-low-soft: #fef3c6;
   --inv-out-soft: #ffe2e2;
   --inv-scrim: rgba(15, 23, 43, 0.45);
+  /* What an edge fade blends into. Defaults to the page canvas; anything that
+     sits a scroller on a different surface (a sheet) overrides it locally, so a
+     ChipRow never has to know where it was placed. */
+  --inv-fade: var(--inv-canvas);
   --inv-shadow: 0 1px 2px rgba(15, 23, 43, 0.06);
   --inv-radius: 6px;
   --inv-radius-lg: 12px;
@@ -1358,6 +1362,7 @@ input[type="number"]::-webkit-inner-spin-button {
   --inv-low-soft: rgba(249, 156, 0, 0.18);
   --inv-out-soft: rgba(251, 44, 54, 0.18);
   --inv-scrim: rgba(0, 0, 0, 0.6);
+  --inv-fade: var(--inv-canvas);
   --inv-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 

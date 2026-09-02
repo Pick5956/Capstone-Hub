@@ -141,7 +141,12 @@ export function BottomSheet({
           </button>
         </div>
         <div className="border-t border-(--inv-hairline)" />
-        <div className="max-h-[64vh] overflow-y-auto overscroll-contain px-4 py-3">{children}</div>
+        <div
+          className="max-h-[64vh] overflow-y-auto overscroll-contain px-4 py-3"
+          style={{ "--inv-fade": "var(--inv-surface)" } as React.CSSProperties}
+        >
+          {children}
+        </div>
         {footer && <div className="border-t border-(--inv-hairline) px-4 py-3">{footer}</div>}
       </div>
     </div>,
@@ -315,7 +320,59 @@ export function SecondaryButton({
   );
 }
 
-/** Chip row used for filters and date ranges; scrolls rather than wrapping. */
+/**
+ * Tracks whether a scroller actually overflows and where it sits, so the
+ * affordance below it is drawn only when there IS more to reach — a permanent
+ * bar under a row that already fits reads as a broken decoration.
+ */
+function useScrollAffordance() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [state, setState] = useState({ scrollable: false, ratio: 0, progress: 0 });
+
+  const measure = useCallback(() => {
+    const node = ref.current;
+    if (!node) return;
+    const overflow = node.scrollWidth - node.clientWidth;
+    if (overflow <= 1) {
+      setState((current) => (current.scrollable ? { scrollable: false, ratio: 0, progress: 0 } : current));
+      return;
+    }
+    setState({
+      scrollable: true,
+      ratio: node.clientWidth / node.scrollWidth,
+      progress: node.scrollLeft / overflow,
+    });
+  }, []);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.addEventListener("scroll", measure, { passive: true });
+    // ResizeObserver fires once on observe(), which is the first measurement —
+    // no separate call is needed, and calling one here would set state straight
+    // out of the effect body. It also covers the row ceasing to overflow when a
+    // category is deleted or the phone rotates, neither of which scrolls.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => {
+      node.removeEventListener("scroll", measure);
+      observer.disconnect();
+    };
+  }, [measure]);
+
+  return { ref, ...state };
+}
+
+/**
+ * Chip row for filters and date ranges; scrolls rather than wrapping.
+ *
+ * iOS draws its own scroll indicator, but it is pale grey, it sits hard against
+ * the chips, and it fades a moment after the finger lifts — so a row that
+ * overflows looks like a row that simply ends. The native one stays hidden and
+ * this draws an ember bar instead: it appears only when the row overflows, it
+ * has real space above it, and it stays put. A fade on the leading and trailing
+ * edge shows which direction still has chips.
+ */
 export function ChipRow<T extends string | number>({
   value,
   options,
@@ -325,22 +382,67 @@ export function ChipRow<T extends string | number>({
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
 }) {
+  const { ref, scrollable, ratio, progress } = useScrollAffordance();
+  // One value feeds both the width and the travel, so they can never disagree.
+  const thumb = Math.max(ratio * 100, 18);
+
   return (
-    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {options.map((option) => (
-        <button
-          key={String(option.value)}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={`ui-press shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-[13px] font-semibold transition ${
-            option.value === value
-              ? "border-(--inv-action) bg-(--inv-action-soft) text-(--inv-action)"
-              : "border-(--inv-hairline) bg-(--inv-surface) text-(--inv-muted)"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div className="relative">
+      <div
+        ref={ref}
+        // soft-scrollbar-hide, not a Tailwind arbitrary variant: globals.css sets
+        // *::-webkit-scrollbar { height: 8px } outside any @layer, and unlayered
+        // CSS beats layered utilities no matter the specificity — the utility
+        // version simply lost, which is why the pale native bar kept showing.
+        className="soft-scrollbar-hide -mx-4 flex gap-2 overflow-x-auto px-4"
+      >
+        {options.map((option) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`ui-press shrink-0 whitespace-nowrap rounded-full border px-3 py-2 text-[13px] font-semibold transition ${
+              option.value === value
+                ? "border-(--inv-action) bg-(--inv-action-soft) text-(--inv-action)"
+                : "border-(--inv-hairline) bg-(--inv-surface) text-(--inv-muted)"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {scrollable && (
+        <>
+          {/* Edge fades sit over the chips, outside the 16px gutter, so they read
+              as "the row continues" rather than as a border. */}
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute -left-4 top-0 bottom-0 w-8 bg-gradient-to-r from-(--inv-fade) to-transparent transition-opacity duration-200 ${
+              progress > 0.02 ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute -right-4 top-0 bottom-0 w-8 bg-gradient-to-l from-(--inv-fade) to-transparent transition-opacity duration-200 ${
+              progress < 0.98 ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          {/* 10px of air between the chips and the bar; the pale grey iOS
+              indicator used to touch them. */}
+          <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-(--inv-surface-strong)">
+            {/* No transition: the thumb must track the finger frame for frame.
+                With one it lagged behind the chips and read as stutter. */}
+            <div
+              className="h-full rounded-full bg-(--inv-action)"
+              style={{
+                width: `${thumb}%`,
+                transform: `translateX(${(progress * (100 - thumb) * 100) / thumb}%)`,
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
