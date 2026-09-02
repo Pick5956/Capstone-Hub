@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/src/lib/format";
 import type { IngredientCategory } from "@/src/types/ingredient";
 import { UNITS } from "../inventoryPageUtils";
@@ -20,9 +20,8 @@ type Row = {
   categoryId: number;
 };
 
-let nextKey = 1;
-const emptyRow = (categoryId: number, unit: string): Row => ({
-  key: nextKey++,
+const emptyRow = (key: number, categoryId: number, unit: string): Row => ({
+  key,
   name: "",
   quantity: "",
   unit,
@@ -62,6 +61,7 @@ export default function BulkAddScreen({
             pickCategory: "เลือกหมวดหมู่",
             pickUnit: "เลือกหน่วยนับ",
             partial: (ok: number, fail: number) => `บันทึกได้ ${ok} · ไม่สำเร็จ ${fail}`,
+            addRow: "เพิ่มแถว",
           }
         : {
             title: "Add several",
@@ -79,12 +79,24 @@ export default function BulkAddScreen({
             pickCategory: "Pick a category",
             pickUnit: "Pick a unit",
             partial: (ok: number, fail: number) => `Saved ${ok} · failed ${fail}`,
+            addRow: "Add row",
           },
     [lang],
   );
 
   const [defaultCategory, setDefaultCategory] = useState(0);
-  const [rows, setRows] = useState<Row[]>([emptyRow(0, UNITS[1])]);
+  // The key counter lives in a ref and is advanced OUTSIDE the state updater.
+  // It used to be a module-level nextKey++ inside the updater, which React is
+  // free to call more than once per update — a side effect there is a bug
+  // waiting for the first double invocation.
+  const nextKey = useRef(2);
+  const takeKey = useCallback(() => {
+    nextKey.current += 1;
+    return nextKey.current;
+  }, []);
+  // Lazy initialiser: without it emptyRow ran on every render, burning a key
+  // each time for a value React throws away after mount.
+  const [rows, setRows] = useState<Row[]>(() => [emptyRow(1, 0, UNITS[1])]);
   const [picker, setPicker] = useState<{ kind: "category" | "unit"; key: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -96,14 +108,20 @@ export default function BulkAddScreen({
   );
 
   function patch(key: number, changes: Partial<Row>) {
+    const spare = takeKey();
     setRows((current) => {
       const next = current.map((row) => (row.key === key ? { ...row, ...changes } : row));
-      // Typing into the last row appends a fresh one, so the list always has an
-      // empty slot waiting and nobody hunts for an "add row" button.
+      // Typing a name into the last row still opens a fresh one, so a fast typist
+      // never has to reach for the button.
       const last = next[next.length - 1];
-      if (last.name.trim() !== "") next.push(emptyRow(defaultCategory, UNITS[1]));
+      if (last.name.trim() !== "") next.push(emptyRow(spare, defaultCategory, UNITS[1]));
       return next;
     });
+  }
+
+  function addRow() {
+    const key = takeKey();
+    setRows((current) => [...current, emptyRow(key, defaultCategory, UNITS[1])]);
   }
 
   async function save() {
@@ -148,7 +166,7 @@ export default function BulkAddScreen({
         trailing={
           <button
             type="button"
-            onClick={() => setRows([emptyRow(defaultCategory, UNITS[1])])}
+            onClick={() => setRows([emptyRow(takeKey(), defaultCategory, UNITS[1])])}
             className={`ui-press px-2 text-[15px] font-medium text-(--inv-action) ${TAP}`}
           >
             {copy.clear}
@@ -248,6 +266,19 @@ export default function BulkAddScreen({
             </div>
           );
         })}
+
+        {/* Auto-append on typing is invisible until you already typed, so a row
+            that is still blank looks like the end of the form. An explicit
+            button is the affordance people reach for. */}
+        <button
+          type="button"
+          onClick={addRow}
+          className={`ui-press flex w-full items-center justify-center gap-2 rounded-(--inv-radius-lg) border border-dashed border-(--inv-hairline) bg-(--inv-surface) text-[15px] font-semibold text-(--inv-action) ${TAP}`}
+          style={{ minHeight: 52 }}
+        >
+          <Plus className="h-5 w-5" strokeWidth={2} />
+          {copy.addRow}
+        </button>
 
         {error && <p className="px-1 text-[13px] leading-snug text-(--inv-out)">{error}</p>}
       </div>
