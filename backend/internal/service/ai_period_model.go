@@ -250,7 +250,41 @@ func (s *AIService) aiSalesCoverageNote(restaurantID uint) string {
 	if err != nil || strings.TrimSpace(coverage.FirstDate) == "" {
 		return ""
 	}
-	return fmt.Sprintf("data_coverage=%s..%s\nnote=%s", coverage.FirstDate, coverage.LastDate, aiCoverageMeaning(coverage.FirstDate, coverage.LastDate))
+	return aiCoverageLines(coverage.FirstDate, coverage.LastDate, time.Time{})
+}
+
+// aiSalesCoverageNoteFor is aiSalesCoverageNote for a question about a window
+// that starts on a known date. When that date is earlier than the first bill on
+// record, the note names the exact gap for this question — "the range you asked
+// about starts 1 January, the records start 24 August, so the figure above is
+// from 24 August on". The general sentence in aiCoverageMeaning asks the model
+// to say this; three runs of "ปีที่แล้วขายได้เท่าไหร่" showed it reporting the
+// right total and saying nothing about the gap. A sentence already written
+// about this question gets relayed; a rule about questions in general does not.
+func (s *AIService) aiSalesCoverageNoteFor(restaurantID uint, start time.Time) string {
+	if s.repo == nil {
+		return ""
+	}
+	coverage, err := s.repo.SalesCoverage(restaurantID)
+	if err != nil || strings.TrimSpace(coverage.FirstDate) == "" {
+		return ""
+	}
+	return aiCoverageLines(coverage.FirstDate, coverage.LastDate, start)
+}
+
+func aiCoverageLines(first, last string, start time.Time) string {
+	lines := fmt.Sprintf("data_coverage=%s..%s\nnote=%s", first, last, aiCoverageMeaning(first, last))
+	firstDay, err := time.Parse("2006-01-02", strings.TrimSpace(first))
+	if err != nil || start.IsZero() {
+		return lines
+	}
+	firstDay = time.Date(firstDay.Year(), firstDay.Month(), firstDay.Day(), 0, 0, 0, 0, start.Location())
+	if start.Before(firstDay) {
+		lines += fmt.Sprintf("\npartial_coverage=true note=ช่วงที่ถามเริ่ม %s แต่บิลแรกในระบบคือ %s "+
+			"ตัวเลขข้างบนจึงเป็นยอดตั้งแต่ %s เท่านั้น ไม่ใช่ทั้งช่วง ต้องบอกเจ้าของประโยคนี้ในคำตอบ",
+			aiThaiDate(start.Format("2006-01-02")), aiThaiDate(first), aiThaiDate(first))
+	}
+	return lines
 }
 
 // aiCoverageMeaning spells the coverage out in Thai. "data_coverage=2025-08-24.."
