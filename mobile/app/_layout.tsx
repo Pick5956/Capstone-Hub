@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Platform, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TabletWorkspaceFrame } from '@/src/components/app-shell';
@@ -14,6 +15,7 @@ import {
   useDisplayPreferences,
 } from '@/src/providers/display-preferences-provider';
 import { APP_FONT_FAMILIES } from '@/src/lib/app-font';
+import { shouldLockPortrait } from '@/src/lib/orientation-lock';
 import { colors } from '@/src/theme';
 
 export {
@@ -42,6 +44,31 @@ const bundledFonts = {
 
 function TabletWorkspaceStackLayout({ children }: { children: ReactNode }) {
   return <TabletWorkspaceFrame>{children}</TabletWorkspaceFrame>;
+}
+
+// Pin phones to upright portrait and leave tablets free to rotate, so the POS
+// still works on a tablet stand. The effect keys off the boolean rather than the
+// raw dimensions, so rotating a tablet does not churn lock/unlock calls.
+function usePortraitLockOnPhones() {
+  const { width, height } = useWindowDimensions();
+  const lockPortrait = shouldLockPortrait({ width, height });
+
+  useEffect(() => {
+    // react-native-web has no equivalent lock and throws on desktop browsers.
+    if (Platform.OS === 'web') return;
+
+    void (async () => {
+      try {
+        if (lockPortrait) {
+          await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        } else {
+          await ScreenOrientation.unlockAsync();
+        }
+      } catch {
+        // Orientation control is a nicety - never let it break startup.
+      }
+    })();
+  }, [lockPortrait]);
 }
 
 function AppNavigator() {
@@ -96,6 +123,8 @@ function AppNavigator() {
 }
 
 export default function RootLayout() {
+  usePortraitLockOnPhones();
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <StatusBar style="dark" backgroundColor={colors.surface} />

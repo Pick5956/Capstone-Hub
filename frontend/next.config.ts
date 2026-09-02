@@ -30,7 +30,16 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  // identity-credentials-get must be delegated to accounts.google.com: the GIS
+  // button is a cross-origin iframe that carries allow="identity-credentials-get"
+  // and calls FedCM itself. Without the delegation the iframe is denied, fails
+  // silently, and the sign-in dialog never opens — which is why sign-in worked
+  // only in browsers with FedCM disabled (Brave), where GIS falls back to a popup.
+  // The allowlist stays narrower than the browser default; camera/mic/geo are untouched.
+  {
+    key: "Permissions-Policy",
+    value: 'camera=(), microphone=(), geolocation=(), identity-credentials-get=(self "https://accounts.google.com")',
+  },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 

@@ -10,6 +10,7 @@ import { restaurantRepository } from '../app/repositories/restaurantRepository';
 import AuthModal from '../components/auth/AuthModal';
 import { useConfirm } from '../components/shared/FeedbackProvider';
 import { useLanguage } from './LanguageProvider';
+import { safeInternalPath } from '../lib/safeRedirect';
 
 interface AuthContextType {
   user: User | null;
@@ -128,7 +129,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const openLoginModal = (redirectTo?: string) => {
-    setLoginRedirectTo(typeof redirectTo === "string" && redirectTo.startsWith("/") ? redirectTo : undefined);
+    setLoginRedirectTo(safeInternalPath(redirectTo));
     setIsLoginModalOpen(true);
   };
   const closeLoginModal = () => {

@@ -30,11 +30,6 @@ export const radius = {
 } as const;
 
 export const typeScale = StyleSheet.create({
-  kicker: {
-    color: palette.accent,
-    fontSize: 12,
-    fontWeight: '700',
-  },
   hero: {
     color: palette.textStrong,
     fontSize: 24,
@@ -73,14 +68,6 @@ export const typeScale = StyleSheet.create({
 });
 
 export const layout = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-    gap: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: 112,
-    backgroundColor: palette.canvas,
-  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -88,75 +75,6 @@ export const layout = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.xxl,
     backgroundColor: palette.canvas,
-  },
-  panel: {
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    backgroundColor: palette.surface,
-  },
-  card: {
-    minHeight: 80,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    backgroundColor: palette.surface,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  tile: {
-    width: '48%',
-    minHeight: 104,
-    flexGrow: 1,
-    flexBasis: 150,
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: radius.md,
-    backgroundColor: palette.surface,
-  },
-  primaryButton: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    backgroundColor: palette.primary,
-    paddingHorizontal: spacing.lg,
-  },
-  primaryButtonText: {
-    color: palette.primaryText,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: palette.borderStrong,
-    borderRadius: radius.md,
-    backgroundColor: palette.surface,
-    paddingHorizontal: spacing.md,
-  },
-  secondaryButtonText: {
-    color: palette.text,
-    fontSize: 13,
-    fontWeight: '700',
   },
 });
 
