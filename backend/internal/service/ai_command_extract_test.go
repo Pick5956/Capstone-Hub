@@ -80,3 +80,20 @@ func TestNegativeQuantitiesSurviveParsing(t *testing.T) {
 		t.Errorf("the number the owner said was changed to %v — the resolver can no longer explain it", drafts[0].Quantity)
 	}
 }
+
+// "ตั้งราคาแกงเขียวหวานไก่ 139 ดีมั้ย" asks whether to change a price. Read as a
+// menu_price command it becomes a confirmation card: the owner asked for an
+// opinion and was handed the button that makes the change.
+func TestExtractionPromptLeavesSuppositionsAlone(t *testing.T) {
+	for _, rule := range []string{
+		"ประโยคสมมติ",
+		"ดีมั้ย",
+		"คุ้มมั้ย",
+		`"ตั้งราคาเมนูY 139 ดีมั้ย"`,
+		"ไม่ได้ถามผล",
+	} {
+		if !strings.Contains(aiStockExtractionPrompt, rule) {
+			t.Errorf("the extraction prompt no longer says: %s", rule)
+		}
+	}
+}

@@ -231,3 +231,15 @@ func TestPartlyNamedRowsFindsTheDishTheOwnerMeant(t *testing.T) {
 		t.Errorf("the exact lookup must be unaffected, got %v", found)
 	}
 }
+
+// "ไข่ไก่ขึ้นฟองละ 2 บาท เมนูไหนโดนหนักสุด" was answered "ทุกเมนูใช้ไข่ไก่เหมือนกันหมด":
+// the sheet listed which menus use the ingredient and not how much each one
+// uses, so there was nothing to rank by. The per-serving quantity has to be on
+// the line.
+func TestIngredientDetailSaysHowMuchEachMenuUses(t *testing.T) {
+	body := joyboyIngredientDetailBody(aiDetailShelf(), aiDetailMenus(), "กะเพราขึ้นราคา เมนูไหนโดนหนักสุด", nil)
+	if !strings.Contains(body, "used_by_menus=ข้าวกะเพราไก่ไข่ดาว (ใช้ 30 กรัม ต่อรายการ)") {
+		t.Errorf("the recipe quantity is missing from the menu list:
+%s", body)
+	}
+}

@@ -277,12 +277,21 @@ func joyboyIngredientDetailBody(shelf []entity.Ingredient, menus []entity.MenuIt
 
 // aiMenusUsingIngredient reads the stored recipes rather than guessing from the
 // name. The invented "กะเพราไก่" came from having no such list to read.
+//
+// Each menu carries how much of the ingredient one serving uses. Names alone
+// answered "ไข่ไก่ขึ้นฟองละ 2 บาท เมนูไหนโดนหนักสุด" with "ทุกเมนูใช้ไข่ไก่เหมือนกันหมด" —
+// the model had a list of four menus and nothing to rank them by. The quantity
+// is what a price rise multiplies, so it is the one figure that question needs.
 func aiMenusUsingIngredient(menus []entity.MenuItem, ingredientID uint) []string {
 	used := make([]string, 0, 4)
 	for _, menu := range menus {
 		for _, component := range menu.Ingredients {
 			if component.IngredientID == ingredientID {
-				used = append(used, menu.Name)
+				entry := menu.Name
+				if component.Quantity > 0 {
+					entry += " (ใช้ " + strings.TrimSpace(joyboyNum(component.Quantity)+" "+component.Unit) + " ต่อรายการ)"
+				}
+				used = append(used, entry)
 				break
 			}
 		}

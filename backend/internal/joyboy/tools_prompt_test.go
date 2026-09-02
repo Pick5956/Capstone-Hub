@@ -138,3 +138,27 @@ func TestSelectionPromptSeparatesRecappingTheChatFromSummarisingTheShop(t *testi
 		t.Fatal("the rule must still send a real store question to the tools")
 	}
 }
+
+// "ถ้าลดราคาชาไทยลง 5 บาท กำไรจะเหลือเท่าไหร่" selected no tool, and the answer was
+// "ผมยังไม่ได้ดึงข้อมูลต้นทุนมาคำนวณครับ" — over a shop whose per-unit profit is one
+// get_menu_detail away. The command rule reads verbs, and a supposition uses the
+// same verbs as an order. The prompt has to say that a sentence asking what
+// WOULD happen is a question, name the tools it needs, and say it before the
+// command rule gets to swallow the sentence.
+func TestSelectionPromptTreatsSuppositionsAsQuestions(t *testing.T) {
+	prompt := selectionPrompt("ถ้าลดราคาชาไทยเย็นลง 5 บาท กำไรจะเหลือเท่าไหร่", nil, nil)
+	for _, want := range []string{
+		"ไม่ใช่คำสั่ง ให้เลือกเครื่องมือดูรายตัวเสมอ",
+		"ดีมั้ย", "คุ้มมั้ย", "สมมติ",
+		"get_menu_detail", "get_ingredient_detail",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("the supposition rule lost %q", want)
+		}
+	}
+	supposition := strings.Index(prompt, "ไม่ใช่คำสั่ง ให้เลือกเครื่องมือดูรายตัวเสมอ")
+	command := strings.Index(prompt, "ให้ตอบ [] เสมอ ไม่ต้องหยิบเครื่องมืออะไรมา")
+	if command < 0 || supposition > command {
+		t.Fatal("the supposition rule must come before the command rule that reads the same verbs")
+	}
+}
