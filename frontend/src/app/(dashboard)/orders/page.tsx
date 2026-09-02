@@ -13,7 +13,6 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
 import { can } from "@/src/lib/rbac";
 import { getOrderBill, listOrders } from "@/src/lib/order";
-import type { OrderListSummary } from "@/src/lib/order";
 import type { Bill, Order } from "@/src/types/order";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
 import OperationalPageShell from "@/src/components/shared/OperationalPageShell";
@@ -21,8 +20,6 @@ import { Skeleton } from "@/src/components/shared/Skeleton";
 import PaidReceiptDialog from "@/src/components/orders/PaidReceiptDialog";
 import { orderPosHref } from "@/src/lib/orderNavigation";
 import { canReprintReceipt, itemCount, orderTime, statusClass, tableName, zoneName } from "./ordersPageUtils";
-
-type StatusFilter = "all" | "active" | "completed" | "cancelled";
 
 const ORDERS_PAGE_SIZE = 25;
 
@@ -37,44 +34,33 @@ function buildPageList(current: number, totalPages: number): (number | "…")[] 
   return pages;
 }
 
-const emptyOrderSummary: OrderListSummary = {
-  total: 0,
-  active: 0,
-  closed: 0,
-  statuses: {
-    open: 0,
-    sent_to_kitchen: 0,
-    cooking: 0,
-    ready: 0,
-    served: 0,
-    completed: 0,
-    cancelled: 0,
-  },
-};
-
 export default function OrdersPage() {
   const { activeMembership } = useAuth();
   const { language } = useLanguage();
   const canView = can(activeMembership, "view_orders") || can(activeMembership, "take_order");
   const [orders, setOrders] = useState<Order[]>([]);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState<OrderListSummary>(emptyOrderSummary);
   const [error, setError] = useState("");
   const [receiptBill, setReceiptBill] = useState<Bill | null>(null);
   const [receiptLoadingId, setReceiptLoadingId] = useState<number | null>(null);
   const requestVersionRef = useRef(0);
+  // The search toolbar is a fixed bar under the mobile top bar; this reserves the
+  // exact space it takes so the table doesn't slide underneath it. On lg the bar is
+  // a sticky element in normal flow (see [data-shell-sticky] in globals.css), so the
+  // spacer is hidden there and no measurement is needed.
+  const stickyToolbarRef = useRef<HTMLDivElement>(null);
+  const [stickyToolbarHeight, setStickyToolbarHeight] = useState(0);
 
   const copy = language === "th"
     ? {
         denied: "ไม่มีสิทธิ์ดูคลังออเดอร์",
         eyebrow: "Order archive",
         title: "คลังออเดอร์",
-        subtitle: "สำหรับผู้จัดการตรวจสอบออเดอร์ย้อนหลัง ดูสถานะ ยอดเงิน รายการอาหาร และประวัติการปิดงาน",
+        subtitle: "ประวัติออเดอร์ที่ชำระเงินแล้ว สำหรับตรวจสอบยอดเงิน รายการอาหาร และพิมพ์ใบเสร็จซ้ำ",
         all: "ทั้งหมด",
         active: "กำลังใช้งาน",
         open: "เปิดโต๊ะ",
@@ -111,7 +97,7 @@ export default function OrdersPage() {
         denied: "You do not have permission to view the order archive.",
         eyebrow: "Order archive",
         title: "Order archive",
-        subtitle: "A manager view for reviewing past and current orders, payment status, item snapshots, and closing history.",
+        subtitle: "A record of paid orders — review totals, item snapshots, and reprint receipts.",
         all: "All",
         active: "Active",
         open: "Open table",
@@ -175,10 +161,11 @@ export default function OrdersPage() {
     setError("");
 
     try {
+      // The archive keeps paid orders only — a true transaction history. Live,
+      // unbilled tables (open/cooking/served/…) belong on the floor view, not here.
       const response = await listOrders({
-        status: statusFilter === "all" ? "" : statusFilter,
+        payment_status: "paid",
         search: debouncedQuery || undefined,
-        include_summary: true,
         page: pageToLoad,
         limit: ORDERS_PAGE_SIZE,
       });
@@ -188,7 +175,6 @@ export default function OrdersPage() {
       setOrders(nextOrders);
       setPage(response.data.pagination?.page ?? pageToLoad);
       setTotal(response.data.pagination?.total ?? nextOrders.length);
-      setSummary(response.data.summary ?? emptyOrderSummary);
     } catch {
       if (requestVersion === requestVersionRef.current) {
         setOrders([]);
@@ -197,13 +183,24 @@ export default function OrdersPage() {
     } finally {
       if (requestVersion === requestVersionRef.current) setLoading(false);
     }
-  }, [canView, debouncedQuery, ordersLoadError, statusFilter]);
+  }, [canView, debouncedQuery, ordersLoadError]);
 
   // Reload from the first page whenever the filter or search changes.
   useEffect(() => {
     window.scrollTo({ top: 0 });
     void fetchOrders(1);
   }, [fetchOrders]);
+
+  // Track the fixed toolbar's height so the mobile spacer matches it exactly.
+  useEffect(() => {
+    const node = stickyToolbarRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setStickyToolbarHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canView]);
 
   const totalPages = Math.max(1, Math.ceil(total / ORDERS_PAGE_SIZE));
   const pageList = buildPageList(page, totalPages);
@@ -212,13 +209,6 @@ export default function OrdersPage() {
     window.scrollTo({ top: 0 });
     void fetchOrders(next);
   };
-
-  const statusFilters: { value: StatusFilter; label: string; count: number }[] = [
-    { value: "all", label: copy.all, count: summary.total },
-    { value: "active", label: copy.active, count: summary.active },
-    { value: "completed", label: copy.completed, count: summary.statuses.completed },
-    { value: "cancelled", label: copy.cancelled, count: summary.statuses.cancelled },
-  ];
 
   const openReceipt = async (order: Order) => {
     if (!canReprintReceipt(order)) return;
@@ -234,50 +224,38 @@ export default function OrdersPage() {
     }
   };
 
-  const renderArchiveToolbar = (placement: "desktop" | "mobile") => (
-    <div className={placement === "desktop" ? "w-full max-w-lg min-w-0 pr-2" : "mb-4 w-full max-w-lg"}>
-      <label className="relative block w-full min-w-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={copy.search}
-          aria-label={copy.search}
-          className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
-        />
-      </label>
-    </div>
-  );
-
   if (!canView) return <PermissionDenied title={copy.denied} />;
 
   return (
-    <OperationalPageShell
-      eyebrow={copy.eyebrow}
-      title={copy.title}
-      subtitle={copy.subtitle}
-      hideHeaderText
-    >
-
-      {renderArchiveToolbar("mobile")}
-
-      <div role="group" aria-label={copy.status} className="mb-4 flex flex-wrap gap-2">
-        {statusFilters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={statusFilter === item.value}
-            onClick={() => setStatusFilter(item.value)}
-            className={`ui-press inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-              statusFilter === item.value
-                ? "border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900"
-                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+    <>
+      <div
+        data-shell-sticky=""
+        ref={stickyToolbarRef}
+        className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto"
+      >
+        <h1 className="sr-only">{copy.title}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
+          <div className="w-full max-w-lg">
+            <label className="relative block w-full min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={copy.search}
+                aria-label={copy.search}
+                className="h-10 w-full rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-9 pr-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+              />
+            </label>
+          </div>
+        </div>
       </div>
+      <div aria-hidden="true" className="lg:hidden" style={{ height: stickyToolbarHeight }} />
+      <OperationalPageShell
+        eyebrow={copy.eyebrow}
+        title={copy.title}
+        subtitle={copy.subtitle}
+        showHeader={false}
+      >
 
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">
@@ -459,6 +437,7 @@ export default function OrdersPage() {
         />
       ) : null}
 
-    </OperationalPageShell>
+      </OperationalPageShell>
+    </>
   );
 }

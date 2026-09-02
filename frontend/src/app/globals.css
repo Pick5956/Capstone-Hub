@@ -46,8 +46,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-kanit), Arial, Helvetica, sans-serif;
-  --font-mono: var(--font-kanit), Arial, Helvetica, sans-serif;
+  /* Mirror the body stack so Thai always resolves to the looped Sarabun face:
+     Latin + digits render in Inter, Thai falls through to Sarabun, Kanit stays a
+     last resort. Kanit carries Thai glyphs, so listing it first (as before) made
+     any Thai inside a font-sans/font-mono element render loopless — mixing with
+     the looped Sarabun used everywhere else. tabular-nums is unaffected; it is a
+     font-variant utility, independent of the family. */
+  --font-sans: var(--font-latin), var(--font-kitchen), var(--font-kanit), Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-latin), var(--font-kitchen), var(--font-kanit), Arial, Helvetica, sans-serif;
 }
 
 body {
@@ -1040,7 +1046,7 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 
   .dark [data-shell-sticky] {
-    background-color: #1a0d06;
+    background-color: #0f0f0f;
   }
 
   [data-shell-scroll] > main > *:not(.ai-aura-bg):not([data-shell-sticky]) {
@@ -1050,7 +1056,7 @@ input[type="number"]::-webkit-inner-spin-button {
   /* The canvas is a light-mode surface in the design system. Dark mode uses the
      night background from patterns.css .dishy-bg-night instead. */
   .dark [data-shell-sheet] {
-    background-color: #1a0d06;
+    background-color: #0f0f0f;
     /* Flat, like the light sheet. The glows used to sit strongest along the top
        edge, which is exactly where a sticky header paints its own solid fill -
        so the bar cut a hard rectangle out of them at the top right. */
@@ -1095,51 +1101,9 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 }
 
-/* ---- Card edges on the warm canvas ----------------------------------------
-   .dishy-surface in patterns.css puts cards on --line (clay-300) with
-   --line-control (clay-500) on hover. Ported here so card edges sit in the same
-   family as the canvas instead of the neutral gray.
-
-   Targeting the utility classes rather than redefining --color-gray-200: that
-   token also backs text-gray-200 and text-gray-300, about 310 usages, which
-   would all turn orange. Light and dark are written separately because the
-   plain and dark: utilities have equal specificity, and a single rule appended
-   here would win in both and flatten dark mode.
-
-   Scoped to the sheet on purpose: the warm canvas only exists there, so phones
-   and the routes outside the dashboard keep their neutral edges. */
-[data-shell-sheet] {
-  --dashboard-shell-border: #fed7aa;
-}
-
-html:not(.dark) [data-shell-sheet] .border-gray-200,
-html:not(.dark) [data-shell-sheet] .border-slate-200 {
-  border-color: #fed7aa;
-}
-
-html:not(.dark) [data-shell-sheet] .border-gray-300 {
-  border-color: #e0a87c;
-}
-
-html:not(.dark) [data-shell-sheet] .hover\:border-gray-300:hover,
-html:not(.dark) [data-shell-sheet] .hover\:border-gray-400:hover {
-  border-color: #c77948;
-}
-
-.dark [data-shell-sheet] {
-  --dashboard-shell-border: rgba(255, 241, 228, 0.12);
-}
-
-.dark [data-shell-sheet] .border-gray-200,
-.dark [data-shell-sheet] .border-slate-200,
-.dark [data-shell-sheet] .border-gray-800 {
-  border-color: rgba(255, 241, 228, 0.1);
-}
-
-.dark [data-shell-sheet] .hover\:border-gray-300:hover,
-.dark [data-shell-sheet] .hover\:border-gray-400:hover {
-  border-color: rgba(255, 241, 228, 0.22);
-}
+/* Card edges keep their neutral Tailwind values (border-gray-200 / -800) and the
+   --dashboard-shell-border token from :root (#dfe3e8 light / #303030 dark). The
+   warm-canvas override that repainted every dashboard border orange was removed. */
 
 /* AI page — "Sunset Boulevard" aura background (light theme only).
    Two multiply layers blend against the container's #faf8f2 base. The

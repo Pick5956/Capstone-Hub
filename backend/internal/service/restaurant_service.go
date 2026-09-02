@@ -107,12 +107,14 @@ type CreateRestaurantRequest struct {
 }
 
 type UpdateRestaurantRequest struct {
-	Name                 string  `json:"name" binding:"required"`
-	BranchName           string  `json:"branch_name" binding:"required"`
-	RestaurantType       string  `json:"restaurant_type" binding:"required"`
-	Address              string  `json:"address"`
-	Phone                string  `json:"phone"`
-	Logo                 string  `json:"logo"`
+	Name           string `json:"name" binding:"required"`
+	BranchName     string `json:"branch_name" binding:"required"`
+	RestaurantType string `json:"restaurant_type" binding:"required"`
+	Address        string `json:"address"`
+	Phone          string `json:"phone"`
+	// Logo is opt-in: a payload that omits it keeps the stored logo rather than
+	// clearing it. Sending an explicit "" still clears it, as before.
+	Logo                 *string `json:"logo"`
 	OpenTime             string  `json:"open_time"`
 	CloseTime            string  `json:"close_time"`
 	TableCount           int     `json:"table_count"`
@@ -490,13 +492,20 @@ func (s *RestaurantService) UpdateRestaurant(restaurantID uint, req *UpdateResta
 		return nil, errors.New("restaurant not found")
 	}
 
+	// Clients that never render a logo field (the web settings form) omit it
+	// entirely; keep what is stored instead of wiping it.
+	logo := restaurant.Logo
+	if req.Logo != nil {
+		logo = *req.Logo
+	}
+
 	fields, err := sanitizeRestaurantFields(
 		req.Name,
 		req.BranchName,
 		req.RestaurantType,
 		req.Address,
 		req.Phone,
-		req.Logo,
+		logo,
 		req.OpenTime,
 		req.CloseTime,
 		req.TableCount,

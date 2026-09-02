@@ -183,6 +183,8 @@ export default function PosOrderDetailPage() {
       soldOut: "หมด",
       lowStockLeft: "เหลือ",
       servingUnit: "ที่",
+      leftToast: (n: number, name: string) => `${name} เหลืออีก ${n} ที่`,
+      soldOutToast: (name: string) => `${name} หมดแล้ว`,
     }
     : {
       denied: "You do not have permission to take orders.",
@@ -253,6 +255,8 @@ export default function PosOrderDetailPage() {
       soldOut: "Sold out",
       lowStockLeft: "Only",
       servingUnit: "left",
+      leftToast: (n: number, name: string) => `Only ${n} left for ${name}`,
+      soldOutToast: (name: string) => `${name} is sold out`,
     };
 
   const paidToastTitle = language === "th" ? "รับเงินเรียบร้อยแล้ว" : "Payment recorded";
@@ -504,7 +508,27 @@ export default function PosOrderDetailPage() {
     };
   }, [modalScrollLocked]);
 
-  const runAction = async (action: () => Promise<Order>) => {
+  // The backend rejects an over-order with "only N left for <menu>" or
+  // "<menu> is sold out" (ensureMenuCapacity). Surface those as a warning toast
+  // with a localized message instead of the inline error banner, using the menu
+  // name we already know on the client (so we never parse Thai names out of the
+  // English backend string). Returns true when it handled the error as a toast.
+  const notifyCapacityError = (error: unknown, menuName: string): boolean => {
+    const raw = apiErrorMessage(error);
+    if (!raw) return false;
+    const leftMatch = raw.match(/only\s+(\d+)\s+left/i);
+    if (leftMatch) {
+      showToast({ tone: "warning", title: copy.leftToast(Number(leftMatch[1]), menuName) });
+      return true;
+    }
+    if (/sold out/i.test(raw)) {
+      showToast({ tone: "warning", title: copy.soldOutToast(menuName) });
+      return true;
+    }
+    return false;
+  };
+
+  const runAction = async (action: () => Promise<Order>, options?: { capacityMenuName?: string }) => {
     setSubmitting(true);
     actionInFlightRef.current = true;
     setError("");
@@ -512,7 +536,11 @@ export default function PosOrderDetailPage() {
       const next = await action();
       setOrder(next);
     } catch (error) {
-      setError(apiErrorMessage(error) || copy.saveError);
+      const capacityName = options?.capacityMenuName;
+      // A capacity rejection becomes a toast; anything else stays in the inline banner.
+      if (!capacityName || !notifyCapacityError(error, capacityName)) {
+        setError(apiErrorMessage(error) || copy.saveError);
+      }
     } finally {
       actionInFlightRef.current = false;
       setSubmitting(false);
@@ -532,7 +560,7 @@ export default function PosOrderDetailPage() {
       setNote("");
       setSelectedFulfillment(order.order_type === "takeaway" ? "takeaway" : "dine_in");
       return res.data;
-    });
+    }, { capacityMenuName: selectedMenu.name });
   };
 
   const requestCloseEmptyTable = async () => {
@@ -574,6 +602,7 @@ export default function PosOrderDetailPage() {
   const adjustPendingGroup = async (group: OrderItemGroup, delta: -1 | 1) => {
     if (!order || !group.pendingItems.length) return;
     const item = group.pendingItems[0];
+    // Only a quantity increase can exceed capacity; a decrease never does.
     await runAction(async () => {
       if (delta < 0 && item.quantity === 1) {
         return (await deleteOrderItem(order.ID, item.ID)).data;
@@ -582,7 +611,7 @@ export default function PosOrderDetailPage() {
         quantity: item.quantity + delta,
         note: item.note,
       })).data;
-    });
+    }, delta > 0 ? { capacityMenuName: item.menu_name } : undefined);
   };
 
   const renderOrderItemGroup = (group: OrderItemGroup, variant: "card" | "row" = "card", allowQuantityAdjustment = true) => {
@@ -711,7 +740,9 @@ export default function PosOrderDetailPage() {
       await reloadBill();
       void load({ background: true });
     } catch (error) {
-      setError(apiErrorMessage(error) || copy.saveError);
+      if (!(delta > 0 && notifyCapacityError(error, item.menu_name))) {
+        setError(apiErrorMessage(error) || copy.saveError);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -735,7 +766,9 @@ export default function PosOrderDetailPage() {
       await reloadBill();
       showToast({ title: copy.itemAddedToast });
     } catch (error) {
-      setError(apiErrorMessage(error) || copy.saveError);
+      if (!notifyCapacityError(error, item.menu_name)) {
+        setError(apiErrorMessage(error) || copy.saveError);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -930,7 +963,7 @@ export default function PosOrderDetailPage() {
                     ) : null}
                     {orderedQuantity > 0 && (
                       <span className="absolute right-2 top-2 z-10 rounded-md bg-orange-500 px-2 py-1 text-[11px] font-semibold text-white shadow-md shadow-orange-950/10 dark:bg-orange-400 dark:text-orange-950 dark:shadow-black/30">
-                        {language === "th" ? "เพิ่มแล้ว" : "Added"} x{orderedQuantity}
+                        x{orderedQuantity}
                       </span>
                     )}
                     <div
@@ -941,7 +974,6 @@ export default function PosOrderDetailPage() {
                     <div className="flex min-w-0 flex-1 flex-col p-3">
                       <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-white">{item.name}</p>
                       <p className="mt-0.5 font-mono text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">฿{item.price.toLocaleString()}</p>
-                      <p className="mt-2 truncate text-[11px] text-gray-500">{item.category?.name ?? ""}</p>
                     </div>
                   </button>
                 );
@@ -1316,8 +1348,12 @@ export default function PosOrderDetailPage() {
                 <div data-screen-receipt className="shrink-0 border-t border-gray-200 bg-white px-4 py-3 text-[12px] dark:border-gray-800 dark:bg-gray-900 sm:px-5">
                   <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
                     <div className="flex justify-between gap-4"><span>{copy.total}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.total_amount.toLocaleString()}</span></div>
-                    <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.service_charge_amount.toLocaleString()}</span></div>
-                    <div className="flex justify-between gap-4"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.vat_amount.toLocaleString()}</span></div>
+                    {bill.service_charge_enabled || bill.service_charge_amount > 0 ? (
+                      <div className="flex justify-between gap-4"><span>{copy.service} {bill.service_charge_enabled ? `${bill.service_charge_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.service_charge_amount.toLocaleString()}</span></div>
+                    ) : null}
+                    {bill.vat_enabled || bill.vat_amount > 0 ? (
+                      <div className="flex justify-between gap-4"><span>{copy.vat} {bill.vat_enabled ? `${bill.vat_rate}%` : ""}</span><span className="font-mono tabular-nums text-gray-900 dark:text-white">฿{bill.vat_amount.toLocaleString()}</span></div>
+                    ) : null}
                     <div className="mt-2 flex items-end justify-between gap-4 border-t border-gray-200 pt-2.5 dark:border-gray-800">
                       <span className="text-[13px] font-semibold text-gray-900 dark:text-white">{copy.grandTotal}</span>
                       <span className="font-mono text-[20px] font-extrabold tabular-nums text-gray-950 dark:text-white">฿{bill.grand_total.toLocaleString()}</span>

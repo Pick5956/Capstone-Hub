@@ -12,6 +12,7 @@ import LanguageToggle from "@/src/components/shared/LanguageToggle";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage, type Language } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
+import { safeNextPathFromSearch } from "@/src/lib/safeRedirect";
 import {
   ArrowRight,
   BarChart3,
@@ -63,12 +64,6 @@ type HeroProof = {
 };
 
 const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1750950388492-f803d12c4a8a?auto=format&fit=crop&w=2200&q=80";
-
-function safeNextPathFromSearch(search: string) {
-  const next = new URLSearchParams(search).get("next");
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return undefined;
-  return next;
-}
 
 const HERO_PROOFS: Record<Language, HeroProof[]> = {
   th: [

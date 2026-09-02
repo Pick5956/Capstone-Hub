@@ -17,6 +17,7 @@ import { useLanguage } from "@/src/providers/LanguageProvider";
 import AppLogo from "@/src/components/shared/AppLogo";
 import AppWordmark from "@/src/components/shared/AppWordmark";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
+import { safeInternalPath } from "@/src/lib/safeRedirect";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -409,7 +410,7 @@ export default function AuthModal({
       if (data.token) authRepository.setToken(data.token, tokenType);
       onAuthenticated?.(data.user, data.memberships);
       onClose();
-      const target = redirectTo?.startsWith("/") ? redirectTo : decideRedirect();
+      const target = safeInternalPath(redirectTo) ?? decideRedirect();
       if (hardReload) {
         window.location.href = target;
       } else {

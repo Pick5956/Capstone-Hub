@@ -214,7 +214,10 @@ export default function RestaurantSettingsPage() {
         useCurrentLocation: "ใช้ตำแหน่งปัจจุบัน",
         locating: "กำลังอ่านตำแหน่ง...",
         geoUnsupported: "อุปกรณ์นี้ไม่รองรับการอ่านตำแหน่ง",
-        geoDenied: "อ่านตำแหน่งไม่สำเร็จ กรุณาอนุญาตการเข้าถึงตำแหน่ง",
+        geoInsecure: "เบราว์เซอร์บล็อกการอ่านตำแหน่งเพราะหน้านี้เปิดผ่านการเชื่อมต่อที่ไม่ปลอดภัย ให้เปิดผ่าน http://localhost:3000 หรือ https แล้วลองใหม่",
+        geoDenied: "การเข้าถึงตำแหน่งถูกปฏิเสธ ไปที่ไอคอนหน้าเว็บ (แถบ URL) → การตั้งค่าเว็บไซต์ → ตำแหน่ง → อนุญาต แล้วลองใหม่",
+        geoUnavailable: "อ่านตำแหน่งไม่ได้ในขณะนี้ ตรวจสอบว่าเปิด GPS/Location ของอุปกรณ์แล้ว",
+        geoTimeout: "อ่านตำแหน่งหมดเวลา ลองใหม่อีกครั้ง หรือย้ายไปที่รับสัญญาณ GPS ได้ดีขึ้น",
         validateCoords: "กรุณากรอกพิกัดให้ถูกต้อง (หรือกดใช้ตำแหน่งปัจจุบัน)",
         validateRadius: "รัศมีต้องอยู่ระหว่าง 20 ถึง 5000 เมตร",
         dangerZone: "พื้นที่อันตราย / ลบร้านอาหาร",
@@ -296,7 +299,10 @@ export default function RestaurantSettingsPage() {
         useCurrentLocation: "Use current location",
         locating: "Reading location...",
         geoUnsupported: "This device does not support location.",
-        geoDenied: "Could not read location. Please allow location access.",
+        geoInsecure: "The browser blocked location because this page is served over an insecure connection. Open it via http://localhost:3000 or https, then try again.",
+        geoDenied: "Location access was blocked. Click the site icon in the address bar → Site settings → Location → Allow, then try again.",
+        geoUnavailable: "Location is unavailable right now. Make sure your device's GPS/Location is turned on.",
+        geoTimeout: "Reading location timed out. Try again or move somewhere with a better GPS signal.",
         validateCoords: "Enter valid coordinates (or tap Use current location).",
         validateRadius: "Radius must be between 20 and 5000 meters.",
         dangerZone: "Danger Zone / Delete Restaurant",
@@ -364,6 +370,14 @@ export default function RestaurantSettingsPage() {
       setErrors((current) => ({ ...current, latitude: copy.geoUnsupported }));
       return;
     }
+    // Geolocation only runs in a secure context (https, or http://localhost).
+    // Served over a plain-HTTP LAN origin (e.g. http://192.168.x.x:3000) the
+    // browser blocks it silently and never shows the permission prompt, so name
+    // that cause instead of the generic "please allow" message.
+    if (typeof window !== "undefined" && window.isSecureContext === false) {
+      setErrors((current) => ({ ...current, latitude: copy.geoInsecure }));
+      return;
+    }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -375,8 +389,12 @@ export default function RestaurantSettingsPage() {
         setErrors((current) => ({ ...current, latitude: undefined }));
         setLocating(false);
       },
-      () => {
-        setErrors((current) => ({ ...current, latitude: copy.geoDenied }));
+      (error) => {
+        const message =
+          error.code === error.POSITION_UNAVAILABLE ? copy.geoUnavailable
+            : error.code === error.TIMEOUT ? copy.geoTimeout
+              : copy.geoDenied;
+        setErrors((current) => ({ ...current, latitude: message }));
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 },

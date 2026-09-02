@@ -12,6 +12,7 @@ import { WorkspaceShell, getRestaurantTypeLabel, formatUserName, useWorkspaceUse
 import { RestaurantCardSkeleton } from "@/src/components/shared/Skeleton";
 import { getDefaultWorkspaceRoute } from "@/src/lib/workMode";
 import { roleLabel } from "@/src/lib/roleLabels";
+import { safeNextPathFromSearch } from "@/src/lib/safeRedirect";
 import { Plus, LogIn, Clock, Grid, ChevronRight, Phone } from "lucide-react";
 import AppWordmark from "@/src/components/shared/AppWordmark";
 
@@ -227,8 +228,8 @@ export default function RestaurantsPage() {
   const enterDashboardFor = (membership: Membership) => {
     restaurantRepository.setActiveId(membership.restaurant_id);
     setActiveRestaurant(membership.restaurant_id);
-    const next = new URLSearchParams(window.location.search).get("next");
-    router.push(next?.startsWith("/") ? next : getDefaultWorkspaceRoute(membership));
+    const next = safeNextPathFromSearch(window.location.search);
+    router.push(next ?? getDefaultWorkspaceRoute(membership));
   };
 
   if (!loading && !hasRestaurants) {

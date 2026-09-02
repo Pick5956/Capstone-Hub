@@ -31,6 +31,7 @@ export default defineConfig({
       "src/lib/__tests__/qr.test.ts",
       "src/lib/__tests__/requestGeneration.test.ts",
       "src/lib/__tests__/roleLabels.test.ts",
+      "src/lib/__tests__/safeRedirect.test.ts",
       "src/lib/__tests__/singleFlight.test.ts",
       "src/app/(dashboard)/orders/ordersPageUtils.test.ts",
       "src/app/(dashboard)/tables/tablesPageUtils.test.ts",

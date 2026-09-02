@@ -428,6 +428,12 @@ export default function InventoryPage() {
   const saveOnce = useRef(createSingleFlight());
   const deleteOnce = useRef(createSingleFlight());
   const adjustOnce = useRef(createSingleFlight());
+  // The toolbar is a fixed bar under the mobile top bar; this reserves the exact
+  // space it takes so the table doesn't slide underneath it. On lg the bar is a
+  // sticky element in normal flow (see [data-shell-sticky] in globals.css), so the
+  // spacer is hidden there and no measurement is needed.
+  const stickyToolbarRef = useRef<HTMLDivElement>(null);
+  const [stickyToolbarHeight, setStickyToolbarHeight] = useState(0);
   const categoryOptions = useMemo(
     () => [
       { value: "0", label: categories.length === 0 ? copy.noCategories : copy.uncategorized },
@@ -459,6 +465,18 @@ export default function InventoryPage() {
       window.clearTimeout(loadTimer);
     };
   }, [canView]);
+
+  // Track the fixed toolbar's height so the mobile spacer matches it exactly,
+  // even as the toolbar wraps to a different number of rows across breakpoints.
+  useEffect(() => {
+    const node = stickyToolbarRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setStickyToolbarHeight(node.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canView, canManage]);
 
   // `/inventory?adjust=<id>` — the dashboard's stock-risk cards link straight
   // to the adjustment for the ingredient they warned about. Read off the URL
@@ -951,34 +969,42 @@ export default function InventoryPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-100 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
-      <div className="space-y-5">
-        <div className="flex w-fit items-center gap-1 rounded-md border border-slate-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900">
-          {(["stock", "history"] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={`inline-flex h-8 items-center rounded px-3 text-[12px] font-semibold transition ${
-                tab === key
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-                  : "text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-gray-800"
-              }`}
-            >
-              {key === "stock"
-                ? lang === "th"
-                  ? "สต๊อกปัจจุบัน"
-                  : "Stock"
-                : lang === "th"
-                  ? "ประวัติทั้งคลัง"
-                  : "History"}
-            </button>
-          ))}
-        </div>
-
-        {tab === "stock" && (
-        <>
-        <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <>
+      <div
+        data-shell-sticky=""
+        ref={stickyToolbarRef}
+        className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto"
+      >
+        <h1 className="sr-only">{copy.title}</h1>
+        <div className="px-4 py-2 sm:px-6 lg:px-8 lg:pb-2 lg:pt-4">
+          {/* The tabs live inside the sticky bar so switching views stays reachable
+              on a phone, where the bar is fixed and the list scrolls under it. */}
+          <div className="mb-2 flex w-fit items-center gap-1 rounded-md border border-slate-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900">
+            {(["stock", "history"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`inline-flex h-8 items-center rounded px-3 text-[12px] font-semibold transition ${
+                  tab === key
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                    : "text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-gray-800"
+                }`}
+              >
+                {key === "stock"
+                  ? lang === "th"
+                    ? "สต๊อกปัจจุบัน"
+                    : "Stock"
+                  : lang === "th"
+                    ? "ประวัติทั้งคลัง"
+                    : "History"}
+              </button>
+            ))}
+          </div>
+          {/* The history tab brings its own search box and export button, so the
+              stock toolbar would duplicate both — it belongs to the stock tab only. */}
+          {tab === "stock" && (
+          <header className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -1139,7 +1165,15 @@ export default function InventoryPage() {
               {copy.add}
             </button>
           )}
-        </header>
+          </header>
+          )}
+        </div>
+      </div>
+      <div aria-hidden="true" className="lg:hidden" style={{ height: stickyToolbarHeight }} />
+      <div className="min-h-dvh bg-slate-100 px-4 py-4 text-slate-900 dark:bg-gray-950 dark:text-white sm:px-6 lg:px-8 lg:py-6">
+        <div className="space-y-5">
+        {tab === "stock" && (
+        <>
 
         {(statusFilter !== "all" || categoryFilter !== 0) && (
           <div className="flex flex-wrap items-center gap-2">
@@ -2033,5 +2067,6 @@ export default function InventoryPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
