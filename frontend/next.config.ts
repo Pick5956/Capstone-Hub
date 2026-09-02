@@ -9,18 +9,23 @@ const isDev = process.env.NODE_ENV !== "production";
 // Turbopack HMR. The high-value protections that hold in every mode are
 // frame-ancestors (clickjacking), object-src/base-uri lockdown, and a tight
 // img/connect allow-list.
+//
+// accounts.google.com is deliberately absent from script/style/frame/connect:
+// Google sign-in is a top-level navigation to its own tab now, which CSP does
+// not govern, so nothing of Google's is loaded into this document. Only
+// lh3.googleusercontent.com stays, for account profile photos.
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  `script-src 'self' 'unsafe-inline' https://accounts.google.com${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline' https://accounts.google.com",
-  "img-src 'self' data: blob: https://api.dishy.pro https://lh3.googleusercontent.com https://images.unsplash.com https://accounts.google.com https://*.gstatic.com http://localhost:8080 http://127.0.0.1:8080",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://api.dishy.pro https://lh3.googleusercontent.com https://images.unsplash.com http://localhost:8080 http://127.0.0.1:8080",
   "font-src 'self' data:",
-  `connect-src 'self' https://api.dishy.pro https://accounts.google.com${isDev ? " http://localhost:8080 http://127.0.0.1:8080 ws: wss:" : ""}`,
-  "frame-src 'self' https://accounts.google.com",
+  `connect-src 'self' https://api.dishy.pro${isDev ? " http://localhost:8080 http://127.0.0.1:8080 ws: wss:" : ""}`,
+  "frame-src 'self'",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
 ].join("; ");
@@ -33,16 +38,17 @@ const securityHeaders = [
   // geolocation=(self): the geofence setup (settings) and customer geofence check
   // call navigator.geolocation, which the browser blocks outright (no prompt) when
   // this policy is empty. Allow it for our own origin only.
-  // identity-credentials-get must be delegated to accounts.google.com: the GIS
-  // button is a cross-origin iframe that carries allow="identity-credentials-get"
-  // and calls FedCM itself. Without the delegation the iframe is denied, fails
-  // silently, and the sign-in dialog never opens — which is why sign-in worked
-  // only in browsers with FedCM disabled (Brave), where GIS falls back to a popup.
-  // Both allowlists stay narrower than the browser default; camera/microphone stay
-  // fully disabled since nothing uses them.
+  // identity-credentials-get is deliberately NOT delegated any more. It existed
+  // only for the Google Identity Services button, a cross-origin iframe that
+  // called FedCM itself; Google sign-in is a plain OAuth redirect in its own tab
+  // now and never touches FedCM. Restore the delegation to accounts.google.com if
+  // GIS ever comes back - without it that iframe fails silently and the sign-in
+  // dialog never opens except in browsers with FedCM off.
+  // The geolocation allowlist stays narrower than the browser default;
+  // camera/microphone stay fully disabled since nothing uses them.
   {
     key: "Permissions-Policy",
-    value: 'camera=(), microphone=(), geolocation=(self), identity-credentials-get=(self "https://accounts.google.com")',
+    value: "camera=(), microphone=(), geolocation=(self)",
   },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];

@@ -18,36 +18,18 @@ import AppLogo from "@/src/components/shared/AppLogo";
 import AppWordmark from "@/src/components/shared/AppWordmark";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 import { safeInternalPath } from "@/src/lib/safeRedirect";
-
-type GoogleCredentialResponse = {
-  credential?: string;
-};
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (options: {
-            client_id: string;
-            callback: (response: GoogleCredentialResponse) => void;
-          }) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: {
-              type?: "standard" | "icon";
-              theme?: "outline" | "filled_blue" | "filled_black";
-              size?: "large" | "medium" | "small";
-              text?: "signin_with" | "signup_with" | "continue_with" | "signin";
-              shape?: "rectangular" | "pill" | "circle" | "square";
-              width?: number;
-            }
-          ) => void;
-        };
-      };
-    };
-  }
-}
+import {
+  GOOGLE_AUTH_MESSAGE,
+  GOOGLE_TAB_NAME,
+  buildGoogleAuthUrl,
+  clearPendingGoogleAuth,
+  googleCallbackUrl,
+  isGoogleCallbackTrusted,
+  randomAuthToken,
+  rememberPendingGoogleAuth,
+  type GoogleAuthMessage,
+  type GoogleAuthPending,
+} from "@/src/lib/googleOAuth";
 
 const EyeIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor" className="h-4 w-4">
@@ -238,7 +220,9 @@ export default function AuthModal({
   const [lastIsOpen, setLastIsOpen] = useState(isOpen);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [googlePending, setGooglePending] = useState(false);
+  const googleTabRef = useRef<Window | null>(null);
+  const googleRequestRef = useRef<GoogleAuthPending | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -246,7 +230,10 @@ export default function AuthModal({
 
   if (lastIsOpen !== isOpen) {
     setLastIsOpen(isOpen);
-    if (!isOpen) setClosing(false);
+    if (!isOpen) {
+      setClosing(false);
+      setGooglePending(false);
+    }
   }
 
   const copy = language === "th"
@@ -289,6 +276,7 @@ export default function AuthModal({
         createAccountBusy: "กำลังสร้างบัญชี...",
         or: "หรือ",
         continueWithGoogle: "ดำเนินการต่อโดยใช้ Google",
+        googleBusy: "กำลังรอหน้าต่าง Google...",
         noAccount: "ยังไม่มีบัญชี?",
         haveAccount: "มีบัญชีอยู่แล้ว?",
         forgotPassword: "ลืมรหัสผ่าน?",
@@ -335,6 +323,7 @@ export default function AuthModal({
         createAccountBusy: "Creating account...",
         or: "or",
         continueWithGoogle: "Continue with Google",
+        googleBusy: "Waiting for Google...",
         noAccount: "Don't have an account?",
         haveAccount: "Already have an account?",
         forgotPassword: "Forgot password?",
@@ -420,16 +409,12 @@ export default function AuthModal({
     [onAuthenticated, onClose, redirectTo, router]
   );
 
-  const handleGoogleCredential = useCallback(
-    async (response: GoogleCredentialResponse) => {
-      if (!response.credential) {
-        setError(copy.googleCredentialMissing);
-        return;
-      }
+  const finishGoogleLogin = useCallback(
+    async (idToken: string) => {
       setLoading(true);
       setError("");
       try {
-        const res = await googleLogin(response.credential);
+        const res = await googleLogin(idToken);
         if (res?.data) {
           completeAuth(res.data);
         } else {
@@ -441,115 +426,87 @@ export default function AuthModal({
         setLoading(false);
       }
     },
-    [completeAuth, copy.googleCredentialMissing, copy.googleLoginFailed, copy.googleLoginRetry]
+    [completeAuth, copy.googleLoginFailed, copy.googleLoginRetry]
   );
 
-  // Keep the latest credential handler in a ref so the GIS setup effect does not
-  // depend on its identity (which changes whenever the parent re-renders).
-  const googleCredentialRef = useRef(handleGoogleCredential);
-  useEffect(() => {
-    googleCredentialRef.current = handleGoogleCredential;
-  }, [handleGoogleCredential]);
-
-  // Guard so google.accounts.id.initialize() runs at most once per mount.
-  const googleInitializedRef = useRef(false);
-
-  useEffect(() => {
+  // Google sign-in runs in its own browser tab, the way most sites do it. The
+  // tab lands on /auth/google/callback, which posts the credential back here.
+  const startGoogleLogin = useCallback(() => {
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    if (!isOpen || authMode !== "login" || !clientId) return;
+    if (!clientId) {
+      setError(copy.googleCredentialMissing);
+      return;
+    }
+    setError("");
 
-    let cancelled = false;
+    const request: GoogleAuthPending = {
+      state: randomAuthToken(),
+      nonce: randomAuthToken(),
+      next: safeInternalPath(redirectTo),
+    };
+    googleRequestRef.current = request;
+    rememberPendingGoogleAuth(request);
 
-    // Google bakes the width into the button at render time and never reflows it.
-    // Measuring once left a 320 px button inside a narrower slot on small screens,
-    // so it overflowed and its own grey outline showed past our border. Re-render
-    // on container resize instead, and remember the last width so the observer
-    // cannot loop on the layout its own re-render produces.
-    const MAX_BUTTON_WIDTH = 320;
-    const MEASURE_RETRY_MS = 50;
-    const MEASURE_MAX_RETRIES = 40;
-    let lastRenderedWidth = 0;
-    let measureTimer: ReturnType<typeof setTimeout> | undefined;
-    let measureAttempts = 0;
-    const renderGoogleButton = () => {
-      const slot = googleButtonRef.current;
-      if (cancelled || !window.google || !slot) return;
-      const measured = Math.round(slot.getBoundingClientRect().width);
-      // The dialog animates open, so the slot is still zero-width on the first
-      // pass. The old code fell back to 320 px there and baked that width into
-      // the button, which then overflowed a narrower slot and pushed Google own
-      // grey outline out past our border. Wait for a real measurement instead,
-      // but never wait forever - a button at the old fallback width beats no
-      // button at all.
-      if (measured <= 0 && measureAttempts < MEASURE_MAX_RETRIES) {
-        measureAttempts += 1;
-        measureTimer = setTimeout(renderGoogleButton, MEASURE_RETRY_MS);
+    const authUrl = buildGoogleAuthUrl({
+      clientId,
+      redirectUri: googleCallbackUrl(),
+      state: request.state,
+      nonce: request.nonce,
+    });
+
+    // Opened straight out of the click so the browser counts it as user
+    // initiated. If a blocker still refuses, sign in through this tab instead -
+    // the callback page finishes the exchange when it has no opener.
+    const tab = window.open(authUrl, GOOGLE_TAB_NAME);
+    if (!tab) {
+      window.location.href = authUrl;
+      return;
+    }
+    googleTabRef.current = tab;
+    setGooglePending(true);
+    tab.focus?.();
+  }, [copy.googleCredentialMissing, redirectTo]);
+
+  // Mounted for the whole time the modal is open rather than only while a tab
+  // is pending: the callback tab closes itself right after posting, and tearing
+  // the listener down on that close could race the message it just sent.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleMessage = (event: MessageEvent<GoogleAuthMessage>) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== GOOGLE_AUTH_MESSAGE) return;
+
+      const request = googleRequestRef.current;
+      if (!request || data.state !== request.state) return;
+
+      googleRequestRef.current = null;
+      googleTabRef.current = null;
+      clearPendingGoogleAuth();
+      setGooglePending(false);
+
+      if (!isGoogleCallbackTrusted({ idToken: data.idToken, state: data.state, error: data.error }, request)) {
+        // access_denied is the user backing out of the chooser on purpose.
+        if (data.error !== "access_denied") setError(copy.googleLoginFailed);
         return;
       }
-      const width = Math.min(MAX_BUTTON_WIDTH, measured || MAX_BUTTON_WIDTH);
-      if (width === lastRenderedWidth) return;
-      lastRenderedWidth = width;
-      slot.innerHTML = "";
-      window.google.accounts.id.renderButton(slot, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        shape: "rectangular",
-        width,
-      });
+      void finishGoogleLogin(data.idToken as string);
     };
 
-    const initializeGoogleButton = () => {
-      if (cancelled || !window.google || !googleButtonRef.current) return;
-      if (!googleInitializedRef.current) {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response) => googleCredentialRef.current(response),
-        });
-        googleInitializedRef.current = true;
-      }
-      renderGoogleButton();
-    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [copy.googleLoginFailed, finishGoogleLogin, isOpen]);
 
-    // ResizeObserver catches container-driven width changes; the window listener
-    // covers viewport changes such as an orientation flip. Both funnel through the
-    // lastRenderedWidth guard, so whichever fires first does the single re-render.
-    const slotEl = googleButtonRef.current;
-    const resizeObserver =
-      slotEl && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => renderGoogleButton())
-        : null;
-    if (slotEl && resizeObserver) resizeObserver.observe(slotEl);
-    const handleWindowResize = () => renderGoogleButton();
-    window.addEventListener("resize", handleWindowResize);
-    window.addEventListener("orientationchange", handleWindowResize);
-
-    if (window.google) {
-      initializeGoogleButton();
-    } else {
-      const existingScript = document.getElementById("google-identity-services");
-      if (existingScript) {
-        existingScript.addEventListener("load", initializeGoogleButton, { once: true });
-      } else {
-        const script = document.createElement("script");
-        script.id = "google-identity-services";
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        script.onload = initializeGoogleButton;
-        document.head.appendChild(script);
-      }
-    }
-
-    return () => {
-      cancelled = true;
-      if (measureTimer) clearTimeout(measureTimer);
-      if (resizeObserver) resizeObserver.disconnect();
-      window.removeEventListener("resize", handleWindowResize);
-      window.removeEventListener("orientationchange", handleWindowResize);
-    };
-  }, [authMode, isOpen]);
+  // The tab can also be closed without choosing an account, which posts
+  // nothing. Watch for that so the button does not stay stuck on "waiting".
+  useEffect(() => {
+    if (!googlePending) return;
+    const timer = window.setInterval(() => {
+      if (googleTabRef.current?.closed) setGooglePending(false);
+    }, 600);
+    return () => window.clearInterval(timer);
+  }, [googlePending]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -817,24 +774,15 @@ export default function AuthModal({
                     <span className="text-[11px] text-gray-500 dark:text-gray-500">{copy.or}</span>
                     <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                   </div>
-                  {/* Google injects its own button markup and restyles it on focus, press,
-                      and on the way back from the account picker - borders, outlines and
-                      state layers we cannot predict or keep up with. So their button stays
-                      the real click and focus target but is rendered fully transparent, and
-                      we paint the visible face underneath it. Nothing Google does to its own
-                      markup can reach the user. The 44 px outer height is the anti-jump slot;
-                      the face and the click target are both the visible 40 px. */}
-                  <div data-google-auth="" className="relative mx-auto h-11 w-full max-w-80">
-                    <span data-google-face="" aria-hidden="true">
-                      <GoogleGlyph />
-                      {copy.continueWithGoogle}
-                    </span>
-                    <div
-                      data-gis-slot=""
-                      className="absolute inset-x-0 top-0 h-10 overflow-hidden rounded-md opacity-0"
-                      ref={googleButtonRef}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={startGoogleLogin}
+                    disabled={loading || googlePending}
+                    className="mx-auto flex h-10 w-full max-w-80 items-center justify-center gap-2.5 rounded-md border border-gray-300 bg-white text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus-visible:border-orange-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                  >
+                    <GoogleGlyph />
+                    {googlePending ? copy.googleBusy : copy.continueWithGoogle}
+                  </button>
                 </>
               )}
             </form>

@@ -14,6 +14,7 @@ export default defineConfig({
       "src/lib/__tests__/orderItemGroups.test.ts",
       "src/lib/__tests__/homeDashboard.test.ts",
       "src/lib/__tests__/documentTitle.test.ts",
+      "src/lib/__tests__/googleOAuth.test.ts",
       "src/lib/__tests__/docsContent.test.ts",
       "src/lib/__tests__/customerOrderView.test.ts",
       "src/lib/__tests__/invitation.test.ts",
