@@ -43,6 +43,24 @@ type AIOrderTypeSummary struct {
 	Revenue   float64 `json:"revenue"`
 }
 
+// AIPaymentMethodSummary is how many bills were settled by one method over a
+// window, and how much money came in that way.
+type AIPaymentMethodSummary struct {
+	Method string  `json:"method"`
+	Bills  int64   `json:"bills"`
+	Amount float64 `json:"amount"`
+}
+
+// AIPaymentCoverage says which paid bills in a window have a payment row at all.
+// The payment table started being written on 2026-08-30; every paid bill before
+// that has no method on record, so a window reaching further back must say so
+// rather than report a cash/PromptPay split over a fraction of its bills.
+type AIPaymentCoverage struct {
+	PaidBills     int64  `json:"paid_bills"`
+	WithMethod    int64  `json:"with_method"`
+	FirstRecorded string `json:"first_recorded"`
+}
+
 type AIPeriodSummary struct {
 	Period  int     `json:"period"` // weekday 0..6 (Sun..Sat) or hour 0..23 depending on the query
 	Orders  int64   `json:"orders"`
@@ -447,6 +465,45 @@ func (r *AIRepository) MenuMarginsByCategory(restaurantID uint, since time.Time)
 		Limit(200).
 		Scan(&rows).Error
 	return rows, err
+}
+
+// PaymentMix totals the bills paid by each method inside [start, end), keyed on
+// when the bill was closed so the figures line up with every other revenue
+// number. Only completed, paid orders count — a payment row on a bill that was
+// later voided would otherwise be reported as money taken.
+func (r *AIRepository) PaymentMix(restaurantID uint, start, end time.Time) ([]AIPaymentMethodSummary, error) {
+	var rows []AIPaymentMethodSummary
+	err := r.db.Table("order_payments").
+		Select("order_payments.method, COUNT(*) AS bills, COALESCE(SUM(order_payments.amount), 0) AS amount").
+		Joins("JOIN orders ON orders.id = order_payments.order_id").
+		Where("order_payments.restaurant_id = ? AND order_payments.deleted_at IS NULL AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.status = ? AND orders.payment_status = ? AND orders.completed_at >= ? AND orders.completed_at < ?",
+			restaurantID, restaurantID, entity.OrderStatusCompleted, entity.PaymentStatusPaid, start, end).
+		Group("order_payments.method").
+		Order("bills desc").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// PaymentCoverage counts the paid bills in the window and how many of them carry
+// a payment row, plus the day the first payment row was ever written.
+func (r *AIRepository) PaymentCoverage(restaurantID uint, start, end time.Time) (AIPaymentCoverage, error) {
+	var cov AIPaymentCoverage
+	err := r.db.Table("orders").
+		Select("COUNT(*) AS paid_bills, COUNT(order_payments.id) AS with_method").
+		Joins("LEFT JOIN order_payments ON order_payments.order_id = orders.id AND order_payments.deleted_at IS NULL").
+		Where("orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.status = ? AND orders.payment_status = ? AND orders.completed_at >= ? AND orders.completed_at < ?",
+			restaurantID, entity.OrderStatusCompleted, entity.PaymentStatusPaid, start, end).
+		Scan(&cov).Error
+	if err != nil {
+		return cov, err
+	}
+	var first struct{ FirstRecorded string }
+	err = r.db.Table("order_payments").
+		Select("TO_CHAR(MIN(paid_at) AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS first_recorded").
+		Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
+		Scan(&first).Error
+	cov.FirstRecorded = first.FirstRecorded
+	return cov, err
 }
 
 func (r *AIRepository) PeakSalesByWeekday(restaurantID uint, since time.Time) ([]AIPeriodSummary, error) {

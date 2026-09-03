@@ -155,3 +155,12 @@ func TestJoyboySpendsThinkingWhereTheDecisionIs(t *testing.T) {
 		t.Fatalf("an unknown call kind ran at %q instead of medium", got.ReasoningEffort)
 	}
 }
+
+// Same guard as get_menu_profit_by_category: offered, described, and actually
+// wired to a runner.
+func TestPaymentMixIsWiredToARunner(t *testing.T) {
+	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
+	if _, _, handled := tools.runJoyboyExtraTool(joyboyToolPaymentMix, "จ่ายพร้อมเพย์กี่บิล"); !handled {
+		t.Fatal("get_payment_mix is offered to the model but no runner claims it")
+	}
+}

@@ -669,3 +669,33 @@ func TestProfitSheetCarriesGrossMeaningAndNetAfterRecordedExpenses(t *testing.T)
 		t.Errorf("without the ledger there must be no net figure:\n%s", body)
 	}
 }
+
+// "จ่ายพร้อมเพย์กับเงินสดอย่างไหนเยอะกว่า" had no tool at all. The sheet divides
+// the shares itself and says how many paid bills carry no method, because
+// everything before the day payments started being recorded does not.
+func TestPaymentMixSheetSharesAndCoverage(t *testing.T) {
+	body := joyboyPaymentMixBody("30 วันล่าสุด",
+		[]repository.AIPaymentMethodSummary{
+			{Method: "cash", Bills: 78, Amount: 23384},
+			{Method: "promptpay_qr", Bills: 58, Amount: 14550},
+		},
+		repository.AIPaymentCoverage{PaidBills: 969, WithMethod: 136, FirstRecorded: "2026-08-30"})
+	for _, want := range []string{
+		"bills_with_method=136 amount=37934.00",
+		"method=เงินสด bills=78 amount=23384.00 bill_share_pct=57.35 amount_share_pct=61.64",
+		"method=พร้อมเพย์ bills=58",
+		"bills_without_method=833",
+		"payment_method_recorded_from=2026-08-30",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the payment sheet lost %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "promptpay_qr") {
+		t.Errorf("the raw method code must not reach the model:\n%s", body)
+	}
+	empty := joyboyPaymentMixBody("ปี 2567", nil, repository.AIPaymentCoverage{PaidBills: 0, FirstRecorded: "2026-08-30"})
+	if !strings.Contains(empty, "no_payment_method_recorded_in_period") || !strings.Contains(empty, "ห้ามประมาณสัดส่วนเอง") {
+		t.Errorf("an empty window must say so in Thai:\n%s", empty)
+	}
+}

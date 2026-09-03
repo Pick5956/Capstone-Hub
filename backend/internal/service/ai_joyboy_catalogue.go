@@ -172,6 +172,14 @@ const joyboyToolMenuList AIToolName = "get_menu_list"
 // whose description would differ from this one only by the word "ทุก".
 const joyboyToolMenuProfitByCategory AIToolName = "get_menu_profit_by_category"
 
+// joyboyToolPaymentMix reads how bills were paid — cash against PromptPay. The
+// payment table existed from the start, but nothing wrote to it until the day
+// seeder learned to (2026-09-03), so the tool arrives with the data. It takes a
+// named period the way the sales tools do, and reports how many paid bills in
+// the window have no method recorded, because everything before 2026-08-30
+// does not.
+const joyboyToolPaymentMix AIToolName = "get_payment_mix"
+
 // joyboyToolShopProfile reads the shop's own identity — its name, branch, type
 // and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
 // end the model filled by dumping a sales total.
@@ -197,6 +205,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolShopProfile,
 	joyboyToolActiveOrders,
 	joyboyToolMenuList,
+	joyboyToolPaymentMix,
 	joyboyToolMenuProfitByCategory,
 }
 
@@ -282,6 +291,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ถ้าถามเมนูกำไรดีสุดของทั้งร้านโดยไม่เอ่ยหมวด ให้ใช้ get_highest_margin_menu แทน " +
 		"ถ้าถามว่าร้านมีเมนูอะไรบ้างในแต่ละหมวด ไม่ได้ถามเรื่องเงิน ให้ใช้ get_menu_list แทน " +
 		"ถ้าถามกำไรรวมของทั้งร้านโดยไม่แยกหมวด ให้ใช้ get_profit_summary แทน",
+	joyboyToolPaymentMix: "ลูกค้าจ่ายเงินแบบไหน — จำนวนบิลและยอดเงินแยกตามวิธีจ่าย (เงินสด / พร้อมเพย์) พร้อมสัดส่วน " +
+		"ค่าเริ่มต้นคือ 30 วันล่าสุด **เลือกช่วงเวลาได้** ถ้าคำถามเอ่ยช่วง (วันนี้ เมื่อวาน สัปดาห์ก่อน เดือนที่แล้ว) " +
+		"ใช้ตอบ: จ่ายพร้อมเพย์กับเงินสดอย่างไหนเยอะกว่า · วันนี้รับเงินสดเท่าไหร่ · โอนมากี่บิล · " +
+		"สัดส่วนพร้อมเพย์กี่เปอร์เซ็นต์ · เงินสดในลิ้นชักควรมีเท่าไหร่ " +
+		"ถ้าถามยอดขายรวมโดยไม่สนวิธีจ่าย ให้ใช้ get_sales_summary หรือ get_sales_for_period แทน",
 	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
 		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
 		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
@@ -314,7 +328,7 @@ var joyboyToolGroups = []struct {
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
-		AIToolGetProfitSummary, joyboyToolSalesForecast,
+		AIToolGetProfitSummary, joyboyToolSalesForecast, joyboyToolPaymentMix,
 	}},
 	{"วัตถุดิบและสต๊อก", []AIToolName{
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,

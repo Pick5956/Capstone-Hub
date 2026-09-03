@@ -365,6 +365,27 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyMenuProfitByCategoryBody(sold, items), true, true
 
+	case joyboyToolPaymentMix:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
+		}
+		mix, err := t.service.repo.PaymentMix(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		coverage, err := t.service.repo.PaymentCoverage(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s coverage failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyPaymentMixBody(label, mix, coverage), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

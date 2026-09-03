@@ -80,6 +80,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_ingredient_named_in_question":             "ยังไม่รู้ว่าถามถึงวัตถุดิบตัวไหน ให้ถามกลับ ห้ามเดาตัวเลขของตัวไหน",
 	"no_menu_items_recorded":                      "ยังไม่มีเมนูในระบบเลย ต้องไปเพิ่มที่หน้าจัดการเมนูก่อน",
 	"no_menu_named_in_question":                   "ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับ ห้ามเดาตัวเลขของเมนูไหน",
+	"no_payment_method_recorded_in_period":        "ช่วงนี้ไม่มีบิลที่บันทึกวิธีจ่ายเงินไว้ จึงบอกไม่ได้ว่าเงินสดหรือพร้อมเพย์เท่าไหร่ ห้ามประมาณสัดส่วนเอง",
 }
 
 func joyboyNum(value float64) string {
@@ -1316,6 +1317,60 @@ func joyboySystemDocsBody(result AISystemDocsToolResult) string {
 			lines = append(lines, content)
 		}
 		lines = append(lines, "")
+	}
+	return joyboyJoin(lines)
+}
+
+// aiPaymentMethodThai turns the stored method code into the owner's words, so
+// "promptpay_qr" is never pasted into an answer.
+func aiPaymentMethodThai(method string) string {
+	switch method {
+	case "cash":
+		return "เงินสด"
+	case "promptpay_qr":
+		return "พร้อมเพย์"
+	}
+	return method
+}
+
+// joyboyPaymentMixBody renders how the window's bills were paid. Shares are
+// divided here; the coverage line says how many paid bills have no method on
+// record, and from which day methods exist at all — a window starting before
+// that day would otherwise report a split over a fraction of its bills as if it
+// were the whole.
+func joyboyPaymentMixBody(label string, mix []repository.AIPaymentMethodSummary, coverage repository.AIPaymentCoverage) string {
+	lines := []string{"period=" + label, "scope=bills_paid_in_period_by_payment_method"}
+	if len(mix) == 0 {
+		lines = append(lines, "bills_with_method=0 amount=0.00",
+			joyboyNoData("no_payment_method_recorded_in_period"))
+		if coverage.PaidBills > 0 {
+			lines = append(lines, fmt.Sprintf("paid_bills_in_period=%d note=บิลจ่ายแล้วมี แต่ไม่มีบิลไหนบันทึกวิธีจ่าย", coverage.PaidBills))
+		}
+		if coverage.FirstRecorded != "" {
+			lines = append(lines, "payment_method_recorded_from="+coverage.FirstRecorded)
+		}
+		return joyboyJoin(lines)
+	}
+	var bills int64
+	var amount float64
+	for _, row := range mix {
+		bills += row.Bills
+		amount += row.Amount
+	}
+	lines = append(lines, fmt.Sprintf("bills_with_method=%d amount=%s", bills, joyboyNum(roundBaht(amount))))
+	for _, row := range mix {
+		lines = append(lines, fmt.Sprintf("method=%s bills=%d amount=%s bill_share_pct=%s amount_share_pct=%s",
+			aiPaymentMethodThai(row.Method), row.Bills, joyboyNum(roundBaht(row.Amount)),
+			joyboyNum(roundBaht(joyboyPercent(float64(row.Bills), float64(bills)))),
+			joyboyNum(roundBaht(joyboyPercent(row.Amount, amount)))))
+	}
+	if missing := coverage.PaidBills - coverage.WithMethod; missing > 0 {
+		lines = append(lines, fmt.Sprintf("bills_without_method=%d note=บิลจ่ายแล้วในช่วงนี้อีก %d บิลไม่มีวิธีจ่ายบันทึกไว้ "+
+			"สัดส่วนข้างบนคิดจากเฉพาะบิลที่บันทึกวิธีจ่าย ต้องบอกเจ้าของ", missing, missing))
+	}
+	if coverage.FirstRecorded != "" {
+		lines = append(lines, "payment_method_recorded_from="+coverage.FirstRecorded+
+			" note=ระบบเริ่มบันทึกวิธีจ่ายตั้งแต่วันนี้ บิลก่อนหน้านั้นไม่มีข้อมูลวิธีจ่าย")
 	}
 	return joyboyJoin(lines)
 }
