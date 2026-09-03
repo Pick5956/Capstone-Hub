@@ -403,16 +403,37 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		if t.service.repo == nil {
 			return "", false, false
 		}
+		now := repository.BangkokNow()
 		start, end, label, explicit := t.periodNamedIn(question)
 		if !explicit {
-			return "", false, false
+			// No period named: the same rolling window the snapshot uses, read
+			// here rather than from the snapshot so the expense ledger for the
+			// window can ride on the sheet. The snapshot path stays as the
+			// fallback when this read fails.
+			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
 		}
 		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, start, end)
 		if err != nil {
 			aiStage("warn", "joyboy: %s for %s failed (%v) → falling back to the 30-day snapshot", tool, label, err)
 			return "", false, false
 		}
-		return joyboyProfitForPeriodBody(label, metrics), true, true
+		// The ledger for the same window. "กำไร" without it is gross profit, and
+		// the owner who asks "เหลือเท่าไหร่" is asking for what is left after the
+		// bills — which only this join can answer.
+		var expenses *ExpenseListResponse
+		if t.service.actionExpenses != nil {
+			from := start.Format("2006-01-02")
+			until := end.AddDate(0, 0, -1).Format("2006-01-02")
+			if !explicit {
+				until = end.Format("2006-01-02")
+			}
+			if list, err := t.service.actionExpenses.List(t.restaurantID, from, until, ""); err == nil {
+				expenses = list
+			} else {
+				aiStage("warn", "joyboy: %s expenses for %s failed (%v) → sheet without net", tool, label, err)
+			}
+		}
+		return joyboyProfitForPeriodBody(label, metrics, expenses), true, true
 
 	case joyboyToolMenuForPeriod:
 		// Reuse legacy's period parser and range query, but render raw figures for

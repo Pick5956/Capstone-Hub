@@ -1120,7 +1120,17 @@ func joyboyPercent(part, whole float64) float64 {
 // Coverage is reported for the same reason the snapshot reports it: below full
 // coverage the cost is understated, so the profit is a floor rather than a
 // figure.
-func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSummary) string {
+//
+// expenses is the ledger for the same window, and it turns this sheet from one
+// figure into two. "กำไร" here is revenue minus recipe cost — gross profit — and
+// the owner who asked "ขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่" was given
+// 284,900 / 5,130.74 / 197,122.38 and no subtraction: the sheet had nothing
+// below gross profit and the expense sheet forbids subtracting from revenue. Now
+// the sheet says what "profit" means, and carries the net after the recorded
+// expenses as a figure of its own, computed here. The caveat that the ledger
+// holds only what was written down travels with it, because a net over an empty
+// ledger reads as "nothing else was spent".
+func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSummary, expenses *ExpenseListResponse) string {
 	var revenue, cost, profit, costedRevenue float64
 	for _, m := range metrics {
 		revenue += m.Revenue
@@ -1135,16 +1145,44 @@ func joyboyProfitForPeriodBody(label string, metrics []repository.AIMenuMarginSu
 	}
 	lines := []string{
 		"period=" + label,
-		"scope=named_period_not_30day_window",
-		fmt.Sprintf("revenue=%s cost=%s profit=%s margin_pct=%s",
+		fmt.Sprintf("revenue=%s cost=%s gross_profit=%s margin_pct=%s",
 			joyboyNum(roundBaht(revenue)), joyboyNum(roundBaht(cost)), joyboyNum(roundBaht(profit)),
 			joyboyNum(roundBaht(profit/revenue*100))),
+		"gross_profit_means=กำไรขั้นต้น = ยอดขาย − ต้นทุนวัตถุดิบตามสูตร ยังไม่หักรายจ่ายอื่น (ค่าแรง ค่าเช่า ค่าน้ำไฟ ฯลฯ) " +
+			"เวลาพูดถึงเลขนี้ต้องบอกว่าเป็นกำไรก่อนหักรายจ่าย",
 	}
 	if coverage := costedRevenue / revenue * 100; coverage < 99.5 {
 		lines = append(lines, fmt.Sprintf(
 			"note=cost_covers_only_%s_pct_of_revenue_so_profit_is_a_floor", joyboyNum(roundBaht(coverage))))
 	}
+	lines = append(lines, joyboyNetAfterExpensesLines(profit, expenses)...)
 	return joyboyJoin(lines)
+}
+
+// joyboyNetAfterExpensesLines is gross profit less the recorded expenses of the
+// same window, as a figure. Nothing is printed when the ledger was not fetched
+// at all (a sheet that says nothing about expenses is better than one that
+// implies there were none); an empty ledger prints the net equal to gross with
+// the caveat that nothing was recorded.
+func joyboyNetAfterExpensesLines(grossProfit float64, expenses *ExpenseListResponse) []string {
+	if expenses == nil {
+		return nil
+	}
+	net := grossProfit - expenses.Total
+	lines := []string{
+		fmt.Sprintf("expenses_recorded=%s expense_items=%d net_after_expenses=%s",
+			joyboyNum(roundBaht(expenses.Total)), expenses.Entries, joyboyNum(roundBaht(net))),
+	}
+	if expenses.Entries == 0 {
+		lines = append(lines, "net_means=ช่วงนี้ยังไม่มีรายจ่ายบันทึกไว้เลย net_after_expenses จึงเท่ากับกำไรขั้นต้น "+
+			"ถ้าถามว่าเหลือเท่าไหร่ ให้บอกเลขนี้พร้อมบอกว่ายังไม่มีรายจ่ายในระบบ เงินที่เหลือจริงอาจน้อยกว่านี้")
+		return lines
+	}
+	lines = append(lines, fmt.Sprintf("net_means=กำไรขั้นต้นหักรายจ่ายที่บันทึกในระบบช่วงเดียวกัน (%d รายการ) "+
+		"ถ้าถามว่าเหลือเท่าไหร่ หรือกำไรหลังหักค่าใช้จ่าย ให้ตอบ net_after_expenses "+
+		"และบอกด้วยว่าหักเฉพาะรายจ่ายที่บันทึกไว้ รายจ่ายที่ไม่ได้บันทึกยังไม่รวม "+
+		"ถ้าถามว่ากำไรเท่าไหร่เฉย ๆ ให้บอกทั้งสองเลข: กำไรขั้นต้น (ก่อนหัก) และ net_after_expenses (หลังหัก) เสมอ", expenses.Entries))
+	return lines
 }
 
 // joyboySalesForPeriodBody renders the whole-store paid-sales total for one

@@ -120,9 +120,9 @@ func TestProfitForPeriodTotalsTheNamedWindow(t *testing.T) {
 		{MenuName: "ผัดไทยกุ้งสด", Quantity: 100, Revenue: 8900, Cost: 2700, Profit: 6200},
 		{MenuName: "ลาบหมู", Quantity: 50, Revenue: 3950, Cost: 1200, Profit: 2750},
 	}
-	body := joyboyProfitForPeriodBody("เดือนกรกฎาคม 2569", metrics)
+	body := joyboyProfitForPeriodBody("เดือนกรกฎาคม 2569", metrics, nil)
 
-	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "revenue=12850", "profit=8950", "scope=named_period_not_30day_window"} {
+	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "revenue=12850", "profit=8950", "gross_profit_means=กำไรขั้นต้น"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sheet is missing %q:\n%s", want, body)
 		}
@@ -136,14 +136,14 @@ func TestProfitForPeriodFlagsPartialCostCoverage(t *testing.T) {
 		{MenuName: "มีต้นทุน", Quantity: 10, Revenue: 1000, Cost: 400, Profit: 600},
 		{MenuName: "ยังไม่ผูกต้นทุน", Quantity: 10, Revenue: 1000, Cost: 0, Profit: 1000},
 	}
-	if body := joyboyProfitForPeriodBody("เดือนนี้", metrics); !strings.Contains(body, "profit_is_a_floor") {
+	if body := joyboyProfitForPeriodBody("เดือนนี้", metrics, nil); !strings.Contains(body, "profit_is_a_floor") {
 		t.Errorf("half the revenue is uncosted, the sheet must flag it:\n%s", body)
 	}
 }
 
 // A named period with no sales is a stated empty period, not a zero-baht profit.
 func TestProfitForPeriodReportsAnEmptyWindow(t *testing.T) {
-	if body := joyboyProfitForPeriodBody("เมื่อวาน", nil); !strings.Contains(body, "no_paid_sales_in_period") {
+	if body := joyboyProfitForPeriodBody("เมื่อวาน", nil, nil); !strings.Contains(body, "no_paid_sales_in_period") {
 		t.Errorf("an empty window must be reported as empty:\n%s", body)
 	}
 }
@@ -632,5 +632,40 @@ func TestActiveOrdersSheetGroupsRowsByStatusWithCounts(t *testing.T) {
 	t2 := strings.Index(body, "order=T2 ")
 	if !(cooking < t2 && t2 < queued) {
 		t.Errorf("cooking rows must sit under the cooking header and before the queue:\n%s", body)
+	}
+}
+
+// "เดือนที่แล้วขายได้เท่าไหร่ จ่ายไปเท่าไหร่ เหลือเท่าไหร่" was answered 284,900 /
+// 5,130.74 / "กำไรของเมนู 197,122.38" — every figure right, the subtraction
+// never done, and "กำไร" never said to be gross. The sheet now names what the
+// profit is and carries the net after the recorded ledger as its own figure.
+func TestProfitSheetCarriesGrossMeaningAndNetAfterRecordedExpenses(t *testing.T) {
+	metrics := []repository.AIMenuMarginSummary{
+		{MenuName: "ต้มยำกุ้งน้ำข้น", Quantity: 100, Revenue: 13900, Cost: 4400, Profit: 9500, Margin: 68.35},
+		{MenuName: "ชาไทยเย็น", Quantity: 200, Revenue: 9800, Cost: 3000, Profit: 6800, Margin: 69.39},
+	}
+	body := joyboyProfitForPeriodBody("เดือนสิงหาคม 2569", metrics, &ExpenseListResponse{Total: 5130.74, Entries: 5})
+	for _, want := range []string{
+		"gross_profit=16300.00",
+		"gross_profit_means=กำไรขั้นต้น",
+		"ก่อนหักรายจ่าย",
+		// 16300 − 5130.74, subtracted here, not by the model.
+		"expenses_recorded=5130.74 expense_items=5 net_after_expenses=11169.26",
+		"หักเฉพาะรายจ่ายที่บันทึกไว้",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the profit sheet lost %q:\n%s", want, body)
+		}
+	}
+
+	// An empty ledger: the net equals gross, and the sheet says why.
+	body = joyboyProfitForPeriodBody("เมื่อวาน", metrics, &ExpenseListResponse{})
+	if !strings.Contains(body, "expense_items=0 net_after_expenses=16300.00") || !strings.Contains(body, "ยังไม่มีรายจ่ายบันทึกไว้เลย") {
+		t.Errorf("an empty ledger should give net = gross with the caveat:\n%s", body)
+	}
+
+	// Ledger not fetched: no net line at all, rather than one that implies zero.
+	if body := joyboyProfitForPeriodBody("เมื่อวาน", metrics, nil); strings.Contains(body, "net_after_expenses") {
+		t.Errorf("without the ledger there must be no net figure:\n%s", body)
 	}
 }
