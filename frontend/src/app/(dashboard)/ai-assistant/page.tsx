@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Bell, Bot, ChevronDown, Loader2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
+import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, Minimize2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/src/lib/aiActionPreview";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
+import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
@@ -129,7 +130,8 @@ export default function AIAssistantPage() {
   // The sentence that produced the pending change. "Ask again" puts it back in
   // the box so the owner edits one word instead of retyping the command.
   const [pendingActionQuestion, setPendingActionQuestion] = useState("");
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const composer = useAutoGrowTextarea(input);
+  const inputRef = composer.ref;
   // The inline confirm bar owns its terminal state (done/cancelled/expired) and
   // stays mounted to show it. Once resolved, the preview must be dropped without
   // trying to cancel an already-executed action.
@@ -970,8 +972,28 @@ export default function AIAssistantPage() {
                   }}
                   placeholder={copy.askPlaceholder}
                   rows={1}
-                  className="max-h-40 min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
+                  className="min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
                 />
+              )}
+              {/* Open the field taller once there is enough text that expanding
+                  shows more of it. Hidden while dictating: the waveform owns
+                  the field then, and there is nothing to read back yet. */}
+              {!voiceListening && composer.canExpand && (
+                <HoverTip label={composer.expanded
+                  ? (language === "th" ? "ย่อช่องพิมพ์" : "Shrink the box")
+                  : (language === "th" ? "ขยายช่องพิมพ์" : "Expand the box")}>
+                  <button
+                    type="button"
+                    onClick={() => composer.setExpanded((open) => !open)}
+                    aria-label={composer.expanded
+                      ? (language === "th" ? "ย่อช่องพิมพ์" : "Shrink the box")
+                      : (language === "th" ? "ขยายช่องพิมพ์" : "Expand the box")}
+                    aria-expanded={composer.expanded}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+                  >
+                    {composer.expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                </HoverTip>
               )}
               {/* Kept mounted while dictating (it owns the mic session), just hidden */}
               <div className={voiceListening ? "hidden" : "contents"}>

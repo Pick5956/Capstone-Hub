@@ -13,7 +13,9 @@ import {
   BarChart2,
   Lightbulb,
   RotateCcw,
-  ChevronDown
+  ChevronDown,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
@@ -28,6 +30,7 @@ import {
 import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
+import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
@@ -232,7 +235,8 @@ export default function AIOperationsFloatingChat() {
   // undo, so the button asks first. It used to wipe the thread on one stray tap.
   const [confirmingClear, setConfirmingClear] = useState(false);
   const chatDialogRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const composer = useAutoGrowTextarea(input);
+  const inputRef = composer.ref;
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
   const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-floating-chat"));
@@ -1155,16 +1159,38 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling}
                 onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
               />
-              <input
+              {/* A textarea, not an input: an input cannot wrap, so a long
+                  question scrolled sideways out of sight while it was being
+                  typed. Enter still sends; Shift+Enter starts a new line. */}
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
                 placeholder={copy.askPlaceholder}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
-                className="min-h-9 min-w-0 flex-1 bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
+              {composer.canExpand && (
+                <button
+                  type="button"
+                  onClick={() => composer.setExpanded((open) => !open)}
+                  aria-label={composer.expanded
+                    ? (language === "th" ? "ย่อช่องพิมพ์" : "Shrink the box")
+                    : (language === "th" ? "ขยายช่องพิมพ์" : "Expand the box")}
+                  aria-expanded={composer.expanded}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+                >
+                  {composer.expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
+              )}
               <AIInputTools
                 tools={["voice"]}
                 language={language}

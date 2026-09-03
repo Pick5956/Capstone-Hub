@@ -34,6 +34,7 @@ export default defineConfig({
       "src/lib/__tests__/roleLabels.test.ts",
       "src/lib/__tests__/safeRedirect.test.ts",
       "src/lib/__tests__/singleFlight.test.ts",
+      "src/lib/__tests__/chatComposer.test.ts",
       "src/app/(dashboard)/orders/ordersPageUtils.test.ts",
       "src/app/(dashboard)/tables/tablesPageUtils.test.ts",
       "src/app/(dashboard)/inventory/inventoryPageUtils.test.ts",
