@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 19
+	CurrentSchemaVersion int64 = 20
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -363,6 +363,20 @@ func schemaMigrationPlan() []SchemaMigration {
 						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability','create_expense','set_menu_price'))`,
 				).Error; err != nil {
 					return fmt.Errorf("recreate AI action type constraint: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 20,
+			Name:    "menu_option_ingredients",
+			Up: func(ctx *MigrationContext) error {
+				// Lets one option carry its own ingredient use, so "เพิ่มกุ้ง 2 ตัว"
+				// deducts two more shrimp instead of only charging for them.
+				// Additive: a new table nothing reads yet, so rolling back leaves
+				// an unused table and every existing recipe deduction untouched.
+				if err := ctx.DB.AutoMigrate(&entity.MenuOptionIngredient{}); err != nil {
+					return fmt.Errorf("migrate menu option ingredients: %w", err)
 				}
 				return nil
 			},

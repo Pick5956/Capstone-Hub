@@ -140,6 +140,11 @@ type selectedMenuOption struct {
 	GroupName     string
 	OptionName    string
 	PriceDelta    float64
+	// Ingredients is what this option does to the dish ingredient use. It rides
+	// along with the selection because the recipe snapshot is written in the same
+	// breath as the option snapshot, and an option that changes the price without
+	// changing the stock is exactly the bug this field exists to prevent.
+	Ingredients []entity.MenuOptionIngredient
 }
 
 func shouldSeatReservationOnOpen(tableStatus string, requested bool) (bool, error) {
@@ -456,7 +461,7 @@ func (s *OrderService) AddItem(restaurantID, userID, orderID uint, req *AddOrder
 		if err := tx.CreateItem(item); err != nil {
 			return err
 		}
-		if err := snapshotRecipeForOrderItem(tx, order, item); err != nil {
+		if err := snapshotRecipeForOrderItem(tx, order, item, selectedOptions); err != nil {
 			return err
 		}
 		for _, option := range selectedOptions {
@@ -1034,25 +1039,118 @@ func orderStatusAfterPendingItemAdded(status string) string {
 	return status
 }
 
-func buildOrderItemRecipeSnapshots(
-	order *entity.Order,
-	item *entity.OrderItem,
+// recipeQuantityEpsilon is the width of "this is zero". Quantities are stored as
+// numeric(18,6) and reach here after unit conversion, so a line the owner meant
+// to cancel exactly can land a hair off and would otherwise survive as a
+// deduction of almost nothing.
+const recipeQuantityEpsilon = 1e-9
+
+// mergedRecipeLine is one ingredient total draw for an order item, after the
+// selected options have been folded into the base recipe.
+type mergedRecipeLine struct {
+	ingredientID uint
+	ingredient   *entity.Ingredient
+	unit         string
+	quantity     float64
+}
+
+// mergeRecipeWithOptions folds every selected option ingredient row into the dish
+// recipe and returns one line per ingredient, in a stable order.
+//
+// Merging - rather than appending - is not a preference. OrderItemRecipeSnapshot
+// is uniquely indexed on (order_item_id, ingredient_id), so an "add 2 shrimp"
+// option on a dish whose recipe already uses shrimp has nowhere to put a second
+// row. It also happens to be the correct arithmetic: the kitchen draws one amount
+// of shrimp, not two.
+//
+// A line the options cancel to zero or below is dropped rather than clamped to a
+// tiny positive value: the snapshot table CHECKs quantity_per_item > 0, and "no
+// vegetables" on a dish with 30g of greens should deduct no greens at all. Going
+// below zero never credits stock back - an option cannot un-cook the rest of the
+// dish - so the floor is simply nothing.
+func mergeRecipeWithOptions(
 	components []entity.MenuItemIngredient,
-) []entity.OrderItemRecipeSnapshot {
-	snapshots := make([]entity.OrderItemRecipeSnapshot, 0, len(components))
+	options []selectedMenuOption,
+) ([]mergedRecipeLine, error) {
+	lines := make([]mergedRecipeLine, 0, len(components))
+	index := make(map[uint]int, len(components))
 	for _, component := range components {
-		if component.Quantity <= 0 || component.Ingredient == nil {
+		if component.Ingredient == nil {
+			return nil, errors.New("menu recipe contains an unavailable ingredient")
+		}
+		if component.Quantity <= 0 {
 			continue
 		}
 		unit := strings.TrimSpace(component.Unit)
 		if unit == "" {
 			unit = strings.TrimSpace(component.Ingredient.Unit)
 		}
-		costPerUnit := component.Ingredient.CostPerUnit
+		index[component.IngredientID] = len(lines)
+		lines = append(lines, mergedRecipeLine{
+			ingredientID: component.IngredientID,
+			ingredient:   component.Ingredient,
+			unit:         unit,
+			quantity:     component.Quantity,
+		})
+	}
+
+	for _, option := range options {
+		for _, row := range option.Ingredients {
+			if row.Quantity <= 0 {
+				continue
+			}
+			delta := row.Quantity
+			if row.Direction == entity.MenuOptionIngredientRemove {
+				delta = -delta
+			}
+			if position, ok := index[row.IngredientID]; ok {
+				lines[position].quantity += delta
+				continue
+			}
+			if delta <= 0 {
+				// Taking an ingredient off a dish that never had it. Nothing to
+				// subtract, and inventing a negative line would deduct backwards.
+				continue
+			}
+			if row.Ingredient == nil {
+				return nil, errors.New("option ingredient is unavailable")
+			}
+			unit := strings.TrimSpace(row.Unit)
+			if unit == "" {
+				unit = strings.TrimSpace(row.Ingredient.Unit)
+			}
+			index[row.IngredientID] = len(lines)
+			lines = append(lines, mergedRecipeLine{
+				ingredientID: row.IngredientID,
+				ingredient:   row.Ingredient,
+				unit:         unit,
+				quantity:     delta,
+			})
+		}
+	}
+
+	merged := make([]mergedRecipeLine, 0, len(lines))
+	for _, line := range lines {
+		if line.quantity <= recipeQuantityEpsilon {
+			continue
+		}
+		merged = append(merged, line)
+	}
+	return merged, nil
+}
+
+func buildOrderItemRecipeSnapshots(
+	order *entity.Order,
+	item *entity.OrderItem,
+	lines []mergedRecipeLine,
+) []entity.OrderItemRecipeSnapshot {
+	snapshots := make([]entity.OrderItemRecipeSnapshot, 0, len(lines))
+	for _, line := range lines {
+		costPerUnit := line.ingredient.CostPerUnit
 		if costPerUnit < 0 {
 			costPerUnit = 0
 		}
-		yieldPercent := component.Ingredient.YieldPercent
+		yieldPercent := line.ingredient.YieldPercent
 		if yieldPercent <= 0 || yieldPercent > 100 {
 			yieldPercent = 100
 		}
@@ -1061,10 +1159,10 @@ func buildOrderItemRecipeSnapshots(
 			OrderID:         order.ID,
 			OrderItemID:     item.ID,
 			MenuItemID:      item.MenuID,
-			IngredientID:    component.IngredientID,
-			IngredientName:  strings.TrimSpace(component.Ingredient.Name),
-			Unit:            unit,
-			QuantityPerItem: component.Quantity,
+			IngredientID:    line.ingredientID,
+			IngredientName:  strings.TrimSpace(line.ingredient.Name),
+			Unit:            line.unit,
+			QuantityPerItem: line.quantity,
 			CostPerUnit:     costPerUnit,
 			YieldPercent:    yieldPercent,
 		})
@@ -1076,16 +1174,17 @@ func snapshotRecipeForOrderItem(
 	tx *repository.OrderRepository,
 	order *entity.Order,
 	item *entity.OrderItem,
+	options []selectedMenuOption,
 ) error {
 	components, err := tx.ListRecipeComponents(order.RestaurantID, item.MenuID)
 	if err != nil {
 		return err
 	}
-	snapshots := buildOrderItemRecipeSnapshots(order, item, components)
-	if len(snapshots) != len(components) {
-		return errors.New("menu recipe contains an unavailable ingredient")
+	lines, err := mergeRecipeWithOptions(components, options)
+	if err != nil {
+		return err
 	}
-	return tx.CreateItemRecipeSnapshots(snapshots)
+	return tx.CreateItemRecipeSnapshots(buildOrderItemRecipeSnapshots(order, item, lines))
 }
 
 func editablePendingItem(tx *repository.OrderRepository, restaurantID, orderID, itemID uint) (*entity.Order, *entity.OrderItem, error) {
@@ -1132,6 +1231,7 @@ func validateSelectedMenuOptions(menu *entity.MenuItem, selectedIDs []uint) ([]s
 				GroupName:     group.Name,
 				OptionName:    option.Name,
 				PriceDelta:    option.PriceDelta,
+				Ingredients:   option.Ingredients,
 			})
 			delete(selectedByID, option.ID)
 		}

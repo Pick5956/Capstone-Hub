@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -466,7 +467,11 @@ func TestBuildOrderItemRecipeSnapshotsCopiesRecipeAndCostInputs(t *testing.T) {
 		Ingredient:   ingredient,
 	}}
 
-	snapshots := buildOrderItemRecipeSnapshots(order, item, components)
+	lines, err := mergeRecipeWithOptions(components, nil)
+	if err != nil {
+		t.Fatalf("mergeRecipeWithOptions() error = %v", err)
+	}
+	snapshots := buildOrderItemRecipeSnapshots(order, item, lines)
 	if len(snapshots) != 1 {
 		t.Fatalf("snapshot count = %d, want 1", len(snapshots))
 	}
@@ -479,6 +484,133 @@ func TestBuildOrderItemRecipeSnapshotsCopiesRecipeAndCostInputs(t *testing.T) {
 	}
 	if got.QuantityPerItem != 180 || got.CostPerUnit != ingredient.CostPerUnit || got.YieldPercent != ingredient.YieldPercent {
 		t.Fatalf("snapshot recipe inputs = %+v", got)
+	}
+}
+
+// The option-to-recipe merge is where a wrong number becomes a wrong shelf, so
+// each case below is one way an owner can arrange options against a recipe.
+func TestMergeRecipeWithOptions(t *testing.T) {
+	shrimp := &entity.Ingredient{Name: "Shrimp", Unit: "g", CostPerUnit: 0.5, YieldPercent: 100}
+	shrimp.ID = 1
+	greens := &entity.Ingredient{Name: "Greens", Unit: "g", CostPerUnit: 0.1, YieldPercent: 100}
+	greens.ID = 2
+	garlic := &entity.Ingredient{Name: "Garlic", Unit: "g", CostPerUnit: 0.2, YieldPercent: 100}
+	garlic.ID = 3
+
+	recipe := func() []entity.MenuItemIngredient {
+		return []entity.MenuItemIngredient{
+			{IngredientID: shrimp.ID, Quantity: 50, Unit: "g", Ingredient: shrimp},
+			{IngredientID: greens.ID, Quantity: 30, Unit: "g", Ingredient: greens},
+		}
+	}
+	option := func(rows ...entity.MenuOptionIngredient) selectedMenuOption {
+		return selectedMenuOption{ID: 99, Ingredients: rows}
+	}
+	add := func(ing *entity.Ingredient, qty float64) entity.MenuOptionIngredient {
+		return entity.MenuOptionIngredient{
+			IngredientID: ing.ID, Direction: entity.MenuOptionIngredientAdd,
+			Quantity: qty, Unit: ing.Unit, Ingredient: ing,
+		}
+	}
+	remove := func(ing *entity.Ingredient, qty float64) entity.MenuOptionIngredient {
+		return entity.MenuOptionIngredient{
+			IngredientID: ing.ID, Direction: entity.MenuOptionIngredientRemove,
+			Quantity: qty, Unit: ing.Unit, Ingredient: ing,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		options []selectedMenuOption
+		want    map[uint]float64
+	}{
+		{
+			name: "no options leaves the recipe alone",
+			want: map[uint]float64{shrimp.ID: 50, greens.ID: 30},
+		},
+		{
+			name:    "adding an ingredient the recipe already uses merges into one line",
+			options: []selectedMenuOption{option(add(shrimp, 20))},
+			want:    map[uint]float64{shrimp.ID: 70, greens.ID: 30},
+		},
+		{
+			name:    "adding an ingredient the recipe lacks appends a line",
+			options: []selectedMenuOption{option(add(garlic, 5))},
+			want:    map[uint]float64{shrimp.ID: 50, greens.ID: 30, garlic.ID: 5},
+		},
+		{
+			name:    "removing part of a line subtracts",
+			options: []selectedMenuOption{option(remove(greens, 10))},
+			want:    map[uint]float64{shrimp.ID: 50, greens.ID: 20},
+		},
+		{
+			name:    "removing the whole line drops it instead of writing a zero",
+			options: []selectedMenuOption{option(remove(greens, 30))},
+			want:    map[uint]float64{shrimp.ID: 50},
+		},
+		{
+			name:    "removing more than the recipe holds never goes negative",
+			options: []selectedMenuOption{option(remove(greens, 500))},
+			want:    map[uint]float64{shrimp.ID: 50},
+		},
+		{
+			name:    "removing an ingredient the recipe never had is a no-op",
+			options: []selectedMenuOption{option(remove(garlic, 5))},
+			want:    map[uint]float64{shrimp.ID: 50, greens.ID: 30},
+		},
+		{
+			name:    "two options touching the same ingredient both count",
+			options: []selectedMenuOption{option(add(shrimp, 20)), option(add(shrimp, 10))},
+			want:    map[uint]float64{shrimp.ID: 80, greens.ID: 30},
+		},
+		{
+			name:    "an add and a remove on the same ingredient cancel",
+			options: []selectedMenuOption{option(add(garlic, 5)), option(remove(garlic, 5))},
+			want:    map[uint]float64{shrimp.ID: 50, greens.ID: 30},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lines, err := mergeRecipeWithOptions(recipe(), test.options)
+			if err != nil {
+				t.Fatalf("mergeRecipeWithOptions() error = %v", err)
+			}
+			if len(lines) != len(test.want) {
+				t.Fatalf("line count = %d, want %d (%+v)", len(lines), len(test.want), lines)
+			}
+			seen := map[uint]bool{}
+			for _, line := range lines {
+				want, ok := test.want[line.ingredientID]
+				if !ok {
+					t.Fatalf("unexpected ingredient %d in merged lines", line.ingredientID)
+				}
+				if seen[line.ingredientID] {
+					t.Fatalf("ingredient %d appears twice; the snapshot unique index would reject it", line.ingredientID)
+				}
+				seen[line.ingredientID] = true
+				if math.Abs(line.quantity-want) > 1e-9 {
+					t.Fatalf("ingredient %d quantity = %v, want %v", line.ingredientID, line.quantity, want)
+				}
+				if line.quantity <= 0 {
+					t.Fatalf("ingredient %d quantity %v would violate quantity_per_item > 0", line.ingredientID, line.quantity)
+				}
+			}
+		})
+	}
+}
+
+func TestMergeRecipeWithOptionsRejectsUnavailableIngredients(t *testing.T) {
+	// A missing Ingredient pointer means the join found nothing. Deducting a
+	// nameless ingredient at zero cost would be worse than refusing the order.
+	if _, err := mergeRecipeWithOptions([]entity.MenuItemIngredient{{IngredientID: 1, Quantity: 5}}, nil); err == nil {
+		t.Fatal("recipe with an unavailable ingredient was accepted")
+	}
+	options := []selectedMenuOption{{ID: 1, Ingredients: []entity.MenuOptionIngredient{{
+		IngredientID: 9, Direction: entity.MenuOptionIngredientAdd, Quantity: 2,
+	}}}}
+	if _, err := mergeRecipeWithOptions(nil, options); err == nil {
+		t.Fatal("option with an unavailable ingredient was accepted")
 	}
 }
 

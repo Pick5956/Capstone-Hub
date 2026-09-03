@@ -60,20 +60,32 @@ type MenuOptionGroupRequest struct {
 }
 
 type MenuOptionRequest struct {
-	Name         string  `json:"name" binding:"max=120"`
-	PriceDelta   float64 `json:"price_delta"`
-	IsDefault    bool    `json:"is_default"`
-	DisplayOrder int     `json:"display_order"`
-	IsActive     *bool   `json:"is_active"`
+	Name         string                        `json:"name" binding:"max=120"`
+	PriceDelta   float64                       `json:"price_delta"`
+	IsDefault    bool                          `json:"is_default"`
+	DisplayOrder int                           `json:"display_order"`
+	IsActive     *bool                         `json:"is_active"`
+	Ingredients  []MenuOptionIngredientRequest `json:"ingredients" binding:"max=20,dive"`
+}
+
+// MenuOptionIngredientRequest is what one option adds to, or takes off, the
+// dish's ingredient use. Direction carries the sign so Quantity stays positive —
+// see entity.MenuOptionIngredient for why that is not merely a style choice.
+type MenuOptionIngredientRequest struct {
+	IngredientID uint    `json:"ingredient_id"`
+	Direction    string  `json:"direction" binding:"max=8"`
+	Quantity     float64 `json:"quantity"`
+	Unit         string  `json:"unit" binding:"max=40"`
 }
 
 const (
-	maxMenuCategories   = 20
-	maxMenuIngredients  = 100
-	maxMenuOptionGroups = 20
-	maxOptionsPerGroup  = 50
-	maxMenuMoney        = 1_000_000_000
-	maxRecipeQuantity   = 1_000_000_000
+	maxMenuCategories    = 20
+	maxMenuIngredients   = 100
+	maxMenuOptionGroups  = 20
+	maxOptionsPerGroup   = 50
+	maxOptionIngredients = 20
+	maxMenuMoney         = 1_000_000_000
+	maxRecipeQuantity    = 1_000_000_000
 )
 
 func (s *MenuService) ListCategories(restaurantID uint, includeInactive bool) ([]entity.Category, error) {
@@ -184,7 +196,7 @@ func (s *MenuService) CreateMenuItem(restaurantID uint, req *MenuItemRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	groups, err := normalizeMenuOptionGroups(restaurantID, 0, req.OptionGroups)
+	groups, err := s.normalizeMenuOptionGroups(restaurantID, 0, req.OptionGroups)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +253,7 @@ func (s *MenuService) UpdateMenuItem(restaurantID, itemID uint, req *MenuItemReq
 	if req.IsAvailable != nil {
 		item.IsAvailable = *req.IsAvailable
 	}
-	groups, err := normalizeMenuOptionGroups(restaurantID, item.ID, req.OptionGroups)
+	groups, err := s.normalizeMenuOptionGroups(restaurantID, item.ID, req.OptionGroups)
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +317,7 @@ func (s *MenuService) DeleteMenuItem(restaurantID, itemID uint) error {
 	return s.repo.DeleteMenuItem(item)
 }
 
-func normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOptionGroupRequest) ([]entity.MenuOptionGroup, error) {
+func (s *MenuService) normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOptionGroupRequest) ([]entity.MenuOptionGroup, error) {
 	if len(requests) > maxMenuOptionGroups {
 		return nil, errors.New("too many option groups")
 	}
@@ -392,6 +404,11 @@ func normalizeMenuOptionGroups(restaurantID, menuItemID uint, requests []MenuOpt
 			if optionReq.IsActive != nil {
 				option.IsActive = *optionReq.IsActive
 			}
+			optionIngredients, err := s.normalizeMenuOptionIngredients(restaurantID, menuItemID, optionReq.Ingredients)
+			if err != nil {
+				return nil, err
+			}
+			option.Ingredients = optionIngredients
 			if option.IsActive {
 				activeOptions++
 				if option.IsDefault {
@@ -486,7 +503,7 @@ func (s *MenuService) normalizeMenuIngredients(restaurantID, menuItemID uint, re
 		if err != nil {
 			return nil, errors.New("recipe ingredient not found")
 		}
-		unit, err := normalizeRecipeUnit(req.Unit, ingredient.Unit)
+		quantity, unit, err := normalizeRecipeQuantity(req.Quantity, req.Unit, ingredient.Unit)
 		if err != nil {
 			return nil, err
 		}
@@ -498,7 +515,7 @@ func (s *MenuService) normalizeMenuIngredients(restaurantID, menuItemID uint, re
 			RestaurantID: restaurantID,
 			MenuItemID:   menuItemID,
 			IngredientID: req.IngredientID,
-			Quantity:     req.Quantity,
+			Quantity:     quantity,
 			Unit:         unit,
 			Note:         note,
 		})
@@ -507,16 +524,86 @@ func (s *MenuService) normalizeMenuIngredients(restaurantID, menuItemID uint, re
 	return components, nil
 }
 
-func normalizeRecipeUnit(requested, ingredientUnit string) (string, error) {
+// normalizeMenuOptionIngredients restates what one option does to the dish's
+// ingredient use. It is deliberately the same shape as normalizeMenuIngredients
+// and shares normalizeRecipeQuantity, so an amount typed against an option is
+// stored on exactly the same basis as one typed into the recipe — anything else
+// and the two would be added together at order time in different units.
+func (s *MenuService) normalizeMenuOptionIngredients(restaurantID, menuItemID uint, requests []MenuOptionIngredientRequest) ([]entity.MenuOptionIngredient, error) {
+	if len(requests) > maxOptionIngredients {
+		return nil, errors.New("too many ingredients for one option")
+	}
+	rows := make([]entity.MenuOptionIngredient, 0, len(requests))
+	seen := map[uint]bool{}
+	for _, req := range requests {
+		if req.IngredientID == 0 && req.Quantity == 0 {
+			// A row the owner started and abandoned. Dropping it is kinder than
+			// refusing the whole save over a blank line.
+			continue
+		}
+		if req.IngredientID == 0 {
+			return nil, errors.New("ingredient is required for an option ingredient")
+		}
+		if !isFiniteMenuNumber(req.Quantity) || req.Quantity <= 0 {
+			return nil, errors.New("option ingredient quantity must be greater than zero")
+		}
+		if req.Quantity > maxRecipeQuantity {
+			return nil, errors.New("option ingredient quantity is too large")
+		}
+		if seen[req.IngredientID] {
+			return nil, errors.New("ingredient can only appear once per option")
+		}
+		direction := strings.ToLower(strings.TrimSpace(req.Direction))
+		if direction == "" {
+			direction = entity.MenuOptionIngredientAdd
+		}
+		if direction != entity.MenuOptionIngredientAdd && direction != entity.MenuOptionIngredientRemove {
+			return nil, errors.New("option ingredient direction must be add or remove")
+		}
+		ingredient, err := s.repo.FindIngredient(restaurantID, req.IngredientID)
+		if err != nil {
+			return nil, errors.New("option ingredient not found")
+		}
+		quantity, unit, err := normalizeRecipeQuantity(req.Quantity, req.Unit, ingredient.Unit)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, entity.MenuOptionIngredient{
+			RestaurantID: restaurantID,
+			MenuItemID:   menuItemID,
+			IngredientID: req.IngredientID,
+			Direction:    direction,
+			Quantity:     quantity,
+			Unit:         unit,
+		})
+		seen[req.IngredientID] = true
+	}
+	return rows, nil
+}
+
+// normalizeRecipeQuantity restates a recipe amount in the ingredient's own stock
+// unit. A cook may write the amount in any unit of the same family — 5 กรัม
+// against a shelf kept in กิโลกรัม — and it is stored as 0.005 กิโลกรัม, because
+// the stock number the recipe is deducted from is in that unit and nothing
+// downstream should have to guess. Crossing families is still refused: no factor
+// turns ฟอง into กรัม, and inventing one would drain the wrong amount forever.
+func normalizeRecipeQuantity(quantity float64, requested, ingredientUnit string) (float64, string, error) {
 	stockUnit := strings.TrimSpace(ingredientUnit)
 	unit := strings.TrimSpace(requested)
-	if unit == "" {
-		return stockUnit, nil
+	if unit == "" || strings.EqualFold(unit, stockUnit) {
+		return quantity, stockUnit, nil
 	}
-	if !strings.EqualFold(unit, stockUnit) {
-		return "", errors.New("recipe unit must match the ingredient stock unit")
+	converted, ok := ConvertToStockUnit(quantity, unit, stockUnit)
+	if !ok {
+		return 0, "", errors.New("recipe unit cannot be converted to the ingredient stock unit")
 	}
-	return stockUnit, nil
+	if !isFiniteMenuNumber(converted) || converted <= 0 {
+		return 0, "", errors.New("recipe quantity must be greater than zero")
+	}
+	if converted > maxRecipeQuantity {
+		return 0, "", errors.New("recipe quantity is too large")
+	}
+	return converted, stockUnit, nil
 }
 
 func validateMenuItemRequest(req *MenuItemRequest, name string) error {

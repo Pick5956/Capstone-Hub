@@ -474,6 +474,8 @@ func (r *OrderRepository) FindMenuItem(restaurantID, menuID uint) (*entity.MenuI
 	err := r.db.
 		Preload("OptionGroups", "is_active = ?", true).
 		Preload("OptionGroups.Options", "is_active = ?", true).
+		Preload("OptionGroups.Options.Ingredients").
+		Preload("OptionGroups.Options.Ingredients.Ingredient").
 		Where("restaurant_id = ? AND id = ?", restaurantID, menuID).
 		First(&item).Error
 	if err != nil {

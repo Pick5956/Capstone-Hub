@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
@@ -53,108 +52,6 @@ func AIMenuCommandKind(kind string) bool {
 	default:
 		return false
 	}
-}
-
-// --- Units -------------------------------------------------------------------
-
-// The system never converts units on its own: a recipe in grams against stock in
-// kilograms silently misreads by a thousand. So a spoken unit is either the same
-// unit, a conversion this table knows, or a question back to the owner.
-var aiUnitAliases = map[string]string{
-	"กรัม": "g", "ก.": "g", "g": "g", "gram": "g", "grams": "g",
-	"ขีด": "hg", "hg": "hg",
-	"กิโลกรัม": "kg", "กิโล": "kg", "กก.": "kg", "กก": "kg", "โล": "kg", "kg": "kg", "kilo": "kg", "kilogram": "kg",
-	"มิลลิลิตร": "ml", "มล.": "ml", "มล": "ml", "ml": "ml",
-	"ลิตร": "l", "ล.": "l", "l": "l", "liter": "l", "litre": "l",
-	"ฟอง": "unit", "ชิ้น": "unit", "อัน": "unit", "ลูก": "unit", "ใบ": "unit", "ห่อ": "pack", "แพ็ค": "pack", "แพ็ก": "pack",
-	"ขวด": "bottle", "กระป๋อง": "can", "ถุง": "bag", "กล่อง": "box", "แผง": "tray", "หัว": "head", "กำ": "bunch", "มัด": "bunch",
-}
-
-// aiUnitToBase converts a canonical unit to a base unit and a factor, when the
-// unit belongs to a family this code can reason about (mass, volume). Counting
-// units have no factor: "ฟอง" and "ชิ้น" only match themselves.
-var aiUnitToBase = map[string]struct {
-	base   string
-	factor float64
-}{
-	"g":  {"g", 1},
-	"hg": {"g", 100},
-	"kg": {"g", 1000},
-	"ml": {"ml", 1},
-	"l":  {"ml", 1000},
-}
-
-func aiCanonicalUnit(unit string) string {
-	key := strings.ToLower(strings.TrimSpace(unit))
-	key = strings.TrimSuffix(key, ".")
-	if canonical, ok := aiUnitAliases[key]; ok {
-		return canonical
-	}
-	if canonical, ok := aiUnitAliases[key+"."]; ok {
-		return canonical
-	}
-	return key
-}
-
-// ConvertToStockUnit expresses a spoken quantity in the ingredient's own stock
-// unit. ok=false means the two units are not the same and no known conversion
-// links them — the caller must ask rather than assume.
-func ConvertToStockUnit(quantity float64, spokenUnit, stockUnit string) (float64, bool) {
-	spoken := aiCanonicalUnit(spokenUnit)
-	stock := aiCanonicalUnit(stockUnit)
-	if spoken == "" || spoken == stock {
-		return quantity, true
-	}
-	from, okFrom := aiUnitToBase[spoken]
-	to, okTo := aiUnitToBase[stock]
-	if !okFrom || !okTo || from.base != to.base {
-		return 0, false
-	}
-	converted := quantity * from.factor / to.factor
-	if math.IsNaN(converted) || math.IsInf(converted, 0) {
-		return 0, false
-	}
-	return converted, true
-}
-
-// aiUnitIsFine reports whether a stock unit is small enough that a bare price
-// ("ตั้งราคาหมูสับ 180") cannot plausibly mean per that unit — nobody prices pork
-// at 180 baht a gram. For a counting unit ("ไข่ 5 บาท" against ฟอง) a bare price
-// is unambiguous and needs no question.
-func aiUnitIsFine(stockUnit string) bool {
-	switch aiCanonicalUnit(stockUnit) {
-	case "g", "ml":
-		return true
-	default:
-		return false
-	}
-}
-
-// ConvertPricePerUnit turns a price quoted per spokenUnit into a price per
-// stockUnit. ok=false means the caller must ask: either no unit was given for a
-// finely measured ingredient, or the two units have no known relation.
-func ConvertPricePerUnit(price float64, spokenUnit, stockUnit string) (float64, bool) {
-	if price < 0 {
-		return 0, false
-	}
-	if strings.TrimSpace(spokenUnit) == "" {
-		// No unit spoken: safe only when the stock unit is something a price is
-		// naturally quoted in (a piece, an egg), never for grams or millilitres.
-		if aiUnitIsFine(stockUnit) {
-			return 0, false
-		}
-		return price, true
-	}
-	// How many stock units make up one spoken unit — 1 กก. = 1,000 กรัม.
-	perSpoken, ok := ConvertToStockUnit(1, spokenUnit, stockUnit)
-	if !ok || perSpoken <= 0 {
-		return 0, false
-	}
-	converted := price / perSpoken
-	if math.IsNaN(converted) || math.IsInf(converted, 0) {
-		return 0, false
-	}
-	return converted, true
 }
 
 // --- Name resolution ----------------------------------------------------------

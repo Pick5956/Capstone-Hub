@@ -68,17 +68,22 @@ export function getInventoryValue(item: Ingredient) {
 export function buildAdjustStockPayload({
   type,
   quantity,
+  unit,
   note,
   paidAmount,
   canManageExpenses,
 }: {
   type: AdjustStockInput["type"];
   quantity: number;
+  unit?: string;
   note: string;
   paidAmount: string;
   canManageExpenses: boolean;
 }): AdjustStockInput {
   const payload: AdjustStockInput = { type, quantity, note };
+  // Only send a unit when it differs from what the ingredient stores; an empty
+  // unit already means "the ingredient's own", and sending it adds nothing.
+  if (unit && unit.trim()) payload.unit = unit.trim();
   const amount = Number(paidAmount);
   if (type === "in" && canManageExpenses && paidAmount.trim() !== "" && Number.isFinite(amount) && amount > 0) {
     payload.amount = amount;

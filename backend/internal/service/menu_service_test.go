@@ -1,9 +1,17 @@
 package service
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
+
+// optionGroupNormalizer is a MenuService with no repository. Every case below
+// passes options with no ingredients, and the ingredient table is only reached
+// when an option actually names one - so there is nothing to stub.
+func optionGroupNormalizer() *MenuService { return &MenuService{} }
 
 func TestNormalizeMenuOptionGroupsRejectsInvalidSelectionBounds(t *testing.T) {
-	_, err := normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{
+	_, err := optionGroupNormalizer().normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{
 		{
 			Name:      "Size",
 			MinSelect: 2,
@@ -20,7 +28,7 @@ func TestNormalizeMenuOptionGroupsRejectsInvalidSelectionBounds(t *testing.T) {
 }
 
 func TestNormalizeMenuOptionGroupsRejectsNegativePrice(t *testing.T) {
-	_, err := normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{
+	_, err := optionGroupNormalizer().normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{
 		{
 			Name: "Size",
 			Options: []MenuOptionRequest{
@@ -69,7 +77,7 @@ func TestNormalizeMenuOptionGroupsRejectsBlankAndDuplicateNames(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := normalizeMenuOptionGroups(1, 1, test.request)
+			_, err := optionGroupNormalizer().normalizeMenuOptionGroups(1, 1, test.request)
 			if err == nil || err.Error() != test.wantErr {
 				t.Fatalf("normalizeMenuOptionGroups() error = %v, want %q", err, test.wantErr)
 			}
@@ -114,7 +122,7 @@ func TestNormalizeMenuOptionGroupsRejectsImpossibleActiveSelections(t *testing.T
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{test.group})
+			_, err := optionGroupNormalizer().normalizeMenuOptionGroups(1, 1, []MenuOptionGroupRequest{test.group})
 			if err == nil || err.Error() != test.wantErr {
 				t.Fatalf("normalizeMenuOptionGroups() error = %v, want %q", err, test.wantErr)
 			}
@@ -122,15 +130,33 @@ func TestNormalizeMenuOptionGroupsRejectsImpossibleActiveSelections(t *testing.T
 	}
 }
 
-func TestNormalizeRecipeUnitUsesIngredientStockUnit(t *testing.T) {
-	if got, err := normalizeRecipeUnit("", "kg"); err != nil || got != "kg" {
-		t.Fatalf("normalizeRecipeUnit(empty) = %q, %v; want kg, nil", got, err)
+func TestNormalizeRecipeQuantityRestatesInStockUnit(t *testing.T) {
+	// No unit, or the shelf's own unit, is stored exactly as typed.
+	if qty, unit, err := normalizeRecipeQuantity(2, "", "kg"); err != nil || qty != 2 || unit != "kg" {
+		t.Fatalf("normalizeRecipeQuantity(empty) = %v %q, %v; want 2 kg, nil", qty, unit, err)
 	}
-	if got, err := normalizeRecipeUnit(" KG ", "kg"); err != nil || got != "kg" {
-		t.Fatalf("normalizeRecipeUnit(case) = %q, %v; want kg, nil", got, err)
+	if qty, unit, err := normalizeRecipeQuantity(2, " KG ", "kg"); err != nil || qty != 2 || unit != "kg" {
+		t.Fatalf("normalizeRecipeQuantity(case) = %v %q, %v; want 2 kg, nil", qty, unit, err)
 	}
-	if _, err := normalizeRecipeUnit("g", "kg"); err == nil || err.Error() != "recipe unit must match the ingredient stock unit" {
-		t.Fatalf("normalizeRecipeUnit(mismatch) error = %v", err)
+
+	// The point of the feature: 5 grams against a kilogram shelf is 0.005 kg,
+	// so nobody has to type the zeros that are easy to get wrong.
+	qty, unit, err := normalizeRecipeQuantity(5, "กรัม", "กิโลกรัม")
+	if err != nil || unit != "กิโลกรัม" || math.Abs(qty-0.005) > 1e-9 {
+		t.Fatalf("normalizeRecipeQuantity(g->kg) = %v %q, %v; want 0.005 กิโลกรัม, nil", qty, unit, err)
+	}
+	qty, _, err = normalizeRecipeQuantity(250, "มิลลิลิตร", "ลิตร")
+	if err != nil || math.Abs(qty-0.25) > 1e-9 {
+		t.Fatalf("normalizeRecipeQuantity(ml->l) = %v, %v; want 0.25, nil", qty, err)
+	}
+
+	// Counting units belong to no family, so there is nothing to convert and
+	// the request is refused rather than approximated.
+	if _, _, err := normalizeRecipeQuantity(3, "ฟอง", "กิโลกรัม"); err == nil {
+		t.Fatal("normalizeRecipeQuantity(cross-family) error = nil, want refusal")
+	}
+	if _, _, err := normalizeRecipeQuantity(3, "หน่วยที่ไม่รู้จัก", "กรัม"); err == nil {
+		t.Fatal("normalizeRecipeQuantity(unknown unit) error = nil, want refusal")
 	}
 }
 

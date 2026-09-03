@@ -104,7 +104,18 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		// still on an AI-owned table outside the frozen registry.
 		18: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 		// Version 19 widens the same CHECK once more (recording an expense).
-		19: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
+		//
+		// The hash then moved without the database moving: Ingredient gained
+		// UnitFamily, a `gorm:"-"` field computed at read time to tell a client
+		// which units it accepts. This fingerprint hashes every field, ignored
+		// ones included, so a read-time field trips the gate even though it adds
+		// no column and needs no migration. Reviewed and accepted on that basis -
+		// CurrentSchemaVersion stays 19 because the schema itself is unchanged.
+		19: "a2af463275584e4b9967d5cf758e96eb36661566ee360098420413465d5d1902",
+		// Version 20 adds menu_option_ingredients: the ingredients one option
+		// consumes on top of (or instead of) the dish recipe. A genuinely new
+		// table in the baseline registry, so the fingerprint advances.
+		20: "29c7a5867b20aedf28b9f9f2431fd3f1d6bb2ade636f827885728f8602da79f6",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {

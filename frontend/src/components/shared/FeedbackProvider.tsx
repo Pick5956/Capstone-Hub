@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
 
@@ -52,27 +52,11 @@ const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 const TOAST_SURFACE =
   "border-gray-200 bg-white text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-white";
 
-const toneStyles: Record<ToastTone, { icon: LucideIcon; accentClassName: string; iconWrapClassName: string }> = {
-  success: {
-    icon: CheckCircle2,
-    accentClassName: "bg-emerald-500",
-    iconWrapClassName: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
-  },
-  error: {
-    icon: XCircle,
-    accentClassName: "bg-red-500",
-    iconWrapClassName: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
-  },
-  warning: {
-    icon: AlertTriangle,
-    accentClassName: "bg-amber-500",
-    iconWrapClassName: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-  },
-  info: {
-    icon: Info,
-    accentClassName: "bg-sky-500",
-    iconWrapClassName: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
-  },
+const toneTitleClassName: Record<ToastTone, string> = {
+  success: "text-gray-900 dark:text-white",
+  info: "text-gray-900 dark:text-white",
+  warning: "text-amber-700 dark:text-amber-300",
+  error: "text-red-700 dark:text-red-300",
 };
 
 export function FeedbackProvider({ children }: { children: React.ReactNode }) {
@@ -193,31 +177,25 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
       <ConfirmContext.Provider value={confirmValue}>
         {children}
 
-        <div className="pointer-events-none fixed left-1/2 top-16 z-[var(--z-toast)] flex w-[calc(100dvw-1.5rem)] max-w-sm -translate-x-1/2 flex-col gap-2 sm:top-5">
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-1/2 z-[var(--z-toast)] flex max-w-[calc(100dvw-1.5rem)] -translate-x-1/2 flex-col-reverse items-center gap-2 sm:bottom-6">
           {toasts.map((toast) => {
-            const styles = toneStyles[toast.tone];
-            const Icon = styles.icon;
             const urgent = toast.tone === "error" || toast.tone === "warning";
             return (
               <div
                 key={toast.id}
-                className={`animate-slide-down pointer-events-auto relative flex min-h-14 items-center gap-3 overflow-hidden rounded-xl border py-3 pl-4 pr-2 shadow-[0_2px_6px_rgba(15,23,42,0.08),0_16px_48px_rgba(15,23,42,0.20)] dark:shadow-[0_2px_6px_rgba(0,0,0,0.35),0_16px_48px_rgba(0,0,0,0.55)] ${TOAST_SURFACE}`}
+                className={`animate-slide-up pointer-events-auto flex min-h-11 max-w-full items-center gap-2 overflow-hidden rounded-xl border py-2 pl-4 pr-2 shadow-[0_2px_4px_rgba(15,23,42,0.06),0_16px_40px_rgba(15,23,42,0.14)] dark:shadow-[0_2px_4px_rgba(0,0,0,0.35),0_16px_40px_rgba(0,0,0,0.55)] ${TOAST_SURFACE}`}
                 role={urgent ? "alert" : "status"}
                 aria-live={urgent ? "assertive" : "polite"}
                 aria-atomic="true"
               >
-                <span className={`absolute bottom-0 left-0 top-0 w-1.5 ${styles.accentClassName}`} aria-hidden="true" />
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${styles.iconWrapClassName}`} aria-hidden="true">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-semibold leading-5">{toast.title}</p>
+                <div className="min-w-0">
+                  <p className={`text-[13px] font-semibold leading-5 ${toneTitleClassName[toast.tone]}`}>{toast.title}</p>
                   {toast.message && <p className="mt-0.5 text-[12px] leading-5 text-gray-500 dark:text-gray-400">{toast.message}</p>}
                 </div>
                 <button
                   type="button"
                   onClick={() => dismissToast(toast.id)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-300"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-300"
                   aria-label={language === "th" ? "ปิดแจ้งเตือน" : "Dismiss notification"}
                 >
                   <X className="h-4 w-4" aria-hidden="true" />

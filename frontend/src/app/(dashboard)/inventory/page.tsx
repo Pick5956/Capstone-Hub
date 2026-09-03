@@ -413,6 +413,21 @@ export default function InventoryPage() {
   const [adjustClosing, setAdjustClosing] = useState(false);
   const [adjustType, setAdjustType] = useState<"in" | "out" | "adjust">("in");
   const [adjustQty, setAdjustQty] = useState("");
+  const [adjustUnit, setAdjustUnit] = useState("");
+  // The server decides which units this ingredient accepts and what each one is
+  // worth, so the picker and the preview below never carry their own factors.
+  const adjustUnitOptions = useMemo(
+    () => (adjustTarget?.unit_family ?? []).map((option) => ({ value: option.unit, label: option.unit })),
+    [adjustTarget],
+  );
+  const convertedAdjustQty = useMemo(() => {
+    if (!adjustTarget || !adjustUnit || adjustUnit === adjustTarget.unit) return null;
+    const quantity = Number(adjustQty);
+    if (!Number.isFinite(quantity) || quantity <= 0) return null;
+    const option = adjustTarget.unit_family?.find((entry) => entry.unit === adjustUnit);
+    if (!option) return null;
+    return quantity * option.stock_per_unit;
+  }, [adjustQty, adjustTarget, adjustUnit]);
   const [adjustPaidAmount, setAdjustPaidAmount] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [adjustError, setAdjustError] = useState("");
@@ -809,6 +824,9 @@ export default function InventoryPage() {
     setAdjustTarget(item);
     setAdjustType("in");
     setAdjustQty("");
+    // Default to the shelf's own unit every time, so a unit chosen for one
+    // ingredient never carries into the next one.
+    setAdjustUnit(item.unit);
     setAdjustPaidAmount("");
     setAdjustNote("");
     setAdjustError("");
@@ -848,6 +866,7 @@ export default function InventoryPage() {
         const response = await adjustStock(adjustTarget.ID, buildAdjustStockPayload({
           type: adjustType,
           quantity: qty,
+          unit: adjustUnit,
           note: adjustNote,
           paidAmount: adjustPaidAmount,
           canManageExpenses,
@@ -1918,16 +1937,33 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {copy.quantity} ({adjustTarget.unit})
+                  {copy.quantity}
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={adjustQty}
-                  onChange={(event) => setAdjustQty(event.target.value)}
-                  className={inputCls}
-                  autoFocus
-                />
+                <div className={adjustUnitOptions.length > 1 ? "grid grid-cols-[minmax(0,1fr)_9rem] gap-2" : ""}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={adjustQty}
+                    onChange={(event) => setAdjustQty(event.target.value)}
+                    className={inputCls}
+                    autoFocus
+                  />
+                  {adjustUnitOptions.length > 1 ? (
+                    <ThemedSelect
+                      value={adjustUnit || adjustTarget.unit}
+                      onChange={setAdjustUnit}
+                      options={adjustUnitOptions}
+                      aria-label={copy.quantity}
+                    />
+                  ) : null}
+                </div>
+                {/* Entering in another unit is only useful if the result is
+                    visible before saving - the shelf still counts in its own. */}
+                {convertedAdjustQty !== null ? (
+                  <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                    = <span className="font-mono tabular-nums">{convertedAdjustQty.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span> {adjustTarget.unit}
+                  </p>
+                ) : null}
               </div>
               {adjustType === "in" && canManageExpenses && (
                 <div>

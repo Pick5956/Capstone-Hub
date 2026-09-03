@@ -2,7 +2,9 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +42,12 @@ type IngredientCategoryRequest struct {
 type AdjustStockRequest struct {
 	Type     string  `json:"type" binding:"required"` // "in", "out", "adjust"
 	Quantity float64 `json:"quantity" binding:"required"`
-	Note     string  `json:"note" binding:"max=500"`
+	// Unit is what the quantity was typed in. Empty means the ingredient's own
+	// stock unit. Any other unit of the same family is converted before the
+	// stock moves, so 100 กิโลกรัม and 100 กรัม of the same ingredient add to one
+	// shelf row instead of forcing two entries.
+	Unit string `json:"unit" binding:"max=40"`
+	Note string `json:"note" binding:"max=500"`
 	// Amount is what the restock cost. Only meaningful for "in"; a positive
 	// value also writes the expense-ledger row.
 	Amount float64 `json:"amount"`
@@ -54,11 +61,29 @@ const (
 // ListIngredients and FindIngredient satisfy AIActionIngredientPort so the
 // assistant validates against, and writes through, this same service.
 func (s *IngredientService) ListIngredients(restaurantID uint) ([]entity.Ingredient, error) {
-	return s.repo.List(restaurantID)
+	items, err := s.repo.List(restaurantID)
+	return attachUnitFamilyList(items), err
 }
 
 func (s *IngredientService) FindIngredient(restaurantID, ingredientID uint) (*entity.Ingredient, error) {
-	return s.repo.FindByID(restaurantID, ingredientID)
+	return attachUnitFamily(s.repo.FindByID(restaurantID, ingredientID))
+}
+
+// attachUnitFamily fills the read-time UnitFamily so a client can offer the
+// units this ingredient accepts without shipping its own copy of the table.
+func attachUnitFamily(ingredient *entity.Ingredient, err error) (*entity.Ingredient, error) {
+	if err != nil || ingredient == nil {
+		return ingredient, err
+	}
+	ingredient.UnitFamily = IngredientUnitFamily(ingredient.Unit)
+	return ingredient, nil
+}
+
+func attachUnitFamilyList(items []entity.Ingredient) []entity.Ingredient {
+	for i := range items {
+		items[i].UnitFamily = IngredientUnitFamily(items[i].Unit)
+	}
+	return items
 }
 
 // List returns the whole inventory with the read-time "lasts N days" figure
@@ -71,7 +96,7 @@ func (s *IngredientService) List(restaurantID uint) ([]entity.Ingredient, error)
 	if err := s.repo.AttachDaysLeft(restaurantID, items); err != nil {
 		return nil, err
 	}
-	return items, nil
+	return attachUnitFamilyList(items), nil
 }
 
 func (s *IngredientService) ListFiltered(restaurantID uint, q repository.IngredientListQuery) ([]entity.Ingredient, int64, error) {
@@ -82,7 +107,7 @@ func (s *IngredientService) ListFiltered(restaurantID uint, q repository.Ingredi
 	if err := s.repo.AttachDaysLeft(restaurantID, items); err != nil {
 		return nil, 0, err
 	}
-	return items, total, nil
+	return attachUnitFamilyList(items), total, nil
 }
 
 func (s *IngredientService) ListCategories(restaurantID uint, includeInactive bool) ([]entity.IngredientCategory, error) {
@@ -195,7 +220,7 @@ func (s *IngredientService) Create(restaurantID, userID uint, req *IngredientReq
 	}); err != nil {
 		return nil, err
 	}
-	return ingredient, nil
+	return attachUnitFamily(ingredient, nil)
 }
 
 func (s *IngredientService) Update(restaurantID, ingredientID uint, req *IngredientRequest) (*entity.Ingredient, error) {
@@ -273,7 +298,11 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		if err != nil {
 			return errors.New("ingredient not found")
 		}
-		nextStock, err := applyStockAdjustment(ingredient.Stock, kind, req.Quantity)
+		quantity, err := stockQuantityInStockUnit(req.Quantity, req.Unit, ingredient.Unit)
+		if err != nil {
+			return err
+		}
+		nextStock, err := applyStockAdjustment(ingredient.Stock, kind, quantity)
 		if err != nil {
 			return err
 		}
@@ -290,15 +319,15 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 		// Nobody said what this restock cost, so value it at the ingredient's
 		// cost per unit. Only inside the transaction is that rate known.
 		if amount == 0 && kind == "in" {
-			amount = referenceRestockAmount(ingredient.CostPerUnit, req.Quantity)
+			amount = referenceRestockAmount(ingredient.CostPerUnit, quantity)
 		}
 		stockTransaction := &entity.IngredientTransaction{
 			RestaurantID: restaurantID,
 			IngredientID: ingredientID,
 			Type:         kind,
-			Quantity:     req.Quantity,
+			Quantity:     quantity,
 			Amount:       amount,
-			Note:         note,
+			Note:         noteWithEnteredUnit(note, req.Quantity, req.Unit, ingredient.Unit),
 			CreatedByID:  userID,
 		}
 		if err := tx.CreateTransaction(stockTransaction); err != nil {
@@ -316,7 +345,7 @@ func (s *IngredientService) AdjustStock(restaurantID, ingredientID, userID uint,
 	if err != nil {
 		return nil, err
 	}
-	return updated, nil
+	return attachUnitFamily(updated, nil)
 }
 
 // ListTransactions reads the stock movement log. The query carries the filters
@@ -510,4 +539,39 @@ func ingredientRecipeUnitChangeBlocked(currentUnit, nextUnit string, referenced 
 
 func isFiniteIngredientNumber(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+// stockQuantityInStockUnit restates a typed amount in the ingredient's own unit.
+// A unit from the same family is converted; anything else is refused, because a
+// wrong factor here moves real stock and nothing later can tell it was wrong.
+func stockQuantityInStockUnit(quantity float64, enteredUnit, stockUnit string) (float64, error) {
+	unit := strings.TrimSpace(enteredUnit)
+	if unit == "" || strings.EqualFold(unit, strings.TrimSpace(stockUnit)) {
+		return quantity, nil
+	}
+	converted, ok := ConvertToStockUnit(quantity, unit, stockUnit)
+	if !ok {
+		return 0, errors.New("stock unit cannot be converted to the ingredient unit")
+	}
+	if math.IsNaN(converted) || math.IsInf(converted, 0) {
+		return 0, errors.New("stock quantity is not a valid number")
+	}
+	return converted, nil
+}
+
+// noteWithEnteredUnit keeps what the user actually typed on the ledger row. The
+// stored quantity is in the ingredient's unit, so without this a 10 กิโลกรัม
+// delivery reads as 10,000 กรัม in history with no sign of how it was entered.
+// It is written into the existing note rather than a new column so no migration
+// is needed for an audit detail.
+func noteWithEnteredUnit(note string, quantity float64, enteredUnit, stockUnit string) string {
+	unit := strings.TrimSpace(enteredUnit)
+	if unit == "" || strings.EqualFold(unit, strings.TrimSpace(stockUnit)) {
+		return note
+	}
+	entered := fmt.Sprintf("กรอก %s %s", strconv.FormatFloat(quantity, 'f', -1, 64), unit)
+	if note == "" {
+		return entered
+	}
+	return entered + " · " + note
 }

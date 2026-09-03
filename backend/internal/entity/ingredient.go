@@ -12,6 +12,13 @@ type IngredientCategory struct {
 	Restaurant *Restaurant `json:"restaurant,omitempty" gorm:"foreignKey:RestaurantID"`
 }
 
+// IngredientUnitOption is one entry in a unit picker: a unit this ingredient
+// accepts, and how many of its own stock units one of them makes.
+type IngredientUnitOption struct {
+	Unit         string  `json:"unit"`
+	StockPerUnit float64 `json:"stock_per_unit"`
+}
+
 type Ingredient struct {
 	gorm.Model
 	RestaurantID uint    `json:"restaurant_id" gorm:"not null;index"`
@@ -37,6 +44,12 @@ type Ingredient struct {
 	// "no usage data", never as an empty bar.
 	DaysLeft *float64 `json:"days_left,omitempty" gorm:"-"`
 	DailyUse *float64 `json:"daily_use,omitempty" gorm:"-"`
+
+	// UnitFamily is every unit a quantity may be entered in for this ingredient,
+	// computed at read time from Unit. The client uses it to build the unit
+	// picker, so the list of what converts to what lives in one place on the
+	// server instead of being mirrored - and drifting - in each app.
+	UnitFamily []IngredientUnitOption `json:"unit_family,omitempty" gorm:"-"`
 }
 
 type IngredientTransaction struct {

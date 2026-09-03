@@ -72,7 +72,10 @@ export default function MenuItemEditorScreen() {
       if (item) {
         setName(item.name); setPrice(String(item.price)); setDescription(item.description || ''); setImageUrl(item.image_url || ''); setDisplayOrder(String(item.display_order)); setAvailable(item.is_available ? 'yes' : 'no');
         setCategoryIds(initialMenuCategoryIds(item, categoryResponse.categories || []));
-        setOptionGroups(menuOptionGroupDrafts((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active })) }))));
+        // Option ingredient links are authored on the web only, but they are read
+        // here and posted back untouched. A save replaces the whole option
+        // aggregate, so dropping them on the way in deletes them on the way out.
+        setOptionGroups(menuOptionGroupDrafts((item.option_groups || []).map((group) => ({ name: group.name, required: group.required, min_select: group.min_select, max_select: group.max_select, display_order: group.display_order, is_active: group.is_active, options: (group.options || []).map((option) => ({ name: option.name, price_delta: option.price_delta, is_default: option.is_default, display_order: option.display_order, is_active: option.is_active, ingredients: (option.ingredients || []).map((row) => ({ ingredient_id: row.ingredient_id, direction: row.direction, quantity: row.quantity, unit: row.unit })) })) }))));
         setIngredients(menuIngredientDrafts((item.ingredients || []).map((ingredient) => ({ ingredient_id: ingredient.ingredient_id, quantity: ingredient.quantity, unit: ingredient.unit, note: ingredient.note }))));
         setItemExists(true);
       } else if (!editing) {

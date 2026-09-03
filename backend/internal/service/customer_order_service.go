@@ -413,7 +413,7 @@ func addCustomerItem(
 	if err := tx.CreateItem(item); err != nil {
 		return 0, err
 	}
-	if err := snapshotRecipeForOrderItem(tx, order, item); err != nil {
+	if err := snapshotRecipeForOrderItem(tx, order, item, selectedOptions); err != nil {
 		return 0, err
 	}
 	for _, option := range selectedOptions {

@@ -1,5 +1,5 @@
 import type { Ingredient } from "@/src/types/ingredient";
-import type { MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput } from "@/src/types/menu";
+import type { MenuIngredientInput, MenuItem, MenuItemInput, MenuOptionGroupInput, MenuOptionIngredientInput } from "@/src/types/menu";
 
 export const emptyItem: MenuItemInput = {
   category_id: 0,
@@ -24,6 +24,13 @@ export const emptyOptionGroup = (): MenuOptionGroupInput => ({
   options: [{ name: "", price_delta: 0, is_default: false, display_order: 0, is_active: true }],
 });
 
+export const emptyOptionIngredient = (): MenuOptionIngredientInput => ({
+  ingredient_id: 0,
+  direction: "add",
+  quantity: 0,
+  unit: "",
+});
+
 export const emptyRecipeComponent = (): MenuIngredientInput => ({
   ingredient_id: 0,
   quantity: 0,
@@ -31,12 +38,28 @@ export const emptyRecipeComponent = (): MenuIngredientInput => ({
   note: "",
 });
 
+/**
+ * How many stock units one `unit` of this ingredient makes. cost_per_unit and
+ * stock are both quoted in the ingredient's own unit, so any amount typed in a
+ * different unit of the same family has to be restated before it can be priced
+ * or summed. The backend does this on save; this is the same arithmetic for the
+ * live preview, which otherwise showed a kilogram of a gram-stocked ingredient
+ * at a thousandth of its cost until the form round-tripped.
+ */
+export function stockUnitsPer(ingredient: Ingredient | undefined, unit: string | undefined) {
+  if (!ingredient) return 1;
+  const chosen = (unit || ingredient.unit || "").trim();
+  if (!chosen || chosen === ingredient.unit) return 1;
+  return ingredient.unit_family?.find((entry) => entry.unit === chosen)?.stock_per_unit ?? 1;
+}
+
 export function recipeCost(components: MenuIngredientInput[], ingredients: Ingredient[]) {
   return components.reduce((total, component) => {
     const ingredient = ingredients.find((item) => item.ID === component.ingredient_id);
     if (!ingredient || component.quantity <= 0) return total;
     const yieldPercent = ingredient.yield_percent && ingredient.yield_percent > 0 ? ingredient.yield_percent : 100;
-    return total + (component.quantity * ingredient.cost_per_unit) / (yieldPercent / 100);
+    const inStockUnits = component.quantity * stockUnitsPer(ingredient, component.unit);
+    return total + (inStockUnits * ingredient.cost_per_unit) / (yieldPercent / 100);
   }, 0);
 }
 
@@ -73,6 +96,14 @@ export function menuItemToInput(item: MenuItem, isAvailable = item.is_available)
         is_default: option.is_default,
         display_order: option.display_order,
         is_active: option.is_active,
+        // Must be carried: a save posts the whole option aggregate and the
+        // backend replaces it, so a field missing here is a field deleted.
+        ingredients: (option.ingredients ?? []).map((row) => ({
+          ingredient_id: row.ingredient_id,
+          direction: row.direction,
+          quantity: row.quantity,
+          unit: row.unit || row.ingredient?.unit || "",
+        })),
       })),
     })),
     ingredients: (item.ingredients ?? []).map((component) => ({

@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, MapPin, Minus, Plus, Printer, Rec
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { apiErrorMessage } from "@/src/lib/apiErrors";
+import { MENU_CARD_GRID_CLASS, MENU_CARD_SHELL_CLASS } from "@/src/lib/menuGrid";
 import { menuCategoryIds, menuOptionLimits } from "@/src/lib/menuUtils";
 import { groupOrderItems, type OrderItemGroup } from "@/src/lib/orderItemGroups";
 import { canCloseEmptyTableOrder } from "@/src/lib/orderNavigation";
@@ -863,13 +864,13 @@ export default function PosOrderDetailPage() {
     <div className={`min-h-dvh w-full bg-slate-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100 ${showCurrentRoundAction ? "pb-24" : "pb-6"}`}>
       <div data-shell-sticky="" className="fixed inset-x-0 top-14 z-20 bg-slate-100/95 backdrop-blur dark:bg-gray-950/95 transition-[left] duration-300 ease-in-out lg:inset-auto">
         <div className="px-4 py-2 sm:px-6 lg:px-8">
-          <div className="mx-auto grid w-full max-w-6xl gap-1.5 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(12rem,0.7fr)_minmax(8rem,13rem)_auto_minmax(0,1fr)] lg:items-center">
+          <div className="grid w-full gap-1.5 lg:h-[var(--dashboard-shell-row)] lg:min-h-[var(--dashboard-shell-row)] lg:grid-cols-[2.5rem_minmax(10rem,20rem)_minmax(8rem,10rem)_minmax(0,1fr)_auto] lg:items-center">
           <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-1.5 lg:contents">
             <button type="button" onClick={() => router.push("/pos/tables")} aria-label={copy.back} title={copy.back} className="ui-press inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-gray-600 transition-[border-color,background-color] hover:border-[#d6dbe2] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-[#2c3848] dark:hover:bg-gray-800 lg:order-1">
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             </button>
             {order && (
-              <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-4">
+              <div className="flex min-w-0 items-center justify-start gap-1.5 lg:order-5">
                 <button type="button" onClick={openOrderSummary} aria-label={orderSummaryCopy.title} aria-haspopup="dialog" className="ui-press flex h-10 min-w-0 flex-[0_1_auto] items-center overflow-hidden rounded-md border border-[color:var(--dashboard-shell-border)] bg-white text-left text-[13px] font-semibold text-gray-700 transition-[border-color,background-color] hover:border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-[#2c3848] dark:hover:bg-gray-800">
                   <span className="flex min-w-0 items-center gap-1.5 px-2">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-orange-500" aria-hidden="true" />
@@ -890,7 +891,7 @@ export default function PosOrderDetailPage() {
                   </span>
                 </button>
                 {canCloseTable ? (
-                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-gray-300 bg-white px-3 text-[13px] font-semibold text-gray-700 transition-[border-color,background-color,opacity] hover:border-gray-400 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800">
+                  <button type="button" disabled={submitting} onClick={() => { void requestCloseEmptyTable(); }} className="ui-press h-10 shrink-0 rounded-md border border-red-200 bg-red-50 px-3 text-[13px] font-semibold text-red-700 transition-[border-color,background-color,opacity] hover:border-red-300 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/50">
                     {copy.closeEmptyTable}
                   </button>
                 ) : null}
@@ -917,11 +918,11 @@ export default function PosOrderDetailPage() {
               />
             </div>
           )}
-          <div aria-hidden="true" className="hidden lg:order-5 lg:block" />
+          <div aria-hidden="true" className="hidden lg:order-4 lg:block" />
           </div>
         </div>
         {error ? (
-          <div className="mx-auto w-full max-w-6xl px-4 py-2 sm:px-6 lg:px-8">
+          <div className="w-full px-4 py-2 sm:px-6 lg:px-8">
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-red-700 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-300">{error}</div>
           </div>
         ) : null}
@@ -940,9 +941,9 @@ export default function PosOrderDetailPage() {
         </div>
       ) : order ? (
         // ── Menu grid (normal order-taking mode) ─────────────────────────────
-        <div className="mx-auto w-full max-w-6xl px-4 py-3 sm:px-6 lg:px-8">
+        <div className="w-full px-4 py-3 sm:px-6 lg:px-8">
           <section className="min-w-0">
-            <div className="grid auto-rows-max grid-cols-3 content-start items-start gap-2.5 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={MENU_CARD_GRID_CLASS}>
               {filteredMenu.length ? filteredMenu.map((item) => {
                 const orderedQuantity = menuOrderQuantities.get(item.ID) ?? 0;
                 // remaining_servings === 0 means the queue already claimed the last
@@ -951,7 +952,7 @@ export default function PosOrderDetailPage() {
                 const lowStock = !soldOut && typeof item.remaining_servings === "number" && item.remaining_servings > 0 && item.remaining_servings <= 10;
 
                 return (
-                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className="ui-press relative flex min-h-[168px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white text-left transition-transform disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-900 sm:min-h-[214px] sm:hover:-translate-y-0.5">
+                  <button key={item.ID} type="button" disabled={isTerminal || submitting || soldOut} onClick={() => openMenuPicker(item)} className={`ui-press ${MENU_CARD_SHELL_CLASS} disabled:cursor-not-allowed disabled:opacity-50 sm:hover:-translate-y-0.5`}>
                     {soldOut ? (
                       <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
                         {copy.soldOut}
