@@ -77,18 +77,6 @@ func main() {
 		return
 	}
 
-	var existing int64
-	db.Model(&entity.Order{}).
-		Where("restaurant_id = ? AND note = ?", *restaurantID, marker).
-		Count(&existing)
-	if existing > 0 && !*force {
-		log.Printf("วันที่ %s มีกิจกรรมแล้ว (%d ออเดอร์) ข้ามไป — ใช้ -force ถ้าจะเติมซ้ำ", dateStr, existing)
-		return
-	}
-	if *force {
-		purgeDay(db, *restaurantID, marker)
-	}
-
 	menus, err := loadMenus(db, *restaurantID)
 	if err != nil || len(menus) == 0 {
 		log.Fatalf("no menus for restaurant %d: %v", *restaurantID, err)
@@ -100,6 +88,39 @@ func main() {
 	staffID, err := resolveStaffID(db, *restaurantID)
 	if err != nil {
 		log.Fatalf("resolve staff: %v", err)
+	}
+
+	// Close what earlier seeded days left on the floor, and give every paid
+	// seeded bill its payment row. Both run before the per-day guard so a
+	// second run on the same day still tidies up, and both are no-ops once
+	// caught up.
+	settled, err := settleLeftovers(db, *restaurantID, dateStr, loc, ingredients, staffID)
+	if err != nil {
+		log.Fatalf("settle leftovers: %v", err)
+	}
+	backfilled, err := backfillPayments(db, *restaurantID, staffID)
+	if err != nil {
+		log.Fatalf("backfill payments: %v", err)
+	}
+	reportSettlement(settled, backfilled)
+	// The stock the leftovers consumed is now subtracted; reload so today's
+	// cost building sees the current shelf.
+	if settled > 0 {
+		if ingredients, err = loadIngredients(db, *restaurantID); err != nil {
+			log.Fatalf("reload ingredients: %v", err)
+		}
+	}
+
+	var existing int64
+	db.Model(&entity.Order{}).
+		Where("restaurant_id = ? AND note = ?", *restaurantID, marker).
+		Count(&existing)
+	if existing > 0 && !*force {
+		log.Printf("วันที่ %s มีกิจกรรมแล้ว (%d ออเดอร์) ข้ามไป — ใช้ -force ถ้าจะเติมซ้ำ", dateStr, existing)
+		return
+	}
+	if *force {
+		purgeDay(db, *restaurantID, marker)
 	}
 
 	// Seeded from the date, so a given day always generates the same activity —
@@ -190,6 +211,10 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 			if err := tx.Model(order).Updates(map[string]interface{}{
 				"subtotal": total, "total_amount": total, "grand_total": total,
 			}).Error; err != nil {
+				return err
+			}
+			order.GrandTotal = total
+			if err := tx.Create(seededPayment(*order, done, staffID, rng)).Error; err != nil {
 				return err
 			}
 			summary.completed++
@@ -621,6 +646,7 @@ func purgeDay(db *gorm.DB, restaurantID uint, marker string) {
 		}
 	}
 	if len(ids) > 0 {
+		db.Where("order_id IN ?", ids).Delete(&entity.OrderPayment{})
 		db.Where("order_id IN ?", ids).Delete(&entity.OrderInventoryDeduction{})
 		db.Where("order_id IN ?", ids).Delete(&entity.OrderItemRecipeSnapshot{})
 		db.Where("order_id IN ?", ids).Delete(&entity.OrderItem{})
