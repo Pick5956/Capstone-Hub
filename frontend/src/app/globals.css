@@ -43,6 +43,33 @@
   --color-gray-700: #454545;
 }
 
+/* Nav rail theme. Light mode paints the rail orange (#FFA951) with dark warm
+   text and a light "selected" pill; dark mode keeps the neutral rail. Every rail
+   colour reads from these tokens, so the two themes live in one place. */
+[data-nav-rail] {
+  --rail-bg: #FFA951;
+  --rail-fg: #431407;
+  --rail-fg-muted: #7c2d12;
+  --rail-fg-dim: rgba(67, 20, 7, 0.55);
+  --rail-hover-bg: rgba(255, 255, 255, 0.4);
+  --rail-hover-fg: #431407;
+  --rail-border: rgba(0, 0, 0, 0.12);
+  --rail-active-bg: #fff7ed;
+  --rail-active-fg: #c2410c;
+}
+
+.dark [data-nav-rail] {
+  --rail-bg: #0f0f0f;
+  --rail-fg: #e5e7eb;
+  --rail-fg-muted: #9ca3af;
+  --rail-fg-dim: #6b7280;
+  --rail-hover-bg: #212121;
+  --rail-hover-fg: #ffffff;
+  --rail-border: var(--dashboard-shell-border);
+  --rail-active-bg: #431407;
+  --rail-active-fg: #fed7aa;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

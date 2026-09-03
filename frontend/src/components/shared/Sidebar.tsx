@@ -185,7 +185,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
             <div
               role="separator"
               aria-orientation="horizontal"
-              className="mx-1 my-2 border-t border-orange-700 [@media(max-height:760px)]:my-1.5"
+              className="mx-1 my-2 border-t border-[var(--rail-border)] [@media(max-height:760px)]:my-1.5"
             />
           )}
           <div className="space-y-0.5">
@@ -201,20 +201,20 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
 
               const itemClassName = `relative flex w-full items-center rounded-md px-2.5 py-2 text-[12px] font-medium transition-[background-color,border-color,box-shadow,color,gap] duration-200 ease-out motion-reduce:transition-none [@media(max-height:760px)]:py-1.5 ${
                 active
-                  ? 'border border-transparent bg-orange-100 text-orange-900 shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-transparent dark:bg-orange-100 dark:text-orange-900 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
-                  : 'border border-transparent text-orange-100 hover:border-orange-700 hover:bg-orange-700 hover:text-white dark:text-orange-100 dark:hover:bg-orange-800 dark:hover:text-white'
-              } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-orange-200 dark:hover:bg-transparent dark:hover:text-orange-200' : ''}`;
+                  ? 'border border-transparent bg-[var(--rail-active-bg)] text-[var(--rail-active-fg)] shadow-[0_0_6px_rgba(15,23,42,0.18)] active:shadow-[0_0_3px_rgba(15,23,42,0.16)] dark:border-orange-700 dark:shadow-[0_0_7px_rgba(249,115,22,0.24)] dark:active:shadow-[0_0_3px_rgba(249,115,22,0.18)]'
+                  : 'border border-transparent text-[var(--rail-fg)] hover:border-[var(--rail-border)] hover:bg-[var(--rail-hover-bg)] hover:text-[var(--rail-hover-fg)]'
+              } ${collapsed ? 'justify-center gap-0' : 'gap-2.5'} ${comingSoon ? 'cursor-default opacity-50 hover:bg-transparent hover:text-[var(--rail-fg-dim)]' : ''}`;
 
               const content = (
                 <>
-                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-orange-900 dark:text-orange-900' : 'text-orange-200 dark:text-orange-200'}`}>{icon}</span>
+                  <span className={`grid h-5 w-5 shrink-0 place-items-center ${active ? 'text-[var(--rail-active-fg)]' : 'text-[var(--rail-fg-muted)]'}`}>{icon}</span>
                   <span
                     className={`flex min-w-0 flex-1 items-center justify-between gap-2 transition-all duration-300 ${
                       collapsed ? 'w-0 opacity-0 pointer-events-none overflow-hidden' : 'w-auto opacity-100'
                     }`}
                   >
                     <span className="truncate leading-[1.6]">{label}</span>
-                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-orange-300 dark:text-orange-300">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
+                    {comingSoon && <span className="shrink-0 text-[10px] font-medium text-[var(--rail-fg-dim)]">{language === 'th' ? 'เร็วๆ นี้' : 'Soon'}</span>}
                     {hasSubItems && (
                       <svg
                         viewBox="0 0 24 24"
@@ -222,7 +222,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         stroke="currentColor"
                         strokeWidth="2.5"
                         strokeLinecap="round"
-                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-orange-900 dark:text-orange-900' : 'text-orange-200'} ${isExpanded ? 'rotate-90' : ''}`}
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${active ? 'text-[var(--rail-active-fg)]' : 'text-[var(--rail-fg-muted)]'} ${isExpanded ? 'rotate-90' : ''}`}
                       >
                         <polyline points="9 18 15 12 9 6"/>
                       </svg>
@@ -280,7 +280,7 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                         isExpanded ? '' : 'pointer-events-none'
                       }`}
                     >
-                      <div className="relative ml-5 border-l border-orange-700 pl-3 space-y-0.5 dark:border-orange-700 pt-1 pb-1">
+                      <div className="relative ml-5 border-l border-[var(--rail-border)] pl-3 space-y-0.5 pt-1 pb-1">
                         {visibleSubItems.map(sub => {
                           const subActive = isActive(sub.href);
                           return (
@@ -291,8 +291,8 @@ function NavLinks({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: 
                               tabIndex={isExpanded ? 0 : -1}
                               className={`flex items-center rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
                                 subActive
-                                  ? 'bg-orange-100 text-orange-900 dark:bg-orange-100 dark:text-orange-900'
-                                  : 'text-orange-200 hover:bg-orange-700 hover:text-white dark:text-orange-200 dark:hover:bg-orange-800 dark:hover:text-white'
+                                  ? 'bg-[var(--rail-active-bg)] text-[var(--rail-active-fg)]'
+                                  : 'text-[var(--rail-fg)] hover:bg-[var(--rail-hover-bg)] hover:text-[var(--rail-hover-fg)]'
                               }`}
                             >
                               {sub.label}
@@ -342,7 +342,7 @@ function RestaurantSwitcherCard({ collapsed }: { collapsed: boolean }) {
       href="/restaurants"
       title={collapsed ? name : undefined}
       aria-label={language === 'th' ? 'เปลี่ยนร้าน' : 'Switch restaurant'}
-      className={`flex min-w-0 items-center rounded-md border border-transparent transition-colors hover:border-orange-700 hover:bg-orange-700 ${collapsed ? 'justify-center p-1' : 'min-w-0 flex-1 gap-2 p-1.5'}`}
+      className={`flex min-w-0 items-center rounded-md border border-transparent transition-colors hover:border-[var(--rail-border)] hover:bg-[var(--rail-hover-bg)] ${collapsed ? 'justify-center p-1' : 'min-w-0 flex-1 gap-2 p-1.5'}`}
     >
       <span
         aria-hidden="true"
@@ -354,10 +354,10 @@ function RestaurantSwitcherCard({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[12px] font-bold leading-[1.6] text-orange-50">{name}</span>
-            {detail && <span className="truncate text-[11px] leading-[1.6] text-orange-200 [@media(max-height:760px)]:hidden">{detail}</span>}
+            <span className="truncate text-[12px] font-bold leading-[1.6] text-[var(--rail-fg)]">{name}</span>
+            {detail && <span className="truncate text-[11px] leading-[1.6] text-[var(--rail-fg-muted)] [@media(max-height:760px)]:hidden">{detail}</span>}
           </span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-orange-200" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 shrink-0 text-[var(--rail-fg-muted)]" aria-hidden="true">
             <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
           </svg>
         </>
@@ -381,7 +381,7 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
         className={`flex min-w-0 items-center rounded-md border border-transparent transition-[background-color,border-color,gap,padding] duration-300 ${
           collapsed 
             ? 'justify-center gap-0 p-1 hover:bg-transparent' 
-            : 'gap-2.5 px-1.5 py-1.5 hover:border-orange-700 hover:bg-orange-700 dark:hover:bg-orange-800'
+            : 'gap-2.5 px-1.5 py-1.5 hover:border-[var(--rail-border)] hover:bg-[var(--rail-hover-bg)]'
         }`}
       >
         <AppLogo size={32} />
@@ -391,9 +391,9 @@ function RestaurantHeader({ collapsed, onNavigate }: { collapsed: boolean; onNav
           }`}
         >
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[12px] font-semibold leading-[1.6] text-white dark:text-white">{restaurantName}</span>
+            <span className="block truncate text-[12px] font-semibold leading-[1.6] text-[var(--rail-fg)]">{restaurantName}</span>
           </span>
-          <span className="shrink-0 text-[11px] font-semibold text-orange-200 dark:text-orange-200">{switchLabel}</span>
+          <span className="shrink-0 text-[11px] font-semibold text-[var(--rail-fg-muted)]">{switchLabel}</span>
         </div>
       </Link>
     </div>
@@ -437,17 +437,17 @@ export default function Sidebar() {
           if (event.key === 'Escape') setMobileOpen(false);
         }}
         className={`
-          fixed left-0 top-0 z-[var(--z-modal)] flex h-dvh w-64 flex-col border-r border-orange-900 bg-orange-800 shadow-2xl transition-transform duration-300 ease-in-out will-change-transform dark:bg-orange-900 lg:hidden
+          fixed left-0 top-0 z-[var(--z-modal)] flex h-dvh w-64 flex-col border-r border-[var(--rail-border)] bg-[var(--rail-bg)] shadow-2xl transition-transform duration-300 ease-in-out will-change-transform lg:hidden
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'}
         `}
       >
-        <div className="dashboard-shell-row border-b border-orange-700 flex shrink-0 items-center justify-between gap-2 px-3">
+        <div className="dashboard-shell-row border-b border-[var(--rail-border)] flex shrink-0 items-center justify-between gap-2 px-3">
           <RestaurantHeader collapsed={false} onNavigate={() => setMobileOpen(false)} />
           <div className="flex items-center gap-1">
             <button
               onClick={() => setMobileOpen(false)}
               aria-label={language === 'th' ? 'ปิดเมนู' : 'Close menu'}
-              className="rounded-md p-1.5 text-orange-200 transition-colors hover:bg-orange-700 dark:hover:bg-orange-800"
+              className="rounded-md p-1.5 text-[var(--rail-fg-muted)] transition-colors hover:bg-[var(--rail-hover-bg)]"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-5 w-5">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -462,7 +462,7 @@ export default function Sidebar() {
       <aside
         data-nav-rail=""
         className={`
-          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-dvh flex-col overflow-hidden bg-orange-800 dark:bg-orange-900 lg:flex
+          dashboard-shell-border-r fixed left-0 top-0 z-30 hidden h-dvh flex-col overflow-hidden bg-[var(--rail-bg)] lg:flex
           transition-[width] duration-300 ease-in-out will-change-[width]
           ${collapsed ? 'w-[68px]' : 'w-[220px]'}
         `}
@@ -476,7 +476,7 @@ export default function Sidebar() {
                  place the collapsed rail centres every nav icon. Widening rather
                  than re-aligning keeps the left edge fixed, so the icon does not
                  shift when the rail collapses. */
-              className="inline-flex h-9 w-11 shrink-0 items-center justify-center rounded-md text-orange-200 transition-colors hover:bg-orange-700 dark:hover:bg-orange-800"
+              className="inline-flex h-9 w-11 shrink-0 items-center justify-center rounded-md text-[var(--rail-fg-muted)] transition-colors hover:bg-[var(--rail-hover-bg)]"
               title={collapseTitle}
               aria-label={collapseTitle}
               aria-expanded={!collapsed}
@@ -496,14 +496,14 @@ export default function Sidebar() {
               }`}
             >
               <AppLogo size={32} />
-              <AppWordmark height={22} className="shrink-0 text-orange-50" />
+              <AppWordmark height={22} className="shrink-0 text-[var(--rail-fg)]" />
             </Link>
           </div>
         </div>
 
         <NavLinks collapsed={collapsed} />
 
-        <div className={`shrink-0 border-t border-orange-700 px-3 py-2 flex flex-col ${collapsed ? 'items-center gap-1' : 'gap-0.5'}`}>
+        <div className={`shrink-0 border-t border-[var(--rail-border)] px-3 py-2 flex flex-col ${collapsed ? 'items-center gap-1' : 'gap-0.5'}`}>
           <RestaurantSwitcherCard collapsed={collapsed} />
           <DashboardAccountMenu variant={collapsed ? 'icon' : 'rail'} />
         </div>
