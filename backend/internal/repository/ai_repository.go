@@ -373,11 +373,19 @@ func (r *AIRepository) MenusByRevenue(restaurantID uint, since time.Time) ([]AIM
 	return rows, err
 }
 
+// OrderTypeBreakdown counts bills the same way every revenue figure does:
+// completed and paid, attributed to the day the bill was closed. It used to
+// count every non-cancelled bill by the day it was opened, so "สั่งกลับบ้านกี่
+// ออเดอร์" (325) and "ขายได้กี่บิล" (1,052 of which 323 takeaway) disagreed about
+// the same month, and a share worked out from the two was wrong. Traffic
+// questions (peak hours) still count by opened_at — that is when the customer
+// walked in.
 func (r *AIRepository) OrderTypeBreakdown(restaurantID uint, since time.Time) ([]AIOrderTypeSummary, error) {
 	var rows []AIOrderTypeSummary
 	err := r.db.Model(&entity.Order{}).
 		Select("order_type, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
-		Where("restaurant_id = ? AND opened_at >= ? AND status <> ?", restaurantID, since, entity.OrderStatusCancelled).
+		Where("restaurant_id = ? AND deleted_at IS NULL AND completed_at >= ? AND status = ? AND payment_status = ?",
+			restaurantID, since, entity.OrderStatusCompleted, entity.PaymentStatusPaid).
 		Group("order_type").
 		Order("revenue desc").
 		Scan(&rows).Error
@@ -563,8 +571,8 @@ func (r *AIRepository) OrderTypeBreakdownForRange(restaurantID uint, start, end 
 	var rows []AIOrderTypeSummary
 	err := r.db.Model(&entity.Order{}).
 		Select("order_type, COUNT(*) AS orders, COALESCE(SUM(grand_total), 0) AS revenue").
-		Where("restaurant_id = ? AND opened_at >= ? AND opened_at < ? AND status <> ?",
-			restaurantID, start, end, entity.OrderStatusCancelled).
+		Where("restaurant_id = ? AND deleted_at IS NULL AND completed_at >= ? AND completed_at < ? AND status = ? AND payment_status = ?",
+			restaurantID, start, end, entity.OrderStatusCompleted, entity.PaymentStatusPaid).
 		Group("order_type").
 		Order("orders desc").
 		Scan(&rows).Error

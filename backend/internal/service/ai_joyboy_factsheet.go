@@ -300,7 +300,7 @@ func joyboyFactBody(result AIToolResult) (string, bool) {
 		if len(result.OrderTypeBreakdown) == 0 {
 			return joyboyNoData("no_orders_recorded_in_period"), true
 		}
-		lines := []string{window}
+		lines := []string{window, "counted=บิลที่ปิดและจ่ายแล้ว ตามวันปิดบิล นิยามเดียวกับยอดขาย"}
 		for _, entry := range result.OrderTypeBreakdown {
 			lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
 				aiOrderTypeThai(entry.OrderType), entry.Orders, joyboyNum(entry.Revenue)))
@@ -596,7 +596,8 @@ func joyboyOrderTypeForPeriodBody(label string, rows []repository.AIOrderTypeSum
 	if len(rows) == 0 {
 		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_orders_recorded_in_period")})
 	}
-	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	lines := []string{"period=" + label, "scope=named_period_not_30day_window",
+		"counted=บิลที่ปิดและจ่ายแล้ว ตามวันปิดบิล นิยามเดียวกับยอดขาย"}
 	for _, row := range rows {
 		lines = append(lines, fmt.Sprintf("order_type=%s orders=%d revenue=%s",
 			aiOrderTypeThai(row.OrderType), row.Orders, joyboyNum(row.Revenue)))
