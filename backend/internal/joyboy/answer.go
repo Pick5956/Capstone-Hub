@@ -105,7 +105,8 @@ const joyboyPersona = `คุณคือผู้ช่วย AI ในระ�
   เช่น "มื้อเย็นทานอะไรดี" "หิวจัง" "เบื่อจัง" "วันนี้เหนื่อย"
   → ตอบแบบเพื่อนคุย เป็นกันเอง อบอุ่น จริงใจ ไม่ต้องเป็นทางการ
   ถ้าเขาบอกเองว่าเหนื่อย บ่น หรือดูเครียด ให้รับฟังและให้กำลังใจก่อน
-  **แต่ถ้าเขาแค่ทักหรือถามธรรมดา ห้ามทึกทักเองว่าเขาเหนื่อยหรือทำงานมาทั้งวัน** ทักกลับธรรมดาพอ
+  **แต่ถ้าเขาแค่ทักหรือถามธรรมดา ห้ามทึกทักเองว่าเขาเหนื่อยหรือทำงานมาทั้งวัน**
+  ทักกลับสั้น ๆ แบบเป็นมิตร แล้วถามว่ามีอะไรให้ช่วยดูไหม (ไม่ใช่ตอบแค่คำว่า "สวัสดีครับ" คำเดียว)
   (ทัก "สวัสดีครับ" ตอนเที่ยงแล้วตอบว่า "เหนื่อยมาทั้งวันเลยสิครับ" คือผิด เขายังไม่ได้เปิดร้านด้วยซ้ำ)
   เป็นเพื่อนที่คุยด้วยแล้วสบายใจ ไม่ใช่พนักงานที่รีบตอบให้จบ ๆ
   พูดสั้นกระชับก็จริง แต่ให้มีน้ำใจและความเป็นมนุษย์ ไม่แข็งทื่อ
@@ -516,7 +517,7 @@ func cleanAnswer(raw string) string {
 	text = latexDelimiters.ReplaceAllString(text, "")
 	text = unicodeSpaces.ReplaceAllString(text, " ")
 	text = zeroWidthChars.ReplaceAllString(text, "")
-	text = plateUnitAfterNumber.ReplaceAllString(text, "${1}รายการ")
+	text = plateUnitAfterNumber.ReplaceAllString(text, "${1}รายการ${2}")
 	text = particleStuckToNonThai.ReplaceAllString(text, "$1 $2")
 	for _, politeness := range repeatedPoliteness {
 		text = politeness.pattern.ReplaceAllString(text, politeness.particle)
@@ -567,7 +568,10 @@ var zeroWidthChars = regexp.MustCompile(`[\x{200B}\x{200C}\x{200D}\x{2060}\x{FEF
 // right after a number (optionally through bold markers), so "จานเดียว",
 // "ต่อจาน", "แก้วใส" are safe. The prompt asks for "รายการ" up front; this is the
 // backstop for when the model reaches for a classifier anyway.
-var plateUnitAfterNumber = regexp.MustCompile(`(\d[\s*]*)(?:จาน|ชิ้น|แก้ว|ถ้วย|ที่)`)
+//
+// "ที่" is matched only when nothing Thai follows it: "38 ที่นั่ง" (seats) is not a
+// count of dishes, and the first version rewrote it to "38 รายการนั่ง".
+var plateUnitAfterNumber = regexp.MustCompile(`(\d[\s*]*)(?:จาน|ชิ้น|แก้ว|ถ้วย|ที่)(\s|$|[^\p{Thai}])`)
 
 // answerFigure matches a numeric token in either the fact sheet or the answer,
 // allowing space or comma thousands separators and an optional decimal part.

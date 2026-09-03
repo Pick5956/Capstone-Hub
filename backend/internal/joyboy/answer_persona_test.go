@@ -208,3 +208,19 @@ func TestPersonaDoesNotAssumeTheOwnerIsTired(t *testing.T) {
 		t.Fatal("the unconditional 'the owner is tired' line is back")
 	}
 }
+
+// "โต๊ะว่าง 10 โต๊ะ รวม 38 ที่นั่ง" came out as "38 รายการนั่ง": the classifier
+// rewrite matched the "ที่" inside "ที่นั่ง". A classifier is only a classifier
+// when nothing Thai follows it.
+func TestCleanAnswerLeavesSeatsAlone(t *testing.T) {
+	for in, want := range map[string]string{
+		"รวมที่นั่งว่างทั้งหมด 38 ที่นั่ง":  "รวมที่นั่งว่างทั้งหมด 38 ที่นั่ง",
+		"ขายได้ 12 ที่ ครับ":                  "ขายได้ 12 รายการ ครับ",
+		"ขายได้ **330 จาน** วันนี้":           "ขายได้ **330 รายการ** วันนี้",
+		"ชาไทย 3 แก้ว":                        "ชาไทย 3 รายการ",
+	} {
+		if got := cleanAnswer(in); got != want {
+			t.Errorf("cleanAnswer(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
