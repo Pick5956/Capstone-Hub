@@ -15,6 +15,7 @@ import {
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
+import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/lib/aiPendingPlan";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
@@ -127,6 +128,9 @@ export default function AIAssistantPage() {
   const [pendingActionPreview, setPendingActionPreview] = useState<AIActionPreview | null>(null);
   // A multi-item plan (inventory commands) waiting for one confirmation.
   const [pendingActionPlan, setPendingActionPlan] = useState<AIActionPlan | null>(null);
+  // How the card ended, if it has. Held next to the plan so the card can be put
+  // back saying "cancelled" rather than offering the buttons all over again.
+  const [planCardState, setPlanCardState] = useState<StoredPlanState>("pending");
   // The sentence that produced the pending change. "Ask again" puts it back in
   // the box so the owner edits one word instead of retyping the command.
   const [pendingActionQuestion, setPendingActionQuestion] = useState("");
@@ -174,6 +178,7 @@ export default function AIAssistantPage() {
     setConversationId(null);
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -184,6 +189,13 @@ export default function AIAssistantPage() {
       setMessages(stored && stored.length > 0
         ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
         : [welcomeMessage()]);
+      // The server keeps one pending plan at a time and it outlives a page
+      // switch, so the card that goes with it has to come back too. Without
+      // this the next command answered "confirm or cancel the one above" over
+      // a card that had been unmounted, with no way to press either button.
+      const storedPlan = loadPendingPlan(storageKey);
+      setPendingActionPlan(storedPlan?.plan ?? null);
+      setPlanCardState(storedPlan?.state ?? "pending");
       setLoading(false);
       setHydratedStorageKey(storageKey);
     }, 0);
@@ -195,6 +207,13 @@ export default function AIAssistantPage() {
     if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages, chatWriteSourceRef.current);
   }, [hydratedStorageKey, messages, storageKey]);
+
+  // Only after hydration: before it the plan is deliberately null, and saving
+  // that would erase the very plan we are about to restore.
+  useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
+    savePendingPlan(storageKey, pendingActionPlan, planCardState);
+  }, [hydratedStorageKey, pendingActionPlan, planCardState, storageKey]);
 
   useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
     if (write.kind === "conversation") {
@@ -249,6 +268,7 @@ export default function AIAssistantPage() {
     setConversationId(null);
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -340,6 +360,7 @@ export default function AIAssistantPage() {
       if (data.action_plan) {
         actionResolvedRef.current = false;
         setPendingActionPlan(data.action_plan);
+        setPlanCardState("pending");
         setPendingActionQuestion(trimmed);
       }
       const actions =
@@ -538,6 +559,7 @@ export default function AIAssistantPage() {
   const handlePlanReissue = () => {
     actionResolvedRef.current = false;
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     reissuePendingCommand();
   };
 
@@ -545,6 +567,7 @@ export default function AIAssistantPage() {
     actionResolvedRef.current = false;
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     reissuePendingCommand();
   };
 
@@ -611,7 +634,11 @@ export default function AIAssistantPage() {
         onConfirm={handlePlanConfirm}
         onCancel={handlePlanCancel}
         onReissue={handlePlanReissue}
-        onResolved={() => { actionResolvedRef.current = true; }}
+        initialState={planCardState}
+        onResolved={(resolved) => {
+          actionResolvedRef.current = true;
+          if (resolved !== "confirming") setPlanCardState(resolved);
+        }}
         language={language}
       />
     ) : null;

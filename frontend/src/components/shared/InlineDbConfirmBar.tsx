@@ -41,8 +41,16 @@ export type InlineDbConfirmBarProps = {
   onUndo?: () => void;
   onReissue?: () => void;
   /** Fired once when the bar settles into any terminal state (done/cancelled/
-   * expired), so the host can stop treating the preview as pending. */
-  onResolved?: () => void;
+   * expired), so the host can stop treating the preview as pending. It carries
+   * which ending it was, so the host can put the same card back later. */
+  onResolved?: (state: InlineDbConfirmState) => void;
+  /**
+   * Where the bar opens. Left unset it opens waiting for an answer, which is
+   * what a fresh card wants. A card restored after the owner switched pages
+   * passes the ending it already reached, so it reopens saying what happened
+   * instead of offering buttons for a decision that was already made.
+   */
+  initialState?: InlineDbConfirmState;
   language?: "th" | "en";
 };
 
@@ -170,7 +178,7 @@ export function barView(
 
 export default function InlineDbConfirmBar({
   itemName, fromLabel, toLabel, items, summary, warnings, detail, expiresAt,
-  onConfirm, onCancel, onUndo, onReissue, onResolved, language = "th",
+  onConfirm, onCancel, onUndo, onReissue, onResolved, initialState, language = "th",
 }: InlineDbConfirmBarProps) {
   const planItems = items ?? [];
   const isPlan = planItems.length > 0;
@@ -182,7 +190,7 @@ export default function InlineDbConfirmBar({
   // render body - that reads the clock during render.
   const [totalMs] = useState(() => Math.max(1000, expiryMs - Date.now()));
 
-  const [state, setState] = useState<InlineDbConfirmState>("pending");
+  const [state, setState] = useState<InlineDbConfirmState>(initialState ?? "pending");
   const [remaining, setRemaining] = useState<number>(() => Math.max(0, expiryMs - Date.now()));
   const [error, setError] = useState("");
 
@@ -200,11 +208,14 @@ export default function InlineDbConfirmBar({
     return () => window.clearInterval(id);
   }, [state, expiryMs]);
 
-  const resolvedFiredRef = useRef(false);
+  // A bar restored into a terminal state has already been dealt with, so it
+  // must not announce the ending a second time — that would re-run whatever the
+  // host does on resolution for a decision made before the page was reloaded.
+  const resolvedFiredRef = useRef(isTerminal(initialState ?? "pending"));
   useEffect(() => {
     if (isTerminal(state) && !resolvedFiredRef.current) {
       resolvedFiredRef.current = true;
-      onResolved?.();
+      onResolved?.(state);
     }
   }, [state, onResolved]);
 

@@ -31,6 +31,7 @@ import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
+import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/lib/aiPendingPlan";
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
@@ -216,6 +217,9 @@ export default function AIOperationsFloatingChat() {
   // show while phones were redirected to the full page, and became reachable the
   // moment the floating chat started opening as a sheet on mobile.
   const [pendingActionPlan, setPendingActionPlan] = useState<AIActionPlan | null>(null);
+  // How the card ended, if it has. Kept beside the plan so closing the widget or
+  // leaving the page brings the same card back, saying what happened.
+  const [planCardState, setPlanCardState] = useState<StoredPlanState>("pending");
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
@@ -257,6 +261,7 @@ export default function AIOperationsFloatingChat() {
     setConversationId(null);
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -267,6 +272,12 @@ export default function AIOperationsFloatingChat() {
       setMessages(stored && stored.length > 0
         ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
         : [{ id: "welcome", role: "assistant", content: copy.welcome, createdAt: new Date() }]);
+      // The server holds one pending plan at a time and it survives a page
+      // switch; the card that goes with it has to survive too, or the owner is
+      // told to answer a card that is no longer anywhere on screen.
+      const storedPlan = loadPendingPlan(storageKey);
+      setPendingActionPlan(storedPlan?.plan ?? null);
+      setPlanCardState(storedPlan?.state ?? "pending");
       setLoading(false);
       setHydratedStorageKey(storageKey);
     }, 0);
@@ -278,6 +289,13 @@ export default function AIOperationsFloatingChat() {
     if (hydratedStorageKey !== storageKey) return;
     saveMessages(storageKey, messages, chatWriteSourceRef.current);
   }, [hydratedStorageKey, messages, storageKey]);
+
+  // Only after hydration: before it the plan is deliberately null, and saving
+  // that would erase the very card we are about to restore.
+  useEffect(() => {
+    if (hydratedStorageKey !== storageKey) return;
+    savePendingPlan(storageKey, pendingActionPlan, planCardState);
+  }, [hydratedStorageKey, pendingActionPlan, planCardState, storageKey]);
 
   useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
     if (write.kind === "conversation") {
@@ -363,6 +381,7 @@ export default function AIOperationsFloatingChat() {
     setConversationId(null);
     setPendingActionPreview(null);
     setPendingActionPlan(null);
+    setPlanCardState("pending");
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
@@ -543,6 +562,7 @@ export default function AIOperationsFloatingChat() {
 
       if (data.action_plan) {
         setPendingActionPlan(data.action_plan);
+        setPlanCardState("pending");
       }
       
       if (data.snapshot) {
@@ -729,6 +749,10 @@ export default function AIOperationsFloatingChat() {
         expiresAt={pendingActionPlan.expires_at}
         onConfirm={handlePlanConfirm}
         onCancel={handlePlanCancel}
+        initialState={planCardState}
+        onResolved={(resolved) => {
+          if (resolved !== "confirming") setPlanCardState(resolved);
+        }}
         language={language}
       />
     ) : null;

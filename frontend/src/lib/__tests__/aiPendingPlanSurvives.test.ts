@@ -25,5 +25,17 @@ describe("a pending write plan survives the next question", () => {
       const sendBlock = source.slice(sendIndex, sendIndex + 900);
       expect(sendBlock).not.toContain("setPendingActionPlan(null)");
     });
+
+    // The other half of the same complaint: the card was gone after switching
+    // to another page and back, because it lived only in component state while
+    // the server still held the plan.
+    it(`is restored after a page switch in the ${name}`, () => {
+      const source = readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
+      expect(source).toContain("loadPendingPlan(storageKey)");
+      expect(source).toContain("savePendingPlan(storageKey, pendingActionPlan, planCardState)");
+      // And it comes back in the state it ended in, so a card already answered
+      // does not offer the buttons a second time.
+      expect(source).toContain("initialState={planCardState}");
+    });
   }
 });

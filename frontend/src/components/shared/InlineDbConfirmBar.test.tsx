@@ -87,4 +87,27 @@ describe("InlineDbConfirmBar render", () => {
     expect(html).toContain("ยืนยัน");
     expect(html).toContain("aria-live=\"polite\"");
   });
+
+  it("reopens an answered card saying what happened, with no buttons to press again", () => {
+    // What the owner sees after leaving the page and coming back: the card is
+    // still there, but the decision it is showing was already made. Offering
+    // "ยืนยัน" again would either fail on an expired plan or run it twice.
+    const html = renderToStaticMarkup(
+      <InlineDbConfirmBar
+        itemName="ต้มยำกุ้งน้ำข้น"
+        fromLabel="เปิดขาย"
+        toLabel="ปิดขาย"
+        detail="แก้ข้อมูลจริง 1 รายการ"
+        expiresAt={new Date(Date.now() - 60_000).toISOString()}
+        initialState="cancelled"
+        onConfirm={async () => {}}
+        onCancel={() => {}}
+        language="th"
+      />,
+    );
+    expect(html).toContain("ต้มยำกุ้งน้ำข้น");
+    expect(html).toContain("ยกเลิกแล้ว · ไม่มีการแก้ข้อมูล");
+    // The group is still labelled "ยืนยันการแก้ข้อมูล...", so look for the button itself.
+    expect(html).not.toContain("ยืนยัน</button>");
+  });
 });
