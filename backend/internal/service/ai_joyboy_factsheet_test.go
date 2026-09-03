@@ -594,3 +594,43 @@ func TestOrderTypeIsTranslatedBeforeTheModelSeesIt(t *testing.T) {
 		t.Errorf("raw codes leaked to the model:\n%s", body)
 	}
 }
+
+// "ครัวกำลังทำอะไรอยู่บ้าง" over a flat list of 22 rows came back 4, 3, 4 and 6 on
+// four asks, over a floor with 5 cooking and 5 queued. The sheet must hand the
+// model each status as a group with its count, so the answer is read, not
+// tallied.
+func TestActiveOrdersSheetGroupsRowsByStatusWithCounts(t *testing.T) {
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	mk := func(number, status string) repository.AIActiveOrder {
+		return repository.AIActiveOrder{OrderNumber: number, OrderType: "takeaway", Status: status,
+			PaymentStatus: "unpaid", GrandTotal: 100, CustomerCount: 1, OpenedAt: now.Add(-10 * time.Minute)}
+	}
+	body := joyboyActiveOrdersBody([]repository.AIActiveOrder{
+		mk("T1", entity.OrderStatusServed),
+		mk("T2", entity.OrderStatusCooking),
+		mk("T3", entity.OrderStatusSentToKitchen),
+		mk("T4", entity.OrderStatusCooking),
+		mk("T5", entity.OrderStatusReady),
+		mk("T6", entity.OrderStatusCooking),
+	}, now)
+
+	for _, want := range []string{
+		"group=ครัวกำลังทำ count=3",
+		"group=ส่งครัวแล้ว รอครัวเริ่มทำ count=1",
+		"group=ครัวทำเสร็จ รอเสิร์ฟ count=1",
+		"group=เสิร์ฟแล้ว รอเก็บเงิน count=1",
+		"in_kitchen_now=4",
+		"ห้ามนับแถวเอง",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the grouped sheet lost %q:\n%s", want, body)
+		}
+	}
+	// The cooking rows sit under their own header, and before the queue.
+	cooking := strings.Index(body, "group=ครัวกำลังทำ count=3")
+	queued := strings.Index(body, "group=ส่งครัวแล้ว")
+	t2 := strings.Index(body, "order=T2 ")
+	if !(cooking < t2 && t2 < queued) {
+		t.Errorf("cooking rows must sit under the cooking header and before the queue:\n%s", body)
+	}
+}

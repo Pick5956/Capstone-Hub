@@ -671,7 +671,15 @@ func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) st
 			"ถ้าผู้ใช้ขอให้ทำ ห้ามบอกว่าทำให้แล้ว ให้บอกว่าต้องไปกดเองที่หน้าขายหรือหน้าครัว",
 		fmt.Sprintf("active_orders=%d", len(orders)),
 	}
-	rows := make([]string, 0, len(orders))
+	// Rows are grouped by status, each group headed by its own count, rather
+	// than listed flat. Asked "ครัวกำลังทำอะไรอยู่บ้าง" over a flat list of 22
+	// rows, the model counted the cooking rows itself and got 4, 3, 4 and 6 on
+	// four asks — over a floor with 5 cooking and 5 queued — and once wrote "4
+	// รายการ" above a list of five. The sheet already carried in_kitchen_now=10;
+	// the model did not use it, because the figure it wanted was "how many are
+	// cooking", and that number was nowhere. Now every status has its count and
+	// its rows together, so the answer is a read, not a tally.
+	grouped := make(map[string][]string, 5)
 	for _, order := range orders {
 		if order.PaymentStatus == "unpaid" {
 			unpaidCount++
@@ -694,16 +702,47 @@ func joyboyActiveOrdersBody(orders []repository.AIActiveOrder, now time.Time) st
 		if waited < 0 {
 			waited = 0
 		}
-		rows = append(rows, fmt.Sprintf("order=%s %s สถานะ=%s ยอด=%s การชำระ=%s เปิดมาแล้ว=%d นาที คน=%d",
+		grouped[order.Status] = append(grouped[order.Status], fmt.Sprintf("order=%s %s สถานะ=%s ยอด=%s การชำระ=%s เปิดมาแล้ว=%d นาที คน=%d",
 			order.OrderNumber, where, status, joyboyNum(order.GrandTotal),
 			map[string]string{"unpaid": "ยังไม่จ่าย", "paid": "จ่ายแล้ว"}[order.PaymentStatus],
 			waited, order.CustomerCount))
 	}
 	lines = append(lines,
 		fmt.Sprintf("in_kitchen_now=%d", kitchenCount),
-		fmt.Sprintf("unpaid_bills=%d unpaid_total=%s", unpaidCount, joyboyNum(roundBaht(unpaidTotal))))
-	lines = append(lines, rows...)
+		fmt.Sprintf("unpaid_bills=%d unpaid_total=%s", unpaidCount, joyboyNum(roundBaht(unpaidTotal))),
+		"note=รายการข้างล่างจัดกลุ่มตามสถานะแล้ว แต่ละกลุ่มมีจำนวนบอกไว้ ให้ใช้จำนวนนั้น ห้ามนับแถวเอง "+
+			"\"ครัวกำลังทำ\" คือกลุ่มที่ครัวลงมือแล้ว ส่วน \"ส่งครัวแล้ว รอครัวเริ่มทำ\" คือคิวที่ยังไม่ได้เริ่ม ถ้าถามว่าครัวทำอะไรอยู่ให้บอกทั้งสองกลุ่ม")
+	for _, status := range aiActiveOrderStatusOrder {
+		rows := grouped[status]
+		if len(rows) == 0 {
+			continue
+		}
+		label := aiOrderStatusThai[status]
+		if label == "" {
+			label = status
+		}
+		lines = append(lines, fmt.Sprintf("group=%s count=%d", label, len(rows)))
+		lines = append(lines, rows...)
+		delete(grouped, status)
+	}
+	// A status this file does not know still gets listed, under its raw name,
+	// rather than dropped: a hidden row is a bill the owner is told does not exist.
+	for status, rows := range grouped {
+		lines = append(lines, fmt.Sprintf("group=%s count=%d", status, len(rows)))
+		lines = append(lines, rows...)
+	}
 	return joyboyJoin(lines)
+}
+
+// aiActiveOrderStatusOrder is the order the floor is read in: what the kitchen
+// is doing first, then what is waiting on the floor, then what only waits on
+// the bill.
+var aiActiveOrderStatusOrder = []string{
+	entity.OrderStatusCooking,
+	entity.OrderStatusSentToKitchen,
+	entity.OrderStatusOpen,
+	entity.OrderStatusReady,
+	entity.OrderStatusServed,
 }
 
 // joyboyMenuListMaxRows caps how many menu names travel to the model. A shop
