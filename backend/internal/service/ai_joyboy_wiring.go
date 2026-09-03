@@ -810,6 +810,22 @@ func (s *AIService) askJoyboy(ctx context.Context, actor AIActorContext, request
 		Task:   task,
 		Model:  fmt.Sprintf("joyboy(%s)", strings.Join(answer.Tools, "+")),
 	}
+	// The tools that actually produced data, named for the client.
+	//
+	// This used to be left empty on this path, and the chat screen derives its
+	// follow-up chips from it: with no tool name it fell back to reading the
+	// answer PROSE for keywords, so a peak-hours answer that happened to contain
+	// "ขายดี" was offered "เมนูกำไรดีสุด / เมนูขายไม่ออก", and a chat reply with
+	// the word "ยอด" in it got sales chips. The chips looked random because they
+	// were derived from wording rather than from what was actually read.
+	for _, name := range answer.Tools {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			response.ToolsUsed = append(response.ToolsUsed, AIToolName(trimmed))
+		}
+	}
+	if len(response.ToolsUsed) > 0 {
+		response.Tool = response.ToolsUsed[0]
+	}
 	// A forecast question leaves its chart-ready series on the tools struct; hand
 	// it to the frontend so the ForecastChart draws under the answer.
 	if tools.forecast != nil {

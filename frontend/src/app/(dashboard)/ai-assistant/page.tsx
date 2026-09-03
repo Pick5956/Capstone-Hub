@@ -344,7 +344,7 @@ export default function AIAssistantPage() {
         data.intent === "unclear"
           ? getUnclearRequestActions(activeMembership, language)
           : data.intent === "analysis"
-            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tool, data.scope_assumed)
+            ? getGuidedActions(trimmed, answer, activeMembership, language, data.tools_used ?? data.tool, data.scope_assumed)
             : [];
       setMessages((prev) => [
         ...prev,

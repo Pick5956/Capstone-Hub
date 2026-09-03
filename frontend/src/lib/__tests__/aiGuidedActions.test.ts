@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { getGuidedActions } from "@/src/lib/aiGuidedActions";
 import { membershipWith, ownerMembership } from "./fixtures";
 
+// These three pass the tool explicitly: since the chips became tool-driven, an
+// answer that read no data shows none at all, so a permission test needs a tool
+// to have something to gate.
 describe("getGuidedActions permission and confirmation guardrails", () => {
   it("marks inventory review as requiring confirmation", () => {
-    const actions = getGuidedActions("review low stock", "", ownerMembership, "en");
+    const actions = getGuidedActions("review low stock", "", ownerMembership, "en", ["get_low_stock_ingredients"]);
     const inventory = actions.find((action) => action.id === "review-inventory");
 
     expect(inventory).toMatchObject({
@@ -14,7 +17,7 @@ describe("getGuidedActions permission and confirmation guardrails", () => {
   });
 
   it("marks menu review as requiring confirmation", () => {
-    const actions = getGuidedActions("show low margin menu", "", ownerMembership, "en");
+    const actions = getGuidedActions("show low margin menu", "", ownerMembership, "en", ["get_lowest_margin_menu"]);
     const menu = actions.find((action) => action.id === "review-menu");
 
     expect(menu).toMatchObject({
@@ -24,7 +27,7 @@ describe("getGuidedActions permission and confirmation guardrails", () => {
   });
 
   it("does not return inventory or report actions to a member without permission", () => {
-    const actions = getGuidedActions("review low stock sales", "", membershipWith("view_menu"), "en");
+    const actions = getGuidedActions("review low stock sales", "", membershipWith("view_menu"), "en", ["get_low_stock_ingredients"]);
 
     expect(actions).toEqual([]);
   });
@@ -93,5 +96,43 @@ describe("getGuidedActions offers period pivots when the backend assumed scope",
   it("a dish-count question re-asks กี่จาน, not ยอดขาย", () => {
     const actions = getGuidedActions("ขายได้กี่จานทั้งหมด", "... ขายได้รวม ... จาน", ownerMembership, "th", undefined, true);
     expect(actions.find((a) => a.id === "fu-scope-today")?.prompt).toBe("วันนี้ขายได้กี่จาน");
+  });
+});
+
+describe("chips follow the tools that ran, not the wording of the answer", () => {
+  it("shows no chips when no tool ran", () => {
+    // A greeting or a chat reply read no shop data. Chips there were the ones
+    // the owner called "มั่ว": every answer wearing the same three buttons.
+    expect(getGuidedActions("สวัสดีครับ", "สวัสดีครับ มีอะไรให้ช่วยไหมครับ", ownerMembership, "th", [])).toEqual([]);
+    expect(getGuidedActions("หิวจัง", "ลองข้าวผัดกุ้งไหมครับ อร่อยดี", ownerMembership, "th", undefined)).toEqual([]);
+  });
+
+  it("does not offer menu chips for a peak-hours answer that merely says ขายดี", () => {
+    const actions = getGuidedActions(
+      "ร้านคนเยอะช่วงไหน",
+      "วันอังคารขายดีที่สุด 179 รายการ ช่วง 13:00 ขายดีที่สุด 146 รายการ",
+      ownerMembership,
+      "th",
+      ["get_peak_periods"],
+    );
+    expect(actions.some((a) => a.id === "fu-top-margin")).toBe(false);
+    expect(actions.some((a) => a.id === "fu-slow")).toBe(false);
+    expect(actions.some((a) => a.id === "fu-peak" || a.id === "fu-trend" || a.id === "open-report")).toBe(true);
+  });
+
+  it("unions the topics of every tool that ran", () => {
+    const actions = getGuidedActions(
+      "เครื่องดื่มตัวไหนกำไรดีสุด",
+      "ชาไทยเย็น 11,101 บาท",
+      ownerMembership,
+      "th",
+      ["get_menu_profit_by_category"],
+    );
+    expect(actions.some((a) => a.id === "fu-low-margin" || a.id === "review-menu")).toBe(true);
+  });
+
+  it("gives the floor tools no topic chips at all", () => {
+    const actions = getGuidedActions("โต๊ะว่างมั้ย", "ว่างครบ 10 โต๊ะครับ", ownerMembership, "th", ["get_table_status"]);
+    expect(actions).toEqual([]);
   });
 });

@@ -38,6 +38,26 @@ const TOOL_TOPICS: Record<string, Topic[]> = {
   get_ingredient_reorder_forecast: ["inventory"],
   get_dead_stock: ["inventory"],
   get_top_cost_ingredients: ["inventory"],
+  get_ingredient_detail: ["inventory"],
+  // Added when the assistant grew these tools. A tool missing from this map used
+  // to fall through to reading the answer prose, which is how a peak-hours reply
+  // ended up offering "เมนูกำไรดีสุด": the word "ขายดี" appeared in the sentence.
+  get_menu_detail: ["menu"],
+  get_menu_list: ["menu"],
+  get_menu_metrics_for_period: ["menu", "sales"],
+  get_menu_profit_by_category: ["menu", "margin"],
+  get_profit_summary: ["margin", "sales"],
+  get_expense_summary: ["sales"],
+  get_payment_mix: ["sales", "billing"],
+  get_sales_forecast: ["sales"],
+  // Deliberately no topics: these answer about the shop itself or the floor
+  // right now, and none of the topic chips ("เทียบสัปดาห์ก่อน", "เมนูกำไรดีสุด")
+  // follow from them.
+  get_shop_profile: [],
+  get_table_status: [],
+  get_active_orders: [],
+  get_data_coverage: [],
+  search_system_docs: [],
 };
 
 function includesAny(text: string, terms: string[]) {
@@ -79,14 +99,34 @@ export function getGuidedActions(
   answer: string,
   membership: Membership | null | undefined,
   language: "th" | "en",
-  tool?: string,
+  tool?: string | string[],
   scopeAssumed?: boolean,
 ): AIGuidedAction[] {
-  // Prefer the structured tool; fall back to text only for free-form answers.
-  const topics =
-    tool && TOOL_TOPICS[tool]
-      ? new Set<Topic>(TOOL_TOPICS[tool])
-      : topicsFromText(`${question} ${answer}`.toLowerCase());
+  // Which tools actually produced the answer. The backend sends every one of
+  // them; a single name is still accepted for the older callers.
+  const used = (Array.isArray(tool) ? tool : tool ? [tool] : [])
+    .map((name) => name.trim())
+    .filter(Boolean);
+
+  // No tool ran, so no shop data was read: this was a greeting, a chat reply, or
+  // a refusal. Chips here are the "มั่ว" the owner complained about — every
+  // answer wearing the same three buttons whether or not they follow from it.
+  // The one exception is a period pivot, which the backend asks for explicitly.
+  if (used.length === 0 && !scopeAssumed) return [];
+
+  // Topics come from what was READ, never from how the answer was worded. Text
+  // matching is the last resort, for an answer whose tool this map does not know.
+  const topics = new Set<Topic>();
+  let knownTool = false;
+  for (const name of used) {
+    const mapped = TOOL_TOPICS[name];
+    if (!mapped) continue;
+    knownTool = true;
+    for (const topic of mapped) topics.add(topic);
+  }
+  if (!knownTool && used.length > 0) {
+    for (const topic of topicsFromText(`${question} ${answer}`.toLowerCase())) topics.add(topic);
+  }
   const has = (topic: Topic) => topics.has(topic) && canTopic(membership, topic);
 
   const actions: AIGuidedAction[] = [];
