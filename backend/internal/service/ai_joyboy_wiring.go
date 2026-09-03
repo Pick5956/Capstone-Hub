@@ -614,7 +614,42 @@ func (t *joyboyTools) Run(ctx context.Context, names []string, question string) 
 	}
 
 	results := t.appendReadOnlyResults(make([]joyboy.ToolResult, 0, len(names)), names, snapshot, question)
+	// The picture is already on its way to the screen; the model has to be told,
+	// or it apologises over the top of it. Asked "ขอกราฟเทียบรายได้ 7 วันก่อนกับ
+	// สัปดาห์นี้" it answered "ผมไม่สามารถสร้างกราฟให้ดูได้" with the finished bar
+	// chart rendered directly underneath — the figures were right and the chart was
+	// right, and the sentence above them was a lie about the system's own
+	// capabilities. Nothing in the fact sheet had ever mentioned a chart.
+	if note := joyboyChartNote(t.chart, t.forecast); note != "" {
+		results = append(results, joyboy.ToolResult{Tool: "chart_on_screen", Label: "chart_on_screen", Body: note})
+	}
 	return results, nil
+}
+
+// joyboyChartNote states what the owner is already looking at. It names the
+// chart's own title rather than describing the drawing: the model's job is to
+// talk about the figures, not to narrate a picture the owner can see.
+func joyboyChartNote(chart *AIChartData, forecast *AIForecastResult) string {
+	switch {
+	case chart != nil:
+		title := strings.TrimSpace(chart.Title)
+		if title == "" {
+			title = "กราฟ"
+		}
+		return joyboyJoin([]string{
+			"chart_on_screen=true chart_title=" + title,
+			"note=ระบบวาดกราฟ \"" + title + "\" ขึ้นแสดงใต้คำตอบนี้ให้เจ้าของเห็นแล้ว " +
+				"**ห้ามบอกว่าทำกราฟให้ไม่ได้ หรือให้ไปดูเอาเองในระบบ** เพราะกราฟอยู่ตรงหน้าเขาแล้ว " +
+				"ให้เล่าตัวเลขที่กราฟแสดงเป็นคำพูด ไม่ต้องบรรยายว่ากราฟหน้าตายังไง และไม่ต้องบอกว่าคุณเป็นคนวาด",
+		})
+	case forecast != nil:
+		return joyboyJoin([]string{
+			"chart_on_screen=true chart_title=พยากรณ์ยอดขาย",
+			"note=ระบบวาดกราฟพยากรณ์ขึ้นแสดงใต้คำตอบนี้แล้ว **ห้ามบอกว่าทำกราฟให้ไม่ได้** " +
+				"ให้เล่าตัวเลขพยากรณ์เป็นคำพูด และย้ำว่าเป็นการคาดการณ์ ไม่ใช่ยอดจริง",
+		})
+	}
+	return ""
 }
 
 // appendReadOnlyResults runs each requested tool and appends its fact sheet.

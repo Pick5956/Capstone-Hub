@@ -164,3 +164,22 @@ func TestPaymentMixIsWiredToARunner(t *testing.T) {
 		t.Fatal("get_payment_mix is offered to the model but no runner claims it")
 	}
 }
+
+// The bar chart was rendered and the sentence above it said "ผมไม่สามารถสร้าง
+// กราฟให้ดูได้". Nothing in the fact sheet mentioned a chart, so the model had
+// no way to know one was on the way. This block is that missing fact.
+func TestChartNoteTellsTheModelTheChartIsAlreadyOnScreen(t *testing.T) {
+	note := joyboyChartNote(&AIChartData{Kind: AIChartBar, Title: "เทียบยอดขาย"}, nil)
+	for _, want := range []string{"chart_on_screen=true", "เทียบยอดขาย", "ห้ามบอกว่าทำกราฟให้ไม่ได้"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("the chart note lost %q:\n%s", want, note)
+		}
+	}
+	forecast := joyboyChartNote(nil, &AIForecastResult{})
+	if !strings.Contains(forecast, "พยากรณ์") || !strings.Contains(forecast, "ห้ามบอกว่าทำกราฟให้ไม่ได้") {
+		t.Errorf("a forecast chart needs the same note:\n%s", forecast)
+	}
+	if joyboyChartNote(nil, nil) != "" {
+		t.Error("no chart, no note")
+	}
+}
