@@ -272,3 +272,19 @@ func TestIngredientDetailCarriesDaysLeftFromTheSameMathsAsTheForecast(t *testing
 		t.Errorf("with no usage rows there must be no days_left line:\n%s", body)
 	}
 }
+
+// Asked for the recipe, the model said "ในช่วง 30 วันล่าสุด ใช้กุ้งสด 150 กรัม":
+// the window label headed the whole sheet, so it was read as covering the
+// recipe too. The label belongs to the sales line alone.
+func TestMenuDetailKeepsTheWindowOffTheRecipe(t *testing.T) {
+	body := joyboyMenuDetailBody(aiDetailMenus(), aiDetailMargins(), "period=30 วันล่าสุด", "ต้มยำกุ้งน้ำข้นใช้วัตถุดิบอะไรบ้าง", nil)
+	if strings.HasPrefix(body, "period=") {
+		t.Errorf("the window must not head the whole sheet:\n%s", body)
+	}
+	if !strings.Contains(body, "period=30 วันล่าสุด qty_sold=") {
+		t.Errorf("the window should sit on the sales line:\n%s", body)
+	}
+	if !strings.Contains(body, "recipe_means=") {
+		t.Errorf("the recipe line should say it has no window:\n%s", body)
+	}
+}

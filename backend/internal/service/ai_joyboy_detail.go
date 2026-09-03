@@ -372,8 +372,11 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 		byName[aiNormalizeName(row.MenuName)] = row
 	}
 
+	// The window label rides on the sales figures below, not on the sheet as a
+	// whole: with "period=30 วันล่าสุด" as the first line the model told the
+	// owner the recipe was "ในช่วง 30 วันล่าสุด ใช้กุ้งสด 150 กรัม" — a recipe has
+	// no window, and a price does not either.
 	lines := make([]string, 0, len(found)*7)
-	lines = append(lines, window)
 	// When the sentence named nothing, these rows are the things the conversation
 	// has touched, oldest first — candidates, not an answer. Saying so is what lets
 	// the model resolve "เมนูแรกที่บอกไปตอนต้น" (take the first) apart from
@@ -395,8 +398,8 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 			lines = append(lines, "selling_status=ปิดขายอยู่")
 		}
 		if row, ok := byName[aiNormalizeName(menu.Name)]; ok {
-			lines = append(lines, fmt.Sprintf("qty_sold=%d revenue=%s cost=%s profit=%s margin_pct=%s",
-				row.Quantity, joyboyNum(row.Revenue), joyboyNum(row.Cost),
+			lines = append(lines, fmt.Sprintf("%s qty_sold=%d revenue=%s cost=%s profit=%s margin_pct=%s",
+				window, row.Quantity, joyboyNum(row.Revenue), joyboyNum(row.Cost),
 				joyboyNum(row.Profit), joyboyNum(row.Margin)))
 			// Per-plate figures are computed here because the model is forbidden to
 			// do arithmetic: given only a total profit and a quantity it answered
@@ -411,10 +414,11 @@ func joyboyMenuDetailBody(menus []entity.MenuItem, margins []repository.AIMenuMa
 		} else {
 			// Not in the margin set means no paid sales in the window — a real zero,
 			// which is different from "this menu is unknown".
-			lines = append(lines, "qty_sold=0 note=ไม่มียอดขายในช่วงที่วิเคราะห์")
+			lines = append(lines, window+" qty_sold=0 note=ไม่มียอดขายในช่วงที่วิเคราะห์")
 		}
 		if recipe := aiMenuRecipeLines(menu); recipe != "" {
-			lines = append(lines, "recipe="+recipe)
+			lines = append(lines, "recipe="+recipe,
+				"recipe_means=สูตรปัจจุบันต่อ 1 รายการ เป็นค่าที่ตั้งไว้ ไม่ขึ้นกับช่วงเวลา เวลาเล่าสูตรห้ามใส่คำว่า 'ในช่วง 30 วันล่าสุด'")
 		} else {
 			lines = append(lines, "recipe=ยังไม่ได้บันทึกสูตรของเมนูนี้")
 		}

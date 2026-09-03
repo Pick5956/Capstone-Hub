@@ -196,3 +196,15 @@ func TestNoDataPromptSaysWhatTheSystemCanActuallyWrite(t *testing.T) {
 		t.Error("the rule should say why, not just what")
 	}
 }
+
+// "สวัสดีครับ" at noon came back "เหนื่อยมาทั้งวันเลยสิครับวันนี้": the persona's
+// line about a tired owner was read as a fact about this owner. The rule is
+// now conditional on the owner saying so, and says the assumption is wrong.
+func TestPersonaDoesNotAssumeTheOwnerIsTired(t *testing.T) {
+	if !strings.Contains(joyboyPersona, "ห้ามทึกทักเองว่าเขาเหนื่อย") {
+		t.Fatal("the persona lost the rule against assuming tiredness")
+	}
+	if strings.Contains(joyboyPersona, "เจ้าของร้านเปิดร้านมาทั้งวันเหนื่อยได้") {
+		t.Fatal("the unconditional 'the owner is tired' line is back")
+	}
+}
