@@ -81,6 +81,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_menu_items_recorded":                      "ยังไม่มีเมนูในระบบเลย ต้องไปเพิ่มที่หน้าจัดการเมนูก่อน",
 	"no_menu_named_in_question":                   "ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับ ห้ามเดาตัวเลขของเมนูไหน",
 	"no_payment_method_recorded_in_period":        "ช่วงนี้ไม่มีบิลที่บันทึกวิธีจ่ายเงินไว้ จึงบอกไม่ได้ว่าเงินสดหรือพร้อมเพย์เท่าไหร่ ห้ามประมาณสัดส่วนเอง",
+	"no_tables_recorded":                          "ร้านนี้ยังไม่มีโต๊ะในระบบเลย ต้องไปเพิ่มโต๊ะที่หน้าผังโต๊ะก่อน",
 }
 
 func joyboyNum(value float64) string {
@@ -852,10 +853,15 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 		if label == "" {
 			label = strings.TrimSpace(table.DisplayLabel)
 		}
+		// The zone name usually already begins with "โซน" ("โซนครอบครัว"), and
+		// prefixing it again produced "โซนโซนครอบครัว" in the owner's answer.
 		zone := strings.TrimSpace(table.Zone)
 		descriptor := fmt.Sprintf("%s(%d ที่นั่ง", label, table.Capacity)
 		if zone != "" {
-			descriptor += " · โซน" + zone
+			if !strings.HasPrefix(zone, "โซน") && !strings.HasPrefix(zone, "ห้อง") {
+				zone = "โซน" + zone
+			}
+			descriptor += " · " + zone
 		}
 		descriptor += ")"
 
@@ -1372,6 +1378,120 @@ func joyboyPaymentMixBody(label string, mix []repository.AIPaymentMethodSummary,
 	if coverage.FirstRecorded != "" {
 		lines = append(lines, "payment_method_recorded_from="+coverage.FirstRecorded+
 			" note=ระบบเริ่มบันทึกวิธีจ่ายตั้งแต่วันนี้ บิลก่อนหน้านั้นไม่มีข้อมูลวิธีจ่าย")
+	}
+	return joyboyJoin(lines)
+}
+
+// joyboyTableUsageBody ranks tables by how much they were actually used, and
+// totals the zones from the same rows.
+//
+// One sheet answers both halves of "โต๊ะไหนคนไม่ค่อยนั่ง แล้วควรย้ายไปโซนไหน":
+// the table lines say which table is quiet, the zone lines say which zone is
+// busy enough to move it to. Splitting them into two tools would have meant two
+// descriptions differing by one word, which is how the model picked the wrong
+// one before.
+//
+// Go does every count and division. bills_per_seat is here because it is the
+// only fair comparison for a move decision: a six-seat room with two bills is
+// not quieter than a two-seat table with two bills, it is emptier per seat.
+func joyboyTableUsageBody(label string, usage []repository.AITableUsage) string {
+	if len(usage) == 0 {
+		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_tables_recorded")})
+	}
+
+	type zoneTotal struct {
+		name    string
+		tables  int
+		seats   int
+		bills   int64
+		revenue float64
+		guests  int64
+	}
+	zoneIndex := map[string]*zoneTotal{}
+	var zones []*zoneTotal
+	var totalBills int64
+	var totalRevenue float64
+
+	lines := []string{
+		"period=" + label,
+		"scope=สถิติย้อนหลังของแต่ละโต๊ะ ไม่ใช่สถานะตอนนี้",
+		"counted=บิลที่ปิดและจ่ายแล้ว ตามวันปิดบิล นิยามเดียวกับยอดขาย",
+		"note=บิลสั่งกลับบ้านและเดลิเวอรีไม่มีโต๊ะ จึงไม่อยู่ในใบนี้ ยอดรวมของโต๊ะจึงน้อยกว่ายอดขายทั้งร้าน " +
+			"โต๊ะที่ไม่มีใครนั่งเลยจะขึ้น bills=0 ไม่ได้แปลว่าไม่มีโต๊ะนั้น " +
+			"ถ้าจะเทียบว่าโต๊ะไหนคุ้มกว่ากัน ให้ดู bills_per_seat เพราะโต๊ะใหญ่กับโต๊ะเล็กเทียบจำนวนบิลตรง ๆ ไม่ได้",
+	}
+
+	rows := make([]string, 0, len(usage))
+	for _, table := range usage {
+		zoneName := strings.TrimSpace(table.Zone)
+		if zoneName == "" {
+			zoneName = "ไม่ระบุโซน"
+		}
+		zone, known := zoneIndex[zoneName]
+		if !known {
+			zone = &zoneTotal{name: zoneName}
+			zoneIndex[zoneName] = zone
+			zones = append(zones, zone)
+		}
+		zone.tables++
+		zone.seats += table.Capacity
+		zone.bills += table.Bills
+		zone.revenue += table.Revenue
+		zone.guests += table.Guests
+		totalBills += table.Bills
+		totalRevenue += table.Revenue
+
+		row := fmt.Sprintf("table=%s zone=%s seats=%d bills=%d revenue=%s guests=%d",
+			table.TableNumber, zoneName, table.Capacity, table.Bills,
+			joyboyNum(roundBaht(table.Revenue)), table.Guests)
+		if table.Capacity > 0 {
+			row += " bills_per_seat=" + joyboyNum(roundBaht(float64(table.Bills)/float64(table.Capacity)))
+		}
+		if table.Bills > 0 {
+			row += " revenue_per_bill=" + joyboyNum(roundBaht(table.Revenue/float64(table.Bills)))
+		}
+		rows = append(rows, row)
+	}
+
+	lines = append(lines, fmt.Sprintf("tables=%d table_bills_total=%d table_revenue_total=%s ranked_by=bills asc (โต๊ะที่คนนั่งน้อยที่สุดอยู่บนสุด)",
+		len(usage), totalBills, joyboyNum(roundBaht(totalRevenue))))
+	lines = append(lines, rows...)
+
+	sort.SliceStable(zones, func(i, j int) bool {
+		if zones[i].bills != zones[j].bills {
+			return zones[i].bills > zones[j].bills
+		}
+		return zones[i].revenue > zones[j].revenue
+	})
+	// The minimum of a column is arithmetic, so Go states it: asked over
+	// thirteen unlabelled rows the model once named the wrong table. Which zone
+	// the owner should move it to is NOT arithmetic — it is a judgement about
+	// the shop — so the sheet carries the figures a judgement needs and stops
+	// there. Go computing the answer, or telling the model what to say about it,
+	// is the line this project does not cross.
+	if len(usage) > 0 {
+		quiet := usage[0]
+		quietZone := strings.TrimSpace(quiet.Zone)
+		if quietZone == "" {
+			quietZone = "ไม่ระบุโซน"
+		}
+		lines = append(lines, fmt.Sprintf("quietest_table=%s zone=%s bills=%d revenue=%s",
+			quiet.TableNumber, quietZone, quiet.Bills, joyboyNum(roundBaht(quiet.Revenue))))
+	}
+	lines = append(lines, "zone_ranking=เรียงจากโซนที่คนนั่งมากไปน้อย",
+		"zone_bills_per_seat_means=ความถี่การใช้งานต่อหนึ่งที่นั่งของโซนนั้น เป็นตัวเทียบว่าโซนไหนคนนิยมกว่ากัน "+
+			"โดยไม่ติดว่าโซนไหนมีโต๊ะใหญ่หรือเล็ก")
+	for rank, zone := range zones {
+		line := fmt.Sprintf("zone_rank=%d zone=%s tables=%d seats=%d bills=%d revenue=%s guests=%d",
+			rank+1, zone.name, zone.tables, zone.seats, zone.bills,
+			joyboyNum(roundBaht(zone.revenue)), zone.guests)
+		if zone.seats > 0 {
+			line += " bills_per_seat=" + joyboyNum(roundBaht(float64(zone.bills)/float64(zone.seats)))
+		}
+		if totalBills > 0 {
+			line += " bill_share_pct=" + joyboyNum(roundBaht(joyboyPercent(float64(zone.bills), float64(totalBills))))
+		}
+		lines = append(lines, line)
 	}
 	return joyboyJoin(lines)
 }

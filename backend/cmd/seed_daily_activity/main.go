@@ -155,6 +155,13 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 	tag := fmt.Sprintf("%x", rng.Intn(1<<24))
 
 	err := db.Transaction(func(tx *gorm.DB) error {
+		// Every table in the shop, for seating the day's dine-in bills. The
+		// completed orders used to carry no table at all — only the three to five
+		// live ones did — so thirty days of history showed one bill per table and
+		// "โต๊ะไหนคนไม่ค่อยนั่ง" had nothing to rank. A closed bill remembers which
+		// table it was served at, so the seeded ones do too.
+		allTables := dineInTables(tx, restaurantID)
+
 		// ---- completed, paid orders: the day's sales ------------------------
 		completed := 18 + rng.Intn(11) // 18–28
 		for i := 0; i < completed; i++ {
@@ -165,6 +172,12 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 			orderType := entity.OrderTypeDineIn
 			if rng.Float64() < 0.3 {
 				orderType, fulfillment = entity.OrderTypeTakeaway, entity.OrderItemFulfillmentTakeaway
+			}
+			var seatedAt *uint
+			if orderType == entity.OrderTypeDineIn {
+				if table := pickTable(allTables, rng); table != nil {
+					seatedAt = &table.ID
+				}
 			}
 			order := &entity.Order{
 				Model:         gorm.Model{CreatedAt: openedAt, UpdatedAt: done},
@@ -177,6 +190,7 @@ func seedDay(db *gorm.DB, restaurantID uint, marker, dateStr string, day time.Ti
 				Status:        entity.OrderStatusCompleted,
 				PaymentStatus: entity.PaymentStatusPaid,
 				Note:          marker,
+				TableID:       seatedAt,
 				OpenedAt:      openedAt,
 				ClosedAt:      &done,
 				CompletedAt:   &done,
@@ -624,6 +638,40 @@ func buildExpenses(restaurantID uint, day time.Time, staffID uint, marker string
 // stock. It does not need to be exact — it only has to move the number.
 func restockUnits(amount float64) float64 {
 	return round2(amount / 5)
+}
+
+// dineInTables is every table the shop has, in a stable order.
+func dineInTables(tx *gorm.DB, restaurantID uint) []entity.RestaurantTable {
+	var tables []entity.RestaurantTable
+	tx.Where("restaurant_id = ? AND deleted_at IS NULL", restaurantID).
+		Order("id asc").Find(&tables)
+	return tables
+}
+
+// pickTable seats one bill, and deliberately not evenly. A real shop fills the
+// front tables first and the private room last, so the seeded history has a
+// busiest and a quietest table to find; a uniform random pick would make every
+// table identical and the question "which table is quiet" unanswerable in a
+// different way — with a true answer of "all the same".
+//
+// The weight is 1/(rank+1): the first table is seated about twice as often as
+// the fourth and four times as often as the tenth.
+func pickTable(tables []entity.RestaurantTable, rng *rand.Rand) *entity.RestaurantTable {
+	if len(tables) == 0 {
+		return nil
+	}
+	total := 0.0
+	for index := range tables {
+		total += 1 / float64(index+1)
+	}
+	draw := rng.Float64() * total
+	for index := range tables {
+		draw -= 1 / float64(index+1)
+		if draw <= 0 {
+			return &tables[index]
+		}
+	}
+	return &tables[len(tables)-1]
 }
 
 func freeDineInTables(tx *gorm.DB, restaurantID uint) []entity.RestaurantTable {

@@ -699,3 +699,69 @@ func TestPaymentMixSheetSharesAndCoverage(t *testing.T) {
 		t.Errorf("an empty window must say so in Thai:\n%s", empty)
 	}
 }
+
+// "โต๊ะไหนคนไม่ค่อยนั่ง แล้วควรย้ายไปโซนไหนดี" was answered from live status
+// alone — "ทุกโต๊ะว่างอยู่ครับ" — because nothing read the bills' memory of which
+// table served them. One sheet has to answer both halves: which table is quiet,
+// and which zone is busy enough to move it to.
+func TestTableUsageSheetRanksTablesAndZones(t *testing.T) {
+	body := joyboyTableUsageBody("30 วันล่าสุด", []repository.AITableUsage{
+		{TableNumber: "P03", Zone: "ห้องส่วนตัว", Capacity: 6, Bills: 1, Revenue: 531, Guests: 1},
+		{TableNumber: "P01", Zone: "ห้องส่วนตัว", Capacity: 6, Bills: 2, Revenue: 318, Guests: 2},
+		{TableNumber: "F01", Zone: "โซนหน้าร้าน", Capacity: 2, Bills: 7, Revenue: 2302, Guests: 18},
+		{TableNumber: "F02", Zone: "โซนหน้าร้าน", Capacity: 2, Bills: 4, Revenue: 599, Guests: 10},
+	})
+
+	for _, want := range []string{
+		// The quiet table sits first, and carries the fair comparison Go divided.
+		"table=P03 zone=ห้องส่วนตัว seats=6 bills=1 revenue=531.00 guests=1 bills_per_seat=0.17",
+		"table=F01 zone=โซนหน้าร้าน seats=2 bills=7 revenue=2302.00 guests=18 bills_per_seat=3.50",
+		"revenue_per_bill=328.86",
+		// Zones are totalled from the same rows, busiest first.
+		"zone_rank=1 zone=โซนหน้าร้าน tables=2 seats=4 bills=11",
+		"zone_rank=2 zone=ห้องส่วนตัว tables=2 seats=12 bills=3",
+		"bill_share_pct=78.57",
+		"ranked_by=bills asc",
+		"bills_per_seat เพราะโต๊ะใหญ่กับโต๊ะเล็กเทียบจำนวนบิลตรง ๆ ไม่ได้",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the table-usage sheet lost %q:\n%s", want, body)
+		}
+	}
+	// A table nobody sat at must stay on the sheet as a table with no bills.
+	quiet := joyboyTableUsageBody("30 วันล่าสุด", []repository.AITableUsage{
+		{TableNumber: "B09", Zone: "", Capacity: 4, Bills: 0},
+	})
+	if !strings.Contains(quiet, "table=B09 zone=ไม่ระบุโซน seats=4 bills=0") {
+		t.Errorf("an unused table must still be listed:\n%s", quiet)
+	}
+	if strings.Contains(quiet, "revenue_per_bill") {
+		t.Errorf("no bills means no per-bill average:\n%s", quiet)
+	}
+	if !strings.Contains(joyboyTableUsageBody("30 วันล่าสุด", nil), "no_tables_recorded") {
+		t.Error("a shop with no tables should say so")
+	}
+}
+
+// The minimum is arithmetic, so the sheet states it — asked over thirteen
+// unlabelled rows the model once named the wrong table. Which zone to move to is
+// a judgement, so the sheet carries the figures and no recommendation.
+func TestTableUsageSheetNamesTheQuietTableButNotWhereToMoveIt(t *testing.T) {
+	body := joyboyTableUsageBody("30 วันล่าสุด", []repository.AITableUsage{
+		{TableNumber: "A02", Zone: "โซนครอบครัว", Capacity: 4, Bills: 1, Revenue: 279, Guests: 3},
+		{TableNumber: "P03", Zone: "ห้องส่วนตัว", Capacity: 6, Bills: 2, Revenue: 531, Guests: 4},
+		{TableNumber: "F01", Zone: "โซนหน้าร้าน", Capacity: 2, Bills: 7, Revenue: 2302, Guests: 18},
+	})
+	if !strings.Contains(body, "quietest_table=A02 zone=โซนครอบครัว bills=1 revenue=279.00") {
+		t.Errorf("the quiet table is a computed minimum and must be stated:\n%s", body)
+	}
+	if !strings.Contains(body, "zone_bills_per_seat_means=") {
+		t.Errorf("the sheet must say what the per-seat rate means:\n%s", body)
+	}
+	// Go must not pick the zone, nor tell the model what to say about it.
+	for _, forbidden := range []string{"suggested_zone_to_move_to", "suggestion_means", "ไม่ต้องบอกว่าไม่มีข้อมูล"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("Go decided something it should not have (%s):\n%s", forbidden, body)
+		}
+	}
+}

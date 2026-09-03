@@ -43,6 +43,19 @@ type AIOrderTypeSummary struct {
 	Revenue   float64 `json:"revenue"`
 }
 
+// AITableUsage is one table's traffic over a window: how many bills were served
+// at it, what they were worth, and how many guests sat there. Capacity comes
+// along because a six-seat room with two bills and a two-seat table with two
+// bills are not the same story.
+type AITableUsage struct {
+	TableNumber string  `json:"table_number"`
+	Zone        string  `json:"zone"`
+	Capacity    int     `json:"capacity"`
+	Bills       int64   `json:"bills"`
+	Revenue     float64 `json:"revenue"`
+	Guests      int64   `json:"guests"`
+}
+
 // AIPaymentMethodSummary is how many bills were settled by one method over a
 // window, and how much money came in that way.
 type AIPaymentMethodSummary struct {
@@ -512,6 +525,39 @@ func (r *AIRepository) PaymentCoverage(restaurantID uint, start, end time.Time) 
 		Scan(&first).Error
 	cov.FirstRecorded = first.FirstRecorded
 	return cov, err
+}
+
+// TableUsage reports every table with the paid bills served at it inside
+// [start, end), counted the way sales are: completed and paid, by the day the
+// bill closed.
+//
+// The join is LEFT from the table so a table nobody sat at still comes back,
+// with zeros. Dropping it would be the same mistake the category sheet made
+// about drinks: a quiet table that never appears is indistinguishable from a
+// table the shop does not have, and "which table is quiet" is exactly the
+// question being asked.
+//
+// Takeaway and delivery bills carry no table and are simply absent here; the
+// fact sheet says so, because table bills will not add up to the shop's total.
+func (r *AIRepository) TableUsage(restaurantID uint, start, end time.Time) ([]AITableUsage, error) {
+	var rows []AITableUsage
+	err := r.db.Table("restaurant_tables").
+		Select(`restaurant_tables.table_number,
+			COALESCE(NULLIF(table_zones.name, ''), NULLIF(restaurant_tables.zone, ''), '') AS zone,
+			restaurant_tables.capacity,
+			COUNT(orders.id) AS bills,
+			COALESCE(SUM(orders.grand_total), 0) AS revenue,
+			COALESCE(SUM(orders.customer_count), 0) AS guests`).
+		Joins("LEFT JOIN table_zones ON table_zones.id = restaurant_tables.zone_id AND table_zones.deleted_at IS NULL").
+		Joins(`LEFT JOIN orders ON orders.table_id = restaurant_tables.id AND orders.deleted_at IS NULL
+			AND orders.status = ? AND orders.payment_status = ?
+			AND orders.completed_at >= ? AND orders.completed_at < ?`,
+			entity.OrderStatusCompleted, entity.PaymentStatusPaid, start, end).
+		Where("restaurant_tables.restaurant_id = ? AND restaurant_tables.deleted_at IS NULL", restaurantID).
+		Group("restaurant_tables.id, table_zones.name, restaurant_tables.zone, restaurant_tables.table_number, restaurant_tables.capacity").
+		Order("bills asc, revenue asc").
+		Scan(&rows).Error
+	return rows, err
 }
 
 func (r *AIRepository) PeakSalesByWeekday(restaurantID uint, since time.Time) ([]AIPeriodSummary, error) {

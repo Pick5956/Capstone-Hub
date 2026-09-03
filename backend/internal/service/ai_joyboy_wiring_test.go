@@ -183,3 +183,10 @@ func TestChartNoteTellsTheModelTheChartIsAlreadyOnScreen(t *testing.T) {
 		t.Error("no chart, no note")
 	}
 }
+
+func TestTableUsageIsWiredToARunner(t *testing.T) {
+	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
+	if _, _, handled := tools.runJoyboyExtraTool(joyboyToolTableUsage, "โต๊ะไหนคนไม่ค่อยนั่ง"); !handled {
+		t.Fatal("get_table_usage is offered to the model but no runner claims it")
+	}
+}

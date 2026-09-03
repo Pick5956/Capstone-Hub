@@ -386,6 +386,22 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyPaymentMixBody(label, mix, coverage), true, true
 
+	case joyboyToolTableUsage:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
+		}
+		usage, err := t.service.repo.TableUsage(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyTableUsageBody(label, usage), true, true
+
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
 			return "", false, true

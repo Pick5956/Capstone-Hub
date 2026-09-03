@@ -180,6 +180,13 @@ const joyboyToolMenuProfitByCategory AIToolName = "get_menu_profit_by_category"
 // does not.
 const joyboyToolPaymentMix AIToolName = "get_payment_mix"
 
+// joyboyToolTableUsage reads how much each table was actually used. Everything
+// else about tables is live status — free or occupied right now — so "โต๊ะไหน
+// คนไม่ค่อยนั่ง แล้วควรย้ายไปโซนไหน" could only be answered from whoever happened
+// to be sitting down at that second, and the owner got "ทุกโต๊ะว่างอยู่ครับ".
+// The bills remember which table served them; this is that memory.
+const joyboyToolTableUsage AIToolName = "get_table_usage"
+
 // joyboyToolShopProfile reads the shop's own identity — its name, branch, type
 // and opening hours. Nothing else exposed this, so "ร้านเราชื่ออะไร" was a dead
 // end the model filled by dumping a sales total.
@@ -206,6 +213,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolActiveOrders,
 	joyboyToolMenuList,
 	joyboyToolPaymentMix,
+	joyboyToolTableUsage,
 	joyboyToolMenuProfitByCategory,
 }
 
@@ -296,6 +304,11 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: จ่ายพร้อมเพย์กับเงินสดอย่างไหนเยอะกว่า · วันนี้รับเงินสดเท่าไหร่ · โอนมากี่บิล · " +
 		"สัดส่วนพร้อมเพย์กี่เปอร์เซ็นต์ · เงินสดในลิ้นชักควรมีเท่าไหร่ " +
 		"ถ้าถามยอดขายรวมโดยไม่สนวิธีจ่าย ให้ใช้ get_sales_summary หรือ get_sales_for_period แทน",
+	joyboyToolTableUsage: "สถิติการใช้งานของแต่ละโต๊ะย้อนหลัง — โต๊ะไหนมีคนนั่งกี่บิล ทำเงินเท่าไหร่ ลูกค้ากี่คน " +
+		"พร้อมจำนวนที่นั่งของโต๊ะนั้น และสรุปรวมแยกตามโซน ค่าเริ่มต้น 30 วันล่าสุด **ระบุช่วงเวลาได้** " +
+		"ใช้ตอบ: โต๊ะไหนคนไม่ค่อยนั่ง · โต๊ะไหนคนนั่งบ่อยสุด · ควรย้ายโต๊ะไปโซนไหน · โซนไหนคนนิยม · " +
+		"โต๊ะไหนทำเงินได้มากสุด · ควรเพิ่มหรือลดโต๊ะตรงไหน " +
+		"**เป็นสถิติย้อนหลัง ไม่ใช่สถานะตอนนี้** ถ้าถามว่าตอนนี้โต๊ะไหนว่างหรือเต็ม ให้ใช้ get_table_status แทน",
 	joyboyToolShopProfile: "ข้อมูลตัวร้านเอง ชื่อร้าน ชื่อสาขา ประเภทร้าน เวลาเปิด-ปิด จำนวนโต๊ะทั้งหมด " +
 		"ใช้ตอบ: ร้านเราชื่ออะไร ร้านเปิดกี่โมง ปิดกี่โมง สาขาอะไร ร้านเราเป็นร้านประเภทไหน มีกี่โต๊ะ " +
 		"เป็นข้อมูลตัวตนของร้าน ไม่ใช่ยอดขายหรือสถานะโต๊ะตอนนี้",
@@ -325,6 +338,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering, joyboyToolMenuForPeriod,
 		joyboyToolMenuProfitByCategory,
 	}},
+	{"โต๊ะและหน้าร้าน", []AIToolName{joyboyToolTableStatus, joyboyToolTableUsage, joyboyToolActiveOrders}},
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
