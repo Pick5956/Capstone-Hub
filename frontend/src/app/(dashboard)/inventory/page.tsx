@@ -1520,6 +1520,7 @@ export default function InventoryPage() {
                       )}
                     </div>
                     <ThemedSelect
+                      aria-label={copy.category}
                       value={String(form.category_id ?? 0)}
                       onChange={(value) => setForm((current) => ({ ...current, category_id: parseInt(value, 10) || 0 }))}
                       options={categoryOptions}
@@ -1530,6 +1531,7 @@ export default function InventoryPage() {
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.stockUnit}</label>
                     <ThemedSelect
+                      aria-label={copy.stockUnit}
                       value={form.unit}
                       onChange={(value) => setForm((current) => ({ ...current, unit: value }))}
                       options={!form.unit || UNITS.includes(form.unit) ? unitOptions : [{ value: form.unit, label: form.unit }, ...unitOptions]}
@@ -1586,6 +1588,7 @@ export default function InventoryPage() {
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-slate-500 dark:text-slate-400">{copy.storageType}</label>
                     <ThemedSelect
+                      aria-label={copy.storageType}
                       value={form.storage_type ?? "room_temp"}
                       onChange={(value) => setForm((current) => ({ ...current, storage_type: value }))}
                       options={storageOptions}
@@ -1667,6 +1670,7 @@ export default function InventoryPage() {
                       </td>
                       <td className="min-w-[150px]">
                         <ThemedSelect
+                          aria-label={copy.category}
                           value={String(row.category_id)}
                           onChange={(value) => updateBulkRow(index, { category_id: Number(value) || 0 })}
                           options={categoryOptions}
@@ -1674,6 +1678,7 @@ export default function InventoryPage() {
                       </td>
                       <td className="min-w-[110px]">
                         <ThemedSelect
+                          aria-label={copy.stockUnit}
                           value={row.unit}
                           onChange={(value) => updateBulkRow(index, { unit: value })}
                           options={unitOptions}

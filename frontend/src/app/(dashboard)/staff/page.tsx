@@ -903,6 +903,7 @@ export default function StaffPage() {
                           {canEditMemberRole ? (
                             <div>
                               <ThemedSelect
+                                aria-label={copy.role}
                                 className="max-w-full lg:w-full xl:w-[220px]"
                                 value={String(member.role_id)}
                                 onChange={(next) => void changeMemberRole(member.ID, next)}
@@ -1161,6 +1162,7 @@ export default function StaffPage() {
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.role}</span>
                   <ThemedSelect
+                    aria-label={copy.role}
                     value={String(roleId || inviteRoles[0]?.ID || "")}
                     onChange={(next) => setRoleId(Number(next))}
                     disabled={!canManageInvites}
@@ -1174,6 +1176,7 @@ export default function StaffPage() {
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.expiry}</span>
                   <ThemedSelect
+                    aria-label={copy.expiry}
                     value={expiresInDays}
                     onChange={setExpiresInDays}
                     disabled={!canManageInvites}

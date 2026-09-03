@@ -120,6 +120,7 @@ export default function PosOrderDetailPage() {
       back: "กลับไปเลือกโต๊ะ",
       search: "ค้นหาเมนู",
       all: "ทั้งหมด",
+      category: "หมวดหมู่",
       tableLabel: "โต๊ะ",
       orderLabel: "ออเดอร์",
       itemsLabel: "รายการ",
@@ -192,6 +193,7 @@ export default function PosOrderDetailPage() {
       back: "Back to tables",
       search: "Search menu",
       all: "All",
+      category: "Category",
       tableLabel: "Table",
       orderLabel: "Order",
       itemsLabel: "Items",
@@ -911,6 +913,7 @@ export default function PosOrderDetailPage() {
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={copy.search} aria-label={copy.search} className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800" />
               </div>
               <ThemedSelect
+                aria-label={copy.category}
                 className="lg:order-3"
                 value={categoryId === "all" ? "all" : String(categoryId)}
                 onChange={(next) => setCategoryId(next === "all" ? "all" : Number(next))}

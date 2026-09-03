@@ -167,6 +167,7 @@ export default function ExpensesPage() {
             monthTotal: "รวมทั้งเดือน",
             exportError: "สร้างไฟล์ PDF ไม่สำเร็จ",
             perPage: "ต่อหน้า",
+            month: "เดือน",
             previousPage: "หน้าก่อน",
             nextPage: "หน้าถัดไป",
             pageOf: (current: number, total: number) => `หน้า ${current} / ${total}`,
@@ -202,6 +203,7 @@ export default function ExpensesPage() {
             monthTotal: "Month total",
             exportError: "Could not create the PDF",
             perPage: "per page",
+            month: "Month",
             previousPage: "Previous page",
             nextPage: "Next page",
             pageOf: (current: number, total: number) => `Page ${current} of ${total}`,
@@ -474,7 +476,7 @@ export default function ExpensesPage() {
 
       <div id="expense-print">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <ThemedSelect value={monthValue} onChange={selectMonth} options={monthOptions} compact className="w-[140px] print:hidden" />
+        <ThemedSelect aria-label={copy.month} value={monthValue} onChange={selectMonth} options={monthOptions} compact className="w-[140px] print:hidden" />
         {/* The picker itself is screen-only, so the PDF keeps a plain month heading. */}
         <span className="hidden text-[16px] font-semibold print:block">{monthLabel}</span>
         <span className="text-[11px] text-gray-500 dark:text-gray-400 print:hidden">{scopedData.entries} {copy.entries}</span>
@@ -499,6 +501,7 @@ export default function ExpensesPage() {
 
       <div className="mb-4 print:hidden">
         <ThemedSelect
+          aria-label={copy.category}
           value={categoryFilter}
           onChange={(value) => { setCategoryFilter(value as "all" | ExpenseCategory); setPage(1); }}
           options={(["all", ...expenseCategories] as const).map((value) => {
@@ -642,6 +645,7 @@ export default function ExpensesPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-2.5 dark:border-gray-900 print:hidden">
             <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
               <ThemedSelect
+                aria-label={copy.perPage}
                 value={String(pageSize)}
                 onChange={(value) => { setPageSize(Number(value)); setPage(1); }}
                 options={pageSizes.map((size) => ({ value: String(size), label: String(size) }))}

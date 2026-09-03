@@ -833,6 +833,7 @@ export default function MenuPage() {
                   </label>
                   <div className="w-full sm:w-40">
                     <ThemedSelect
+                      aria-label={copy.allCategories}
                       value={String(filterCategory)}
                       onChange={(next) => setFilterCategory(Number(next))}
                       options={categoryFilterOptions}
@@ -1132,6 +1133,7 @@ export default function MenuPage() {
                           )}
                           {available.length ? (
                             <ThemedSelect
+                              aria-label={copy.addCategoryPlaceholder}
                               value=""
                               placeholder={copy.addCategoryPlaceholder}
                               onChange={(next) => {
@@ -1358,6 +1360,7 @@ export default function MenuPage() {
                                   <span>{copy.countLabel}</span>
                                   <div className="w-[4.5rem] shrink-0">
                                     <ThemedSelect
+                                      aria-label={copy.countLabel}
                                       compact
                                       value={String(maxSelect)}
                                       onChange={(next) => setMax(Number(next) || 1)}
@@ -1370,6 +1373,7 @@ export default function MenuPage() {
                                     <span>{copy.minLabel}</span>
                                     <div className="w-[4.5rem] shrink-0">
                                       <ThemedSelect
+                                        aria-label={copy.minLabel}
                                         compact
                                         value={String(minSelect)}
                                         onChange={(next) => setMin(Number(next) || 1)}
@@ -1444,6 +1448,7 @@ export default function MenuPage() {
                                                 <div className="flex flex-wrap items-center gap-2">
                                                   <div className="min-w-0 flex-1">
                                                     <ThemedSelect
+                                                      aria-label={copy.ingredient}
                                                       compact
                                                       value={String(row.ingredient_id || 0)}
                                                       onChange={(next) => {
@@ -1464,6 +1469,7 @@ export default function MenuPage() {
                                                   />
                                                   <div className="w-[4.75rem] shrink-0 sm:w-24">
                                                     <ThemedSelect
+                                                      aria-label={copy.unit}
                                                       compact
                                                       value={chosenUnit}
                                                       onChange={(next) => patchRow({ unit: next })}
@@ -1549,6 +1555,7 @@ export default function MenuPage() {
                       return (
                         <div key={componentIndex} className="grid gap-2 rounded-md border border-gray-200 p-3 dark:border-gray-800">
                           <ThemedSelect
+                            aria-label={copy.ingredient}
                             value={String(component.ingredient_id || 0)}
                             onChange={(next) => {
                               const ingredient = recipeIngredients.find((item) => item.ID === Number(next));

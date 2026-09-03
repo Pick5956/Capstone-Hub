@@ -26,6 +26,23 @@ describe("ThemedSelect", () => {
     expect(markup).toContain('aria-haspopup="listbox"');
   });
 
+  it("names the trigger from aria-label", () => {
+    // The trigger is a button, so it has no implicit name. Call sites passed
+    // aria-label for a long time and it reached nothing: TypeScript does not
+    // check hyphenated JSX attributes against a props type, so the prop was
+    // dropped in silence and the control was announced unlabelled.
+    const markup = renderToStaticMarkup(
+      <ThemedSelect
+        aria-label="Role"
+        value="waiter"
+        onChange={() => {}}
+        options={[{ value: "waiter", label: "Waiter" }]}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="Role"');
+  });
+
   it("keeps interactions inside the portaled menu open", () => {
     const target = {} as Node;
 

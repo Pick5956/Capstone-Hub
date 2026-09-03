@@ -246,6 +246,7 @@ export default function InventoryHistoryTab({
         </div>
 
         <ThemedSelect
+          aria-label={copy.type}
           compact
           className="w-32"
           value={type}
@@ -254,6 +255,7 @@ export default function InventoryHistoryTab({
         />
 
         <ThemedSelect
+          aria-label={copy.allCategories}
           compact
           className="w-40"
           value={String(categoryId)}

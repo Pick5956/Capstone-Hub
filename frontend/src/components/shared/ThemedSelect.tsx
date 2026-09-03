@@ -31,6 +31,8 @@ export default function ThemedSelect({
   className = "",
   placeholder = "เลือก",
   compact = false,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -40,6 +42,13 @@ export default function ThemedSelect({
   placeholder?: string;
   // compact matches the h-9 action buttons; the default h-10 stays the app-wide size.
   compact?: boolean;
+  // The trigger is a button, not a native select, so it has no implicit name.
+  // Call sites were already passing aria-label and TypeScript let it through -
+  // JSX skips prop checking for hyphenated attributes - so it silently reached
+  // nothing and those dropdowns were announced as an unlabelled button. Declared
+  // here and forwarded below.
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 }) {
   const { language } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -205,6 +214,8 @@ export default function ThemedSelect({
             closeMenu();
           }
         }}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={renderMenu ? listboxId : undefined}
