@@ -1176,13 +1176,7 @@ export default function AIOperationsFloatingChat() {
                matching the full AI page. sm+ keeps the bordered footer. */
             className="bg-transparent px-3 pb-3 pt-1 dark:bg-transparent sm:rounded-b-2xl sm:border-t sm:border-gray-200 sm:bg-white sm:p-3.5 sm:dark:border-gray-800 sm:dark:bg-gray-950"
           >
-            <div className="flex items-end gap-2 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
-              <AIInputTools
-                tools={["scan"]}
-                language={language}
-                disabled={loading || actionConfirming || actionCancelling}
-                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
-              />
+            <div className="flex flex-col gap-1 rounded-[1.5rem] border border-gray-200 bg-white p-1.5 shadow-sm transition focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900">
               {/* A textarea, not an input: an input cannot wrap, so a long
                   question scrolled sideways out of sight while it was being
                   typed. Enter still sends; Shift+Enter starts a new line. */}
@@ -1200,8 +1194,16 @@ export default function AIOperationsFloatingChat() {
                 placeholder={copy.askPlaceholder}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.askPlaceholder}
-                className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
+                className="min-h-9 w-full resize-none bg-transparent px-2 py-1.5 text-sm font-medium !text-gray-950 placeholder-gray-400 outline-none dark:!text-gray-50 dark:placeholder-gray-500"
               />
+              <div className="flex items-center gap-1">
+              <AIInputTools
+                tools={["scan"]}
+                language={language}
+                disabled={loading || actionConfirming || actionCancelling}
+                onInsertText={(text) => setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text))}
+              />
+              <div className="flex-1" />
               {composer.canExpand && (
                 <button
                   type="button"
@@ -1229,6 +1231,7 @@ export default function AIOperationsFloatingChat() {
               >
                 <Send className="h-4 w-4" />
               </button>
+              </div>
             </div>
           </form>
           </div>

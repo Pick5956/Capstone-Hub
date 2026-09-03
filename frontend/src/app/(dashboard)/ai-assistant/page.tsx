@@ -955,12 +955,32 @@ export default function AIAssistantPage() {
             }}
           >
             <div
-              className={`flex items-end gap-2 rounded-[1.75rem] border p-2 shadow-sm transition ${
+              className={`flex flex-col gap-1 rounded-[1.75rem] border p-2 shadow-sm transition ${
                 voiceListening
                   ? "border-orange-200 bg-orange-50/60 pl-2 dark:border-orange-900/50 dark:bg-orange-950/20"
                   : "border-gray-200 bg-white pl-2 focus-within:border-orange-300 focus-within:shadow-md focus-within:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-800"
               }`}
             >
+              {voiceListening ? (
+                /* Dictation mode: the live waveform takes over the text field */
+                <VoiceWaveform level={voiceLevel} className="min-h-[2.25rem] w-full px-2" />
+              ) : (
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submitQuestion();
+                    }
+                  }}
+                  placeholder={copy.askPlaceholder}
+                  rows={1}
+                  className="min-h-[2.25rem] w-full resize-none bg-transparent px-2 py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
+                />
+              )}
+              <div className="flex items-center gap-1">
               {/* Scan / tools — far-left slot, only when not dictating */}
               {!voiceListening && (
                 <AIInputTools
@@ -983,25 +1003,7 @@ export default function AIAssistantPage() {
                   </button>
                 </HoverTip>
               )}
-              {voiceListening ? (
-                /* Dictation mode: the live waveform takes over the text field */
-                <VoiceWaveform level={voiceLevel} className="min-h-[2.25rem] min-w-0 flex-1 px-1" />
-              ) : (
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      submitQuestion();
-                    }
-                  }}
-                  placeholder={copy.askPlaceholder}
-                  rows={1}
-                  className="min-h-[2.25rem] min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:text-white"
-                />
-              )}
+              <div className="flex-1" />
               {/* Open the field taller once there is enough text that expanding
                   shows more of it. Hidden while dictating: the waveform owns
                   the field then, and there is nothing to read back yet. */}
@@ -1075,6 +1077,7 @@ export default function AIAssistantPage() {
                   )}
                 </button>
               )}
+              </div>
             </div>
           </form>
         </div>
