@@ -157,29 +157,3 @@ export function buildReceiptModel(
     footer: copy('ขอบคุณที่ใช้บริการ', 'Thank you'),
   };
 }
-
-export function buildReceiptShareText(
-  bill: Bill,
-  restaurant?: ReceiptRestaurant,
-  language: DisplayLanguage = 'th',
-): string {
-  const model = buildReceiptModel(bill, restaurant, language);
-  const lines = [
-    ...model.heading,
-    model.title,
-    ...model.meta.map((entry) => `${entry.label} ${entry.value}`),
-    '',
-    ...model.items.flatMap((item) => [
-      `${item.quantity} × ${item.name}  ${item.amount}`,
-      item.options ? `+ ${item.options}` : '',
-      item.note ? `* ${item.note}` : '',
-    ]),
-    '',
-    ...model.totals.map((total) => `${total.label} ${total.amount}`),
-    model.paymentLine,
-    '',
-    model.footer,
-  ];
-
-  return lines.filter((line, index) => line || lines[index - 1] !== '').join('\n').trim();
-}
