@@ -195,7 +195,7 @@ export function FeedbackProvider({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={() => dismissToast(toast.id)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-300"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none dark:text-gray-500 dark:hover:bg-gray-900 dark:hover:text-gray-300"
                   aria-label={language === "th" ? "ปิดแจ้งเตือน" : "Dismiss notification"}
                 >
                   <X className="h-4 w-4" aria-hidden="true" />

@@ -561,7 +561,7 @@ export default function PosTablesPage() {
                 onChange={(event) => setSearch(event.target.value)}
                 disabled={isNavigating}
                 placeholder={copy.search}
-                className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white py-2 pl-7 pr-3 text-[15px] outline-none focus:border-orange-500 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] placeholder:text-[15px] dark:bg-gray-800"
                 aria-label={copy.search}
               />
             </label>
@@ -569,7 +569,7 @@ export default function PosTablesPage() {
               <button
                 type="button"
                 onClick={() => setReservationsOpen(true)}
-                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
               >
                 <CalendarClock className="h-4 w-4" />
                 {copy.reservationHistory}
@@ -578,7 +578,7 @@ export default function PosTablesPage() {
                 type="button"
                 disabled={isNavigating}
                 onClick={openTakeawaySheet}
-                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
+                className="ui-press inline-flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 lg:flex-none"
               >
                 <ShoppingBag className="h-4 w-4" />
                 {copy.takeaway}
@@ -591,6 +591,7 @@ export default function PosTablesPage() {
                   onChange={setZoneFilter}
                   options={zoneSelectOptions}
                   aria-label={allZonesLabel}
+ triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]"
                 />
               </div>
             )}
@@ -751,7 +752,7 @@ export default function PosTablesPage() {
                           value={customerName}
                           onChange={(event) => setCustomerName(event.target.value)}
                           placeholder={copy.customerNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="block">
@@ -761,7 +762,7 @@ export default function PosTablesPage() {
                           onChange={(event) => setCustomerPhone(event.target.value)}
                           inputMode="tel"
                           placeholder={copy.customerPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-gray-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>
@@ -769,7 +770,7 @@ export default function PosTablesPage() {
                   {customerCountField}
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.note}</span>
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:min-h-20 sm:text-[13px]" />
+                    <textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-24 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-[15px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:min-h-20 sm:text-[13px]" />
                   </label>
                   {reservationDraftOpen && (
                     <div className="motion-reservation-panel rounded-md border border-sky-200 bg-sky-50 p-3 dark:border-sky-900/60 dark:bg-sky-950/25">
@@ -781,7 +782,7 @@ export default function PosTablesPage() {
                           inputMode="tel"
                           autoFocus
                           placeholder={copy.reservationPhonePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                       <label className="mt-3 block">
@@ -790,7 +791,7 @@ export default function PosTablesPage() {
                           value={reservationName}
                           onChange={(event) => setReservationName(event.target.value)}
                           placeholder={copy.reservationNamePlaceholder}
-                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
+                          className="h-11 w-full rounded-md border border-sky-200 bg-white px-3 text-[15px] outline-none focus:border-orange-500 dark:border-sky-800 dark:bg-gray-900 sm:h-10 sm:text-[13px]"
                         />
                       </label>
                     </div>

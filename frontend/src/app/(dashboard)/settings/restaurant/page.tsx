@@ -727,7 +727,7 @@ export default function RestaurantSettingsPage() {
                   setDeleteError("");
                 }}
                 placeholder={copy.confirmDeleteInputPlaceholder}
-                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-red-500 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white"
               />
               {deleteError && (
                 <p className="text-[11px] font-medium text-red-600 dark:text-red-300">{deleteError}</p>

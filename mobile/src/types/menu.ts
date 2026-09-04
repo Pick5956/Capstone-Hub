@@ -9,7 +9,9 @@ export interface Category {
 export interface CategoryInput {
   name: string;
   display_order: number;
-  is_active: boolean;
+  /** Optional on the API (`*bool` server-side): omit it and the stored value is
+   *  left alone. Send it only when creating, where the category starts active. */
+  is_active?: boolean;
 }
 
 export interface MenuItem {

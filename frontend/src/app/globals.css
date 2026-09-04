@@ -954,6 +954,22 @@ input[type="number"]::-webkit-inner-spin-button {
   background-color: rgba(249, 115, 22, 0.55);
 }
 
+/* ---- Thai leading vowels inside form fields -------------------------------
+   Same glyph problem as the clipped-text rule below, different box. A field
+   clips its value at the CONTENT edge, not the padding edge, so padding does
+   not help: โ เ แ ไ ใ are drawn to the LEFT of the text origin and the first
+   character loses its upright stroke, which is most of what makes ไ readable.
+
+   text-indent moves only the text, so the field keeps its size and the caret
+   still lands where it looks like it should. 6px, not the ~1px that
+   measureText().actualBoundingBoxLeft reports: at 4x zoom the hook of the first
+   ไ is visibly still being sliced at 2px. 6px leaves room to spare rather
+   than sitting on the exact threshold. */
+input,
+textarea {
+  text-indent: 6px;
+}
+
 /* ---- Thai leading vowels inside clipped text ------------------------------
    โ เ แ ไ ใ are pre-posed vowels: they are drawn to the LEFT of the text
    origin. Any box that clips its own overflow starts exactly at that origin,

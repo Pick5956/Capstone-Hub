@@ -6,7 +6,6 @@ import {
   type TextStyle,
 } from 'react-native';
 
-import { scaleTextMetric } from '@/src/lib/display-preferences';
 import {
   resolveAppFontFamily,
   resolveAppFontWeight,
@@ -17,7 +16,6 @@ import { palette } from '@/src/theme';
 const AppFontWeightContext = createContext<TextStyle['fontWeight']>('normal');
 
 export function AppText({ style, ...props }: TextProps) {
-  const { textSize } = useDisplayPreferences();
   const inheritedFontWeight = useContext(AppFontWeightContext);
   const flattened = StyleSheet.flatten(style) as TextStyle | undefined;
   const fontWeight = resolveAppFontWeight(
@@ -41,11 +39,8 @@ export function AppText({ style, ...props }: TextProps) {
           {
             fontFamily: resolveAppFontFamily(fontWeight),
             fontWeight: 'normal',
-            fontSize: scaleTextMetric(fontSize, textSize),
-            lineHeight:
-              lineHeight === undefined
-                ? undefined
-                : scaleTextMetric(lineHeight, textSize),
+            fontSize,
+            lineHeight,
           },
         ]}
       />

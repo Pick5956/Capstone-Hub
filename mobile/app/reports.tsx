@@ -23,7 +23,8 @@ export default function ReportsScreen() {
   const locale = language === 'th' ? 'th-TH' : 'en-US';
   const canView = can(activeMembership, 'view_reports');
   const currentMonth = useMemo(() => getBangkokReportMonth(), []);
-  const [days, setDays] = useState(14);
+  // Fixed window, matching the web reports page. There is no period picker.
+  const REPORT_DAYS = 14;
   const [topMenuMonth, setTopMenuMonth] = useState(currentMonth);
   const [report, setReport] = useState<ManagerReport | null>(null);
   const [topMenus, setTopMenus] = useState<TopMenuItemsReport | null>(null);
@@ -49,7 +50,7 @@ export default function ReportsScreen() {
     setReport(null);
     setTopMenus(null);
     const result = await loadFilteredReplacement(() => Promise.all([
-        getManagerReport(days),
+        getManagerReport(REPORT_DAYS),
         getTopMenuItemsByMonth(topMenuMonth),
       ]));
     if (!requestGenerationRef.current.isCurrent(request)) return;
@@ -63,7 +64,7 @@ export default function ReportsScreen() {
       setError(result.error instanceof Error ? result.error.message : copy('โหลดรายงานไม่สำเร็จ', 'Could not load reports.'));
     }
     setLoading(false);
-  }, [canView, copy, days, topMenuMonth]);
+  }, [canView, copy, topMenuMonth]);
   useEffect(() => {
     void load();
     return () => requestGenerationRef.current.invalidate();
@@ -89,25 +90,6 @@ export default function ReportsScreen() {
       timeZone: 'Asia/Bangkok',
     }).format(new Date(Date.UTC(year, month - 1, day, 12)));
   }, [locale]);
-
-  const periodPanel = (
-    <Surface>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <AppIcon color={palette.muted} name="calendar-outline" size={20} />
-        <Text selectable style={typeScale.cardTitle}>{copy('ช่วงรายงาน', 'Report period')}</Text>
-      </View>
-      <ChipGroup
-        label={copy('ช่วงเวลา', 'Reporting period')}
-        value={days}
-        onChange={setDays}
-        options={[
-          { label: copy('7 วัน', '7 days'), value: 7 },
-          { label: copy('14 วัน', '14 days'), value: 14 },
-          { label: copy('30 วัน', '30 days'), value: 30 },
-        ]}
-      />
-    </Surface>
-  );
 
   const summaryPanel = report ? (
     <Surface>
@@ -137,7 +119,7 @@ export default function ReportsScreen() {
 
   const dailySalesPanel = report ? (
     <Surface>
-      <SectionHeader title={copy('ยอดขายรายวัน', 'Daily sales')} detail={copy(`ย้อนหลัง ${days.toLocaleString('th-TH')} วัน`, `Last ${days.toLocaleString('en-US')} days`)} />
+      <SectionHeader title={copy('ยอดขายรายวัน', 'Daily sales')} detail={copy(`ย้อนหลัง ${REPORT_DAYS.toLocaleString('th-TH')} วัน`, `Last ${REPORT_DAYS.toLocaleString('en-US')} days`)} />
       {report.sales_days.length ? report.sales_days.map((day) => (
         <View key={day.order_date} style={{ minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopWidth: 1, borderTopColor: palette.border }}>
           <Text selectable style={[typeScale.caption, { flex: 1, color: palette.muted }]}>{dateLabel(day.order_date)}</Text>
@@ -220,14 +202,12 @@ export default function ReportsScreen() {
             {profitabilityPanel}
           </View>
           <View style={{ flex: 0.85, gap: spacing.xl }}>
-            {periodPanel}
             {topMenusPanel}
             {stockRisksPanel}
           </View>
         </View>
       ) : (
         <View style={{ gap: spacing.xl }}>
-          {periodPanel}
           {summaryPanel}
           {dailySalesPanel}
           {topMenusPanel}

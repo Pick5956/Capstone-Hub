@@ -85,7 +85,7 @@ function TimeColumn({
         tabIndex={0}
         onKeyDown={onKeyDown}
         style={{ height: COLUMN_HEIGHT, width: COLUMN_WIDTH }}
-        className="snap-y snap-mandatory overflow-y-auto rounded-md bg-gray-50 p-1 outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 dark:bg-gray-800/50"
+        className="snap-y snap-mandatory overflow-y-auto rounded-md bg-gray-50 p-1 outline-none dark:bg-gray-800/50"
       >
         <div className="flex flex-col" style={{ gap: CELL_GAP }}>
           {values.map((entry) => {
@@ -244,8 +244,8 @@ export default function ThemedTimeInput({
         }}
         className={`flex h-11 w-full items-center gap-2.5 rounded-md border bg-white px-3 text-left outline-none transition-[border-color,box-shadow] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 sm:h-10 ${
           error
-            ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/15 dark:border-red-900/60"
-            : "border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700"
+            ? "border-red-300 focus:border-red-500 dark:border-red-900/60"
+            : "border-gray-200 focus:border-orange-500 dark:border-gray-700"
         }`}
       >
         <Clock className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />

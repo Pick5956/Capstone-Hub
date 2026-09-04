@@ -13,7 +13,7 @@ export const TAP_LG = "min-h-[52px]";
  * shifts every subsequent tap target. Every text input on these screens uses it.
  */
 export const inputBase =
-  "w-full rounded-(--inv-radius) border bg-(--inv-surface) px-3 text-[16px] text-(--inv-heading) outline-none transition placeholder:text-(--inv-faint) focus:border-(--inv-action) focus:ring-[3px] focus:ring-(--inv-action)/20";
+  "w-full rounded-(--inv-radius) border bg-(--inv-surface) px-3 text-[16px] text-(--inv-heading) outline-none transition placeholder:text-(--inv-faint) focus:border-(--inv-action)-(--inv-action)/20";
 
 export function useIsMobile(breakpoint = 768) {
   // Starts null so the server and the first client paint agree; the tree picks a

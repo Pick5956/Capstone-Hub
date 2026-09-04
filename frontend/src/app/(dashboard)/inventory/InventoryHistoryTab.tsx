@@ -222,7 +222,7 @@ export default function InventoryHistoryTab({
             placeholder={copy.searchPlaceholder}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className={`${inputCls} !h-9 pl-10 pr-3`}
+            className={`${inputCls} !h-9 pl-7 pr-3`}
           />
         </div>
 

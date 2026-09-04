@@ -61,7 +61,7 @@ export default function DisplaySettingsPage() {
               <button
                 type="button"
                 onClick={() => setShowAIAssistant(!showAIAssistant)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-500/20 active:scale-95 ${
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-all duration-300 focus:outline-none active:scale-95 ${
                   showAIAssistant
                     ? "bg-orange-500 shadow-sm shadow-orange-500/10"
                     : "bg-gray-200 dark:bg-gray-800"

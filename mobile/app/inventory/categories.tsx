@@ -76,19 +76,6 @@ export default function IngredientCategoriesScreen() {
     }
   }
 
-  async function toggleActive(item: IngredientCategory) {
-    setRowBusyId(item.ID);
-    setError(null);
-    try {
-      await updateIngredientCategory(item.ID, { is_active: !item.is_active });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : copy('ปรับสถานะหมวดไม่สำเร็จ', 'Could not update the category status'));
-    } finally {
-      setRowBusyId(null);
-    }
-  }
-
   async function runDelete(item: IngredientCategory) {
     setRowBusyId(item.ID);
     setError(null);
@@ -167,13 +154,6 @@ export default function IngredientCategoriesScreen() {
             </View>
           ) : (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-              <Button
-                compact
-                variant="ghost"
-                icon={item.is_active ? 'eye-outline' : 'eye-off-outline'}
-                label={item.is_active ? copy('ใช้งาน', 'Active') : copy('ปิด', 'Off')}
-                onPress={() => { void toggleActive(item); }}
-              />
               <Button compact variant="secondary" icon="create-outline" label={copy('แก้ไข', 'Edit')} onPress={() => startEdit(item)} />
               <Button compact variant="danger" icon="trash-outline" label={copy('ลบ', 'Delete')} onPress={() => confirmDelete(item)} loading={busy} />
             </View>

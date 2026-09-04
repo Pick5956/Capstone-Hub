@@ -611,7 +611,7 @@ export default function KitchenPage() {
                     type="button"
                     disabled={submittingId !== null}
                     onClick={() => markAllReady(order)}
-                    className="ui-press inline-flex h-9 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
+                    className="ui-press inline-flex h-9 items-center justify-center rounded-md px-2 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100/70 hover:text-emerald-900 focus-visible:outline-none disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-100"
                   >
                     {copy.markAllReady}
                   </button>
@@ -665,7 +665,7 @@ export default function KitchenPage() {
                               title={copy.undo}
                               disabled={submittingId !== null}
                               onClick={() => revertToCooking(order, item)}
-                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-600 hover:bg-amber-100/70 hover:text-amber-800 focus-visible:outline-none disabled:opacity-50 dark:text-gray-300 dark:hover:bg-amber-950/35 dark:hover:text-amber-200"
                             >
                               <Undo2 className="h-[18px] w-[18px]" aria-hidden="true" />
                             </button>
@@ -676,7 +676,7 @@ export default function KitchenPage() {
                               title={copy.markReady}
                               disabled={submittingId !== null}
                               onClick={() => markReady(order, item.ID)}
-                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-emerald-600 hover:bg-emerald-100/70 hover:text-emerald-800 focus-visible:outline-none disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/35 dark:hover:text-emerald-200"
                             >
                               <Check className="h-5 w-5" strokeWidth={3} aria-hidden="true" />
                             </button>
@@ -688,7 +688,7 @@ export default function KitchenPage() {
                               title={copy.cancelItem}
                               disabled={submittingId !== null}
                               onClick={() => openCancelDialog(order, item)}
-                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
+                              className="ui-press inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 transition-colors hover:bg-red-100/70 hover:text-red-800 focus-visible:outline-none disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/35 dark:hover:text-red-200"
                             >
                               <X className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden="true" />
                             </button>
@@ -961,10 +961,10 @@ export default function KitchenPage() {
                   setCancelReason(event.target.value);
                   if (cancelReasonError) setCancelReasonError("");
                 }}
-                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:opacity-60 dark:bg-gray-900 dark:text-white ${
+                className={`mt-3 w-full resize-none rounded-md border bg-white px-3 py-2.5 text-[13px] leading-5 text-gray-900 outline-none transition-colors placeholder:text-gray-500 disabled:opacity-60 dark:bg-gray-900 dark:text-white ${
                   cancelReasonError
-                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/15 dark:border-red-700"
-                    : "border-gray-300 focus:border-gray-500 focus:ring-gray-500/15 dark:border-gray-700 dark:focus:border-gray-500"
+                    ? "border-red-400 focus:border-red-500 dark:border-red-700"
+                    : "border-gray-300 focus:border-gray-500 dark:border-gray-700 dark:focus:border-gray-500"
                 }`}
               />
               <div className="mt-1 flex min-h-5 items-start justify-between gap-3">

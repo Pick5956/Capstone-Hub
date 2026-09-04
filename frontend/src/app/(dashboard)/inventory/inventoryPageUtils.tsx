@@ -102,4 +102,4 @@ export function formatDateTime(value: string | undefined, language: "th" | "en")
 }
 
 export const inputCls =
-  "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500 dark:focus:ring-orange-900/30";
+  "h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-orange-400 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500";

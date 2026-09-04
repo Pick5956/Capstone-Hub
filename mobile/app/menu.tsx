@@ -21,7 +21,6 @@ export default function MenuScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [category, setCategory] = useState('all');
-  const [availability, setAvailability] = useState<'all' | 'available' | 'hidden'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -56,13 +55,10 @@ export default function MenuScreen() {
       const categoryMatch = category === 'all'
         || item.category_id === Number(category)
         || item.categories?.some((link) => link.category_id === Number(category));
-      const availabilityMatch = availability === 'all'
-        || (availability === 'available' ? item.is_available : !item.is_available);
       return categoryMatch
-        && availabilityMatch
         && (!keyword || [item.name, item.description].some((value) => String(value || '').toLowerCase().includes(keyword)));
     });
-  }, [availability, category, items, search]);
+  }, [category, items, search]);
 
   async function toggle(item: MenuItem) {
     if (!canManage) return;
@@ -132,16 +128,6 @@ export default function MenuScreen() {
           options={[
             { label: copy('ทุกหมวด', 'All categories'), value: 'all' },
             ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) })),
-          ]}
-        />
-        <ChipGroup
-          scrollable
-          value={availability}
-          onChange={setAvailability}
-          options={[
-            { label: copy('ทั้งหมด', 'All'), value: 'all' },
-            { label: copy('พร้อมขาย', 'Available'), value: 'available' },
-            { label: copy('ปิดขาย', 'Unavailable'), value: 'hidden' },
           ]}
         />
       </View>

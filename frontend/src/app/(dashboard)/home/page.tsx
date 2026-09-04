@@ -1656,7 +1656,7 @@ export default function Home() {
             {/* The native input drives the value but renders the browser's own
                 numeric format, so it sits transparent on top and the readable
                 weekday/date is drawn underneath it. */}
-            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 focus-within:ring-2 focus-within:ring-inset focus-within:ring-orange-500/40 dark:hover:bg-gray-800">
+            <label className="relative inline-flex h-10 min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 sm:flex-initial hover:bg-gray-50 dark:hover:bg-gray-800">
               <CalendarDays className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
               <span className="sr-only">{copy.chooseDate}</span>
               {/* Fixed width: the label is a long weekday and month name, so

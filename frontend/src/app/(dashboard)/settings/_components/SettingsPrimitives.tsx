@@ -109,10 +109,10 @@ export function Field({
             disabled={disabled}
             readOnly={!onChange}
             onChange={(event) => onChange?.(event.target.value)}
-            className={`h-11 w-full min-w-0 rounded-md border bg-white px-3 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:h-10 sm:text-[13px] ${
+            className={`h-11 w-full min-w-0 rounded-md border bg-white px-3 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:h-10 sm:text-[13px] ${
               error
-                ? "border-red-300 focus:border-red-500 focus:ring-red-500/15 dark:border-red-900/60"
-                : "border-gray-200 focus:border-orange-500 focus:ring-orange-500/15 dark:border-gray-700"
+                ? "border-red-300 focus:border-red-500 dark:border-red-900/60"
+                : "border-gray-200 focus:border-orange-500 dark:border-gray-700"
             }`}
           />
           {(error || help) && (
@@ -153,10 +153,10 @@ export function TextAreaField({
         disabled={disabled}
         readOnly={!onChange}
         onChange={(event) => onChange?.(event.target.value)}
-        className={`w-full min-w-0 rounded-md border bg-white px-3 py-2 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:text-[13px] ${
+        className={`w-full min-w-0 rounded-md border bg-white px-3 py-2 text-[14px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-900 dark:text-white sm:text-[13px] ${
           error
-            ? "border-red-300 focus:border-red-500 focus:ring-red-500/15 dark:border-red-900/60"
-            : "border-gray-200 focus:border-orange-500 focus:ring-orange-500/15 dark:border-gray-700"
+            ? "border-red-300 focus:border-red-500 dark:border-red-900/60"
+            : "border-gray-200 focus:border-orange-500 dark:border-gray-700"
         }`}
       />
       {(error || help) && (

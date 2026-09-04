@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Download, KeyRound } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronUp, Download, KeyRound } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -10,6 +10,7 @@ import { createSingleFlight } from "@/src/lib/singleFlight";
 import type { RestaurantTable, RestaurantTableInput, TableTag, TableTagInput, TableZone, TableZoneInput } from "@/src/types/table";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
+import ReservationHistoryModal from "@/src/components/tables/ReservationHistoryModal";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
@@ -38,6 +39,7 @@ export default function TablesPage() {
   const confirm = useConfirm();
   const canManage = can(activeMembership, "manage_table");
   const canView = canManage || can(activeMembership, "view_tables");
+ const [reservationsOpen, setReservationsOpen] = useState(false);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [zones, setZones] = useState<TableZone[]>([]);
   const [tags, setTags] = useState<TableTag[]>([]);
@@ -86,6 +88,7 @@ export default function TablesPage() {
         allZones: "ทุกโซน",
         noZone: "ไม่มีโซน",
         allTags: "ทุก tag",
+ reservationHistory: "ประวัติการจอง",
         seats: "ที่นั่ง",
         edit: "แก้ไข",
         delete: "ลบ",
@@ -170,6 +173,7 @@ export default function TablesPage() {
         allZones: "All zones",
         noZone: "No zone",
         allTags: "All tags",
+ reservationHistory: "Reservation history",
         seats: "seats",
         edit: "Edit",
         delete: "Delete",
@@ -695,6 +699,14 @@ export default function TablesPage() {
               <div className="w-full sm:w-52">
                 <ThemedSelect aria-label={copy.allTags} value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
               </div>
+ <button
+ type="button"
+ onClick={() => setReservationsOpen(true)}
+ className="ui-press inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+ >
+ <CalendarClock className="h-4 w-4" aria-hidden="true" />
+ {copy.reservationHistory}
+ </button>
             </div>
             {canManage ? (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -798,12 +810,12 @@ export default function TablesPage() {
                       {!editingTable && (
                         <label className="block">
                           <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.count}</span>
-                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.count} />
+                          <input type="number" min={1} max={200} value={bulkCount} onChange={(event) => setBulkCount(Number(event.target.value) || 1)} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.count} />
                         </label>
                       )}
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.capacity}</span>
-                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.capacity} />
+                        <input type="number" min={1} max={50} value={tableForm.capacity} onChange={(event) => setTableForm((current) => ({ ...current, capacity: Number(event.target.value) || 2 }))} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" aria-label={copy.capacity} />
                       </label>
                       <label className="block">
                         <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.status}</span>
@@ -978,6 +990,7 @@ export default function TablesPage() {
         </div>
       )}
     </div>
+ <ReservationHistoryModal open={reservationsOpen} onClose={() => setReservationsOpen(false)} language={language} />
     </>
   );
 }
@@ -1042,7 +1055,7 @@ function ManagerRow({
       aria-pressed={selected}
       onClick={onToggle}
       onKeyDown={handleKeyDown}
-      className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
+      className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] ${
         selected
           ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
           : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"

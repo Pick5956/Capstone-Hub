@@ -497,13 +497,16 @@ export default function MenuPage() {
         const nextDisplayOrder = editingCategory
           ? editingCategory.display_order
           : Math.max(0, ...categories.map((category) => category.display_order || 0)) + 1;
-        const payload = { name, display_order: nextDisplayOrder, is_active: true };
+        // is_active is a *bool on the API: omitting it leaves the stored value
+        // alone. Sending true on a rename or a reorder silently un-hid any
+        // category that had been switched off.
+        const payload = { name, display_order: nextDisplayOrder };
         if (editingCategory) {
           const res = await updateCategory(editingCategory.ID, payload);
           setCategories((current) => current.map((cat) => cat.ID === res.data.ID ? res.data : cat));
           showToast({ title: copy.categoryUpdated });
         } else {
-          const res = await createCategory(payload);
+          const res = await createCategory({ ...payload, is_active: true });
           setCategories((current) => [...current, res.data]);
           if (!itemForm.category_id && !itemForm.category_ids?.length) setItemForm((current) => ({ ...current, category_id: res.data.ID, category_ids: [res.data.ID] }));
           showToast({ title: copy.categoryCreated });
@@ -607,7 +610,6 @@ export default function MenuPage() {
       await Promise.all(normalized.map((category) => updateCategory(category.ID, {
         name: category.name,
         display_order: category.display_order,
-        is_active: true,
       })));
       showToast({ title: copy.orderUpdated });
     } catch {
@@ -828,7 +830,7 @@ export default function MenuPage() {
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder={copy.searchPlaceholder}
                       aria-label={copy.searchPlaceholder}
-                      className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-10 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800"
+                      className="h-10 w-full min-w-0 rounded-md border border-[color:var(--dashboard-shell-border)] bg-white pl-7 pr-3 text-[15px] outline-none placeholder:text-[15px] focus:border-orange-500 dark:bg-gray-800"
                     />
                   </label>
                   <div className="w-full sm:w-40">
@@ -882,7 +884,7 @@ export default function MenuPage() {
                         event.preventDefault();
                         editItem(item);
                       } : undefined}
-                      className={`group ${MENU_CARD_SHELL_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/25 ${canManage ? "cursor-pointer active:scale-[0.99] sm:hover:-translate-y-0.5" : ""} ${!item.is_available ? "opacity-60" : ""}`}
+                      className={`group ${MENU_CARD_SHELL_CLASS} focus-visible:outline-none ${canManage ? "cursor-pointer active:scale-[0.99] sm:hover:-translate-y-0.5" : ""} ${!item.is_available ? "opacity-60" : ""}`}
                     >
                       {!item.is_available ? (
                         <span className="absolute left-2 top-2 z-10 rounded-md bg-gray-900/85 px-2 py-1 text-[11px] font-semibold text-white shadow-md dark:bg-gray-100/90 dark:text-gray-900">
@@ -958,7 +960,7 @@ export default function MenuPage() {
                       event.preventDefault();
                       toggleCategoryEdit(category);
                     }}
-                    className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-orange-500/30 ${
+                    className={`grid cursor-pointer grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2 outline-none transition-[background-color,border-color,box-shadow] ${
                       editingCategory?.ID === category.ID
                         ? "border-gray-950 bg-orange-50/70 shadow-[inset_3px_0_0_#f97316] dark:border-white/80 dark:bg-orange-950/20"
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:border-gray-700 dark:hover:bg-gray-800/60"
@@ -1015,7 +1017,7 @@ export default function MenuPage() {
                   }}
                   placeholder={copy.categoryPlaceholder}
                   aria-invalid={Boolean(categoryError)}
-                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
+                  className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 dark:bg-gray-800 ${categoryError ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`}
                 />
                 <button disabled={submitting} className="ui-press h-10 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white disabled:opacity-60 dark:bg-orange-700 dark:text-white">
                   {editingCategory ? copy.saveCategory : copy.createCategory}
@@ -1084,17 +1086,17 @@ export default function MenuPage() {
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-start">
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.itemName}</span>
-                    <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
+                    <input value={itemForm.name} onChange={(event) => { setItemForm({ ...itemForm, name: event.target.value }); setItemErrors((current) => ({ ...current, name: undefined, submit: undefined })); }} placeholder={copy.itemNamePlaceholder} className={`h-10 w-full rounded-md border bg-white px-3 text-[13px] outline-none transition-colors focus:border-orange-500 dark:bg-gray-800 ${itemErrors.name ? "border-red-300 dark:border-red-900/60" : "border-gray-200 dark:border-gray-700"}`} />
                     {itemErrors.name && <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-300">{itemErrors.name}</p>}
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.price}</span>
-                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
+                    <input value={itemForm.price || ""} onChange={(event) => setItemForm({ ...itemForm, price: Number(event.target.value) })} placeholder={copy.pricePlaceholder} type="number" min={0} className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" />
                   </label>
                 </div>
                 <label className="block">
                   <span className="mb-1.5 block text-[12px] font-medium text-gray-700 dark:text-gray-300">{copy.description}</span>
-                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800" />
+                  <textarea value={itemForm.description} onChange={(event) => setItemForm({ ...itemForm, description: event.target.value })} placeholder={copy.descriptionPlaceholder} className="h-24 w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800" />
                 </label>
                 <section className="border-t border-gray-200 pt-4 dark:border-gray-800">
                   <p className="text-[12px] font-semibold text-gray-900 dark:text-white">{copy.itemCategories}</p>
@@ -1162,7 +1164,7 @@ export default function MenuPage() {
                           }
                         }}
                         placeholder={copy.inlineCategoryPlaceholder}
-                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900"
+                        className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-900"
                       />
                       <button
                         type="button"
@@ -1277,7 +1279,7 @@ export default function MenuPage() {
                       );
                       const microLabel = "text-[11px] font-medium text-gray-500 dark:text-gray-400";
                       const inputClass =
-                        "h-10 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800";
+                        "h-10 min-w-0 rounded-md border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800";
                       // Every row in the panel spans the panel and ends on the same
                       // right edge. Capping fields individually is what made the card
                       // look ragged - the fix is a shared grid, not smaller boxes.
@@ -1294,7 +1296,7 @@ export default function MenuPage() {
                                 onChange={(event) => updateOptionGroup(groupIndex, { name: event.target.value })}
                                 placeholder={copy.optionGroupPlaceholder}
                                 aria-label={copy.groupNameLabel}
-                                className="h-8 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 text-[13px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500/15 placeholder:font-normal placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
+                                className="h-8 w-full rounded-md border border-gray-200 bg-gray-50 px-2.5 text-[13px] font-semibold text-gray-900 outline-none transition-colors focus:border-orange-500 focus:bg-white placeholder:font-normal placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
                               />
                               <button
                                 type="button"
@@ -1465,7 +1467,7 @@ export default function MenuPage() {
                                                     value={row.quantity || ""}
                                                     onChange={(event) => patchRow({ quantity: Number(event.target.value) || 0 })}
                                                     placeholder={copy.quantity}
-                                                    className="h-9 w-16 shrink-0 rounded-md border border-gray-200 bg-white px-2 text-[12px] tabular-nums outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800 sm:w-20 sm:px-3"
+                                                    className="h-9 w-16 shrink-0 rounded-md border border-gray-200 bg-white px-2 text-[12px] tabular-nums outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 sm:w-20 sm:px-3"
                                                   />
                                                   <div className="w-[4.75rem] shrink-0 sm:w-24">
                                                     <ThemedSelect
@@ -1571,7 +1573,7 @@ export default function MenuPage() {
                               value={component.quantity || ""}
                               onChange={(event) => updateRecipeComponents((components) => components.map((current, index) => index === componentIndex ? { ...current, quantity: Number(event.target.value) || 0 } : current))}
                               placeholder={copy.quantity}
-                              className="h-9 w-24 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] tabular-nums outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-800"
+                              className="h-9 w-24 shrink-0 rounded-md border border-gray-200 bg-white px-3 text-[12px] tabular-nums outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800"
                             />
                             <div className="w-28 shrink-0">
                               <ThemedSelect

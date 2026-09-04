@@ -114,7 +114,10 @@ export type MenuOptionIngredientDirection = "add" | "remove";
 export interface CategoryInput {
   name: string;
   display_order: number;
-  is_active: boolean;
+  /** Optional on the API (`*bool` server-side): omit it and the stored value is
+   *  left alone. Send it only when you mean to change whether the category is
+   *  shown - passing `true` on a rename used to silently un-hide it. */
+  is_active?: boolean;
 }
 
 export interface MenuItemInput {

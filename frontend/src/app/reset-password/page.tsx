@@ -106,7 +106,7 @@ export default function ResetPasswordPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder={copy.passwordPlaceholder}
                 autoComplete="new-password"
-                className="h-10 w-full rounded-md border border-white/10 bg-gray-950 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15"
+                className="h-10 w-full rounded-md border border-white/10 bg-gray-950 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-500"
               />
             </label>
 
@@ -118,7 +118,7 @@ export default function ResetPasswordPage() {
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder={copy.passwordPlaceholder}
                 autoComplete="new-password"
-                className="h-10 w-full rounded-md border border-white/10 bg-gray-950 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15"
+                className="h-10 w-full rounded-md border border-white/10 bg-gray-950 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-500"
               />
             </label>
 

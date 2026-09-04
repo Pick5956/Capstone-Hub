@@ -137,7 +137,7 @@ const InputField = ({
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[16px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-white sm:text-[13px]`}
+          className={`h-9 w-full rounded-md border border-gray-200 bg-white pl-3 ${prClass} text-[16px] text-gray-900 outline-none transition-colors placeholder:text-gray-500 focus:border-orange-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white sm:text-[13px]`}
         />
 
         {value.length > 0 && onClear && (
@@ -778,7 +778,7 @@ export default function AuthModal({
                     type="button"
                     onClick={startGoogleLogin}
                     disabled={loading || googlePending}
-                    className="mx-auto flex h-10 w-full max-w-80 items-center justify-center gap-2.5 rounded-md border border-gray-300 bg-white text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus-visible:border-orange-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
+                    className="mx-auto flex h-10 w-full max-w-80 items-center justify-center gap-2.5 rounded-md border border-gray-300 bg-white text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus-visible:border-orange-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900"
                   >
                     <GoogleGlyph />
                     {googlePending ? copy.googleBusy : copy.continueWithGoogle}
