@@ -12,7 +12,7 @@ import { Button, ChipGroup, EmptyState, Feedback, SearchField, SectionHeader } f
 import { money, tableStatusLabel } from '@/src/lib/format';
 import { can } from '@/src/lib/rbac';
 import { createRequestGeneration, shouldStartRequest } from '@/src/lib/request-generation';
-import { tableEntryAction } from '@/src/lib/table-workflow';
+import { canViewReservationHistory, tableEntryAction } from '@/src/lib/table-workflow';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { breakpoints, palette, radius, spacing, statusTone, typeScale } from '@/src/theme';
@@ -27,6 +27,11 @@ export default function TablesScreen() {
   const { copy, language } = useDisplayPreferences();
   const canTakeOrder = can(activeMembership, 'take_order');
   const canManageTables = can(activeMembership, 'manage_table');
+  const canViewHistory = canViewReservationHistory(
+    can(activeMembership, 'view_tables'),
+    canManageTables,
+    canTakeOrder,
+  );
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
@@ -148,6 +153,7 @@ export default function TablesScreen() {
             <SearchField accessibilityLabel={copy('ค้นหาโต๊ะ โซน หรือแท็ก', 'Search tables, zones, or tags')} clearLabel={copy('ล้างคำค้นหา', 'Clear search')} value={search} onChangeText={setSearch} placeholder={copy('ค้นหาโต๊ะ', 'Search tables')} />
           </View>
           {canTakeOrder ? <Button compact icon="calendar-outline" variant="secondary" label={copy('จองโต๊ะ', 'Reserve')} onPress={() => router.push('/table-reservation' as never)} /> : null}
+          {canViewHistory ? <Button compact icon="time-outline" variant="secondary" label={copy('ประวัติจอง', 'History')} onPress={() => router.push('/reservations' as never)} /> : null}
         </View>
         {zones.length > 1 ? (
           <ChipGroup

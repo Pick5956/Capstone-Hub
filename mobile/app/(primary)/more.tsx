@@ -8,7 +8,7 @@ import { useDisplayPreferences } from '@/src/providers/display-preferences-provi
 import { breakpoints, spacing } from '@/src/theme';
 
 const toolGroups = [
-  { key: 'restaurant', itemKeys: ['menu', 'inventory', 'tables-manage', 'reservations'] },
+  { key: 'restaurant', itemKeys: ['menu', 'inventory', 'tables-manage'] },
   { key: 'team', itemKeys: ['staff', 'reports', 'expenses', 'ai'] },
   { key: 'account', itemKeys: ['settings'] },
 ] as const;

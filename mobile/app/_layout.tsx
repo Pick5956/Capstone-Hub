@@ -117,7 +117,12 @@ function AppNavigator() {
           <Stack.Screen name="invite/manual" />
           <Stack.Screen name="invite/[token]" />
           <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
-          <Stack.Screen name="reservations" />
+          {/*
+            Reservation history is reached from the table screens, the way the
+            web opens it as a modal over /pos/tables and /tables, rather than
+            from a menu entry of its own.
+          */}
+          <Stack.Screen name="reservations" options={{ presentation: 'modal' }} />
           <Stack.Screen name="table-reservation" />
           <Stack.Screen name="table-management" />
           <Stack.Screen name="table-management/table" />
