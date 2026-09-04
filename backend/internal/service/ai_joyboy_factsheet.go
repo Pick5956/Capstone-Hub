@@ -83,6 +83,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_payment_method_recorded_in_period":        "ช่วงนี้ไม่มีบิลที่บันทึกวิธีจ่ายเงินไว้ จึงบอกไม่ได้ว่าเงินสดหรือพร้อมเพย์เท่าไหร่ ห้ามประมาณสัดส่วนเอง",
 	"no_tables_recorded":                          "ร้านนี้ยังไม่มีโต๊ะในระบบเลย ต้องไปเพิ่มโต๊ะที่หน้าผังโต๊ะก่อน",
 	"no_closed_bills_to_count_guests_from":        "ช่วงนี้ยังไม่มีบิลที่ปิดแล้ว จึงยังไม่มีจำนวนลูกค้าให้นับ = 0 คน ไม่ใช่ว่าระบบไม่เก็บจำนวนคน",
+	"period_before_first_record":                  "ช่วงที่ถามจบก่อนบิลแรกในระบบ ไม่ใช่ว่าร้านขายไม่ได้ แค่ตอนนั้นยังไม่ได้ใช้ระบบ วันที่บิลแรกอยู่ในบรรทัด data_coverage ต้องบอกเจ้าของว่าข้อมูลเริ่มวันไหน",
 }
 
 func joyboyNum(value float64) string {
@@ -923,6 +924,18 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 // lets it rank by whichever the question asked, rather than picking a ranking in
 // Go the way legacy's finished answer does. The period label is stated so the
 // answer never reads as the 30-day window.
+// joyboyNoTableBills reports whether not one table seated a paid bill in the
+// window — the shape "before the records" takes on the table sheet, where the
+// tables themselves still exist and each row simply reads zero.
+func joyboyNoTableBills(usage []repository.AITableUsage) bool {
+	for _, table := range usage {
+		if table.Bills > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // joyboyCustomerCountBody renders who came as whole people.
 //
 // The headcount is the sum over party sizes, and the sheet lists those sizes

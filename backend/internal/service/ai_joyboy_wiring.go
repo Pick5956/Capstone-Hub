@@ -115,6 +115,39 @@ func joyboyWithCoverage(body, coverage string) string {
 	return body + "\n" + coverage
 }
 
+// withPeriodCoverage adds what range the shop actually has records for to a
+// sheet about a named window, and names an empty window that ends before the
+// first bill as "before the records" rather than as nothing sold.
+//
+// The sales tool has carried this since it learned named periods; the menu,
+// profit, expense and table tools did not, so "เมนูขายดีเดือนเมษายน 2568" —
+// four months before the shop's first bill — came back as "ยังไม่มีการบันทึก
+// ยอดขายเมนูไหนเลย", and "เมนูขายดีเดือนสิงหาคม 2568", which has eight days of
+// records, was headed as the whole month. The owner reads the first as a month
+// with no sales and the second as a bad month; both are the same gap.
+//
+// empty is whether the tool found nothing in the window. The "before the
+// records" reason replaces the sheet only then: an expense logged before the
+// first bill is still an expense.
+func (t *joyboyTools) withPeriodCoverage(body, label string, start, end time.Time, empty bool) string {
+	if t.service == nil || t.service.repo == nil {
+		return body
+	}
+	coverage, err := t.service.repo.SalesCoverage(t.restaurantID)
+	if err != nil || strings.TrimSpace(coverage.FirstDate) == "" {
+		return body
+	}
+	if empty {
+		if firstDay, parseErr := time.Parse("2006-01-02", strings.TrimSpace(coverage.FirstDate)); parseErr == nil {
+			firstDay = time.Date(firstDay.Year(), firstDay.Month(), firstDay.Day(), 0, 0, 0, 0, start.Location())
+			if !end.After(firstDay) {
+				body = joyboyJoin([]string{"period=" + label, joyboyNoData("period_before_first_record")})
+			}
+		}
+	}
+	return joyboyWithCoverage(body, aiCoverageLines(coverage.FirstDate, coverage.LastDate, start))
+}
+
 func (t *joyboyTools) Catalogue() []joyboy.ToolSpec {
 	// The tool names still come from the provider definitions, so adding a tool
 	// there is enough to make it runnable. The descriptions come from
@@ -305,7 +338,8 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboyExpenseSummaryBody(label, from, until, list), true, true
+		return t.withPeriodCoverage(joyboyExpenseSummaryBody(label, from, until, list),
+			label, start, end, list == nil || list.Entries == 0), true, true
 	case AIToolGetPeakPeriods:
 		// Same shape as the profit case: a named window is answered from that
 		// window, anything else falls through to the 30-day snapshot.
@@ -427,7 +461,8 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboyTableUsageBody(label, usage), true, true
+		return t.withPeriodCoverage(joyboyTableUsageBody(label, usage),
+			label, start, end, joyboyNoTableBills(usage)), true, true
 
 	case joyboyToolShopProfile:
 		if t.service.repo == nil {
@@ -503,7 +538,8 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				aiStage("warn", "joyboy: %s expenses for %s failed (%v) → sheet without net", tool, label, err)
 			}
 		}
-		return joyboyProfitForPeriodBody(label, metrics, expenses), true, true
+		return t.withPeriodCoverage(joyboyProfitForPeriodBody(label, metrics, expenses),
+			label, start, end, len(metrics) == 0), true, true
 
 	case joyboyToolMenuForPeriod:
 		// Reuse legacy's period parser and range query, but render raw figures for
@@ -520,7 +556,8 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboyMenuForPeriodBody(period.Label, metrics), true, true
+		return t.withPeriodCoverage(joyboyMenuForPeriodBody(period.Label, metrics),
+			period.Label, period.Start, period.End, len(metrics) == 0), true, true
 	case AIToolGetSalesForPeriod:
 		// A whole-store sales total for a named day / month / relative month, or
 		// a month-to-month / year-over-year comparison, all go through legacy's

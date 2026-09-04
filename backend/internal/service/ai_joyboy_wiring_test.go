@@ -9,7 +9,10 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"testing"
+
+	"Project-M/internal/repository"
 
 	"Project-M/internal/joyboy"
 )
@@ -188,5 +191,42 @@ func TestTableUsageIsWiredToARunner(t *testing.T) {
 	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
 	if _, _, handled := tools.runJoyboyExtraTool(joyboyToolTableUsage, "โต๊ะไหนคนไม่ค่อยนั่ง"); !handled {
 		t.Fatal("get_table_usage is offered to the model but no runner claims it")
+	}
+}
+
+// A window that ends before the shop's first bill is "before the records", not
+// "nothing sold". Without a repository there is no first bill to compare
+// against, so the sheet is passed through untouched rather than guessed at.
+func TestWithPeriodCoverageLeavesSheetAloneWithoutRecords(t *testing.T) {
+	tools := &joyboyTools{service: &AIService{}, restaurantID: 1}
+	start := time.Date(2025, time.April, 1, 0, 0, 0, 0, bangkokLocation())
+	body := tools.withPeriodCoverage("period=x\nmenu=a", "x", start, start.AddDate(0, 1, 0), true)
+	if body != "period=x\nmenu=a" {
+		t.Fatalf("sheet changed without a repository: %q", body)
+	}
+}
+
+// The table sheet's "nothing here" is every table at zero bills — the tables
+// themselves still exist, so len(usage)==0 is the wrong test.
+func TestNoTableBillsIsEveryTableAtZero(t *testing.T) {
+	if !joyboyNoTableBills([]repository.AITableUsage{{TableNumber: "A01"}, {TableNumber: "A02"}}) {
+		t.Error("all-zero tables should count as no bills")
+	}
+	if joyboyNoTableBills([]repository.AITableUsage{{TableNumber: "A01"}, {TableNumber: "A02", Bills: 1}}) {
+		t.Error("one seated bill is not no bills")
+	}
+	if !joyboyNoTableBills(nil) {
+		t.Error("no tables at all is no bills")
+	}
+}
+
+// The reason the model reads for a window before the records must say what it
+// is not — a month with no sales — and point at where the first date is.
+func TestPeriodBeforeFirstRecordMeaning(t *testing.T) {
+	note := joyboyNoData("period_before_first_record")
+	for _, want := range []string{"ไม่ใช่ว่าร้านขายไม่ได้", "data_coverage", "ยังไม่ได้ใช้ระบบ"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("meaning missing %q: %s", want, note)
+		}
 	}
 }
