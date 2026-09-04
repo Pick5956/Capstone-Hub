@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, Share, useWindowDimensions, View } from 'react-native';
 
 import { apiUrl } from '@/src/api/client';
@@ -23,9 +23,12 @@ import {
 } from '@/src/lib/order-workflow';
 import { resetRouteStack } from '@/src/lib/navigation-runtime';
 import { can } from '@/src/lib/rbac';
+import { describePrinterFailure } from '@/src/lib/printer';
 import { buildReceiptShareText } from '@/src/lib/receipt';
+import { ReceiptSlip } from '@/src/components/receipt-slip';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
+import { usePrinter } from '@/src/providers/printer-provider';
 import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
 import type { Bill, OrderItem } from '@/src/types/order';
@@ -75,6 +78,15 @@ export default function BillScreen() {
   const [paymentRecorded, setPaymentRecorded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [printNotice, setPrintNotice] = useState<string | null>(null);
+  const slipRef = useRef<View>(null);
+  const {
+    printReceiptView,
+    printing,
+    selectedPrinter,
+    supported: printerSupported,
+  } = usePrinter();
 
   const load = useCallback(async (quiet = false) => {
     if (!canAccessBill || !validOrderId) {
@@ -246,6 +258,27 @@ export default function BillScreen() {
       title: copy(`ใบเสร็จ ${bill.order.order_number}`, `Receipt ${bill.order.order_number}`),
       message: buildReceiptShareText(bill, activeMembership?.restaurant, language),
     });
+  }
+
+  async function printReceipt() {
+    if (!bill || !canAccessBill) return;
+    setPrintNotice(null);
+    setPrintError(null);
+
+    if (!selectedPrinter) {
+      setPrintError(describePrinterFailure('NO_PRINTER_SELECTED', language));
+      return;
+    }
+
+    const result = await printReceiptView(slipRef.current);
+    if (result.ok) {
+      setPrintNotice(copy(
+        `ส่งใบเสร็จไปที่ ${selectedPrinter.name} แล้ว`,
+        `Receipt sent to ${selectedPrinter.name}.`,
+      ));
+      return;
+    }
+    setPrintError(describePrinterFailure(result.code, language, result.message));
   }
 
   if (!canAccessBill) {
@@ -645,6 +678,19 @@ export default function BillScreen() {
         <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('ยอดคงเหลือ', 'Amount due')}</Text>
         <Text selectable style={[typeScale.number, { color: palette.success, fontSize: 32, lineHeight: 40 }]}>{money(0, language)}</Text>
       </View>
+      {printError ? <Feedback title={copy('พิมพ์ใบเสร็จไม่สำเร็จ', 'Could not print')} detail={printError} tone="danger" /> : null}
+      {printNotice ? <Feedback title={copy('ส่งไปเครื่องพิมพ์แล้ว', 'Sent to printer')} detail={printNotice} tone="success" /> : null}
+      {printerSupported ? (
+        <Button
+          icon="print-outline"
+          variant="secondary"
+          label={printing
+            ? copy('กำลังพิมพ์…', 'Printing…')
+            : copy('พิมพ์ใบเสร็จ', 'Print receipt')}
+          loading={printing}
+          onPress={printReceipt}
+        />
+      ) : null}
       <Button icon="share-social-outline" variant="secondary" label={copy('แชร์ใบเสร็จ', 'Share receipt')} onPress={shareReceipt} />
       {splitWorkspace ? exitAction : null}
     </Surface>
@@ -707,6 +753,30 @@ export default function BillScreen() {
     >
       {error && paymentStage !== 'recorded' ? <Feedback title={copy('ทำรายการไม่สำเร็จ', 'Could not complete this action')} detail={error} tone="danger" /> : null}
       {message && paymentStage === 'due' ? <Feedback title={message} tone="success" /> : null}
+
+      {/*
+        The printable slip is laid out off-screen rather than conditionally
+        mounted: view-shot can only capture a view the platform has actually
+        measured, so it has to be in the tree and sized before the print button
+        is pressed. It is pushed far to the left instead of hidden, because a
+        display:none or zero-size view captures as blank on Android.
+      */}
+      {printerSupported ? (
+        <View
+          accessibilityElementsHidden
+          aria-hidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: -10000 }}
+        >
+          <ReceiptSlip
+            bill={bill}
+            language={language}
+            ref={slipRef}
+            restaurant={activeMembership?.restaurant}
+          />
+        </View>
+      ) : null}
 
       {!splitWorkspace ? (
         <View

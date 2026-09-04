@@ -80,9 +80,55 @@ Changing native packages, the OAuth client configuration, or the iOS URL scheme 
 
 The tunnel script intentionally passes an empty Cloudflare config file so any existing named tunnel config in `~/.cloudflared` does not override the quick tunnel.
 
+## Which client to test on
+
+Once the development build is installed, **use it for everything on Android**. It is a superset of
+Expo Go, not an alternative to it: everything Expo Go runs, it runs, plus the native modules Expo
+Go cannot load. Fast Refresh behaves identically in both.
+
+```powershell
+npm run start:dev-client:local
+```
+
+Metro serves one client mode at a time and both modes want port 8081, so a leftover
+`npm run start` / `start:go:lan` process (Expo Go mode) will stop the development build from
+connecting. Stop it before starting the other.
+
+### When a rebuild is actually needed
+
+| Change | Rebuild? |
+| --- | --- |
+| UI, business logic, API calls, copy, receipt layout | No - Fast Refresh |
+| Adding or removing a **native** dependency | Yes |
+| `app.json` / `app.config.js` native config: permissions, package name, icon, splash | Yes |
+| Expo SDK upgrade | Yes |
+| Google OAuth client ID or iOS URL scheme | Yes |
+
+An installed APK does not expire, and it is not tied to whoever built it - the whole team can
+install the same one. Only the EAS *download link* expires. So a rebuild is a rare event, not part
+of the edit-test loop.
+
+### What Expo Go is still for
+
+- **iOS.** There is no iOS development build, and making one needs a paid Apple Developer account.
+  Expo Go remains the only free way to check iOS layout - but not Google login or Bluetooth
+  printing, neither of which runs there (printing does not run on iOS at all; see below).
+- **Showing someone the app quickly** without having them install the APK first.
+
+## Bluetooth receipt printing
+
+Closed bills can be printed to a 58 mm Bluetooth thermal printer (developed against an
+**Xprinter XP-58IIH**). It needs the development client, works on **Android only**, and the
+receipt is sent as a bitmap rather than ESC/POS text so Thai renders correctly.
+
+Full setup, testing steps and troubleshooting (in Thai):
+[`bluetoothreceiptprinting.md`](bluetoothreceiptprinting.md)
+
 ## Notes
 
 - Do not connect the app directly to PostgreSQL.
 - Keep the backend terminal and tunnel terminal running while testing on mobile.
 - Use a deployed backend URL later by changing only `EXPO_PUBLIC_API_URL`.
 - Expo Go supports the password flow only; use the development client for Google login.
+- Bluetooth receipt printing also needs the development client, and works on Android only.
+- On Android, prefer the development build for all testing - see "Which client to test on".

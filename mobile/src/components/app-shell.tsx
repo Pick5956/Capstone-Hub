@@ -388,11 +388,20 @@ export function PrimaryPhoneNavigation({
   );
 }
 
+// Android renders a scroll view's refreshControl as the OUTER element, cloning it
+// with the scroll view injected as children:
+//   cloneElement(refreshControl, { style }, <ScrollView>...</ScrollView>)
+// So this wrapper has to pass whatever it is handed straight through - dropping
+// `children` drops the entire screen, which is what left every tab that pulls to
+// refresh blank on Android while /more (the one screen with no refreshControl)
+// still rendered. iOS puts the control inside the scroll view instead, so it
+// never needed the forwarding and never showed the bug.
 export function AppRefreshControl({
   onRefresh,
+  ...rest
 }: {
   onRefresh: () => void | Promise<void>;
-}) {
+} & Omit<React.ComponentProps<typeof RefreshControl>, 'onRefresh' | 'refreshing'>) {
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -415,6 +424,7 @@ export function AppRefreshControl({
 
   return (
     <RefreshControl
+      {...rest}
       colors={[palette.accent]}
       onRefresh={refresh}
       progressBackgroundColor={palette.surface}
