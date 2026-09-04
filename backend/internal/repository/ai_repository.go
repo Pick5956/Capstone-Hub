@@ -426,12 +426,28 @@ func (r *AIRepository) MenuCatalogue(restaurantID uint) ([]AIMenuCatalogueItem, 
 	return rows, err
 }
 
+// MenusByRevenue ranks menus by what they took, counted the way every other
+// revenue figure is: served items on completed, paid bills, by the day the bill
+// closed. It used to count every non-cancelled item by the day it was ordered,
+// open and unpaid bills included, so "เมนูขายดี" and "เมนูทำเงิน" asked a minute
+// apart put แกงเขียวหวานไก่ at 37,797 and then 37,539 for the same thirty days
+// — both faithfully read from their sheets, and the owner had no way to know
+// which was the shop's real figure.
 func (r *AIRepository) MenusByRevenue(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {
 	var rows []AIMenuSummary
-	err := r.db.Model(&entity.OrderItem{}).
-		Select("menu_name, COALESCE(SUM(quantity), 0) AS quantity, COALESCE(SUM(subtotal), 0) AS revenue").
-		Where("restaurant_id = ? AND created_at >= ? AND status <> ?", restaurantID, since, entity.OrderItemStatusCancelled).
-		Group("menu_name").
+	err := r.db.Table("order_items").
+		Select("order_items.menu_name, COALESCE(SUM(order_items.quantity), 0) AS quantity, COALESCE(SUM(order_items.subtotal), 0) AS revenue").
+		Joins("JOIN orders ON orders.id = order_items.order_id").
+		Where(
+			"order_items.restaurant_id = ? AND order_items.deleted_at IS NULL AND order_items.status = ? AND orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?",
+			restaurantID,
+			entity.OrderItemStatusServed,
+			restaurantID,
+			since,
+			entity.OrderStatusCompleted,
+			entity.PaymentStatusPaid,
+		).
+		Group("order_items.menu_name").
 		Order("revenue desc, quantity desc").
 		Limit(10).
 		Scan(&rows).Error
@@ -691,17 +707,23 @@ func (r *AIRepository) IngredientUsage(restaurantID uint, since time.Time) ([]AI
 }
 
 // SlowMovingMenus lists available menus with the fewest sales (including zero)
-// in the analysis window, to flag candidates for review or removal.
+// in the analysis window, to flag candidates for review or removal. Sales are
+// counted as MenusByRevenue and TopMenuItems count them — served items on
+// closed, paid bills — so the bottom of this list and the top of those agree
+// about the same menu.
 func (r *AIRepository) SlowMovingMenus(restaurantID uint, since time.Time) ([]AIMenuSummary, error) {
 	var rows []AIMenuSummary
 	err := r.db.Table("menu_items").
 		Select("menu_items.name AS menu_name, COALESCE(sales.qty, 0) AS quantity, COALESCE(sales.revenue, 0) AS revenue").
 		Joins(`LEFT JOIN (
-			SELECT menu_id, SUM(quantity) AS qty, SUM(subtotal) AS revenue
+			SELECT order_items.menu_id, SUM(order_items.quantity) AS qty, SUM(order_items.subtotal) AS revenue
 			FROM order_items
-			WHERE restaurant_id = ? AND created_at >= ? AND status <> ? AND deleted_at IS NULL
-			GROUP BY menu_id
-		) sales ON sales.menu_id = menu_items.id`, restaurantID, since, entity.OrderItemStatusCancelled).
+			JOIN orders ON orders.id = order_items.order_id
+			WHERE order_items.restaurant_id = ? AND order_items.deleted_at IS NULL AND order_items.status = ?
+			  AND orders.deleted_at IS NULL AND orders.completed_at >= ? AND orders.status = ? AND orders.payment_status = ?
+			GROUP BY order_items.menu_id
+		) sales ON sales.menu_id = menu_items.id`,
+			restaurantID, entity.OrderItemStatusServed, since, entity.OrderStatusCompleted, entity.PaymentStatusPaid).
 		Where("menu_items.restaurant_id = ? AND menu_items.deleted_at IS NULL", restaurantID).
 		Order("quantity asc, menu_items.name asc").
 		Limit(8).
