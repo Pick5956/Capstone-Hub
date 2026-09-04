@@ -137,6 +137,15 @@ const joyboyToolTableStatus AIToolName = "get_table_status"
 // food already sold, and neither of those is rent, wages or the electricity bill.
 const joyboyToolExpenseSummary AIToolName = "get_expense_summary"
 
+// joyboyToolCustomerCount counts the people who came, from the headcount the
+// staff record on every bill. Asked "วันนี้มีลูกค้ากี่คน" with nothing to read,
+// the model answered three different ways in three runs — the bill count, the
+// tables in use, and "ระบบไม่ได้เก็บจำนวนคน" — and the last is untrue:
+// orders.customer_count is required on every order. People come in whole
+// numbers, so the sheet carries the party sizes and the most common one, never
+// a fractional average.
+const joyboyToolCustomerCount AIToolName = "get_customer_count"
+
 // The two lookup tools. Everything else here ranks or totals; these answer about
 // one named thing, which is the question an owner asks most and the one the
 // assistant used to answer worst — see ai_joyboy_detail.go for what went wrong.
@@ -207,6 +216,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolSalesForecast,
 	joyboyToolTableStatus,
 	joyboyToolExpenseSummary,
+	joyboyToolCustomerCount,
 	joyboyToolIngredientDetail,
 	joyboyToolMenuDetail,
 	joyboyToolShopProfile,
@@ -247,6 +257,12 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ข้าวผัดปูใช้วัตถุดิบอะไร · ถ้าปิดขายเมนูนี้จะกระทบยอดขายแค่ไหน " +
 		"**สำคัญ: ถ้าคำถามเอ่ยชื่อเมนูเจาะจง ให้ใช้เครื่องมือนี้ ห้ามใช้ลิสต์อันดับ** " +
 		"เพราะลิสต์อันดับมีแค่ไม่กี่ตัว เมนูที่ไม่อยู่ในลิสต์ไม่ได้แปลว่าไม่มียอดขาย",
+	joyboyToolCustomerCount: "จำนวนลูกค้า (คน) ที่มาร้านในช่วงเวลา นับจากจำนวนคนที่พนักงานลงไว้ตอนเปิดบิล " +
+		"พร้อมว่าส่วนใหญ่มากันกี่คนต่อบิล และตอนนี้มีคนนั่งค้างอยู่กี่คน " +
+		"รับช่วงเวลาได้ทุกแบบ (วันนี้ เมื่อวาน สัปดาห์ที่แล้ว เดือนนี้) ไม่ระบุ = 30 วันล่าสุด " +
+		"ใช้ตอบ: วันนี้มีลูกค้ากี่คน เดือนนี้ลูกค้ากี่คน ลูกค้ามากันกี่คนต่อโต๊ะ ลูกค้าเยอะขึ้นไหม " +
+		"ถ้าถามจำนวนบิลหรือออเดอร์ ไม่ใช่จำนวนคน ให้ใช้ get_sales_for_period แทน " +
+		"ถ้าถามว่าตอนนี้โต๊ะไหนมีคนนั่ง ให้ใช้ get_table_status",
 	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริง แยกตามหมวด " +
 		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
 		// The window used to be described as a hard "30 วันล่าสุด". Asked
@@ -339,7 +355,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetMostExpensiveMenu, AIToolGetMenuEngineering, joyboyToolMenuForPeriod,
 		joyboyToolMenuProfitByCategory,
 	}},
-	{"โต๊ะและหน้าร้าน", []AIToolName{joyboyToolTableStatus, joyboyToolTableUsage, joyboyToolActiveOrders}},
+	{"โต๊ะและหน้าร้าน", []AIToolName{joyboyToolTableStatus, joyboyToolTableUsage, joyboyToolActiveOrders, joyboyToolCustomerCount}},
 	{"ยอดขายและกำไร", []AIToolName{
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,

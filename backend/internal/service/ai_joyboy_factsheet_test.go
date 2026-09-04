@@ -810,3 +810,59 @@ func TestMenuForPeriodBodyDeclaresTruncation(t *testing.T) {
 		t.Errorf("a cut sheet must declare the cut:\n%s", body)
 	}
 }
+
+// "วันนี้มีลูกค้ากี่คน" had no sheet to read, and the model answered three
+// different ways in three runs — the bill count, the tables in use, and "ระบบ
+// ไม่ได้เก็บจำนวนคน", which is untrue. The sheet carries the headcount as whole
+// people: a total, the party sizes, and the most common one. No average, because
+// 2.8 people is arithmetic nobody can seat.
+func TestCustomerCountBodyCountsWholePeople(t *testing.T) {
+	body := joyboyCustomerCountBody("วันนี้", []repository.AIPartySize{
+		{PartySize: 1, Bills: 3},
+		{PartySize: 2, Bills: 8},
+		{PartySize: 3, Bills: 5},
+		{PartySize: 4, Bills: 2},
+	}, []repository.AIActiveOrder{
+		{CustomerCount: 2}, {CustomerCount: 4}, {CustomerCount: 3}, {CustomerCount: 2},
+	}, true)
+
+	for _, want := range []string{
+		"guests=42 bills=18", // 3 + 16 + 15 + 8
+		"party_size=2 bills=8",
+		"most_common_party_size=2",
+		"open_bills_now=4 open_guests_now=11",
+		"ห้ามหารเฉลี่ยจำนวนคน",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sheet missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "guests_per_bill") || strings.Contains(body, "2.3") {
+		t.Errorf("a fractional headcount slipped in:\n%s", body)
+	}
+}
+
+// A window that ended before now has no open bills in it. The open_ lines are
+// left out rather than shown as zero, because "open_guests_now=0" under last
+// month reads as a fact about last month.
+func TestCustomerCountBodyOmitsOpenBillsForPastWindows(t *testing.T) {
+	body := joyboyCustomerCountBody("เดือนสิงหาคม 2569", []repository.AIPartySize{{PartySize: 2, Bills: 10}}, nil, false)
+	if strings.Contains(body, "open_") {
+		t.Errorf("a past window must not carry open-bill lines:\n%s", body)
+	}
+	if !strings.Contains(body, "guests=20 bills=10") {
+		t.Errorf("headcount missing:\n%s", body)
+	}
+}
+
+// No closed bills is "0 people so far", said in a way that cannot be misread as
+// "the system does not record people" — which is the sentence this tool exists
+// to stop.
+func TestCustomerCountBodyNoBillsIsNotNoFeature(t *testing.T) {
+	body := joyboyCustomerCountBody("วันนี้", nil, nil, true)
+	for _, want := range []string{"guests=0 bills=0", "status=no_data", "ไม่ใช่ว่าระบบไม่เก็บจำนวนคน"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sheet missing %q:\n%s", want, body)
+		}
+	}
+}

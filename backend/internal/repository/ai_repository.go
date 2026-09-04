@@ -206,6 +206,30 @@ type AIActiveOrder struct {
 // Nothing else exposed this: every other tool here reports history. Asked "ตอนนี้
 // บิลไหนยังไม่จ่าย" the assistant had no source at all, which is the shape of
 // question it used to answer by guessing.
+// AIPartySize is how many closed bills were opened for a party of one size.
+type AIPartySize struct {
+	PartySize int   `json:"party_size"`
+	Bills     int64 `json:"bills"`
+}
+
+// GuestsByPartySize counts the paid bills in [start, end) by the number of
+// people the staff recorded on each. The total headcount is the sum of
+// size × bills, and the shape of the list says whether the shop is fed by
+// couples or by tables of six — which a single average would hide.
+func (r *AIRepository) GuestsByPartySize(restaurantID uint, start, end time.Time) ([]AIPartySize, error) {
+	var rows []AIPartySize
+	err := r.db.Table("orders").
+		Select("orders.customer_count AS party_size, COUNT(*) AS bills").
+		Where(
+			"orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.status = ? AND orders.payment_status = ? AND orders.completed_at >= ? AND orders.completed_at < ?",
+			restaurantID, entity.OrderStatusCompleted, entity.PaymentStatusPaid, start, end,
+		).
+		Group("orders.customer_count").
+		Order("orders.customer_count asc").
+		Scan(&rows).Error
+	return rows, err
+}
+
 func (r *AIRepository) ActiveOrders(restaurantID uint) ([]AIActiveOrder, error) {
 	var rows []AIActiveOrder
 	err := r.db.Table("orders").

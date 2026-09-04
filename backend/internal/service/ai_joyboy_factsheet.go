@@ -82,6 +82,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_menu_named_in_question":                   "ยังไม่รู้ว่าถามถึงเมนูไหน ให้ถามกลับ ห้ามเดาตัวเลขของเมนูไหน",
 	"no_payment_method_recorded_in_period":        "ช่วงนี้ไม่มีบิลที่บันทึกวิธีจ่ายเงินไว้ จึงบอกไม่ได้ว่าเงินสดหรือพร้อมเพย์เท่าไหร่ ห้ามประมาณสัดส่วนเอง",
 	"no_tables_recorded":                          "ร้านนี้ยังไม่มีโต๊ะในระบบเลย ต้องไปเพิ่มโต๊ะที่หน้าผังโต๊ะก่อน",
+	"no_closed_bills_to_count_guests_from":        "ช่วงนี้ยังไม่มีบิลที่ปิดแล้ว จึงยังไม่มีจำนวนลูกค้าให้นับ = 0 คน ไม่ใช่ว่าระบบไม่เก็บจำนวนคน",
 }
 
 func joyboyNum(value float64) string {
@@ -922,6 +923,51 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 // lets it rank by whichever the question asked, rather than picking a ranking in
 // Go the way legacy's finished answer does. The period label is stated so the
 // answer never reads as the 30-day window.
+// joyboyCustomerCountBody renders who came as whole people.
+//
+// The headcount is the sum over party sizes, and the sheet lists those sizes
+// rather than an average: "2.8 คนต่อบิล" is arithmetic nobody can seat. What an
+// owner actually asks is "มากันกี่คนส่วนใหญ่", and that is the most common party
+// size — a whole number the sheet names outright so the model never divides.
+func joyboyCustomerCountBody(label string, parties []repository.AIPartySize, open []repository.AIActiveOrder, live bool) string {
+	var guests, bills int64
+	mostCommon, mostCommonBills := 0, int64(0)
+	for _, party := range parties {
+		guests += int64(party.PartySize) * party.Bills
+		bills += party.Bills
+		if party.Bills > mostCommonBills {
+			mostCommon, mostCommonBills = party.PartySize, party.Bills
+		}
+	}
+
+	lines := []string{"period=" + label, "scope=closed_paid_bills_only"}
+	if bills == 0 {
+		lines = append(lines, "guests=0 bills=0", joyboyNoData("no_closed_bills_to_count_guests_from"))
+	} else {
+		lines = append(lines, fmt.Sprintf("guests=%d bills=%d", guests, bills))
+		for _, party := range parties {
+			lines = append(lines, fmt.Sprintf("party_size=%d bills=%d", party.PartySize, party.Bills))
+		}
+		lines = append(lines, fmt.Sprintf("most_common_party_size=%d", mostCommon))
+	}
+	if live {
+		var openGuests int64
+		for _, order := range open {
+			openGuests += int64(order.CustomerCount)
+		}
+		lines = append(lines, fmt.Sprintf("open_bills_now=%d open_guests_now=%d", len(open), openGuests))
+	}
+	lines = append(lines,
+		"guests_means=จำนวนคนที่พนักงานลงไว้ตอนเปิดบิล รวมเฉพาะบิลที่ปิดแล้วในช่วงนี้",
+		"party_size_means=บิลที่มากันกี่คน มีกี่บิล · most_common_party_size คือขนาดกลุ่มที่พบบ่อยที่สุด",
+	)
+	if live {
+		lines = append(lines, "open_means=คนที่ยังนั่งอยู่ ณ ตอนนี้ บิลยังไม่ปิด จึงยังไม่รวมใน guests")
+	}
+	lines = append(lines, "note=คนเป็นจำนวนเต็มเสมอ ห้ามหารเฉลี่ยจำนวนคนออกมาเป็นทศนิยม ถ้าจะบอกว่ามากันกี่คน ให้ใช้ most_common_party_size")
+	return joyboyJoin(lines)
+}
+
 // joyboyRankBy numbers rows 1..n by one of their figures, largest first, and
 // returns the rank for each row in the order the rows were given. Rows that tie
 // are numbered in the order they arrived, so the ranking is stable rather than

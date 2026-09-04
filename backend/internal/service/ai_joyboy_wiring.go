@@ -253,6 +253,33 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question, t.history), true, true
 
+	case joyboyToolCustomerCount:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
+		}
+		parties, err := t.service.repo.GuestsByPartySize(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		// People still seated are read live, and only when the window reaches
+		// now — a question about last month has no open bills in it, and an
+		// "open_guests_now" line under it would read as though it did.
+		var open []repository.AIActiveOrder
+		live := !end.Before(now)
+		if live {
+			open, err = t.service.repo.ActiveOrders(t.restaurantID)
+			if err != nil {
+				aiStage("warn", "joyboy: %s could not read open bills (%v) → counting closed bills only", tool, err)
+				live, open = false, nil
+			}
+		}
+		return joyboyCustomerCountBody(label, parties, open, live), true, true
 	case joyboyToolExpenseSummary:
 		if t.service.actionExpenses == nil {
 			return "", false, true
