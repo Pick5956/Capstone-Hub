@@ -289,3 +289,108 @@ func TestRouterTemplatesRenderCleanly(t *testing.T) {
 		}
 	}
 }
+
+// refWednesday is a fixed "now" on a Wednesday, so a week that runs Monday to
+// Sunday is half over and this week and the last seven days are visibly
+// different windows.
+func refWednesday(t *testing.T) time.Time {
+	t.Helper()
+	return time.Date(2026, time.July, 15, 12, 0, 0, 0, bangkokLocation()) // Wed
+}
+
+func bkk(t *testing.T, year int, month time.Month, day int) time.Time {
+	t.Helper()
+	return time.Date(year, month, day, 0, 0, 0, 0, bangkokLocation())
+}
+
+// A window measured in days is not a calendar month, and the month scanners
+// could not see one. "ในช่วง 7 วัน เมนูไหนขายดี" therefore resolved to no window
+// at all, and the menu tools answered from their fixed 30-day snapshot: real
+// figures for a period nobody asked about.
+func TestExtractPeriodsCountdownDays(t *testing.T) {
+	for _, tc := range []struct {
+		question string
+		label    string
+		start    time.Time
+	}{
+		{"ในช่วง 7 วัน เมนูไหนขายดี", "7 วันล่าสุด", bkk(t, 2026, time.July, 9)},
+		{"7 วันล่าสุด เมนูไหนขายดี", "7 วันล่าสุด", bkk(t, 2026, time.July, 9)},
+		{"3 วันที่ผ่านมาขายได้เท่าไหร่", "3 วันล่าสุด", bkk(t, 2026, time.July, 13)},
+		{"ยอดขาย 14 วันย้อนหลัง", "14 วันล่าสุด", bkk(t, 2026, time.July, 2)},
+	} {
+		periods := extractPeriods(tc.question, refWednesday(t))
+		if len(periods) != 1 {
+			t.Fatalf("%q: want 1 period, got %d: %+v", tc.question, len(periods), periods)
+		}
+		if periods[0].Label != tc.label {
+			t.Errorf("%q: label = %q, want %q", tc.question, periods[0].Label, tc.label)
+		}
+		if !periods[0].Start.Equal(tc.start) {
+			t.Errorf("%q: start = %v, want %v", tc.question, periods[0].Start, tc.start)
+		}
+		// Today counts as one of the days, so the window ends tomorrow.
+		if want := bkk(t, 2026, time.July, 16); !periods[0].End.Equal(want) {
+			t.Errorf("%q: end = %v, want %v", tc.question, periods[0].End, want)
+		}
+	}
+}
+
+// A count of days only becomes a window when the sentence says which direction
+// it runs. Without that guard "อีก 7 วันข้างหน้า" — the forecast tool's question
+// — would be answered with the seven days that already happened.
+func TestExtractPeriodsIgnoresDaysWithoutDirection(t *testing.T) {
+	for _, question := range []string{
+		"อีก 7 วันข้างหน้าจะขายได้เท่าไหร่",
+		"คาดการณ์ยอดขาย 7 วันถัดไป",
+		"ร้านเปิดมา 7 วันแล้วนะ",
+		"สั่งของ 5 วันต่อครั้ง",
+	} {
+		if periods := extractPeriods(question, refWednesday(t)); len(periods) != 0 {
+			t.Errorf("%q: want no period, got %+v", question, periods)
+		}
+	}
+}
+
+// Last week is Monday to Sunday, not the seven days ending today. The older
+// day-part scope collapsed both onto "7 วันล่าสุด"; asked on a Wednesday those
+// two windows share only three days.
+func TestExtractPeriodsCalendarWeeks(t *testing.T) {
+	periods := extractPeriods("สัปดาห์ที่แล้วเมนูไหนขายดี", refWednesday(t))
+	if len(periods) != 1 || periods[0].Label != "สัปดาห์ที่แล้ว" {
+		t.Fatalf("last week: got %+v", periods)
+	}
+	if !periods[0].Start.Equal(bkk(t, 2026, time.July, 6)) || !periods[0].End.Equal(bkk(t, 2026, time.July, 13)) {
+		t.Fatalf("last week = %v → %v", periods[0].Start, periods[0].End)
+	}
+
+	periods = extractPeriods("สัปดาห์นี้ขายได้เท่าไหร่", refWednesday(t))
+	if len(periods) != 1 || periods[0].Label != "สัปดาห์นี้" {
+		t.Fatalf("this week: got %+v", periods)
+	}
+	// Monday to today only: the rest of the week has not happened, and counting
+	// it would report days of zero sales as though the week were going badly.
+	if !periods[0].Start.Equal(bkk(t, 2026, time.July, 13)) || !periods[0].End.Equal(bkk(t, 2026, time.July, 16)) {
+		t.Fatalf("this week = %v → %v", periods[0].Start, periods[0].End)
+	}
+}
+
+// "อาทิตย์" on its own is the weekday Sunday. Only นี้ / ที่แล้ว / ก่อน turn it
+// into a week, or "ยอดขายวันอาทิตย์" would silently become a seven-day total.
+func TestExtractPeriodsSundayIsNotAWeek(t *testing.T) {
+	if periods := extractPeriods("ยอดขายวันอาทิตย์เป็นยังไง", refWednesday(t)); len(periods) != 0 {
+		t.Fatalf("want no period, got %+v", periods)
+	}
+}
+
+// A week and a month named together are two windows, not one. They are
+// de-duplicated by different keys on purpose: keyed by month alone, a week in
+// July would have cancelled out "เดือนกรกฎาคม".
+func TestExtractPeriodsWeekAndMonthCoexist(t *testing.T) {
+	periods := extractPeriods("ยอดขายเดือนกรกฎาคมกับสัปดาห์นี้", refWednesday(t))
+	if len(periods) != 2 {
+		t.Fatalf("want 2 periods, got %d: %+v", len(periods), periods)
+	}
+	if periods[0].Label != "เดือนกรกฎาคม 2569" || periods[1].Label != "สัปดาห์นี้" {
+		t.Fatalf("labels = %q, %q", periods[0].Label, periods[1].Label)
+	}
+}
