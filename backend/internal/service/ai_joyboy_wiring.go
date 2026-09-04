@@ -426,12 +426,18 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyTableStatusBody(tables), true, true
 	case AIToolSearchSystemDocs:
-		result, err := executeSystemDocsTool(AIToolSearchSystemDocs, AISystemDocsToolInput{Query: question})
+		// The whole manual, not a search result. Scoring the question against
+		// each section was Go deciding which part of the manual someone meant,
+		// and it decided wrong on a typo: "จะกดให้สิทพนักงานกดตรงไหน" missed the
+		// permissions article by four hundredths of a point and came back as
+		// "ไม่พบหัวข้อนี้ในคู่มือ". Reading a sentence is the model's job, and the
+		// manual is small enough to hand over whole.
+		handbook, err := systemDocsHandbook(detectSystemDocsLanguage(question))
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 			return "", false, true
 		}
-		return joyboySystemDocsBody(result), true, true
+		return joyboySystemDocsHandbookBody(handbook), true, true
 	case AIToolGetProfitSummary:
 		// The snapshot behind this tool is fixed at 30 days, so "กำไรเดือนที่แล้ว"
 		// came back as the rolling window's profit stated as last month's. When the

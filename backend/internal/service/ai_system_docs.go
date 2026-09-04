@@ -145,6 +145,50 @@ func searchSystemDocs(input AISystemDocsToolInput) (AISystemDocsToolResult, erro
 	return AISystemDocsToolResult{SearchResults: results}, nil
 }
 
+// systemDocsHandbook renders the whole manual in one language, section by
+// section, with the page each article lives on.
+//
+// Searching it turned out to be the problem rather than the solution. The query
+// was scored against every section by counting three-character runs shared with
+// it, so "จะกดให้สิทพนักงานกดตรงไหน" — one letter short of "สิทธิ์" — scored
+// 0.295 against the permissions section, fell under the 0.38 cut, and the
+// assistant replied that the manual has no such topic. It has a whole article
+// on it. Spelling, phrasing and synonyms are what the model is for; the manual
+// is about 12,000 characters, which is cheaper to hand over whole than to teach
+// Go to guess which part of it someone meant.
+func systemDocsHandbook(language string) (string, error) {
+	catalog, err := systemdocs.Load()
+	if err != nil {
+		return "", err
+	}
+	lines := make([]string, 0, len(catalog.Articles)*6)
+	for _, article := range catalog.Articles {
+		title := strings.TrimSpace(article.Title.ForLanguage(language))
+		lines = append(lines, "## "+title)
+		if summary := strings.TrimSpace(article.Summary.ForLanguage(language)); summary != "" {
+			lines = append(lines, summary)
+		}
+		// The page an article belongs to answers half the questions people ask
+		// about it — "กดตรงไหน" wants a place, not a paragraph.
+		for _, route := range article.Routes {
+			label := strings.TrimSpace(route.Label.ForLanguage(language))
+			if label == "" || strings.TrimSpace(route.Href) == "" {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("หน้าที่ใช้: %s (%s)", label, route.Href))
+		}
+		for _, section := range article.Sections {
+			lines = append(lines, "### "+strings.TrimSpace(section.Title.ForLanguage(language)))
+			if content := strings.TrimSpace(formatSystemDocSection(section, language)); content != "" {
+				lines = append(lines, content)
+			}
+			lines = append(lines, "อ่านเพิ่ม: "+systemDocURL(article.Slug, section.ID))
+		}
+		lines = append(lines, "")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")), nil
+}
+
 func readSystemDoc(input AISystemDocsToolInput) (AISystemDocsToolResult, error) {
 	slug := strings.TrimSpace(input.Slug)
 	sectionID := strings.TrimSpace(input.SectionID)

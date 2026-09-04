@@ -765,3 +765,48 @@ func TestTableUsageSheetNamesTheQuietTableButNotWhereToMoveIt(t *testing.T) {
 		}
 	}
 }
+
+// The rows of a period menu sheet arrive ordered by revenue, but the questions
+// asked of them are "เมนูไหนขายดี" (dishes sold) and "เมนูไหนกำไรดี" (profit).
+// Left to re-sort the list itself the model put ข้าวกะเพรา — 52 dishes, the
+// most of any row — eleventh, below rows with 43. Ordering numbers is
+// arithmetic, so the sheet carries the ranks and says which order it is in.
+func TestMenuForPeriodBodyRanksByQuantityAndProfit(t *testing.T) {
+	body := joyboyMenuForPeriodBody("7 วันล่าสุด", []repository.AIMenuMarginSummary{
+		{MenuName: "ผัดไทยกุ้งสด", Quantity: 67, Revenue: 6030, Profit: 2010, Margin: 33.3},
+		{MenuName: "ข้าวกะเพราไก่ไข่ดาว", Quantity: 52, Revenue: 4100, Profit: 2400, Margin: 58.5},
+		{MenuName: "น้ำมะนาวโซดา", Quantity: 71, Revenue: 3195, Profit: 900, Margin: 28.2},
+	})
+
+	for _, want := range []string{
+		"row_order=revenue desc",
+		"menu=น้ำมะนาวโซดา qty=71 qty_rank=1",
+		"menu=ผัดไทยกุ้งสด qty=67 qty_rank=2",
+		"menu=ข้าวกะเพราไก่ไข่ดาว qty=52 qty_rank=3",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sheet missing %q:\n%s", want, body)
+		}
+	}
+	// Profit ranks the same rows differently — that is the whole point of
+	// carrying both, so a profit question is not answered from the sales order.
+	if !strings.Contains(body, "profit_rank=1 margin_pct=58.50") {
+		t.Errorf("ข้าวกะเพรา should lead on profit:\n%s", body)
+	}
+}
+
+// A sheet cut to its first rows says so. Silently showing fifteen of forty reads
+// as "these are all the menus", and an answer built on that is wrong about the
+// menus it never saw.
+func TestMenuForPeriodBodyDeclaresTruncation(t *testing.T) {
+	metrics := make([]repository.AIMenuMarginSummary, 0, 20)
+	for i := 0; i < 20; i++ {
+		metrics = append(metrics, repository.AIMenuMarginSummary{
+			MenuName: fmt.Sprintf("เมนู %d", i), Quantity: int64(20 - i), Revenue: float64(200 - i*10),
+		})
+	}
+	body := joyboyMenuForPeriodBody("สัปดาห์ที่แล้ว", metrics)
+	if !strings.Contains(body, "rows_shown=15 of 20") {
+		t.Errorf("a cut sheet must declare the cut:\n%s", body)
+	}
+}

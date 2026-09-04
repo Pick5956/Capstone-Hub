@@ -922,18 +922,55 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 // lets it rank by whichever the question asked, rather than picking a ranking in
 // Go the way legacy's finished answer does. The period label is stated so the
 // answer never reads as the 30-day window.
+// joyboyRankBy numbers rows 1..n by one of their figures, largest first, and
+// returns the rank for each row in the order the rows were given. Rows that tie
+// are numbered in the order they arrived, so the ranking is stable rather than
+// arbitrary from one call to the next.
+func joyboyRankBy(metrics []repository.AIMenuMarginSummary, value func(repository.AIMenuMarginSummary) float64) []int {
+	order := make([]int, len(metrics))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return value(metrics[order[a]]) > value(metrics[order[b]])
+	})
+	ranks := make([]int, len(metrics))
+	for rank, index := range order {
+		ranks[index] = rank + 1
+	}
+	return ranks
+}
+
 func joyboyMenuForPeriodBody(label string, metrics []repository.AIMenuMarginSummary) string {
 	if len(metrics) == 0 {
 		return joyboyJoin([]string{"period=" + label, joyboyNoData("no_menu_sales_recorded_in_period")})
 	}
-	lines := []string{"period=" + label, "scope=named_period_not_30day_window"}
+	// The rows arrive ordered by revenue, but "เมนูไหนขายดี" asks for dishes
+	// sold and "เมนูไหนกำไรดี" for profit. Left to re-sort the list itself the
+	// model got it wrong — it answered the seven-day question with ข้าวกะเพรา
+	// (52 จาน) in eleventh place, below rows with 43. Ordering numbers is
+	// arithmetic, so it is counted here and the sheet says which order it is in.
+	qtyRank := joyboyRankBy(metrics, func(m repository.AIMenuMarginSummary) float64 { return float64(m.Quantity) })
+	profitRank := joyboyRankBy(metrics, func(m repository.AIMenuMarginSummary) float64 { return m.Profit })
+
+	lines := []string{
+		"period=" + label,
+		"scope=named_period_not_30day_window",
+		"row_order=revenue desc",
+		"qty_rank_means=อันดับตามจำนวนที่ขายได้ 1 คือขายได้มากที่สุด",
+		"profit_rank_means=อันดับตามกำไรรวมของเมนูนั้นในช่วงนี้ 1 คือกำไรมากที่สุด",
+	}
 	const limit = 15
 	for i, m := range metrics {
 		if i >= limit {
 			break
 		}
-		lines = append(lines, fmt.Sprintf("menu=%s qty=%d revenue=%s profit=%s margin_pct=%s",
-			m.MenuName, m.Quantity, joyboyNum(m.Revenue), joyboyNum(m.Profit), joyboyNum(m.Margin)))
+		lines = append(lines, fmt.Sprintf("menu=%s qty=%d qty_rank=%d revenue=%s profit=%s profit_rank=%d margin_pct=%s",
+			m.MenuName, m.Quantity, qtyRank[i], joyboyNum(m.Revenue),
+			joyboyNum(m.Profit), profitRank[i], joyboyNum(m.Margin)))
+	}
+	if len(metrics) > limit {
+		lines = append(lines, fmt.Sprintf("rows_shown=%d of %d ตัดจากรายได้มากไปน้อย", limit, len(metrics)))
 	}
 	return joyboyJoin(lines)
 }
@@ -1305,27 +1342,19 @@ func joyboyForecastBody(r *AIForecastResult) string {
 	return joyboyJoin(lines)
 }
 
-// joyboySystemDocsBody renders documentation search hits for the model to answer
-// "how do I use X?" from. Unlike the figure tools this body is prose — the actual
-// manual text — because the answer is explaining the system, not reporting a
-// number. The model rewrites it to fit the question rather than pasting it.
-func joyboySystemDocsBody(result AISystemDocsToolResult) string {
-	if len(result.SearchResults) == 0 {
+// joyboySystemDocsHandbookBody hands over the manual as the facts for this
+// answer, with the one rule that matters: what is not written here is not
+// something to fill in from general knowledge about restaurant software.
+func joyboySystemDocsHandbookBody(handbook string) string {
+	if strings.TrimSpace(handbook) == "" {
 		return joyboyNoData("no_matching_documentation")
 	}
-	lines := make([]string, 0, len(result.SearchResults)*2)
-	for _, hit := range result.SearchResults {
-		title := strings.TrimSpace(hit.ArticleTitle)
-		if section := strings.TrimSpace(hit.SectionTitle); section != "" {
-			title += " — " + section
-		}
-		lines = append(lines, "หัวข้อ: "+title)
-		if content := strings.TrimSpace(hit.RelevantContent); content != "" {
-			lines = append(lines, content)
-		}
-		lines = append(lines, "")
-	}
-	return joyboyJoin(lines)
+	return joyboyJoin([]string{
+		"source=คู่มือระบบทั้งฉบับ",
+		"scope=ตอบได้เฉพาะสิ่งที่เขียนอยู่ในคู่มือนี้ · เรื่องที่คู่มือไม่ได้เขียนไว้ ให้บอกตรง ๆ ว่าคู่มือไม่ได้ระบุ ห้ามเดาจากความรู้ทั่วไปเรื่องระบบร้านอาหาร",
+		"",
+		handbook,
+	})
 }
 
 // aiPaymentMethodThai turns the stored method code into the owner's words, so

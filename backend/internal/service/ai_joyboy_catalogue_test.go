@@ -338,19 +338,29 @@ func TestYearSalesTotalClaimsOnlyYearSalesQuestions(t *testing.T) {
 	}
 }
 
-// search_system_docs is the other joyboy-only tool. Its fact sheet is prose — the
-// manual text a hit carried — so the model can answer "how do I use X?" from the
-// docs instead of its own guess. No hits must read as no-data, not as silence.
-func TestSystemDocsBodyRendersHitsAndNoData(t *testing.T) {
-	body := joyboySystemDocsBody(AISystemDocsToolResult{SearchResults: []AISystemDocSearchResult{
-		{ArticleTitle: "เมนู", SectionTitle: "เพิ่มเมนูใหม่", RelevantContent: "ไปที่หน้าเมนู แล้วกดปุ่มเพิ่ม"},
-	}})
-	for _, want := range []string{"เมนู", "เพิ่มเมนูใหม่", "ไปที่หน้าเมนู"} {
+// search_system_docs is the other joyboy-only tool, and it no longer searches:
+// it hands over the whole manual. Scoring the question against each section was
+// Go deciding which part of the manual someone meant, and a single missing
+// letter was enough to decide wrong. The body must carry the manual itself, and
+// must say plainly that anything outside it is not to be filled in.
+func TestSystemDocsHandbookBodyCarriesTheManual(t *testing.T) {
+	handbook, err := systemDocsHandbook("th")
+	if err != nil {
+		t.Fatalf("load manual: %v", err)
+	}
+	body := joyboySystemDocsHandbookBody(handbook)
+	for _, want := range []string{
+		"ทีม บทบาท และสิทธิ์", // the article a typo used to hide
+		"/staff",              // the page that answers "กดตรงไหน"
+		"เชิญสมาชิก",
+		"คู่มือระบบทั้งฉบับ",
+		"ห้ามเดาจากความรู้ทั่วไป",
+	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("docs body missing %q: %s", want, body)
+			t.Errorf("handbook body missing %q", want)
 		}
 	}
-	if empty := joyboySystemDocsBody(AISystemDocsToolResult{}); !strings.Contains(empty, "status=no_data") {
-		t.Errorf("no hits should report no_data, got %q", empty)
+	if empty := joyboySystemDocsHandbookBody(""); !strings.Contains(empty, "status=no_data") {
+		t.Errorf("an empty manual should report no_data, got %q", empty)
 	}
 }
