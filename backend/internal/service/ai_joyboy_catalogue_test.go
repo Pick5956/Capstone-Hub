@@ -270,6 +270,24 @@ func TestSalesForPeriodBodyMarksRunningWindow(t *testing.T) {
 	}
 }
 
+// The money still on the tables is its own line, never part of the paid total.
+// Zero open bills is still a line: "no one seated" is an answer to "แล้วที่ยัง
+// ไม่ปิดบิลล่ะ", and leaving it off would send the model guessing.
+func TestOpenBillsNowIsASeparateFigure(t *testing.T) {
+	body := joyboyOpenBillsNow([]repository.AIActiveOrder{
+		{OrderNumber: "A1", GrandTotal: 320}, {OrderNumber: "A2", GrandTotal: 802},
+	})
+	if !strings.Contains(body, "open_bills_now=2 open_total_now=1122.00") {
+		t.Errorf("open bills not summed as their own figure:\n%s", body)
+	}
+	if !strings.Contains(body, "ยังไม่รวมใน revenue") {
+		t.Errorf("the sheet must say the open total is outside the paid total:\n%s", body)
+	}
+	if none := joyboyOpenBillsNow(nil); !strings.Contains(none, "open_bills_now=0 open_total_now=0.00") {
+		t.Errorf("no open bills should still be stated:\n%s", none)
+	}
+}
+
 // get_sales_forecast renders the next-7-days prediction as figures for the model
 // to phrase, always carrying the "this is a prediction" caveat with the data and
 // the measured accuracy. A closed day shows as closed, not a zero prediction.

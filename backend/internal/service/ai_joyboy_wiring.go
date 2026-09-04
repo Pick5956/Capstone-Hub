@@ -622,7 +622,20 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				return joyboyWithCoverage(joyboySalesForPeriodBody(p, d, now), t.service.aiSalesCoverageNoteFor(t.restaurantID, p.Start)), true, true
+				body := joyboySalesForPeriodBody(p, d, now)
+				// A window that reaches now has bills still open in it. "วันนี้ขาย
+				// ได้เท่าไหร่" at five in the afternoon answered 4,895 baht while
+				// 1,122 more sat unpaid on four tables — true of the paid total, and
+				// not what the owner meant. The open bills are read live and put
+				// on the sheet as their own figure, never added into the total.
+				if p.End.After(now) {
+					if open, openErr := t.service.repo.ActiveOrders(t.restaurantID); openErr == nil {
+						body = joyboyJoin([]string{body, joyboyOpenBillsNow(open)})
+					} else {
+						aiStage("warn", "joyboy: %s could not read open bills (%v) → paid total only", tool, openErr)
+					}
+				}
+				return joyboyWithCoverage(body, t.service.aiSalesCoverageNoteFor(t.restaurantID, p.Start)), true, true
 			}
 		}
 		if year, ok := joyboyYearSalesTotal(question, now); ok {

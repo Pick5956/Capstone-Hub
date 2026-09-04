@@ -924,6 +924,21 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 // lets it rank by whichever the question asked, rather than picking a ranking in
 // Go the way legacy's finished answer does. The period label is stated so the
 // answer never reads as the 30-day window.
+// joyboyOpenBillsNow is the money still on the tables at this moment: bills
+// opened and not yet closed, with what they have run up so far. It sits under a
+// sales window that reaches now, as a separate figure the model can name next
+// to the paid total — "ปิดบิลแล้ว 4,895 ยังค้างอีก 1,122" — and never folded in.
+func joyboyOpenBillsNow(open []repository.AIActiveOrder) string {
+	var total float64
+	for _, order := range open {
+		total += order.GrandTotal
+	}
+	return joyboyJoin([]string{
+		fmt.Sprintf("open_bills_now=%d open_total_now=%s", len(open), joyboyNum(roundBaht(total))),
+		"open_means=บิลที่ยังนั่งอยู่ ณ ตอนนี้ ยังไม่ปิดบิล จึงยังไม่รวมใน revenue ข้างบน ตัวเลขนี้เปลี่ยนตลอดเวลา",
+	})
+}
+
 // joyboyNoTableBills reports whether not one table seated a paid bill in the
 // window — the shape "before the records" takes on the table sheet, where the
 // tables themselves still exist and each row simply reads zero.
