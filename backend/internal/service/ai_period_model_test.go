@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,6 +72,25 @@ func TestAIPeriodFromModelMonth(t *testing.T) {
 		if _, ok := aiPeriodFromModel(bad, now); ok {
 			t.Errorf("impossible month %+v must be dropped", bad)
 		}
+	}
+}
+
+// "ยอดขายสามวันที่ผ่านมา" is today and the two days before it — the owner's
+// own definition. The prompt used to stop at yesterday, which disagreed with
+// the trend tool and with what people mean by "ล่าสุด"; a running window says
+// for itself that it is not over, so nothing is gained by cutting today off.
+func TestPeriodPromptCountsTodayAsTheFirstDayBack(t *testing.T) {
+	for _, want := range []string{
+		"นับวันนี้เป็นวันแรก",
+		`"3 วันที่ผ่านมาขายได้เท่าไหร่" → {"periods":[{"start":"2026-08-25","end":"2026-08-27"}]`,
+		`"เทียบ 7 วันล่าสุดกับ 7 วันก่อนหน้า" → {"periods":[{"start":"2026-08-21","end":"2026-08-27"},{"start":"2026-08-14","end":"2026-08-20"}]`,
+	} {
+		if !strings.Contains(aiPeriodPrompt, want) {
+			t.Errorf("period prompt missing %q", want)
+		}
+	}
+	if strings.Contains(aiPeriodPrompt, "ไม่รวมวันนี้") {
+		t.Error("the prompt still tells the model to cut today off")
 	}
 }
 

@@ -557,15 +557,17 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 			label, start, end, len(metrics) == 0), true, true
 
 	case joyboyToolMenuForPeriod:
-		// Reuse legacy's period parser and range query, but render raw figures for
-		// the model to rank rather than legacy's finished answer. A question that
-		// names no period is not this tool's job — leave it out so the model's
-		// 30-day menu tools answer instead.
-		periods := extractPeriods(question, repository.BangkokNow())
-		if len(periods) == 0 {
+		// The window is read the way the profit and expense tools read theirs:
+		// the model says which range was meant, Go checks the dates. This tool
+		// used to run the month-only word list alone, so "ในช่วง 7 วัน เมนูไหน
+		// ขายดี" found no window, dropped out, and the 30-day snapshot answered.
+		// A question that names no period is still not this tool's job — leave
+		// it out so the model's 30-day menu tools answer instead.
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
 			return "", false, true
 		}
-		period := periods[0]
+		period := AIPeriod{Label: label, Start: start, End: end}
 		metrics, err := t.service.repo.MenuMetricsForRange(t.restaurantID, period.Start, period.End)
 		if err != nil {
 			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)

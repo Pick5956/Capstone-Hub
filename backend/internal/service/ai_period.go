@@ -431,9 +431,15 @@ type periodHit struct {
 	period AIPeriod
 }
 
-// extractPeriods finds every window referenced in the question, in the order
-// they appear. It understands named months (Thai + English), the relative words
-// เดือนนี้ / เดือนก่อน, calendar weeks, and countdowns measured in days.
+// extractPeriods finds every month window referenced in the question, in the
+// order they appear, de-duplicated by (year, month). It understands named months
+// (Thai + English) and the relative words เดือนนี้ / เดือนก่อน.
+//
+// It is deliberately no wider than that. Days, weeks and countdowns ("7 วัน
+// ล่าสุด", "สัปดาห์ที่แล้ว") are read by the model through periodNamedIn — a word
+// list for those was tried and dropped the same day: it missed "3 วันหลังสุด",
+// collapsed "7 วันล่าสุดกับ 7 วันก่อนหน้า" into one window, and counted days
+// differently from the model. Reading what someone meant is not Go's job.
 func extractPeriods(question string, ref time.Time) []AIPeriod {
 	loc := bangkokLocation()
 	ref = ref.In(loc)
@@ -476,20 +482,6 @@ func extractPeriods(question string, ref time.Time) []AIPeriod {
 		}
 	}
 
-	// Day-sized windows. Their de-duplication key carries the day and is made
-	// negative, so a week in September never cancels out "เดือนกันยายน" — the
-	// month key is (year, month) alone and the two would otherwise collide.
-	addDayPeriod := func(pos int, p AIPeriod) {
-		key := p.Start.Year()*10000 + int(p.Start.Month())*100 + p.Start.Day()
-		hits = append(hits, periodHit{pos: pos, yearMo: -key, period: p})
-	}
-	for _, hit := range weekPeriods(n, ref) {
-		addDayPeriod(hit.pos, hit.period)
-	}
-	if p, pos, ok := recentDaysPeriod(n, ref); ok {
-		addDayPeriod(pos, p)
-	}
-
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].pos < hits[j].pos })
 
 	periods := make([]AIPeriod, 0, len(hits))
@@ -502,104 +494,6 @@ func extractPeriods(question string, ref time.Time) []AIPeriod {
 		periods = append(periods, h.period)
 	}
 	return periods
-}
-
-// --- Windows measured in days ------------------------------------------------
-//
-// A question can name a window that is not a calendar month: "7 วันล่าสุด",
-// "ในช่วง 3 วันที่ผ่านมา", "สัปดาห์ที่แล้ว". The month scanners could see none of
-// them, so "ในช่วง 7 วัน เมนูไหนขายดี" resolved to no window at all and the menu
-// tools answered from their fixed 30-day snapshot instead — the right figures
-// for the wrong week, labelled honestly as 30 days but never what was asked.
-
-// recentDaysPattern finds "<number> วัน" anywhere in the sentence.
-var recentDaysPattern = regexp.MustCompile(`(\d{1,3})\s*วัน`)
-
-// maxRecentDayWindow caps the countdown at a year. Past that the number is far
-// more likely to be a quantity that happens to sit next to the word วัน than a
-// window anyone means to report on.
-const maxRecentDayWindow = 365
-
-// recentDaysPeriod reads a countdown window ending today.
-//
-// A bare count of days does not say which way it runs — "อีก 7 วัน" and
-// "7 วันล่าสุด" point in opposite directions — so it is only taken as a window
-// when the sentence settles the direction: a backward word after the count, or
-// a scoping word before it. Anything pointing forward is left alone, because
-// that is the forecast tool's question, not this one's.
-func recentDaysPeriod(n string, ref time.Time) (AIPeriod, int, bool) {
-	for _, match := range recentDaysPattern.FindAllStringSubmatchIndex(n, -1) {
-		days, err := strconv.Atoi(n[match[2]:match[3]])
-		if err != nil || days < 1 || days > maxRecentDayWindow {
-			continue
-		}
-		after := strings.TrimSpace(n[match[1]:])
-		if hasAnyPrefix(after, "ข้างหน้า", "หน้า", "ถัดไป", "ต่อจากนี้", "จากนี้") {
-			continue
-		}
-		backward := hasAnyPrefix(after,
-			"ล่าสุด", "ที่ผ่านมา", "ผ่านมา", "ย้อนหลัง", "ก่อนหน้า", "ก่อน", "ที่แล้ว")
-		scoped := hasAnySuffix(strings.TrimSpace(n[:match[0]]), "ช่วง", "ใน", "รอบ")
-		if !backward && !scoped {
-			continue
-		}
-		loc := ref.Location()
-		today := time.Date(ref.Year(), ref.Month(), ref.Day(), 0, 0, 0, 0, loc)
-		return AIPeriod{
-			Label: fmt.Sprintf("%d วันล่าสุด", days),
-			// Counting today as one of them: "3 วันล่าสุด" asked at midday means
-			// today and the two before it, not three days that ended yesterday.
-			Start: today.AddDate(0, 0, -(days - 1)),
-			End:   today.AddDate(0, 0, 1),
-		}, match[0], true
-	}
-	return AIPeriod{}, 0, false
-}
-
-// weekPeriods reads "สัปดาห์นี้" and "สัปดาห์ที่แล้ว" as real weeks starting Monday,
-// every one the sentence names, so "เทียบสัปดาห์นี้กับสัปดาห์ที่แล้ว" yields both.
-//
-// The older day-part scope collapsed both onto "7 วันล่าสุด", which answers a
-// different question: last week is Monday to Sunday, not the seven days ending
-// today. Asked on a Thursday the two windows overlap by only three days.
-//
-// "อาทิตย์" is accepted only with นี้ / ที่แล้ว / ก่อน attached; on its own it is
-// the weekday Sunday, and reading "ยอดขายวันอาทิตย์" as a week would be wrong.
-func weekPeriods(n string, ref time.Time) []periodHit {
-	loc := ref.Location()
-	today := time.Date(ref.Year(), ref.Month(), ref.Day(), 0, 0, 0, 0, loc)
-	// Go counts Sunday as 0; a Thai working week is read from Monday.
-	monday := today.AddDate(0, 0, -((int(today.Weekday()) + 6) % 7))
-
-	hits := make([]periodHit, 0, 2)
-	if pos := earliestIndex(n, "สัปดาห์ที่แล้ว", "สัปดาห์ก่อน", "สัปดาห์ที่ผ่านมา",
-		"อาทิตย์ที่แล้ว", "อาทิตย์ก่อน", "อาทิตย์ที่ผ่านมา", "last week"); pos >= 0 {
-		hits = append(hits, periodHit{pos: pos, period: AIPeriod{Label: "สัปดาห์ที่แล้ว", Start: monday.AddDate(0, 0, -7), End: monday}})
-	}
-	if pos := earliestIndex(n, "สัปดาห์นี้", "อาทิตย์นี้", "this week"); pos >= 0 {
-		// Up to today, not to Sunday: the rest of the week has not happened yet
-		// and reporting it as zero would read as a bad week.
-		hits = append(hits, periodHit{pos: pos, period: AIPeriod{Label: "สัปดาห์นี้", Start: monday, End: today.AddDate(0, 0, 1)}})
-	}
-	return hits
-}
-
-func hasAnyPrefix(s string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(s, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasAnySuffix(s string, suffixes ...string) bool {
-	for _, suffix := range suffixes {
-		if strings.HasSuffix(s, suffix) {
-			return true
-		}
-	}
-	return false
 }
 
 // earliestIndex returns the smallest index at which any of the candidates occurs,
