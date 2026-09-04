@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CurrentSchemaVersion int64 = 19
+	CurrentSchemaVersion int64 = 20
 	migrationAdvisoryKey int64 = 0x524855424d494752
 )
 
@@ -363,6 +363,20 @@ func schemaMigrationPlan() []SchemaMigration {
 						CHECK (action_type IN ('adjust_ingredient_stock','set_ingredient_min_stock','set_ingredient_cost','create_ingredient','set_menu_availability','create_expense','set_menu_price'))`,
 				).Error; err != nil {
 					return fmt.Errorf("recreate AI action type constraint: %w", err)
+				}
+				return nil
+			},
+		},
+		{
+			Version: 20,
+			Name:    "ai_conversation_turn_latency",
+			Up: func(ctx *MigrationContext) error {
+				// Additive: one integer column, defaulting to 0 for every turn
+				// already stored, so nothing that reads turns has to change.
+				if err := ctx.DB.Exec(
+					`ALTER TABLE ai_conversation_turns ADD COLUMN IF NOT EXISTS latency_ms BIGINT NOT NULL DEFAULT 0`,
+				).Error; err != nil {
+					return fmt.Errorf("add AI conversation turn latency: %w", err)
 				}
 				return nil
 			},

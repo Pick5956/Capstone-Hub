@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 	"sync/atomic"
 
 	"Project-M/internal/entity"
@@ -203,7 +204,7 @@ func reduceSystemDocsAnswerForProvider(answer string, docURLs []string) string {
 	return liveAnswer + "\n\n" + notice
 }
 
-func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiConversationSession, question string, response *AIAskResponse) error {
+func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiConversationSession, question string, response *AIAskResponse, elapsed time.Duration) error {
 	if session == nil || session.conversation == nil || response == nil {
 		return errors.New("AI conversation turn is incomplete")
 	}
@@ -257,6 +258,7 @@ func (s *AIService) persistConversationTurn(actor AIActorContext, session *aiCon
 		ResolvedPlanJSON:     string(planJSON),
 		ContextDeltaJSON:     string(contextDeltaJSON),
 		ResultEntityRefsJSON: string(entityRefsJSON),
+		LatencyMS:            elapsed.Milliseconds(),
 	}
 	if err := s.conversationStore.AppendTurn(
 		actor.RestaurantID,

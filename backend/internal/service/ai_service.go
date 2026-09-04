@@ -200,6 +200,9 @@ func (s *AIService) AskOperations(restaurantID uint, req *AIAskRequest) (*AIAskR
 }
 
 func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorContext, req *AIAskRequest) (*AIAskResponse, error) {
+	// Measured here, at the edge, so the stored figure is the whole wait the
+	// owner saw — every model call, every retry, the database write excluded.
+	startedAt := time.Now()
 	if actor.RestaurantID == 0 || actor.OwnerUserID == 0 || actor.Role != "owner" {
 		return nil, errors.New("authenticated restaurant owner context is required")
 	}
@@ -230,7 +233,7 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 			return response, nil
 		}
 		response.ConversationID = session.conversation.ID
-		if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
+		if err := s.persistConversationTurn(actor, session, originalQuestion, response, time.Since(startedAt)); err != nil {
 			return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 		}
 		return response, nil
@@ -249,7 +252,7 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 				return docsResponse, nil
 			}
 			docsResponse.ConversationID = session.conversation.ID
-			if err := s.persistConversationTurn(actor, session, originalQuestion, docsResponse); err != nil {
+			if err := s.persistConversationTurn(actor, session, originalQuestion, docsResponse, time.Since(startedAt)); err != nil {
 				return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 			}
 			return docsResponse, nil
@@ -282,7 +285,7 @@ func (s *AIService) AskOperationsForOwner(ctx context.Context, actor AIActorCont
 		return response, nil
 	}
 	response.ConversationID = session.conversation.ID
-	if err := s.persistConversationTurn(actor, session, originalQuestion, response); err != nil {
+	if err := s.persistConversationTurn(actor, session, originalQuestion, response, time.Since(startedAt)); err != nil {
 		return nil, fmt.Errorf("%w: persist conversation turn: %w", ErrAIConversationPersistence, err)
 	}
 	return response, nil

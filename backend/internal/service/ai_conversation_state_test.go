@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"Project-M/internal/entity"
 )
@@ -141,7 +142,7 @@ func TestPersistConversationTurnStoresCompactPlanWithoutSnapshot(t *testing.T) {
 	response := &AIAskResponse{Answer: "อันดับสองคือผัดไทยครับ", Task: plan.Task, Tool: plan.ToolHint, ResolvedPlan: &plan}
 	session := &aiConversationSession{conversation: &entity.AIConversation{ID: "conversation-1", Version: 4}}
 
-	if err := service.persistConversationTurn(actor, session, "แล้วอันดับสองล่ะ", response); err != nil {
+	if err := service.persistConversationTurn(actor, session, "แล้วอันดับสองล่ะ", response, 1500*time.Millisecond); err != nil {
 		t.Fatalf("persistConversationTurn: %v", err)
 	}
 	if response.TurnID != "turn-created" || store.appendCalls != 1 {
@@ -159,6 +160,11 @@ func TestPersistConversationTurnStoresCompactPlanWithoutSnapshot(t *testing.T) {
 	}
 	if store.appended.ResolvedPlanJSON == "{}" || store.appended.ResultEntityRefsJSON == "" {
 		t.Fatalf("turn metadata = %+v", store.appended)
+	}
+	// The wait the owner saw is stored with the turn, in milliseconds, so a
+	// slow afternoon can be told from a slow question after the log is gone.
+	if store.appended.LatencyMS != 1500 {
+		t.Fatalf("turn latency_ms = %d, want 1500", store.appended.LatencyMS)
 	}
 }
 
@@ -243,7 +249,7 @@ func TestPersistConversationTurnStoresOnlySafeDocsProvenanceInContextDelta(t *te
 		},
 	}
 	session := &aiConversationSession{conversation: &entity.AIConversation{ID: "conversation-1", Version: 1}}
-	if err := service.persistConversationTurn(ownerActor(), session, "วิธีเชิญพนักงาน", response); err != nil {
+	if err := service.persistConversationTurn(ownerActor(), session, "วิธีเชิญพนักงาน", response, 2*time.Second); err != nil {
 		t.Fatalf("persistConversationTurn: %v", err)
 	}
 	if strings.Contains(store.appended.ContextDeltaJSON, "Untrusted documentation body") || strings.Contains(store.appended.ContextDeltaJSON, "private.invalid") {

@@ -105,6 +105,9 @@ func TestSchemaModelRegistryFingerprintMatchesVersion(t *testing.T) {
 		18: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
 		// Version 19 widens the same CHECK once more (recording an expense).
 		19: "567155fe0788640f0e6c032c2a2ed8723e7adfe43eee6f782614711d43d650c4",
+		// Version 20 adds latency_ms to AI conversation turns — how long the
+		// owner waited for each answer — so the registry moves with it.
+		20: "1d46fef8248ae39fbde5a15d9ef9a06d98bbddfaeb5203ecc990039372173453",
 	}
 	want, ok := expectedByVersion[CurrentSchemaVersion]
 	if !ok {
@@ -229,7 +232,7 @@ func TestAdditiveMigrationModelFingerprintsStayFrozen(t *testing.T) {
 		{
 			name:   "version 8 conversations",
 			models: []any{&entity.AIConversation{}, &entity.AIConversationTurn{}},
-			want:   "ebd31de5b6539e7f1347ed92d6c0f356be0ef71d1dd93cf0100eea61156ace1b",
+			want:   "f1f926bb1052ed0fad231a128cd78a46378d3c05d82284662fa3f5e56dc3f2a9", // refrozen at v20: latency_ms added to the turn row,
 		},
 		{
 			name:   "version 9 action previews",

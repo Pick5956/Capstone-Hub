@@ -38,7 +38,12 @@ type AIConversationTurn struct {
 	ResolvedPlanJSON     string    `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
 	ContextDeltaJSON     string    `json:"-" gorm:"type:jsonb;not null;default:'{}'"`
 	ResultEntityRefsJSON string    `json:"-" gorm:"type:jsonb;not null;default:'[]'"`
-	CreatedAt            time.Time `json:"created_at"`
+	// LatencyMS is how long the owner waited for this answer, request in to
+	// response out. Kept on the turn so a slow afternoon can be told apart from
+	// a slow question after the server log is gone: an answer that took 117
+	// seconds and one that took 2 look identical in the transcript.
+	LatencyMS int64     `json:"latency_ms" gorm:"not null;default:0"`
+	CreatedAt time.Time `json:"created_at"`
 
 	Conversation *AIConversation `json:"-" gorm:"foreignKey:ConversationID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 }
