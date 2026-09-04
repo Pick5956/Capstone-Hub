@@ -117,3 +117,14 @@ export function validateKitchenCancelReason(value: string) {
   if (reason.length > 500) return { reason: null, error: 'too_long' as const };
   return { reason, error: null };
 }
+
+/**
+ * A receipt can be reprinted once the order is finished and settled - the same
+ * rule the web archive uses. A paid but still-running order has no final
+ * receipt yet, and an unpaid one has nothing to reprint.
+ */
+export function canReprintReceipt(
+  order: { status?: string | null; payment_status?: string | null },
+): boolean {
+  return order.status === 'completed' && order.payment_status === 'paid';
+}

@@ -1,23 +1,25 @@
 export type InventoryItemAccess = 'denied' | 'read' | 'edit';
 export type OrderDetailResource = 'order' | 'menu' | 'categories';
-export type OrderListAccess = 'denied' | 'operational' | 'archive';
+export type OrderListAccess = 'denied' | 'archive';
 
 export const orderRoutePermissions = ['view_orders', 'take_order'] as const;
 
 type OrderListRequestInput = {
-  status?: string;
   search?: string;
   page: number;
   limit: number;
 };
 
+/**
+ * Either permission opens the same archive, matching the web. Order taking used
+ * to get a narrowed live view here instead, but live tables belong on the floor
+ * screen; the archive is a record of what was paid.
+ */
 export function orderListAccess(
   canViewOrders: boolean,
   canTakeOrder: boolean,
 ): OrderListAccess {
-  if (canViewOrders) return 'archive';
-  if (canTakeOrder) return 'operational';
-  return 'denied';
+  return canViewOrders || canTakeOrder ? 'archive' : 'denied';
 }
 
 export function orderListRequest(
@@ -25,17 +27,10 @@ export function orderListRequest(
   input: OrderListRequestInput,
 ) {
   if (access === 'denied') return null;
-  if (access === 'operational') {
-    return {
-      status: 'active' as const,
-      page: input.page,
-      limit: input.limit,
-    };
-  }
+  // Paid orders only - a transaction history, not a work queue.
   return {
-    status: input.status || '',
+    payment_status: 'paid' as const,
     search: input.search?.trim() || '',
-    include_summary: true as const,
     page: input.page,
     limit: input.limit,
   };

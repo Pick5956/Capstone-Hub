@@ -28,6 +28,7 @@ import {
   canCancelOrderForRole,
   canCloseEmptyOrder,
   canOpenOrderBill,
+  canReprintReceipt,
   canTakeOrderPayment,
   isKitchenComplete,
   isOptionSelectionBelowMinimum,
@@ -359,4 +360,13 @@ test('quiet polling never supersedes a foreground request', () => {
   assert.equal(shouldStartRequest(true, true), false);
   assert.equal(shouldStartRequest(true, false), true);
   assert.equal(shouldStartRequest(false, true), true);
+});
+
+test('a receipt is reprintable only once the order is completed and paid', () => {
+  assert.equal(canReprintReceipt({ status: 'completed', payment_status: 'paid' }), true);
+  assert.equal(canReprintReceipt({ status: 'completed', payment_status: 'unpaid' }), false);
+  assert.equal(canReprintReceipt({ status: 'served', payment_status: 'paid' }), false);
+  assert.equal(canReprintReceipt({ status: 'cancelled', payment_status: 'paid' }), false);
+  assert.equal(canReprintReceipt({}), false);
+  assert.equal(canReprintReceipt({ status: null, payment_status: null }), false);
 });

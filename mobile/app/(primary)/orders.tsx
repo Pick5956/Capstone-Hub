@@ -1,20 +1,16 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import {
   listOrders,
   type OrderListResponse,
-  type OrderListStatus,
-  type OrderListSummary,
 } from '@/src/api/order';
-import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import {
   Button,
-  ChipGroup,
   EdgeRow,
   EdgeSection,
   EdgeSectionHeader,
@@ -25,6 +21,7 @@ import {
   StatusBadge,
 } from '@/src/components/ui';
 import { money, orderStatusLabel } from '@/src/lib/format';
+import { canReprintReceipt } from '@/src/lib/order-workflow';
 import { orderListAccess, orderListRequest } from '@/src/lib/permission-parity';
 import { can } from '@/src/lib/rbac';
 import { useAuth } from '@/src/providers/auth-provider';
@@ -32,7 +29,6 @@ import { useDisplayPreferences } from '@/src/providers/display-preferences-provi
 import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Order } from '@/src/types/order';
 
-type ArchiveFilter = '' | 'active' | 'completed' | 'cancelled';
 
 const PAGE_SIZE = 25;
 
@@ -60,12 +56,9 @@ export default function OrdersScreen() {
   const canViewOrders = can(activeMembership, 'view_orders');
   const canTakeOrder = can(activeMembership, 'take_order');
   const access = orderListAccess(canViewOrders, canTakeOrder);
-  const archiveMode = access === 'archive';
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filter, setFilter] = useState<ArchiveFilter>('active');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [summary, setSummary] = useState<OrderListSummary | null>(null);
   const [pagination, setPagination] = useState<OrderListResponse['pagination']>();
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -82,19 +75,12 @@ export default function OrdersScreen() {
   useEffect(() => {
     requestIdRef.current += 1;
     setOrders([]);
-    setSummary(null);
     setPagination(undefined);
-    if (access !== 'archive') {
-      setSearch('');
-      setDebouncedSearch('');
-      setFilter('active');
-    }
   }, [access]);
 
   const load = useCallback(async (page = 1, append = false) => {
     const requestId = ++requestIdRef.current;
     const request = orderListRequest(access, {
-      status: filter,
       search: debouncedSearch,
       page,
       limit: PAGE_SIZE,
@@ -107,15 +93,11 @@ export default function OrdersScreen() {
     else setLoading(true);
     setError(null);
     try {
-      const response = await listOrders({
-        ...request,
-        status: request.status as OrderListStatus,
-      });
+      const response = await listOrders(request);
       if (requestId !== requestIdRef.current) return;
       setOrders((current) => append
         ? mergeOrderPages(current, response.orders || [])
         : response.orders || []);
-      setSummary(response.summary || null);
       setPagination(response.pagination);
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
@@ -126,7 +108,7 @@ export default function OrdersScreen() {
         setLoadingMore(false);
       }
     }
-  }, [access, copy, debouncedSearch, filter]);
+  }, [access, copy, debouncedSearch]);
 
   useEffect(() => {
     if (
@@ -150,10 +132,7 @@ export default function OrdersScreen() {
     };
   }, [load]));
 
-  const totalCount = summary?.total ?? pagination?.total ?? orders.length;
-  const activeCount = summary?.active ?? 0;
-  const completedCount = summary?.statuses?.completed ?? 0;
-  const cancelledCount = summary?.statuses?.cancelled ?? 0;
+  const totalCount = pagination?.total ?? orders.length;
   const tabletWorkspace = width >= breakpoints.tabletWorkspace;
 
   if (access === 'denied') {
@@ -162,41 +141,27 @@ export default function OrdersScreen() {
 
   return (
     <AppScreen
-      title={archiveMode ? copy('คลังออเดอร์', 'Order archive') : copy('ออเดอร์ที่กำลังทำ', 'Active orders')}
-      subtitle={archiveMode
-        ? copy(`${activeCount.toLocaleString('th-TH')} กำลังดำเนินการ · ${totalCount.toLocaleString('th-TH')} ออเดอร์ทั้งหมด`, `${activeCount.toLocaleString('en-US')} active · ${totalCount.toLocaleString('en-US')} total orders`)
-        : copy(`${totalCount.toLocaleString('th-TH')} ออเดอร์ที่ยังไม่ปิด`, `${totalCount.toLocaleString('en-US')} open ${totalCount === 1 ? 'order' : 'orders'}`)}
+      title={copy('คลังออเดอร์', 'Order archive')}
+      subtitle={copy(
+        `บันทึกออเดอร์ที่ชำระแล้ว · ${totalCount.toLocaleString('th-TH')} ออเดอร์`,
+        `A record of paid orders · ${totalCount.toLocaleString('en-US')} orders`,
+      )}
       topLevel
       refreshControl={<AppRefreshControl onRefresh={() => load()} />}
     >
-      {error ? <Feedback title={archiveMode ? copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive') : copy('โหลดออเดอร์ที่กำลังทำไม่ได้', 'Could not load active orders')} detail={error} tone="danger" /> : null}
-      {archiveMode ? (
-        <View style={{ gap: spacing.md }}>
-          <SearchField
-            accessibilityLabel={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
-            clearLabel={copy('ล้างคำค้นหา', 'Clear search')}
-            value={search}
-            onChangeText={setSearch}
-            placeholder={copy('ค้นหาออเดอร์ โต๊ะ หรือลูกค้า', 'Search orders, tables, or customers')}
-          />
-          <ChipGroup
-            scrollable
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { label: copy(`ทั้งหมด ${totalCount.toLocaleString('th-TH')}`, `All ${totalCount.toLocaleString('en-US')}`), value: '' },
-              { label: copy(`กำลังดำเนินการ ${activeCount.toLocaleString('th-TH')}`, `Active ${activeCount.toLocaleString('en-US')}`), value: 'active' },
-              { label: copy(`สำเร็จ ${completedCount.toLocaleString('th-TH')}`, `Completed ${completedCount.toLocaleString('en-US')}`), value: 'completed' },
-              { label: copy(`ยกเลิก ${cancelledCount.toLocaleString('th-TH')}`, `Cancelled ${cancelledCount.toLocaleString('en-US')}`), value: 'cancelled' },
-            ]}
-          />
-        </View>
-      ) : null}
+      {error ? <Feedback title={copy('โหลดคลังออเดอร์ไม่ได้', 'Could not load the order archive')} detail={error} tone="danger" /> : null}
+      <SearchField
+        accessibilityLabel={copy('ค้นหาคลังออเดอร์', 'Search the order archive')}
+        clearLabel={copy('ล้างคำค้นหา', 'Clear search')}
+        value={search}
+        onChangeText={setSearch}
+        placeholder={copy('ค้นหาเลขออเดอร์ โต๊ะ โซน หรือลูกค้า', 'Search order, table, zone, or customer')}
+      />
 
       <View style={{ gap: spacing.md }}>
         {tabletWorkspace ? (
           <SectionHeader
-            title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
+            title={copy('รายการออเดอร์', 'Orders')}
             detail={copy(
               `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
               `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
@@ -204,7 +169,7 @@ export default function OrdersScreen() {
           />
         ) : (
           <EdgeSectionHeader
-            title={archiveMode ? copy('รายการออเดอร์', 'Orders') : copy('งานที่ต้องดำเนินการต่อ', 'Orders in progress')}
+            title={copy('รายการออเดอร์', 'Orders')}
             detail={copy(
               `${orders.length.toLocaleString('th-TH')}${pagination?.total && pagination.total > orders.length ? ` จาก ${pagination.total.toLocaleString('th-TH')}` : ''} รายการ`,
               `${orders.length.toLocaleString('en-US')}${pagination?.total && pagination.total > orders.length ? ` of ${pagination.total.toLocaleString('en-US')}` : ''} orders`,
@@ -222,15 +187,9 @@ export default function OrdersScreen() {
                   : 'neutral';
             const openedAt = formatOrderTime(order.opened_at, language);
             return (
-            <Pressable
-              accessibilityLabel={copy(
-                `เปิด ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
-                `Open ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
-              )}
-              accessibilityRole="button"
+            <View
               key={order.ID}
-              onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
-              style={({ pressed }) => ({
+              style={{
                 // Two stable columns. flexGrow used to fight the 48.5% width and
                 // stretched a lone card on the last row across the workspace.
                 width: '48.5%',
@@ -242,11 +201,10 @@ export default function OrdersScreen() {
                 borderWidth: 1,
                 borderColor: palette.border,
                 borderRadius: radius.md,
-                backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
+                backgroundColor: palette.surface,
                 paddingHorizontal: spacing.lg,
                 paddingVertical: 14,
-                opacity: pressed ? 0.74 : 1,
-              })}
+              }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
                 <Text selectable numberOfLines={1} style={[typeScale.cardTitle, { minWidth: 0, flex: 1, color: palette.textStrong, fontSize: 16 }]}>
@@ -258,7 +216,6 @@ export default function OrdersScreen() {
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                   <Text selectable numberOfLines={1} adjustsFontSizeToFit style={[typeScale.number, { fontSize: 18 }]}>{money(order.grand_total, language)}</Text>
-                  <AppIcon color={palette.muted} name="chevron-forward" size={17} />
                 </View>
               </View>
               <Text selectable numberOfLines={1} style={[typeScale.caption, { color: palette.muted }]}>
@@ -272,7 +229,16 @@ export default function OrdersScreen() {
                   </Text>
                 ) : null}
               </View>
-            </Pressable>
+              <Button
+                compact
+                variant="secondary"
+                icon="receipt-outline"
+                label={canReprintReceipt(order)
+                  ? copy('ดูใบเสร็จ / พิมพ์ซ้ำ', 'View / reprint receipt')
+                  : copy('ดูบิล', 'View bill')}
+                onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(order.ID) } } as never)}
+              />
+            </View>
             );
           })}
         </View> : (
@@ -301,13 +267,8 @@ export default function OrdersScreen() {
               return (
                 <EdgeRow
                   key={order.ID}
-                  accessibilityLabel={copy(
-                    `เปิด ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
-                    `Open ${order.table?.display_label || order.order_number}, ${orderStatusLabel(order.status, language)}`,
-                  )}
                   title={title}
                   detail={detail}
-                  onPress={() => router.push({ pathname: '/order/[id]', params: { id: String(order.ID) } })}
                   style={{ minHeight: 96 }}
                   trailing={(
                     <View style={{ alignItems: 'flex-end', gap: 5 }}>
@@ -329,6 +290,15 @@ export default function OrdersScreen() {
                           {paymentLabel}
                         </Text>
                       ) : null}
+                      <Button
+                        compact
+                        variant="secondary"
+                        icon="receipt-outline"
+                        label={canReprintReceipt(order)
+                          ? copy('ดูใบเสร็จ / พิมพ์ซ้ำ', 'View / reprint receipt')
+                          : copy('ดูบิล', 'View bill')}
+                        onPress={() => router.push({ pathname: '/order/bill' as never, params: { id: String(order.ID) } } as never)}
+                      />
                     </View>
                   )}
                 />
@@ -348,12 +318,10 @@ export default function OrdersScreen() {
 
         {!loading && !orders.length ? (
           <EmptyState
-            title={archiveMode ? copy('ไม่พบออเดอร์', 'No orders found') : copy('ไม่มีออเดอร์ที่กำลังทำ', 'No active orders')}
-            detail={archiveMode
-              ? debouncedSearch || filter
-                ? copy('ลองเปลี่ยนตัวกรองหรือคำค้น', 'Try a different filter or search.')
-                : copy('ออเดอร์ใหม่จะปรากฏเมื่อเปิดโต๊ะหรือรับรายการซื้อกลับบ้าน', 'New orders appear after opening a table or starting a takeaway order.')
-              : copy('ออเดอร์โต๊ะและซื้อกลับบ้านที่ยังไม่ปิดจะแสดงที่นี่', 'Open table and takeaway orders appear here so staff can continue them.')}
+            title={copy('ไม่พบออเดอร์', 'No orders found')}
+            detail={debouncedSearch
+              ? copy('ลองเปลี่ยนคำค้นหา', 'Try another search.')
+              : copy('ออเดอร์จะเข้ามาที่นี่หลังรับชำระเงินแล้ว', 'Orders arrive here once they have been paid.')}
           />
         ) : null}
       </View>
