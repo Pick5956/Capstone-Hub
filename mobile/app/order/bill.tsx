@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, Share, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, useWindowDimensions, View } from 'react-native';
 
 import { apiUrl } from '@/src/api/client';
 import { listCategories, listMenuItems } from '@/src/api/menu';
@@ -9,7 +9,7 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, Select, StatusBadge, Surface, TextField } from '@/src/components/ui';
 import { itemStatusLabel, money } from '@/src/lib/format';
 import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
@@ -24,7 +24,6 @@ import {
 import { resetRouteStack } from '@/src/lib/navigation-runtime';
 import { can } from '@/src/lib/rbac';
 import { describePrinterFailure } from '@/src/lib/printer';
-import { buildReceiptShareText } from '@/src/lib/receipt';
 import { ReceiptSlip } from '@/src/components/receipt-slip';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
@@ -250,14 +249,6 @@ export default function BillScreen() {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function shareReceipt() {
-    if (!bill || !canAccessBill) return;
-    await Share.share({
-      title: copy(`ใบเสร็จ ${bill.order.order_number}`, `Receipt ${bill.order.order_number}`),
-      message: buildReceiptShareText(bill, activeMembership?.restaurant, language),
-    });
   }
 
   async function printReceipt() {
@@ -530,8 +521,8 @@ export default function BillScreen() {
         onChangeText={setSearch}
         placeholder={copy('ค้นหาเมนู', 'Search menu')}
       />
-      <ChipGroup
-        scrollable
+      <Select
+        label={copy('หมวดหมู่', 'Category')}
         value={categoryId}
         onChange={setCategoryId}
         options={[
@@ -556,9 +547,12 @@ export default function BillScreen() {
                 void addServedItem(item);
               }}
               style={({ pressed }) => ({
-                minWidth: 148,
-                flexGrow: 1,
-                flexBasis: splitWorkspace ? 168 : 148,
+                // Same two-column grid as the ordering screen: a grow factor
+                // stretches a lone tile on the last row across the screen.
+                minWidth: splitWorkspace ? 148 : 0,
+                width: splitWorkspace ? undefined : '48%',
+                flexGrow: 0,
+                flexBasis: splitWorkspace ? 168 : 'auto',
                 overflow: 'hidden',
                 borderWidth: 1,
                 borderColor: palette.border,
@@ -671,13 +665,9 @@ export default function BillScreen() {
     <Surface style={{ borderColor: palette.success }}>
       <SectionHeader
         title={copy('ชำระเงินเรียบร้อย', 'Payment complete')}
-        detail={copy('ออเดอร์ปิดแล้ว แชร์ใบเสร็จให้ลูกค้า หรือกลับไปทำรายการถัดไป', 'The order is closed. Share the receipt or continue to the next task.')}
+        detail={copy('ออเดอร์ปิดแล้ว พิมพ์ใบเสร็จให้ลูกค้า หรือกลับไปทำรายการถัดไป', 'The order is closed. Print the receipt or continue to the next task.')}
         action={<StatusBadge label={copy('ชำระแล้ว', 'Paid')} tone="success" />}
       />
-      <View style={{ gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: palette.border, paddingBottom: spacing.lg }}>
-        <Text selectable style={[typeScale.caption, { color: palette.muted }]}>{copy('ยอดคงเหลือ', 'Amount due')}</Text>
-        <Text selectable style={[typeScale.number, { color: palette.success, fontSize: 32, lineHeight: 40 }]}>{money(0, language)}</Text>
-      </View>
       {printError ? <Feedback title={copy('พิมพ์ใบเสร็จไม่สำเร็จ', 'Could not print')} detail={printError} tone="danger" /> : null}
       {printNotice ? <Feedback title={copy('ส่งไปเครื่องพิมพ์แล้ว', 'Sent to printer')} detail={printNotice} tone="success" /> : null}
       {printerSupported ? (
@@ -691,7 +681,6 @@ export default function BillScreen() {
           onPress={printReceipt}
         />
       ) : null}
-      <Button icon="share-social-outline" variant="secondary" label={copy('แชร์ใบเสร็จ', 'Share receipt')} onPress={shareReceipt} />
       {splitWorkspace ? exitAction : null}
     </Surface>
   ) : paymentStage === 'recorded' ? (

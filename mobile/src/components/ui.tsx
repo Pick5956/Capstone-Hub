@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, useWindowDimensions, View, type KeyboardTypeOptions, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
@@ -476,6 +476,146 @@ export function ChipGroup<T extends string | number>({ label, value, options, on
       ) : (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>{controls}</View>
       )}
+    </View>
+  );
+}
+
+/**
+ * A dropdown built from a pressable field and a sheet of options.
+ *
+ * There is no native picker here on purpose: one would be a native dependency,
+ * which costs a rebuild and locks the team's iOS members out of testing it in
+ * Expo Go. It replaces a chip row where the list is long enough that the chips
+ * scroll sideways, which hides options behind a gesture nobody is told about.
+ */
+export function Select<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  label?: string;
+  value: T;
+  options: Array<{ label: string; value: T }>;
+  onChange: (value: T) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <View style={{ gap: spacing.sm }}>
+      {label ? <Text selectable style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>{label}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: Boolean(disabled), expanded: open }}
+        accessibilityLabel={label}
+        accessibilityValue={{ text: selected?.label }}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => ({
+          minHeight: 48,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+          borderWidth: 1,
+          borderColor: palette.borderStrong,
+          borderRadius: radius.md,
+          backgroundColor: palette.surface,
+          paddingHorizontal: spacing.md,
+          opacity: disabled ? 0.6 : pressed ? 0.72 : 1,
+        })}
+      >
+        <Text
+          numberOfLines={1}
+          style={{
+            minWidth: 0,
+            flex: 1,
+            color: selected ? palette.text : palette.muted,
+            fontSize: 14,
+            fontWeight: '600',
+          }}
+        >
+          {selected?.label ?? placeholder ?? ''}
+        </Text>
+        <AppIcon color={palette.muted} name="chevron-down" size={18} />
+      </Pressable>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+        transparent
+        visible={open}
+      >
+        <Pressable
+          accessibilityLabel={placeholder ?? label}
+          onPress={() => setOpen(false)}
+          style={{
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0,0,0,0.45)',
+          }}
+        >
+          {/* Stops a tap inside the sheet from reaching the dismiss backdrop. */}
+          <Pressable
+            onPress={() => undefined}
+            style={{
+              maxHeight: '70%',
+              borderTopLeftRadius: radius.md,
+              borderTopRightRadius: radius.md,
+              backgroundColor: palette.surface,
+              paddingBottom: spacing.xl,
+            }}
+          >
+            {label ? (
+              <View style={{ borderBottomWidth: 1, borderBottomColor: palette.border, paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}>
+                <Text style={{ color: palette.text, fontSize: 15, fontWeight: '700' }}>{label}</Text>
+              </View>
+            ) : null}
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {options.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    key={String(option.value)}
+                    onPress={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => ({
+                      minHeight: 52,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.md,
+                      backgroundColor: pressed ? palette.surfaceSubtle : 'transparent',
+                      paddingHorizontal: spacing.lg,
+                    })}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        minWidth: 0,
+                        flex: 1,
+                        color: palette.text,
+                        fontSize: 15,
+                        fontWeight: isSelected ? '700' : '500',
+                      }}
+                    >
+                      {option.label}
+                    </Text>
+                    {isSelected ? <AppIcon color={palette.primary} name="checkmark" size={20} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

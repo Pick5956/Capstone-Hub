@@ -8,7 +8,7 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, StatusBadge, Surface } from '@/src/components/ui';
+import { ActionDock, Button, Divider, EmptyState, Feedback, SearchField, SectionHeader, Select, StatusBadge, Surface } from '@/src/components/ui';
 import { itemStatusLabel, money, orderStatusLabel } from '@/src/lib/format';
 import {
   CURRENT_ROUND_BAR_COLORS,
@@ -398,8 +398,8 @@ export default function OrderDetailScreen() {
         onChangeText={setSearch}
         placeholder={copy('ค้นหาเมนู', 'Search menu')}
       />
-      <ChipGroup
-        scrollable
+      <Select
+        label={copy('หมวดหมู่', 'Category')}
         value={categoryId}
         onChange={setCategoryId}
         options={[{ label: copy('ทั้งหมด', 'All'), value: 'all' }, ...categories.filter((item) => item.is_active).map((item) => ({ label: item.name, value: String(item.ID) }))]}
@@ -415,9 +415,14 @@ export default function OrderDetailScreen() {
               disabled={!item.is_available}
               onPress={() => router.push({ pathname: '/order/item' as never, params: { id: String(orderId), menuId: String(item.ID) } } as never)}
               style={({ pressed }) => ({
-                minWidth: 148,
-                flexGrow: 1,
-                flexBasis: tabletWorkspace ? 164 : 148,
+                // Phones get an exact two-column grid. A grow factor here fights
+                // the column width and stretches a lone tile on the last row
+                // across the screen, which reads as a different, more important
+                // dish than the rest.
+                minWidth: tabletWorkspace ? 148 : 0,
+                width: tabletWorkspace ? undefined : '48%',
+                flexGrow: 0,
+                flexBasis: tabletWorkspace ? 164 : 'auto',
                 gap: spacing.sm,
                 borderRadius: radius.md,
                 backgroundColor: 'transparent',
