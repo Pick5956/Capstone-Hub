@@ -84,7 +84,8 @@ The tunnel script intentionally passes an empty Cloudflare config file so any ex
 
 Once the development build is installed, **use it for everything on Android**. It is a superset of
 Expo Go, not an alternative to it: everything Expo Go runs, it runs, plus the native modules Expo
-Go cannot load. Fast Refresh behaves identically in both.
+Go cannot load. Fast Refresh behaves identically in both. **On iOS there is no development build -
+see below.**
 
 ```powershell
 npm run start:dev-client:local
@@ -108,11 +109,42 @@ An installed APK does not expire, and it is not tied to whoever built it - the w
 install the same one. Only the EAS *download link* expires. So a rebuild is a rare event, not part
 of the edit-test loop.
 
-### What Expo Go is still for
+### On iOS, stay on Expo Go
 
-- **iOS.** There is no iOS development build, and making one needs a paid Apple Developer account.
-  Expo Go remains the only free way to check iOS layout - but not Google login or Bluetooth
-  printing, neither of which runs there (printing does not run on iOS at all; see below).
+The development build is an **Android APK - iOS devices cannot install it**. Producing an iOS build
+that runs on a real device requires a paid Apple Developer Program membership ($99/year), because
+iOS will only launch apps signed with a provisioning profile from one.
+
+That costs nothing in practice, because **everything the development build adds on top of Expo Go
+is unavailable on iOS anyway or nearly so**:
+
+| Feature | Expo Go | iOS development build |
+| --- | --- | --- |
+| Bluetooth receipt printing | No | **Still no** - Bluetooth Classic needs MFi |
+| Google login | No | Yes |
+| Everything else | Yes | Yes |
+
+The print button is hidden on iOS regardless of client, so for an iOS teammate the only difference
+a development build would make is Google login. Password login covers the rest.
+
+So: **iOS teammates run Expo Go**, with two things to watch.
+
+- **Expo Go must be the SDK 54 build.** The store version tracks the newest SDK and will refuse to
+  open this project once it moves on. Turn off automatic updates for Expo Go.
+- **Start Metro in Expo Go mode**, not development-client mode:
+
+```powershell
+npm run start:go:lan
+```
+
+Only one Metro mode can hold port 8081, so a machine cannot serve both clients at once.
+
+Every change is verifiable in Expo Go except the two native features above - screens, layout,
+navigation, business logic and the receipt design are all plain JavaScript. Bluetooth printing can
+only be tested by someone on Android with a printer.
+
+### What Expo Go is still for, on Android
+
 - **Showing someone the app quickly** without having them install the APK first.
 
 ## Bluetooth receipt printing
@@ -131,4 +163,4 @@ Full setup, testing steps and troubleshooting (in Thai):
 - Use a deployed backend URL later by changing only `EXPO_PUBLIC_API_URL`.
 - Expo Go supports the password flow only; use the development client for Google login.
 - Bluetooth receipt printing also needs the development client, and works on Android only.
-- On Android, prefer the development build for all testing - see "Which client to test on".
+- On Android, prefer the development build for all testing; on iOS stay on Expo Go - see "Which client to test on".
