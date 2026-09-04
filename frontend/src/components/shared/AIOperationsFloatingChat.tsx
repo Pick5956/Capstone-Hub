@@ -11,7 +11,6 @@ import {
   Wallet,
   X,
   BarChart2,
-  Lightbulb,
   RotateCcw,
   ChevronDown,
   Maximize2,
@@ -90,7 +89,7 @@ function buildCopy(language: "th" | "en") {
     ? {
         title: "ผู้ช่วยวิเคราะห์ร้าน AI",
         subtitle: "ถามจากยอดขายและคลังวัตถุดิบล่าสุดของร้าน",
-        welcome: "สวัสดีครับ! ยินดีต้อนรับสู่ผู้ช่วยวิเคราะห์ร้านอัจฉริยะ 🤖\n\nผมสามารถวิเคราะห์ประวัติยอดขาย คำนวณกำไร (Margin) ของแต่ละเมนู หรือตรวจสอบวัตถุดิบที่เสี่ยงหมดได้ทันที\n\nคุณมีเรื่องอะไรที่อยากปรึกษาผมในวันนี้ไหมครับ?",
+        welcome: "สวัสดีคุณผู้จัดการ",
         askPlaceholder: "พิมพ์คำถามของคุณที่นี่...",
         send: "ส่ง",
         thinking: "กำลังวิเคราะห์...",
@@ -115,7 +114,7 @@ function buildCopy(language: "th" | "en") {
     : {
         title: "AI Operations Assistant",
         subtitle: "Analyzing sales and real-time inventory levels",
-        welcome: "Hello! Welcome to your Restaurant AI Assistant 🤖\n\nI can analyze your sales history, calculate item margins, or check inventory stock risk in real-time.\n\nWhat would you like me to analyze today?",
+        welcome: "Hello, manager.",
         askPlaceholder: "Type your question here...",
         send: "Send",
         thinking: "Analyzing...",
@@ -174,8 +173,6 @@ export default function AIOperationsFloatingChat() {
     ? {
         openAssistant: "เปิดผู้ช่วย AI",
         closeAssistant: "ปิดผู้ช่วย AI",
-        toggleTips: "เปิดหรือปิดคำถามแนะนำ",
-        hideTips: "ซ่อนคำถามแนะนำ",
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
@@ -188,8 +185,6 @@ export default function AIOperationsFloatingChat() {
     : {
         openAssistant: "Open AI assistant",
         closeAssistant: "Close AI assistant",
-        toggleTips: "Toggle suggested questions",
-        hideTips: "Hide suggested questions",
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
         clearChat: "New chat",
@@ -203,7 +198,6 @@ export default function AIOperationsFloatingChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [hasOpenedStats, setHasOpenedStats] = useState(false);
-  const [showTips, setShowTips] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -374,7 +368,6 @@ export default function AIOperationsFloatingChat() {
 
   const resetConversation = useCallback(() => {
     conversationRequests.invalidate();
-    setShowTips(true);
     setLoading(false);
     // Also reached when the other chat surface clears: that surface's history is
     // gone, so this one must drop the shared server thread and any pending action.
@@ -769,6 +762,8 @@ export default function AIOperationsFloatingChat() {
     />
   ) : null;
 
+  // Only the welcome line is in the thread, so nothing has been asked yet.
+  const isEmptyThread = messages.length <= 1 && !loading;
   const planAnchorId = pendingActionPlan
     ? messages.find((message) => message.planId === pendingActionPlan.id)?.id ?? null
     : null;
@@ -934,24 +929,6 @@ export default function AIOperationsFloatingChat() {
               and the ones that only make sense on a wider screen keep their own
               width gates rather than living in a separate header. */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-            {messages.length <= 1 && (
-              <button
-                type="button"
-                aria-label={labels.toggleTips}
-                aria-pressed={showTips}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowTips(!showTips);
-                }}
-                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 sm:inline-flex ${
-                  showTips
-                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
-                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
-                }`}
-              >
-                <Lightbulb className="h-3.5 w-3.5" />
-              </button>
-            )}
             {messages.length > 1 && (
               <button
                 type="button"
@@ -1008,7 +985,38 @@ export default function AIOperationsFloatingChat() {
             onScroll={handleThreadScroll}
             className="ai-sheet-fade flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-14 space-y-4 scrollbar-thin sm:px-4 sm:pt-4"
           >
-            {messages.map((msg) => {
+            {/* Nothing asked yet: the orb, one line, and the questions — the
+                same opening as the full AI page. This used to be a chat bubble
+                introducing the assistant, with the suggestions in a separate
+                drawer below it that pushed the input off a phone screen. Two
+                surfaces, two first impressions, for the same assistant. */}
+            {isEmptyThread ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-2 pb-6 text-center">
+                <SiriOrb
+                  size="112px"
+                  className="shrink-0 drop-shadow-[0_15px_50px_rgba(249,115,22,0.4)]"
+                />
+                <h2 className="shrink-0 text-base font-semibold text-gray-950 dark:text-white">
+                  {copy.welcome}
+                </h2>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {copy.quickQuestions.map((question) => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleSend(question);
+                      }}
+                      className="min-h-9 rounded-full border border-gray-200 bg-white/70 px-3.5 py-1.5 text-[12px] font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+            messages.map((msg) => {
               if (msg.role === "system") {
                 return (
                   <div key={msg.id} className="w-full text-center py-2 text-xs text-red-500 dark:text-red-400 font-medium animate-message-slide">
@@ -1054,7 +1062,8 @@ export default function AIOperationsFloatingChat() {
                 {previewAnchorId === msg.id && previewCard}
                 </React.Fragment>
               );
-            })}
+            })
+            )}
 
             {loading && (
               <div className="flex items-center gap-2.5 animate-message-slide">
@@ -1086,45 +1095,6 @@ export default function AIOperationsFloatingChat() {
             {previewAnchorId === null && previewCard}
             <div ref={messagesEndRef} />
           </div>
-
-          {/* Quick Questions suggestion overlay with slide-up entrance */}
-          {messages.length <= 1 && !loading && showTips && (
-            <div className="animate-message-slide border-t border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40 sm:p-3.5">
-              <div className="flex flex-col gap-2">
-                {/* Tips Header with Close Button */}
-                <div className="flex items-center justify-between mb-1 px-0.5">
-                  <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
-                    {language === "th" ? "💡 คำถามแนะนำ" : "💡 Suggested Questions"}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={labels.hideTips}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowTips(false);
-                    }}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
-                    title={language === "th" ? "ซ่อนคำแนะนำ" : "Hide Suggestions"}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                {copy.quickQuestions.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSend(q);
-                    }}
-                    className="min-h-10 w-full rounded-xl border border-gray-200 bg-white/70 px-3.5 py-2 text-left text-[12px] font-medium text-gray-700 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:text-orange-700 hover:shadow-md hover:shadow-orange-500/10 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:border-orange-800 dark:hover:text-orange-300"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Asked before the thread is deleted, not after. The server copy goes
               too and there is no undo, so a stray tap on a small screen used to
