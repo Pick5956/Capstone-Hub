@@ -66,7 +66,6 @@ type StoredMessage = Omit<Message, "createdAt"> & { createdAt?: string };
 function buildCopy(language: "th" | "en") {
   return language === "th"
     ? {
-        title: "ผู้ช่วยวิเคราะห์ร้าน",
         askPlaceholder: "พิมพ์คำถามของคุณที่นี่...",
         ask: "ถาม AI",
         thinking: "กำลังวิเคราะห์",
@@ -77,7 +76,7 @@ function buildCopy(language: "th" | "en") {
         newChatNo: "ไม่ลบ",
         scrollToLatest: "ไปที่ข้อความล่าสุด",
         permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
-        welcome: "สวัสดีครับ ผมเป็นผู้ช่วยวิเคราะห์ร้าน ถามผมได้เลยเรื่องยอดขาย กำไรเมนู หรือคลังวัตถุดิบครับ",
+        welcome: "สวัสดีคุณผู้จัดการ",
         error: "เรียก AI ไม่สำเร็จ",
         quickQuestions: [
           "สรุปร้าน",
@@ -87,7 +86,6 @@ function buildCopy(language: "th" | "en") {
         ],
       }
     : {
-        title: "Restaurant AI assistant",
         askPlaceholder: "Type your question here...",
         ask: "Ask AI",
         thinking: "Analyzing",
@@ -98,7 +96,7 @@ function buildCopy(language: "th" | "en") {
         newChatNo: "Keep it",
         scrollToLatest: "Jump to the latest message",
         permissionDenied: "This page is for the restaurant owner only",
-        welcome: "Hi! I'm your restaurant analysis assistant. Ask me about sales, menu profit, or ingredient stock.",
+        welcome: "Hello, manager.",
         error: "AI request failed",
         quickQuestions: [
           "Summarize today's restaurant situation.",
@@ -772,11 +770,12 @@ export default function AIAssistantPage() {
                   active={voiceListening}
                   level={voiceLevel}
                 />
+                {/* One line on the empty screen. The heading repeated the app's
+                    own name above a sentence that said it again — three ways of
+                    saying "restaurant analysis assistant" over the questions the
+                    owner came to press. */}
                 <div className="shrink-0">
-                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.title}</h2>
-                  <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                    {copy.welcome}
-                  </p>
+                  <h2 className="text-lg font-semibold text-gray-950 dark:text-white">{copy.welcome}</h2>
                 </div>
               </div>
             ) : (
