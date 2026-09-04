@@ -146,6 +146,11 @@ const joyboyToolExpenseSummary AIToolName = "get_expense_summary"
 // a fractional average.
 const joyboyToolCustomerCount AIToolName = "get_customer_count"
 
+// joyboyToolCancelledOrders counts the bills that were dropped rather than
+// paid. Asked "วันนี้มีบิลยกเลิกกี่ใบ" with no tool to reach for, the model
+// promised to go and look — three runs, three promises, nothing ever fetched.
+const joyboyToolCancelledOrders AIToolName = "get_cancelled_orders"
+
 // The two lookup tools. Everything else here ranks or totals; these answer about
 // one named thing, which is the question an owner asks most and the one the
 // assistant used to answer worst — see ai_joyboy_detail.go for what went wrong.
@@ -217,6 +222,7 @@ var joyboyExtraTools = []AIToolName{
 	joyboyToolTableStatus,
 	joyboyToolExpenseSummary,
 	joyboyToolCustomerCount,
+	joyboyToolCancelledOrders,
 	joyboyToolIngredientDetail,
 	joyboyToolMenuDetail,
 	joyboyToolShopProfile,
@@ -263,6 +269,10 @@ var joyboyExtraToolGuide = map[AIToolName]string{
 		"ใช้ตอบ: วันนี้มีลูกค้ากี่คน เดือนนี้ลูกค้ากี่คน ลูกค้ามากันกี่คนต่อโต๊ะ ลูกค้าเยอะขึ้นไหม " +
 		"ถ้าถามจำนวนบิลหรือออเดอร์ ไม่ใช่จำนวนคน ให้ใช้ get_sales_for_period แทน " +
 		"ถ้าถามว่าตอนนี้โต๊ะไหนมีคนนั่ง ให้ใช้ get_table_status",
+	joyboyToolCancelledOrders: "บิลที่ถูกยกเลิกทั้งใบในช่วงเวลา กี่ใบ รวมเป็นเงินเท่าไหร่ และเหตุผลที่พนักงานลงไว้ " +
+		"รับช่วงเวลาได้ทุกแบบ (วันนี้ เมื่อวาน สัปดาห์ที่แล้ว เดือนนี้) ไม่ระบุ = 30 วันล่าสุด " +
+		"ใช้ตอบ: วันนี้มีบิลยกเลิกกี่ใบ เดือนนี้ยกเลิกไปเท่าไหร่ ทำไมถึงยกเลิก ยกเลิกเยอะไหม " +
+		"ไม่รวมรายการอาหารที่ถูกลบออกจากบิลที่ยังจ่ายตามปกติ",
 	joyboyToolExpenseSummary: "รายจ่ายที่ร้านจ่ายเงินออกไปจริง แยกตามหมวด " +
 		"(วัตถุดิบ ค่าแรง ค่าเช่า ค่าน้ำค่าไฟ อุปกรณ์ อื่น ๆ) พร้อมรายการล่าสุด " +
 		// The window used to be described as a hard "30 วันล่าสุด". Asked
@@ -360,6 +370,7 @@ var joyboyToolGroups = []struct {
 		AIToolGetSalesSummary, AIToolGetSalesForPeriod, AIToolGetSalesTrend,
 		AIToolGetAverageOrderValue, AIToolGetOrderTypeBreakdown, AIToolGetPeakPeriods,
 		AIToolGetProfitSummary, joyboyToolSalesForecast, joyboyToolPaymentMix,
+		joyboyToolCancelledOrders,
 	}},
 	{"วัตถุดิบและสต๊อก", []AIToolName{
 		AIToolGetLowStockIngredients, AIToolGetIngredientReorderForecast, AIToolGetDeadStock,

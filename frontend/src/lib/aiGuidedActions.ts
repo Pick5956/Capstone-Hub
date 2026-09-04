@@ -49,6 +49,7 @@ const TOOL_TOPICS: Record<string, Topic[]> = {
   get_profit_summary: ["margin", "sales"],
   get_expense_summary: ["sales"],
   get_customer_count: ["sales"],
+  get_cancelled_orders: ["sales"],
   get_payment_mix: ["sales", "billing"],
   get_sales_forecast: ["sales"],
   // Deliberately no topics: these answer about the shop itself or the floor

@@ -206,6 +206,34 @@ type AIActiveOrder struct {
 // Nothing else exposed this: every other tool here reports history. Asked "ตอนนี้
 // บิลไหนยังไม่จ่าย" the assistant had no source at all, which is the shape of
 // question it used to answer by guessing.
+// AICancelledReason is how many bills were cancelled for one stated reason,
+// and what they had run up before being dropped.
+type AICancelledReason struct {
+	Reason string  `json:"reason"`
+	Bills  int64   `json:"bills"`
+	Total  float64 `json:"total"`
+}
+
+// CancelledOrders lists the bills cancelled outright in [start, end), grouped
+// by the reason the staff gave. Orders carry no cancellation timestamp of their
+// own, so the moment of cancellation is taken as the row's last update — a
+// cancelled bill is not edited again. Items struck from a bill that then closed
+// normally are not counted here; those are a line on someone's bill, not a
+// lost bill.
+func (r *AIRepository) CancelledOrders(restaurantID uint, start, end time.Time) ([]AICancelledReason, error) {
+	var rows []AICancelledReason
+	err := r.db.Table("orders").
+		Select("COALESCE(NULLIF(TRIM(orders.cancelled_reason), ''), '') AS reason, COUNT(*) AS bills, COALESCE(SUM(orders.grand_total), 0) AS total").
+		Where(
+			"orders.restaurant_id = ? AND orders.deleted_at IS NULL AND orders.status = ? AND orders.updated_at >= ? AND orders.updated_at < ?",
+			restaurantID, entity.OrderStatusCancelled, start, end,
+		).
+		Group("reason").
+		Order("bills desc, reason asc").
+		Scan(&rows).Error
+	return rows, err
+}
+
 // AIPartySize is how many closed bills were opened for a party of one size.
 type AIPartySize struct {
 	PartySize int   `json:"party_size"`

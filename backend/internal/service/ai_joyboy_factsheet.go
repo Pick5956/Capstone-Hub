@@ -83,6 +83,7 @@ var joyboyNoDataMeaning = map[string]string{
 	"no_payment_method_recorded_in_period":        "ช่วงนี้ไม่มีบิลที่บันทึกวิธีจ่ายเงินไว้ จึงบอกไม่ได้ว่าเงินสดหรือพร้อมเพย์เท่าไหร่ ห้ามประมาณสัดส่วนเอง",
 	"no_tables_recorded":                          "ร้านนี้ยังไม่มีโต๊ะในระบบเลย ต้องไปเพิ่มโต๊ะที่หน้าผังโต๊ะก่อน",
 	"no_closed_bills_to_count_guests_from":        "ช่วงนี้ยังไม่มีบิลที่ปิดแล้ว จึงยังไม่มีจำนวนลูกค้าให้นับ = 0 คน ไม่ใช่ว่าระบบไม่เก็บจำนวนคน",
+	"no_cancelled_bills_in_period":                "ช่วงนี้ไม่มีบิลที่ถูกยกเลิกเลย บิลยกเลิก = 0 ใบ 0 บาท เป็นคำตอบ ไม่ใช่ข้อมูลขาด",
 	"period_before_first_record":                  "ช่วงที่ถามจบก่อนบิลแรกในระบบ ไม่ใช่ว่าร้านขายไม่ได้ แค่ตอนนั้นยังไม่ได้ใช้ระบบ วันที่บิลแรกอยู่ในบรรทัด data_coverage ต้องบอกเจ้าของว่าข้อมูลเริ่มวันไหน",
 }
 
@@ -937,6 +938,36 @@ func joyboyOpenBillsNow(open []repository.AIActiveOrder) string {
 		fmt.Sprintf("open_bills_now=%d open_total_now=%s", len(open), joyboyNum(roundBaht(total))),
 		"open_means=บิลที่ยังนั่งอยู่ ณ ตอนนี้ ยังไม่ปิดบิล จึงยังไม่รวมใน revenue ข้างบน ตัวเลขนี้เปลี่ยนตลอดเวลา",
 	})
+}
+
+// joyboyCancelledOrdersBody renders the bills that were dropped: how many, how
+// much they had run up, and why — the reason as the staff typed it, one line
+// per reason, so "ทำไมถึงยกเลิก" reads from the shop's own words. A blank reason
+// is shown as such rather than dropped: a bill cancelled with no reason given
+// is still a cancelled bill.
+func joyboyCancelledOrdersBody(label string, reasons []repository.AICancelledReason) string {
+	var bills int64
+	var total float64
+	for _, reason := range reasons {
+		bills += reason.Bills
+		total += reason.Total
+	}
+	lines := []string{"period=" + label, "scope=bills_cancelled_whole_not_items"}
+	if bills == 0 {
+		return joyboyJoin(append(lines, "cancelled_bills=0 cancelled_total=0.00", joyboyNoData("no_cancelled_bills_in_period")))
+	}
+	lines = append(lines, fmt.Sprintf("cancelled_bills=%d cancelled_total=%s", bills, joyboyNum(roundBaht(total))))
+	for _, reason := range reasons {
+		name := strings.TrimSpace(reason.Reason)
+		if name == "" {
+			name = "ไม่ได้ระบุเหตุผล"
+		}
+		lines = append(lines, fmt.Sprintf("reason=%s bills=%d total=%s", name, reason.Bills, joyboyNum(roundBaht(reason.Total))))
+	}
+	lines = append(lines,
+		"cancelled_means=บิลที่ถูกยกเลิกทั้งใบ ไม่รวมในยอดขาย · ไม่นับรายการที่ถูกลบออกจากบิลที่จ่ายตามปกติ",
+		"reason_means=เหตุผลตามที่พนักงานพิมพ์ไว้ตอนยกเลิก")
+	return joyboyJoin(lines)
 }
 
 // joyboyNoTableBills reports whether not one table seated a paid bill in the

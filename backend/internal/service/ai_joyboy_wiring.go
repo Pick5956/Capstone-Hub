@@ -286,6 +286,21 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		}
 		return joyboyMenuDetailBody(menus, margins, "period="+analysisWindowLabel(), question, t.history), true, true
 
+	case joyboyToolCancelledOrders:
+		if t.service.repo == nil {
+			return "", false, true
+		}
+		now := repository.BangkokNow()
+		start, end, label, explicit := t.periodNamedIn(question)
+		if !explicit {
+			start, end, label = now.AddDate(0, 0, -int(analysisWindowDays)), now, analysisWindowLabel()
+		}
+		reasons, err := t.service.repo.CancelledOrders(t.restaurantID, start, end)
+		if err != nil {
+			aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
+			return "", false, true
+		}
+		return joyboyCancelledOrdersBody(label, reasons), true, true
 	case joyboyToolCustomerCount:
 		if t.service.repo == nil {
 			return "", false, true

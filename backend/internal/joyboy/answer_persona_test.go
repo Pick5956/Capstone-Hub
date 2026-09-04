@@ -209,6 +209,26 @@ func TestPersonaDoesNotAssumeTheOwnerIsTired(t *testing.T) {
 	}
 }
 
+// "วันนี้มีบิลยกเลิกกี่ใบ" with no tool to read got "ขอไปเช็คสักครู่แล้วคุณค่อย
+// ถามใหม่" — three times out of three. Nothing fetches anything between turns;
+// asking again gets the same sentence. The persona has to say so.
+func TestPersonaForbidsPromisesItCannotKeep(t *testing.T) {
+	for _, rule := range []string{"ห้ามสัญญาว่าจะไปทำอะไรให้ทีหลัง", "ไม่มีรอบถัดไป"} {
+		if !strings.Contains(joyboyPersona, rule) {
+			t.Fatalf("the persona lost the rule %q", rule)
+		}
+	}
+}
+
+// "ระบบไม่ได้เก็บข้อมูลจำนวนคน" was said about a column that is required on
+// every order. The model knew only that it had not been handed the figure; the
+// persona must keep it from turning that into a claim about the product.
+func TestPersonaForbidsSpeakingForTheSystem(t *testing.T) {
+	if !strings.Contains(joyboyPersona, "ห้ามบอกว่า \"ระบบไม่เก็บข้อมูล X\"") {
+		t.Fatal("the persona lost the rule against declaring what the system does not store")
+	}
+}
+
 // "โต๊ะว่าง 10 โต๊ะ รวม 38 ที่นั่ง" came out as "38 รายการนั่ง": the classifier
 // rewrite matched the "ที่" inside "ที่นั่ง". A classifier is only a classifier
 // when nothing Thai follows it.

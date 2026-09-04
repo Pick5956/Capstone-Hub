@@ -811,6 +811,30 @@ func TestMenuForPeriodBodyDeclaresTruncation(t *testing.T) {
 	}
 }
 
+// "วันนี้มีบิลยกเลิกกี่ใบ" had no sheet to read, and the model promised to go
+// and look, three times out of three. The sheet carries the count, the money,
+// and the staff's reasons — and zero cancelled bills is an answer, said so.
+func TestCancelledOrdersBodyListsReasonsAndCallsZeroAnAnswer(t *testing.T) {
+	body := joyboyCancelledOrdersBody("วันนี้", []repository.AICancelledReason{
+		{Reason: "ลูกค้าเปลี่ยนใจ", Bills: 2, Total: 540},
+		{Reason: "", Bills: 1, Total: 120},
+	})
+	for _, want := range []string{
+		"cancelled_bills=3 cancelled_total=660.00",
+		"reason=ลูกค้าเปลี่ยนใจ bills=2 total=540.00",
+		"reason=ไม่ได้ระบุเหตุผล bills=1",
+		"ไม่รวมในยอดขาย",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("sheet missing %q:\n%s", want, body)
+		}
+	}
+	none := joyboyCancelledOrdersBody("วันนี้", nil)
+	if !strings.Contains(none, "cancelled_bills=0 cancelled_total=0.00") || !strings.Contains(none, "เป็นคำตอบ ไม่ใช่ข้อมูลขาด") {
+		t.Errorf("zero cancellations must read as an answer:\n%s", none)
+	}
+}
+
 // "วันนี้มีลูกค้ากี่คน" had no sheet to read, and the model answered three
 // different ways in three runs — the bill count, the tables in use, and "ระบบ
 // ไม่ได้เก็บจำนวนคน", which is untrue. The sheet carries the headcount as whole
