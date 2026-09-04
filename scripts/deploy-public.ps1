@@ -23,17 +23,45 @@
 #      seconds. Killing it stops nothing. The real processes are main.exe,
 #      cloudflared, and whatever owns the port-3000 listener.
 #
+# ---------------------------------------------------------------------------
+# Two ways to run this, and when each is right
+#
+# start-public.ps1 and start-dishy-tunnel.ps1 both BLOCK - they run node and
+# cloudflared in the foreground and wait. That is deliberate: a blocking script
+# can be run as a visible, manually stoppable task. Wrapping them in
+# `Start-Process -WindowStyle Hidden`, which is what the one-shot mode below
+# does, throws that away: the servers become hidden Windows processes with no
+# window, no task entry, and nothing to click to stop.
+#
+#   -BuildOnly    steps 1-2 only (stop, prove port 3000 free, build), then exit.
+#                 Start the three services yourself as blocking foreground
+#                 commands so they stay visible and stoppable:
+#                     backend/   go run main.go
+#                     frontend/  npm.cmd run start:public
+#                     frontend/  npm.cmd run tunnel:public
+#   -VerifyOnly   steps 6-8 only. Run this after starting them that way - it
+#                 applies exactly the same readiness and asset gates the
+#                 one-shot mode does, so nothing is given up by splitting.
+#
+# Prefer -BuildOnly + -VerifyOnly whenever a person is watching, so they can see
+# the servers running and stop them without hunting for a PID. Use the one-shot
+# mode for unattended runs.
+#
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-public.ps1
 #   -SkipBuild   restart on the build already on disk
 #   -Clean       delete .next first (only when the build is actually suspect;
 #                a clean build changes every asset hash, which breaks any tab
 #                that is already open)
+#   -BuildOnly   stop + build, then hand off (see above)
+#   -VerifyOnly  gates only, start nothing (see above)
 
 [CmdletBinding()]
 param(
   [switch]$SkipBuild,
-  [switch]$Clean
+  [switch]$Clean,
+  [switch]$BuildOnly,
+  [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,6 +71,8 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $frontend = Join-Path $root "frontend"
 $logs = Join-Path $root "logs"
+
+if ($BuildOnly -and $VerifyOnly) { throw "-BuildOnly and -VerifyOnly are mutually exclusive." }
 
 function Step($n, $text) { Write-Host "`n[$n] $text" -ForegroundColor Cyan }
 function Ok($text) { Write-Host "    ok  $text" -ForegroundColor Green }
@@ -69,6 +99,59 @@ function Get-PortOwner([int]$port) {
 function Stop-Port([int]$port) {
   $owner = Get-PortOwner $port
   if ($owner) { Stop-Process -Id $owner -Force -ErrorAction SilentlyContinue }
+}
+
+# Steps 6-8. A function so -VerifyOnly applies the identical gates: splitting the
+# deploy to keep the servers visible must not cost any verification.
+function Test-PublicReady {
+  # ------------------------------------------------------------- 6. ready ----
+  Step 6 "Waiting for https://dishy.pro and https://api.dishy.pro"
+  $web = 0; $api = 0
+  for ($i = 0; $i -lt 45; $i++) {
+    $web = Get-Status "https://dishy.pro/"
+    $api = Get-Status "https://api.dishy.pro/readyz"
+    if ($web -eq 200 -and $api -eq 200) { break }
+    Start-Sleep -Seconds 4
+  }
+  if ($web -ne 200) { Die "dishy.pro returned $web" }
+  if ($api -ne 200) { Die "api.dishy.pro returned $api" }
+  Ok "dishy.pro 200, api.dishy.pro 200"
+
+  # ------------------------------------------------------------ 7. assets ----
+  # The check that would have caught the stale-server bug on the spot.
+  Step 7 "Checking every asset the page references, not just the page"
+  $html = (Invoke-WebRequest "https://dishy.pro/?next=%2Frestaurants" -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 20).Content
+  $assets = [regex]::Matches($html, '/_next/static/[a-zA-Z0-9_./-]+\.(?:css|js)') |
+    ForEach-Object { $_.Value } | Sort-Object -Unique
+  if ($assets.Count -eq 0) { Die "no assets found in the HTML - the page is not what we think it is" }
+  $broken = @()
+  foreach ($a in $assets) {
+    $code = Get-Status "https://dishy.pro$a"
+    if ($code -ne 200) { $broken += "$code  $a" }
+  }
+  if ($broken.Count -gt 0) {
+    Write-Host "    broken assets:" -ForegroundColor Red
+    $broken | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
+    Die "$($broken.Count) of $($assets.Count) assets do not resolve - the served HTML does not match the build on disk"
+  }
+  Ok "$($assets.Count) assets, all 200"
+
+  # -------------------------------------------------------------- 8. pids ----
+  Step 8 "Real process ids"
+  $fePid = Get-PortOwner 3000
+  Get-Process main, cloudflared -ErrorAction SilentlyContinue |
+    ForEach-Object { Write-Host ("    {0,-14} {1}" -f $_.ProcessName, $_.Id) }
+  Write-Host ("    {0,-14} {1}" -f "frontend node", $fePid)
+
+  Write-Host "`nhttps://dishy.pro is live and verified.`n" -ForegroundColor Green
+  Write-Host "Stop with (or just stop the tasks, if you started them yourself):" -ForegroundColor DarkGray
+  Write-Host "  Get-Process main,cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force; Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }" -ForegroundColor DarkGray
+}
+
+if ($VerifyOnly) {
+  Write-Host "Verify-only: starting nothing, gating what is already running." -ForegroundColor DarkGray
+  Test-PublicReady
+  exit 0
 }
 
 # ---------------------------------------------------------------- 1. stop ----
@@ -98,6 +181,16 @@ if (-not $SkipBuild) {
   Ok "build finished"
 } else {
   Step 2 "Skipping build, using the build already on disk"
+}
+
+if ($BuildOnly) {
+  Write-Host "`nBuild is ready and port 3000 is free." -ForegroundColor Green
+  Write-Host "Start these three as blocking foreground commands so they stay visible and stoppable:" -ForegroundColor DarkGray
+  Write-Host "  backend/   go run main.go" -ForegroundColor DarkGray
+  Write-Host "  frontend/  npm.cmd run start:public" -ForegroundColor DarkGray
+  Write-Host "  frontend/  npm.cmd run tunnel:public" -ForegroundColor DarkGray
+  Write-Host "Then gate them with: deploy-public.ps1 -VerifyOnly`n" -ForegroundColor DarkGray
+  exit 0
 }
 
 # ------------------------------------------------------------- 3. backend ----
@@ -148,45 +241,4 @@ if (Get-Process -Name cloudflared -ErrorAction SilentlyContinue) {
   Ok "started"
 }
 
-# --------------------------------------------------------------- 6. ready ----
-Step 6 "Waiting for https://dishy.pro and https://api.dishy.pro"
-$web = 0; $api = 0
-for ($i = 0; $i -lt 45; $i++) {
-  $web = Get-Status "https://dishy.pro/"
-  $api = Get-Status "https://api.dishy.pro/readyz"
-  if ($web -eq 200 -and $api -eq 200) { break }
-  Start-Sleep -Seconds 4
-}
-if ($web -ne 200) { Die "dishy.pro returned $web" }
-if ($api -ne 200) { Die "api.dishy.pro returned $api" }
-Ok "dishy.pro 200, api.dishy.pro 200"
-
-# ------------------------------------------------------------- 7. assets -----
-# The check that would have caught the stale-server bug on the spot.
-Step 7 "Checking every asset the page references, not just the page"
-$html = (Invoke-WebRequest "https://dishy.pro/?next=%2Frestaurants" -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 20).Content
-$assets = [regex]::Matches($html, '/_next/static/[a-zA-Z0-9_./-]+\.(?:css|js)') |
-  ForEach-Object { $_.Value } | Sort-Object -Unique
-if ($assets.Count -eq 0) { Die "no assets found in the HTML - the page is not what we think it is" }
-$broken = @()
-foreach ($a in $assets) {
-  $code = Get-Status "https://dishy.pro$a"
-  if ($code -ne 200) { $broken += "$code  $a" }
-}
-if ($broken.Count -gt 0) {
-  Write-Host "    broken assets:" -ForegroundColor Red
-  $broken | ForEach-Object { Write-Host "      $_" -ForegroundColor Red }
-  Die "$($broken.Count) of $($assets.Count) assets do not resolve - the served HTML does not match the build on disk"
-}
-Ok "$($assets.Count) assets, all 200"
-
-# ---------------------------------------------------------------- 8. pids ----
-Step 8 "Real process ids"
-$fePid = Get-PortOwner 3000
-Get-Process main, cloudflared -ErrorAction SilentlyContinue |
-  ForEach-Object { Write-Host ("    {0,-14} {1}" -f $_.ProcessName, $_.Id) }
-Write-Host ("    {0,-14} {1}" -f "frontend node", $fePid)
-
-Write-Host "`nhttps://dishy.pro is live and verified.`n" -ForegroundColor Green
-Write-Host "Stop with:" -ForegroundColor DarkGray
-Write-Host "  Get-Process main,cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force; Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }" -ForegroundColor DarkGray
+Test-PublicReady
