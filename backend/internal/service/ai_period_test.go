@@ -394,3 +394,21 @@ func TestExtractPeriodsWeekAndMonthCoexist(t *testing.T) {
 		t.Fatalf("labels = %q, %q", periods[0].Label, periods[1].Label)
 	}
 }
+
+// Both weeks named in one sentence are both windows. Returning only the first
+// turned "เทียบสัปดาห์นี้กับสัปดาห์ที่แล้ว" into a one-window comparison, and the
+// assistant asked the owner to spell out the dates of two weeks it had just
+// been given.
+func TestExtractPeriodsReadsBothWeeksForAComparison(t *testing.T) {
+	periods := extractPeriods("เทียบยอดขายสัปดาห์นี้กับสัปดาห์ที่แล้ว", refWednesday(t))
+	if len(periods) != 2 {
+		t.Fatalf("want 2 periods, got %d: %+v", len(periods), periods)
+	}
+	if periods[0].Label != "สัปดาห์นี้" || periods[1].Label != "สัปดาห์ที่แล้ว" {
+		t.Fatalf("labels = %q, %q (text order)", periods[0].Label, periods[1].Label)
+	}
+	req, ok := resolveDatedSalesRequest("เทียบยอดขายสัปดาห์นี้กับสัปดาห์ที่แล้ว", refWednesday(t))
+	if !ok || !req.comparison || len(req.periods) != 2 || req.clarify != "" {
+		t.Fatalf("should be a two-window comparison with nothing to clarify: %+v ok=%v", req, ok)
+	}
+}

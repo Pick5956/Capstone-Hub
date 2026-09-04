@@ -483,8 +483,8 @@ func extractPeriods(question string, ref time.Time) []AIPeriod {
 		key := p.Start.Year()*10000 + int(p.Start.Month())*100 + p.Start.Day()
 		hits = append(hits, periodHit{pos: pos, yearMo: -key, period: p})
 	}
-	if p, pos, ok := weekPeriod(n, ref); ok {
-		addDayPeriod(pos, p)
+	for _, hit := range weekPeriods(n, ref) {
+		addDayPeriod(hit.pos, hit.period)
 	}
 	if p, pos, ok := recentDaysPeriod(n, ref); ok {
 		addDayPeriod(pos, p)
@@ -556,7 +556,8 @@ func recentDaysPeriod(n string, ref time.Time) (AIPeriod, int, bool) {
 	return AIPeriod{}, 0, false
 }
 
-// weekPeriod reads "สัปดาห์นี้" and "สัปดาห์ที่แล้ว" as real weeks starting Monday.
+// weekPeriods reads "สัปดาห์นี้" and "สัปดาห์ที่แล้ว" as real weeks starting Monday,
+// every one the sentence names, so "เทียบสัปดาห์นี้กับสัปดาห์ที่แล้ว" yields both.
 //
 // The older day-part scope collapsed both onto "7 วันล่าสุด", which answers a
 // different question: last week is Monday to Sunday, not the seven days ending
@@ -564,22 +565,23 @@ func recentDaysPeriod(n string, ref time.Time) (AIPeriod, int, bool) {
 //
 // "อาทิตย์" is accepted only with นี้ / ที่แล้ว / ก่อน attached; on its own it is
 // the weekday Sunday, and reading "ยอดขายวันอาทิตย์" as a week would be wrong.
-func weekPeriod(n string, ref time.Time) (AIPeriod, int, bool) {
+func weekPeriods(n string, ref time.Time) []periodHit {
 	loc := ref.Location()
 	today := time.Date(ref.Year(), ref.Month(), ref.Day(), 0, 0, 0, 0, loc)
 	// Go counts Sunday as 0; a Thai working week is read from Monday.
 	monday := today.AddDate(0, 0, -((int(today.Weekday()) + 6) % 7))
 
+	hits := make([]periodHit, 0, 2)
 	if pos := earliestIndex(n, "สัปดาห์ที่แล้ว", "สัปดาห์ก่อน", "สัปดาห์ที่ผ่านมา",
 		"อาทิตย์ที่แล้ว", "อาทิตย์ก่อน", "อาทิตย์ที่ผ่านมา", "last week"); pos >= 0 {
-		return AIPeriod{Label: "สัปดาห์ที่แล้ว", Start: monday.AddDate(0, 0, -7), End: monday}, pos, true
+		hits = append(hits, periodHit{pos: pos, period: AIPeriod{Label: "สัปดาห์ที่แล้ว", Start: monday.AddDate(0, 0, -7), End: monday}})
 	}
 	if pos := earliestIndex(n, "สัปดาห์นี้", "อาทิตย์นี้", "this week"); pos >= 0 {
 		// Up to today, not to Sunday: the rest of the week has not happened yet
 		// and reporting it as zero would read as a bad week.
-		return AIPeriod{Label: "สัปดาห์นี้", Start: monday, End: today.AddDate(0, 0, 1)}, pos, true
+		hits = append(hits, periodHit{pos: pos, period: AIPeriod{Label: "สัปดาห์นี้", Start: monday, End: today.AddDate(0, 0, 1)}})
 	}
-	return AIPeriod{}, 0, false
+	return hits
 }
 
 func hasAnyPrefix(s string, prefixes ...string) bool {

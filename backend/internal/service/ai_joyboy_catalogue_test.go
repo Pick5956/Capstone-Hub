@@ -162,7 +162,7 @@ func TestMenuForPeriodBodyStatesPeriodAndAllMetrics(t *testing.T) {
 // instead of summing menu lines (the mistake that produced 347,353 for a
 // 347,453 month). An empty window reads as no-data, not a zero baht answer.
 func TestSalesForPeriodBodyStatesWholeStoreTotal(t *testing.T) {
-	body := joyboySalesForPeriodBody("เดือนกรกฎาคม 2569", repository.AISalesRange{Orders: 1285, Revenue: 347453, Days: 31})
+	body := joyboySalesForPeriodBody(AIPeriod{Label: "เดือนกรกฎาคม 2569"}, repository.AISalesRange{Orders: 1285, Revenue: 347453, Days: 31}, time.Now())
 	for _, want := range []string{"period=เดือนกรกฎาคม 2569", "whole_store", "revenue=347453", "orders=1285", "selling_days=31"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("sales-for-period body missing %q: %s", want, body)
@@ -174,7 +174,7 @@ func TestSalesForPeriodBodyStatesWholeStoreTotal(t *testing.T) {
 	if !strings.Contains(body, "avg_per_order=270.39") {
 		t.Errorf("the average bill should be computed here: %s", body)
 	}
-	if empty := joyboySalesForPeriodBody("ปี 2567", repository.AISalesRange{}); !strings.Contains(empty, "status=no_data") {
+	if empty := joyboySalesForPeriodBody(AIPeriod{Label: "ปี 2567"}, repository.AISalesRange{}, time.Now()); !strings.Contains(empty, "status=no_data") {
 		t.Errorf("no paid orders should report no_data, got %q", empty)
 	}
 }
@@ -185,7 +185,7 @@ func TestSalesForPeriodBodyStatesWholeStoreTotal(t *testing.T) {
 func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
 	a := AIPeriod{Label: "เดือนสิงหาคม 2569"}
 	b := AIPeriod{Label: "เดือนกรกฎาคม 2569"}
-	up := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 100, Revenue: 120}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
+	up := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 100, Revenue: 120}, b, repository.AISalesRange{Orders: 90, Revenue: 100}, time.Now())
 	for _, want := range []string{"period_a=เดือนสิงหาคม 2569", "revenue_a=120", "revenue_b=100", "change_pct=20.00", "direction=เพิ่มขึ้น", "avg_per_order_a=1.2", "avg_per_order_b=1.11"} {
 		if !strings.Contains(up, want) {
 			t.Errorf("comparison body missing %q: %s", want, up)
@@ -193,13 +193,80 @@ func TestSalesComparisonBodyComputesPercentInGo(t *testing.T) {
 	}
 	// A fall reads as a Thai word with an unsigned percentage: a bare "-20" is what
 	// let the model narrate the wrong subject and keep the minus sign.
-	down := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 80, Revenue: 80}, b, repository.AISalesRange{Orders: 90, Revenue: 100})
+	down := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 80, Revenue: 80}, b, repository.AISalesRange{Orders: 90, Revenue: 100}, time.Now())
 	if !strings.Contains(down, "direction=ลดลง") || !strings.Contains(down, "change_pct=20.00") || strings.Contains(down, "-20") {
 		t.Errorf("a fall should read direction=ลดลง with an unsigned percentage: %s", down)
 	}
-	zero := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 5, Revenue: 50}, b, repository.AISalesRange{})
+	zero := joyboySalesComparisonBody(a, repository.AISalesRange{Orders: 5, Revenue: 50}, b, repository.AISalesRange{}, time.Now())
 	if !strings.Contains(zero, "change_pct=na") {
 		t.Errorf("a zero baseline must not be divided by: %s", zero)
+	}
+}
+
+// "เทียบเดือนนี้กับเดือนที่แล้ว" on the 4th read "ลดลง 90.61%": four days against
+// thirty-one. The sheet now says how long each window is, how much of it has
+// passed, and the change per selling day, so the model can see the windows
+// are unequal and say so instead of sounding the alarm.
+func TestSalesComparisonBodyFlagsUnevenWindows(t *testing.T) {
+	loc := bangkokLocation()
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, loc)
+	thisMonth := AIPeriod{Label: "เดือนกันยายน 2569", Start: time.Date(2026, 9, 1, 0, 0, 0, 0, loc), End: time.Date(2026, 10, 1, 0, 0, 0, 0, loc)}
+	lastMonth := AIPeriod{Label: "เดือนสิงหาคม 2569", Start: time.Date(2026, 8, 1, 0, 0, 0, 0, loc), End: time.Date(2026, 9, 1, 0, 0, 0, 0, loc)}
+	body := joyboySalesComparisonBody(
+		thisMonth, repository.AISalesRange{Orders: 97, Revenue: 27033, Days: 4},
+		lastMonth, repository.AISalesRange{Orders: 1064, Revenue: 287839, Days: 26}, now)
+
+	for _, want := range []string{
+		"calendar_days_a=30",
+		"period_a_incomplete=true days_elapsed_a=4 of 30",
+		"calendar_days_b=31",
+		"per_selling_day_a=6758.25",
+		"per_selling_day_b=11070.73",
+		"per_day_change_pct=38.95 per_day_direction=ลดลง",
+		"uneven_windows=true",
+		"change_pct=90.61", // still there: true of the totals, just not the whole story
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("uneven comparison missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "period_b_incomplete") {
+		t.Errorf("last month is over and must not read as incomplete:\n%s", body)
+	}
+}
+
+// Two whole months of different lengths are uneven too — February against
+// March is 28 days against 31 — and the flag says so without either being
+// incomplete.
+func TestSalesComparisonBodyFlagsDifferentMonthLengths(t *testing.T) {
+	loc := bangkokLocation()
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, loc)
+	feb := AIPeriod{Label: "เดือนกุมภาพันธ์ 2569", Start: time.Date(2026, 2, 1, 0, 0, 0, 0, loc), End: time.Date(2026, 3, 1, 0, 0, 0, 0, loc)}
+	mar := AIPeriod{Label: "เดือนมีนาคม 2569", Start: time.Date(2026, 3, 1, 0, 0, 0, 0, loc), End: time.Date(2026, 4, 1, 0, 0, 0, 0, loc)}
+	body := joyboySalesComparisonBody(mar, repository.AISalesRange{Orders: 10, Revenue: 3100, Days: 31}, feb, repository.AISalesRange{Orders: 10, Revenue: 2800, Days: 28}, now)
+	if !strings.Contains(body, "uneven_windows=true") || strings.Contains(body, "incomplete") {
+		t.Errorf("28 vs 31 days should be flagged uneven and nothing incomplete:\n%s", body)
+	}
+	// Same per-day takings: the flag should not be taken as a change.
+	if !strings.Contains(body, "per_day_change_pct=0.00") {
+		t.Errorf("equal per-day takings should read 0.00:\n%s", body)
+	}
+}
+
+// A single window that is still running says so. "ยอดขายเดือนนี้" on the 4th is
+// four days, and "วันนี้ขายได้เท่าไหร่" at three in the afternoon is a day not over.
+func TestSalesForPeriodBodyMarksRunningWindow(t *testing.T) {
+	loc := bangkokLocation()
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, loc)
+	today := AIPeriod{Label: "วันนี้", Start: time.Date(2026, 9, 4, 0, 0, 0, 0, loc), End: time.Date(2026, 9, 5, 0, 0, 0, 0, loc)}
+	body := joyboySalesForPeriodBody(today, repository.AISalesRange{Orders: 18, Revenue: 4895, Days: 1}, now)
+	if !strings.Contains(body, "period_incomplete=true days_elapsed=1 of 1") || !strings.Contains(body, "incomplete_means=") {
+		t.Errorf("a day still running must be marked:\n%s", body)
+	}
+	yesterday := AIPeriod{Label: "เมื่อวาน", Start: time.Date(2026, 9, 3, 0, 0, 0, 0, loc), End: time.Date(2026, 9, 4, 0, 0, 0, 0, loc)}
+	done := joyboySalesForPeriodBody(yesterday, repository.AISalesRange{Orders: 20, Revenue: 5000, Days: 1}, now)
+	if strings.Contains(done, "incomplete") {
+		t.Errorf("yesterday is over and must not read as incomplete:\n%s", done)
 	}
 }
 

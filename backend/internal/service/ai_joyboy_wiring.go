@@ -613,7 +613,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				// backwards. The figures are the same either way; only the order the
 				// eye reads them in differs from the sheet's.
 				t.chart = buildSalesComparisonChart(older.Label, dOlder.Revenue, newer.Label, dNewer.Revenue)
-				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder), t.service.aiSalesCoverageNoteFor(t.restaurantID, older.Start)), true, true
+				return joyboyWithCoverage(joyboySalesComparisonBody(newer, dNewer, older, dOlder, now), t.service.aiSalesCoverageNoteFor(t.restaurantID, older.Start)), true, true
 			}
 			if len(req.periods) > 0 {
 				p := req.periods[0]
@@ -622,7 +622,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 					aiStage("warn", "joyboy: %s failed (%v) → leaving it out", tool, err)
 					return "", false, true
 				}
-				return joyboyWithCoverage(joyboySalesForPeriodBody(p.Label, d), t.service.aiSalesCoverageNoteFor(t.restaurantID, p.Start)), true, true
+				return joyboyWithCoverage(joyboySalesForPeriodBody(p, d, now), t.service.aiSalesCoverageNoteFor(t.restaurantID, p.Start)), true, true
 			}
 		}
 		if year, ok := joyboyYearSalesTotal(question, now); ok {
@@ -631,7 +631,7 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 				aiStage("warn", "joyboy: %s (year) failed (%v) → leaving it out", tool, err)
 				return "", false, true
 			}
-			return joyboyWithCoverage(joyboySalesForPeriodBody(year.Label, d), t.service.aiSalesCoverageNoteFor(t.restaurantID, year.Start)), true, true
+			return joyboyWithCoverage(joyboySalesForPeriodBody(year, d, now), t.service.aiSalesCoverageNoteFor(t.restaurantID, year.Start)), true, true
 		}
 		return "", false, false
 	case joyboyToolSalesForecast:

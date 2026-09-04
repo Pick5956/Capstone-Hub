@@ -1294,9 +1294,86 @@ func joyboyNetAfterExpensesLines(grossProfit float64, expenses *ExpenseListRespo
 // the orders table — the authoritative figure — so the model states it rather
 // than re-deriving it by summing menu lines (which drops rounding and misses
 // anything that is not a menu subtotal).
-func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
+// joyboyPeriodDays measures a window against the clock: how many calendar days
+// it spans, how many of those have happened, and whether it is still running.
+//
+// A window that reaches past now is not over — "เดือนนี้" asked on the 4th is
+// four days of thirty — and every figure in it is a running total, not a result.
+// A zero-valued period (a label with no dates, as some tests build) measures as
+// nothing, and the day lines are simply left off.
+func joyboyPeriodDays(p AIPeriod, now time.Time) (calendar, elapsed int, incomplete bool) {
+	if p.Start.IsZero() || p.End.IsZero() || !p.End.After(p.Start) {
+		return 0, 0, false
+	}
+	calendar = int(p.End.Sub(p.Start).Hours() / 24)
+	if !p.End.After(now) {
+		return calendar, calendar, false
+	}
+	loc := p.Start.Location()
+	today := time.Date(now.In(loc).Year(), now.In(loc).Month(), now.In(loc).Day(), 0, 0, 0, 0, loc)
+	elapsed = int(today.Sub(p.Start).Hours()/24) + 1
+	if elapsed < 1 {
+		elapsed = 1
+	}
+	if elapsed > calendar {
+		elapsed = calendar
+	}
+	return calendar, elapsed, true
+}
+
+// joyboyPeriodDayLines is the day arithmetic for one window, keyed with a suffix
+// so two windows can sit on the same sheet ("_a", "_b") or one alone ("").
+//
+// Comparing "เดือนนี้" with "เดือนที่แล้ว" on the 4th produced "ลดลง 90.61%" — four
+// days against thirty-one, arithmetically true and practically an alarm over
+// nothing. The sheet carried no day counts, so the model had no way to see the
+// two windows were not the same length. Now it carries the calendar length, the
+// days that have actually passed, the days that had sales, and the revenue per
+// selling day: the figures needed to compare unequal windows, computed here.
+func joyboyPeriodDayLines(suffix string, p AIPeriod, d repository.AISalesRange, now time.Time) []string {
+	calendar, elapsed, incomplete := joyboyPeriodDays(p, now)
+	if calendar == 0 {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("calendar_days%s=%d", suffix, calendar)}
+	if incomplete {
+		lines = append(lines, fmt.Sprintf("period%s_incomplete=true days_elapsed%s=%d of %d", suffix, suffix, elapsed, calendar))
+	}
+	if d.Days > 0 {
+		lines = append(lines, fmt.Sprintf("per_selling_day%s=%s", suffix, joyboyNum(roundBaht(d.Revenue/float64(d.Days)))))
+	}
+	return lines
+}
+
+// joyboyPerDayChange is the change between two windows measured per selling
+// day, the comparison that survives unequal lengths. Returned empty when either
+// side has no selling day to divide by.
+func joyboyPerDayChange(da, db repository.AISalesRange) string {
+	if da.Days == 0 || db.Days == 0 {
+		return ""
+	}
+	perDayA := da.Revenue / float64(da.Days)
+	perDayB := db.Revenue / float64(db.Days)
+	if perDayB == 0 {
+		return ""
+	}
+	pct := (perDayA - perDayB) / perDayB * 100
+	dir := "เพิ่มขึ้น"
+	if pct < 0 {
+		dir = "ลดลง"
+		pct = -pct
+	}
+	return fmt.Sprintf("per_day_change_pct=%s per_day_direction=%s", joyboyNum(pct), dir)
+}
+
+func joyboySalesForPeriodBody(p AIPeriod, d repository.AISalesRange, now time.Time) string {
+	label := p.Label
 	if d.Orders == 0 {
-		return joyboyJoin([]string{"period=" + label, "scope=named_period_paid_sales_whole_store", "orders=0 revenue=0.00", joyboyNoData("no_paid_orders_in_period")})
+		lines := []string{"period=" + label, "scope=named_period_paid_sales_whole_store", "orders=0 revenue=0.00"}
+		if _, elapsed, incomplete := joyboyPeriodDays(p, now); incomplete {
+			lines = append(lines, fmt.Sprintf("period_incomplete=true days_elapsed=%d note=ช่วงนี้ยังไม่จบ ยังไม่มีบิลจนถึงตอนนี้", elapsed))
+		}
+		return joyboyJoin(append(lines, joyboyNoData("no_paid_orders_in_period")))
 	}
 	lines := []string{
 		"period=" + label,
@@ -1304,6 +1381,12 @@ func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
 		"revenue=" + joyboyNum(d.Revenue),
 		fmt.Sprintf("orders=%d", d.Orders),
 		fmt.Sprintf("selling_days=%d", d.Days),
+	}
+	if dayLines := joyboyPeriodDayLines("", p, d, now); len(dayLines) > 0 {
+		lines = append(lines, dayLines...)
+		if _, _, incomplete := joyboyPeriodDays(p, now); incomplete {
+			lines = append(lines, "incomplete_means=ช่วงนี้ยังไม่จบ ตัวเลขข้างบนคือยอดจนถึงตอนนี้ ไม่ใช่ยอดทั้งช่วง ต้องบอกเจ้าของว่าผ่านไปกี่วันจากทั้งหมด")
+		}
 	}
 	// The average bill is revenue ÷ orders, a division the model is forbidden to
 	// do — so "เดือนที่แล้วบิลเฉลี่ยเท่าไหร่" had nothing to read and either made
@@ -1319,11 +1402,25 @@ func joyboySalesForPeriodBody(label string, d repository.AISalesRange) string {
 // them. The percentage is computed in Go, not left to the model — a model
 // dividing two totals by hand is exactly the mistake this avoids — so the figure
 // lands in the fact sheet where reconcileFigures can check it.
-func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPeriod, db repository.AISalesRange) string {
+func joyboySalesComparisonBody(a AIPeriod, da repository.AISalesRange, b AIPeriod, db repository.AISalesRange, now time.Time) string {
 	lines := []string{
 		"scope=named_period_comparison_whole_store",
-		fmt.Sprintf("period_a=%s revenue_a=%s orders_a=%d", a.Label, joyboyNum(da.Revenue), da.Orders),
-		fmt.Sprintf("period_b=%s revenue_b=%s orders_b=%d", b.Label, joyboyNum(db.Revenue), db.Orders),
+		fmt.Sprintf("period_a=%s revenue_a=%s orders_a=%d selling_days_a=%d", a.Label, joyboyNum(da.Revenue), da.Orders, da.Days),
+		fmt.Sprintf("period_b=%s revenue_b=%s orders_b=%d selling_days_b=%d", b.Label, joyboyNum(db.Revenue), db.Orders, db.Days),
+	}
+	lines = append(lines, joyboyPeriodDayLines("_a", a, da, now)...)
+	lines = append(lines, joyboyPeriodDayLines("_b", b, db, now)...)
+	calA, _, incA := joyboyPeriodDays(a, now)
+	calB, _, incB := joyboyPeriodDays(b, now)
+	if perDay := joyboyPerDayChange(da, db); perDay != "" {
+		lines = append(lines, perDay)
+	}
+	// Say when the two windows are not the same length, and why that matters —
+	// the total-to-total percentage below is still true, it just answers a
+	// question nobody asked when one side has had four days and the other thirty.
+	if incA || incB || (calA > 0 && calB > 0 && calA != calB) {
+		lines = append(lines,
+			"uneven_windows=true note=สองช่วงนี้ยาวไม่เท่ากันหรือช่วงหนึ่งยังไม่จบ change_pct เทียบยอดรวมจึงเบี้ยว ให้ดู per_day_change_pct (ยอดต่อวันที่มีการขาย) ประกอบ และบอกเจ้าของว่าเทียบกี่วันกับกี่วัน")
 	}
 	// The average bill per period, for "บิลเฉลี่ยเดือนนี้เทียบเดือนก่อนต่างกันไหม" —
 	// the model cannot divide, so both averages are computed here.
