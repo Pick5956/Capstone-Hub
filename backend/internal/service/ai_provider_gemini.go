@@ -21,13 +21,23 @@ func (s *AIService) getGeminiKeys() []string {
 	if keysStr == "" {
 		return nil
 	}
-	parts := strings.Split(keysStr, ",")
-	var keys []string
-	for _, p := range parts {
-		k := strings.TrimSpace(p)
-		if k != "" {
-			keys = append(keys, k)
+	// Split on commas and on any control character, which is what a line break
+	// is. The variable is normally written as a quoted block with one key per
+	// line, and a key added there without a trailing comma used to be glued to
+	// the one above it: the pair became a single "key" carrying a newline, and
+	// the HTTP client rejected it as an invalid header value on every call. A
+	// separator only the author remembers is a separator that gets forgotten.
+	parts := strings.FieldsFunc(keysStr, func(r rune) bool {
+		return r == ',' || r < ' '
+	})
+	keys := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if key := strings.TrimSpace(part); key != "" {
+			keys = append(keys, key)
 		}
+	}
+	if len(keys) == 0 {
+		return nil
 	}
 	return keys
 }
