@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TabletWorkspaceFrame } from '@/src/components/app-shell';
 import { AuthProvider } from '@/src/providers/auth-provider';
+import { PrinterProvider } from '@/src/providers/printer-provider';
 import {
   DisplayPreferencesProvider,
   useDisplayPreferences,
@@ -97,39 +98,42 @@ function AppNavigator() {
 
   return (
     <AuthProvider>
-      <Stack
-        layout={TabletWorkspaceStackLayout}
-        screenOptions={{
-          headerShown: false,
-          animation: 'slide_from_right',
-          gestureEnabled: true,
-          presentation: 'card',
-          contentStyle: { backgroundColor: colors.surface },
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="register" />
-        <Stack.Screen name="restaurants" />
-        <Stack.Screen name="create-restaurant" />
-        <Stack.Screen name="invite/manual" />
-        <Stack.Screen name="invite/[token]" />
-        <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
-        <Stack.Screen name="reservations" />
-        <Stack.Screen name="table-reservation" />
-        <Stack.Screen name="table-management" />
-        <Stack.Screen name="table-management/table" />
-        <Stack.Screen name="table-management/zones" />
-        <Stack.Screen name="table-management/tags" />
-        <Stack.Screen name="order/[id]" />
-        <Stack.Screen name="order/new" />
-        <Stack.Screen name="menu" />
-        <Stack.Screen name="staff" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="inventory" />
-        <Stack.Screen name="reports" />
-        <Stack.Screen name="ai-assistant" />
-      </Stack>
+      <PrinterProvider>
+        <Stack
+          layout={TabletWorkspaceStackLayout}
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_right',
+            gestureEnabled: true,
+            presentation: 'card',
+            contentStyle: { backgroundColor: colors.surface },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="restaurants" />
+          <Stack.Screen name="create-restaurant" />
+          <Stack.Screen name="invite/manual" />
+          <Stack.Screen name="invite/[token]" />
+          <Stack.Screen name="(primary)" options={topLevelScreenOptions} />
+          <Stack.Screen name="reservations" />
+          <Stack.Screen name="table-reservation" />
+          <Stack.Screen name="table-management" />
+          <Stack.Screen name="table-management/table" />
+          <Stack.Screen name="table-management/zones" />
+          <Stack.Screen name="table-management/tags" />
+          <Stack.Screen name="order/[id]" />
+          <Stack.Screen name="order/new" />
+          <Stack.Screen name="menu" />
+          <Stack.Screen name="staff" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="settings/printer" />
+          <Stack.Screen name="inventory" />
+          <Stack.Screen name="reports" />
+          <Stack.Screen name="ai-assistant" />
+        </Stack>
+      </PrinterProvider>
     </AuthProvider>
   );
 }
