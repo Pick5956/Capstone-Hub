@@ -75,6 +75,83 @@ func TestAIPeriodFromModelMonth(t *testing.T) {
 	}
 }
 
+func stubWindowReader(req datedSalesRequest, ok bool) salesWindowReader {
+	return func(string, []AIConversationMessage, time.Time) (datedSalesRequest, bool) { return req, ok }
+}
+
+// The model reads first. The word list used to, and it grabbed "20 ส.ค." as one
+// day out of a sentence naming two five-day spans — a real figure for a window
+// nobody asked about — while the model was never consulted.
+func TestResolveSalesWindowLetsTheModelReadFirst(t *testing.T) {
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, bangkokLocation())
+	question := "เทียบยอดขายช่วง 20 ส.ค. - 24 ส.ค. กับ 25 ส.ค. - 29 ส.ค."
+	loc := bangkokLocation()
+	spans := datedSalesRequest{comparison: true, periods: []AIPeriod{
+		{Label: "20–24 สิงหาคม 2569", Start: time.Date(2026, 8, 20, 0, 0, 0, 0, loc), End: time.Date(2026, 8, 25, 0, 0, 0, 0, loc)},
+		{Label: "25–29 สิงหาคม 2569", Start: time.Date(2026, 8, 25, 0, 0, 0, 0, loc), End: time.Date(2026, 8, 30, 0, 0, 0, 0, loc)},
+	}}
+	req, ok := resolveSalesWindow(question, nil, now, stubWindowReader(spans, true))
+	if !ok || !req.comparison || len(req.periods) != 2 || req.periods[0].Label != "20–24 สิงหาคม 2569" {
+		t.Fatalf("the model's two spans should win: %+v", req)
+	}
+	// The word list on its own reads the same sentence as a single day — the
+	// bug this ordering exists to stop.
+	word, _ := resolveDatedSalesRequest(question, now)
+	if len(word.periods) != 1 || word.comparison {
+		t.Fatalf("expected the word list to misread this as one day (that is the point): %+v", word)
+	}
+}
+
+// A date that does not exist is a question, not a reading. It is checked
+// before the model gets the sentence, or a model would round it to a real day.
+func TestResolveSalesWindowChecksTheCalendarBeforeReading(t *testing.T) {
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, bangkokLocation())
+	called := false
+	reader := func(string, []AIConversationMessage, time.Time) (datedSalesRequest, bool) {
+		called = true
+		return datedSalesRequest{}, false
+	}
+	req, ok := resolveSalesWindow("ยอดขายวันที่ 31 กุมภาพันธ์", nil, now, reader)
+	if !ok || req.clarify == "" {
+		t.Fatalf("an impossible date must come back as a question: %+v", req)
+	}
+	if called {
+		t.Fatal("the model must not be asked to read a date that does not exist")
+	}
+}
+
+// Asked to compare, read one side: that is not a total to report. It falls
+// through to the word list, which asks which other side was meant.
+func TestResolveSalesWindowHandsBackAHalfReadComparison(t *testing.T) {
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, bangkokLocation())
+	oneSide := datedSalesRequest{comparison: true, periods: []AIPeriod{{Label: "เดือนกรกฎาคม 2569"}}}
+	req, ok := resolveSalesWindow("เทียบยอดขายเดือนกรกฎาคมกับ", nil, now, stubWindowReader(oneSide, true))
+	if !ok || req.clarify == "" {
+		t.Fatalf("a half-read comparison should end as a question: %+v", req)
+	}
+}
+
+// With the model unreachable, the month word list still answers what it can.
+func TestResolveSalesWindowFallsBackToTheWordList(t *testing.T) {
+	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, bangkokLocation())
+	req, ok := resolveSalesWindow("ยอดขายเดือนกรกฎาคม", nil, now, stubWindowReader(datedSalesRequest{}, false))
+	if !ok || len(req.periods) != 1 || req.periods[0].Label != "เดือนกรกฎาคม 2569" {
+		t.Fatalf("the word list should still read a named month: %+v", req)
+	}
+	req, ok = resolveSalesWindow("ยอดขายเดือนกรกฎาคม", nil, now, nil)
+	if !ok || len(req.periods) != 1 {
+		t.Fatalf("no reader at all should still read a named month: %+v", req)
+	}
+}
+
+// Month against the same month last year has an example now; without one the
+// model paired a month with a whole year.
+func TestPeriodPromptPairsAMonthWithItselfLastYear(t *testing.T) {
+	if !strings.Contains(aiPeriodPrompt, `"เทียบยอดขายเดือนกรกฎาคมกับปีที่แล้ว" → {"periods":[{"year":2026,"month":7},{"year":2025,"month":7}],"comparison":true}`) {
+		t.Error("period prompt lost the month-vs-last-year example")
+	}
+}
+
 // "ยอดขายสามวันที่ผ่านมา" is today and the two days before it — the owner's
 // own definition. The prompt used to stop at yesterday, which disagreed with
 // the trend tool and with what people mean by "ล่าสุด"; a running window says

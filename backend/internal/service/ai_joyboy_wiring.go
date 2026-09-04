@@ -588,19 +588,9 @@ func (t *joyboyTools) runJoyboyExtraTool(tool AIToolName, question string) (body
 		// window in it. (That tool can also report the last seven days, but only
 		// when it is given the question, which the snapshot path does not do.)
 		now := repository.BangkokNow()
-		req, isDated := resolveDatedSalesRequest(question, now)
-		if !isDated {
-			// The word list did not recognise the range — which is most of the time,
-			// because it only knows months. "เมื่อวาน", "สัปดาห์ที่แล้ว" and every
-			// other day-level window arrive here. Rather than quietly answering
-			// about today — which is how "เดือนมีน่า" became "there is no data" —
-			// ask the model what range was meant and validate its answer here.
-			// Reading a sentence is its job; deciding the figures stays ours.
-			if modelReq, ok := t.service.resolveDatedSalesWithModel(question, t.history, now); ok {
-				req, isDated = modelReq, true
-				aiStage("flow", "joyboy: period read by the model (%d window(s), comparison=%v)", len(modelReq.periods), modelReq.comparison)
-			}
-		}
+		// The model reads the range, Go checks it, the month word list is the
+		// fallback — see resolveSalesWindow for why the order matters.
+		req, isDated := resolveSalesWindow(question, t.history, now, t.service.resolveDatedSalesWithModel)
 		if isDated {
 			if strings.TrimSpace(req.clarify) != "" {
 				return req.clarify, true, true

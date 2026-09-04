@@ -55,6 +55,7 @@ const aiPeriodPrompt = `คุณคือตัวอ่าน "ช่วงเ
 - "สัปดาห์ที่แล้ว" คือ จันทร์ถึงอาทิตย์ของสัปดาห์ก่อนหน้า
 - ถ้าผู้ใช้พูดถึงเดือนแบบไม่เต็มยศ (มีน่า มีนา เมษา กุมภา) ให้เข้าใจว่าหมายถึงเดือนนั้น
 - ถ้าพูดว่า "เทียบเดือนต่อเดือน" โดยไม่ระบุเดือน ให้ใช้ เดือนนี้ กับ เดือนที่แล้ว และ comparison=true
+- ถ้าเทียบ "เดือน X กับปีที่แล้ว" หมายถึงเดือน X ของปีนี้ กับเดือน X เดียวกันของปีที่แล้ว ไม่ใช่ทั้งปี
 - **"ปีที่แล้ว" "ปีก่อน" "ปี 2568" ที่ไม่ระบุเดือน = ทั้งปี** start=1 ม.ค. end=31 ธ.ค. ของปีนั้น
   ห้ามตัดให้เหลือแค่ช่วงเดียวกับปีนี้ · ส่วน "ปีนี้" = 1 ม.ค. ถึงวันนี้ (ยังไม่จบปี)
 - comparison=true เมื่อผู้ใช้ขอเปรียบเทียบ
@@ -65,6 +66,7 @@ const aiPeriodPrompt = `คุณคือตัวอ่าน "ช่วงเ
 ข้อความ: "เดือนมีน่ากับเมษา 69" → {"periods":[{"year":2026,"month":3},{"year":2026,"month":4}],"comparison":true}
 ข้อความ: "ขอดูกราฟเทียบยอดขายเดือนต่อเดือน" → {"periods":[{"year":2026,"month":8},{"year":2026,"month":7}],"comparison":true}
 ข้อความ: "ยอดขายกรกฎาคม" → {"periods":[{"year":2026,"month":7}],"comparison":false}
+ข้อความ: "เทียบยอดขายเดือนกรกฎาคมกับปีที่แล้ว" → {"periods":[{"year":2026,"month":7},{"year":2025,"month":7}],"comparison":true}
 ข้อความ: "ปีที่แล้วขายได้เท่าไหร่" (วันนี้ 2026-09-02) → {"periods":[{"start":"2025-01-01","end":"2025-12-31"}],"comparison":false}
 ข้อความ: "เมื่อวานขายได้เท่าไหร่" → {"periods":[{"start":"2026-08-26","end":"2026-08-26"}],"comparison":false}
 ข้อความ: "ยอดขายวันนี้" → {"periods":[{"start":"2026-08-27","end":"2026-08-27"}],"comparison":false}
@@ -122,7 +124,52 @@ func (s *AIService) resolveDatedSalesWithModel(question string, history []AIConv
 	if reply.Comparison && len(periods) >= 2 {
 		return datedSalesRequest{comparison: true, periods: periods[:2]}, true
 	}
-	return datedSalesRequest{periods: periods[:1]}, true
+	// The flag is kept even with one window, so a caller can tell "asked to
+	// compare, read only one side" apart from "asked for one window" — the
+	// first is a question to hand back, not a total to report.
+	return datedSalesRequest{comparison: reply.Comparison, periods: periods[:1]}, true
+}
+
+// salesWindowReader reads the range a sentence is about: the model in
+// production, a stub in tests.
+type salesWindowReader func(question string, history []AIConversationMessage, now time.Time) (datedSalesRequest, bool)
+
+// resolveSalesWindow decides which window(s) a dated sales question is about,
+// in the order the rest of the assistant already uses: the model reads the
+// sentence, Go checks what it read, and the month word list is only a fallback
+// for when the model is unreachable.
+//
+// It used to run the other way round, word list first, and the word list
+// grabbed the first date it saw. "เทียบยอดขายช่วง 20 ส.ค. - 24 ส.ค. กับ 25 ส.ค. -
+// 29 ส.ค." came back as the 20th alone — 9,188 baht for a span that took
+// 43,176 — and the model, whose prompt handles exactly that sentence, was never
+// asked. Reading what someone meant is the model's job.
+//
+// Two things stay in Go, because they are checks rather than readings:
+//   - a date that does not exist ("31 กุมภาพันธ์") is handed back as a question
+//     before anyone reads it, or a model would round it to the 28th and the
+//     owner would get a real figure for a day they never named;
+//   - a comparison the model could read only one side of falls through to the
+//     word list, which asks which side was meant, instead of reporting one
+//     window as though that were the comparison.
+func resolveSalesWindow(question string, history []AIConversationMessage, now time.Time, readWithModel salesWindowReader) (datedSalesRequest, bool) {
+	if msg, bad := invalidNamedDate(question, now); bad {
+		return datedSalesRequest{clarify: msg}, true
+	}
+	if readWithModel != nil {
+		if req, ok := readWithModel(question, history, now); ok && strings.TrimSpace(req.clarify) == "" {
+			if !req.comparison || len(req.periods) >= 2 {
+				aiStage("flow", "joyboy: period read by the model (%d window(s), comparison=%v)", len(req.periods), req.comparison)
+				return req, true
+			}
+			aiStage("flow", "joyboy: model read one side of a comparison → asking which other side was meant")
+		}
+	}
+	req, ok := resolveDatedSalesRequest(question, now)
+	if ok {
+		aiStage("flow", "joyboy: period read by the word list (%d window(s), comparison=%v)", len(req.periods), req.comparison)
+	}
+	return req, ok
 }
 
 // aiPeriodFromModel turns one validated candidate into a window. Explicit dates
