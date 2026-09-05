@@ -66,8 +66,21 @@ func (ctrl *RoleController) UpdateRolePermissions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"role": role})
 }
 
+// GET /api/v1/roles
+//
+// The response carries each role's full permission list, which is staff
+// management data and not something an order-taker needs to see. Every caller is
+// a staff surface — the web staff page and the app's invite, member, role and
+// roles screens — so gating on the three management permissions reaches all of
+// them while stopping any active member from enumerating who can do what.
 func (ctrl *RoleController) GetScopedRoles(c *gin.Context) {
-	restaurantID, ok := requireRestaurant(c)
+	restaurantID, ok := requireRestaurantWithAnyPermission(
+		c,
+		"missing staff management permission",
+		service.PermissionManageRoles,
+		service.PermissionManageMembers,
+		service.PermissionManageInvites,
+	)
 	if !ok {
 		return
 	}

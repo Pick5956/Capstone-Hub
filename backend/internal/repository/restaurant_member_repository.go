@@ -15,10 +15,6 @@ func NewRestaurantMemberRepository(db *gorm.DB) *RestaurantMemberRepository {
 	return &RestaurantMemberRepository{db: db}
 }
 
-func (r *RestaurantMemberRepository) Create(member *entity.RestaurantMember) error {
-	return r.db.Create(member).Error
-}
-
 func (r *RestaurantMemberRepository) Update(member *entity.RestaurantMember) error {
 	return r.db.Omit(clause.Associations).Save(member).Error
 }

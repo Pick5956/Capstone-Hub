@@ -23,6 +23,18 @@
 #      seconds. Killing it stops nothing. The real processes are main.exe,
 #      cloudflared, and whatever owns the port-3000 listener.
 #
+#   5. Starting the backend with a bare `go run main.go` looks identical to a
+#      correct start and is not. It leaves gin in *debug* mode, so
+#      isAllowedDevOrigin stays live and any loopback or private-IP origin on
+#      port 3000 can send credentialed cross-origin requests; and it leaves
+#      PUBLIC_BACKEND_URL unset, so upload URLs are built from the
+#      client-supplied Host header and then persisted - including the PromptPay
+#      QR customers scan to pay. Putting PUBLIC_BACKEND_URL in backend/.env does
+#      not fix it: LoadRuntimeEnvironment returns early and never reads that
+#      file when GIN_MODE=release. scripts/start-backend.ps1 -Mode public is the
+#      only correct public start - it loads .env into the process itself, sets
+#      PUBLIC_BACKEND_URL, pins GIN_MODE=release, and migrates first.
+#
 # ---------------------------------------------------------------------------
 # Two ways to run this, and when each is right
 #
@@ -36,7 +48,7 @@
 #   -BuildOnly    steps 1-2 only (stop, prove port 3000 free, build), then exit.
 #                 Start the three services yourself as blocking foreground
 #                 commands so they stay visible and stoppable:
-#                     backend/   go run main.go
+#                     repo root  scripts/start-backend.ps1 -Mode public
 #                     frontend/  npm.cmd run start:public
 #                     frontend/  npm.cmd run tunnel:public
 #   -VerifyOnly   steps 6-8 only. Run this after starting them that way - it
@@ -186,7 +198,7 @@ if (-not $SkipBuild) {
 if ($BuildOnly) {
   Write-Host "`nBuild is ready and port 3000 is free." -ForegroundColor Green
   Write-Host "Start these three as blocking foreground commands so they stay visible and stoppable:" -ForegroundColor DarkGray
-  Write-Host "  backend/   go run main.go" -ForegroundColor DarkGray
+  Write-Host "  repo root  powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-backend.ps1 -Mode public" -ForegroundColor DarkGray
   Write-Host "  frontend/  npm.cmd run start:public" -ForegroundColor DarkGray
   Write-Host "  frontend/  npm.cmd run tunnel:public" -ForegroundColor DarkGray
   Write-Host "Then gate them with: deploy-public.ps1 -VerifyOnly`n" -ForegroundColor DarkGray
@@ -196,15 +208,41 @@ if ($BuildOnly) {
 # ------------------------------------------------------------- 3. backend ----
 Step 3 "Backend"
 if (Get-Process -Name main -ErrorAction SilentlyContinue) {
+  # Left running on purpose - stopping a backend that is already serving would
+  # drop live requests. Note this cannot tell a release-mode backend from one
+  # somebody started with a bare `go run main.go`; if in doubt, stop it and
+  # re-run this script so it comes back up through start-backend.ps1.
   Ok "already running"
 } else {
   New-Item -ItemType Directory -Force (Join-Path $logs "backend\current") | Out-Null
-  Start-Process -FilePath "go" -ArgumentList "run", "main.go" `
-    -WorkingDirectory (Join-Path $root "backend") `
-    -RedirectStandardOutput (Join-Path $logs "backend\current\public.out.log") `
-    -RedirectStandardError (Join-Path $logs "backend\current\public.err.log") `
+  $backendStamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $backendOut = Join-Path $logs "backend\current\deploy-$backendStamp.out.log"
+  $backendErr = Join-Path $logs "backend\current\deploy-$backendStamp.err.log"
+  Start-Process -FilePath "powershell" `
+    -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $root "scripts\start-backend.ps1"), "-Mode", "public" `
+    -WorkingDirectory $root `
+    -RedirectStandardOutput $backendOut `
+    -RedirectStandardError $backendErr `
     -WindowStyle Hidden | Out-Null
-  Ok "started"
+
+  # Prove it, the way step 4 proves the frontend. start-backend.ps1 compiles and
+  # runs migrations before it serves, so this waits longer than a bare `go run`
+  # would need. Deliberately NOT keyed on stderr being non-empty: Go's logger
+  # writes its successful "backend listening" line to stderr, so a stderr check
+  # would call a good start a failure (docs/wiki/gotchas/
+  # windows-powershell-cloudflared-stderr.md). The port is the real signal; the
+  # log is only read once the port has failed to open.
+  $listening = $false
+  for ($i = 0; $i -lt 45; $i++) {
+    Start-Sleep -Seconds 2
+    if (Get-PortOwner 8080) { $listening = $true; break }
+  }
+  if (-not $listening) {
+    $backendStartErr = (Get-Content $backendErr -Raw -ErrorAction SilentlyContinue)
+    if ($backendStartErr -and $backendStartErr.Trim()) { Die "start-backend.ps1 reported:`n$backendStartErr" }
+    Die "nothing is listening on port 8080 after 90s - see $backendErr"
+  }
+  Ok "started in release mode, port 8080 listening"
 }
 
 # ------------------------------------------------------------ 4. frontend ----

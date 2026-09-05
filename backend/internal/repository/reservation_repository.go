@@ -14,20 +14,6 @@ func NewReservationRepository(db *gorm.DB) *ReservationRepository {
 	return &ReservationRepository{db: db}
 }
 
-func (r *ReservationRepository) Transaction(fn func(tx *ReservationRepository) error) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		return fn(&ReservationRepository{db: tx})
-	})
-}
-
-func (r *ReservationRepository) Create(reservation *entity.Reservation) error {
-	return r.db.Create(reservation).Error
-}
-
-func (r *ReservationRepository) Save(reservation *entity.Reservation) error {
-	return r.db.Save(reservation).Error
-}
-
 // List returns reservations for the archive, newest first, filtered by status
 // ("" = all). Returns limit+1 rows so the caller can detect more pages.
 func (r *ReservationRepository) List(restaurantID uint, status string, limit, offset int) ([]entity.Reservation, error) {

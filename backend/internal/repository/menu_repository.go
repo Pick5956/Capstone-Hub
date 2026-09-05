@@ -56,15 +56,6 @@ func (r *MenuRepository) FindCategoryForUpdate(restaurantID, categoryID uint) (*
 	return &category, nil
 }
 
-func (r *MenuRepository) FindCategoryByName(restaurantID uint, name string) (*entity.Category, error) {
-	var category entity.Category
-	err := r.db.Where("restaurant_id = ? AND name = ?", restaurantID, name).First(&category).Error
-	if err != nil {
-		return nil, err
-	}
-	return &category, nil
-}
-
 // CategoryNameExists reports whether an active category with the same name
 // (case-insensitive) already exists for the restaurant. Pass excludeID to skip
 // the category being updated so renaming it to its own name is allowed.

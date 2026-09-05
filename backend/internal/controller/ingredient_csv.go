@@ -101,6 +101,44 @@ func csvMoney(value float64) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
+// csvSafeCell stops a cell from being executed as a spreadsheet formula.
+//
+// encoding/csv quoting is no defence here: Excel strips the quotes first and
+// only then decides what the cell is, so a value opening with = + - @ tab or CR
+// runs as a formula. Ingredient names, units, notes and the recorded staff name
+// are free text, so an =HYPERLINK(...) planted in an ingredient name executes on
+// whoever opens the export. A leading apostrophe forces Excel to read it as text
+// and is not itself displayed.
+//
+// Numbers are left alone. Every stock-out prints its Change as a negative, so
+// escaping on the '-' alone would send a real column through as text and stop it
+// summing. csvNumber and csvMoney both emit plain FormatFloat output, which
+// ParseFloat accepts, so this exempts exactly the cells this file generates.
+func csvSafeCell(value string) string {
+	if value == "" {
+		return value
+	}
+	switch value[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+	default:
+		return value
+	}
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
+		return value
+	}
+	return "'" + value
+}
+
+// csvSafeRow returns a new row with every cell neutralised; the caller's slice
+// is left untouched.
+func csvSafeRow(row []string) []string {
+	safe := make([]string, len(row))
+	for i, cell := range row {
+		safe[i] = csvSafeCell(cell)
+	}
+	return safe
+}
+
 func csvTransactionTypeLabel(kind string, thai bool) string {
 	switch kind {
 	case "in":
@@ -174,11 +212,11 @@ func writeCSVDownload(c *gin.Context, filename string, header []string, rows [][
 	}
 	writer := csv.NewWriter(c.Writer)
 	writer.UseCRLF = true
-	if err := writer.Write(header); err != nil {
+	if err := writer.Write(csvSafeRow(header)); err != nil {
 		return
 	}
 	for _, row := range rows {
-		if err := writer.Write(row); err != nil {
+		if err := writer.Write(csvSafeRow(row)); err != nil {
 			return
 		}
 	}
