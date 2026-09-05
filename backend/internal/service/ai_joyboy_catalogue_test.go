@@ -260,8 +260,20 @@ func TestSalesForPeriodBodyMarksRunningWindow(t *testing.T) {
 	now := time.Date(2026, time.September, 4, 15, 0, 0, 0, loc)
 	today := AIPeriod{Label: "วันนี้", Start: time.Date(2026, 9, 4, 0, 0, 0, 0, loc), End: time.Date(2026, 9, 5, 0, 0, 0, 0, loc)}
 	body := joyboySalesForPeriodBody(today, repository.AISalesRange{Orders: 18, Revenue: 4895, Days: 1}, now)
-	if !strings.Contains(body, "period_incomplete=true days_elapsed=1 of 1") || !strings.Contains(body, "incomplete_means=") {
+	if !strings.Contains(body, "period_incomplete=true") || !strings.Contains(body, "incomplete_means=") {
 		t.Errorf("a day still running must be marked:\n%s", body)
+	}
+	// "ผ่านไป 6 วันจากทั้งหมด 6 วัน" beside "ยังไม่จบ" reads as a contradiction.
+	// A window that already stops at today says only that today is not over.
+	if strings.Contains(body, "days_elapsed=1 of 1") {
+		t.Errorf("elapsed equal to the whole window must not be spelled out:\n%s", body)
+	}
+
+	// A window that really does run past today keeps the count.
+	month := AIPeriod{Label: "เดือนกันยายน 2569", Start: time.Date(2026, 9, 1, 0, 0, 0, 0, loc), End: time.Date(2026, 10, 1, 0, 0, 0, 0, loc)}
+	partial := joyboySalesForPeriodBody(month, repository.AISalesRange{Orders: 97, Revenue: 27033, Days: 4}, now)
+	if !strings.Contains(partial, "days_elapsed=4 of 30") {
+		t.Errorf("a month four days in should still say so:\n%s", partial)
 	}
 	yesterday := AIPeriod{Label: "เมื่อวาน", Start: time.Date(2026, 9, 3, 0, 0, 0, 0, loc), End: time.Date(2026, 9, 4, 0, 0, 0, 0, loc)}
 	done := joyboySalesForPeriodBody(yesterday, repository.AISalesRange{Orders: 20, Revenue: 5000, Days: 1}, now)
@@ -275,15 +287,22 @@ func TestSalesForPeriodBodyMarksRunningWindow(t *testing.T) {
 // ไม่ปิดบิลล่ะ", and leaving it off would send the model guessing.
 func TestOpenBillsNowIsASeparateFigure(t *testing.T) {
 	body := joyboyOpenBillsNow([]repository.AIActiveOrder{
-		{OrderNumber: "A1", GrandTotal: 320}, {OrderNumber: "A2", GrandTotal: 802},
+		{OrderNumber: "A1", TableNumber: "F01", GrandTotal: 320},
+		{OrderNumber: "A2", TableNumber: "F02", GrandTotal: 700},
+		// Takeaway: money owed, nobody seated. An answer said "5 โต๊ะ" from a
+		// count of bills, which held only while every open bill was dine-in.
+		{OrderNumber: "A3", GrandTotal: 102},
 	})
-	if !strings.Contains(body, "open_bills_now=2 open_total_now=1122.00") {
-		t.Errorf("open bills not summed as their own figure:\n%s", body)
+	if !strings.Contains(body, "open_bills_now=3 open_at_tables_now=2 open_total_now=1122.00") {
+		t.Errorf("open bills and open tables must be separate figures:\n%s", body)
+	}
+	if !strings.Contains(body, "ห้ามเรียกจำนวนบิลว่าจำนวนโต๊ะ") {
+		t.Errorf("the sheet must say the two are not the same:\n%s", body)
 	}
 	if !strings.Contains(body, "ยังไม่รวมใน revenue") {
 		t.Errorf("the sheet must say the open total is outside the paid total:\n%s", body)
 	}
-	if none := joyboyOpenBillsNow(nil); !strings.Contains(none, "open_bills_now=0 open_total_now=0.00") {
+	if none := joyboyOpenBillsNow(nil); !strings.Contains(none, "open_bills_now=0 open_at_tables_now=0 open_total_now=0.00") {
 		t.Errorf("no open bills should still be stated:\n%s", none)
 	}
 }

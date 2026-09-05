@@ -931,12 +931,22 @@ func joyboyTableStatusBody(tables []entity.RestaurantTable) string {
 // to the paid total — "ปิดบิลแล้ว 4,895 ยังค้างอีก 1,122" — and never folded in.
 func joyboyOpenBillsNow(open []repository.AIActiveOrder) string {
 	var total float64
+	tables := 0
 	for _, order := range open {
 		total += order.GrandTotal
+		// A bill without a table is takeaway or delivery: real money still
+		// owed, but nobody sitting down. Counted separately because the answer
+		// said "5 โต๊ะ" from a count of bills — true only while every open bill
+		// happened to be a dine-in one.
+		if strings.TrimSpace(order.TableNumber) != "" {
+			tables++
+		}
 	}
 	return joyboyJoin([]string{
-		fmt.Sprintf("open_bills_now=%d open_total_now=%s", len(open), joyboyNum(roundBaht(total))),
-		"open_means=บิลที่ยังนั่งอยู่ ณ ตอนนี้ ยังไม่ปิดบิล จึงยังไม่รวมใน revenue ข้างบน ตัวเลขนี้เปลี่ยนตลอดเวลา",
+		fmt.Sprintf("open_bills_now=%d open_at_tables_now=%d open_total_now=%s",
+			len(open), tables, joyboyNum(roundBaht(total))),
+		"open_means=บิลที่ยังไม่ปิด ณ ตอนนี้ จึงยังไม่รวมใน revenue ข้างบน ตัวเลขนี้เปลี่ยนตลอดเวลา",
+		"open_at_tables_means=จำนวนบิลที่นั่งอยู่บนโต๊ะ ที่เหลือเป็นกลับบ้าน/เดลิเวอรีซึ่งไม่มีโต๊ะ ห้ามเรียกจำนวนบิลว่าจำนวนโต๊ะ",
 	})
 }
 
@@ -1383,7 +1393,16 @@ func joyboyPeriodDayLines(suffix string, p AIPeriod, d repository.AISalesRange, 
 	}
 	lines := []string{fmt.Sprintf("calendar_days%s=%d", suffix, calendar)}
 	if incomplete {
-		lines = append(lines, fmt.Sprintf("period%s_incomplete=true days_elapsed%s=%d of %d", suffix, suffix, elapsed, calendar))
+		// "X of Y" only when the two differ. A window the model read as running
+		// up to today — "สัปดาห์นี้" comes back as 31 Aug–5 Sep, not the whole
+		// week — has elapsed equal to its length, and "ผ่านไป 6 วันจากทั้งหมด
+		// 6 วัน" next to "ยังไม่จบ" reads as a contradiction. What is true of
+		// such a window is simply that it stops at today, and today is not over.
+		if elapsed < calendar {
+			lines = append(lines, fmt.Sprintf("period%s_incomplete=true days_elapsed%s=%d of %d", suffix, suffix, elapsed, calendar))
+		} else {
+			lines = append(lines, fmt.Sprintf("period%s_incomplete=true note=ช่วงนี้นับถึงวันนี้ ซึ่งวันนี้ยังไม่จบ ตัวเลขเป็นยอดถึงตอนนี้ ห้ามบอกว่าผ่านไปกี่วันจากกี่วัน", suffix))
+		}
 	}
 	if d.Days > 0 {
 		lines = append(lines, fmt.Sprintf("per_selling_day%s=%s", suffix, joyboyNum(roundBaht(d.Revenue/float64(d.Days)))))
@@ -1417,7 +1436,11 @@ func joyboySalesForPeriodBody(p AIPeriod, d repository.AISalesRange, now time.Ti
 	if d.Orders == 0 {
 		lines := []string{"period=" + label, "scope=named_period_paid_sales_whole_store", "orders=0 revenue=0.00"}
 		if _, elapsed, incomplete := joyboyPeriodDays(p, now); incomplete {
-			lines = append(lines, fmt.Sprintf("period_incomplete=true days_elapsed=%d note=ช่วงนี้ยังไม่จบ ยังไม่มีบิลจนถึงตอนนี้", elapsed))
+			if calendar, _, _ := joyboyPeriodDays(p, now); calendar > elapsed {
+				lines = append(lines, fmt.Sprintf("period_incomplete=true days_elapsed=%d of %d note=ช่วงนี้ยังไม่จบ ยังไม่มีบิลจนถึงตอนนี้", elapsed, calendar))
+			} else {
+				lines = append(lines, "period_incomplete=true note=ช่วงนี้นับถึงวันนี้ ซึ่งวันนี้ยังไม่จบ ยังไม่มีบิลจนถึงตอนนี้")
+			}
 		}
 		return joyboyJoin(append(lines, joyboyNoData("no_paid_orders_in_period")))
 	}
