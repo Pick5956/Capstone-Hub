@@ -106,7 +106,9 @@ test('ranks overdue kitchen work first, then ready food, then inventory risks', 
   };
 
   assert.equal(resolveHomePriority(counts, fullAccess).key, 'kitchen-overdue');
-  assert.equal(resolveHomePriority({ ...counts, overdueKitchen: 0 }, fullAccess).key, 'kitchen-ready');
+  // Ready-to-serve is not an alert: the web filters its done lane off the
+  // attention face, so clearing the overdue queue falls straight through to stock.
+  assert.equal(resolveHomePriority({ ...counts, overdueKitchen: 0 }, fullAccess).key, 'stock-out');
   assert.equal(resolveHomePriority({ ...counts, overdueKitchen: 0, readyKitchen: 0 }, fullAccess).key, 'stock-out');
 });
 

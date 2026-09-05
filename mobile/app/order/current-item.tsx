@@ -8,7 +8,7 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
-import { ActionDock, Button, EmptyState, Feedback, Surface, TextField } from '@/src/components/ui';
+import { ActionDock, Button, EmptyState, Feedback, Surface } from '@/src/components/ui';
 import { money } from '@/src/lib/format';
 import {
   createOrderDetailRequestGuard,
@@ -222,14 +222,6 @@ export default function CurrentRoundItemScreen() {
                 onPress={() => setQuantity((current) => Math.min(100, current + 1))}
               />
             </View>
-            <TextField
-              label={language === 'th' ? 'หมายเหตุถึงครัว' : 'Note for the kitchen'}
-              placeholder={language === 'th' ? 'เช่น ไม่ใส่ผัก เผ็ดน้อย' : 'For example, no vegetables, mild'}
-              value={note}
-              onChangeText={setNote}
-              multiline
-              maxLength={500}
-            />
           </Surface>
         </>
       ) : (

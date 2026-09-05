@@ -7,7 +7,6 @@ import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
 import {
-  Button,
   ChipGroup,
   EdgeRow,
   EdgeSection,
@@ -58,10 +57,7 @@ export default function ReservationsScreen() {
   const [filter, setFilter] = useState<ReservationFilter>('all');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [counts, setCounts] = useState<Partial<Record<ReservationStatus, number>>>({});
-  const [hasMore, setHasMore] = useState(false);
-  const [nextOffset, setNextOffset] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestGenerationRef = useRef(createRequestGeneration());
 
@@ -70,19 +66,14 @@ export default function ReservationsScreen() {
       requestGenerationRef.current.invalidate();
       setReservations([]);
       setCounts({});
-      setHasMore(false);
-      setNextOffset(0);
       setLoading(false);
       return;
     }
     const request = requestGenerationRef.current.begin();
     setLoading(true);
-    setLoadingMore(false);
     setError(null);
     setReservations([]);
     setCounts({});
-    setHasMore(false);
-    setNextOffset(0);
     const result = await loadFilteredReplacement(() => listReservations({
         status: filter === 'all' ? '' : filter,
         limit: pageSize,
@@ -92,13 +83,9 @@ export default function ReservationsScreen() {
       const response = result.data;
       setReservations(response.reservations || []);
       setCounts(response.counts || {});
-      setHasMore(Boolean(response.has_more));
-      setNextOffset(response.next_offset || 0);
     } else {
       setReservations([]);
       setCounts({});
-      setHasMore(false);
-      setNextOffset(0);
       setError(result.error instanceof Error
         ? result.error.message
         : copy('โหลดประวัติการจองไม่สำเร็จ', 'Could not load reservation history'));
@@ -112,35 +99,6 @@ export default function ReservationsScreen() {
       requestGenerationRef.current.invalidate();
     };
   }, [load]));
-
-  async function loadMore() {
-    if (!canView || loading || loadingMore || !hasMore) return;
-    const request = requestGenerationRef.current.begin();
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const response = await listReservations({
-        status: filter === 'all' ? '' : filter,
-        limit: pageSize,
-        offset: nextOffset,
-      });
-      if (!requestGenerationRef.current.isCurrent(request)) return;
-      setReservations((current) => {
-        const known = new Set(current.map((reservation) => reservation.ID));
-        return [...current, ...(response.reservations || []).filter((reservation) => !known.has(reservation.ID))];
-      });
-      setCounts(response.counts || {});
-      setHasMore(Boolean(response.has_more));
-      setNextOffset(response.next_offset || nextOffset);
-    } catch (err) {
-      if (!requestGenerationRef.current.isCurrent(request)) return;
-      setError(err instanceof Error
-        ? err.message
-        : copy('โหลดประวัติเพิ่มไม่สำเร็จ', 'Could not load more reservations'));
-    } finally {
-      if (requestGenerationRef.current.isCurrent(request)) setLoadingMore(false);
-    }
-  }
 
   if (!canView) {
     return (
@@ -304,15 +262,6 @@ export default function ReservationsScreen() {
           </EdgeSection>
         </View>
       )}
-      {hasMore ? (
-        <Button
-          variant="secondary"
-          icon="time-outline"
-          label={copy('ดูรายการก่อนหน้าเพิ่ม', 'Load earlier reservations')}
-          onPress={() => { void loadMore(); }}
-          loading={loadingMore}
-        />
-      ) : null}
     </AppScreen>
   );
 }

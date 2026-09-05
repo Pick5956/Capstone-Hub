@@ -2,12 +2,10 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { listMenuItems } from '@/src/api/menu';
 import { kitchenQueue, updateOrderItemStatus } from '@/src/api/order';
 import { AppIcon, type AppIconName } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
-import { MenuImage } from '@/src/components/menu-image';
 import { usePrimaryTabSceneStatus } from '@/src/components/primary-tabs-runtime';
 import { useKitchenOrderEvents } from '@/src/hooks/use-kitchen-order-events';
 import {
@@ -21,7 +19,6 @@ import {
   TextField,
 } from '@/src/components/ui';
 import { itemStatusLabel } from '@/src/lib/format';
-import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   createKitchenMutationGate,
   formatKitchenDuration,
@@ -311,7 +308,6 @@ export default function KitchenScreen() {
   const canUpdate = access.canUpdate;
   const canView = access.canView;
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuImageById, setMenuImageById] = useState<ReadonlyMap<number, string>>(new Map());
   const [completedOpen, setCompletedOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submittingKey, setSubmittingKey] = useState<string | null>(null);
@@ -326,22 +322,6 @@ export default function KitchenScreen() {
   const pendingQuietRefreshRef = useRef(false);
   const adjacentWarmRequestedRef = useRef(false);
   const primaryTabSceneStatus = usePrimaryTabSceneStatus();
-
-  useEffect(() => {
-    if (!canView) return;
-    let active = true;
-    void listMenuItems()
-      .then((response) => {
-        if (!active) return;
-        setMenuImageById(new Map(
-          (response.menu_items || []).map((item) => [item.ID, item.image_url]),
-        ));
-      })
-      .catch(() => {
-        if (active) setMenuImageById(new Map());
-      });
-    return () => { active = false; };
-  }, [canView]);
 
   const requestQueueSnapshot = useCallback(async (request: number) => {
     try {
@@ -724,21 +704,11 @@ export default function KitchenScreen() {
                   {items.map((item, index) => {
                     const cancelling = cancelTargetId === item.ID;
                     const fulfillment = kitchenFulfillmentContext(order.order_type, item.fulfillment_type);
-                    const imageUrl = selectOrderItemImage({
-                      menuId: item.menu_id,
-                      menuImageUrl: item.menu?.image_url,
-                    }, menuImageById);
                     return (
                       <View key={item.ID}>
                         {index ? <Divider /> : null}
                         <View style={styles.item}>
                           <View style={styles.itemMain}>
-                            <MenuImage
-                              accessibilityLabel={copy(`รูปเมนู ${item.menu_name}`, `Photo of ${item.menu_name}`)}
-                              imageUrl={imageUrl}
-                              size={width >= 820 ? 60 : 52}
-                              variant="row"
-                            />
                             <View style={styles.itemContent}>
                               <View style={styles.itemTitleRow}>
                                 <View
@@ -875,7 +845,6 @@ export default function KitchenScreen() {
             {!loading && !group.orders.length ? (
               <EmptyState
                 title={copy('ไม่มีรายการกำลังทำ', 'No items cooking')}
-                detail={copy('รายการใหม่จะเข้าคิวอัตโนมัติเมื่อส่งออเดอร์เข้าครัว', 'New items appear automatically after an order is sent to the kitchen.')}
               />
             ) : null}
           </View>
@@ -890,10 +859,7 @@ export default function KitchenScreen() {
           compact
           icon="time-outline"
           variant="secondary"
-          label={copy(
-            `รายการที่เสร็จสิ้น ${doneTickets.length.toLocaleString('th-TH')}`,
-            `Completed ${doneTickets.length.toLocaleString('en-US')}`,
-          )}
+        label={copy('รายการที่เสร็จสิ้น', 'Completed')}
           onPress={() => setCompletedOpen(true)}
         />
       )}
@@ -934,12 +900,6 @@ export default function KitchenScreen() {
           <View style={styles.sheetHeader}>
             <View style={{ minWidth: 0, flex: 1 }}>
               <Text style={typeScale.cardTitle}>{copy('รายการที่เสร็จสิ้น', 'Completed')}</Text>
-              <Text style={[typeScale.caption, { color: palette.muted }]}>
-                {copy(
-                  'อยู่ตรงนี้จนกว่าหน้าร้านจะรับชำระเงิน',
-                  'Stays here until front-of-house takes payment.',
-                )}
-              </Text>
             </View>
             <Button
               compact

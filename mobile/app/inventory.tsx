@@ -1,8 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
-import { deleteIngredient, listIngredientCategories, listIngredients } from '@/src/api/ingredient';
+import { listIngredientCategories, listIngredients } from '@/src/api/ingredient';
 import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppRefreshControl, AppScreen } from '@/src/components/app-shell';
@@ -59,7 +59,6 @@ export default function InventoryScreen() {
   const [search, setSearch] = useState('');
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const canManage = can(activeMembership, 'manage_inventory');
@@ -148,39 +147,6 @@ export default function InventoryScreen() {
   function exitSelect() {
     setSelecting(false);
     setSelectedIds(new Set());
-  }
-
-  async function runBulkDelete() {
-    const ids = [...selectedIds];
-    if (!ids.length) return;
-    setBulkDeleting(true);
-    setError(null);
-    try {
-      const results = await Promise.allSettled(ids.map((id) => deleteIngredient(id)));
-      const failed = results.filter((result) => result.status === 'rejected').length;
-      await load();
-      exitSelect();
-      if (failed > 0) {
-        setError(copy(`ลบไม่สำเร็จ ${failed} รายการ`, `${failed} item(s) could not be deleted.`));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : copy('ลบวัตถุดิบไม่สำเร็จ', 'Could not delete ingredients.'));
-    } finally {
-      setBulkDeleting(false);
-    }
-  }
-
-  function confirmBulkDelete() {
-    const count = selectedIds.size;
-    if (!count) return;
-    Alert.alert(
-      copy(`ลบ ${count.toLocaleString(locale)} รายการที่เลือก?`, `Delete ${count.toLocaleString(locale)} selected item(s)?`),
-      copy('การลบนี้ย้อนกลับไม่ได้', 'This action cannot be undone.'),
-      [
-        { text: copy('ยกเลิก', 'Cancel'), style: 'cancel' },
-        { text: copy('ลบ', 'Delete'), style: 'destructive', onPress: () => { void runBulkDelete(); } },
-      ],
-    );
   }
 
   if (!canView) {
@@ -366,9 +332,6 @@ export default function InventoryScreen() {
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <View style={{ flex: 1 }}>
             <Button compact variant="secondary" icon="checkmark-done-outline" label={allSelected ? copy('ไม่เลือก', 'None') : copy('เลือกทั้งหมด', 'All')} onPress={toggleSelectAll} disabled={!filtered.length} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Button compact variant="danger" icon="trash-outline" label={copy('ลบที่เลือก', 'Delete')} onPress={confirmBulkDelete} loading={bulkDeleting} disabled={!selectedIds.size} />
           </View>
         </View>
       </ActionDock>

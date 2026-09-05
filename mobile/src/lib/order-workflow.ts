@@ -87,12 +87,11 @@ export function billExitRoute(canTakeOrder: boolean, canViewOrders: boolean) {
   return '/home' as const;
 }
 
-export function billPaymentStage(
-  paymentStatus: 'unpaid' | 'paid',
-  paymentRecorded: boolean,
-) {
-  if (paymentStatus === 'paid') return 'paid' as const;
-  return paymentRecorded ? 'recorded' as const : 'due' as const;
+// Two states only, matching the web. The bill screen leaves as soon as a
+// payment succeeds rather than re-reading the bill, so there is no window
+// in which a paid order can still be sitting on an unpaid-looking screen.
+export function billPaymentStage(paymentStatus: 'unpaid' | 'paid') {
+  return paymentStatus === 'paid' ? 'paid' as const : 'due' as const;
 }
 
 export function isCookingItem(status: OrderItemStatus) {

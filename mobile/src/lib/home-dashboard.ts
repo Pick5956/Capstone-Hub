@@ -52,7 +52,6 @@ export type HomeAccess = {
 
 export type HomePriorityKey =
   | 'kitchen-overdue'
-  | 'kitchen-ready'
   | 'stock-out'
   | 'stock-low'
   | 'kitchen-active'
@@ -314,9 +313,6 @@ export function buildHomeAttention(counts: HomeOperationalCounts, access: HomeAc
 
   if (access.canViewKitchen && counts.overdueKitchen > 0) {
     alerts.push({ key: 'kitchen-overdue', count: counts.overdueKitchen, href: '/kitchen', tone: 'danger' });
-  }
-  if (access.canViewKitchen && counts.readyKitchen > 0) {
-    alerts.push({ key: 'kitchen-ready', count: counts.readyKitchen, href: '/kitchen', tone: 'success' });
   }
   if (access.canViewInventory && counts.outOfStock > 0) {
     alerts.push({ key: 'stock-out', count: counts.outOfStock, href: '/inventory', tone: 'danger' });

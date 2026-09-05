@@ -24,7 +24,7 @@ export default function SettingsScreen() {
     : selectedPrinter?.name || copy('ยังไม่ได้เลือกเครื่องพิมพ์', 'No printer selected');
   const settingsItems: Array<{ title: string; detail: string; href: string; icon: AppIconName; show: boolean }> = [
     { title: copy('บัญชีของฉัน', 'My account'), detail: user?.email || copy('ชื่อและเบอร์โทร', 'Name and phone'), href: '/settings/account', icon: 'person-outline', show: true },
-    { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษาและขนาดตัวอักษร', 'Language and text size'), href: '/settings/display', icon: 'text-outline', show: true },
+    { title: copy('การแสดงผล', 'Display'), detail: copy('ภาษา', 'Language'), href: '/settings/display', icon: 'text-outline', show: true },
     { title: copy('เครื่องพิมพ์ใบเสร็จ', 'Receipt printer'), detail: printerDetail, href: '/settings/printer', icon: 'print-outline', show: true },
     { title: copy('ข้อมูลร้าน', 'Restaurant'), detail: copy('ข้อมูลร้าน บิล และ QR', 'Restaurant, bill and QR settings'), href: '/settings/restaurant', icon: 'storefront-outline', show: canManageRestaurant },
     { title: copy('ทีมและสิทธิ์', 'Team and access'), detail: copy('พนักงาน บทบาท และคำเชิญ', 'Staff, roles and invitations'), href: '/staff', icon: 'people-outline', show: canManageTeam },

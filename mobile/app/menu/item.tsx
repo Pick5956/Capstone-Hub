@@ -237,9 +237,6 @@ export default function MenuItemEditorScreen() {
         <View style={{ flex: 1, minWidth: 140 }}>
           <TextField icon="cash-outline" label={copy('ราคา', 'Price')} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
         </View>
-        <View style={{ flex: 1, minWidth: 140 }}>
-          <TextField icon="reorder-three-outline" label={copy('ลำดับ', 'Display order')} value={displayOrder} onChangeText={setDisplayOrder} keyboardType="number-pad" />
-        </View>
       </View>
       <Divider />
       <View style={{ gap: spacing.sm }}>
@@ -268,15 +265,6 @@ export default function MenuItemEditorScreen() {
       </View>
       <Divider />
       <TextField icon="document-text-outline" label={copy('คำอธิบาย', 'Description')} value={description} onChangeText={setDescription} multiline />
-      <ChipGroup
-        label={copy('สถานะขาย', 'Availability')}
-        value={available}
-        onChange={setAvailable}
-        options={[
-          { label: copy('พร้อมขาย', 'Available'), value: 'yes' },
-          { label: copy('ปิดขาย', 'Unavailable'), value: 'no' },
-        ]}
-      />
       <View style={{ gap: spacing.sm }}>
         <Text style={{ color: palette.text, fontSize: 13, fontWeight: '700' }}>{copy('หมวดเมนู', 'Menu categories')}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
@@ -370,15 +358,6 @@ export default function MenuItemEditorScreen() {
                   </View>
                   <TextField label={copy('ชื่อ', 'Name')} value={option.name} onChangeText={(value) => updateOption(groupIndex, optionIndex, { name: value })} error={optionNameIssue ? optionIssueMessage(optionNameIssue.code) : undefined} />
                   <TextField label={copy('ราคาเพิ่ม', 'Additional price')} value={option.price_delta} onChangeText={(value) => updateOption(groupIndex, optionIndex, { price_delta: value })} keyboardType="decimal-pad" error={optionPriceIssue ? optionIssueMessage(optionPriceIssue.code) : undefined} />
-                  <ChipGroup
-                    label={copy('ค่าเริ่มต้น', 'Default selection')}
-                    value={option.is_default ? 'yes' : 'no'}
-                    onChange={(value) => updateOption(groupIndex, optionIndex, { is_default: value === 'yes' })}
-                    options={[
-                      { label: copy('ไม่เลือก', 'Not selected'), value: 'no' },
-                      { label: copy('เลือกไว้', 'Selected'), value: 'yes' },
-                    ]}
-                  />
                 </View>
               );
             })}

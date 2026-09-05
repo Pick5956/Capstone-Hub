@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, ChevronDown, ChevronUp, Download, KeyRound } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, KeyRound } from "lucide-react";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { can } from "@/src/lib/rbac";
@@ -10,7 +10,6 @@ import { createSingleFlight } from "@/src/lib/singleFlight";
 import type { RestaurantTable, RestaurantTableInput, TableTag, TableTagInput, TableZone, TableZoneInput } from "@/src/types/table";
 import { Skeleton } from "@/src/components/shared/Skeleton";
 import PermissionDenied from "@/src/components/shared/PermissionDenied";
-import ReservationHistoryModal from "@/src/components/tables/ReservationHistoryModal";
 import ThemedSelect from "@/src/components/shared/ThemedSelect";
 import { useConfirm, useToast } from "@/src/components/shared/FeedbackProvider";
 import { useBackdropClose } from "@/src/hooks/useBackdropClose";
@@ -39,7 +38,6 @@ export default function TablesPage() {
   const confirm = useConfirm();
   const canManage = can(activeMembership, "manage_table");
   const canView = canManage || can(activeMembership, "view_tables");
- const [reservationsOpen, setReservationsOpen] = useState(false);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [zones, setZones] = useState<TableZone[]>([]);
   const [tags, setTags] = useState<TableTag[]>([]);
@@ -88,7 +86,6 @@ export default function TablesPage() {
         allZones: "ทุกโซน",
         noZone: "ไม่มีโซน",
         allTags: "ทุก tag",
- reservationHistory: "ประวัติการจอง",
         seats: "ที่นั่ง",
         edit: "แก้ไข",
         delete: "ลบ",
@@ -173,7 +170,6 @@ export default function TablesPage() {
         allZones: "All zones",
         noZone: "No zone",
         allTags: "All tags",
- reservationHistory: "Reservation history",
         seats: "seats",
         edit: "Edit",
         delete: "Delete",
@@ -693,26 +689,18 @@ export default function TablesPage() {
             <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
               {hasAnyZone && (
                 <div className="w-full sm:w-52">
-                  <ThemedSelect aria-label={copy.allZones} value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
+                  <ThemedSelect triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]" aria-label={copy.allZones} value={zoneFilter} onChange={setZoneFilter} options={[{ value: "all", label: copy.allZones }, { value: "none", label: copy.noZone }, ...activeZones.map((zone) => ({ value: String(zone.ID), label: zone.name }))]} />
                 </div>
               )}
               <div className="w-full sm:w-52">
-                <ThemedSelect aria-label={copy.allTags} value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
+                <ThemedSelect triggerClassName="rounded-xl shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]" aria-label={copy.allTags} value={tagFilter} onChange={setTagFilter} options={[{ value: "all", label: copy.allTags }, ...activeTags.map((tag) => ({ value: String(tag.ID), label: tag.name }))]} />
               </div>
- <button
- type="button"
- onClick={() => setReservationsOpen(true)}
- className="ui-press inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-[color:var(--dashboard-shell-border)] bg-white px-3 text-[13px] font-semibold text-gray-800 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
- >
- <CalendarClock className="h-4 w-4" aria-hidden="true" />
- {copy.reservationHistory}
- </button>
             </div>
             {canManage ? (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>
-                <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-md border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>
-                <button type="button" onClick={startCreateTable} className="h-9 rounded-md bg-orange-700 px-3 text-[12px] font-semibold text-white hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>
+                <button type="button" onClick={() => setZoneManagerOpen(true)} className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.zoneManager}</button>
+                <button type="button" onClick={() => setTagManagerOpen(true)} className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-700 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800">{copy.tagManager}</button>
+                <button type="button" onClick={startCreateTable} className="h-9 rounded-xl bg-orange-700 px-3 text-[12px] font-semibold text-white shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)] hover:bg-orange-800 dark:bg-orange-700 dark:text-white">+ {copy.createTable}</button>
               </div>
             ) : null}
           </div>
@@ -990,7 +978,6 @@ export default function TablesPage() {
         </div>
       )}
     </div>
- <ReservationHistoryModal open={reservationsOpen} onClose={() => setReservationsOpen(false)} language={language} />
     </>
   );
 }

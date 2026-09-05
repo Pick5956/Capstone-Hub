@@ -24,7 +24,7 @@ const STATUS_LABELS: Record<string, Record<DisplayLanguage, string>> = {
 };
 
 export const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
-export const INVITATION_EXPIRY_DAY_OPTIONS = [1, 3, 7, 14, 30, 0] as const;
+export const INVITATION_EXPIRY_DAY_OPTIONS = [1, 3, 7, 14, 0] as const;
 
 export function invitationExpiryLabel(
   days: number,

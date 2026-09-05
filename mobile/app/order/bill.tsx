@@ -5,17 +5,17 @@ import { Image, Pressable, useWindowDimensions, View } from 'react-native';
 import { apiUrl } from '@/src/api/client';
 import { listCategories, listMenuItems } from '@/src/api/menu';
 import { addOrderItem, getBill, payOrder, updateOrderItemStatus } from '@/src/api/order';
-import { AppIcon } from '@/src/components/app-icon';
 import { AppText as Text } from '@/src/components/app-text';
 import { AppScreen } from '@/src/components/app-shell';
 import { MenuImage } from '@/src/components/menu-image';
 import { ActionDock, Button, ChipGroup, Divider, EmptyState, Feedback, SearchField, SectionHeader, Select, StatusBadge, Surface, TextField } from '@/src/components/ui';
-import { itemStatusLabel, money } from '@/src/lib/format';
+import { money } from '@/src/lib/format';
 import { selectOrderItemImage } from '@/src/lib/order-detail-runtime';
 import {
   activeOrderItems,
   billExitRoute,
   billPaymentStage,
+  isCookingItem,
   canTakeOrderPayment,
   paymentReceivedAmount,
   undeliveredOrderItems,
@@ -28,6 +28,7 @@ import { ReceiptSlip } from '@/src/components/receipt-slip';
 import { useAuth } from '@/src/providers/auth-provider';
 import { useDisplayPreferences } from '@/src/providers/display-preferences-provider';
 import { usePrinter } from '@/src/providers/printer-provider';
+import { useToast } from '@/src/providers/toast-provider';
 import { breakpoints, palette, radius, spacing, typeScale } from '@/src/theme';
 import type { Category, MenuItem } from '@/src/types/menu';
 import type { Bill, OrderItem } from '@/src/types/order';
@@ -36,12 +37,6 @@ function resolveImage(value: string) {
   if (!value) return '';
   if (value.startsWith('http')) return value;
   return `${apiUrl}${value.startsWith('/') ? '' : '/'}${value}`;
-}
-
-function itemTone(status: OrderItem['status']) {
-  if (status === 'ready' || status === 'served') return 'success' as const;
-  if (status === 'cooking' || status === 'pending') return 'warning' as const;
-  return 'neutral' as const;
 }
 
 function hasRequiredOptions(item: MenuItem) {
@@ -57,6 +52,7 @@ export default function BillScreen() {
   const validOrderId = Number.isInteger(orderId) && orderId > 0;
   const { activeMembership } = useAuth();
   const { copy, language } = useDisplayPreferences();
+  const { showToast } = useToast();
   const canTakeOrder = can(activeMembership, 'take_order');
   const canPay = can(activeMembership, 'take_payment');
   const canViewOrders = can(activeMembership, 'view_orders');
@@ -67,14 +63,12 @@ export default function BillScreen() {
   const [categoryId, setCategoryId] = useState('all');
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState<'cash' | 'promptpay_qr'>('cash');
-  const [note, setNote] = useState('');
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<OrderItem | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [paymentRecorded, setPaymentRecorded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
@@ -97,7 +91,6 @@ export default function BillScreen() {
     try {
       const nextBill = await getBill(orderId);
       setBill(nextBill);
-      if (nextBill.payment_status === 'paid') setPaymentRecorded(false);
       setMethod(nextBill.payments.at(-1)?.method || 'cash');
       if (nextBill.payment_status !== 'paid' && canTakeOrder) {
         const [menuResponse, categoryResponse] = await Promise.all([
@@ -131,7 +124,7 @@ export default function BillScreen() {
   );
   const paymentReady = canTakeOrderPayment(activeItems);
   const paymentStage = bill
-    ? billPaymentStage(bill.payment_status, paymentRecorded)
+    ? billPaymentStage(bill.payment_status)
     : 'due';
   const canEditBill = paymentStage === 'due' && canTakeOrder;
   const filteredMenu = useMemo(() => {
@@ -206,7 +199,7 @@ export default function BillScreen() {
   }
 
   async function pay() {
-    if (!bill || !canPay || !paymentReady || paymentRecorded) return;
+    if (!bill || !canPay || !paymentReady) return;
     if (method === 'promptpay_qr' && !bill.promptpay_qr_image) {
       setError(copy(
         'ร้านยังไม่ได้ตั้งค่า QR PromptPay จึงยังรับเงินด้วยวิธีนี้ไม่ได้',
@@ -221,29 +214,19 @@ export default function BillScreen() {
       await payOrder(orderId, {
         method,
         received_amount: paymentReceivedAmount(method, bill.grand_total),
-        note: note.trim(),
       });
-      setPaymentRecorded(true);
+      // Match the web: once payment succeeds, leave the bill instead of
+      // re-reading it. The web never refetches here - confirmPayment goes
+      // straight to router.replace - which is why two states are enough for
+      // it: a failed re-read can never strand a paid order on a screen that
+      // still offers a Pay button. The receipt stays reachable from the order
+      // archive, the same place the web sends people for a reprint.
       setEditing(false);
       setAdding(false);
       setCancelTarget(null);
       setCancelReason('');
-      setMessage(copy('รับชำระเงินเรียบร้อย', 'Payment recorded'));
-      try {
-        const paidBill = await getBill(orderId);
-        setBill(paidBill);
-        if (paidBill.payment_status === 'paid') setPaymentRecorded(false);
-      } catch (err) {
-        setError(err instanceof Error
-          ? copy(
-            `รับชำระเงินแล้ว แต่โหลดใบเสร็จล่าสุดไม่สำเร็จ: ${err.message}`,
-            `Payment was recorded, but the latest receipt could not be loaded: ${err.message}`,
-          )
-          : copy(
-            'รับชำระเงินแล้ว แต่โหลดใบเสร็จล่าสุดไม่สำเร็จ',
-            'Payment was recorded, but the latest receipt could not be loaded',
-          ));
-      }
+      showToast({ title: copy('รับชำระเงินเรียบร้อย', 'Payment recorded') });
+      resetRouteStack(router, billExitRoute(canTakeOrder, canViewOrders));
     } catch (err) {
       setError(err instanceof Error ? err.message : copy('บันทึกการชำระเงินไม่สำเร็จ', 'Could not record the payment'));
     } finally {
@@ -321,16 +304,6 @@ export default function BillScreen() {
   }
 
   const splitWorkspace = width >= breakpoints.tabletWorkspace;
-  const workflowStep = paymentStage === 'paid' || paymentStage === 'recorded'
-    ? 3
-    : canPay && paymentReady && !editing
-      ? 2
-      : 1;
-  const workflowSteps = [
-    copy('ตรวจบิล', 'Review'),
-    copy('วิธีจ่าย', 'Payment'),
-    copy('ผลลัพธ์', 'Result'),
-  ];
   const exitLabel = canTakeOrder
     ? copy('กลับไปหน้าโต๊ะ', 'Back to tables')
     : canViewOrders
@@ -369,14 +342,6 @@ export default function BillScreen() {
       onPress={pay}
       loading={saving}
       disabled={!paymentReady || editing || (method === 'promptpay_qr' && !bill.promptpay_qr_image)}
-    />
-  );
-  const retryReceiptAction = (
-    <Button
-      icon="document-text-outline"
-      label={copy('ลองโหลดใบเสร็จอีกครั้ง', 'Try loading receipt again')}
-      onPress={() => { void load(); }}
-      loading={loading}
     />
   );
   const exitAction = <Button icon="arrow-back" label={exitLabel} onPress={exitBill} />;
@@ -434,7 +399,9 @@ export default function BillScreen() {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
                   <Text selectable style={typeScale.number}>{money(item.subtotal, language)}</Text>
-                  <StatusBadge label={itemStatusLabel(item.status, language)} tone={itemTone(item.status)} />
+                  {isCookingItem(item.status) ? (
+                    <StatusBadge label={copy('ยังไม่เสิร์ฟ', 'Not served')} tone="warning" />
+                  ) : null}
                 </View>
               </View>
 
@@ -658,7 +625,6 @@ export default function BillScreen() {
           <Text selectable style={typeScale.cardTitle}>{bill.promptpay_name || 'PromptPay'}</Text>
         </View>
       )}
-      <TextField label={copy('หมายเหตุการรับเงิน', 'Payment note')} value={note} onChangeText={setNote} />
       {splitWorkspace ? confirmPaymentAction : null}
     </Surface>
   ) : paymentStage === 'paid' ? (
@@ -683,19 +649,6 @@ export default function BillScreen() {
       ) : null}
       {splitWorkspace ? exitAction : null}
     </Surface>
-  ) : paymentStage === 'recorded' ? (
-    <Surface style={{ borderColor: palette.warning }}>
-      <SectionHeader
-        title={copy('รับชำระเงินแล้ว', 'Payment recorded')}
-        detail={copy(
-          'ระบบบันทึกยอดแล้ว แต่ยังโหลดใบเสร็จล่าสุดไม่สำเร็จ เพื่อป้องกันการรับเงินซ้ำ กรุณาลองโหลดใบเสร็จอีกครั้ง',
-          'The payment is recorded, but the latest receipt did not load. To prevent a duplicate payment, try loading the receipt again.',
-        )}
-        action={<StatusBadge label={copy('บันทึกยอดแล้ว', 'Recorded')} tone="warning" />}
-      />
-      {error ? <Feedback title={copy('ยังโหลดใบเสร็จไม่ได้', 'Receipt is still unavailable')} detail={error} tone="danger" /> : null}
-      {splitWorkspace ? retryReceiptAction : null}
-    </Surface>
   ) : (
     <Surface>
       <SectionHeader title={copy('สถานะการชำระเงิน', 'Payment status')} />
@@ -717,8 +670,6 @@ export default function BillScreen() {
     </ActionDock>
   ) : !splitWorkspace && paymentStage === 'paid' ? (
     <ActionDock>{exitAction}</ActionDock>
-  ) : !splitWorkspace && paymentStage === 'recorded' ? (
-    <ActionDock>{retryReceiptAction}</ActionDock>
   ) : undefined;
 
   return (
@@ -733,14 +684,12 @@ export default function BillScreen() {
         <StatusBadge
           label={paymentStage === 'paid'
             ? copy('ชำระแล้ว', 'Paid')
-            : paymentStage === 'recorded'
-              ? copy('บันทึกยอดแล้ว', 'Payment recorded')
-              : copy('รอชำระ', 'Payment due')}
-          tone={paymentStage === 'due' || paymentStage === 'recorded' ? 'warning' : 'success'}
+            : copy('รอชำระ', 'Payment due')}
+          tone={paymentStage === 'paid' ? 'success' : 'warning'}
         />
       )}
     >
-      {error && paymentStage !== 'recorded' ? <Feedback title={copy('ทำรายการไม่สำเร็จ', 'Could not complete this action')} detail={error} tone="danger" /> : null}
+      {error ? <Feedback title={copy('ทำรายการไม่สำเร็จ', 'Could not complete this action')} detail={error} tone="danger" /> : null}
       {message && paymentStage === 'due' ? <Feedback title={message} tone="success" /> : null}
 
       {/*
@@ -764,36 +713,6 @@ export default function BillScreen() {
             ref={slipRef}
             restaurant={activeMembership?.restaurant}
           />
-        </View>
-      ) : null}
-
-      {!splitWorkspace ? (
-        <View
-          accessible
-          accessibilityLabel={copy(
-            `ขั้นตอน ${workflowStep} จาก 3: ${workflowSteps[workflowStep - 1]}`,
-            `Step ${workflowStep} of 3: ${workflowSteps[workflowStep - 1]}`,
-          )}
-          style={{ flexDirection: 'row', alignItems: 'flex-start' }}
-        >
-          {workflowSteps.map((label, index) => {
-            const step = index + 1;
-            const active = step === workflowStep;
-            const complete = step < workflowStep;
-            const color = active ? palette.primary : complete ? palette.success : palette.muted;
-            return (
-              <View key={label} style={{ minWidth: 0, flex: 1, alignItems: 'center' }}>
-                <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ height: 1, flex: 1, backgroundColor: index === 0 ? 'transparent' : complete || active ? palette.borderStrong : palette.border }} />
-                  <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color, borderRadius: radius.full, backgroundColor: active ? palette.primary : complete ? palette.successSoft : palette.surface }}>
-                    <Text allowFontScaling={false} style={{ color: active ? palette.primaryText : color, fontSize: 12, fontWeight: '800' }}>{step}</Text>
-                  </View>
-                  <View style={{ height: 1, flex: 1, backgroundColor: index === workflowSteps.length - 1 ? 'transparent' : complete ? palette.borderStrong : palette.border }} />
-                </View>
-                <Text numberOfLines={1} style={{ color, fontSize: 12, fontWeight: active || complete ? '700' : '600', marginTop: spacing.xs }}>{label}</Text>
-              </View>
-            );
-          })}
         </View>
       ) : null}
 

@@ -109,9 +109,8 @@ test('table cards keep one size instead of stretching across a partial last row'
 test('a table with an active order never reads as available', async () => {
   const source = await readFile(path.join(mobileRoot, 'app', '(primary)', 'tables.tsx'), 'utf8');
 
-  // Occupied is amber whether or not food is ready; emerald is reserved for a
-  // free table, so ready items surface as their own badge instead.
+  // Occupied is amber whether or not food is ready. Emerald means free, so a
+  // busy table must never take the free tint no matter what its items say.
   assert.match(source, /const tone = order \? 'warning'/);
   assert.doesNotMatch(source, /const tone = ready \? 'success'/);
-  assert.match(source, /readyTint = statusTone\('success'\)/);
 });

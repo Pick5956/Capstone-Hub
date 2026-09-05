@@ -45,9 +45,8 @@ test('paid bill exits to an accessible workflow for waiter and cashier roles', (
 });
 
 test('a recorded payment cannot be submitted again while the receipt reloads', () => {
-  assert.equal(billPaymentStage('unpaid', false), 'due');
-  assert.equal(billPaymentStage('unpaid', true), 'recorded');
-  assert.equal(billPaymentStage('paid', true), 'paid');
+  assert.equal(billPaymentStage('unpaid'), 'due');
+  assert.equal(billPaymentStage('paid'), 'paid');
 });
 
 test('only an open empty dine-in table order can use the mistake-recovery close action', () => {

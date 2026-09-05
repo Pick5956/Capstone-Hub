@@ -167,18 +167,6 @@ function priorityCopy(priority: HomePriority, copy: Copy) {
         ),
         label: copy('เปิดคิวครัว', 'Open kitchen queue'),
       };
-    case 'kitchen-ready':
-      return {
-        title: copy(
-          `อาหารพร้อมเสิร์ฟ ${priority.count} คิว`,
-          `${priority.count} ${priority.count === 1 ? 'ticket' : 'tickets'} ready to serve`,
-        ),
-        detail: copy(
-          'นำอาหารที่ทำเสร็จออกจากครัวเพื่อไม่ให้โต๊ะรอนาน',
-          'Move completed dishes out of the kitchen so tables do not wait.',
-        ),
-        label: copy('เปิดคิวครัว', 'Open kitchen queue'),
-      };
     case 'stock-out':
       return {
         title: copy(
@@ -249,8 +237,6 @@ function attentionLabel(priority: HomePriority, copy: Copy) {
   switch (priority.key) {
     case 'kitchen-overdue':
       return copy('คิวครัวเกินเวลา', 'Overdue kitchen tickets');
-    case 'kitchen-ready':
-      return copy('อาหารพร้อมเสิร์ฟ', 'Ready to serve');
     case 'stock-out':
       return copy('วัตถุดิบหมด', 'Out of stock');
     case 'stock-low':
@@ -278,7 +264,6 @@ function priorityPresentation(priority: HomePriority): {
   const tone = statusTone(priority.tone);
   const icons: Record<HomePriority['key'], AppIconName> = {
     'kitchen-overdue': 'timer-outline',
-    'kitchen-ready': 'checkmark-circle-outline',
     'stock-out': 'alert-circle-outline',
     'stock-low': 'cube-outline',
     'kitchen-active': 'flame-outline',

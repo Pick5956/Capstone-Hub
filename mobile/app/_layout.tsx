@@ -11,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TabletWorkspaceFrame } from '@/src/components/app-shell';
 import { AuthProvider } from '@/src/providers/auth-provider';
 import { PrinterProvider } from '@/src/providers/printer-provider';
+import { ToastProvider } from '@/src/providers/toast-provider';
 import {
   DisplayPreferencesProvider,
   useDisplayPreferences,
@@ -151,7 +152,9 @@ export default function RootLayout() {
       <StatusBar style="dark" backgroundColor={colors.surface} />
       <SafeAreaProvider>
         <DisplayPreferencesProvider>
-          <AppNavigator />
+          <ToastProvider>
+            <AppNavigator />
+          </ToastProvider>
         </DisplayPreferencesProvider>
       </SafeAreaProvider>
     </View>

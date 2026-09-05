@@ -250,7 +250,7 @@ export default function ThemedSelect({
             id={listboxId}
             role="listbox"
             aria-labelledby={buttonId}
-            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-md border border-[color:var(--dashboard-shell-border)] bg-white p-1.5 shadow-lg dark:bg-gray-900 dark:shadow-black/30`}
+            className={`${closing ? "themed-select-menu-exit" : "themed-select-menu"} fixed overflow-auto rounded-xl border border-[color:var(--dashboard-shell-border)] bg-white p-1.5 shadow-[0_0_2px_rgba(15,23,42,0.04),0_0_16px_rgba(15,23,42,0.06)] dark:bg-gray-900 dark:shadow-[0_0_2px_rgba(0,0,0,0.25),0_0_16px_rgba(0,0,0,0.35)]`}
             style={{
               left: menuPosition.left,
               top: menuPosition.top,

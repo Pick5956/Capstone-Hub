@@ -60,7 +60,9 @@ const membership = (name, permissions, override) => ({
 
 test('staff invitation expiry uses the same safe default and choices as web', () => {
   assert.equal(DEFAULT_INVITATION_EXPIRY_DAYS, 7);
-  assert.deepEqual([...INVITATION_EXPIRY_DAY_OPTIONS], [1, 3, 7, 14, 30, 0]);
+  // staff/page.tsx:1183-1189 offers 1, 3, 7, 14 and no-expiry. There is no
+  // 30-day choice on the web and there never was one.
+  assert.deepEqual([...INVITATION_EXPIRY_DAY_OPTIONS], [1, 3, 7, 14, 0]);
 });
 
 test('team capabilities are independent while legacy manage_staff remains owner-manager compatible', () => {

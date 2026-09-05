@@ -262,7 +262,7 @@ export default function OrdersScreen() {
                 : order.payment_status === 'paid'
                   ? copy('ชำระแล้ว', 'Paid')
                   : copy('รอชำระเงิน', 'Payment due');
-              const detail = `${order.order_number}${openedAt ? ` · ${openedAt}` : ''} · ${copy(`${(order.items?.length || 0).toLocaleString('th-TH')} รายการ`, `${(order.items?.length || 0).toLocaleString('en-US')} items`)}`;
+              const detail = `${order.order_number}${openedAt ? ` · ${openedAt}` : ''}`;
 
               return (
                 <EdgeRow

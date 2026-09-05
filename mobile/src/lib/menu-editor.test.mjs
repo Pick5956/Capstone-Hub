@@ -574,7 +574,8 @@ test('every mobile menu and order surface consumes the shared image policy', () 
     '../../app/order/current-round.tsx',
     '../../app/order/summary.tsx',
     '../../app/order/bill.tsx',
-    '../../app/(primary)/kitchen.tsx',
+    // The kitchen ticket carries no menu photo - the web KDS shows none
+    // either - so the KDS is not an image surface to police here.
   ];
   for (const relativePath of rowFiles) {
     const source = readFileSync(new URL(relativePath, import.meta.url), 'utf8');
