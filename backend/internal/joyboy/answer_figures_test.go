@@ -54,7 +54,11 @@ func TestTheAnswerPromptRequiresEveryBlockOnAnOverview(t *testing.T) {
 	for _, want := range []string{
 		"สรุปสถานการณ์ร้าน",
 		"ร้านเป็นไงบ้าง",
-		"ห้ามข้ามบล็อกไหนไป",
+		// "every block" means every block that arrived. Told inventory must
+		// always be covered, the model wrote an inventory heading for a week
+		// it had not fetched inventory for, and said the system had no data.
+		"ห้ามข้ามบล็อกที่มีมาให้",
+		"ห้ามเขียนถึงเรื่องนั้นเลย",
 		"เว้นแต่คำถามขอภาพรวมของร้าน",
 	} {
 		if !strings.Contains(prompt, want) {
