@@ -54,6 +54,9 @@ const aiPeriodPrompt = `คุณคือตัวอ่าน "ช่วงเ
   (วันนี้ยังไม่จบ Go จะเป็นคนบอกเจ้าของเองว่านับถึงตอนนี้ ไม่ต้องตัดวันนี้ทิ้ง)
 - "สัปดาห์ที่แล้ว" คือ จันทร์ถึงอาทิตย์ของสัปดาห์ก่อนหน้า
 - ถ้าผู้ใช้พูดถึงเดือนแบบไม่เต็มยศ (มีน่า มีนา เมษา กุมภา) ให้เข้าใจว่าหมายถึงเดือนนั้น
+- **"เดือนนี้" "เดือนที่แล้ว" "ปีนี้" "วันนี้" "เมื่อวาน" ให้นับจากวันที่จริงที่บอกไว้ท้ายข้อความนี้เท่านั้น
+  ห้ามใช้วันที่จากตัวอย่างด้านล่าง ตัวอย่างสมมติวันอื่นไว้เพื่อสอนรูปแบบ ไม่ใช่บอกว่าวันนี้คือวันไหน**
+  เช่น ถ้าท้ายข้อความบอกว่าวันนี้คือ 2026-09-05 แล้วผู้ใช้ถาม "เดือนนี้" ต้องตอบเดือน 9 ปี 2026 ไม่ใช่เดือน 8
 - ถ้าพูดว่า "เทียบเดือนต่อเดือน" โดยไม่ระบุเดือน ให้ใช้ เดือนนี้ กับ เดือนที่แล้ว และ comparison=true
 - ถ้าเทียบ "เดือน X กับปีที่แล้ว" หมายถึงเดือน X ของปีนี้ กับเดือน X เดียวกันของปีที่แล้ว ไม่ใช่ทั้งปี
 - **"ปีที่แล้ว" "ปีก่อน" "ปี 2568" ที่ไม่ระบุเดือน = ทั้งปี** start=1 ม.ค. end=31 ธ.ค. ของปีนั้น
@@ -88,13 +91,23 @@ const aiPeriodMaxSpanDays = 400
 
 // resolveDatedSalesWithModel asks the model which range was meant when the
 // deterministic parser found none, then validates every value here.
+// periodPromptFor assembles the prompt for one question. The real date opens
+// it and closes it: the examples inside are anchored to a made-up day, and a
+// model that met that day first answered a question about "this month" for the
+// example's month instead of the shop's.
+func (s *AIService) periodPromptFor(question string, history []AIConversationMessage, now time.Time) string {
+	today := now.Format("2006-01-02")
+	weekday := thaiWeekdayName(int(now.Weekday()))
+	return fmt.Sprintf("วันนี้คือ %s ซึ่งเป็น%s\n\n%s(วันนี้คือ %s ซึ่งเป็น%s)\n%sข้อความ: %s",
+		today, weekday, aiPeriodPrompt, today, weekday,
+		aiRecentTurnsForExtraction(history), strings.TrimSpace(question))
+}
+
 func (s *AIService) resolveDatedSalesWithModel(question string, history []AIConversationMessage, now time.Time) (datedSalesRequest, bool) {
 	if strings.TrimSpace(question) == "" {
 		return datedSalesRequest{}, false
 	}
-	prompt := fmt.Sprintf("%s(วันนี้คือ %s ซึ่งเป็น%s)\n%sข้อความ: %s",
-		aiPeriodPrompt, now.Format("2006-01-02"), thaiWeekdayName(int(now.Weekday())),
-		aiRecentTurnsForExtraction(history), strings.TrimSpace(question))
+	prompt := s.periodPromptFor(question, history, now)
 
 	text, _, err := s.askSecondRoundWithOptions(prompt, aiProviderCompleteOptions{ReasoningEffort: "low", Model: aiSupportModel()})
 	if err != nil {
