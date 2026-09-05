@@ -44,6 +44,7 @@ import AIInsightsPanel from "@/src/components/shared/AIInsightsPanel";
 import HoverTip from "@/src/components/shared/HoverTip";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
 import VoiceWaveform from "@/src/components/shared/VoiceWaveform";
+import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import SiriOrb from "@/src/components/ui/siri-orb";
 
 type Message = {
@@ -801,20 +802,6 @@ export default function AIAssistantPage() {
                     {msg.chart && msg.chart.categories.length > 0 && (
                       <AIChart data={msg.chart} language={language} />
                     )}
-                    {msg.actions && msg.actions.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {msg.actions.map((action) => (
-                          <button
-                            key={`${msg.id}-${action.id}`}
-                            type="button"
-                            onClick={() => handleGuidedAction(action, msg.id)}
-                            className="rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-900 dark:text-orange-300 dark:hover:border-orange-800"
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                     {pendingAction && pendingActionMsgId === msg.id && (
                       <AIInlineConfirm
                         message={pendingAction.description ?? (language === "th" ? "กรุณาตรวจสอบก่อนดำเนินการต่อครับ" : "Please review before continuing.")}
@@ -830,6 +817,14 @@ export default function AIAssistantPage() {
                     )}
                   </div>
                 </div>
+                {msg.actions && msg.actions.length > 0 && (
+                  <AIFollowUpList
+                    items={msg.actions}
+                    messageId={msg.id}
+                    onSelect={(action) => handleGuidedAction(action, msg.id)}
+                    className="-mt-3"
+                  />
+                )}
                 {planAnchorId === msg.id && planCard}
                 {previewAnchorId === msg.id && previewCard}
                 </Fragment>

@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2
 } from "lucide-react";
+import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
@@ -1042,22 +1043,16 @@ export default function AIOperationsFloatingChat() {
                   <SiriOrb size="30px" className="mt-0.5 shrink-0" animationDuration={8} />
                   <div className="min-w-0 break-words rounded-2xl rounded-tl-md bg-gray-100 px-4 py-2.5 text-xs leading-relaxed text-gray-800 shadow-sm dark:bg-gray-800/80 dark:text-gray-100 sm:text-[13px]">
                     <SafeAIResponseContent content={msg.content} compact language={language} />
-                    {msg.actions && msg.actions.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {msg.actions.map((action) => (
-                          <button
-                            key={`${msg.id}-${action.id}`}
-                            type="button"
-                            onClick={() => handleAction(action)}
-                            className="min-h-9 rounded-full border border-orange-200 bg-white px-3.5 py-1.5 text-[11px] font-semibold text-orange-700 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md hover:shadow-orange-500/10 dark:border-orange-900/50 dark:bg-gray-950 dark:text-orange-300 dark:hover:border-orange-800"
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
+                {msg.actions && msg.actions.length > 0 && (
+                  <AIFollowUpList
+                    items={msg.actions}
+                    messageId={msg.id}
+                    onSelect={handleAction}
+                    className="-mt-3"
+                  />
+                )}
                 {planAnchorId === msg.id && planCard}
                 {previewAnchorId === msg.id && previewCard}
                 </React.Fragment>
