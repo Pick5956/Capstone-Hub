@@ -62,13 +62,44 @@ func ProvideAIService(repo *repository.AIRepository) *AIService {
 
 // getAIProvider returns the configured AI provider mode.
 // Valid values: "auto" | "groq" | "gemini" (default: "auto")
+// getAIProvider reads the configured provider policy: one provider name, a
+// comma-separated chain to try in order, or "auto" for the built-in order.
 func (s *AIService) getAIProvider() string {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("AI_PROVIDER")))
-	switch v {
-	case "groq", "gemini":
-		return v
+	if v == "" {
+		return "auto"
 	}
-	return "auto"
+	for _, name := range aiProviderChain(v) {
+		if name != "groq" && name != "gemini" {
+			return "auto"
+		}
+	}
+	if len(aiProviderChain(v)) == 0 {
+		return "auto"
+	}
+	return v
+}
+
+// aiProviderChain splits a policy into the provider names it names, in order,
+// with duplicates dropped. "gemini,groq" is one chain: the first that answers
+// wins, and the rest are the fallback.
+//
+// A single name stays a single name — naming one provider still means only
+// that provider, so a misconfigured key is a loud failure rather than a quiet
+// switch to the other one's voice and pricing.
+func aiProviderChain(policy string) []string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(policy)), ",")
+	names := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		name := strings.TrimSpace(part)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
 }
 
 func ProvideAIServiceWithConversationStore(repo *repository.AIRepository, store AIConversationStore) *AIService {

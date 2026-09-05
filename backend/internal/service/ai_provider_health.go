@@ -18,11 +18,13 @@ package service
 //     the calls that were happening anyway.
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -126,6 +128,46 @@ func (h *providerKeyHealth) available(provider string, keyIndex int) (bool, time
 		return true, time.Time{}
 	}
 	return false, until
+}
+
+// parkProvider marks a whole provider unusable until `until`, and available
+// reads it back through the same keyed map by using a key index no real key can
+// have. One question runs three to five model calls, each rotating every key, so
+// a provider that is down costs fifteen to twenty-five attempts — several of
+// them 30-second timeouts — before the owner is told anything. Once every key
+// has answered "overloaded" for the same provider, the rest of that question
+// skips it and goes straight to the fallback.
+func (h *providerKeyHealth) parkProvider(provider string, until time.Time) {
+	h.park(provider, providerWideKeyIndex, until)
+}
+
+// providerAvailable reports whether the provider as a whole may be tried.
+func (h *providerKeyHealth) providerAvailable(provider string) (bool, time.Time) {
+	return h.available(provider, providerWideKeyIndex)
+}
+
+// providerWideKeyIndex stands for "every key of this provider". Key indexes are
+// positions in a list and never negative, so this can share the same map.
+const providerWideKeyIndex = -1
+
+// aiProviderOverloadPark is how long a provider sits out after every one of its
+// keys reported an overload. Long enough to save the retries inside one
+// question, short enough that a passing spike is not punished for minutes.
+const aiProviderOverloadPark = 45 * time.Second
+
+// isProviderOverloaded reports whether an error is the provider saying it is
+// too busy right now — distinct from a rate limit, which is our own quota, and
+// from a bad model name, which no amount of waiting fixes.
+func isProviderOverloaded(err error) bool {
+	var httpErr *aiProviderHTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode == http.StatusServiceUnavailable ||
+			httpErr.StatusCode == http.StatusBadGateway ||
+			httpErr.StatusCode == http.StatusGatewayTimeout
+	}
+	// A request that never got headers back is the same story from the caller's
+	// side: the provider is not answering.
+	return errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err)
 }
 
 // clear releases a key after a successful call.

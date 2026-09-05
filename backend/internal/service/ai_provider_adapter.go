@@ -254,19 +254,30 @@ func (s *AIService) allProviderAdapters() []aiProviderAdapter {
 }
 
 // orderedProviderAdapters applies the public AI_PROVIDER policy in one place.
-// Auto mode retains the established Groq -> Gemini fallback order.
+// Auto mode retains the established Groq -> Gemini fallback order; a chain
+// ("gemini,groq") is tried in the order it is written, so the shop can name the
+// voice it prefers and still have something to fall back to when that provider
+// is having a bad afternoon.
 func (s *AIService) orderedProviderAdapters() []aiProviderAdapter {
 	adapters := s.allProviderAdapters()
 	provider := s.getAIProvider()
 	if provider == "auto" {
 		return adapters
 	}
+	byID := make(map[string]aiProviderAdapter, len(adapters))
 	for _, adapter := range adapters {
-		if adapter.ID() == provider {
-			return []aiProviderAdapter{adapter}
+		byID[adapter.ID()] = adapter
+	}
+	ordered := make([]aiProviderAdapter, 0, len(adapters))
+	for _, name := range aiProviderChain(provider) {
+		if adapter, ok := byID[name]; ok {
+			ordered = append(ordered, adapter)
 		}
 	}
-	return nil
+	if len(ordered) == 0 {
+		return nil
+	}
+	return ordered
 }
 
 func (s *AIService) hasConfiguredProvider() bool {

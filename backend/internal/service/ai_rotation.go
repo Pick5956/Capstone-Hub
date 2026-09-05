@@ -1,6 +1,9 @@
 package service
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // askSecondRoundWithRotation renders a follow-up prompt through the configured
 // provider, falling back Groq -> Gemini in "auto" mode.
@@ -15,18 +18,38 @@ func (s *AIService) askSecondRoundWithRotation(prompt string) (string, string, e
 func (s *AIService) askSecondRoundWithOptions(prompt string, opts aiProviderCompleteOptions) (string, string, error) {
 	var lastErr error
 	provider := s.getAIProvider()
-	for _, adapter := range s.orderedProviderAdapters() {
+	adapters := s.orderedProviderAdapters()
+	for _, adapter := range adapters {
 		if !adapter.Configured() {
-			if provider != "auto" {
+			if len(adapters) == 1 && provider != "auto" {
 				return "", "", missingProviderConfigurationError(adapter.ID())
+			}
+			continue
+		}
+		// A provider that just told us it was overloaded on every key is skipped
+		// rather than asked again. One question runs several model calls, and
+		// without this each of them rediscovered the same outage key by key —
+		// two minutes of waiting to tell the owner nothing.
+		if usable, until := s.keyHealth.providerAvailable(adapter.ID()); !usable {
+			aiStage("warn", "second-round %s is set aside for %s (it reported an overload) → skipping",
+				adapter.DisplayName(), time.Until(until).Round(time.Second))
+			if lastErr == nil {
+				lastErr = newAIProviderHTTPError(adapter.ID(), "second-round", 503)
 			}
 			continue
 		}
 		answer, err := adapter.Complete(prompt, opts)
 		if err == nil {
+			s.keyHealth.clear(adapter.ID(), providerWideKeyIndex)
 			return answer.Text, answer.Model, nil
 		}
 		lastErr = err
+		if isProviderOverloaded(err) {
+			s.keyHealth.parkProvider(adapter.ID(), time.Now().Add(aiProviderOverloadPark))
+			aiStage("warn", "second-round %s overloaded on every key → set aside for %s",
+				adapter.DisplayName(), aiProviderOverloadPark)
+			continue
+		}
 		aiStage("warn", "second-round %s failed → trying next provider: %v", adapter.DisplayName(), err)
 	}
 	if lastErr != nil {

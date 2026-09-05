@@ -1,0 +1,92 @@
+package service
+
+import (
+	"errors"
+	"net/http"
+	"testing"
+	"time"
+)
+
+// AI_PROVIDER names the voice the shop wants. A chain names a fallback too:
+// "gemini,groq" is "use Gemini, and when Gemini is having a bad afternoon use
+// Groq rather than telling the owner nothing".
+func TestAIProviderChainReadsAnOrderedList(t *testing.T) {
+	service := &AIService{}
+	for _, testCase := range []struct {
+		env  string
+		want string
+	}{
+		{"", "auto"},
+		{"auto", "auto"},
+		{"gemini", "gemini"},
+		{"GEMINI, GROQ", "gemini, groq"},
+		{"gemini,groq", "gemini,groq"},
+		{"nonsense", "auto"},
+		{"gemini,nonsense", "auto"},
+	} {
+		t.Setenv("AI_PROVIDER", testCase.env)
+		if got := service.getAIProvider(); got != testCase.want {
+			t.Errorf("AI_PROVIDER=%q → %q, want %q", testCase.env, got, testCase.want)
+		}
+	}
+}
+
+func TestAIProviderChainSplitsAndDeduplicates(t *testing.T) {
+	got := aiProviderChain(" gemini , groq ,gemini, ")
+	if len(got) != 2 || got[0] != "gemini" || got[1] != "groq" {
+		t.Fatalf("chain = %v, want [gemini groq]", got)
+	}
+	if len(aiProviderChain("  ,  ")) != 0 {
+		t.Error("a chain of nothing is no chain")
+	}
+}
+
+// An overload is the provider saying "not now"; a rate limit is our own quota,
+// and a withdrawn model is a configuration error. Only the first is worth
+// setting the provider aside for.
+func TestIsProviderOverloadedTellsOutagesFromOtherFailures(t *testing.T) {
+	for _, status := range []int{http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout} {
+		if !isProviderOverloaded(newAIProviderHTTPError("gemini", "second-round", status)) {
+			t.Errorf("HTTP %d should read as an overload", status)
+		}
+	}
+	for _, other := range []error{
+		newAIProviderHTTPError("gemini", "second-round", http.StatusBadRequest),
+		errRateLimit,
+		errModelUnavailable,
+		errors.New("something else"),
+	} {
+		if isProviderOverloaded(other) {
+			t.Errorf("%v should not read as an overload", other)
+		}
+	}
+}
+
+// Parking a provider sets every one of its keys aside at once, and it frees
+// itself when the window passes — the assistant must not stay down longer than
+// the provider does.
+func TestParkProviderSetsTheWholeProviderAsideThenReleasesIt(t *testing.T) {
+	now := time.Now()
+	health := providerKeyHealth{nowFunc: func() time.Time { return now }}
+
+	if usable, _ := health.providerAvailable("gemini"); !usable {
+		t.Fatal("a provider starts usable")
+	}
+	health.parkProvider("gemini", now.Add(aiProviderOverloadPark))
+	usable, until := health.providerAvailable("gemini")
+	if usable {
+		t.Fatal("a parked provider must be skipped")
+	}
+	if !until.After(now) {
+		t.Fatalf("park should end in the future, got %v", until)
+	}
+	// The other provider is untouched: that is the whole point of falling back.
+	if usable, _ := health.providerAvailable("groq"); !usable {
+		t.Fatal("parking one provider must not park the other")
+	}
+
+	now = now.Add(aiProviderOverloadPark + time.Second)
+	if usable, _ := health.providerAvailable("gemini"); !usable {
+		t.Fatal("the park must release itself once the window passes")
+	}
+}
