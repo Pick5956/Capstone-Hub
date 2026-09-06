@@ -35,6 +35,7 @@ import {
   useActiveThread,
 } from "@/src/lib/aiThreads";
 import AIChatList from "@/src/components/shared/AIChatList";
+import { useMediaQuery } from "@/src/lib/useMediaQuery";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -205,6 +206,8 @@ export default function AIAssistantPage() {
   // what is there.
   const skipServerLoadRef = useRef<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  // A centred modal on a wide screen, a full sheet on a phone.
+  const wideScreen = useMediaQuery("(min-width: 640px)");
   // Switching chats leaves the current one behind, and a preview waiting on
   // it must be settled first — the server holds one at a time.
   const openThread = async (conversationId: string | null) => {
@@ -755,7 +758,7 @@ export default function AIAssistantPage() {
             top-right button — the conversation keeps the whole width. */}
         {listOpen && (
           <AIChatList
-            variant="sheet"
+            variant={wideScreen ? "modal" : "sheet"}
             language={language}
             activeId={activeThread}
             onOpen={openThread}

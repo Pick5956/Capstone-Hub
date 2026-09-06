@@ -1,25 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageSquareText, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { MessageSquareText, MoreHorizontal, Pencil, Plus, Search, SquarePen, Trash2, X } from "lucide-react";
 import { deleteAIConversation, listAIConversations, renameAIConversation } from "@/src/lib/ai";
 import { matchesThreadQuery, notifyConversationsChanged, threadGroup, useConversationsVersion, type AIThreadGroup } from "@/src/lib/aiThreads";
 import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 import type { AIConversationSummary } from "@/src/types/ai";
 
-// The chat list — one component, three places.
+// The chat list — one component, two shapes.
 //
-// On a wide screen it is the column beside the conversation, the way a chat
-// app lays it out; on a phone it is a sheet over the conversation; inside the
-// floating chat it is that same sheet inside the panel. The list itself is
-// identical in all three, so it lives here once and the surfaces only decide
-// where to put it.
-//
-// The server owns the list. This reads it on mount and again whenever any
-// surface announces a change (an answer landed, a rename, a delete), and it
-// filters by title as the owner types — no request per keystroke.
-
-type Variant = "column" | "sheet";
+// On a phone (and inside the floating chat) it is a sheet that slides over
+// the conversation. On a wide screen it is a modal in the middle of the
+// screen — search on top, "new chat" first, then the chats by day — the way
+// ChatGPT's ⌘K list works. The conversation keeps the whole width either way.
+type Variant = "sheet" | "modal";
 
 function copy(language: "th" | "en") {
   return language === "th"
@@ -91,21 +86,14 @@ export default function AIChatList({
   onNew,
   variant,
   onClose,
-  collapsed = false,
-  onToggleCollapsed,
-  className = "",
 }: {
   language: "th" | "en";
   activeId: string | null;
   onOpen: (conversationId: string) => void;
   onNew: () => void;
   variant: Variant;
-  /** Sheet only: the close control. */
+  /** The close control (backdrop click and Escape use it too). */
   onClose?: () => void;
-  /** Column only: a narrow rail instead of the list. */
-  collapsed?: boolean;
-  onToggleCollapsed?: () => void;
-  className?: string;
 }) {
   const t = copy(language);
   const version = useConversationsVersion();
@@ -127,6 +115,21 @@ export default function AIChatList({
     setClosing(true);
     window.setTimeout(() => onClose?.(), 220);
   };
+  // The modal opens with the cursor in the search box and leaves on Escape,
+  // unless a rename/delete dialog is up — that one owns Escape then.
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (variant !== "modal") return;
+    searchRef.current?.focus();
+  }, [variant]);
+  useEffect(() => {
+    if (variant !== "modal") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !renaming && !removing) requestClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!menuFor) return;
@@ -246,7 +249,9 @@ export default function AIChatList({
                       className={`${rowButton} ${
                         active
                           ? "bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200"
-                          : "text-gray-700 hover:bg-white/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
+                          : variant === "modal"
+                            ? "text-gray-700 hover:bg-orange-50/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
+                            : "text-gray-700 hover:bg-white/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
                       }`}
                     >
                       <span className="min-w-0 flex-1">
@@ -389,80 +394,77 @@ export default function AIChatList({
     </>
   );
 
-  if (variant === "sheet") {
-    return (
-      <div className={`absolute inset-0 z-30 flex flex-col bg-[#faf8f2] dark:bg-gray-900 ${closing ? "ai-chatlist-sheet-out" : "ai-chatlist-sheet-in"}`}>
-        <div className="flex items-center justify-between px-3 pb-2 pt-3">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
-            <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
-          </h2>
-          <button
-            type="button"
-            onClick={requestClose}
-            aria-label={t.close}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+  if (variant === "modal") {
+    if (typeof document === "undefined") return null;
+    return createPortal(
+      <div
+        className={`fixed inset-0 z-[var(--z-modal)] flex items-start justify-center px-4 pt-[10vh] ${closing ? "ai-chatlist-modal-out" : "ai-chatlist-modal-in"}`}
+      >
+        <div className="ai-chatlist-backdrop absolute inset-0 bg-[#2b1a0e]/40 backdrop-blur-[2px]" onClick={requestClose} aria-hidden="true" />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.title}
+          className="ai-chatlist-card relative flex max-h-[min(72vh,640px)] w-full max-w-[600px] flex-col overflow-hidden rounded-2xl border border-orange-100/80 bg-[#fdfbf6] shadow-[0_30px_90px_-24px_rgba(60,30,10,0.45)] dark:border-gray-700 dark:bg-gray-900"
+        >
+          <div className="flex items-center gap-3 border-b border-orange-100/80 px-4 dark:border-gray-800">
+            <Search className="h-[18px] w-[18px] shrink-0 text-gray-400" aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t.search}
+              aria-label={t.search}
+              className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-gray-900 outline-none placeholder:text-gray-400 dark:text-gray-100"
+            />
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label={t.close}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-orange-50 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="px-2 pt-2">
+            <button
+              type="button"
+              onClick={onNew}
+              className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-[13.5px] font-medium text-gray-800 transition-colors hover:bg-orange-50/70 dark:text-gray-100 dark:hover:bg-gray-800/70"
+            >
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950/40 dark:text-orange-300">
+                <SquarePen className="h-4 w-4" />
+              </span>
+              {t.newChat}
+            </button>
+          </div>
+          {list}
+          {dialogs}
         </div>
-        {newChatButton}
-        {searchBox}
-        {list}
-        {dialogs}
-      </div>
+      </div>,
+      document.body,
     );
   }
 
-  // One box whose width animates between the rail and the list; the content
-  // inside swaps with a short fade so neither state pops into place.
   return (
-    <div
-      className={`relative shrink-0 flex-col overflow-hidden border-r border-gray-200/70 transition-[width] duration-300 ease-in-out dark:border-gray-800 ${
-        collapsed ? "w-11" : "w-64"
-      } ${className}`}
-    >
-      {collapsed ? (
-        <div className="ai-chatlist-fade flex w-11 flex-col items-center gap-1 py-3">
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            aria-label={t.expand}
-            title={t.expand}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:hover:bg-gray-800"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onNew}
-            aria-label={t.newChat}
-            title={t.newChat}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-orange-600 hover:bg-orange-50 dark:text-orange-300 dark:hover:bg-orange-950/30"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <div className="ai-chatlist-fade flex h-full w-64 flex-col">
-          <div className="flex items-center justify-between px-3 pb-2 pt-3">
-            <h2 className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
-              <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
-            </h2>
-            <button
-              type="button"
-              onClick={onToggleCollapsed}
-              aria-label={t.collapse}
-              title={t.collapse}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:hover:bg-gray-800"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-          </div>
-          {newChatButton}
-          {searchBox}
-          {list}
-        </div>
-      )}
+    <div className={`absolute inset-0 z-30 flex flex-col bg-[#faf8f2] dark:bg-gray-900 ${closing ? "ai-chatlist-sheet-out" : "ai-chatlist-sheet-in"}`}>
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
+        <h2 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
+          <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
+        </h2>
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label={t.close}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {newChatButton}
+      {searchBox}
+      {list}
       {dialogs}
     </div>
   );

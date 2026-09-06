@@ -1519,6 +1519,27 @@ textarea {
 .ai-chatlist-sheet-out { animation: ai-chatlist-out 0.2s ease-in both; pointer-events: none; }
 .ai-chatlist-fade { animation: ai-chatlist-fade 0.25s ease-out both; }
 .ai-chatlist-pop { animation: ai-chatlist-pop 0.14s ease-out both; transform-origin: top right; }
+/* The wide-screen modal: the backdrop fades, the card drops in from slightly
+   above and settles; leaving plays both in reverse. */
+@keyframes ai-chatlist-card-in {
+  from { transform: translateY(-10px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes ai-chatlist-card-out {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to { transform: translateY(-6px) scale(0.985); opacity: 0; }
+}
+@keyframes ai-chatlist-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.ai-chatlist-modal-in .ai-chatlist-backdrop { animation: ai-chatlist-fade 0.18s ease-out both; }
+.ai-chatlist-modal-in .ai-chatlist-card { animation: ai-chatlist-card-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ai-chatlist-modal-out { pointer-events: none; }
+.ai-chatlist-modal-out .ai-chatlist-backdrop { animation: ai-chatlist-fade-out 0.2s ease-in both; }
+.ai-chatlist-modal-out .ai-chatlist-card { animation: ai-chatlist-card-out 0.18s ease-in both; }
 @media (prefers-reduced-motion: reduce) {
-  .ai-chatlist-sheet-in, .ai-chatlist-sheet-out, .ai-chatlist-fade, .ai-chatlist-pop { animation: none; }
+  .ai-chatlist-sheet-in, .ai-chatlist-sheet-out, .ai-chatlist-fade, .ai-chatlist-pop,
+  .ai-chatlist-modal-in .ai-chatlist-backdrop, .ai-chatlist-modal-in .ai-chatlist-card,
+  .ai-chatlist-modal-out .ai-chatlist-backdrop, .ai-chatlist-modal-out .ai-chatlist-card { animation: none; }
 }
