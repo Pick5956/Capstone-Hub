@@ -3,14 +3,8 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  AlertTriangle,
-  Loader2,
-  PackageSearch,
   Send,
-  TrendingUp,
-  Wallet,
   X,
-  BarChart2,
   SquarePen,
   MessageSquareText,
   ChevronDown,
@@ -20,8 +14,15 @@ import {
 import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import { useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
+
+// The draggable orb: its size (h-14), how far a press may travel and still be
+// a tap, and where its resting place is remembered on this device.
+const ORB_SIZE = 56;
+const ORB_DRAG_THRESHOLD = 6;
+const ORB_SPOT_KEY = "ai_orb_spot";
+type OrbSpot = { side: "left" | "right"; top: number };
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -29,7 +30,6 @@ import {
   getAIActionErrorMessage,
   isTerminalAIActionCancellationError,
 } from "@/src/lib/aiActionPreview";
-import { selectOperationsSnapshot } from "@/src/lib/aiSnapshot";
 import { getUnclearRequestActions, resolveClarificationRequest } from "@/src/lib/aiClarification";
 import { getGuidedActions, type AIGuidedAction } from "@/src/lib/aiGuidedActions";
 import { useAutoGrowTextarea } from "@/src/lib/chatComposer";
@@ -57,7 +57,7 @@ import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage, AISnapshot } from "@/src/types/ai";
+import type { AIActionPlan, AIActionPreview, AIAskResponse, AIConversationMessage } from "@/src/types/ai";
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
@@ -79,20 +79,6 @@ type StoredMessage = Omit<Message, "createdAt"> & {
   createdAt?: string;
 };
 
-function formatCurrency(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    style: "currency",
-    currency: "THB",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatNumber(value: number, language: "th" | "en") {
-  return new Intl.NumberFormat(language === "th" ? "th-TH" : "en-US", {
-    maximumFractionDigits: value % 1 === 0 ? 0 : 2,
-  }).format(value);
-}
-
 function buildCopy(language: "th" | "en") {
   return language === "th"
     ? {
@@ -103,16 +89,7 @@ function buildCopy(language: "th" | "en") {
         send: "ส่ง",
         thinking: "กำลังวิเคราะห์...",
         model: "โมเดล",
-        snapshot: "ข้อมูลร้านค้าปัจจุบัน",
-        salesDays: "วันที่มียอดขาย",
-        inventoryValue: "มูลค่าคลังสินค้า",
-        stockRisks: "วัตถุดิบเสี่ยงหมด",
-        stockOut: "หมดสต็อก",
-        stockLow: "ใกล้หมด",
-        restock: "แนะนำเติม",
-        toggleStats: "สถิติร้านค้า",
         toggleStatsTooltip: "เปิด/ปิด แผงควบคุมสถิติข้างเคียง",
-        emptyStats: "กำลังโหลดข้อมูลสถิติ...",
         quickQuestions: [
           "สรุปร้าน",
           "เมนูขายดี",
@@ -128,16 +105,7 @@ function buildCopy(language: "th" | "en") {
         send: "Send",
         thinking: "Analyzing...",
         model: "Model",
-        snapshot: "Current Restaurant Stats",
-        salesDays: "Sales Days",
-        inventoryValue: "Inventory Value",
-        stockRisks: "Stock Risks",
-        stockOut: "Out",
-        stockLow: "Low",
-        restock: "Restock",
-        toggleStats: "Store Stats",
         toggleStatsTooltip: "Toggle side statistics panel",
-        emptyStats: "Loading statistics...",
         quickQuestions: [
           "Summarize today's restaurant situation.",
           "What ingredients should we prepare tomorrow?",
@@ -145,30 +113,6 @@ function buildCopy(language: "th" | "en") {
           "Are there stockout or overbuying risks?",
         ],
       };
-}
-
-function MetricCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900/40">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-orange-50 text-orange-600 dark:bg-orange-950/25 dark:text-orange-300">
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="mt-0.5 truncate text-base font-semibold text-gray-900 dark:text-white">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export default function AIOperationsFloatingChat() {
@@ -184,8 +128,6 @@ export default function AIOperationsFloatingChat() {
     ? {
         openAssistant: "เปิดผู้ช่วย AI",
         closeAssistant: "ปิดผู้ช่วย AI",
-        toggleStats: "เปิดหรือปิดสถิติร้าน",
-        closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
         chats: "รายการแชท",
         chatGone: "แชทนี้ถูกลบไปแล้ว เปิดแชทใหม่ให้แล้วครับ",
@@ -198,8 +140,6 @@ export default function AIOperationsFloatingChat() {
     : {
         openAssistant: "Open AI assistant",
         closeAssistant: "Close AI assistant",
-        toggleStats: "Toggle restaurant stats",
-        closeStats: "Close restaurant stats",
         clearChat: "New chat",
         chats: "Chats",
         chatGone: "That chat was deleted. Starting a new one.",
@@ -211,8 +151,100 @@ export default function AIOperationsFloatingChat() {
       }, [language]);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showStats, setShowStats] = useState(false);
-  const [hasOpenedStats, setHasOpenedStats] = useState(false);
+
+  // The orb can be dragged anywhere and, once let go, settles against the
+  // nearest side of the screen — the way a Messenger chat head behaves. Where
+  // it settled is remembered on this device. A press that never travelled
+  // more than a few pixels is a tap and opens the chat as before.
+  const [orbSpot, setOrbSpot] = useState<OrbSpot | null>(null);
+  const [orbDrag, setOrbDrag] = useState<{ x: number; y: number } | null>(null);
+  const [viewport, setViewport] = useState<{ w: number; h: number } | null>(null);
+  const orbPressRef = useRef<{ pointerId: number; startX: number; startY: number; offsetX: number; offsetY: number; moved: boolean } | null>(null);
+  const orbSkipClickRef = useRef(false);
+  useEffect(() => {
+    const measure = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    measure();
+    window.addEventListener("resize", measure);
+    try {
+      const raw = window.localStorage.getItem(ORB_SPOT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<OrbSpot>;
+        if ((parsed.side === "left" || parsed.side === "right") && typeof parsed.top === "number") {
+          setOrbSpot({ side: parsed.side, top: parsed.top });
+        }
+      }
+    } catch {
+      // No storage: the orb starts in its corner.
+    }
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const orbMargin = viewport && viewport.w >= 640 ? 24 : 16;
+  const clampOrbTop = (top: number) => {
+    if (!viewport) return top;
+    return Math.min(Math.max(top, orbMargin), viewport.h - ORB_SIZE - orbMargin);
+  };
+  const onOrbPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    orbPressRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onOrbPointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const press = orbPressRef.current;
+    if (!press || press.pointerId !== event.pointerId) return;
+    if (!press.moved) {
+      if (Math.hypot(event.clientX - press.startX, event.clientY - press.startY) < ORB_DRAG_THRESHOLD) return;
+      press.moved = true;
+    }
+    setOrbDrag({ x: event.clientX - press.offsetX, y: event.clientY - press.offsetY });
+  };
+  const onOrbPointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const press = orbPressRef.current;
+    if (!press || press.pointerId !== event.pointerId) return;
+    orbPressRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!press.moved) return; // a tap: the click that follows opens the chat
+    orbSkipClickRef.current = true;
+    const x = event.clientX - press.offsetX;
+    const width = viewport?.w ?? window.innerWidth;
+    const spot: OrbSpot = {
+      side: x + ORB_SIZE / 2 < width / 2 ? "left" : "right",
+      top: clampOrbTop(event.clientY - press.offsetY),
+    };
+    setOrbDrag(null);
+    setOrbSpot(spot);
+    try {
+      window.localStorage.setItem(ORB_SPOT_KEY, JSON.stringify(spot));
+    } catch {
+      // Not remembered, still moved.
+    }
+  };
+  const onOrbClick = () => {
+    if (orbSkipClickRef.current) {
+      orbSkipClickRef.current = false;
+      return;
+    }
+    setIsOpen(true);
+  };
+  // Where the orb sits right now: under the finger while dragging, at its
+  // remembered spot otherwise, or (before anything is known) in its corner.
+  const orbStyle: React.CSSProperties | undefined = orbDrag
+    ? { left: orbDrag.x, top: orbDrag.y, right: "auto", bottom: "auto" }
+    : orbSpot && viewport
+      ? {
+          left: orbSpot.side === "left" ? orbMargin : viewport.w - ORB_SIZE - orbMargin,
+          top: clampOrbTop(orbSpot.top),
+          right: "auto",
+          bottom: "auto",
+        }
+      : undefined;
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -232,11 +264,8 @@ export default function AIOperationsFloatingChat() {
   const [actionConfirming, setActionConfirming] = useState(false);
   const [actionCancelling, setActionCancelling] = useState(false);
   const [actionPreviewError, setActionPreviewError] = useState("");
-  const [latestSnapshot, setLatestSnapshot] = useState<AISnapshot | null>(null);
-  const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>();
   const [conversationRequests] = useState(createRequestGeneration);
-  const [snapshotRequests] = useState(createRequestGeneration);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -250,7 +279,6 @@ export default function AIOperationsFloatingChat() {
   const composer = useAutoGrowTextarea(input);
   const inputRef = composer.ref;
   const chatReturnFocusRef = useRef<HTMLElement | null>(null);
-  const snapshotRequestedRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-floating-chat"));
 
   const canAskAI = activeMembership?.role?.name === "owner";
@@ -375,36 +403,6 @@ export default function AIOperationsFloatingChat() {
       chatReturnFocusRef.current = null;
     };
   }, [isOpen]);
-
-  useEffect(() => {
-    snapshotRequests.invalidate();
-    snapshotRequestedRef.current = false;
-    setLatestSnapshot(null);
-    setSnapshotLoading(false);
-  }, [canAskAI, snapshotRequests, storageKey]);
-
-  // Load snapshot in the background once per restaurant/user scope when opened.
-  useEffect(() => {
-    if (!isOpen || !canAskAI || snapshotRequestedRef.current) return;
-    snapshotRequestedRef.current = true;
-    const snapshotGeneration = snapshotRequests.begin();
-    setSnapshotLoading(true);
-    getOperationsSnapshot()
-      .then((response) => {
-        if (snapshotRequests.isCurrent(snapshotGeneration) && response?.data) {
-          setLatestSnapshot((current) => selectOperationsSnapshot(current, response.data));
-        }
-      })
-      .catch((err) => {
-        if (snapshotRequests.isCurrent(snapshotGeneration)) {
-          snapshotRequestedRef.current = false;
-          console.error("Failed to load initial operations snapshot:", err);
-        }
-      })
-      .finally(() => {
-        if (snapshotRequests.isCurrent(snapshotGeneration)) setSnapshotLoading(false);
-      });
-  }, [canAskAI, isOpen, snapshotRequests, storageKey]);
 
   const conversationHistory = (): AIConversationMessage[] =>
     messages
@@ -596,13 +594,7 @@ export default function AIOperationsFloatingChat() {
         setPendingActionPlan(data.action_plan);
         setPlanCardState("pending");
       }
-      
-      if (data.snapshot) {
-        snapshotRequests.invalidate();
-        setSnapshotLoading(false);
-        setLatestSnapshot((current) => selectOperationsSnapshot(current, data.snapshot));
-      }
-    } catch (err: unknown) {
+          } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       if (isConversationGone(err)) {
         setActiveThread(storageKey, null);
@@ -654,9 +646,6 @@ export default function AIOperationsFloatingChat() {
         createdAt: new Date(),
       },
     ]);
-    // A confirmed plan changed the shop, so the cached snapshot behind the stats
-    // panel is stale — drop it and let the next read refetch.
-    snapshotRequests.invalidate();
     // HTTP 200 with nothing changed: the failure lives in the body, so it has to
     // be raised or the bar paints green over a plan that did nothing.
     if (response.data.succeeded === 0 && response.data.failed > 0) {
@@ -690,18 +679,6 @@ export default function AIOperationsFloatingChat() {
           createdAt: new Date(),
         },
       ]);
-      const snapshotGeneration = snapshotRequests.begin();
-      getOperationsSnapshot()
-        .then((snapshotResponse) => {
-          if (
-            conversationRequests.isCurrent(requestGeneration)
-            && snapshotRequests.isCurrent(snapshotGeneration)
-            && snapshotResponse?.data
-          ) {
-            setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
-          }
-        })
-        .catch(() => undefined);
     } catch (actionError: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
       setActionPreviewError(getAIActionErrorMessage(actionError, language));
@@ -727,18 +704,6 @@ export default function AIOperationsFloatingChat() {
       if (!conversationRequests.isCurrent(requestGeneration)) return false;
       if (isTerminalAIActionCancellationError(cancellationError)) {
         setPendingActionPreview((current) => current?.id === preview.id ? null : current);
-        const snapshotGeneration = snapshotRequests.begin();
-        getOperationsSnapshot()
-          .then((snapshotResponse) => {
-            if (
-              conversationRequests.isCurrent(requestGeneration)
-              && snapshotRequests.isCurrent(snapshotGeneration)
-              && snapshotResponse?.data
-            ) {
-              setLatestSnapshot((current) => selectOperationsSnapshot(current, snapshotResponse.data));
-            }
-          })
-          .catch(() => undefined);
         return true;
       }
       setActionPreviewError(getAIActionCancellationErrorMessage(language));
@@ -756,9 +721,6 @@ export default function AIOperationsFloatingChat() {
   // chat surfaces at once (they share the same history).
   if (!activeMembership || !showAIAssistant || pathname === "/ai-assistant") return null;
 
-  const salesDays = latestSnapshot?.sales_days ?? [];
-  const stockRisks = latestSnapshot?.stock_risks ?? [];
-  const inventorySummary = latestSnapshot?.inventory_summary;
 
   // A confirmation card belongs under the answer that proposed it, not at the
   // end of the thread. See the same block on the AI assistant page — both
@@ -860,103 +822,6 @@ export default function AIOperationsFloatingChat() {
           isOpen ? "sm:opacity-100" : "sm:opacity-0"
         }`}
       >
-        {/* Stats drawer moves and scales as one surface so its cards enter together. */}
-        <div 
-          id="ai-operations-stats"
-          className={`absolute inset-y-0 right-full mr-3 hidden w-[340px] flex-col rounded-md border border-gray-200 bg-white p-3 shadow-xl shadow-gray-950/10 transform-gpu origin-right transition-[opacity,transform] duration-200 ease-out dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/30 lg:flex xl:w-[360px] ${
-            showStats
-              ? "translate-x-0 opacity-100 pointer-events-auto"
-              : hasOpenedStats
-                ? "pointer-events-none translate-x-2 opacity-0"
-                : "pointer-events-none translate-x-2 opacity-0"
-          }`}
-        >
-          <div className="flex h-full w-full shrink-0 flex-col">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
-              <div className="flex items-center gap-2">
-                <BarChart2 className="h-5 w-5 text-orange-500" />
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{copy.snapshot}</h3>
-              </div>
-              <button
-                type="button"
-                aria-label={labels.closeStats}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowStats(false);
-                }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {snapshotLoading && !latestSnapshot ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-10 text-gray-500">
-                <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-                <p className="mt-3 text-xs">{copy.emptyStats}</p>
-              </div>
-            ) : (
-              <div className="mt-4 flex-1 overflow-y-auto space-y-4 px-2 pr-2 scrollbar-thin">
-                <div className="grid grid-cols-1 gap-2.5">
-                  <MetricCard
-                    icon={<TrendingUp className="h-4.5 w-4.5" />}
-                    label={copy.salesDays}
-                    value={formatNumber(salesDays.length, language)}
-                  />
-                  <MetricCard
-                    icon={<Wallet className="h-4.5 w-4.5" />}
-                    label={copy.inventoryValue}
-                    value={formatCurrency(inventorySummary?.value ?? 0, language)}
-                  />
-                  <MetricCard
-                    icon={<AlertTriangle className="h-4.5 w-4.5" />}
-                    label={copy.stockRisks}
-                    value={formatNumber(stockRisks.length, language)}
-                  />
-                </div>
-
-                <div className="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
-                  <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-3.5 py-2.5 dark:border-gray-800 dark:bg-gray-900/40">
-                    <PackageSearch className="h-4.5 w-4.5 text-orange-500" />
-                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{copy.stockRisks}</span>
-                  </div>
-                  <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[220px] overflow-y-auto scrollbar-thin">
-                    {stockRisks.map((item) => (
-                      <div key={item.name} className="p-3 transition-colors hover:bg-gray-50/50 dark:hover:bg-gray-900/30">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-gray-900 dark:text-white">{item.name}</p>
-                            <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-500">
-                              {formatNumber(item.stock, language)} {item.unit}
-                            </p>
-                          </div>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wider ${
-                              item.status === "out"
-                                ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300"
-                                : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                            }`}
-                          >
-                            {item.status === "out" ? copy.stockOut : copy.stockLow}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">
-                          {copy.restock} <span className="font-semibold text-orange-600 dark:text-orange-400">{formatNumber(item.restock_estimate, language)}</span> {item.unit}
-                        </p>
-                      </div>
-                    ))}
-                    {stockRisks.length === 0 && (
-                      <div className="p-4 text-center text-xs text-gray-500 dark:text-gray-500">
-                        {language === "th" ? "ไม่มีสินค้าคลังเสี่ยงหมด" : "No high risk inventory items"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Main Chat Overlay Box */}
         <div className="relative isolate flex h-full w-full shrink-0 rounded-md">
           <div
@@ -973,27 +838,6 @@ export default function AIOperationsFloatingChat() {
               and the ones that only make sense on a wider screen keep their own
               width gates rather than living in a separate header. */}
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-            {messages.length > 1 && (
-              <button
-                type="button"
-                aria-label={labels.toggleStats}
-                aria-pressed={showStats}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!showStats) {
-                    setHasOpenedStats(true);
-                  }
-                  setShowStats(!showStats);
-                }}
-                className={`hidden h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-all active:scale-95 lg:inline-flex ${
-                  showStats
-                    ? "border-orange-200 bg-orange-50/90 text-orange-600 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-300"
-                    : "border-gray-200/80 bg-white/80 text-gray-600 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
-                }`}
-              >
-                <BarChart2 className="h-3.5 w-3.5" />
-              </button>
-            )}
             <button
               type="button"
               aria-label={labels.chats}
@@ -1264,11 +1108,20 @@ export default function AIOperationsFloatingChat() {
       <button
         type="button"
         aria-label={labels.openAssistant}
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu transition-[opacity,transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98] sm:bottom-6 sm:right-6 ${
+        onClick={onOrbClick}
+        onPointerDown={onOrbPointerDown}
+        onPointerMove={onOrbPointerMove}
+        onPointerUp={onOrbPointerUp}
+        onPointerCancel={onOrbPointerUp}
+        style={orbStyle}
+        className={`fixed bottom-4 right-4 z-[var(--z-chat)] flex h-14 w-14 touch-none select-none items-center justify-center overflow-hidden rounded-full shadow-xl shadow-orange-500/30 transform-gpu ease-out sm:bottom-6 sm:right-6 ${
+          orbDrag
+            ? "cursor-grabbing scale-105 shadow-2xl shadow-orange-500/40 transition-none"
+            : "cursor-grab transition-[opacity,transform,box-shadow,left,top] duration-200 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-orange-500/40 active:scale-[0.98]"
+        } ${
           isOpen
             ? "opacity-0 scale-95 pointer-events-none"
-            : "opacity-100 scale-100 pointer-events-auto"
+            : "opacity-100 pointer-events-auto"
         }`}
       >
         <SiriOrb size="66px" className="shrink-0" animationDuration={8} />
