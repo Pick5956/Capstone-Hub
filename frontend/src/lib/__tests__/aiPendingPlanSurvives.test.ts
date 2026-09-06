@@ -31,8 +31,10 @@ describe("a pending write plan survives the next question", () => {
     // the server still held the plan.
     it(`is restored after a page switch in the ${name}`, () => {
       const source = readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
-      expect(source).toContain("loadPendingPlan(storageKey)");
-      expect(source).toContain("savePendingPlan(storageKey, pendingActionPlan, planCardState)");
+      // Keyed by the chat, not the restaurant: each conversation keeps its own
+      // card, and switching chats does not carry one across.
+      expect(source).toContain("loadPendingPlan(threadStorageKey)");
+      expect(source).toContain("savePendingPlan(threadStorageKey, pendingActionPlan, planCardState)");
       // And it comes back in the state it ended in, so a card already answered
       // does not offer the buttons a second time.
       expect(source).toContain("initialState={planCardState}");

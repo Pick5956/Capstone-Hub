@@ -1268,6 +1268,40 @@ textarea {
 .warm-dialog-btn-danger:hover {
   background: #8f2415;
 }
+/* The one non-destructive confirm this frame has: renaming a chat. Terracotta,
+   the accent everything else in the dialog already uses, so it reads as the
+   quiet action next to the ghost button rather than as a second alarm. */
+.warm-dialog-btn-primary {
+  background: #c67139;
+  color: #f9f4ed;
+}
+.warm-dialog-btn-primary:hover {
+  background: #a85d2c;
+}
+/* Content a caller puts between the text and the buttons — a text field. */
+.warm-dialog-slot {
+  width: 100%;
+}
+.warm-dialog-slot input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(32, 30, 29, 0.16);
+  background: #fff;
+  color: #201e1d;
+  font-size: 14px;
+  line-height: 1.3;
+  outline: none;
+}
+.warm-dialog-slot input:focus-visible {
+  border-color: #c67139;
+  box-shadow: 0 0 0 3px rgba(198, 113, 57, 0.18);
+}
+.dark .warm-dialog-slot input {
+  background: #161616;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #ededed;
+}
 .warm-dialog-btn-ghost {
   background: transparent;
   color: #5b544c;

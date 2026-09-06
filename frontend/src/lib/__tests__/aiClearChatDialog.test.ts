@@ -2,53 +2,66 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// The confirmation in front of "start a new chat" is the last thing between a
-// stray tap and a deleted conversation, so the properties that make it safe are
+// The confirmation in front of deleting a chat is the last thing between a
+// stray tap and a lost conversation, so the properties that make it safe are
 // asserted here rather than left to a reviewer to notice.
 //
 // These are source-text checks. They cannot prove the dialog looks right — the
-// owner checks that — but they do catch the three ways it has room to silently
-// stop protecting anything: reverting to the inline card that could be scrolled
+// owner checks that — but they do catch the ways it has room to silently stop
+// protecting anything: reverting to the inline card that could be scrolled
 // away from, focusing the destructive button on open, or losing the portal and
 // being clipped inside the chat panel.
+//
+// Since chats became a list, "new chat" destroys nothing and asks nothing; the
+// question moved to deleting a chat from the list, which lives in one place.
 
 const root = join(__dirname, "..", "..", "..");
 const read = (relative: string) => readFileSync(join(root, relative), "utf8");
 
 const dialog = read("src/components/shared/WarmConfirmDialog.tsx");
 const styles = read("src/app/globals.css");
+const chatList = read("src/components/shared/AIChatList.tsx");
 const surfaces = {
   "floating chat": read("src/components/shared/AIOperationsFloatingChat.tsx"),
   "AI assistant page": read("src/app/(dashboard)/ai-assistant/page.tsx"),
 };
 
-describe("clear-chat confirmation", () => {
+describe("chat deletion confirmation", () => {
   for (const [name, source] of Object.entries(surfaces)) {
-    it(`${name} asks through the modal, not the inline card`, () => {
-      expect(source).toContain("<WarmConfirmDialog");
-      // The inline card is still used for other confirmations on these screens;
-      // what must not come back is using it for the destructive one. Both
-      // surfaces name their clear-chat copy with a *Confirm key, so finding that
-      // key inside an AIInlineConfirm block is the regression.
+    it(`${name} starts a new chat without asking and without deleting`, () => {
+      // The old dialog deleted the thread; now the old chat stays in the list.
+      expect(source).not.toMatch(/title=\{(labels|copy)\.(clearChatTitle|newChatTitle)\}/);
+      expect(source).toContain("<AIChatList");
+      expect(source).toContain("openThread(null)");
+      // The inline card must never carry the destructive question either.
       const inlineBlocks = source.split("<AIInlineConfirm").slice(1);
       for (const block of inlineBlocks) {
         const props = block.slice(0, block.indexOf("/>"));
-        expect(props).not.toMatch(/(clearChatConfirm|newChatConfirm)/);
+        expect(props).not.toMatch(/(clearChatConfirm|newChatConfirm|removeDescription)/);
       }
     });
-
-    it(`${name} shows a title and a body, not one long sentence`, () => {
-      const call = source.slice(source.indexOf("<WarmConfirmDialog"));
-      const props = call.slice(0, call.indexOf("/>"));
-      expect(props).toMatch(/title=\{(labels|copy)\.(clearChatTitle|newChatTitle)\}/);
-      expect(props).toMatch(/description=\{(labels|copy)\.(clearChatConfirm|newChatConfirm)\}/);
-    });
   }
+
+  it("the chat list asks through the modal before deleting, with a title and a body", () => {
+    const calls = chatList
+      .split("<WarmConfirmDialog")
+      .slice(1)
+      .map((call) => call.slice(0, call.indexOf("/>")));
+    const remove = calls.find((props) => props.includes("t.removeTitle"));
+    expect(remove).toBeDefined();
+    expect(remove).toMatch(/description=\{[\s\S]{0,240}?removeDescription/);
+    // Deleting is the red button; renaming borrows the frame but not the alarm.
+    expect(remove).not.toContain('tone="primary"');
+    const rename = calls.find((props) => props.includes("t.renameTitle"));
+    expect(rename).toContain('tone="primary"');
+    expect(styles).toMatch(/\.warm-dialog-btn-primary\s*\{[^}]*background: #c67139/);
+  });
 
   it("opens with focus on the safe button", () => {
     // Enter is the reflex after a dialog appears. If it lands on "delete", the
     // confirmation has actively made things worse than no confirmation at all.
-    expect(dialog).toContain("cancelRef.current?.focus()");
+    // A caller may ask for its content field instead; the fallback is cancel.
+    expect(dialog).toContain("(field ?? cancelRef.current)?.focus()");
     const confirmButton = dialog.slice(dialog.indexOf("warm-dialog-btn-danger"));
     expect(confirmButton.slice(0, confirmButton.indexOf("</button>"))).not.toContain("ref=");
   });

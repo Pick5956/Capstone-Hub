@@ -2,7 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import { clearStoredChat, loadStoredMessages, saveMessages, type ChatWriteSource } from "./aiChatStorage";
+import { getGuidedActions, type AIGuidedAction } from "./aiGuidedActions";
 import type { AIChartData, AIConversationTurn, AIForecastResult, AISystemDocSource } from "../types/ai";
+import type { Membership } from "../types/restaurant";
 
 // Many chats per owner.
 //
@@ -19,6 +21,7 @@ const ACTIVE_SUFFIX = ":active";
 const THREAD_INFIX = ":t:";
 const LEGACY_CONVERSATION_SUFFIX = ":server-conversation";
 const CHANGE_EVENT = "ai-thread-change";
+const CONVERSATIONS_EVENT = "ai-conversations-change";
 const THREAD_CACHE_LIMIT = 5;
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -185,6 +188,28 @@ export function migrateLegacyThread(baseKey: string | null): string | null {
   }
 }
 
+// The list's refresh signal. Any surface that changes what the list shows —
+// an answer that created or reordered a chat, a rename, a delete — announces
+// it, and every mounted list reloads once. A counter is the store so React
+// sees a new snapshot each time.
+let conversationsVersion = 0;
+
+export function notifyConversationsChanged(): void {
+  conversationsVersion += 1;
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(CONVERSATIONS_EVENT));
+}
+
+function subscribeConversations(onChange: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener(CONVERSATIONS_EVENT, onChange);
+  return () => window.removeEventListener(CONVERSATIONS_EVENT, onChange);
+}
+
+/** Bumps whenever the chat list should be read again. */
+export function useConversationsVersion(): number {
+  return useSyncExternalStore(subscribeConversations, () => conversationsVersion, () => 0);
+}
+
 /** Display data a stored turn carries, as the server wrote it. */
 export type AITurnDisplay = {
   chart?: AIChartData;
@@ -240,6 +265,33 @@ export function turnsToMessages(turns: AIConversationTurn[]): AIThreadMessage[] 
     });
   }
   return messages;
+}
+
+/**
+ * A reopened chat, ready to render: the bubbles from the server plus the
+ * follow-up chips the page would have offered under each answer. Chips were
+ * never stored — they are a function of the tool that answered, and deriving
+ * them here means a reopened chat looks exactly like it did the first time.
+ */
+export function hydrateThreadMessages(
+  turns: AIConversationTurn[],
+  membership: Membership | null | undefined,
+  language: "th" | "en",
+): (AIThreadMessage & { actions?: AIGuidedAction[] })[] {
+  const messages = turnsToMessages(turns);
+  const out: (AIThreadMessage & { actions?: AIGuidedAction[] })[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message.role !== "assistant") {
+      out.push(message);
+      continue;
+    }
+    const question = index > 0 ? messages[index - 1].content : "";
+    const tools = message.toolsUsed && message.toolsUsed.length > 0 ? message.toolsUsed : message.tool;
+    const actions = tools ? getGuidedActions(question, message.content, membership, language, tools, message.scopeAssumed) : [];
+    out.push(actions.length > 0 ? { ...message, actions } : message);
+  }
+  return out;
 }
 
 /** True when the server said the conversation the screen holds no longer exists. */

@@ -2,8 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, Minimize2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, normalizeAIAnswer, readAIOutage, getAISettings } from "@/src/lib/ai";
+import { ArrowUp, Bell, Bot, ChevronDown, Loader2, Maximize2, MessageSquareText, Minimize2, RotateCcw, Send, Settings, Square, X } from "lucide-react";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, normalizeAIAnswer, readAIOutage, getAISettings } from "@/src/lib/ai";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import {
   formatAIActionPreviewAnswer,
@@ -19,15 +19,22 @@ import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/li
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
-  clearStoredChat,
-  loadStoredConversationId,
-  loadStoredMessages,
   purgeStaleChats,
-  saveConversationId,
-  saveMessages,
   subscribeToChatClear,
   subscribeToChatWrites,
 } from "@/src/lib/aiChatStorage";
+import {
+  hydrateThreadMessages,
+  isConversationGone,
+  loadThreadCache,
+  migrateLegacyThread,
+  notifyConversationsChanged,
+  saveThreadCache,
+  setActiveThread,
+  threadKey,
+  useActiveThread,
+} from "@/src/lib/aiThreads";
+import AIChatList from "@/src/components/shared/AIChatList";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -35,7 +42,6 @@ import type { AIActionPreview, AIActionPlan, AIConversationMessage, AIForecastRe
 import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIInlineConfirm from "@/src/components/shared/AIInlineConfirm";
-import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 import AIInputTools from "@/src/components/shared/AIInputTools";
 import AISettingsModal from "@/src/components/shared/AISettingsModal";
 import ForecastChart from "@/src/components/shared/ForecastChart";
@@ -78,6 +84,8 @@ function buildCopy(language: "th" | "en") {
         newChatNo: "ไม่ลบ",
         scrollToLatest: "ไปที่ข้อความล่าสุด",
         permissionDenied: "หน้านี้สำหรับเจ้าของร้านเท่านั้น",
+        chats: "รายการแชท",
+        chatGone: "แชทนี้ถูกลบไปแล้ว เปิดแชทใหม่ให้แล้วครับ",
         welcome: "สวัสดีคุณผู้จัดการ",
         error: "เรียก AI ไม่สำเร็จ",
         quickQuestions: [
@@ -98,6 +106,8 @@ function buildCopy(language: "th" | "en") {
         newChatNo: "Keep it",
         scrollToLatest: "Jump to the latest message",
         permissionDenied: "This page is for the restaurant owner only",
+        chats: "Chats",
+        chatGone: "That chat was deleted. Starting a new one.",
         welcome: "Hello, manager.",
         error: "AI request failed",
         quickQuestions: [
@@ -160,7 +170,6 @@ export default function AIAssistantPage() {
   // end; shown always, it covers a message to offer a trip to where they are.
   const [atLatest, setAtLatest] = useState(true);
   // Clearing deletes the server copy too and cannot be undone, so it asks first.
-  const [confirmingClear, setConfirmingClear] = useState(false);
   const voiceControlsRef = useRef<{ stop: () => void; cancel: () => void } | null>(null);
   const sendAfterVoiceRef = useRef(false);
   const chatWriteSourceRef = useRef(Symbol("ai-assistant-page"));
@@ -187,14 +196,46 @@ export default function AIAssistantPage() {
     () => chatStorageKey(activeMembership?.restaurant_id, user?.ID),
     [activeMembership, user],
   );
+  // Which chat this page shows. Shared with the floating chat through
+  // storage, so the two surfaces never show different conversations.
+  const activeThread = useActiveThread(storageKey);
+  const threadStorageKey = useMemo(() => threadKey(storageKey, activeThread), [storageKey, activeThread]);
+  // The first answer of a new chat is already on screen when the server hands
+  // back its id; reloading that one chat from the server would only repaint
+  // what is there.
+  const skipServerLoadRef = useRef<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  const [listCollapsed, setListCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setListCollapsed(window.localStorage.getItem("aiChatListCollapsed") === "1");
+    } catch {
+      // No storage: the list starts open.
+    }
+  }, []);
+  const toggleListCollapsed = () =>
+    setListCollapsed((current) => {
+      try {
+        window.localStorage.setItem("aiChatListCollapsed", current ? "0" : "1");
+      } catch {
+        // Not remembered, still toggled.
+      }
+      return !current;
+    });
+  // Switching chats leaves the current one behind, and a preview waiting on
+  // it must be settled first — the server holds one at a time.
+  const openThread = async (conversationId: string | null) => {
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
+    setListOpen(false);
+    setActiveThread(storageKey, conversationId);
+  };
 
   const welcomeMessage = (): Message => ({ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() });
 
-  // Load shared history (same key as the floating chat) with cleanup + TTL.
   useEffect(() => {
     conversationRequests.invalidate();
-    // Drop the previous key's server conversation and pending action right away:
-    // a send between this render and the deferred load must not reuse them.
+    // Drop the previous chat's server id and pending action right away: a send
+    // between this render and the deferred load must not reuse them.
     setConversationId(null);
     setPendingActionPreview(null);
     setPendingActionPlan(null);
@@ -202,40 +243,61 @@ export default function AIAssistantPage() {
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
+    setError("");
+    setOutage(null);
+    let cancelled = false;
     const loadTimer = window.setTimeout(() => {
+      // A pre-list installation's single thread becomes the active chat, once.
+      // setActiveThread inside it re-runs this effect with the id in hand.
+      if (migrateLegacyThread(storageKey) && !activeThread) return;
       purgeStaleChats(storageKey);
-      setConversationId(loadStoredConversationId(storageKey));
-      const stored = loadStoredMessages<StoredMessage>(storageKey);
-      setMessages(stored && stored.length > 0
-        ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
+      setConversationId(activeThread);
+      const cached = loadThreadCache<StoredMessage>(storageKey, activeThread);
+      setMessages(cached && cached.length > 0
+        ? cached.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
         : [welcomeMessage()]);
-      // The server keeps one pending plan at a time and it outlives a page
-      // switch, so the card that goes with it has to come back too. Without
-      // this the next command answered "confirm or cancel the one above" over
-      // a card that had been unmounted, with no way to press either button.
-      const storedPlan = loadPendingPlan(storageKey);
+      const storedPlan = loadPendingPlan(threadStorageKey);
       setPendingActionPlan(storedPlan?.plan ?? null);
       setPlanCardState(storedPlan?.state ?? "pending");
       setLoading(false);
-      setHydratedStorageKey(storageKey);
+      setHydratedStorageKey(threadStorageKey);
+      // The server owns the transcript; the cache above only paints first. A
+      // chat that was trashed under this screen comes back as gone, and the
+      // page moves to a fresh one rather than showing an error.
+      if (activeThread && skipServerLoadRef.current !== activeThread) {
+        getAIConversationTurns(activeThread)
+          .then((res) => {
+            if (cancelled) return;
+            const hydrated = hydrateThreadMessages(res.data.turns ?? [], activeMembership, language);
+            if (hydrated.length > 0) setMessages(hydrated);
+          })
+          .catch((err: unknown) => {
+            if (cancelled) return;
+            if (isConversationGone(err)) setActiveThread(storageKey, null);
+          });
+      }
+      skipServerLoadRef.current = null;
     }, 0);
-    return () => window.clearTimeout(loadTimer);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(loadTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey, welcomeText]);
+  }, [storageKey, threadStorageKey, activeThread, welcomeText]);
 
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
-    saveMessages(storageKey, messages, chatWriteSourceRef.current);
-  }, [hydratedStorageKey, messages, storageKey]);
+    if (hydratedStorageKey !== threadStorageKey) return;
+    saveThreadCache(storageKey, activeThread, messages, chatWriteSourceRef.current);
+  }, [hydratedStorageKey, messages, storageKey, activeThread, threadStorageKey]);
 
   // Only after hydration: before it the plan is deliberately null, and saving
   // that would erase the very plan we are about to restore.
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
-    savePendingPlan(storageKey, pendingActionPlan, planCardState);
-  }, [hydratedStorageKey, pendingActionPlan, planCardState, storageKey]);
+    if (hydratedStorageKey !== threadStorageKey) return;
+    savePendingPlan(threadStorageKey, pendingActionPlan, planCardState);
+  }, [hydratedStorageKey, pendingActionPlan, planCardState, threadStorageKey]);
 
-  useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
+  useEffect(() => subscribeToChatWrites(threadStorageKey, chatWriteSourceRef.current, (write) => {
     if (write.kind === "conversation") {
       setConversationId(write.conversationId);
       return;
@@ -245,7 +307,7 @@ export default function AIAssistantPage() {
       ...message,
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
     })));
-  }), [storageKey]);
+  }), [threadStorageKey]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -296,21 +358,8 @@ export default function AIAssistantPage() {
   }, [conversationRequests, welcomeText]);
 
   useEffect(() => subscribeToChatClear((clearedKey) => {
-    if (clearedKey === storageKey) resetConversation();
-  }), [resetConversation, storageKey]);
-
-  const handleClearChat = async () => {
-    if (loading || actionConfirming || actionCancelling) return;
-    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
-    const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
-    if (serverConversationId) {
-      void deleteAIConversation(serverConversationId).catch(() => undefined);
-    }
-    // clearStoredChat broadcasts, so both surfaces run resetConversation. With no
-    // storage key there is nothing to broadcast — reset this surface directly.
-    if (storageKey) clearStoredChat(storageKey);
-    else resetConversation();
-  };
+    if (clearedKey === threadStorageKey) resetConversation();
+  }), [resetConversation, threadStorageKey]);
 
   const submitQuestion = async (nextQuestion = input) => {
     const trimmed = nextQuestion.trim();
@@ -368,10 +417,9 @@ export default function AIAssistantPage() {
       const data = response.data;
       const answer = normalizeAIAnswer(data?.answer);
       if (!answer) throw new Error("AI response did not contain a valid answer");
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-        saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
-      }
+      // A chat is born on its first answer: the server minted the id just now.
+      const newThreadId = data.conversation_id && data.conversation_id !== conversationId ? data.conversation_id : null;
+      if (data.conversation_id) setConversationId(data.conversation_id);
       if (data.action_preview) {
         actionResolvedRef.current = false;
         setPendingActionPreview(data.action_preview);
@@ -404,8 +452,24 @@ export default function AIAssistantPage() {
           previewId: data.action_preview?.id,
         },
       ]);
+      if (newThreadId) {
+        // Cache what is on screen under the new id before switching to it, so
+        // the switch repaints the same thread instead of a blank one.
+        skipServerLoadRef.current = newThreadId;
+        setMessages((prev) => {
+          saveThreadCache(storageKey, newThreadId, prev, chatWriteSourceRef.current);
+          return prev;
+        });
+        setActiveThread(storageKey, newThreadId);
+      }
+      notifyConversationsChanged();
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
+      if (isConversationGone(err)) {
+        setActiveThread(storageKey, null);
+        setError(copy.chatGone);
+        return;
+      }
       // An outage gets its own card with the wait and a retry button, instead of
       // the generic red strip that reads as though the question was at fault.
       const reportedOutage = readAIOutage(err);
@@ -704,6 +768,28 @@ export default function AIAssistantPage() {
       <div className="ai-aura-layer ai-aura-layer-1 dark:hidden" aria-hidden="true" />
       <div className="ai-aura-layer ai-aura-layer-2 dark:hidden" aria-hidden="true" />
       <section className="relative flex min-h-0 flex-1">
+        {/* The chat list: a column beside the conversation on a wide screen, a
+            sheet over it on a phone. One component, placed twice. */}
+        <AIChatList
+          variant="column"
+          language={language}
+          activeId={activeThread}
+          onOpen={openThread}
+          onNew={() => openThread(null)}
+          collapsed={listCollapsed}
+          onToggleCollapsed={toggleListCollapsed}
+          className="hidden lg:flex"
+        />
+        {listOpen && (
+          <AIChatList
+            variant="sheet"
+            language={language}
+            activeId={activeThread}
+            onOpen={openThread}
+            onNew={() => openThread(null)}
+            onClose={() => setListOpen(false)}
+          />
+        )}
         {/* Conversation — full width */}
         <div className="relative flex min-h-0 flex-1 flex-col bg-transparent dark:bg-gray-900">
           {/* Floating controls (top-right) — minimal & glassy so the chat stays full-screen */}
@@ -711,6 +797,16 @@ export default function AIAssistantPage() {
             {/* Insights live behind a bell, the control everyone already reads as
                 "there is something new for you". The badge carries the count, so
                 the button needs no label to be understood. */}
+            <HoverTip label={copy.chats} placement="bottom">
+              <button
+                type="button"
+                onClick={() => setListOpen(true)}
+                aria-label={copy.chats}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white lg:hidden"
+              >
+                <MessageSquareText className="h-3.5 w-3.5" />
+              </button>
+            </HoverTip>
             <HoverTip label={language === "th" ? "ควรรู้วันนี้" : "Insights"} placement="bottom">
               <button
                 type="button"
@@ -733,7 +829,7 @@ export default function AIAssistantPage() {
             <HoverTip label={copy.newChat} placement="bottom">
               <button
                 type="button"
-                onClick={() => setConfirmingClear(true)}
+                onClick={() => openThread(null)}
                 disabled={loading || actionConfirming || actionCancelling}
                 aria-label={copy.newChat}
                 className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300 dark:hover:text-white"
@@ -935,22 +1031,6 @@ export default function AIAssistantPage() {
             </div>
           )}
 
-          {/* Asked before the thread is deleted, not after: the server copy goes
-              with it and there is no undo. Same modal as the floating chat, so
-              the question looks and behaves identically on both surfaces. */}
-          <WarmConfirmDialog
-            open={confirmingClear}
-            title={copy.newChatTitle}
-            description={copy.newChatConfirm}
-            confirmLabel={copy.newChatYes}
-            cancelLabel={copy.newChatNo}
-            onConfirm={() => {
-              setConfirmingClear(false);
-              void handleClearChat();
-            }}
-            onCancel={() => setConfirmingClear(false)}
-            busy={loading || actionConfirming || actionCancelling}
-          />
 
           {/* A way back to the newest message once the reader has scrolled up. */}
           {!atLatest && messages.length > 1 && (

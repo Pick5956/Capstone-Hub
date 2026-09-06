@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TriangleAlert } from "lucide-react";
 
@@ -32,6 +32,18 @@ type Props = {
   onConfirm: () => void;
   onCancel: () => void;
   busy?: boolean;
+  /**
+   * The dialog began as the one place that asks before destroying something.
+   * Renaming a chat wanted the same frame with a field in it and a button that
+   * is not red, so the frame took three small options: content between the
+   * text and the buttons, a tone for the confirm button, and the icon. Every
+   * existing caller passes none and gets the warning it always had.
+   */
+  children?: ReactNode;
+  tone?: "danger" | "primary";
+  icon?: ReactNode;
+  /** Where focus lands on open: the cancel button (default) or the content slot. */
+  initialFocus?: "cancel" | "content";
 };
 
 export default function WarmConfirmDialog({
@@ -43,6 +55,10 @@ export default function WarmConfirmDialog({
   onConfirm,
   onCancel,
   busy = false,
+  children,
+  tone = "danger",
+  icon,
+  initialFocus = "cancel",
 }: Props) {
   const titleId = useId();
   const bodyId = useId();
@@ -52,13 +68,14 @@ export default function WarmConfirmDialog({
   // the caret lands on <body> after closing and the next Tab starts from the
   // top of the page.
   const openerRef = useRef<HTMLElement | null>(null);
+  const slotRef = useRef<HTMLDivElement | null>(null);
 
 
   const focusables = useCallback(() => {
     const root = dialogRef.current;
     if (!root) return [] as HTMLElement[];
     return Array.from(
-      root.querySelectorAll<HTMLElement>("button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"),
+      root.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])"),
     );
   }, []);
 
@@ -67,7 +84,13 @@ export default function WarmConfirmDialog({
     openerRef.current = document.activeElement as HTMLElement | null;
     // Deferred a frame: the element is being animated in and is not focusable
     // in the same tick it is inserted.
-    const timer = window.setTimeout(() => cancelRef.current?.focus(), 0);
+    const timer = window.setTimeout(() => {
+      const field = initialFocus === "content"
+        ? slotRef.current?.querySelector<HTMLElement>("input, textarea, button")
+        : null;
+      (field ?? cancelRef.current)?.focus();
+      if (field instanceof HTMLInputElement) field.select();
+    }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -103,7 +126,7 @@ export default function WarmConfirmDialog({
       document.body.style.overflow = previousOverflow;
       openerRef.current?.focus?.();
     };
-  }, [open, focusables, onCancel]);
+  }, [open, focusables, onCancel, initialFocus]);
 
   // No DOM to portal into while the server renders. Nothing is lost by
   // returning null there: the dialog is always closed on first paint, so the
@@ -129,7 +152,7 @@ export default function WarmConfirmDialog({
         className="warm-dialog"
       >
         <span className="warm-dialog-icon" aria-hidden="true">
-          <TriangleAlert size={28} strokeWidth={2.75} />
+          {icon ?? <TriangleAlert size={28} strokeWidth={2.75} />}
         </span>
         <h2 id={titleId} className="warm-dialog-title">
           {title}
@@ -137,10 +160,15 @@ export default function WarmConfirmDialog({
         <p id={bodyId} className="warm-dialog-body">
           {description}
         </p>
+        {children ? (
+          <div ref={slotRef} className="warm-dialog-slot">
+            {children}
+          </div>
+        ) : null}
         <div className="warm-dialog-actions">
           <button
             type="button"
-            className="warm-dialog-btn warm-dialog-btn-danger"
+            className={`warm-dialog-btn ${tone === "primary" ? "warm-dialog-btn-primary" : "warm-dialog-btn-danger"}`}
             onClick={onConfirm}
             disabled={busy}
           >

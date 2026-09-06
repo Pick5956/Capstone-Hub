@@ -12,6 +12,7 @@ import {
   X,
   BarChart2,
   RotateCcw,
+  MessageSquareText,
   ChevronDown,
   Maximize2,
   Minimize2
@@ -20,7 +21,7 @@ import AIFollowUpList from "@/src/components/shared/AIFollowUpList";
 import { useFollowUpsEnabled, useWelcome } from "@/src/lib/aiPrefs";
 import SiriOrb from "@/src/components/ui/siri-orb";
 import AIInputTools from "@/src/components/shared/AIInputTools";
-import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, deleteAIConversation, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
+import { askOperationsAI, cancelAIAction, cancelAIActionPlan, confirmAIAction, confirmAIActionPlan, getAIConversationTurns, getOperationsSnapshot, normalizeAIAnswer, readAIOutage } from "@/src/lib/ai";
 import {
   formatAIActionPreviewAnswer,
   formatAIActionConfirmationMessage,
@@ -36,15 +37,22 @@ import { loadPendingPlan, savePendingPlan, type StoredPlanState } from "@/src/li
 import { resolveNavigationRequest } from "@/src/lib/aiNavigation";
 import {
   chatStorageKey,
-  clearStoredChat,
-  loadStoredConversationId,
-  loadStoredMessages,
   purgeStaleChats,
-  saveConversationId,
-  saveMessages,
   subscribeToChatClear,
   subscribeToChatWrites,
 } from "@/src/lib/aiChatStorage";
+import {
+  hydrateThreadMessages,
+  isConversationGone,
+  loadThreadCache,
+  migrateLegacyThread,
+  notifyConversationsChanged,
+  saveThreadCache,
+  setActiveThread,
+  threadKey,
+  useActiveThread,
+} from "@/src/lib/aiThreads";
+import AIChatList from "@/src/components/shared/AIChatList";
 import { createRequestGeneration } from "@/src/lib/requestGeneration";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useLanguage } from "@/src/providers/LanguageProvider";
@@ -54,7 +62,6 @@ import AIActionPreviewCard from "@/src/components/shared/AIActionPreviewCard";
 import InlineDbConfirmBar from "@/src/components/shared/InlineDbConfirmBar";
 import AIOutageNotice, { type AIOutage } from "@/src/components/shared/AIOutageNotice";
 import SafeAIResponseContent from "@/src/components/shared/SafeAIResponseContent";
-import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
 
 type Message = {
   id: string;
@@ -180,6 +187,8 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "เปิดหรือปิดสถิติร้าน",
         closeStats: "ปิดสถิติร้าน",
         clearChat: "เริ่มแชทใหม่",
+        chats: "รายการแชท",
+        chatGone: "แชทนี้ถูกลบไปแล้ว เปิดแชทใหม่ให้แล้วครับ",
         clearChatTitle: "เริ่มแชทใหม่ไหม?",
         clearChatConfirm: "บทสนทนานี้จะถูกลบทั้งหมด และผู้ช่วยจะจำเรื่องที่คุยกันไว้ไม่ได้อีก",
         clearChatYes: "ลบแล้วเริ่มใหม่",
@@ -192,6 +201,8 @@ export default function AIOperationsFloatingChat() {
         toggleStats: "Toggle restaurant stats",
         closeStats: "Close restaurant stats",
         clearChat: "New chat",
+        chats: "Chats",
+        chatGone: "That chat was deleted. Starting a new one.",
         clearChatTitle: "Start a new chat?",
         clearChatConfirm: "This conversation will be deleted, and the assistant will not remember any of it.",
         clearChatYes: "Delete and start over",
@@ -235,7 +246,6 @@ export default function AIOperationsFloatingChat() {
   const [atLatest, setAtLatest] = useState(true);
   // Clearing deletes the conversation on the server as well, and there is no
   // undo, so the button asks first. It used to wipe the thread on one stray tap.
-  const [confirmingClear, setConfirmingClear] = useState(false);
   const chatDialogRef = useRef<HTMLDivElement>(null);
   const composer = useAutoGrowTextarea(input);
   const inputRef = composer.ref;
@@ -250,6 +260,18 @@ export default function AIOperationsFloatingChat() {
     () => chatStorageKey(activeMembership?.restaurant_id, user?.ID),
     [user, activeMembership],
   );
+  // The same active chat as the AI page, read from the same place.
+  const activeThread = useActiveThread(storageKey);
+  const threadStorageKey = useMemo(() => threadKey(storageKey, activeThread), [storageKey, activeThread]);
+  const skipServerLoadRef = useRef<string | null>(null);
+  const [listOpen, setListOpen] = useState(false);
+  // Switching chats leaves the current one behind, and a preview waiting on
+  // it must be settled first — the server holds one at a time.
+  const openThread = async (conversationId: string | null) => {
+    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
+    setListOpen(false);
+    setActiveThread(storageKey, conversationId);
+  };
 
   // Load shared history for the current (restaurant, user) with TTL + cleanup.
   useEffect(() => {
@@ -263,39 +285,59 @@ export default function AIOperationsFloatingChat() {
     setActionConfirming(false);
     setActionCancelling(false);
     setActionPreviewError("");
+    let cancelled = false;
     const loadTimer = window.setTimeout(() => {
+      if (migrateLegacyThread(storageKey) && !activeThread) return;
       purgeStaleChats(storageKey);
-      setConversationId(loadStoredConversationId(storageKey));
-      const stored = loadStoredMessages<StoredMessage>(storageKey);
+      setConversationId(activeThread);
+      const stored = loadThreadCache<StoredMessage>(storageKey, activeThread);
       setMessages(stored && stored.length > 0
         ? stored.map((m) => ({ ...m, createdAt: m.createdAt ? new Date(m.createdAt) : new Date() }))
         : [{ id: "welcome", role: "assistant", content: welcomeText, createdAt: new Date() }]);
+      // The server owns the transcript; the cache only paints first.
+      if (activeThread && skipServerLoadRef.current !== activeThread) {
+        getAIConversationTurns(activeThread)
+          .then((res) => {
+            if (cancelled) return;
+            const hydrated = hydrateThreadMessages(res.data.turns ?? [], activeMembership, language);
+            if (hydrated.length > 0) setMessages(hydrated);
+          })
+          .catch((err: unknown) => {
+            if (cancelled) return;
+            if (isConversationGone(err)) setActiveThread(storageKey, null);
+          });
+      }
+      skipServerLoadRef.current = null;
       // The server holds one pending plan at a time and it survives a page
       // switch; the card that goes with it has to survive too, or the owner is
       // told to answer a card that is no longer anywhere on screen.
-      const storedPlan = loadPendingPlan(storageKey);
+      const storedPlan = loadPendingPlan(threadStorageKey);
       setPendingActionPlan(storedPlan?.plan ?? null);
       setPlanCardState(storedPlan?.state ?? "pending");
       setLoading(false);
-      setHydratedStorageKey(storageKey);
+      setHydratedStorageKey(threadStorageKey);
     }, 0);
-    return () => window.clearTimeout(loadTimer);
-  }, [conversationRequests, storageKey, welcomeText]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(loadTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationRequests, storageKey, threadStorageKey, activeThread, welcomeText]);
 
   // Persist to the shared key; a lone welcome message is not persisted.
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
-    saveMessages(storageKey, messages, chatWriteSourceRef.current);
-  }, [hydratedStorageKey, messages, storageKey]);
+    if (hydratedStorageKey !== threadStorageKey) return;
+    saveThreadCache(storageKey, activeThread, messages, chatWriteSourceRef.current);
+  }, [hydratedStorageKey, messages, storageKey, activeThread, threadStorageKey]);
 
   // Only after hydration: before it the plan is deliberately null, and saving
   // that would erase the very card we are about to restore.
   useEffect(() => {
-    if (hydratedStorageKey !== storageKey) return;
-    savePendingPlan(storageKey, pendingActionPlan, planCardState);
-  }, [hydratedStorageKey, pendingActionPlan, planCardState, storageKey]);
+    if (hydratedStorageKey !== threadStorageKey) return;
+    savePendingPlan(threadStorageKey, pendingActionPlan, planCardState);
+  }, [hydratedStorageKey, pendingActionPlan, planCardState, threadStorageKey]);
 
-  useEffect(() => subscribeToChatWrites(storageKey, chatWriteSourceRef.current, (write) => {
+  useEffect(() => subscribeToChatWrites(threadStorageKey, chatWriteSourceRef.current, (write) => {
     if (write.kind === "conversation") {
       setConversationId(write.conversationId);
       return;
@@ -305,7 +347,7 @@ export default function AIOperationsFloatingChat() {
       ...message,
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
     })));
-  }), [storageKey]);
+  }), [threadStorageKey]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -386,8 +428,8 @@ export default function AIOperationsFloatingChat() {
   }, [conversationRequests, welcomeText]);
 
   useEffect(() => subscribeToChatClear((clearedKey) => {
-    if (clearedKey === storageKey) resetConversation();
-  }), [resetConversation, storageKey]);
+    if (clearedKey === threadStorageKey) resetConversation();
+  }), [resetConversation, threadStorageKey]);
 
   // Start a fresh chat: drop the stored history and reset to the welcome message.
   // How far from the bottom still counts as "at the latest". A couple of lines of
@@ -403,20 +445,6 @@ export default function AIOperationsFloatingChat() {
 
   const jumpToLatest = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  };
-
-  const handleClearChat = async () => {
-    if (loading || actionConfirming || actionCancelling) return;
-    setConfirmingClear(false);
-    if (pendingActionPreview && !(await discardPendingActionPreview())) return;
-    const serverConversationId = conversationId ?? loadStoredConversationId(storageKey);
-    if (canAskAI && serverConversationId) {
-      void deleteAIConversation(serverConversationId).catch(() => undefined);
-    }
-    // clearStoredChat broadcasts, so both surfaces run resetConversation. With no
-    // storage key there is nothing to broadcast — reset this surface directly.
-    if (storageKey) clearStoredChat(storageKey);
-    else resetConversation();
   };
 
   const handleAction = (action: AIGuidedAction) => {
@@ -532,10 +560,8 @@ export default function AIOperationsFloatingChat() {
       const data: AIAskResponse = response.data;
       const answer = normalizeAIAnswer(data?.answer);
       if (!answer) throw new Error("AI response did not contain a valid answer");
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-        saveConversationId(storageKey, data.conversation_id, chatWriteSourceRef.current);
-      }
+      const newThreadId = data.conversation_id && data.conversation_id !== conversationId ? data.conversation_id : null;
+      if (data.conversation_id) setConversationId(data.conversation_id);
       
       const assistantMsg: Message = {
         id: data.turn_id ? `${data.turn_id}-assistant` : `ai-${Date.now()}`,
@@ -551,7 +577,16 @@ export default function AIOperationsFloatingChat() {
         previewId: data.action_preview?.id,
       };
       
-      setMessages(prev => [...prev, assistantMsg]);
+      setMessages(prev => {
+        const next = [...prev, assistantMsg];
+        if (newThreadId) saveThreadCache(storageKey, newThreadId, next, chatWriteSourceRef.current);
+        return next;
+      });
+      if (newThreadId) {
+        skipServerLoadRef.current = newThreadId;
+        setActiveThread(storageKey, newThreadId);
+      }
+      notifyConversationsChanged();
 
       if (data.action_preview) {
         setPendingActionPreview(data.action_preview);
@@ -569,6 +604,11 @@ export default function AIOperationsFloatingChat() {
       }
     } catch (err: unknown) {
       if (!conversationRequests.isCurrent(requestGeneration)) return;
+      if (isConversationGone(err)) {
+        setActiveThread(storageKey, null);
+        setMessages(prev => [...prev, { id: `gone-${Date.now()}`, role: "assistant", content: labels.chatGone, createdAt: new Date() }]);
+        return;
+      }
       console.error(err);
       // An outage is reported by the backend as a code, not as English words in
       // the message. This used to sniff the message for "429"/"quota"/"exhausted"
@@ -954,6 +994,17 @@ export default function AIOperationsFloatingChat() {
                 <BarChart2 className="h-3.5 w-3.5" />
               </button>
             )}
+            <button
+              type="button"
+              aria-label={labels.chats}
+              onClick={(e) => {
+                e.stopPropagation();
+                setListOpen(true);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 hover:text-gray-900 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300 dark:hover:text-white"
+            >
+              <MessageSquareText className="h-3.5 w-3.5" />
+            </button>
             {messages.length > 1 && (
               <button
                 type="button"
@@ -961,7 +1012,7 @@ export default function AIOperationsFloatingChat() {
                 disabled={loading || actionConfirming || actionCancelling}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setConfirmingClear(true);
+                  openThread(null);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm backdrop-blur transition-all active:scale-95 disabled:opacity-50 dark:border-gray-800/80 dark:bg-gray-900/70 dark:text-gray-300"
               >
@@ -981,6 +1032,16 @@ export default function AIOperationsFloatingChat() {
             </button>
           </div>
 
+          {listOpen && (
+            <AIChatList
+              variant="sheet"
+              language={language}
+              activeId={activeThread}
+              onOpen={openThread}
+              onNew={() => openThread(null)}
+              onClose={() => setListOpen(false)}
+            />
+          )}
           {/* Chat Messages Body with custom scrollbar and entry animation.
               Phone: extra top padding clears the floating controls, and the same
               top fade as the AI page lets content dissolve instead of being cut. */}
@@ -1103,16 +1164,6 @@ export default function AIOperationsFloatingChat() {
               bottom of the message column, so on a phone the question could be
               scrolled away from while the thread it was about to delete stayed on
               screen. This one cannot be scrolled past or missed. */}
-          <WarmConfirmDialog
-            open={confirmingClear}
-            title={labels.clearChatTitle}
-            description={labels.clearChatConfirm}
-            confirmLabel={labels.clearChatYes}
-            cancelLabel={labels.clearChatNo}
-            onConfirm={() => void handleClearChat()}
-            onCancel={() => setConfirmingClear(false)}
-            busy={loading || actionConfirming || actionCancelling}
-          />
 
           {/* A way back to the newest message once the reader has scrolled up.
               It sits just above the input and only appears when there is

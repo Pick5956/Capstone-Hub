@@ -1,0 +1,406 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MessageSquareText, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { deleteAIConversation, listAIConversations, renameAIConversation } from "@/src/lib/ai";
+import { matchesThreadQuery, notifyConversationsChanged, threadGroup, useConversationsVersion, type AIThreadGroup } from "@/src/lib/aiThreads";
+import WarmConfirmDialog from "@/src/components/shared/WarmConfirmDialog";
+import type { AIConversationSummary } from "@/src/types/ai";
+
+// The chat list — one component, three places.
+//
+// On a wide screen it is the column beside the conversation, the way a chat
+// app lays it out; on a phone it is a sheet over the conversation; inside the
+// floating chat it is that same sheet inside the panel. The list itself is
+// identical in all three, so it lives here once and the surfaces only decide
+// where to put it.
+//
+// The server owns the list. This reads it on mount and again whenever any
+// surface announces a change (an answer landed, a rename, a delete), and it
+// filters by title as the owner types — no request per keystroke.
+
+type Variant = "column" | "sheet";
+
+function copy(language: "th" | "en") {
+  return language === "th"
+    ? {
+        title: "แชท",
+        newChat: "แชทใหม่",
+        search: "ค้นหาแชท",
+        empty: "ยังไม่มีแชท ถามอะไรสักอย่างแล้วแชทจะมาอยู่ที่นี่",
+        nothingFound: "ไม่มีแชทที่ชื่อตรงกับคำค้น",
+        loadError: "โหลดรายการแชทไม่สำเร็จ",
+        groups: { today: "วันนี้", yesterday: "เมื่อวาน", week: "7 วันก่อน", older: "เก่ากว่านั้น" } as Record<AIThreadGroup, string>,
+        questions: (n: number) => `${n} คำถาม`,
+        rename: "เปลี่ยนชื่อ",
+        renameTitle: "ตั้งชื่อแชทนี้",
+        renameDescription: "ชื่อที่ตั้งเองจะไม่ถูกเปลี่ยนอีก",
+        renameSave: "บันทึกชื่อ",
+        remove: "ลบ",
+        removeTitle: "ลบแชทนี้ไหม?",
+        removeDescription: "แชทจะย้ายไปถังขยะ กู้คืนได้ภายใน 7 วันจากตั้งค่าผู้ช่วย",
+        removeYes: "ย้ายไปถังขยะ",
+        cancel: "ยกเลิก",
+        collapse: "ซ่อนรายการแชท",
+        expand: "แสดงรายการแชท",
+        close: "ปิด",
+        untitled: "แชทไม่มีชื่อ",
+      }
+    : {
+        title: "Chats",
+        newChat: "New chat",
+        search: "Search chats",
+        empty: "No chats yet. Ask something and it will appear here.",
+        nothingFound: "No chat title matches",
+        loadError: "Could not load chats",
+        groups: { today: "Today", yesterday: "Yesterday", week: "Previous 7 days", older: "Older" } as Record<AIThreadGroup, string>,
+        questions: (n: number) => `${n} question${n === 1 ? "" : "s"}`,
+        rename: "Rename",
+        renameTitle: "Name this chat",
+        renameDescription: "A name you choose is never overwritten",
+        renameSave: "Save name",
+        remove: "Delete",
+        removeTitle: "Delete this chat?",
+        removeDescription: "It moves to the trash and can be restored within 7 days from the assistant settings",
+        removeYes: "Move to trash",
+        cancel: "Cancel",
+        collapse: "Hide chat list",
+        expand: "Show chat list",
+        close: "Close",
+        untitled: "Untitled chat",
+      };
+}
+
+function timeLabel(iso: string, language: "th" | "en", group: AIThreadGroup): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  if (group === "today" || group === "yesterday") {
+    return at.toLocaleTimeString(language === "th" ? "th-TH" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+  return at.toLocaleDateString(language === "th" ? "th-TH" : "en-GB", { day: "numeric", month: "short" });
+}
+
+const GROUP_ORDER: AIThreadGroup[] = ["today", "yesterday", "week", "older"];
+
+export default function AIChatList({
+  language,
+  activeId,
+  onOpen,
+  onNew,
+  variant,
+  onClose,
+  collapsed = false,
+  onToggleCollapsed,
+  className = "",
+}: {
+  language: "th" | "en";
+  activeId: string | null;
+  onOpen: (conversationId: string) => void;
+  onNew: () => void;
+  variant: Variant;
+  /** Sheet only: the close control. */
+  onClose?: () => void;
+  /** Column only: a narrow rail instead of the list. */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  className?: string;
+}) {
+  const t = copy(language);
+  const version = useConversationsVersion();
+  const [conversations, setConversations] = useState<AIConversationSummary[] | null>(null);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [renaming, setRenaming] = useState<AIConversationSummary | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [removing, setRemoving] = useState<AIConversationSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    let cancelled = false;
+    listAIConversations()
+      .then((res) => {
+        if (cancelled) return;
+        setConversations(res.data.conversations ?? []);
+        setError("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t.loadError);
+        setConversations((current) => current ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The load is keyed by version: every announced change reloads once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
+
+  useEffect(() => load(), [load]);
+
+  const grouped = useMemo(() => {
+    const now = new Date();
+    const buckets: Record<AIThreadGroup, AIConversationSummary[]> = { today: [], yesterday: [], week: [], older: [] };
+    for (const conversation of conversations ?? []) {
+      if (!matchesThreadQuery(conversation.title || t.untitled, query)) continue;
+      buckets[threadGroup(conversation.updated_at, now)].push(conversation);
+    }
+    return buckets;
+  }, [conversations, query, t.untitled]);
+
+  const visibleCount = GROUP_ORDER.reduce((sum, group) => sum + grouped[group].length, 0);
+
+  const commitRename = async () => {
+    if (!renaming) return;
+    const title = renameDraft.trim();
+    if (!title) return;
+    setBusy(true);
+    try {
+      await renameAIConversation(renaming.id, title);
+      setConversations((current) =>
+        (current ?? []).map((item) => (item.id === renaming.id ? { ...item, title, title_by_owner: true } : item)),
+      );
+      setRenaming(null);
+      notifyConversationsChanged();
+    } catch {
+      setError(t.loadError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const commitRemove = async () => {
+    if (!removing) return;
+    setBusy(true);
+    try {
+      await deleteAIConversation(removing.id);
+      setConversations((current) => (current ?? []).filter((item) => item.id !== removing.id));
+      const wasActive = removing.id === activeId;
+      setRemoving(null);
+      notifyConversationsChanged();
+      if (wasActive) onNew();
+    } catch {
+      setError(t.loadError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rowButton =
+    "group flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left transition-colors";
+
+  const list = (
+    <div className="ai-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      {conversations === null ? (
+        <p className="px-2 py-6 text-center text-[12px] text-gray-400">…</p>
+      ) : visibleCount === 0 ? (
+        <p className="px-3 py-8 text-center text-[12px] leading-5 text-gray-500 dark:text-gray-400">
+          {query.trim() ? t.nothingFound : t.empty}
+        </p>
+      ) : (
+        GROUP_ORDER.map((group) =>
+          grouped[group].length === 0 ? null : (
+            <div key={group} className="mb-2">
+              <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500">
+                {t.groups[group]}
+              </p>
+              {grouped[group].map((conversation) => {
+                const active = conversation.id === activeId;
+                const title = conversation.title || t.untitled;
+                return (
+                  <div key={conversation.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => onOpen(conversation.id)}
+                      aria-current={active ? "true" : undefined}
+                      className={`${rowButton} ${
+                        active
+                          ? "bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200"
+                          : "text-gray-700 hover:bg-white/70 dark:text-gray-200 dark:hover:bg-gray-800/70"
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium leading-5">{title}</span>
+                        <span className={`mt-0.5 block text-[11px] leading-4 ${active ? "text-orange-600/80 dark:text-orange-300/70" : "text-gray-400 dark:text-gray-500"}`}>
+                          {t.questions(conversation.turn_count)} · {timeLabel(conversation.updated_at, language, group)}
+                        </span>
+                      </span>
+                    </button>
+                    {/* Row actions: hidden until the pointer is on the row, always
+                        shown where there is no pointer to hover with. */}
+                    <span className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+                      <button
+                        type="button"
+                        aria-label={t.rename}
+                        title={t.rename}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRenameDraft(conversation.title || "");
+                          setRenaming(conversation);
+                        }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white hover:text-orange-700 dark:hover:bg-gray-800"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t.remove}
+                        title={t.remove}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRemoving(conversation);
+                        }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white hover:text-red-600 dark:hover:bg-gray-800"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ),
+        )
+      )}
+      {error && <p className="px-3 py-2 text-[11px] text-red-500">{error}</p>}
+    </div>
+  );
+
+  const searchBox = (
+    <label className="relative mx-2 mb-2 block">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t.search}
+        aria-label={t.search}
+        className="h-8 w-full rounded-lg border border-gray-200 bg-white/80 pl-8 pr-2 text-[12.5px] text-gray-800 outline-none placeholder:text-gray-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-500/15 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+      />
+    </label>
+  );
+
+  const newChatButton = (
+    <button
+      type="button"
+      onClick={onNew}
+      className="mx-2 mb-2 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-white/80 text-[13px] font-semibold text-orange-700 shadow-sm transition-colors hover:bg-orange-50 dark:border-orange-900/50 dark:bg-gray-900 dark:text-orange-300 dark:hover:bg-orange-950/30"
+    >
+      <Plus className="h-4 w-4" /> {t.newChat}
+    </button>
+  );
+
+  const dialogs = (
+    <>
+      <WarmConfirmDialog
+        open={renaming !== null}
+        title={t.renameTitle}
+        description={t.renameDescription}
+        confirmLabel={t.renameSave}
+        cancelLabel={t.cancel}
+        onConfirm={() => void commitRename()}
+        onCancel={() => setRenaming(null)}
+        busy={busy}
+        tone="primary"
+        icon={<Pencil size={26} strokeWidth={2.5} />}
+        initialFocus="content"
+      >
+        <input
+          type="text"
+          value={renameDraft}
+          maxLength={80}
+          onChange={(event) => setRenameDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void commitRename();
+            }
+          }}
+          aria-label={t.renameTitle}
+        />
+      </WarmConfirmDialog>
+      <WarmConfirmDialog
+        open={removing !== null}
+        title={t.removeTitle}
+        description={removing ? `“${removing.title || t.untitled}” — ${t.removeDescription}` : t.removeDescription}
+        confirmLabel={t.removeYes}
+        cancelLabel={t.cancel}
+        onConfirm={() => void commitRemove()}
+        onCancel={() => setRemoving(null)}
+        busy={busy}
+      />
+    </>
+  );
+
+  if (variant === "sheet") {
+    return (
+      <div className="absolute inset-0 z-30 flex flex-col bg-[#faf8f2] dark:bg-gray-900">
+        <div className="flex items-center justify-between px-3 pb-2 pt-3">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-gray-900 dark:text-white">
+            <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t.close}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200/80 bg-white/80 text-gray-600 shadow-sm dark:border-gray-800/80 dark:bg-gray-800/70 dark:text-gray-300"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {newChatButton}
+        {searchBox}
+        {list}
+        {dialogs}
+      </div>
+    );
+  }
+
+  if (collapsed) {
+    return (
+      <div className={`w-11 shrink-0 flex-col items-center gap-1 border-r border-gray-200/70 py-3 dark:border-gray-800 ${className}`}>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label={t.expand}
+          title={t.expand}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-white/70 hover:text-gray-800 dark:hover:bg-gray-800"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onNew}
+          aria-label={t.newChat}
+          title={t.newChat}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-orange-600 hover:bg-orange-50 dark:text-orange-300 dark:hover:bg-orange-950/30"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        {dialogs}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-64 shrink-0 flex-col border-r border-gray-200/70 dark:border-gray-800 ${className}`}>
+      <div className="flex items-center justify-between px-3 pb-2 pt-3">
+        <h2 className="flex items-center gap-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
+          <MessageSquareText className="h-4 w-4 text-orange-500" /> {t.title}
+        </h2>
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          aria-label={t.collapse}
+          title={t.collapse}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white/70 hover:text-gray-700 dark:hover:bg-gray-800"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
+      </div>
+      {newChatButton}
+      {searchBox}
+      {list}
+      {dialogs}
+    </div>
+  );
+}
