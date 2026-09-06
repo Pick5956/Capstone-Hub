@@ -61,9 +61,9 @@ function copy(language: "th" | "en") {
         loadError: "โหลดการตั้งค่าไม่สำเร็จ",
         saveError: "บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง",
         sections: {
-          general: { name: "ทั่วไป", blurb: "ชื่อที่เรียกคุณ · คำถามแนะนำ · ประวัติแชท", subtitle: "ผู้ช่วยเรียกคุณว่าอะไร และเสนออะไรเพิ่มหลังคำตอบ" },
-          actions: { name: "สิ่งที่ทำแทนคุณได้", blurb: "เลือกได้ทีละอย่างว่าให้แก้อะไรได้บ้าง", subtitle: "เลือกว่าให้ผู้ช่วยช่วยแก้ข้อมูลร้านเรื่องไหนได้บ้าง ทุกครั้งจะรอคุณกดยืนยันก่อนเสมอ" },
-          notifications: { name: "การแจ้งเตือน", blurb: "ของใกล้หมด · ของค้าง · ยอดขายผิดปกติ", subtitle: "เรื่องที่ผู้ช่วยจะเตือนคุณเอง โดยไม่ต้องรอให้ถาม" },
+          general: { name: "ทั่วไป", blurb: "ชื่อที่เรียกคุณ · คำถามแนะนำ · ประวัติแชท" },
+          actions: { name: "สิ่งที่ทำแทนคุณได้", blurb: "เลือกได้ทีละอย่างว่าให้แก้อะไรได้บ้าง" },
+          notifications: { name: "การแจ้งเตือน", blurb: "ของใกล้หมด · ของค้าง · ยอดขายผิดปกติ" },
         },
         groupAnswers: "การตอบ",
         titleLabel: "ชื่อที่ผู้ช่วยใช้เรียกคุณ",
@@ -100,9 +100,9 @@ function copy(language: "th" | "en") {
         loadError: "Could not load settings",
         saveError: "Could not save, try again",
         sections: {
-          general: { name: "General", blurb: "What it calls you · suggestions · chat history", subtitle: "What the assistant calls you, and what it offers after an answer" },
-          actions: { name: "What it can do for you", blurb: "Choose, one by one, what it may change", subtitle: "Choose which shop data the assistant may change. Every change waits for your confirmation." },
-          notifications: { name: "Notifications", blurb: "Low stock · dead stock · unusual sales", subtitle: "Things the assistant tells you about without being asked" },
+          general: { name: "General", blurb: "What it calls you · suggestions · chat history" },
+          actions: { name: "What it can do for you", blurb: "Choose, one by one, what it may change" },
+          notifications: { name: "Notifications", blurb: "Low stock · dead stock · unusual sales" },
         },
         groupAnswers: "Answers",
         titleLabel: "What the assistant calls you",
@@ -529,13 +529,13 @@ export default function AISettingsModal({
 
           {/* The section itself: always on desktop, after a tap on a phone */}
           <div className={`${mobileOpen ? "flex" : "hidden"} min-h-0 flex-1 flex-col sm:flex`}>
-            <header className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] dark:border-gray-800 sm:px-6 sm:pt-[18px]">
-              <div className="flex min-w-0 items-start gap-2">
+            <header className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] dark:border-gray-800 sm:px-6 sm:pt-4">
+              <div className="flex min-w-0 items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileOpen(false)}
                   aria-label={t.back}
-                  className="-ml-1 mt-0.5 rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 sm:hidden"
+                  className="-ml-1 rounded-md p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 sm:hidden"
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
@@ -544,7 +544,6 @@ export default function AISettingsModal({
                     <SectionIcon className="h-4 w-4 text-orange-500 sm:hidden" />
                     {t.sections[activeSection].name}
                   </h2>
-                  <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t.sections[activeSection].subtitle}</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
